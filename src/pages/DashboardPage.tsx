@@ -29,7 +29,7 @@ export function DashboardPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <SummaryCard icon={<Building2 size={20} />} label="Total Units" value={total} color="#1e3a5f" />
         <SummaryCard icon={<Clock size={20} />} label="Not Started" value={notStarted} color="#6b7280" />
-        <SummaryCard icon={<AlertTriangle size={20} />} label="Shinui Units" value={shinuiCount} color="#f59e0b" />
+        <SummaryCard icon={<AlertTriangle size={20} />} label="Changes" value={shinuiCount} color="#f59e0b" />
         <SummaryCard icon={<FileText size={20} />} label="With Notes" value={withNotes} color="#10b981" />
       </div>
 
@@ -106,7 +106,7 @@ export function DashboardPage() {
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-amber-500">{shinuiCount}</div>
-              <div className="text-xs text-gray-500">Shinui units</div>
+              <div className="text-xs text-gray-500">Changes units</div>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-gray-500">{notStarted}</div>

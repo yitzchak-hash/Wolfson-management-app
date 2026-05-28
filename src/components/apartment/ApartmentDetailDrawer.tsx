@@ -93,7 +93,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           {classification === 'shinui' && (
             <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200">
               <AlertTriangle size={11} />
-              Shinui
+              Changes
             </span>
           )}
           {apartment.isDuplexApt && (
@@ -175,12 +175,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                         : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
                     }`}
                   >
-                    Shinui / Change
+                    Changes
                   </button>
                 </div>
                 {classification === 'shinui' && (
                   <p className="text-xs text-amber-600 mt-1.5">
-                    Marked as Shinui — change is logged automatically.
+                    Marked as Changes — change is logged automatically.
                   </p>
                 )}
               </div>

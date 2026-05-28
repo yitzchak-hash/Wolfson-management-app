@@ -1,31 +1,22 @@
 import React from 'react';
-import { LogOut, User } from 'lucide-react';
+import { LogOut, User, Sun, Moon } from 'lucide-react';
 import { useStore } from '../../data/store';
 
-function TzviAirLogo() {
+function TzviAirLogo({ light }: { light: boolean }) {
   return (
     <div className="flex items-center gap-2.5">
-      {/* Swoosh SVG matching actual TzviAir logo */}
-      <svg width="48" height="34" viewBox="0 0 48 34" fill="none" xmlns="http://www.w3.org/2000/svg">
-        {/* Orange top arc */}
+      <svg width="48" height="34" viewBox="0 0 48 34" fill="none">
         <path d="M4 6 Q24 -2 44 6" stroke="#f5a623" strokeWidth="3" strokeLinecap="round" fill="none"/>
-        {/* Yellow second arc */}
         <path d="M6 11 Q24 3 42 11" stroke="#f9c840" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
-        {/* Light blue third arc */}
         <path d="M8 16 Q24 9 40 16" stroke="#4aa8d8" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
-        {/* Dark blue bottom arc */}
         <path d="M10 21 Q24 15 38 21" stroke="#1e6fa5" strokeWidth="2" strokeLinecap="round" fill="none"/>
       </svg>
       <div>
         <div className="leading-none">
-          <span className="text-xl font-extrabold tracking-tight text-white" style={{ fontStyle: 'italic' }}>
-            Tzvi
-          </span>
-          <span className="text-xl font-extrabold tracking-tight text-[#4aa8d8]" style={{ fontStyle: 'italic' }}>
-            Air
-          </span>
+          <span className={`text-xl font-extrabold tracking-tight italic ${light ? 'text-[#1e3a5f]' : 'text-white'}`}>Tzvi</span>
+          <span className="text-xl font-extrabold tracking-tight italic text-[#4aa8d8]">Air</span>
         </div>
-        <div className="text-[9px] text-gray-400 tracking-[0.18em] uppercase mt-0.5 leading-none">
+        <div className={`text-[9px] tracking-[0.18em] uppercase mt-0.5 leading-none ${light ? 'text-gray-400' : 'text-gray-400'}`}>
           Air Conditioning Engineering
         </div>
       </div>
@@ -33,34 +24,21 @@ function TzviAirLogo() {
   );
 }
 
-function WolfsonLogo() {
+function WolfsonLogo({ light }: { light: boolean }) {
   return (
     <div className="flex items-center gap-2.5">
-      {/* W mark — copper/bronze color on light background */}
-      <div
-        className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-        style={{ backgroundColor: '#d6e8ee' }}
-      >
+      <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+        style={{ backgroundColor: light ? '#e8f4f8' : '#d6e8ee' }}>
         <svg width="28" height="22" viewBox="0 0 28 22" fill="none">
-          {/* The W shape with serif-like look */}
-          <path
-            d="M2 3 L7 19 L14 8 L21 19 L26 3"
-            stroke="#b8860b"
-            strokeWidth="2.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            fill="none"
-          />
+          <path d="M2 3 L7 19 L14 8 L21 19 L26 3"
+            stroke="#b8860b" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
         </svg>
       </div>
       <div>
-        <div className="text-[11px] font-semibold tracking-[0.22em] text-[#d6e8ee] leading-tight uppercase">
-          Wolfson
+        <div className={`text-[11px] font-semibold tracking-[0.22em] uppercase leading-tight ${light ? 'text-[#b8860b]' : 'text-[#d6e8ee]'}`}>
+          W Residence
         </div>
-        <div className="text-[8px] tracking-[0.15em] text-gray-400 uppercase leading-tight">
-          Residence
-        </div>
-        <div className="text-[7px] tracking-[0.1em] text-gray-500 uppercase leading-tight">
+        <div className={`text-[8px] tracking-[0.15em] uppercase leading-tight ${light ? 'text-gray-500' : 'text-gray-400'}`}>
           by the Wolfson Group
         </div>
       </div>
@@ -69,38 +47,51 @@ function WolfsonLogo() {
 }
 
 export function Header() {
-  const { currentUser, logout } = useStore();
+  const { currentUser, logout, lightTheme, setLightTheme } = useStore();
 
   return (
-    <header className="bg-[#1e3a5f] text-white h-16 flex items-center justify-between px-5 shadow-lg flex-shrink-0 z-30">
-      {/* Left: logos */}
+    <header
+      className="h-16 flex items-center justify-between px-5 shadow-lg flex-shrink-0 z-30 transition-colors duration-200"
+      style={{ backgroundColor: lightTheme ? '#ffffff' : '#1e3a5f', borderBottom: lightTheme ? '1px solid #e5e7eb' : 'none' }}
+    >
       <div className="flex items-center gap-5">
-        <TzviAirLogo />
-
-        <div className="w-px h-10 bg-white/20" />
-
-        <WolfsonLogo />
+        <TzviAirLogo light={lightTheme} />
+        <div className="w-px h-10" style={{ backgroundColor: lightTheme ? '#e5e7eb' : 'rgba(255,255,255,0.2)' }} />
+        <WolfsonLogo light={lightTheme} />
       </div>
 
-      {/* Right: user */}
-      {currentUser && (
-        <div className="flex items-center gap-3">
-          <div className="text-right">
-            <div className="text-sm font-medium">{currentUser.name}</div>
-            <div className="text-xs text-gray-400">{currentUser.role}</div>
-          </div>
-          <div className="w-8 h-8 rounded-full bg-[#4aa8d8]/25 flex items-center justify-center border border-[#4aa8d8]/40">
-            <User size={16} className="text-[#4aa8d8]" />
-          </div>
-          <button
-            onClick={logout}
-            title="Sign out"
-            className="p-2 rounded-lg hover:bg-white/10 transition-colors text-gray-300 hover:text-white"
-          >
-            <LogOut size={18} />
-          </button>
-        </div>
-      )}
+      <div className="flex items-center gap-2">
+        {/* Theme toggle */}
+        <button
+          onClick={() => setLightTheme(!lightTheme)}
+          title={lightTheme ? 'Switch to dark theme' : 'Switch to light theme'}
+          className="p-2 rounded-lg transition-colors"
+          style={{ color: lightTheme ? '#6b7280' : '#9ca3af' }}
+        >
+          {lightTheme ? <Moon size={17} /> : <Sun size={17} />}
+        </button>
+
+        {currentUser && (
+          <>
+            <div className="text-right ml-1">
+              <div className="text-sm font-medium" style={{ color: lightTheme ? '#1e3a5f' : 'white' }}>{currentUser.name}</div>
+              <div className="text-xs" style={{ color: lightTheme ? '#6b7280' : '#9ca3af' }}>{currentUser.role}</div>
+            </div>
+            <div className="w-8 h-8 rounded-full flex items-center justify-center border"
+              style={{ backgroundColor: 'rgba(74,168,216,0.2)', borderColor: 'rgba(74,168,216,0.4)' }}>
+              <User size={16} className="text-[#4aa8d8]" />
+            </div>
+            <button
+              onClick={logout}
+              title="Sign out"
+              className="p-2 rounded-lg transition-colors"
+              style={{ color: lightTheme ? '#6b7280' : '#9ca3af' }}
+            >
+              <LogOut size={18} />
+            </button>
+          </>
+        )}
+      </div>
     </header>
   );
 }

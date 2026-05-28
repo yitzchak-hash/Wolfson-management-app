@@ -7,6 +7,7 @@ import { fsSet, fsBatchSet, fsGetAll, fsListen, isFirebaseConfigured } from './f
 
 const STORAGE_KEY = 'wolfson_app_data';
 const VERSION_KEY = 'wolfson_app_version';
+const THEME_KEY = 'wolfson_theme';
 
 function generateId(): string {
   return Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
@@ -64,6 +65,8 @@ interface AppState {
   stageNotes: StageNote[];
   activityLogs: ActivityLog[];
   firebaseListening: boolean;
+  lightTheme: boolean;
+  setLightTheme: (v: boolean) => void;
 
   login: (code: string) => User | null;
   logout: () => void;
@@ -98,6 +101,11 @@ export const useStore = create<AppState>((set, get) => ({
   stageNotes: (stored?.stageNotes as StageNote[] | null) ?? [],
   activityLogs: (stored?.activityLogs as ActivityLog[] | null) ?? [],
   firebaseListening: false,
+  lightTheme: localStorage.getItem(THEME_KEY) === 'light',
+  setLightTheme: (v: boolean) => {
+    set({ lightTheme: v });
+    localStorage.setItem(THEME_KEY, v ? 'light' : 'dark');
+  },
 
   login: (code: string) => {
     const user = get().users.find(u => u.code === code && u.active);

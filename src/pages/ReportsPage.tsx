@@ -81,7 +81,7 @@ export function ReportsPage() {
     if (enabledCols.has('apartment')) row['Apartment'] = apt.displayName || apt.apartmentNumber || '(unnamed)';
     if (enabledCols.has('floor')) row['Floor'] = apt.floor === 0 ? 'Ground' : String(apt.floor);
     if (enabledCols.has('stage')) row['Current Stage'] = getStageName(apt.currentStageId);
-    if (enabledCols.has('classification')) row['Classification'] = apt.classification === 'shinui' ? 'Shinui/Change' : 'Standard';
+    if (enabledCols.has('classification')) row['Classification'] = apt.classification === 'shinui' ? 'Changes' : 'Standard';
     if (enabledCols.has('generalNotes')) row['General Notes'] = apt.generalNotes;
     sortedStages.forEach(s => {
       if (enabledStageCols.has(s.id)) row[`${s.name} Notes`] = getNotes(apt.id, s.id);
@@ -201,7 +201,7 @@ export function ReportsPage() {
                       ? c === 'shinui' ? 'bg-amber-500 text-white border-amber-500' : 'bg-[#1e3a5f] text-white border-[#1e3a5f]'
                       : 'bg-white text-gray-600 border-gray-200'
                   }`}>
-                  {c === 'shinui' ? 'Shinui' : c.charAt(0).toUpperCase() + c.slice(1)}
+                  {c === 'shinui' ? 'Changes' : c.charAt(0).toUpperCase() + c.slice(1)}
                 </button>
               ))}
             </div>
@@ -304,7 +304,7 @@ export function ReportsPage() {
                       {enabledCols.has('classification') && (
                         <td className="px-4 py-2.5">
                           {apt.classification === 'shinui'
-                            ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-700 font-medium">Shinui</span>
+                            ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-700 font-medium">Changes</span>
                             : <span className="text-gray-500 text-xs">Standard</span>}
                         </td>
                       )}

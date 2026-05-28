@@ -93,7 +93,7 @@ export function ProjectDiagramPage() {
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                {c === 'all' ? 'All' : c === 'standard' ? 'Standard' : 'Shinui'}
+                {c === 'all' ? 'All' : c === 'standard' ? 'Standard' : 'Changes'}
               </button>
             ))}
           </div>
@@ -109,16 +109,16 @@ export function ProjectDiagramPage() {
             />
           </div>
 
-          {/* Shinui badge toggle */}
+          {/* Changes badge toggle */}
           <button
             onClick={() => setShowShinuiBadge(v => !v)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
               showShinuiBadge ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-gray-100 border-gray-200 text-gray-500'
             }`}
-            title="Toggle Shinui badges"
+            title="Toggle Changes badges"
           >
             <ToggleLeft size={14} />
-            Shinui badges
+            Changes badges
           </button>
 
           {hasFilters && (

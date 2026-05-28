@@ -59,7 +59,7 @@ export function ApartmentBlock({
         <div
           className="absolute top-0.5 right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center"
           style={{ backgroundColor: '#f59e0b', border: '1.5px solid white' }}
-          title="Shinui / Change"
+          title="Changes"
         >
           <span className="text-white font-bold leading-none" style={{ fontSize: '8px' }}>S</span>
         </div>
