@@ -24,25 +24,14 @@ function TzviAirLogo({ light }: { light: boolean }) {
   );
 }
 
-function WolfsonLogo({ light }: { light: boolean }) {
+function WolfsonLogo() {
   return (
-    <div className="flex items-center gap-2.5">
-      <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-        style={{ backgroundColor: light ? '#e8f4f8' : '#d6e8ee' }}>
-        <svg width="28" height="22" viewBox="0 0 28 22" fill="none">
-          <path d="M2 3 L7 19 L14 8 L21 19 L26 3"
-            stroke="#b8860b" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-        </svg>
-      </div>
-      <div>
-        <div className={`text-[11px] font-semibold tracking-[0.22em] uppercase leading-tight ${light ? 'text-[#b8860b]' : 'text-[#d6e8ee]'}`}>
-          W Residence
-        </div>
-        <div className={`text-[8px] tracking-[0.15em] uppercase leading-tight ${light ? 'text-gray-500' : 'text-gray-400'}`}>
-          by the Wolfson Group
-        </div>
-      </div>
-    </div>
+    <img
+      src="/wolfson-building.png"
+      alt="W Residence by the Wolfson Group"
+      className="h-11 w-auto rounded flex-shrink-0"
+      style={{ objectFit: 'contain' }}
+    />
   );
 }
 
@@ -57,7 +46,7 @@ export function Header() {
       <div className="flex items-center gap-5">
         <TzviAirLogo light={lightTheme} />
         <div className="w-px h-10" style={{ backgroundColor: lightTheme ? '#e5e7eb' : 'rgba(255,255,255,0.2)' }} />
-        <WolfsonLogo light={lightTheme} />
+        <WolfsonLogo />
       </div>
 
       <div className="flex items-center gap-2">

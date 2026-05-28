@@ -1,6 +1,6 @@
 import { Apartment, Building, BuildingId, Stage, User } from '../types';
 
-export const DATA_VERSION = 2; // Bump this to force a reset when data model changes
+export const DATA_VERSION = 3; // Bump this to force a reset when data model changes
 
 export const DEFAULT_USERS: User[] = [
   { id: 'u1', name: 'Isaac', role: 'Admin', code: '111111', active: true, createdAt: '2024-01-01T00:00:00Z' },
@@ -79,6 +79,29 @@ function makeApt(
   };
 }
 
+// Basement slots: 4 per floor, numbered from 57 upward per building.
+// A1 has floors: -0.5, -1, -2, -3, -4 (apt nums 57-76)
+// A2/A3 have floors: -1, -2, -3, -4 (apt nums 57-72)
+// Slots start as unnamed so users can label them (e.g. "Parking 7", "Storage B").
+interface BasementFloorDef { floorNum: number; startAptNum: number }
+function getBasementFloors(buildingId: BuildingId): BasementFloorDef[] {
+  if (buildingId === 'A1') {
+    return [
+      { floorNum: -0.5, startAptNum: 57 },
+      { floorNum: -1,   startAptNum: 61 },
+      { floorNum: -2,   startAptNum: 65 },
+      { floorNum: -3,   startAptNum: 69 },
+      { floorNum: -4,   startAptNum: 73 },
+    ];
+  }
+  return [
+    { floorNum: -1, startAptNum: 57 },
+    { floorNum: -2, startAptNum: 61 },
+    { floorNum: -3, startAptNum: 65 },
+    { floorNum: -4, startAptNum: 69 },
+  ];
+}
+
 export function buildDefaultApartments(): Apartment[] {
   const apts: Apartment[] = [];
 
@@ -100,6 +123,32 @@ export function buildDefaultApartments(): Apartment[] {
     // Apts 55-56 (floors 16-17, duplex)
     apts.push(makeApt(bid, 55));
     apts.push(makeApt(bid, 56));
+
+    // Basement slots (unnamed by default — user assigns labels via the drawer)
+    getBasementFloors(bid).forEach(({ floorNum, startAptNum }) => {
+      for (let col = 1; col <= 4; col++) {
+        const aptNum = startAptNum + col - 1;
+        apts.push({
+          id: `${bid}-${aptNum}`,
+          buildingId: bid,
+          apartmentNumber: String(aptNum),
+          displayName: '',
+          floor: floorNum,
+          colPosition: col,
+          colSpan: 1,
+          isDuplexApt: false,
+          currentStageId: null,
+          classification: 'standard',
+          shinuiDetails: null,
+          generalNotes: '',
+          isUnnamed: true,
+          createdAt: '2024-01-01T00:00:00Z',
+          updatedAt: '2024-01-01T00:00:00Z',
+          updatedBy: '',
+          updatedByName: '',
+        });
+      }
+    });
   });
 
   return apts;

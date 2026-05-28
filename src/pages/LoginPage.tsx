@@ -65,15 +65,12 @@ export function LoginPage() {
         <div className="absolute bottom-0 left-0 right-0 p-10">
           <div className="mb-3">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: 'rgba(214,232,238,0.25)', backdropFilter: 'blur(8px)', border: '1px solid rgba(184,134,11,0.4)' }}>
-                <svg width="32" height="26" viewBox="0 0 32 26" fill="none">
-                  <path d="M2 3 L8 23 L16 9 L24 23 L30 3" stroke="#b8860b" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-                </svg>
-              </div>
-              <div>
-                <div className="text-white font-bold text-2xl tracking-[0.15em] uppercase">W Residence</div>
-                <div className="text-gray-300 text-xs tracking-[0.2em] uppercase">by the Wolfson Group</div>
-              </div>
+              <img
+                src="/wolfson-building.png"
+                alt="W Residence by the Wolfson Group"
+                className="h-20 w-auto rounded-lg"
+                style={{ filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.4))' }}
+              />
             </div>
           </div>
           <p className="text-gray-300 text-sm leading-relaxed max-w-sm">
@@ -124,12 +121,7 @@ export function LoginPage() {
             <div className="flex items-center gap-2 justify-center mb-2">
               <div className="flex-1 h-px bg-white/8" />
               <div className="flex items-center gap-2 px-3">
-                <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'rgba(214,232,238,0.15)' }}>
-                  <svg width="18" height="14" viewBox="0 0 28 22" fill="none">
-                    <path d="M2 3 L7 19 L14 8 L21 19 L26 3" stroke="#b8860b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-                  </svg>
-                </div>
-                <span className="text-[#b8860b] font-semibold tracking-[0.2em] uppercase text-sm">W Residence</span>
+                <img src="/wolfson-building.png" alt="W Residence" className="h-8 w-auto rounded" />
               </div>
               <div className="flex-1 h-px bg-white/8" />
             </div>

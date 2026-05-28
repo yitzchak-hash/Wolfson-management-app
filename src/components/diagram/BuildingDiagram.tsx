@@ -21,44 +21,54 @@ function getTextColor(bgHex: string): string {
   return lum > 0.52 ? '#1a202c' : '#ffffff';
 }
 
-// Floor rows definition (top to bottom)
 interface FloorRowDef {
-  floorLabel: string;     // e.g. "גג", "17", "1", "קרקע", "-1"
+  floorLabel: string;
   type: 'roof' | 'duplex' | 'wide' | 'normal' | 'lobby' | 'ground' | 'basement';
-  aptNums?: number[];     // for normal: [col1,col2,col3,col4]; for wide/duplex: [left, right]
-  height: number;         // row height in px
+  aptNums?: number[];
+  height: number;
 }
 
 function getFloorRows(buildingId: BuildingId): FloorRowDef[] {
   const rows: FloorRowDef[] = [];
 
-  // Roof
-  rows.push({ floorLabel: 'גג', type: 'roof', height: 22 });
+  rows.push({ floorLabel: 'גג', type: 'roof', height: 26 });
 
-  // Floors 17 and 16: duplex (apts 55 and 56, same apartment shown twice)
-  rows.push({ floorLabel: '17', type: 'duplex', aptNums: [55, 56], height: 38 });
-  rows.push({ floorLabel: '16', type: 'duplex', aptNums: [55, 56], height: 38 });
+  // Floors 17 and 16: duplex
+  rows.push({ floorLabel: '17', type: 'duplex', aptNums: [55, 56], height: 52 });
+  rows.push({ floorLabel: '16', type: 'duplex', aptNums: [55, 56], height: 52 });
 
-  // Floor 15: wide (apts 53, 54)
-  rows.push({ floorLabel: '15', type: 'wide', aptNums: [53, 54], height: 38 });
+  // Floor 15: wide
+  rows.push({ floorLabel: '15', type: 'wide', aptNums: [53, 54], height: 52 });
 
   // Floors 14 down to 2: 4 apartments each
   for (let fl = 14; fl >= 2; fl--) {
     const base = (fl - 2) * 4 + 1;
-    rows.push({ floorLabel: String(fl), type: 'normal', aptNums: [base, base + 1, base + 2, base + 3], height: 38 });
+    rows.push({ floorLabel: String(fl), type: 'normal', aptNums: [base, base + 1, base + 2, base + 3], height: 52 });
   }
 
-  // Floor 1: lobby row (blank)
-  rows.push({ floorLabel: '1', type: 'lobby', height: 30 });
+  // Lobby and Ground
+  rows.push({ floorLabel: '1', type: 'lobby', height: 40 });
+  rows.push({ floorLabel: 'קרקע', type: 'ground', height: 40 });
 
-  // Ground / commercial
-  rows.push({ floorLabel: 'קרקע', type: 'ground', height: 30 });
+  // Basement floors with clickable slots (4 per floor)
+  const basementDef = buildingId === 'A1'
+    ? [
+        { label: '-0.5', aptNums: [57, 58, 59, 60] },
+        { label: '-1',   aptNums: [61, 62, 63, 64] },
+        { label: '-2',   aptNums: [65, 66, 67, 68] },
+        { label: '-3',   aptNums: [69, 70, 71, 72] },
+        { label: '-4',   aptNums: [73, 74, 75, 76] },
+      ]
+    : [
+        { label: '-1', aptNums: [57, 58, 59, 60] },
+        { label: '-2', aptNums: [61, 62, 63, 64] },
+        { label: '-3', aptNums: [65, 66, 67, 68] },
+        { label: '-4', aptNums: [69, 70, 71, 72] },
+      ];
 
-  // Basements
-  const basements = buildingId === 'A1'
-    ? ['-0.5', '-1', '-2', '-3', '-4']
-    : ['-1', '-2', '-3', '-4'];
-  basements.forEach(b => rows.push({ floorLabel: b, type: 'basement', height: 30 }));
+  basementDef.forEach(b =>
+    rows.push({ floorLabel: b.label, type: 'basement', aptNums: b.aptNums, height: 48 })
+  );
 
   return rows;
 }
@@ -71,13 +81,18 @@ interface AptCellProps {
   showShinuiBadge: boolean;
   onClick: () => void;
   isDuplex?: boolean;
+  isBasement?: boolean;
   height: number;
 }
 
-function AptCell({ apt, stage, isHighlighted, isDimmed, showShinuiBadge, onClick, isDuplex, height }: AptCellProps) {
-  const bgColor = stage ? stage.color : '#e5e7eb';
+function AptCell({ apt, stage, isHighlighted, isDimmed, showShinuiBadge, onClick, isDuplex, isBasement, height }: AptCellProps) {
+  const bgColor = stage
+    ? stage.color
+    : isBasement
+      ? '#dde6f5'
+      : '#e5e7eb';
   const textColor = getTextColor(bgColor);
-  const label = apt ? (apt.displayName || apt.apartmentNumber) : '';
+  const label = apt ? (apt.displayName || (apt.isUnnamed ? '' : apt.apartmentNumber)) : '';
 
   let extraClass = '';
   if (isHighlighted && !isDimmed) extraClass = ' apartment-block highlighted';
@@ -92,17 +107,17 @@ function AptCell({ apt, stage, isHighlighted, isDimmed, showShinuiBadge, onClick
         color: textColor,
         height: `${height}px`,
         flex: 1,
-        border: `1px solid ${bgColor === '#e5e7eb' ? '#d1d5db' : bgColor}`,
+        border: `1px solid ${bgColor === '#e5e7eb' || bgColor === '#dde6f5' ? (isBasement ? '#c8d6ea' : '#d1d5db') : bgColor}`,
         minWidth: 0,
       }}
       onClick={apt ? onClick : undefined}
-      title={label ? `Apt ${label}${isDuplex ? ' (duplex)' : ''}` : ''}
+      title={label ? `${isBasement ? 'Basement' : 'Apt'} ${label}${isDuplex ? ' (duplex)' : ''}` : isBasement ? 'Click to label this basement slot' : ''}
     >
       <div className="text-center leading-tight px-0.5 overflow-hidden w-full">
         {label ? (
-          <span className="text-[11px] font-bold block">{label}</span>
+          <span className="text-[12px] font-bold block">{label}</span>
         ) : (
-          <span className="text-gray-400 text-[9px] italic">–</span>
+          <span className="opacity-30 italic" style={{ fontSize: '10px' }}>–</span>
         )}
         {isDuplex && label && (
           <span className="text-[8px] opacity-60 block leading-none">⬆</span>
@@ -114,7 +129,7 @@ function AptCell({ apt, stage, isHighlighted, isDimmed, showShinuiBadge, onClick
           className="absolute top-0.5 right-0.5 w-3 h-3 rounded-full flex items-center justify-center"
           style={{ backgroundColor: '#f59e0b', border: '1px solid rgba(255,255,255,0.8)' }}
         >
-          <span style={{ fontSize: '7px', color: 'white', fontWeight: 'bold', lineHeight: 1 }}>S</span>
+          <span style={{ fontSize: '7px', color: 'white', fontWeight: 'bold', lineHeight: 1 }}>C</span>
         </div>
       )}
     </div>
@@ -130,7 +145,6 @@ function BuildingColumn({
   searchQuery,
   onApartmentClick,
   showShinuiBadge,
-  enlarged,
 }: {
   buildingId: BuildingId;
   apartments: Apartment[];
@@ -140,7 +154,6 @@ function BuildingColumn({
   searchQuery: string;
   onApartmentClick: (apt: Apartment) => void;
   showShinuiBadge: boolean;
-  enlarged: boolean;
 }) {
   const stageMap = useMemo(() => new Map(stages.map(s => [s.id, s])), [stages]);
   const aptMap = useMemo(() => {
@@ -183,13 +196,14 @@ function BuildingColumn({
     return !activeStageIds.includes(apt.currentStageId);
   }
 
-  const colW = enlarged ? 280 : 220;
+  const STAIRWELL_W = 14;
+  const LABEL_W = 36;
 
   return (
-    <div className="flex flex-col flex-shrink-0" style={{ width: `${colW}px` }}>
+    <div className="flex flex-col flex-1 min-w-0">
       {/* Building header */}
       <div
-        className="text-center py-1.5 font-bold text-white text-sm tracking-widest rounded-t mb-0.5"
+        className="text-center py-2 font-bold text-white text-sm tracking-widest rounded-t mb-0.5"
         style={{ backgroundColor: '#1e3a5f' }}
       >
         {buildingId}
@@ -198,7 +212,10 @@ function BuildingColumn({
       {/* Floor rows */}
       <div className="flex flex-col border border-gray-300 rounded-b overflow-hidden bg-white">
         {floorRows.map((row, ri) => {
-          const isNonApt = row.type === 'roof' || row.type === 'lobby' || row.type === 'ground' || row.type === 'basement';
+          const isNonApt =
+            row.type === 'roof' ||
+            row.type === 'lobby' ||
+            row.type === 'ground';
 
           return (
             <div
@@ -206,40 +223,41 @@ function BuildingColumn({
               className="flex items-stretch border-b border-gray-200 last:border-0"
               style={{ height: `${row.height}px`, minHeight: `${row.height}px` }}
             >
-              {/* Floor label column */}
+              {/* Floor label */}
               <div
                 className="flex items-center justify-center flex-shrink-0 border-r border-gray-200 text-gray-600"
                 style={{
-                  width: '28px',
-                  backgroundColor: row.type === 'ground' ? '#fef9c3'
-                    : row.type === 'basement' ? '#f1f5f9'
-                    : row.type === 'roof' ? '#dbeafe'
-                    : row.type === 'lobby' ? '#f0fdf4'
-                    : '#f8fafc',
+                  width: `${LABEL_W}px`,
+                  backgroundColor:
+                    row.type === 'ground'   ? '#fef9c3' :
+                    row.type === 'basement' ? '#dde6f5' :
+                    row.type === 'roof'     ? '#dbeafe' :
+                    row.type === 'lobby'    ? '#f0fdf4' :
+                    '#f8fafc',
                   fontSize: '9px',
                   fontWeight: 600,
-                  writingMode: 'horizontal-tb',
                 }}
               >
                 {row.type === 'ground' ? (
-                  <span style={{ fontSize: '7.5px', textAlign: 'center', lineHeight: 1.1 }}>קרקע</span>
+                  <span style={{ fontSize: '7px', textAlign: 'center', lineHeight: 1.1 }}>קרקע</span>
                 ) : (
-                  <span>{row.floorLabel}</span>
+                  <span style={{ fontSize: row.floorLabel.startsWith('-') ? '8px' : '9px' }}>
+                    {row.floorLabel}
+                  </span>
                 )}
               </div>
 
               {/* Cell area */}
-              <div className="flex flex-1 gap-px p-px items-stretch">
+              <div className="flex flex-1 gap-px p-px items-stretch min-w-0">
                 {isNonApt ? (
-                  // Non-apartment row: single spanning cell
                   <div
                     className="flex-1 flex items-center justify-center rounded-sm"
                     style={{
-                      backgroundColor: row.type === 'ground' ? '#fef08a'
-                        : row.type === 'basement' ? '#e2e8f0'
-                        : row.type === 'roof' ? '#bfdbfe'
-                        : row.type === 'lobby' ? '#dcfce7'
-                        : '#f1f5f9',
+                      backgroundColor:
+                        row.type === 'ground' ? '#fef08a' :
+                        row.type === 'roof'   ? '#bfdbfe' :
+                        row.type === 'lobby'  ? '#dcfce7' :
+                        '#f1f5f9',
                       fontSize: '9px',
                       color: '#6b7280',
                       fontStyle: 'italic',
@@ -247,12 +265,9 @@ function BuildingColumn({
                   >
                     {row.type === 'ground' && <span>Ground / Commercial</span>}
                     {row.type === 'lobby' && <span>Lobby</span>}
-                    {row.type === 'basement' && <span>{row.floorLabel}</span>}
                   </div>
-                ) : row.type === 'normal' ? (
-                  // 4-cell row with stairwell divider
+                ) : row.type === 'normal' || row.type === 'basement' ? (
                   <>
-                    {/* Left 2 cells */}
                     {[0, 1].map(ci => {
                       const apt = getApt(row.aptNums![ci]);
                       return (
@@ -264,18 +279,15 @@ function BuildingColumn({
                           isDimmed={isDimmed(apt)}
                           showShinuiBadge={showShinuiBadge}
                           onClick={() => apt && onApartmentClick(apt)}
+                          isBasement={row.type === 'basement'}
                           height={row.height - 2}
                         />
                       );
                     })}
-
-                    {/* Stairwell divider */}
                     <div
-                      className="flex-shrink-0 flex items-center justify-center"
-                      style={{ width: '10px', backgroundColor: '#f59e0b', opacity: 0.85, borderRadius: '1px' }}
+                      className="flex-shrink-0"
+                      style={{ width: `${STAIRWELL_W}px`, backgroundColor: '#f59e0b', opacity: 0.85, borderRadius: '1px' }}
                     />
-
-                    {/* Right 2 cells */}
                     {[2, 3].map(ci => {
                       const apt = getApt(row.aptNums![ci]);
                       return (
@@ -287,13 +299,13 @@ function BuildingColumn({
                           isDimmed={isDimmed(apt)}
                           showShinuiBadge={showShinuiBadge}
                           onClick={() => apt && onApartmentClick(apt)}
+                          isBasement={row.type === 'basement'}
                           height={row.height - 2}
                         />
                       );
                     })}
                   </>
                 ) : (row.type === 'wide' || row.type === 'duplex') ? (
-                  // 2-cell row with stairwell divider (each cell spans 2 cols)
                   <>
                     <AptCell
                       apt={getApt(row.aptNums![0])}
@@ -305,13 +317,10 @@ function BuildingColumn({
                       isDuplex={row.type === 'duplex'}
                       height={row.height - 2}
                     />
-
-                    {/* Stairwell */}
                     <div
-                      className="flex-shrink-0 flex items-center justify-center"
-                      style={{ width: '10px', backgroundColor: '#f59e0b', opacity: 0.85, borderRadius: '1px' }}
+                      className="flex-shrink-0"
+                      style={{ width: `${STAIRWELL_W}px`, backgroundColor: '#f59e0b', opacity: 0.85, borderRadius: '1px' }}
                     />
-
                     <AptCell
                       apt={getApt(row.aptNums![1])}
                       stage={getStage(getApt(row.aptNums![1]))}
@@ -343,10 +352,9 @@ export function BuildingDiagram({
   onApartmentClick,
   showShinuiBadge,
 }: BuildingDiagramProps) {
-  // A3 left, A2 middle, A1 right — matching PDF layout
   const buildingOrder: BuildingId[] = ['A3', 'A2', 'A1'];
   const visibleBuildings = selectedBuilding === 'all' ? buildingOrder : [selectedBuilding];
-  const enlarged = selectedBuilding !== 'all';
+  const single = selectedBuilding !== 'all';
 
   const aptsByBuilding = useMemo(() => {
     const m = new Map<BuildingId, Apartment[]>();
@@ -359,7 +367,10 @@ export function BuildingDiagram({
   }, [apartments]);
 
   return (
-    <div className="flex gap-3 p-4">
+    <div
+      className={`flex gap-6 p-6 ${single ? 'justify-center' : 'w-full'}`}
+      style={single ? { maxWidth: '600px', margin: '0 auto' } : {}}
+    >
       {visibleBuildings.map(bId => (
         <BuildingColumn
           key={bId}
@@ -371,7 +382,6 @@ export function BuildingDiagram({
           searchQuery={searchQuery}
           onApartmentClick={onApartmentClick}
           showShinuiBadge={showShinuiBadge}
-          enlarged={enlarged}
         />
       ))}
     </div>
