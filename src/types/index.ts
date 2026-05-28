@@ -38,22 +38,18 @@ export interface StageNote {
   updatedByName: string;
 }
 
-export interface ShinuiDetail {
-  description: string;
-  requestedBy: string;
-  notes: string;
-  dateOfChange: string;
-}
-
 export interface Apartment {
   id: string;
   buildingId: BuildingId;
   apartmentNumber: string;
   displayName: string;
   floor: number;
+  colPosition: number;  // 1-4 within the 4-col building grid
+  colSpan: number;      // 1 = single col, 2 = spans left or right half
+  isDuplexApt: boolean; // true for apts 55-56 (shown on 2 floors)
   currentStageId: string | null;
   classification: Classification;
-  shinuiDetails: ShinuiDetail | null;
+  shinuiDetails: null; // kept for data compat, form removed from UI
   generalNotes: string;
   isUnnamed: boolean;
   createdAt: string;

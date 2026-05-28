@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Building2, AlertTriangle } from 'lucide-react';
-import { Apartment, ShinuiDetail, User } from '../../types';
+import { Apartment, User } from '../../types';
 import { useStore } from '../../data/store';
 import { format } from 'date-fns';
 import { StageNotesSection } from './StageNotesSection';
-import { ShinuiSection } from './ShinuiSection';
 import { ActivitySection } from './ActivitySection';
 
 interface Props {
@@ -21,7 +20,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [currentStageId, setCurrentStageId] = useState<string>('');
   const [classification, setClassification] = useState<'standard' | 'shinui'>('standard');
   const [generalNotes, setGeneralNotes] = useState('');
-  const [shinuiDetails, setShinuiDetails] = useState<ShinuiDetail | null>(null);
   const [activeTab, setActiveTab] = useState<'details' | 'stages' | 'history'>('details');
 
   useEffect(() => {
@@ -30,7 +28,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       setCurrentStageId(apartment.currentStageId ?? '');
       setClassification(apartment.classification);
       setGeneralNotes(apartment.generalNotes);
-      setShinuiDetails(apartment.shinuiDetails);
       setActiveTab('details');
     }
   }, [apartment?.id]);
@@ -52,40 +49,34 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     onToast('Apartment details saved');
   }
 
-  function handleSaveShinui(details: ShinuiDetail) {
-    updateApartment(apartment!.id, { shinuiDetails: details }, currentUser);
-    onToast('Shinui details saved');
-  }
-
   return (
     <>
-      {/* Overlay */}
       <div className="drawer-overlay fixed inset-0 bg-black/30 z-40" onClick={onClose} />
 
-      {/* Drawer */}
       <div className="drawer-panel fixed right-0 top-0 h-full w-full max-w-lg bg-white shadow-2xl z-50 flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 bg-[#1e3a5f] text-white flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex items-center gap-1.5 flex-shrink-0">
               <Building2 size={18} className="text-[#4aa8d8]" />
               <span className="text-[#4aa8d8] font-semibold">{apartment.buildingId}</span>
             </div>
-            <span className="text-white/40">·</span>
-            <span className="font-bold text-lg">
-              {apartment.displayName || apartment.apartmentNumber || <span className="italic text-white/60 text-base">Unnamed</span>}
+            <span className="text-white/40 flex-shrink-0">·</span>
+            <span className="font-bold text-lg truncate">
+              {apartment.displayName || apartment.apartmentNumber ||
+                <span className="italic text-white/60 text-base">Unnamed</span>}
             </span>
             {apartment.floor > 0 && (
-              <span className="text-white/60 text-sm">Floor {apartment.floor}</span>
+              <span className="text-white/60 text-sm flex-shrink-0">Floor {apartment.floor}</span>
             )}
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0">
             <X size={20} />
           </button>
         </div>
 
-        {/* Stage bar */}
-        <div className="flex items-center gap-2 px-5 py-2.5 bg-gray-50 border-b border-gray-200 flex-shrink-0">
+        {/* Status bar */}
+        <div className="flex items-center gap-2 px-5 py-2.5 bg-gray-50 border-b border-gray-200 flex-shrink-0 flex-wrap">
           {currentStage ? (
             <span
               className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
@@ -105,9 +96,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               Shinui
             </span>
           )}
+          {apartment.isDuplexApt && (
+            <span className="text-xs text-gray-400 italic">duplex</span>
+          )}
           {apartment.updatedByName && (
             <span className="ml-auto text-xs text-gray-400">
-              Updated by {apartment.updatedByName} · {format(new Date(apartment.updatedAt), 'MMM d')}
+              {apartment.updatedByName} · {format(new Date(apartment.updatedAt), 'MMM d')}
             </span>
           )}
         </div>
@@ -118,7 +112,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`flex-1 py-2.5 text-sm font-medium capitalize transition-colors ${
+              className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
                 activeTab === tab
                   ? 'border-b-2 border-[#1e3a5f] text-[#1e3a5f]'
                   : 'text-gray-500 hover:text-gray-700'
@@ -129,7 +123,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           ))}
         </div>
 
-        {/* Tab content */}
+        {/* Content */}
         <div className="flex-1 overflow-y-auto scrollbar-thin p-5">
           {activeTab === 'details' && (
             <div className="space-y-4">
@@ -159,7 +153,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 </select>
               </div>
 
-              {/* Classification */}
+              {/* Classification — simple toggle, no extra form */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-2">Classification</label>
                 <div className="flex gap-2">
@@ -184,12 +178,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     Shinui / Change
                   </button>
                 </div>
+                {classification === 'shinui' && (
+                  <p className="text-xs text-amber-600 mt-1.5">
+                    Marked as Shinui — change is logged automatically.
+                  </p>
+                )}
               </div>
-
-              {/* Shinui details */}
-              {classification === 'shinui' && (
-                <ShinuiSection shinuiDetails={shinuiDetails} onSave={handleSaveShinui} />
-              )}
 
               {/* General notes */}
               <div>

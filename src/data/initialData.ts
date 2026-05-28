@@ -1,5 +1,7 @@
 import { Apartment, Building, BuildingId, Stage, User } from '../types';
 
+export const DATA_VERSION = 2; // Bump this to force a reset when data model changes
+
 export const DEFAULT_USERS: User[] = [
   { id: 'u1', name: 'Isaac', role: 'Admin', code: '111111', active: true, createdAt: '2024-01-01T00:00:00Z' },
   { id: 'u2', name: 'Moshe', role: 'Project Manager', code: '222222', active: true, createdAt: '2024-01-01T00:00:00Z' },
@@ -23,25 +25,53 @@ export const DEFAULT_STAGES: Stage[] = [
   { id: 's7', name: 'Registers & Access Panels', color: '#14b8a6', order: 7, active: true, description: 'Registers, grilles, and access panels', createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z' },
 ];
 
+// Exact layout derived from the Wolfson project PDF:
+// Each building (A1, A2, A3) has apartments numbered 1-56.
+// Floors 16-17: duplex apts 55 (left) and 56 (right) - span both floors
+// Floor 15:     wide apts 53 (left half) and 54 (right half)
+// Floors 2-14:  4 apts per floor in 4 columns
+//   Col 1 (leftmost):  1, 5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45, 49
+//   Col 2:             2, 6, 10, 14, 18, 22, 26, 30, 34, 38, 42, 46, 50
+//   Col 3:             3, 7, 11, 15, 19, 23, 27, 31, 35, 39, 43, 47, 51
+//   Col 4 (rightmost): 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52
+// Floor 1:      lobby, no numbered apartments
+// Ground:       commercial/ground level
+// Basement:     -1 to -4 (A1 has -0.5, -1, -2, -3, -4)
+
+function getFloorForApt(aptNum: number): number {
+  if (aptNum >= 55) return 16; // duplex: stored on lower floor (16)
+  if (aptNum >= 53) return 15;
+  return Math.floor((aptNum - 1) / 4) + 2; // floors 2-14
+}
+
+function getColForApt(aptNum: number): number {
+  if (aptNum >= 55) return aptNum === 55 ? 1 : 3; // left half or right half
+  if (aptNum >= 53) return aptNum === 53 ? 1 : 3;
+  return ((aptNum - 1) % 4) + 1;
+}
+
 function makeApt(
   buildingId: BuildingId,
-  floor: number,
-  aptNum: string,
-  isUnnamed = false,
-  unassignedIdx = 0
+  aptNum: number,
+  isBlank = false
 ): Apartment {
-  const id = isUnnamed ? `${buildingId}-UNASSIGNED-0${unassignedIdx}` : `${buildingId}-${aptNum}`;
+  const id = isBlank ? `${buildingId}-BLANK-${aptNum}` : `${buildingId}-${aptNum}`;
+  const floor = getFloorForApt(aptNum);
+  const col = getColForApt(aptNum);
   return {
     id,
     buildingId,
-    apartmentNumber: isUnnamed ? '' : aptNum,
-    displayName: isUnnamed ? '' : aptNum,
+    apartmentNumber: isBlank ? '' : String(aptNum),
+    displayName: isBlank ? '' : String(aptNum),
     floor,
+    colPosition: col,
+    colSpan: aptNum >= 53 ? 2 : 1,
+    isDuplexApt: aptNum >= 55,
     currentStageId: null,
     classification: 'standard',
     shinuiDetails: null,
     generalNotes: '',
-    isUnnamed,
+    isUnnamed: isBlank,
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z',
     updatedBy: '',
@@ -52,44 +82,25 @@ function makeApt(
 export function buildDefaultApartments(): Apartment[] {
   const apts: Apartment[] = [];
 
-  // A1 – floors 1–13 (2 per floor), ground (2 unnamed)
-  const a1Floors: [number, string, string][] = [
-    [13, '131', '132'], [12, '121', '122'], [11, '111', '112'], [10, '101', '102'],
-    [9, '91', '92'], [8, '81', '82'], [7, '71', '72'], [6, '61', '62'],
-    [5, '51', '52'], [4, '41', '42'], [3, '31', '32'], [2, '21', '22'], [1, '11', '12'],
-  ];
-  a1Floors.forEach(([fl, a, b]) => {
-    apts.push(makeApt('A1', fl, a));
-    apts.push(makeApt('A1', fl, b));
-  });
-  apts.push(makeApt('A1', 0, '', true, 1));
-  apts.push(makeApt('A1', 0, '', true, 2));
+  const buildings: BuildingId[] = ['A1', 'A2', 'A3'];
 
-  // A2 – floors 1–13
-  const a2Floors: [number, string, string][] = [
-    [13, '133', '134'], [12, '123', '124'], [11, '113', '114'], [10, '103', '104'],
-    [9, '93', '94'], [8, '83', '84'], [7, '73', '74'], [6, '63', '64'],
-    [5, '53', '54'], [4, '43', '44'], [3, '33', '34'], [2, '23', '24'], [1, '13', '14'],
-  ];
-  a2Floors.forEach(([fl, a, b]) => {
-    apts.push(makeApt('A2', fl, a));
-    apts.push(makeApt('A2', fl, b));
+  buildings.forEach(bid => {
+    // Apts 1-52 (floors 2-14, 4 per floor)
+    for (let n = 1; n <= 52; n++) {
+      // A1 is missing apartment 37 (blank in original PDF)
+      if (bid === 'A1' && n === 37) {
+        apts.push(makeApt(bid, n, true)); // blank placeholder
+      } else {
+        apts.push(makeApt(bid, n));
+      }
+    }
+    // Apts 53-54 (floor 15, 2 per floor)
+    apts.push(makeApt(bid, 53));
+    apts.push(makeApt(bid, 54));
+    // Apts 55-56 (floors 16-17, duplex)
+    apts.push(makeApt(bid, 55));
+    apts.push(makeApt(bid, 56));
   });
-  apts.push(makeApt('A2', 0, '', true, 1));
-  apts.push(makeApt('A2', 0, '', true, 2));
-
-  // A3 – floors 1–13
-  const a3Floors: [number, string, string][] = [
-    [13, '135', '136'], [12, '125', '126'], [11, '115', '116'], [10, '105', '106'],
-    [9, '95', '96'], [8, '85', '86'], [7, '75', '76'], [6, '65', '66'],
-    [5, '55', '56'], [4, '45', '46'], [3, '35', '36'], [2, '25', '26'], [1, '15', '16'],
-  ];
-  a3Floors.forEach(([fl, a, b]) => {
-    apts.push(makeApt('A3', fl, a));
-    apts.push(makeApt('A3', fl, b));
-  });
-  apts.push(makeApt('A3', 0, '', true, 1));
-  apts.push(makeApt('A3', 0, '', true, 2));
 
   return apts;
 }

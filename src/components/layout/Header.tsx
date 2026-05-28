@@ -2,52 +2,94 @@ import React from 'react';
 import { LogOut, User } from 'lucide-react';
 import { useStore } from '../../data/store';
 
+function TzviAirLogo() {
+  return (
+    <div className="flex items-center gap-2.5">
+      {/* Swoosh SVG matching actual TzviAir logo */}
+      <svg width="48" height="34" viewBox="0 0 48 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+        {/* Orange top arc */}
+        <path d="M4 6 Q24 -2 44 6" stroke="#f5a623" strokeWidth="3" strokeLinecap="round" fill="none"/>
+        {/* Yellow second arc */}
+        <path d="M6 11 Q24 3 42 11" stroke="#f9c840" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
+        {/* Light blue third arc */}
+        <path d="M8 16 Q24 9 40 16" stroke="#4aa8d8" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
+        {/* Dark blue bottom arc */}
+        <path d="M10 21 Q24 15 38 21" stroke="#1e6fa5" strokeWidth="2" strokeLinecap="round" fill="none"/>
+      </svg>
+      <div>
+        <div className="leading-none">
+          <span className="text-xl font-extrabold tracking-tight text-white" style={{ fontStyle: 'italic' }}>
+            Tzvi
+          </span>
+          <span className="text-xl font-extrabold tracking-tight text-[#4aa8d8]" style={{ fontStyle: 'italic' }}>
+            Air
+          </span>
+        </div>
+        <div className="text-[9px] text-gray-400 tracking-[0.18em] uppercase mt-0.5 leading-none">
+          Air Conditioning Engineering
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WolfsonLogo() {
+  return (
+    <div className="flex items-center gap-2.5">
+      {/* W mark — copper/bronze color on light background */}
+      <div
+        className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+        style={{ backgroundColor: '#d6e8ee' }}
+      >
+        <svg width="28" height="22" viewBox="0 0 28 22" fill="none">
+          {/* The W shape with serif-like look */}
+          <path
+            d="M2 3 L7 19 L14 8 L21 19 L26 3"
+            stroke="#b8860b"
+            strokeWidth="2.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            fill="none"
+          />
+        </svg>
+      </div>
+      <div>
+        <div className="text-[11px] font-semibold tracking-[0.22em] text-[#d6e8ee] leading-tight uppercase">
+          Wolfson
+        </div>
+        <div className="text-[8px] tracking-[0.15em] text-gray-400 uppercase leading-tight">
+          Residence
+        </div>
+        <div className="text-[7px] tracking-[0.1em] text-gray-500 uppercase leading-tight">
+          by the Wolfson Group
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Header() {
   const { currentUser, logout } = useStore();
 
   return (
-    <header className="bg-[#1e3a5f] text-white h-16 flex items-center justify-between px-6 shadow-lg flex-shrink-0 z-30">
-      {/* Left: TzviAir brand */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <svg width="44" height="32" viewBox="0 0 44 32" fill="none">
-              <path d="M22 4 C14 4 6 12 2 28" stroke="#f5a623" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
-              <path d="M22 4 C30 4 38 12 42 28" stroke="#4aa8d8" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
-              <path d="M22 4 C22 12 22 20 22 28" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
-            </svg>
-          </div>
-          <div>
-            <span className="text-xl font-bold tracking-wide">
-              <span className="text-white">Tzvi</span>
-              <span className="text-[#4aa8d8]">Air</span>
-            </span>
-            <div className="text-[10px] text-gray-300 leading-none tracking-widest uppercase">HVAC Engineering</div>
-          </div>
-        </div>
+    <header className="bg-[#1e3a5f] text-white h-16 flex items-center justify-between px-5 shadow-lg flex-shrink-0 z-30">
+      {/* Left: logos */}
+      <div className="flex items-center gap-5">
+        <TzviAirLogo />
 
-        <div className="w-px h-10 bg-white/20 mx-2" />
+        <div className="w-px h-10 bg-white/20" />
 
-        {/* Wolfson project brand */}
-        <div className="flex items-center gap-2">
-          <div className="w-9 h-9 rounded-full bg-[#d6e8ee] flex items-center justify-center">
-            <span className="text-[#b8860b] font-bold text-lg leading-none">W</span>
-          </div>
-          <div>
-            <div className="text-sm font-semibold tracking-widest text-[#d6e8ee]">WOLFSON</div>
-            <div className="text-[10px] text-gray-400 tracking-wider uppercase">Project Management</div>
-          </div>
-        </div>
+        <WolfsonLogo />
       </div>
 
-      {/* Right: user info */}
+      {/* Right: user */}
       {currentUser && (
         <div className="flex items-center gap-3">
           <div className="text-right">
             <div className="text-sm font-medium">{currentUser.name}</div>
             <div className="text-xs text-gray-400">{currentUser.role}</div>
           </div>
-          <div className="w-8 h-8 rounded-full bg-[#4aa8d8]/30 flex items-center justify-center border border-[#4aa8d8]/50">
+          <div className="w-8 h-8 rounded-full bg-[#4aa8d8]/25 flex items-center justify-center border border-[#4aa8d8]/40">
             <User size={16} className="text-[#4aa8d8]" />
           </div>
           <button
