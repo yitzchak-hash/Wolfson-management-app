@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    @apply bg-gray-100 text-gray-900;
+  }
+  * {
+    box-sizing: border-box;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #94a3b8 transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: #94a3b8;
+    border-radius: 3px;
+  }
+}
+
+.apartment-block {
+  transition: all 0.15s ease;
+  cursor: pointer;
+  user-select: none;
+}
+.apartment-block:hover {
+  filter: brightness(0.88);
+  transform: scale(1.03);
+  z-index: 10;
+  position: relative;
+}
+.apartment-block.dimmed {
+  opacity: 0.25;
+}
+.apartment-block.highlighted {
+  box-shadow: 0 0 0 3px #f5a623, 0 2px 8px rgba(0,0,0,0.3);
+  transform: scale(1.05);
+  z-index: 20;
+  position: relative;
+}
+
+.drawer-overlay {
+  animation: fadeIn 0.2s ease;
+}
+.drawer-panel {
+  animation: slideIn 0.25s ease;
+}
+@keyframes fadeIn {
+  from { opacity: 0 }
+  to { opacity: 1 }
+}
+@keyframes slideIn {
+  from { transform: translateX(100%) }
+  to { transform: translateX(0) }
+}
+
+.toast {
+  animation: toastIn 0.2s ease;
+}
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(10px) }
+  to { opacity: 1; transform: translateY(0) }
+}
