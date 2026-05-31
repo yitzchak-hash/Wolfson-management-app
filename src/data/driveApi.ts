@@ -17,7 +17,7 @@ declare global {
 }
 
 const GIS_URL = 'https://accounts.google.com/gsi/client';
-const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly';
 
 let gisLoading: Promise<void> | null = null;
 
@@ -138,6 +138,54 @@ export async function checkFolderHealth(
     health.mainFolderAccessible = false;
   }
   return health;
+}
+
+/** Find or create a subfolder by name inside a parent folder */
+export async function findOrCreateFolder(parentId: string, name: string, token: string): Promise<string> {
+  const q = `name = '${name.replace(/'/g, "\\'")}' and '${parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+  const searchResp = await fetch(
+    `https://www.googleapis.com/drive/v3/files?${new URLSearchParams({ q, fields: 'files(id)' })}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (searchResp.ok) {
+    const data = await searchResp.json();
+    if (data.files?.length) return data.files[0].id as string;
+  }
+  const createResp = await fetch('https://www.googleapis.com/drive/v3/files', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] }),
+  });
+  if (!createResp.ok) throw new Error(`Failed to create Drive folder "${name}": ${createResp.status}`);
+  const created = await createResp.json();
+  return created.id as string;
+}
+
+/** Upload a base64 dataUrl to a Drive folder. Returns the created file. */
+export async function uploadFileToDrive(
+  folderId: string,
+  filename: string,
+  dataUrl: string,
+  mimeType: string,
+  token: string,
+): Promise<{ id: string; webViewLink: string }> {
+  const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+  const byteChars = atob(base64);
+  const byteArr = new Uint8Array(byteChars.length);
+  for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+  const blob = new Blob([byteArr], { type: mimeType });
+
+  const metadata = JSON.stringify({ name: filename, parents: [folderId] });
+  const form = new FormData();
+  form.append('metadata', new Blob([metadata], { type: 'application/json' }));
+  form.append('file', blob, filename);
+
+  const resp = await fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink',
+    { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form },
+  );
+  if (!resp.ok) throw new Error(`Drive upload failed: ${resp.status}`);
+  return await resp.json();
 }
 
 export async function findPlansPdf(driveLink: string, token: string): Promise<DriveFile | null> {

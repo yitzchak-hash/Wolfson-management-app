@@ -6,10 +6,13 @@ import { format, isPast, parseISO, differenceInCalendarDays, startOfDay } from '
 import {
   Camera, CheckCircle2, Clock, Building2, CalendarDays, FileText,
   Plus, Send, AlertCircle, X, Play, File as FileIcon, MapPin,
-  BookOpen, Download,
+  BookOpen, Download, Paperclip, MessageSquare, CloudUpload,
 } from 'lucide-react';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
-import { extractFileId, drivePreviewUrl, driveDownloadUrl } from '../data/driveApi';
+import {
+  extractFileId, drivePreviewUrl, driveDownloadUrl,
+  extractFolderId, findOrCreateFolder, uploadFileToDrive,
+} from '../data/driveApi';
 
 const CATEGORY_LABELS: Record<string, string> = {
   drywall: 'Drywall', ac: 'AC / HVAC', general: 'General',
@@ -18,7 +21,6 @@ const CATEGORY_COLORS: Record<string, string> = {
   drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981',
 };
 
-// Compress image before storing
 async function compressImage(file: File, maxPx = 1200, quality = 0.72): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -59,7 +61,6 @@ function detectFileType(file: File): 'image' | 'video' | 'file' {
   return 'file';
 }
 
-// Small countdown badge — only shows for dates within 3 days
 function getDueBadge(dueDate: string | null): { text: string; cls: string } | null {
   if (!dueDate) return null;
   const days = differenceInCalendarDays(parseISO(dueDate), startOfDay(new Date()));
@@ -70,7 +71,6 @@ function getDueBadge(dueDate: string | null): { text: string; cls: string } | nu
   return null;
 }
 
-// Render one media item (image / video / file)
 function MediaItem({ photo, onDelete }: { photo: ContractorPhoto; onDelete: () => void }) {
   const [playing, setPlaying] = useState(false);
   const type = photo.fileType ?? 'image';
@@ -97,6 +97,11 @@ function MediaItem({ photo, onDelete }: { photo: ContractorPhoto; onDelete: () =
           <span className="text-[10px] text-gray-600 mt-1.5 text-center break-all leading-tight line-clamp-3">{photo.filename}</span>
         </a>
       )}
+      {photo.driveFileId && (
+        <div className="absolute bottom-1 left-1 bg-green-500 rounded-full w-3.5 h-3.5 flex items-center justify-center" title="Synced to Drive">
+          <CloudUpload size={8} className="text-white" />
+        </div>
+      )}
       <button onClick={onDelete}
         className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 flex items-center justify-center z-10">
         <X size={12} className="text-white" />
@@ -110,18 +115,23 @@ export function ContractorPortal() {
   const {
     contractors, contractorAssignments, contractorNotes, contractorPhotos,
     apartments, stages,
-    addContractorNote, addContractorPhoto, deleteContractorPhoto, updateContractorAssignment,
+    addContractorNote, addContractorPhoto, updateContractorPhoto, deleteContractorPhoto,
+    updateContractorAssignment, addActivityLog,
+    googleAccessToken, googleTokenExpiry,
   } = useStore();
 
   const [activeTab, setActiveTab] = useState<'tasks' | 'map'>('tasks');
   const [selectedAssignment, setSelectedAssignment] = useState<ContractorAssignment | null>(null);
   const [noteText, setNoteText] = useState('');
+  const [noteAttachment, setNoteAttachment] = useState<{ dataUrl: string; filename: string; mimeType: string } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [mapFilter, setMapFilter] = useState<'all' | 'overdue' | 'today' | 'tomorrow' | 'week'>('all');
   const [showPlansPdf, setShowPlansPdf] = useState(false);
+  const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
   const mediaInputRef = useRef<HTMLInputElement>(null);
+  const noteAttachRef = useRef<HTMLInputElement>(null);
 
   const contractor = contractors.find(c => c.token === token && c.active) ?? null;
 
@@ -145,10 +155,8 @@ export function ContractorPortal() {
   const getMedia = (assignmentId: string) => contractorPhotos.filter(p => p.assignmentId === assignmentId);
   const getNotes = (assignmentId: string) => contractorNotes.filter(n => n.assignmentId === assignmentId);
 
-  // Highlighted apartment IDs for the building map
   const assignedAptIds = new Set(assignments.map(a => a.apartmentId));
 
-  // Countdown sub-labels per apartment (earliest pending due date)
   const aptSubLabels = useMemo(() => {
     const m = new Map<string, string>();
     const today = startOfDay(new Date());
@@ -168,7 +176,6 @@ export function ContractorPortal() {
     return m;
   }, [assignments]);
 
-  // Map filter: subset of assignedAptIds matching the selected time filter
   const filteredAptIds = useMemo(() => {
     if (mapFilter === 'all') return assignedAptIds;
     const today = startOfDay(new Date());
@@ -184,11 +191,38 @@ export function ContractorPortal() {
     return matching;
   }, [mapFilter, assignments]);
 
+  const hasValidToken = !!googleAccessToken && Date.now() < (googleTokenExpiry ?? 0);
+
+  async function tryUploadToDrive(
+    photo: { id: string; dataUrl: string; filename: string; mimeType?: string },
+    apartmentId: string,
+  ) {
+    if (!hasValidToken) return;
+    const apt = getApt(apartmentId);
+    if (!apt?.driveLink) return;
+    const folderId = extractFolderId(apt.driveLink);
+    if (!folderId) return;
+    try {
+      const photosFolderId = await findOrCreateFolder(folderId, 'Photos', googleAccessToken!);
+      const result = await uploadFileToDrive(
+        photosFolderId,
+        photo.filename,
+        photo.dataUrl,
+        photo.mimeType ?? 'image/jpeg',
+        googleAccessToken!,
+      );
+      updateContractorPhoto(photo.id, { driveFileId: result.id, driveUrl: result.webViewLink });
+    } catch {
+      // silent fail — photo stays local if Drive upload fails
+    }
+  }
+
   async function handleMediaUpload(e: React.ChangeEvent<HTMLInputElement>) {
     if (!selectedAssignment || !e.target.files?.length) return;
     setUploading(true);
     setUploadError('');
-    const MAX_SIZE = 50 * 1024 * 1024; // 50 MB
+    const MAX_SIZE = 50 * 1024 * 1024;
+    const apt = getApt(selectedAssignment.apartmentId);
     try {
       for (const file of Array.from(e.target.files)) {
         if (file.size > MAX_SIZE) {
@@ -197,7 +231,7 @@ export function ContractorPortal() {
         }
         const fType = detectFileType(file);
         const dataUrl = fType === 'image' ? await compressImage(file) : await readAsDataUrl(file);
-        addContractorPhoto({
+        const photoId = addContractorPhoto({
           assignmentId: selectedAssignment.id,
           apartmentId: selectedAssignment.apartmentId,
           contractorId,
@@ -206,6 +240,21 @@ export function ContractorPortal() {
           fileType: fType,
           mimeType: file.type,
         });
+        // Try to sync to Drive in background
+        await tryUploadToDrive({ id: photoId, dataUrl, filename: file.name, mimeType: file.type }, selectedAssignment.apartmentId);
+        // Log activity
+        addActivityLog({
+          apartmentId: selectedAssignment.apartmentId,
+          apartmentNumber: apt?.apartmentNumber ?? '',
+          buildingId: selectedAssignment.buildingId,
+          userId: contractorId,
+          userName: contractor!.name,
+          actionType: 'contractor_upload',
+          fieldChanged: 'photo_uploaded',
+          previousValue: '',
+          newValue: file.name,
+          stageId: selectedAssignment.stageId ?? '',
+        });
       }
     } finally {
       setUploading(false);
@@ -213,8 +262,17 @@ export function ContractorPortal() {
     }
   }
 
+  async function handleNoteAttachmentPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const dataUrl = detectFileType(file) === 'image' ? await compressImage(file) : await readAsDataUrl(file);
+    setNoteAttachment({ dataUrl, filename: file.name, mimeType: file.type });
+    if (noteAttachRef.current) noteAttachRef.current.value = '';
+  }
+
   function handleSendNote() {
     if (!selectedAssignment || !noteText.trim()) return;
+    const apt = getApt(selectedAssignment.apartmentId);
     addContractorNote({
       assignmentId: selectedAssignment.id,
       apartmentId: selectedAssignment.apartmentId,
@@ -223,15 +281,49 @@ export function ContractorPortal() {
       authorType: 'contractor',
       authorId: contractorId,
       authorName: contractor?.name ?? '',
+      ...(noteAttachment ?? {}),
+    });
+    addActivityLog({
+      apartmentId: selectedAssignment.apartmentId,
+      apartmentNumber: apt?.apartmentNumber ?? '',
+      buildingId: selectedAssignment.buildingId,
+      userId: contractorId,
+      userName: contractor!.name,
+      actionType: 'contractor_note',
+      fieldChanged: 'note_added',
+      previousValue: '',
+      newValue: noteText.trim().slice(0, 80),
+      stageId: selectedAssignment.stageId ?? '',
     });
     setNoteText('');
+    setNoteAttachment(null);
   }
 
   function handleComplete() {
     if (!selectedAssignment) return;
     if (getMedia(selectedAssignment.id).length === 0) return;
+    setShowCompleteConfirm(true);
+  }
+
+  function handleConfirmComplete() {
+    if (!selectedAssignment) return;
+    const apt = getApt(selectedAssignment.apartmentId);
+    const completedAt = new Date().toISOString();
+    updateContractorAssignment(selectedAssignment.id, { completedAt });
+    addActivityLog({
+      apartmentId: selectedAssignment.apartmentId,
+      apartmentNumber: apt?.apartmentNumber ?? '',
+      buildingId: selectedAssignment.buildingId,
+      userId: contractorId,
+      userName: contractor!.name,
+      actionType: 'contractor_complete',
+      fieldChanged: 'completedAt',
+      previousValue: '',
+      newValue: completedAt,
+      stageId: selectedAssignment.stageId ?? '',
+    });
+    setShowCompleteConfirm(false);
     setCompleting(true);
-    updateContractorAssignment(selectedAssignment.id, { completedAt: new Date().toISOString() });
     setTimeout(() => setCompleting(false), 800);
   }
 
@@ -240,7 +332,6 @@ export function ContractorPortal() {
     updateContractorAssignment(selectedAssignment.id, { completedAt: null });
   }
 
-  // Tap an apt in the map → open first active assignment (or first overall)
   function handleDiagramClick(apt: typeof apartments[0]) {
     const aptAssignments = assignments.filter(a => a.apartmentId === apt.id);
     if (aptAssignments.length === 0) return;
@@ -249,6 +340,8 @@ export function ContractorPortal() {
 
   const selMedia = selectedAssignment ? getMedia(selectedAssignment.id) : [];
   const selNotes = selectedAssignment ? getNotes(selectedAssignment.id) : [];
+  const selOfficeNotes = selNotes.filter(n => n.authorType === 'office');
+  const selContractorNotes = selNotes.filter(n => n.authorType === 'contractor');
   const canComplete = selMedia.length > 0 && !selectedAssignment?.completedAt;
 
   return (
@@ -262,7 +355,7 @@ export function ContractorPortal() {
             {CATEGORY_LABELS[contractor.category]}
           </span>
           <div className="text-right">
-            <div className="text-white text-sm font-semibold">{contractor.name}</div>
+            <div className="text-white text-sm font-semibold">{contractor!.name}</div>
             <div className="text-gray-400 text-xs">
               {assignments.length} task{assignments.length !== 1 ? 's' : ''} · {assignments.filter(a => a.completedAt).length} done
             </div>
@@ -376,7 +469,6 @@ export function ContractorPortal() {
             </div>
           ) : (
             <>
-              {/* Filter row */}
               <div className="px-4 pt-3 pb-2 flex items-center gap-2 flex-wrap">
                 {(['all', 'overdue', 'today', 'tomorrow', 'week'] as const).map(f => (
                   <button
@@ -425,10 +517,11 @@ export function ContractorPortal() {
         const stage = getStage(a.stageId);
         const isOverdue = a.dueDate && !a.completedAt && isPast(parseISO(a.dueDate));
         const dueBadge = getDueBadge(a.dueDate);
+        const plansPdfFileId = apt?.plansPdfLink ? extractFileId(apt.plansPdfLink) : null;
 
         return (
           <>
-            <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setSelectedAssignment(null)} />
+            <div className="fixed inset-0 bg-black/40 z-40" onClick={() => { setSelectedAssignment(null); setShowCompleteConfirm(false); }} />
             <div className="fixed bottom-0 left-0 right-0 z-50 rounded-t-3xl bg-white shadow-2xl flex flex-col" style={{ maxHeight: '92vh' }}>
               <div className="flex items-center justify-center pt-3 pb-1 flex-shrink-0">
                 <div className="w-10 h-1.5 rounded-full bg-gray-200" />
@@ -452,11 +545,10 @@ export function ContractorPortal() {
                       </span>
                     )}
                   </div>
-                  <button onClick={() => setSelectedAssignment(null)} className="p-1.5 rounded-full hover:bg-gray-100">
+                  <button onClick={() => { setSelectedAssignment(null); setShowCompleteConfirm(false); }} className="p-1.5 rounded-full hover:bg-gray-100">
                     <X size={20} className="text-gray-500" />
                   </button>
                 </div>
-
                 {a.dueDate && (
                   <div className={`flex items-center gap-1.5 text-xs font-medium mt-2 ${isOverdue ? 'text-red-500' : 'text-gray-500'}`}>
                     <CalendarDays size={13} />
@@ -465,9 +557,6 @@ export function ContractorPortal() {
                       <span className={`ml-1 px-1.5 py-0.5 rounded border font-semibold text-xs ${dueBadge.cls}`}>
                         {dueBadge.text}
                       </span>
-                    )}
-                    {isOverdue && (
-                      <span className="ml-1 px-1.5 py-0.5 bg-red-100 text-red-600 rounded">Overdue</span>
                     )}
                   </div>
                 )}
@@ -481,58 +570,58 @@ export function ContractorPortal() {
                   <p className="text-gray-800 text-sm leading-relaxed">{a.taskDescription}</p>
                 </div>
 
-                {/* Engineering Plans PDF */}
-                {(() => {
-                  const plansPdf = apt?.plansPdfLink;
-                  const fileId = plansPdf ? extractFileId(plansPdf) : null;
-                  if (!plansPdf) return null;
-                  return (
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-                          <BookOpen size={12} />
-                          Engineering Plans
-                        </h3>
-                        <div className="flex items-center gap-2">
-                          {fileId && (
-                            <a
-                              href={driveDownloadUrl(fileId)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-1 text-xs text-[#1e3a5f] hover:underline"
-                            >
-                              <Download size={11} /> Download
-                            </a>
-                          )}
-                          <button
-                            onClick={() => setShowPlansPdf(v => !v)}
-                            className="text-xs px-2.5 py-1 rounded-lg bg-[#1e3a5f] text-white font-medium"
-                          >
-                            {showPlansPdf ? 'Hide' : 'View PDF'}
-                          </button>
-                        </div>
-                      </div>
-                      {showPlansPdf && fileId && (
-                        <div className="rounded-xl overflow-hidden border border-gray-200" style={{ height: '420px' }}>
-                          <iframe
-                            src={drivePreviewUrl(fileId)}
-                            width="100%"
-                            height="100%"
-                            allow="autoplay"
-                            title="Engineering Plans"
-                            style={{ border: 'none' }}
-                          />
-                        </div>
-                      )}
-                      {showPlansPdf && !fileId && (
-                        <a href={plansPdf} target="_blank" rel="noopener noreferrer"
-                          className="text-sm text-[#1e3a5f] underline">
-                          Open in Google Drive
+                {/* Office notes — shown before contractor starts */}
+                {apt?.generalNotes && (
+                  <div className="px-3 py-2.5 rounded-xl bg-blue-50 border border-blue-100">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <MessageSquare size={12} className="text-blue-500" />
+                      <span className="text-xs font-semibold text-blue-700">From Office</span>
+                    </div>
+                    <p className="text-sm text-blue-800 leading-relaxed whitespace-pre-line">{apt.generalNotes}</p>
+                  </div>
+                )}
+
+                {/* Engineering Plans PDF thumbnail */}
+                {plansPdfFileId && (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                        <BookOpen size={12} /> Engineering Plans
+                      </h3>
+                      <div className="flex items-center gap-2">
+                        <a href={driveDownloadUrl(plansPdfFileId)} target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-xs text-[#1e3a5f] hover:underline">
+                          <Download size={11} /> Download
                         </a>
+                        <button
+                          onClick={() => setShowPlansPdf(v => !v)}
+                          className="text-xs px-2.5 py-1 rounded-lg bg-[#1e3a5f] text-white font-medium">
+                          {showPlansPdf ? 'Hide' : 'View'}
+                        </button>
+                      </div>
+                    </div>
+                    {/* Thumbnail — always visible when PDF is set */}
+                    <div
+                      className="rounded-xl overflow-hidden border border-gray-200 cursor-pointer relative"
+                      style={{ height: showPlansPdf ? '420px' : '160px' }}
+                      onClick={() => setShowPlansPdf(v => !v)}
+                    >
+                      <iframe
+                        src={drivePreviewUrl(plansPdfFileId)}
+                        width="100%"
+                        height={showPlansPdf ? '420' : '160'}
+                        allow="autoplay"
+                        title="Engineering Plans"
+                        style={{ border: 'none', display: 'block', pointerEvents: showPlansPdf ? 'auto' : 'none' }}
+                      />
+                      {!showPlansPdf && (
+                        <div className="absolute inset-0 flex items-end justify-center pb-2 bg-gradient-to-t from-black/20 to-transparent">
+                          <span className="text-white text-xs font-medium bg-black/40 px-2 py-0.5 rounded">Tap to expand</span>
+                        </div>
                       )}
                     </div>
-                  );
-                })()}
+                  </div>
+                )}
 
                 {/* Completion status */}
                 {a.completedAt && (
@@ -546,7 +635,7 @@ export function ContractorPortal() {
                   </div>
                 )}
 
-                {/* Media: photos, videos, files */}
+                {/* Media */}
                 <div>
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
@@ -561,20 +650,14 @@ export function ContractorPortal() {
                       <Plus size={14} />
                       {uploading ? 'Uploading…' : 'Add File'}
                     </button>
-                    <input
-                      ref={mediaInputRef}
-                      type="file"
+                    <input ref={mediaInputRef} type="file"
                       accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip"
-                      multiple
-                      className="hidden"
-                      onChange={handleMediaUpload}
-                    />
+                      multiple className="hidden" onChange={handleMediaUpload} />
                   </div>
 
                   {uploadError && (
                     <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-3 border border-amber-200">
-                      <AlertCircle size={13} className="flex-shrink-0" />
-                      {uploadError}
+                      <AlertCircle size={13} className="flex-shrink-0" /> {uploadError}
                     </div>
                   )}
 
@@ -598,27 +681,77 @@ export function ContractorPortal() {
                   )}
                 </div>
 
-                {/* Notes */}
+                {/* Notes — split by type */}
                 <div>
-                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                    Notes ({selNotes.length})
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                    <MessageSquare size={12} /> Notes
                   </h3>
-                  <div className="space-y-2 mb-3">
-                    {selNotes.map(n => (
-                      <div key={n.id}
-                        className={`px-3 py-2.5 rounded-xl text-sm ${n.authorType === 'office' ? 'bg-blue-50 border border-blue-100' : 'bg-gray-50 border border-gray-100'}`}>
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <span className="text-xs font-semibold text-gray-600">{n.authorName}</span>
-                          {n.authorType === 'office' && (
-                            <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded font-medium">Office</span>
+
+                  {/* Office notes — read-only */}
+                  {selOfficeNotes.length > 0 && (
+                    <div className="mb-3 space-y-2">
+                      <p className="text-[10px] font-semibold text-blue-600 uppercase tracking-wider">From Office</p>
+                      {selOfficeNotes.map(n => (
+                        <div key={n.id} className="px-3 py-2.5 rounded-xl text-sm bg-blue-50 border border-blue-100">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className="text-xs font-semibold text-gray-600">{n.authorName}</span>
+                            <span className="text-[10px] text-gray-400 ml-auto">{format(new Date(n.createdAt), 'MMM d, HH:mm')}</span>
+                          </div>
+                          <p className="text-gray-700 leading-relaxed">{n.text}</p>
+                          {n.attachmentDataUrl && (
+                            <a href={n.attachmentDataUrl} download={n.attachmentFilename}
+                              className="mt-1.5 flex items-center gap-1 text-xs text-[#1e3a5f] hover:underline">
+                              <Paperclip size={10} /> {n.attachmentFilename}
+                            </a>
                           )}
-                          <span className="text-[10px] text-gray-400 ml-auto">{format(new Date(n.createdAt), 'MMM d, HH:mm')}</span>
                         </div>
-                        <p className="text-gray-700 leading-relaxed">{n.text}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex gap-2">
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Contractor notes */}
+                  {selContractorNotes.length > 0 && (
+                    <div className="mb-3 space-y-2">
+                      {selOfficeNotes.length > 0 && <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Your Notes</p>}
+                      {selContractorNotes.map(n => (
+                        <div key={n.id} className="px-3 py-2.5 rounded-xl text-sm bg-gray-50 border border-gray-100">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className="text-xs font-semibold text-gray-600">{n.authorName}</span>
+                            <span className="text-[10px] text-gray-400 ml-auto">{format(new Date(n.createdAt), 'MMM d, HH:mm')}</span>
+                          </div>
+                          <p className="text-gray-700 leading-relaxed">{n.text}</p>
+                          {n.attachmentDataUrl && (
+                            <a href={n.attachmentDataUrl} download={n.attachmentFilename}
+                              className="mt-1.5 flex items-center gap-1 text-xs text-[#1e3a5f] hover:underline">
+                              <Paperclip size={10} /> {n.attachmentFilename}
+                            </a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Note input */}
+                  {noteAttachment && (
+                    <div className="flex items-center gap-2 mb-2 px-2 py-1.5 bg-blue-50 rounded-lg border border-blue-100 text-xs text-blue-700">
+                      <Paperclip size={11} />
+                      <span className="flex-1 truncate">{noteAttachment.filename}</span>
+                      <button onClick={() => setNoteAttachment(null)} className="text-blue-400 hover:text-blue-600">
+                        <X size={12} />
+                      </button>
+                    </div>
+                  )}
+                  <div className="flex gap-2 items-end">
+                    <button
+                      onClick={() => noteAttachRef.current?.click()}
+                      className="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 text-gray-400 hover:text-[#1e3a5f] hover:border-[#1e3a5f] transition-all flex-shrink-0"
+                      title="Attach file"
+                    >
+                      <Paperclip size={15} />
+                    </button>
+                    <input ref={noteAttachRef} type="file"
+                      accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip"
+                      className="hidden" onChange={handleNoteAttachmentPick} />
                     <input
                       value={noteText}
                       onChange={e => setNoteText(e.target.value)}
@@ -627,7 +760,7 @@ export function ContractorPortal() {
                       className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                     />
                     <button onClick={handleSendNote} disabled={!noteText.trim()}
-                      className="w-10 h-10 flex items-center justify-center rounded-xl text-white disabled:opacity-40 transition-all active:scale-95"
+                      className="w-10 h-10 flex items-center justify-center rounded-xl text-white disabled:opacity-40 transition-all active:scale-95 flex-shrink-0"
                       style={{ backgroundColor: '#1e3a5f' }}>
                       <Send size={16} />
                     </button>
@@ -645,19 +778,43 @@ export function ContractorPortal() {
                         Add at least one photo or file to mark this task complete.
                       </div>
                     )}
-                    <button
-                      onClick={handleComplete}
-                      disabled={!canComplete || completing}
-                      className="w-full py-3.5 rounded-xl text-sm font-bold tracking-wide transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                      style={{
-                        background: canComplete ? 'linear-gradient(135deg, #22c55e, #16a34a)' : undefined,
-                        backgroundColor: !canComplete ? '#e5e7eb' : undefined,
-                        color: canComplete ? 'white' : '#9ca3af',
-                      }}
-                    >
-                      <CheckCircle2 size={18} />
-                      {completing ? 'Marking complete…' : 'Mark as Complete'}
-                    </button>
+
+                    {/* Confirmation state */}
+                    {showCompleteConfirm ? (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-gray-800 text-center">Mark this task as complete?</p>
+                        <p className="text-xs text-gray-500 text-center">This will notify the office. You can undo afterwards.</p>
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            onClick={() => setShowCompleteConfirm(false)}
+                            className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={handleConfirmComplete}
+                            className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2"
+                            style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}
+                          >
+                            <CheckCircle2 size={16} /> Confirm Complete
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={handleComplete}
+                        disabled={!canComplete || completing}
+                        className="w-full py-3.5 rounded-xl text-sm font-bold tracking-wide transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        style={{
+                          background: canComplete ? 'linear-gradient(135deg, #22c55e, #16a34a)' : undefined,
+                          backgroundColor: !canComplete ? '#e5e7eb' : undefined,
+                          color: canComplete ? 'white' : '#9ca3af',
+                        }}
+                      >
+                        <CheckCircle2 size={18} />
+                        {completing ? 'Marking complete…' : 'Mark as Complete'}
+                      </button>
+                    )}
                   </>
                 )}
               </div>

@@ -45,6 +45,17 @@ export function ProjectDiagramPage() {
     return m;
   }, [contractorAssignments, contractors, apartments]);
 
+  // Map aptId → true if apartment has tasks and ALL are completed
+  const aptCompletedData = useMemo(() => {
+    const m = new Map<string, boolean>();
+    apartments.forEach(apt => {
+      const tasks = contractorAssignments.filter(a => a.apartmentId === apt.id);
+      if (!tasks.length) return;
+      if (tasks.every(a => !!a.completedAt)) m.set(apt.id, true);
+    });
+    return m;
+  }, [contractorAssignments, apartments]);
+
   // Map aptId → next stage name
   const nextStageLabels = useMemo(() => {
     const m = new Map<string, string>();
@@ -299,6 +310,7 @@ export function ProjectDiagramPage() {
             aptTaskData={aptTaskData}
             nextStageLabels={nextStageLabels}
             onAddTask={bulkMode ? undefined : handleAddTask}
+            aptCompletedData={aptCompletedData}
           />
         </div>
 

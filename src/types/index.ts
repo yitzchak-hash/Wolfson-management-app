@@ -119,6 +119,9 @@ export interface ContractorNote {
   authorId: string;
   authorName: string;
   createdAt: string;
+  attachmentDataUrl?: string;
+  attachmentFilename?: string;
+  attachmentMimeType?: string;
 }
 
 export interface ContractorPhoto {
@@ -126,9 +129,11 @@ export interface ContractorPhoto {
   assignmentId: string;
   apartmentId: string;
   contractorId: string;
-  dataUrl: string;   // compressed base64; will be Drive URL after migration
+  dataUrl: string;   // compressed base64 (or 'drive:' prefix when synced)
   filename: string;
   fileType?: 'image' | 'video' | 'file'; // default: 'image' (for backward compat)
   mimeType?: string;
   uploadedAt: string;
+  driveFileId?: string;
+  driveUrl?: string;
 }

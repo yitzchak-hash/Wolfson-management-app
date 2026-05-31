@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, Save, Calendar, User } from 'lucide-react';
+import { ChevronDown, ChevronUp, Save, Calendar, User, MessageSquare } from 'lucide-react';
 import { Stage, User as UserType } from '../../types';
 import { useStore } from '../../data/store';
 import { format } from 'date-fns';
@@ -14,7 +14,7 @@ interface StageNotesSectionProps {
 export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }: StageNotesSectionProps) {
   const {
     upsertStageNote, getStageNote,
-    apartments, contractors, contractorAssignments,
+    apartments, contractors, contractorAssignments, contractorNotes,
     addContractorAssignment, updateContractorAssignment, deleteContractorAssignment,
   } = useStore();
 
@@ -144,28 +144,60 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                   </div>
                 )}
 
-                {/* Notes */}
-                <textarea
-                  value={getDraft(stage.id)}
-                  onChange={e => setDrafts(d => ({ ...d, [stage.id]: e.target.value }))}
-                  placeholder={`Notes for ${stage.name}...`}
-                  rows={3}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
-                />
-                <div className="flex items-center justify-between">
-                  {note ? (
-                    <span className="text-xs text-gray-400">
-                      {note.updatedByName} · {format(new Date(note.updatedAt), 'MMM d, yyyy HH:mm')}
-                    </span>
-                  ) : <span />}
-                  <button
-                    onClick={() => handleSave(stage.id)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-xs font-medium hover:bg-[#162d4a] transition-colors"
-                  >
-                    <Save size={12} />
-                    Save Note
-                  </button>
+                {/* Office notes */}
+                <div>
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Office Notes</p>
+                  <textarea
+                    value={getDraft(stage.id)}
+                    onChange={e => setDrafts(d => ({ ...d, [stage.id]: e.target.value }))}
+                    placeholder={`Office notes for ${stage.name}...`}
+                    rows={2}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
+                  />
+                  <div className="flex items-center justify-between mt-1">
+                    {note ? (
+                      <span className="text-xs text-gray-400">
+                        {note.updatedByName} · {format(new Date(note.updatedAt), 'MMM d, yyyy HH:mm')}
+                      </span>
+                    ) : <span />}
+                    <button
+                      onClick={() => handleSave(stage.id)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-xs font-medium hover:bg-[#162d4a] transition-colors"
+                    >
+                      <Save size={12} />
+                      Save
+                    </button>
+                  </div>
                 </div>
+
+                {/* Contractor notes for this stage */}
+                {(() => {
+                  const assignmentIds = contractorAssignments
+                    .filter(a => a.apartmentId === apartmentId && a.stageId === stage.id)
+                    .map(a => a.id);
+                  const cNotes = contractorNotes.filter(
+                    n => assignmentIds.includes(n.assignmentId) && n.authorType === 'contractor',
+                  );
+                  if (!cNotes.length) return null;
+                  return (
+                    <div className="mt-2 pt-2 border-t border-gray-100">
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                        <MessageSquare size={9} /> Contractor Notes
+                      </p>
+                      <div className="space-y-1.5">
+                        {cNotes.map(n => (
+                          <div key={n.id} className="px-2.5 py-2 rounded-lg bg-gray-50 border border-gray-100 text-xs">
+                            <div className="flex items-center gap-1 mb-0.5">
+                              <span className="font-medium text-gray-700">{n.authorName}</span>
+                              <span className="text-gray-400 ml-auto">{format(new Date(n.createdAt), 'MMM d, HH:mm')}</span>
+                            </div>
+                            <p className="text-gray-600 leading-snug">{n.text}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>

@@ -33,6 +33,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
   const [dueDate, setDueDate] = useState('');
   const [stageId, setStageId] = useState(apartment.currentStageId ?? '');
   const [showForm, setShowForm] = useState(true);
+  const [hideCompleted, setHideCompleted] = useState(false);
 
   const sortedStages = [...stages].filter(s => s.active).sort((a, b) => a.order - b.order);
   const currentStage = stages.find(s => s.id === apartment.currentStageId);
@@ -51,6 +52,8 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
     });
 
   const pendingCount = aptTasks.filter(a => !a.completedAt).length;
+  const completedCount = aptTasks.filter(a => !!a.completedAt).length;
+  const visibleTasks = hideCompleted ? aptTasks.filter(a => !a.completedAt) : aptTasks;
 
   function handleAdd() {
     if (!contractorId || !task.trim()) return;
@@ -122,6 +125,17 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                   </span>
                 )}
               </h3>
+              {completedCount > 0 && (
+                <button
+                  onClick={() => setHideCompleted(v => !v)}
+                  className={`flex items-center gap-1 text-xs px-2 py-1 rounded-lg border transition-all ${
+                    hideCompleted ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-50 border-gray-200 text-gray-500'
+                  }`}
+                >
+                  <CheckCircle2 size={11} />
+                  {hideCompleted ? `${completedCount} hidden` : 'Hide done'}
+                </button>
+              )}
             </div>
 
             {aptTasks.length === 0 ? (
@@ -131,7 +145,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
               </div>
             ) : (
               <div className="space-y-2">
-                {aptTasks.map(a => {
+                {visibleTasks.map(a => {
                   const contractor = contractors.find(c => c.id === a.contractorId);
                   const stage = stages.find(s => s.id === a.stageId);
                   const dueBadge = getDueBadge(a.dueDate);

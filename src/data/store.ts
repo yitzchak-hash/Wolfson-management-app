@@ -120,7 +120,8 @@ interface AppState {
   updateContractorAssignment: (id: string, changes: Partial<ContractorAssignment>) => void;
   deleteContractorAssignment: (id: string) => void;
   addContractorNote: (n: Omit<ContractorNote, 'id' | 'createdAt'>) => void;
-  addContractorPhoto: (p: Omit<ContractorPhoto, 'id' | 'uploadedAt'>) => void;
+  addContractorPhoto: (p: Omit<ContractorPhoto, 'id' | 'uploadedAt'>) => string;
+  updateContractorPhoto: (id: string, changes: Partial<ContractorPhoto>) => void;
   deleteContractorPhoto: (id: string) => void;
 
   // Backup / restore
@@ -488,6 +489,14 @@ export const useStore = create<AppState>((set, get) => ({
   addContractorPhoto: (fields) => {
     const p: ContractorPhoto = { ...fields, id: generateId(), uploadedAt: new Date().toISOString() };
     set(state => ({ contractorPhotos: [...state.contractorPhotos, p] }));
+    persist(get);
+    return p.id;
+  },
+
+  updateContractorPhoto: (id, changes) => {
+    set(state => ({
+      contractorPhotos: state.contractorPhotos.map(p => p.id === id ? { ...p, ...changes } : p),
+    }));
     persist(get);
   },
 

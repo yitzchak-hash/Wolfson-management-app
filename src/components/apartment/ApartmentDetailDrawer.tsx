@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity } from 'lucide-react';
+import { X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw } from 'lucide-react';
 import { Apartment, User } from '../../types';
 import { useStore } from '../../data/store';
 import { format } from 'date-fns';
 import { StageNotesSection } from './StageNotesSection';
 import { ActivitySection } from './ActivitySection';
-import { extractFileId, drivePreviewUrl, driveDownloadUrl } from '../../data/driveApi';
+import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdf } from '../../data/driveApi';
 
 interface Props {
   apartment: Apartment | null;
@@ -15,7 +15,8 @@ interface Props {
 }
 
 export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast }: Props) {
-  const { stages, activityLogs, apartments, updateApartment, mergeApartments, unmergeApartments } = useStore();
+  const { stages, activityLogs, apartments, updateApartment, mergeApartments, unmergeApartments,
+    googleAccessToken, googleTokenExpiry } = useStore();
 
   const [displayName, setDisplayName] = useState('');
   const [currentStageId, setCurrentStageId] = useState<string>('');
@@ -28,6 +29,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [showUnmergeModal, setShowUnmergeModal] = useState(false);
   const [showPdfViewer, setShowPdfViewer] = useState(false);
   const [showHealthCheck, setShowHealthCheck] = useState(false);
+  const [fetchingPdf, setFetchingPdf] = useState(false);
+  const [detectedPdfId, setDetectedPdfId] = useState<string | null>(null);
 
   useEffect(() => {
     if (apartment) {
@@ -41,6 +44,15 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       setShowPdfViewer(false);
       setShowHealthCheck(false);
       setActiveTab('details');
+      // Auto-detect PDF if drive link is present and token available
+      const existingFileId = apartment.plansPdfLink ? extractFileId(apartment.plansPdfLink) : null;
+      setDetectedPdfId(existingFileId);
+      if (!existingFileId && apartment.driveLink && googleAccessToken && Date.now() < (googleTokenExpiry ?? 0)) {
+        setFetchingPdf(true);
+        findPlansPdf(apartment.driveLink, googleAccessToken).then(f => {
+          if (f) setDetectedPdfId(f.id);
+        }).finally(() => setFetchingPdf(false));
+      }
     }
   }, [apartment?.id]);
 
@@ -326,7 +338,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     <p className="text-xs font-medium text-gray-600 mb-2">Folder Health</p>
                     {[
                       { label: 'Main Drive folder linked', ok: !!driveLink.trim() },
-                      { label: 'Engineering Plans PDF linked', ok: !!plansPdfLink.trim() },
+                      { label: 'Plans PDF detected', ok: !!detectedPdfId },
                     ].map(({ label, ok }) => (
                       <div key={label} className="flex items-center gap-2 text-xs">
                         <span className={`w-4 h-4 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0 ${ok ? 'bg-green-500' : 'bg-red-400'}`} style={{ fontSize: '9px' }}>
@@ -335,9 +347,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                         <span className="text-gray-600">{label}</span>
                       </div>
                     ))}
-                    <p className="text-[10px] text-gray-400 mt-1.5 pt-1.5 border-t border-gray-200">
-                      Connect Google Drive in Settings → App for full folder verification.
-                    </p>
+                    {!detectedPdfId && !fetchingPdf && (
+                      <p className="text-[10px] text-gray-400 mt-1.5 pt-1.5 border-t border-gray-200">
+                        {googleAccessToken ? 'Refresh to re-check.' : 'Connect Google Drive in Settings → App to check.'}
+                      </p>
+                    )}
                   </div>
                 )}
                 {mergedPartner && mergedPartner.driveLink && driveLink && mergedPartner.driveLink !== driveLink.trim() && (
@@ -351,66 +365,76 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 )}
               </div>
 
-              {/* Engineering Plans PDF */}
+              {/* Engineering Plans PDF — auto-detected or manually linked */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1.5">
-                  <BookOpen size={11} />
-                  Engineering Plans PDF
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    value={plansPdfLink}
-                    onChange={e => setPlansPdfLink(e.target.value)}
-                    placeholder="https://drive.google.com/file/d/..."
-                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
-                  />
-                  {plansPdfLink && (() => {
-                    const fileId = extractFileId(plansPdfLink);
-                    return (
-                      <>
-                        <button
-                          onClick={() => setShowPdfViewer(v => !v)}
-                          className="flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 text-gray-500 hover:text-[#1e3a5f] hover:border-[#1e3a5f] transition-all text-xs font-medium"
-                          title={showPdfViewer ? 'Hide PDF' : 'View PDF'}
-                        >
-                          {showPdfViewer ? <EyeOff size={14} /> : <Eye size={14} />}
-                        </button>
-                        {fileId && (
-                          <a
-                            href={driveDownloadUrl(fileId)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center px-3 py-2 rounded-lg border border-gray-200 text-gray-500 hover:text-[#4aa8d8] hover:border-[#4aa8d8] transition-all"
-                            title="Download PDF"
-                          >
-                            <Download size={14} />
-                          </a>
-                        )}
-                      </>
-                    );
-                  })()}
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
+                    <BookOpen size={11} /> Engineering Plans
+                  </label>
+                  {driveLink && googleAccessToken && Date.now() < (googleTokenExpiry ?? 0) && (
+                    <button
+                      onClick={() => {
+                        setFetchingPdf(true);
+                        findPlansPdf(driveLink, googleAccessToken!).then(f => {
+                          if (f) { setDetectedPdfId(f.id); setPlansPdfLink(`https://drive.google.com/file/d/${f.id}/view`); }
+                        }).finally(() => setFetchingPdf(false));
+                      }}
+                      className="flex items-center gap-1 text-xs text-gray-400 hover:text-[#1e3a5f] transition-colors"
+                      title="Re-fetch PDF from Drive"
+                    >
+                      <RefreshCw size={11} className={fetchingPdf ? 'animate-spin' : ''} />
+                      {fetchingPdf ? 'Detecting…' : 'Refresh'}
+                    </button>
+                  )}
                 </div>
-                {showPdfViewer && plansPdfLink && (() => {
-                  const fileId = extractFileId(plansPdfLink);
-                  if (!fileId) return (
-                    <a href={plansPdfLink} target="_blank" rel="noopener noreferrer"
-                      className="mt-2 block text-xs text-[#1e3a5f] underline">
-                      Open in Google Drive
-                    </a>
-                  );
-                  return (
-                    <div className="mt-2 rounded-xl overflow-hidden border border-gray-200 relative" style={{ height: '440px' }}>
+
+                {detectedPdfId ? (
+                  <>
+                    {/* Thumbnail — small preview, click to expand */}
+                    <div
+                      className="rounded-xl overflow-hidden border border-gray-200 cursor-pointer relative mb-2"
+                      style={{ height: showPdfViewer ? '440px' : '160px' }}
+                      onClick={() => setShowPdfViewer(v => !v)}
+                    >
                       <iframe
-                        src={drivePreviewUrl(fileId)}
+                        src={drivePreviewUrl(detectedPdfId)}
                         width="100%"
-                        height="100%"
+                        height={showPdfViewer ? '440' : '160'}
                         allow="autoplay"
                         title="Engineering Plans"
-                        style={{ border: 'none', display: 'block' }}
+                        style={{ border: 'none', display: 'block', pointerEvents: showPdfViewer ? 'auto' : 'none' }}
                       />
+                      {!showPdfViewer && (
+                        <div className="absolute inset-0 flex items-end justify-center pb-2 bg-gradient-to-t from-black/20 to-transparent">
+                          <span className="text-white text-[10px] font-medium bg-black/40 px-2 py-0.5 rounded">Click to expand</span>
+                        </div>
+                      )}
                     </div>
-                  );
-                })()}
+                    <div className="flex gap-2">
+                      <button onClick={() => setShowPdfViewer(v => !v)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:border-[#1e3a5f] hover:text-[#1e3a5f] transition-all">
+                        {showPdfViewer ? <EyeOff size={12} /> : <Eye size={12} />}
+                        {showPdfViewer ? 'Hide' : 'Full View'}
+                      </button>
+                      <a href={driveDownloadUrl(detectedPdfId)} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:border-[#4aa8d8] hover:text-[#4aa8d8] transition-all">
+                        <Download size={12} /> Download
+                      </a>
+                    </div>
+                  </>
+                ) : fetchingPdf ? (
+                  <div className="flex items-center gap-2 text-xs text-gray-400 py-3">
+                    <RefreshCw size={12} className="animate-spin" /> Looking for Plans PDF in Drive…
+                  </div>
+                ) : (
+                  <div className="text-xs text-gray-400 italic py-1">
+                    {driveLink
+                      ? googleAccessToken && Date.now() < (googleTokenExpiry ?? 0)
+                        ? 'No Plans PDF found in Drive folder. Click Refresh to retry.'
+                        : 'Connect Google Drive in Settings to auto-detect the Plans PDF.'
+                      : 'Set the Drive folder link above to auto-detect Plans PDF.'}
+                  </div>
+                )}
               </div>
 
               <button

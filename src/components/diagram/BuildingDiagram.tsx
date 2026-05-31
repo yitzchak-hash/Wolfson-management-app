@@ -17,6 +17,7 @@ interface BuildingDiagramProps {
   aptTaskData?: Map<string, string>;     // aptId → formatted task string e.g. "John · 2"
   nextStageLabels?: Map<string, string>; // aptId → next stage name
   onAddTask?: (apt: Apartment) => void;  // opens quick-add task panel
+  aptCompletedData?: Map<string, boolean>; // aptId → true if all tasks complete
   compact?: boolean;
 }
 
@@ -91,16 +92,17 @@ interface AptCellProps {
   isBulkSelected?: boolean;
   isContractorHighlighted?: boolean;
   aptSubLabel?: string;
-  taskInfo?: string;      // e.g. "John · 2" or "3 tasks"
-  nextStageName?: string; // name of the next stage in sequence
-  onAddTask?: () => void; // "+" button callback
+  taskInfo?: string;
+  nextStageName?: string;
+  onAddTask?: () => void;
+  allTasksDone?: boolean;
   compact?: boolean;
 }
 
 function AptCell({
   apt, stage, isHighlighted, isDimmed, showShinuiBadge, onClick,
   isDuplex, isBasement, isMerged, mergedLabel, isBulkSelected, isContractorHighlighted,
-  aptSubLabel, taskInfo, nextStageName, onAddTask, compact,
+  aptSubLabel, taskInfo, nextStageName, onAddTask, allTasksDone, compact,
 }: AptCellProps) {
   const hasStage = !!stage;
   const bgColor = hasStage ? stage!.color : isBasement ? '#eef3f9' : '#ffffff';
@@ -219,6 +221,17 @@ function AptCell({
         </button>
       )}
 
+      {/* All-tasks-complete green indicator */}
+      {allTasksDone && !compact && (
+        <div
+          className="absolute bottom-0.5 right-0.5 w-3 h-3 rounded-full flex items-center justify-center"
+          style={{ backgroundColor: '#22c55e', border: '1px solid rgba(255,255,255,0.8)' }}
+          title="All tasks complete"
+        >
+          <span style={{ fontSize: '7px', color: 'white', fontWeight: 'bold', lineHeight: 1 }}>✓</span>
+        </div>
+      )}
+
       {isBulkSelected && (
         <div
           className="absolute inset-0 flex items-center justify-center rounded-md"
@@ -244,7 +257,7 @@ function Stairwell({ compact }: { compact?: boolean }) {
 
 function FourCellRow({
   aptNums, getApt, getStage, isHighlighted, isDimmed, isMerged, getMergedLabel,
-  isContractorHighlighted, isBulkSelected, getAptSubLabel, getTaskInfo, getNextStageName, getOnAddTask,
+  isContractorHighlighted, isBulkSelected, getAptSubLabel, getTaskInfo, getNextStageName, getOnAddTask, getAllTasksDone,
   showShinuiBadge, onApartmentClick, isBasement = false, compact,
 }: {
   aptNums: number[];
@@ -260,6 +273,7 @@ function FourCellRow({
   getTaskInfo?: (a: Apartment | undefined) => string | undefined;
   getNextStageName?: (a: Apartment | undefined) => string | undefined;
   getOnAddTask?: (a: Apartment | undefined) => (() => void) | undefined;
+  getAllTasksDone?: (a: Apartment | undefined) => boolean | undefined;
   showShinuiBadge: boolean;
   onApartmentClick: (a: Apartment) => void;
   isBasement?: boolean;
@@ -290,6 +304,7 @@ function FourCellRow({
               taskInfo={getTaskInfo?.(apt)}
               nextStageName={getNextStageName?.(apt)}
               onAddTask={getOnAddTask?.(apt)}
+              allTasksDone={getAllTasksDone?.(apt)}
               compact={compact}
             />
           );
@@ -319,6 +334,7 @@ function FourCellRow({
               taskInfo={getTaskInfo?.(apt)}
               nextStageName={getNextStageName?.(apt)}
               onAddTask={getOnAddTask?.(apt)}
+              allTasksDone={getAllTasksDone?.(apt)}
               compact={compact}
             />
           );
@@ -331,7 +347,7 @@ function FourCellRow({
 function BuildingColumn({
   buildingId, apartments, mergedLabels, stages, activeStageIds, classFilter, searchQuery,
   onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, aptSubLabels,
-  aptTaskData, nextStageLabels, onAddTask, compact,
+  aptTaskData, nextStageLabels, onAddTask, aptCompletedData, compact,
 }: {
   buildingId: BuildingId;
   apartments: Apartment[];
@@ -348,6 +364,7 @@ function BuildingColumn({
   aptTaskData?: Map<string, string>;
   nextStageLabels?: Map<string, string>;
   onAddTask?: (apt: Apartment) => void;
+  aptCompletedData?: Map<string, boolean>;
   compact?: boolean;
 }) {
   const stageMap = useMemo(() => new Map(stages.map(s => [s.id, s])), [stages]);
@@ -411,6 +428,10 @@ function BuildingColumn({
   function getOnAddTask(apt: Apartment | undefined): (() => void) | undefined {
     if (!apt || !onAddTask) return undefined;
     return () => onAddTask(apt);
+  }
+  function getAllTasksDone(apt: Apartment | undefined): boolean | undefined {
+    if (!apt) return undefined;
+    return aptCompletedData?.get(apt.id);
   }
 
   return (
@@ -496,6 +517,7 @@ function BuildingColumn({
                     getTaskInfo={getTaskInfo}
                     getNextStageName={getNextStageName}
                     getOnAddTask={getOnAddTask}
+                    getAllTasksDone={getAllTasksDone}
                     showShinuiBadge={showShinuiBadge}
                     onApartmentClick={onApartmentClick}
                     isBasement={row.type === 'basement'}
@@ -524,6 +546,7 @@ function BuildingColumn({
                             taskInfo={getTaskInfo(apt)}
                             nextStageName={getNextStageName(apt)}
                             onAddTask={getOnAddTask(apt)}
+                            allTasksDone={getAllTasksDone(apt)}
                             compact={compact}
                           />
                         </React.Fragment>
@@ -543,7 +566,7 @@ function BuildingColumn({
 export function BuildingDiagram({
   apartments, stages, activeStageIds, classFilter, searchQuery, selectedBuilding,
   onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, aptSubLabels,
-  aptTaskData, nextStageLabels, onAddTask, compact,
+  aptTaskData, nextStageLabels, onAddTask, aptCompletedData, compact,
 }: BuildingDiagramProps) {
   const buildingOrder: BuildingId[] = ['A3', 'A2', 'A1'];
   const visibleBuildings = selectedBuilding === 'all' ? buildingOrder : [selectedBuilding];
@@ -602,6 +625,7 @@ export function BuildingDiagram({
           aptTaskData={aptTaskData}
           nextStageLabels={nextStageLabels}
           onAddTask={onAddTask}
+          aptCompletedData={aptCompletedData}
           compact={compact}
         />
       ))}
