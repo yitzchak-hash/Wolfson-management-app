@@ -129,7 +129,7 @@ export function ContractorPortal() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-6" style={{ backgroundColor: '#0f1f35' }}>
         <img src="/tzviair-logo.png" alt="TzviAir" className="h-16 mb-8"
-          style={{ filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.4))' }} />
+          style={{ filter: 'drop-shadow(0 2px 12px rgba(0,0,0,0.8)) drop-shadow(0 0 4px rgba(0,0,0,0.6))' }} />
         <div className="text-white text-xl font-semibold mb-2">Link not found</div>
         <p className="text-gray-400 text-sm text-center">This link is invalid or has been deactivated. Contact your project manager.</p>
       </div>
@@ -255,7 +255,7 @@ export function ContractorPortal() {
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#f0f4f8' }}>
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-3 shadow-md flex-shrink-0" style={{ backgroundColor: '#0f1f35' }}>
-        <img src="/tzviair-logo.png" alt="TzviAir" style={{ height: '32px', filter: 'drop-shadow(0 1px 4px rgba(0,0,0,0.3))' }} />
+        <img src="/tzviair-logo.png" alt="TzviAir" style={{ height: '32px', filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.9)) drop-shadow(0 1px 3px rgba(0,0,0,0.7))' }} />
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold px-2.5 py-1 rounded-full"
             style={{ backgroundColor: catColor + '22', color: catColor, border: `1px solid ${catColor}44` }}>

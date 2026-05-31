@@ -25,14 +25,23 @@ src/
     store.ts              — Zustand store (state + all actions)
     initialData.ts        — default seed data (bump DATA_VERSION to reset)
     firebase.ts           — optional Firestore helpers
-  pages/                  — top-level route components
+    driveApi.ts           — Google Drive API helpers (OAuth, folder listing, health check)
+  pages/
+    ProjectDiagramPage    — building diagram with filters + bulk edit
+    DashboardPage         — summary cards
+    TasksPage             — contractor task management (dedicated page, /tasks route)
+    AnalyticsDashboard    — stage/building analytics
+    ReportsPage           — CSV export
+    ActivityLogPage       — global change log
+    SettingsPage          — stages / users / contractors / app (theme, Drive, backup)
+    ContractorPortal      — public /c/:token page (tasks + building map)
+    LoginPage
   components/
     layout/               — AppLayout, Header, Sidebar
     apartment/            — ApartmentDetailDrawer, StageNotesSection, ActivitySection
-    diagram/              — BuildingDiagram, AptCell
+    diagram/              — BuildingDiagram (supports compact, highlightedApartmentIds, aptSubLabels)
     dashboard/            — summary cards
     reports/              — table/export
-    settings/             — stage/user/contractor editors
     ui/                   — Toast, shared primitives
 ```
 
@@ -43,6 +52,10 @@ src/
 - **No duplex apartments** — `isDuplexApt` field retained for data compat but always `false`
 - **Classification**: `'standard'` or `'shinui'` (displayed as "Changes" in UI, internal value preserved)
 - **mergedWith**: optional field on Apartment for buyer-merged units (bilateral link, managed via `mergeApartments()` action)
+- **Merged apartment sync**: `currentStageId`, `classification`, `driveLink`, and `plansPdfLink` auto-sync to the partner on every `updateApartment` call
+- **unmergeApartments(aptId, keepDataAptId, user)**: unlinking action; `keepDataAptId` is `aptId | partnerId | 'both'`; the loser gets `currentStageId=null`, `driveLink=undefined`, `plansPdfLink=undefined`
+- **driveLink**: Google Drive folder URL for the apartment; stored on Apartment, editable in drawer
+- **plansPdfLink**: Google Drive file URL for the Engineering Plans PDF; shown as embedded iframe viewer + download in both admin drawer and contractor portal
 - **DATA_VERSION** in `initialData.ts` — bumping forces a localStorage reset (dev only; production data would need a migration)
 
 ## Contractor Portal
@@ -50,9 +63,14 @@ src/
 - Contractors have category: `'drywall' | 'ac' | 'general'`
 - Each contractor has a unique random token; link is copyable from Settings > Contractors
 - Assignments link contractor → apartment with task description, stage, due date
-- Contractor can upload photos and add notes; office notes visible read-only
-- **Completed button is disabled until at least one photo exists**
-- Photo storage: compressed base64 in localStorage (max ~800px, 70% quality) — planned migration to Google Drive
+- Two tabs: **My Tasks** (assignment cards with countdown badges) and **Building Map**
+- Building map highlights assigned apartments with gold glow; filter buttons: All / Overdue / Today / Tomorrow / This Week
+- Each highlighted cell shows a tiny schedule label (Today / Tomorrow / Overdue / date) at cell bottom
+- Contractor can upload photos, videos, and files; office notes visible read-only
+- **Completed button is disabled until at least one file exists**
+- Engineering Plans PDF shown in task detail sheet when `apartment.plansPdfLink` is set
+- File storage: images compressed (max 1200px, 72% JPEG), videos/files stored as raw base64 (max 50 MB)
+- `ContractorPhoto.fileType`: `'image' | 'video' | 'file'` (default `'image'` for backward compat)
 
 ## Backup / Restore
 - **Export**: full JSON snapshot of all app data including photos (Settings > App > Backup)
@@ -66,12 +84,28 @@ src/
 - CSS colors: primary `#1e3a5f` (navy), accent `#4aa8d8` (blue), amber for Changes badge
 - Always use Tailwind utility classes; only reach for inline `style` for dynamic/computed values
 - Contractor token generation: `generateToken()` → 24-char alphanumeric random string
+- `getDueBadge(dueDate)` → `{ text, cls }` — shared countdown badge logic (copy used in TasksPage and ContractorPortal)
 - **Always update this CLAUDE.md** when new types, pages, or conventions are added
 
-## Google Drive Integration (Planned)
-- OAuth 2.0 client credentials stored in `.env` (not committed)
-- Photos uploaded to a per-apartment Drive folder; `dataUrl` field in `ContractorPhoto` replaced with `driveFileId + driveUrl`
-- Setup guide: see the Google Drive API Setup section in Settings once credentials are configured
+## Tasks Page
+- Route: `/tasks` — requires auth, accessible via sidebar (ClipboardList icon, between Dashboard and Analytics)
+- Full CRUD for contractor assignments: create, inline edit, mark complete/incomplete, delete
+- Filter by contractor; sorted incomplete-first then by due date
+- Countdown badges via `getDueBadge()` for overdue/today/tomorrow/within-3-days tasks
+
+## Google Drive Integration
+- **Client ID**: stored in Zustand as `googleClientId` (persisted to localStorage); entered in Settings → App
+- **Access token**: stored as `googleAccessToken` + `googleTokenExpiry` in Zustand (session-only, not persisted)
+- **OAuth flow**: `requestGoogleToken(clientId)` in `driveApi.ts` loads Google Identity Services (GIS) dynamically and opens consent popup
+- **Scope**: `https://www.googleapis.com/auth/drive.readonly`
+- **Helpers in `src/data/driveApi.ts`**:
+  - `extractFolderId(url)` — pull folder ID from any Drive folder URL
+  - `extractFileId(url)` — pull file ID from any Drive file/doc URL
+  - `drivePreviewUrl(fileId)` → embed URL for iframe PDF viewer
+  - `driveDownloadUrl(fileId)` → direct download link
+  - `checkFolderHealth(driveLink, plansPdfLink, token)` → `FolderHealth` with subfolder/PDF presence
+  - `findPlansPdf(driveLink, token)` → finds PDF inside "Engineered Plans" subfolder
+- **Setup**: Google Cloud Console → New Project → Enable Drive API → OAuth 2.0 Client ID (Web application, origin = app URL)
 
 ## Firebase Setup (Optional)
 - Copy `.env.example` to `.env.local` and add your Firebase config
