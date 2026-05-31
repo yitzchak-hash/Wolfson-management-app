@@ -1,16 +1,17 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { Search, X, ToggleLeft, CheckSquare, Printer, ChevronDown } from 'lucide-react';
 import { useStore } from '../data/store';
 import { Apartment, BuildingId } from '../types';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
 import { StageLegend } from '../components/diagram/StageLegend';
 import { ApartmentDetailDrawer } from '../components/apartment/ApartmentDetailDrawer';
+import { QuickAddTaskPanel } from '../components/apartment/QuickAddTaskPanel';
 import { Toast } from '../components/ui/Toast';
 
 type ClassFilter = 'all' | 'standard' | 'shinui';
 
 export function ProjectDiagramPage() {
-  const { apartments, stages, currentUser, bulkUpdateApartments } = useStore();
+  const { apartments, stages, currentUser, bulkUpdateApartments, contractorAssignments, contractors } = useStore();
 
   const [selectedBuilding, setSelectedBuilding] = useState<BuildingId | 'all'>('all');
   const [activeStageIds, setActiveStageIds] = useState<string[]>([]);
@@ -18,6 +19,7 @@ export function ProjectDiagramPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showShinuiBadge, setShowShinuiBadge] = useState(true);
   const [selectedApt, setSelectedApt] = useState<Apartment | null>(null);
+  const [addTaskApt, setAddTaskApt] = useState<Apartment | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
   // Bulk update state
@@ -27,6 +29,32 @@ export function ProjectDiagramPage() {
   const [bulkDropdownOpen, setBulkDropdownOpen] = useState(false);
 
   const sortedStages = [...stages].filter(s => s.active).sort((a, b) => a.order - b.order);
+
+  // Map aptId → "ContractorName · N" task summary for display in cell
+  const aptTaskData = useMemo(() => {
+    const m = new Map<string, string>();
+    apartments.forEach(apt => {
+      const pending = contractorAssignments.filter(a => a.apartmentId === apt.id && !a.completedAt);
+      if (!pending.length) return;
+      const firstContractor = contractors.find(c => c.id === pending[0].contractorId);
+      const label = firstContractor
+        ? `${firstContractor.name}${pending.length > 1 ? ` · ${pending.length}` : ''}`
+        : `${pending.length} task${pending.length !== 1 ? 's' : ''}`;
+      m.set(apt.id, label);
+    });
+    return m;
+  }, [contractorAssignments, contractors, apartments]);
+
+  // Map aptId → next stage name
+  const nextStageLabels = useMemo(() => {
+    const m = new Map<string, string>();
+    apartments.forEach(apt => {
+      const idx = sortedStages.findIndex(s => s.id === apt.currentStageId);
+      const next = idx >= 0 && idx < sortedStages.length - 1 ? sortedStages[idx + 1] : idx === -1 && sortedStages.length > 0 ? sortedStages[0] : null;
+      if (next) m.set(apt.id, next.name);
+    });
+    return m;
+  }, [apartments, sortedStages]);
 
   function toggleStage(id: string) {
     setActiveStageIds(prev =>
@@ -58,9 +86,15 @@ export function ProjectDiagramPage() {
         return next;
       });
     } else {
+      setAddTaskApt(null);
       setSelectedApt(apt);
     }
   }, [bulkMode]);
+
+  const handleAddTask = useCallback((apt: Apartment) => {
+    setSelectedApt(null);
+    setAddTaskApt(apt);
+  }, []);
 
   function handleBulkApply() {
     if (!currentUser || bulkSelected.size === 0) return;
@@ -262,6 +296,9 @@ export function ProjectDiagramPage() {
             showShinuiBadge={showShinuiBadge}
             bulkMode={bulkMode}
             bulkSelected={bulkSelected}
+            aptTaskData={aptTaskData}
+            nextStageLabels={nextStageLabels}
+            onAddTask={bulkMode ? undefined : handleAddTask}
           />
         </div>
 
@@ -272,6 +309,16 @@ export function ProjectDiagramPage() {
             onClose={() => setSelectedApt(null)}
             currentUser={currentUser}
             onToast={showToast}
+          />
+        )}
+
+        {/* Quick-add task panel */}
+        {!bulkMode && addTaskApt && currentUser && (
+          <QuickAddTaskPanel
+            apartment={addTaskApt}
+            onClose={() => setAddTaskApt(null)}
+            currentUser={currentUser}
+            onToast={msg => showToast(msg)}
           />
         )}
 

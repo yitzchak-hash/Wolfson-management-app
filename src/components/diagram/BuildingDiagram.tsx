@@ -12,9 +12,12 @@ interface BuildingDiagramProps {
   showShinuiBadge: boolean;
   bulkMode?: boolean;
   bulkSelected?: Set<string>;
-  highlightedApartmentIds?: Set<string>; // contractor view: highlight these, dim others
-  aptSubLabels?: Map<string, string>; // aptId → schedule label ("Today", "Tomorrow", "Overdue", etc.)
-  compact?: boolean; // smaller row heights for embedded views
+  highlightedApartmentIds?: Set<string>;
+  aptSubLabels?: Map<string, string>;
+  aptTaskData?: Map<string, string>;     // aptId → formatted task string e.g. "John · 2"
+  nextStageLabels?: Map<string, string>; // aptId → next stage name
+  onAddTask?: (apt: Apartment) => void;  // opens quick-add task panel
+  compact?: boolean;
 }
 
 function getTextColor(bgHex: string): string {
@@ -36,7 +39,7 @@ interface FloorRowDef {
 function getFloorRows(buildingId: BuildingId, compact = false): FloorRowDef[] {
   const h = compact
     ? { roof: 16, wide: 36, normal: 36, basement: 30, lobby: 26, ground: 26 }
-    : { roof: 26, wide: 52, normal: 52, basement: 48, lobby: 40, ground: 40 };
+    : { roof: 26, wide: 68, normal: 68, basement: 58, lobby: 44, ground: 44 };
 
   const rows: FloorRowDef[] = [];
 
@@ -84,16 +87,20 @@ interface AptCellProps {
   isDuplex?: boolean;
   isBasement?: boolean;
   isMerged?: boolean;
-  mergedLabel?: string; // "A/B" label when two apartments are connected
+  mergedLabel?: string;
   isBulkSelected?: boolean;
-  isContractorHighlighted?: boolean; // gold glow in contractor view
-  aptSubLabel?: string; // schedule countdown shown in contractor map cells
+  isContractorHighlighted?: boolean;
+  aptSubLabel?: string;
+  taskInfo?: string;      // e.g. "John · 2" or "3 tasks"
+  nextStageName?: string; // name of the next stage in sequence
+  onAddTask?: () => void; // "+" button callback
   compact?: boolean;
 }
 
 function AptCell({
   apt, stage, isHighlighted, isDimmed, showShinuiBadge, onClick,
-  isDuplex, isBasement, isMerged, mergedLabel, isBulkSelected, isContractorHighlighted, aptSubLabel, compact,
+  isDuplex, isBasement, isMerged, mergedLabel, isBulkSelected, isContractorHighlighted,
+  aptSubLabel, taskInfo, nextStageName, onAddTask, compact,
 }: AptCellProps) {
   const hasStage = !!stage;
   const bgColor = hasStage ? stage!.color : isBasement ? '#eef3f9' : '#ffffff';
@@ -103,7 +110,6 @@ function AptCell({
 
   const textColor = hasStage ? getTextColor(stage!.color) : '#374151';
 
-  // Merged label takes priority; fall back to normal label
   const displayLabel = mergedLabel || (apt ? (apt.displayName || (apt.isUnnamed ? '' : apt.apartmentNumber)) : '');
 
   const opacity = isDimmed ? 0.28 : 1;
@@ -113,9 +119,7 @@ function AptCell({
     ? `0 0 0 2px #f59e0b, 0 2px 10px ${borderColor}88`
     : hasStage ? `0 1px 3px ${borderColor}55` : '0 1px 2px rgba(0,0,0,0.06)';
 
-  const fontSize = compact
-    ? '9px'
-    : mergedLabel ? '10px' : '12px';
+  const numFontSize = compact ? '9px' : mergedLabel ? '10px' : '11px';
 
   return (
     <div
@@ -128,24 +132,48 @@ function AptCell({
         minWidth: 0,
         opacity,
         boxShadow,
+        padding: compact ? '1px 1px' : '2px 2px',
+        gap: compact ? undefined : '1px',
       }}
       onClick={apt ? onClick : undefined}
       title={displayLabel ? `${isBasement ? 'Basement' : 'Apt'} ${displayLabel}` : ''}
     >
       {displayLabel ? (
         <span
-          className="font-bold leading-tight text-center overflow-hidden w-full block text-center"
-          style={{ fontSize, padding: '0 1px' }}
+          className="font-bold leading-tight text-center w-full block"
+          style={{ fontSize: numFontSize, padding: '0 1px' }}
         >
           {displayLabel}
         </span>
       ) : (
-        <span className="opacity-20 italic" style={{ fontSize: compact ? '8px' : '11px' }}>–</span>
-      )}
-      {isDuplex && displayLabel && (
-        <span className="text-[7px] opacity-50 leading-none mt-0.5">↑</span>
+        <span className="opacity-20 italic" style={{ fontSize: compact ? '8px' : '10px' }}>–</span>
       )}
 
+      {/* Stage name — non-compact only */}
+      {!compact && displayLabel && (
+        <span
+          className="w-full text-center leading-none block truncate px-0.5"
+          style={{ fontSize: '7px', opacity: hasStage ? 0.9 : 0.45, fontStyle: hasStage ? 'normal' : 'italic' }}
+        >
+          {hasStage ? stage!.name : 'Not started'}
+        </span>
+      )}
+
+      {/* Task info or next-step hint — non-compact only */}
+      {!compact && displayLabel && (taskInfo || nextStageName) && (
+        <span
+          className="w-full text-center leading-none block truncate px-0.5"
+          style={{ fontSize: '7px', opacity: taskInfo ? 0.85 : 0.5 }}
+        >
+          {taskInfo ?? `→ ${nextStageName}`}
+        </span>
+      )}
+
+      {isDuplex && displayLabel && !compact && (
+        <span style={{ fontSize: '6px', opacity: 0.4, lineHeight: 1 }}>↑</span>
+      )}
+
+      {/* Contractor sub-label (contractor map view) */}
       {aptSubLabel && (
         <span
           className="absolute bottom-0.5 left-0 right-0 text-center leading-none truncate px-0.5"
@@ -163,14 +191,34 @@ function AptCell({
         </span>
       )}
 
+      {/* Changes badge */}
       {showShinuiBadge && apt?.classification === 'shinui' && (
         <div
-          className="absolute top-0.5 right-0.5 w-3 h-3 rounded-full flex items-center justify-center"
+          className="absolute top-0.5 left-0.5 w-3 h-3 rounded-full flex items-center justify-center"
           style={{ backgroundColor: '#f59e0b', border: '1px solid rgba(255,255,255,0.9)' }}
         >
           <span style={{ fontSize: '6px', color: 'white', fontWeight: 'bold', lineHeight: 1 }}>C</span>
         </div>
       )}
+
+      {/* Add-task "+" button */}
+      {!compact && onAddTask && apt && (
+        <button
+          className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full flex items-center justify-center transition-all hover:scale-110 active:scale-95"
+          style={{
+            backgroundColor: 'rgba(255,255,255,0.35)',
+            color: textColor,
+            fontSize: '12px',
+            lineHeight: 1,
+            fontWeight: 'bold',
+          }}
+          onClick={e => { e.stopPropagation(); onAddTask(); }}
+          title="Add task"
+        >
+          +
+        </button>
+      )}
+
       {isBulkSelected && (
         <div
           className="absolute inset-0 flex items-center justify-center rounded-md"
@@ -196,7 +244,8 @@ function Stairwell({ compact }: { compact?: boolean }) {
 
 function FourCellRow({
   aptNums, getApt, getStage, isHighlighted, isDimmed, isMerged, getMergedLabel,
-  isContractorHighlighted, isBulkSelected, getAptSubLabel, showShinuiBadge, onApartmentClick, isBasement = false, compact,
+  isContractorHighlighted, isBulkSelected, getAptSubLabel, getTaskInfo, getNextStageName, getOnAddTask,
+  showShinuiBadge, onApartmentClick, isBasement = false, compact,
 }: {
   aptNums: number[];
   getApt: (n: number) => Apartment | undefined;
@@ -208,6 +257,9 @@ function FourCellRow({
   isContractorHighlighted: (a: Apartment | undefined) => boolean;
   isBulkSelected: (a: Apartment | undefined) => boolean;
   getAptSubLabel: (a: Apartment | undefined) => string | undefined;
+  getTaskInfo?: (a: Apartment | undefined) => string | undefined;
+  getNextStageName?: (a: Apartment | undefined) => string | undefined;
+  getOnAddTask?: (a: Apartment | undefined) => (() => void) | undefined;
   showShinuiBadge: boolean;
   onApartmentClick: (a: Apartment) => void;
   isBasement?: boolean;
@@ -235,6 +287,9 @@ function FourCellRow({
               isBulkSelected={isBulkSelected(apt)}
               isContractorHighlighted={isContractorHighlighted(apt)}
               aptSubLabel={getAptSubLabel(apt)}
+              taskInfo={getTaskInfo?.(apt)}
+              nextStageName={getNextStageName?.(apt)}
+              onAddTask={getOnAddTask?.(apt)}
               compact={compact}
             />
           );
@@ -261,6 +316,9 @@ function FourCellRow({
               isBulkSelected={isBulkSelected(apt)}
               isContractorHighlighted={isContractorHighlighted(apt)}
               aptSubLabel={getAptSubLabel(apt)}
+              taskInfo={getTaskInfo?.(apt)}
+              nextStageName={getNextStageName?.(apt)}
+              onAddTask={getOnAddTask?.(apt)}
               compact={compact}
             />
           );
@@ -272,7 +330,8 @@ function FourCellRow({
 
 function BuildingColumn({
   buildingId, apartments, mergedLabels, stages, activeStageIds, classFilter, searchQuery,
-  onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, aptSubLabels, compact,
+  onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, aptSubLabels,
+  aptTaskData, nextStageLabels, onAddTask, compact,
 }: {
   buildingId: BuildingId;
   apartments: Apartment[];
@@ -286,6 +345,9 @@ function BuildingColumn({
   bulkSelected?: Set<string>;
   highlightedApartmentIds?: Set<string>;
   aptSubLabels?: Map<string, string>;
+  aptTaskData?: Map<string, string>;
+  nextStageLabels?: Map<string, string>;
+  onAddTask?: (apt: Apartment) => void;
   compact?: boolean;
 }) {
   const stageMap = useMemo(() => new Map(stages.map(s => [s.id, s])), [stages]);
@@ -337,6 +399,18 @@ function BuildingColumn({
   function getAptSubLabel(apt: Apartment | undefined): string | undefined {
     if (!apt) return undefined;
     return aptSubLabels?.get(apt.id);
+  }
+  function getTaskInfo(apt: Apartment | undefined): string | undefined {
+    if (!apt) return undefined;
+    return aptTaskData?.get(apt.id);
+  }
+  function getNextStageName(apt: Apartment | undefined): string | undefined {
+    if (!apt) return undefined;
+    return nextStageLabels?.get(apt.id);
+  }
+  function getOnAddTask(apt: Apartment | undefined): (() => void) | undefined {
+    if (!apt || !onAddTask) return undefined;
+    return () => onAddTask(apt);
   }
 
   return (
@@ -419,6 +493,9 @@ function BuildingColumn({
                     isContractorHighlighted={isContractorHighlighted}
                     isBulkSelected={isBulkSelected}
                     getAptSubLabel={getAptSubLabel}
+                    getTaskInfo={getTaskInfo}
+                    getNextStageName={getNextStageName}
+                    getOnAddTask={getOnAddTask}
                     showShinuiBadge={showShinuiBadge}
                     onApartmentClick={onApartmentClick}
                     isBasement={row.type === 'basement'}
@@ -444,6 +521,9 @@ function BuildingColumn({
                             isBulkSelected={isBulkSelected(apt)}
                             isContractorHighlighted={isContractorHighlighted(apt)}
                             aptSubLabel={getAptSubLabel(apt)}
+                            taskInfo={getTaskInfo(apt)}
+                            nextStageName={getNextStageName(apt)}
+                            onAddTask={getOnAddTask(apt)}
                             compact={compact}
                           />
                         </React.Fragment>
@@ -462,7 +542,8 @@ function BuildingColumn({
 
 export function BuildingDiagram({
   apartments, stages, activeStageIds, classFilter, searchQuery, selectedBuilding,
-  onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, aptSubLabels, compact,
+  onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, aptSubLabels,
+  aptTaskData, nextStageLabels, onAddTask, compact,
 }: BuildingDiagramProps) {
   const buildingOrder: BuildingId[] = ['A3', 'A2', 'A1'];
   const visibleBuildings = selectedBuilding === 'all' ? buildingOrder : [selectedBuilding];
@@ -518,6 +599,9 @@ export function BuildingDiagram({
           bulkSelected={bulkSelected}
           highlightedApartmentIds={highlightedApartmentIds}
           aptSubLabels={aptSubLabels}
+          aptTaskData={aptTaskData}
+          nextStageLabels={nextStageLabels}
+          onAddTask={onAddTask}
           compact={compact}
         />
       ))}
