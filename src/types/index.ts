@@ -53,6 +53,7 @@ export interface Apartment {
   generalNotes: string;
   isUnnamed: boolean;
   mergedWith?: string; // id of partner apartment when buyer physically connected two units
+  stageDates?: Record<string, string>; // stageId → ISO timestamp of when that stage was first set
   createdAt: string;
   updatedAt: string;
   updatedBy: string;

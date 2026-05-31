@@ -73,3 +73,11 @@
   from { opacity: 0; transform: translateY(10px) }
   to { opacity: 1; transform: translateY(0) }
 }
+
+@media print {
+  /* Hide everything except the main content outlet */
+  aside, header, nav, .print\:hidden { display: none !important; }
+  body, html { background: white !important; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  @page { margin: 1cm; size: A3 landscape; }
+}

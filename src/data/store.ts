@@ -87,6 +87,7 @@ interface AppState {
   logout: () => void;
 
   updateApartment: (id: string, changes: Partial<Apartment>, user: User) => void;
+  bulkUpdateApartments: (ids: string[], changes: Partial<Apartment>, user: User) => void;
   addApartment: (apt: Apartment) => void;
 
   upsertStageNote: (apartmentId: string, stageId: string, noteText: string, user: User) => void;
@@ -165,9 +166,19 @@ export const useStore = create<AppState>((set, get) => ({
     const existing = get().apartments.find(a => a.id === id);
     if (!existing) return;
     const now = new Date().toISOString();
+
+    // Record the date the first time each stage is set
+    let stageDates = existing.stageDates ?? {};
+    if (changes.currentStageId && changes.currentStageId !== existing.currentStageId) {
+      if (!stageDates[changes.currentStageId]) {
+        stageDates = { ...stageDates, [changes.currentStageId]: now };
+      }
+    }
+
     const updated: Apartment = {
       ...existing,
       ...changes,
+      stageDates,
       updatedAt: now,
       updatedBy: user.id,
       updatedByName: user.name,
@@ -201,6 +212,21 @@ export const useStore = create<AppState>((set, get) => ({
         });
       }
     });
+  },
+
+  bulkUpdateApartments: (ids, changes, user) => {
+    const now = new Date().toISOString();
+    const updated = get().apartments.map(a => {
+      if (!ids.includes(a.id)) return a;
+      let stageDates = a.stageDates ?? {};
+      if (changes.currentStageId && changes.currentStageId !== a.currentStageId && !stageDates[changes.currentStageId]) {
+        stageDates = { ...stageDates, [changes.currentStageId]: now };
+      }
+      return { ...a, ...changes, stageDates, updatedAt: now, updatedBy: user.id, updatedByName: user.name };
+    });
+    set({ apartments: updated });
+    persist(get);
+    updated.filter(a => ids.includes(a.id)).forEach(a => fsSet('apartments', a.id, a));
   },
 
   addApartment: (apt) => {

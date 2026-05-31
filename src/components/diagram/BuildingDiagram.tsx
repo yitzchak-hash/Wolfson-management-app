@@ -10,6 +10,8 @@ interface BuildingDiagramProps {
   selectedBuilding: BuildingId | 'all';
   onApartmentClick: (apt: Apartment) => void;
   showShinuiBadge: boolean;
+  bulkMode?: boolean;
+  bulkSelected?: Set<string>;
 }
 
 function getTextColor(bgHex: string): string {
@@ -75,9 +77,10 @@ interface AptCellProps {
   isDuplex?: boolean;
   isBasement?: boolean;
   isMerged?: boolean;
+  isBulkSelected?: boolean;
 }
 
-function AptCell({ apt, stage, isHighlighted, isDimmed, showShinuiBadge, onClick, isDuplex, isBasement, isMerged }: AptCellProps) {
+function AptCell({ apt, stage, isHighlighted, isDimmed, showShinuiBadge, onClick, isDuplex, isBasement, isMerged, isBulkSelected }: AptCellProps) {
   const hasStage = !!stage;
   const bgColor = hasStage
     ? stage!.color
@@ -138,6 +141,14 @@ function AptCell({ apt, stage, isHighlighted, isDimmed, showShinuiBadge, onClick
           <span style={{ fontSize: '6px', color: 'white', fontWeight: 'bold', lineHeight: 1 }}>⛓</span>
         </div>
       )}
+      {isBulkSelected && (
+        <div
+          className="absolute inset-0 flex items-center justify-center rounded-md"
+          style={{ backgroundColor: 'rgba(30,58,95,0.55)' }}
+        >
+          <span style={{ fontSize: '16px', lineHeight: 1 }}>✓</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -160,7 +171,7 @@ function Stairwell() {
 }
 
 function FourCellRow({
-  aptNums, getApt, getStage, isHighlighted, isDimmed, isMerged, showShinuiBadge, onApartmentClick, isBasement = false,
+  aptNums, getApt, getStage, isHighlighted, isDimmed, isMerged, isBulkSelected, showShinuiBadge, onApartmentClick, isBasement = false,
 }: {
   aptNums: number[];
   getApt: (n: number) => Apartment | undefined;
@@ -168,6 +179,7 @@ function FourCellRow({
   isHighlighted: (a: Apartment | undefined) => boolean;
   isDimmed: (a: Apartment | undefined) => boolean;
   isMerged: (a: Apartment | undefined) => boolean;
+  isBulkSelected: (a: Apartment | undefined) => boolean;
   showShinuiBadge: boolean;
   onApartmentClick: (a: Apartment) => void;
   isBasement?: boolean;
@@ -189,6 +201,7 @@ function FourCellRow({
               onClick={() => apt && onApartmentClick(apt)}
               isBasement={isBasement}
               isMerged={isMerged(apt)}
+              isBulkSelected={isBulkSelected(apt)}
             />
           );
         })}
@@ -211,6 +224,7 @@ function FourCellRow({
               onClick={() => apt && onApartmentClick(apt)}
               isBasement={isBasement}
               isMerged={isMerged(apt)}
+              isBulkSelected={isBulkSelected(apt)}
             />
           );
         })}
@@ -228,6 +242,7 @@ function BuildingColumn({
   searchQuery,
   onApartmentClick,
   showShinuiBadge,
+  bulkSelected,
 }: {
   buildingId: BuildingId;
   apartments: Apartment[];
@@ -237,6 +252,7 @@ function BuildingColumn({
   searchQuery: string;
   onApartmentClick: (apt: Apartment) => void;
   showShinuiBadge: boolean;
+  bulkSelected?: Set<string>;
 }) {
   const stageMap = useMemo(() => new Map(stages.map(s => [s.id, s])), [stages]);
   const aptMap = useMemo(() => {
@@ -270,6 +286,10 @@ function BuildingColumn({
 
   function isMerged(apt: Apartment | undefined): boolean {
     return !!apt?.mergedWith;
+  }
+
+  function isBulkSelected(apt: Apartment | undefined): boolean {
+    return !!apt && !!bulkSelected?.has(apt.id);
   }
 
   const LABEL_W = 34;
@@ -357,6 +377,7 @@ function BuildingColumn({
                     isHighlighted={isHighlighted}
                     isDimmed={isDimmed}
                     isMerged={isMerged}
+                    isBulkSelected={isBulkSelected}
                     showShinuiBadge={showShinuiBadge}
                     onApartmentClick={onApartmentClick}
                     isBasement={row.type === 'basement'}
@@ -372,6 +393,7 @@ function BuildingColumn({
                       onClick={() => { const a = getApt(row.aptNums![0]); if (a) onApartmentClick(a); }}
                       isDuplex={row.type === 'duplex'}
                       isMerged={isMerged(getApt(row.aptNums![0]))}
+                      isBulkSelected={isBulkSelected(getApt(row.aptNums![0]))}
                     />
                     <Stairwell />
                     <AptCell
@@ -383,6 +405,7 @@ function BuildingColumn({
                       onClick={() => { const a = getApt(row.aptNums![1]); if (a) onApartmentClick(a); }}
                       isDuplex={row.type === 'duplex'}
                       isMerged={isMerged(getApt(row.aptNums![1]))}
+                      isBulkSelected={isBulkSelected(getApt(row.aptNums![1]))}
                     />
                   </>
                 ) : null}
@@ -404,6 +427,7 @@ export function BuildingDiagram({
   selectedBuilding,
   onApartmentClick,
   showShinuiBadge,
+  bulkSelected,
 }: BuildingDiagramProps) {
   const buildingOrder: BuildingId[] = ['A3', 'A2', 'A1'];
   const visibleBuildings = selectedBuilding === 'all' ? buildingOrder : [selectedBuilding];
@@ -435,6 +459,7 @@ export function BuildingDiagram({
           searchQuery={searchQuery}
           onApartmentClick={onApartmentClick}
           showShinuiBadge={showShinuiBadge}
+          bulkSelected={bulkSelected}
         />
       ))}
     </div>
