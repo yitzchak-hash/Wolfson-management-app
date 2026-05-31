@@ -55,6 +55,7 @@ export interface Apartment {
   mergedWith?: string; // id of partner apartment when buyer physically connected two units
   stageDates?: Record<string, string>; // stageId → ISO timestamp of when that stage was first set
   driveLink?: string; // Google Drive folder URL for this apartment's files
+  plansPdfLink?: string; // Google Drive link to the Engineering Plans PDF
   createdAt: string;
   updatedAt: string;
   updatedBy: string;

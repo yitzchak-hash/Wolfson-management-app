@@ -10,6 +10,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { ActivityLogPage } from './pages/ActivityLogPage';
 import { AnalyticsDashboard } from './pages/AnalyticsDashboard';
 import { ContractorPortal } from './pages/ContractorPortal';
+import { TasksPage } from './pages/TasksPage';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { currentUser } = useStore();
@@ -35,6 +36,7 @@ export default function App() {
           <Route index element={<Navigate to="/project" replace />} />
           <Route path="project" element={<ProjectDiagramPage />} />
           <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="tasks" element={<TasksPage />} />
           <Route path="analytics" element={<AnalyticsDashboard />} />
           <Route path="reports" element={<ReportsPage />} />
           <Route path="activity" element={<ActivityLogPage />} />

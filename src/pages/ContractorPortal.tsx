@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useStore } from '../data/store';
 import { ContractorAssignment, ContractorPhoto } from '../types';
@@ -6,8 +6,10 @@ import { format, isPast, parseISO, differenceInCalendarDays, startOfDay } from '
 import {
   Camera, CheckCircle2, Clock, Building2, CalendarDays, FileText,
   Plus, Send, AlertCircle, X, Play, File as FileIcon, MapPin,
+  BookOpen, Download,
 } from 'lucide-react';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
+import { extractFileId, drivePreviewUrl, driveDownloadUrl } from '../data/driveApi';
 
 const CATEGORY_LABELS: Record<string, string> = {
   drywall: 'Drywall', ac: 'AC / HVAC', general: 'General',
@@ -117,6 +119,8 @@ export function ContractorPortal() {
   const [uploading, setUploading] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const [mapFilter, setMapFilter] = useState<'all' | 'overdue' | 'today' | 'tomorrow' | 'week'>('all');
+  const [showPlansPdf, setShowPlansPdf] = useState(false);
   const mediaInputRef = useRef<HTMLInputElement>(null);
 
   const contractor = contractors.find(c => c.token === token && c.active) ?? null;
@@ -143,6 +147,42 @@ export function ContractorPortal() {
 
   // Highlighted apartment IDs for the building map
   const assignedAptIds = new Set(assignments.map(a => a.apartmentId));
+
+  // Countdown sub-labels per apartment (earliest pending due date)
+  const aptSubLabels = useMemo(() => {
+    const m = new Map<string, string>();
+    const today = startOfDay(new Date());
+    [...assignments]
+      .filter(a => !a.completedAt && a.dueDate)
+      .sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? ''))
+      .forEach(a => {
+        if (m.has(a.apartmentId)) return;
+        const days = differenceInCalendarDays(parseISO(a.dueDate!), today);
+        const label =
+          days < 0 ? 'Overdue' :
+          days === 0 ? 'Today' :
+          days === 1 ? 'Tomorrow' :
+          format(parseISO(a.dueDate!), 'MMM d');
+        m.set(a.apartmentId, label);
+      });
+    return m;
+  }, [assignments]);
+
+  // Map filter: subset of assignedAptIds matching the selected time filter
+  const filteredAptIds = useMemo(() => {
+    if (mapFilter === 'all') return assignedAptIds;
+    const today = startOfDay(new Date());
+    const matching = new Set<string>();
+    assignments.forEach(a => {
+      if (a.completedAt || !a.dueDate) return;
+      const days = differenceInCalendarDays(parseISO(a.dueDate), today);
+      if (mapFilter === 'overdue' && days < 0) matching.add(a.apartmentId);
+      else if (mapFilter === 'today' && days === 0) matching.add(a.apartmentId);
+      else if (mapFilter === 'tomorrow' && days === 1) matching.add(a.apartmentId);
+      else if (mapFilter === 'week' && days >= 0 && days <= 7) matching.add(a.apartmentId);
+    });
+    return matching;
+  }, [mapFilter, assignments]);
 
   async function handleMediaUpload(e: React.ChangeEvent<HTMLInputElement>) {
     if (!selectedAssignment || !e.target.files?.length) return;
@@ -336,11 +376,30 @@ export function ContractorPortal() {
             </div>
           ) : (
             <>
-              <div className="px-4 pt-3 pb-1">
-                <p className="text-xs text-gray-500">
-                  Your assigned apartments are highlighted. Tap one to open its task.
-                </p>
+              {/* Filter row */}
+              <div className="px-4 pt-3 pb-2 flex items-center gap-2 flex-wrap">
+                {(['all', 'overdue', 'today', 'tomorrow', 'week'] as const).map(f => (
+                  <button
+                    key={f}
+                    onClick={() => setMapFilter(f)}
+                    className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
+                      mapFilter === f
+                        ? f === 'overdue' ? 'bg-red-500 text-white border-red-500'
+                        : f === 'today'   ? 'bg-orange-500 text-white border-orange-500'
+                        : f === 'tomorrow'? 'bg-amber-500 text-white border-amber-500'
+                        : f === 'week'    ? 'bg-blue-500 text-white border-blue-500'
+                        : 'bg-[#1e3a5f] text-white border-[#1e3a5f]'
+                        : 'bg-white text-gray-600 border-gray-200'
+                    }`}
+                  >
+                    {f === 'all' ? 'All' : f === 'overdue' ? 'Overdue' : f === 'today' ? 'Today' : f === 'tomorrow' ? 'Tomorrow' : 'This Week'}
+                  </button>
+                ))}
+                <span className="text-xs text-gray-400 ml-auto">
+                  {filteredAptIds.size} apt{filteredAptIds.size !== 1 ? 's' : ''}
+                </span>
               </div>
+              <p className="px-4 pb-1 text-xs text-gray-400">Highlighted apartments are your assignments. Tap to open task.</p>
               <BuildingDiagram
                 apartments={apartments}
                 stages={stages}
@@ -350,7 +409,8 @@ export function ContractorPortal() {
                 selectedBuilding="all"
                 onApartmentClick={handleDiagramClick}
                 showShinuiBadge={false}
-                highlightedApartmentIds={assignedAptIds}
+                highlightedApartmentIds={filteredAptIds}
+                aptSubLabels={aptSubLabels}
                 compact
               />
             </>
@@ -420,6 +480,59 @@ export function ContractorPortal() {
                   <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Task</h3>
                   <p className="text-gray-800 text-sm leading-relaxed">{a.taskDescription}</p>
                 </div>
+
+                {/* Engineering Plans PDF */}
+                {(() => {
+                  const plansPdf = apt?.plansPdfLink;
+                  const fileId = plansPdf ? extractFileId(plansPdf) : null;
+                  if (!plansPdf) return null;
+                  return (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                          <BookOpen size={12} />
+                          Engineering Plans
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          {fileId && (
+                            <a
+                              href={driveDownloadUrl(fileId)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 text-xs text-[#1e3a5f] hover:underline"
+                            >
+                              <Download size={11} /> Download
+                            </a>
+                          )}
+                          <button
+                            onClick={() => setShowPlansPdf(v => !v)}
+                            className="text-xs px-2.5 py-1 rounded-lg bg-[#1e3a5f] text-white font-medium"
+                          >
+                            {showPlansPdf ? 'Hide' : 'View PDF'}
+                          </button>
+                        </div>
+                      </div>
+                      {showPlansPdf && fileId && (
+                        <div className="rounded-xl overflow-hidden border border-gray-200" style={{ height: '420px' }}>
+                          <iframe
+                            src={drivePreviewUrl(fileId)}
+                            width="100%"
+                            height="100%"
+                            allow="autoplay"
+                            title="Engineering Plans"
+                            style={{ border: 'none' }}
+                          />
+                        </div>
+                      )}
+                      {showPlansPdf && !fileId && (
+                        <a href={plansPdf} target="_blank" rel="noopener noreferrer"
+                          className="text-sm text-[#1e3a5f] underline">
+                          Open in Google Drive
+                        </a>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* Completion status */}
                 {a.completedAt && (

@@ -98,6 +98,14 @@ interface AppState {
   deleteStage: (id: string) => void;
 
   mergeApartments: (aptId: string, partnerId: string | null, user: User) => void;
+  unmergeApartments: (aptId: string, keepDataAptId: string | 'both', user: User) => void;
+
+  // Google Drive
+  googleClientId: string;
+  googleAccessToken: string | null;
+  googleTokenExpiry: number | null;
+  setGoogleClientId: (id: string) => void;
+  setGoogleToken: (token: string | null, expiry: number | null) => void;
 
   updateUser: (id: string, changes: Partial<User>) => void;
   addUser: (user: User) => void;
@@ -138,6 +146,9 @@ export const useStore = create<AppState>((set, get) => ({
   contractorNotes: (stored?.contractorNotes as ContractorNote[] | null) ?? [],
   contractorPhotos: (stored?.contractorPhotos as ContractorPhoto[] | null) ?? [],
   firebaseListening: false,
+  googleClientId: (stored?.googleClientId as string | null) ?? '',
+  googleAccessToken: null,
+  googleTokenExpiry: null,
   lightTheme: localStorage.getItem(THEME_KEY) === 'light',
   setLightTheme: (v: boolean) => {
     set({ lightTheme: v });
@@ -184,12 +195,24 @@ export const useStore = create<AppState>((set, get) => ({
       updatedByName: user.name,
     };
 
-    // Sync driveLink to merged partner when it changes
+    // Sync shared fields to merged partner when they change
     let extraUpdates: Apartment[] = [];
-    if (changes.driveLink !== undefined && updated.mergedWith) {
+    const syncedFields = ['currentStageId', 'classification', 'driveLink', 'plansPdfLink'] as const;
+    const changesHaveSync = syncedFields.some(f => f in changes);
+    if (changesHaveSync && updated.mergedWith) {
       const partner = get().apartments.find(a => a.id === updated.mergedWith);
-      if (partner && partner.driveLink !== changes.driveLink) {
-        extraUpdates = [{ ...partner, driveLink: changes.driveLink, updatedAt: now, updatedBy: user.id, updatedByName: user.name }];
+      if (partner) {
+        const partnerPatch: Partial<Apartment> = {};
+        if ('currentStageId' in changes) partnerPatch.currentStageId = updated.currentStageId;
+        if ('classification' in changes) partnerPatch.classification = updated.classification;
+        if ('driveLink' in changes) partnerPatch.driveLink = updated.driveLink;
+        if ('plansPdfLink' in changes) partnerPatch.plansPdfLink = updated.plansPdfLink;
+        const needsUpdate = Object.keys(partnerPatch).some(k =>
+          JSON.stringify(partner[k as keyof Apartment]) !== JSON.stringify(partnerPatch[k as keyof Apartment])
+        );
+        if (needsUpdate) {
+          extraUpdates = [{ ...partner, ...partnerPatch, updatedAt: now, updatedBy: user.id, updatedByName: user.name }];
+        }
       }
     }
 
@@ -358,6 +381,52 @@ export const useStore = create<AppState>((set, get) => ({
     set(state => ({ apartments: state.apartments.map(a => updates.has(a.id) ? updates.get(a.id)! : a) }));
     persist(get);
     updates.forEach((updated, id) => fsSet('apartments', id, updated));
+  },
+
+  unmergeApartments: (aptId, keepDataAptId, user) => {
+    const state = get();
+    const apt = state.apartments.find(a => a.id === aptId);
+    if (!apt) return;
+    const partnerId = apt.mergedWith;
+    if (!partnerId) return;
+    const partner = state.apartments.find(a => a.id === partnerId);
+    if (!partner) return;
+
+    const now = new Date().toISOString();
+    const updates = new Map<string, Apartment>();
+
+    if (keepDataAptId === 'both') {
+      updates.set(aptId, { ...apt, mergedWith: undefined, updatedAt: now, updatedBy: user.id, updatedByName: user.name });
+      updates.set(partnerId, { ...partner, mergedWith: undefined, updatedAt: now, updatedBy: user.id, updatedByName: user.name });
+    } else {
+      const keeper = keepDataAptId === aptId ? apt : partner;
+      const loser = keepDataAptId === aptId ? partner : apt;
+      updates.set(keeper.id, { ...keeper, mergedWith: undefined, updatedAt: now, updatedBy: user.id, updatedByName: user.name });
+      updates.set(loser.id, {
+        ...loser,
+        mergedWith: undefined,
+        currentStageId: null,
+        driveLink: undefined,
+        plansPdfLink: undefined,
+        updatedAt: now,
+        updatedBy: user.id,
+        updatedByName: user.name,
+      });
+    }
+
+    set(state => ({ apartments: state.apartments.map(a => updates.has(a.id) ? updates.get(a.id)! : a) }));
+    persist(get);
+    updates.forEach((updated, id) => fsSet('apartments', id, updated));
+  },
+
+  setGoogleClientId: (id) => {
+    set({ googleClientId: id });
+    persist(get);
+  },
+
+  setGoogleToken: (token, expiry) => {
+    set({ googleAccessToken: token, googleTokenExpiry: expiry });
+    // not persisted — session-only
   },
 
   // ─── Contractor actions ────────────────────────────────────────────────────
@@ -568,5 +637,6 @@ function persist(get: () => AppState) {
     contractorAssignments: state.contractorAssignments,
     contractorNotes: state.contractorNotes,
     contractorPhotos: state.contractorPhotos,
+    googleClientId: state.googleClientId,
   });
 }

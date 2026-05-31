@@ -13,6 +13,7 @@ interface BuildingDiagramProps {
   bulkMode?: boolean;
   bulkSelected?: Set<string>;
   highlightedApartmentIds?: Set<string>; // contractor view: highlight these, dim others
+  aptSubLabels?: Map<string, string>; // aptId → schedule label ("Today", "Tomorrow", "Overdue", etc.)
   compact?: boolean; // smaller row heights for embedded views
 }
 
@@ -86,12 +87,13 @@ interface AptCellProps {
   mergedLabel?: string; // "A/B" label when two apartments are connected
   isBulkSelected?: boolean;
   isContractorHighlighted?: boolean; // gold glow in contractor view
+  aptSubLabel?: string; // schedule countdown shown in contractor map cells
   compact?: boolean;
 }
 
 function AptCell({
   apt, stage, isHighlighted, isDimmed, showShinuiBadge, onClick,
-  isDuplex, isBasement, isMerged, mergedLabel, isBulkSelected, isContractorHighlighted, compact,
+  isDuplex, isBasement, isMerged, mergedLabel, isBulkSelected, isContractorHighlighted, aptSubLabel, compact,
 }: AptCellProps) {
   const hasStage = !!stage;
   const bgColor = hasStage ? stage!.color : isBasement ? '#eef3f9' : '#ffffff';
@@ -144,6 +146,23 @@ function AptCell({
         <span className="text-[7px] opacity-50 leading-none mt-0.5">↑</span>
       )}
 
+      {aptSubLabel && (
+        <span
+          className="absolute bottom-0.5 left-0 right-0 text-center leading-none truncate px-0.5"
+          style={{
+            fontSize: '6px',
+            fontWeight: 700,
+            color:
+              aptSubLabel === 'Overdue' ? '#ef4444' :
+              aptSubLabel === 'Today'   ? '#ea580c' :
+              aptSubLabel === 'Tomorrow'? '#d97706' :
+              '#6b7280',
+          }}
+        >
+          {aptSubLabel}
+        </span>
+      )}
+
       {showShinuiBadge && apt?.classification === 'shinui' && (
         <div
           className="absolute top-0.5 right-0.5 w-3 h-3 rounded-full flex items-center justify-center"
@@ -177,7 +196,7 @@ function Stairwell({ compact }: { compact?: boolean }) {
 
 function FourCellRow({
   aptNums, getApt, getStage, isHighlighted, isDimmed, isMerged, getMergedLabel,
-  isContractorHighlighted, isBulkSelected, showShinuiBadge, onApartmentClick, isBasement = false, compact,
+  isContractorHighlighted, isBulkSelected, getAptSubLabel, showShinuiBadge, onApartmentClick, isBasement = false, compact,
 }: {
   aptNums: number[];
   getApt: (n: number) => Apartment | undefined;
@@ -188,6 +207,7 @@ function FourCellRow({
   getMergedLabel: (a: Apartment | undefined) => string | undefined;
   isContractorHighlighted: (a: Apartment | undefined) => boolean;
   isBulkSelected: (a: Apartment | undefined) => boolean;
+  getAptSubLabel: (a: Apartment | undefined) => string | undefined;
   showShinuiBadge: boolean;
   onApartmentClick: (a: Apartment) => void;
   isBasement?: boolean;
@@ -214,6 +234,7 @@ function FourCellRow({
               mergedLabel={getMergedLabel(apt)}
               isBulkSelected={isBulkSelected(apt)}
               isContractorHighlighted={isContractorHighlighted(apt)}
+              aptSubLabel={getAptSubLabel(apt)}
               compact={compact}
             />
           );
@@ -239,6 +260,7 @@ function FourCellRow({
               mergedLabel={getMergedLabel(apt)}
               isBulkSelected={isBulkSelected(apt)}
               isContractorHighlighted={isContractorHighlighted(apt)}
+              aptSubLabel={getAptSubLabel(apt)}
               compact={compact}
             />
           );
@@ -250,7 +272,7 @@ function FourCellRow({
 
 function BuildingColumn({
   buildingId, apartments, mergedLabels, stages, activeStageIds, classFilter, searchQuery,
-  onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, compact,
+  onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, aptSubLabels, compact,
 }: {
   buildingId: BuildingId;
   apartments: Apartment[];
@@ -263,6 +285,7 @@ function BuildingColumn({
   showShinuiBadge: boolean;
   bulkSelected?: Set<string>;
   highlightedApartmentIds?: Set<string>;
+  aptSubLabels?: Map<string, string>;
   compact?: boolean;
 }) {
   const stageMap = useMemo(() => new Map(stages.map(s => [s.id, s])), [stages]);
@@ -310,6 +333,10 @@ function BuildingColumn({
   }
   function isBulkSelected(apt: Apartment | undefined): boolean {
     return !!apt && !!bulkSelected?.has(apt.id);
+  }
+  function getAptSubLabel(apt: Apartment | undefined): string | undefined {
+    if (!apt) return undefined;
+    return aptSubLabels?.get(apt.id);
   }
 
   return (
@@ -391,6 +418,7 @@ function BuildingColumn({
                     getMergedLabel={getMergedLabel}
                     isContractorHighlighted={isContractorHighlighted}
                     isBulkSelected={isBulkSelected}
+                    getAptSubLabel={getAptSubLabel}
                     showShinuiBadge={showShinuiBadge}
                     onApartmentClick={onApartmentClick}
                     isBasement={row.type === 'basement'}
@@ -415,6 +443,7 @@ function BuildingColumn({
                             mergedLabel={getMergedLabel(apt)}
                             isBulkSelected={isBulkSelected(apt)}
                             isContractorHighlighted={isContractorHighlighted(apt)}
+                            aptSubLabel={getAptSubLabel(apt)}
                             compact={compact}
                           />
                         </React.Fragment>
@@ -433,7 +462,7 @@ function BuildingColumn({
 
 export function BuildingDiagram({
   apartments, stages, activeStageIds, classFilter, searchQuery, selectedBuilding,
-  onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, compact,
+  onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, aptSubLabels, compact,
 }: BuildingDiagramProps) {
   const buildingOrder: BuildingId[] = ['A3', 'A2', 'A1'];
   const visibleBuildings = selectedBuilding === 'all' ? buildingOrder : [selectedBuilding];
@@ -488,6 +517,7 @@ export function BuildingDiagram({
           showShinuiBadge={showShinuiBadge}
           bulkSelected={bulkSelected}
           highlightedApartmentIds={highlightedApartmentIds}
+          aptSubLabels={aptSubLabels}
           compact={compact}
         />
       ))}

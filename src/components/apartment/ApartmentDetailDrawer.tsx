@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink } from 'lucide-react';
+import { X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity } from 'lucide-react';
 import { Apartment, User } from '../../types';
 import { useStore } from '../../data/store';
 import { format } from 'date-fns';
 import { StageNotesSection } from './StageNotesSection';
 import { ActivitySection } from './ActivitySection';
+import { extractFileId, drivePreviewUrl, driveDownloadUrl } from '../../data/driveApi';
 
 interface Props {
   apartment: Apartment | null;
@@ -14,15 +15,19 @@ interface Props {
 }
 
 export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast }: Props) {
-  const { stages, activityLogs, apartments, updateApartment, mergeApartments } = useStore();
+  const { stages, activityLogs, apartments, updateApartment, mergeApartments, unmergeApartments } = useStore();
 
   const [displayName, setDisplayName] = useState('');
   const [currentStageId, setCurrentStageId] = useState<string>('');
   const [classification, setClassification] = useState<'standard' | 'shinui'>('standard');
   const [generalNotes, setGeneralNotes] = useState('');
   const [driveLink, setDriveLink] = useState('');
+  const [plansPdfLink, setPlansPdfLink] = useState('');
   const [mergedWithId, setMergedWithId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'details' | 'stages' | 'history'>('details');
+  const [showUnmergeModal, setShowUnmergeModal] = useState(false);
+  const [showPdfViewer, setShowPdfViewer] = useState(false);
+  const [showHealthCheck, setShowHealthCheck] = useState(false);
 
   useEffect(() => {
     if (apartment) {
@@ -31,7 +36,10 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       setClassification(apartment.classification);
       setGeneralNotes(apartment.generalNotes);
       setDriveLink(apartment.driveLink ?? '');
+      setPlansPdfLink(apartment.plansPdfLink ?? '');
       setMergedWithId(apartment.mergedWith ?? '');
+      setShowPdfViewer(false);
+      setShowHealthCheck(false);
       setActiveTab('details');
     }
   }, [apartment?.id]);
@@ -56,11 +64,17 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       classification,
       generalNotes,
       driveLink: driveLink.trim() || undefined,
+      plansPdfLink: plansPdfLink.trim() || undefined,
     }, currentUser);
     onToast('Apartment details saved');
   }
 
   function handleSaveMerge() {
+    if (!mergedWithId && mergedPartner) {
+      // Unlinking — show modal to decide who keeps the data
+      setShowUnmergeModal(true);
+      return;
+    }
     mergeApartments(apartment!.id, mergedWithId || null, currentUser);
     const partner = apartments.find(a => a.id === mergedWithId);
     if (partner) {
@@ -70,8 +84,57 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     }
   }
 
+  function handleConfirmUnmerge(keepDataAptId: string | 'both') {
+    setShowUnmergeModal(false);
+    unmergeApartments(apartment!.id, keepDataAptId, currentUser);
+    onToast('Apartments unlinked');
+  }
+
   return (
     <>
+      {/* Unmerge confirmation modal */}
+      {showUnmergeModal && mergedPartner && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-[60]" onClick={() => setShowUnmergeModal(false)} />
+          <div className="fixed z-[70] bg-white rounded-2xl shadow-2xl p-6" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 'min(400px, 90vw)' }}>
+            <h3 className="font-bold text-gray-900 mb-1 text-base">Unlink Apartments</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Unlinking Apt <strong>{apartment.displayName || apartment.apartmentNumber}</strong> and Apt <strong>{mergedPartner.displayName || mergedPartner.apartmentNumber}</strong>.
+              Which apartment keeps the shared data (stage, drive link)?
+            </p>
+            <div className="space-y-2">
+              <button
+                onClick={() => handleConfirmUnmerge(apartment.id)}
+                className="w-full text-left px-4 py-3 rounded-xl border-2 border-gray-200 hover:border-[#1e3a5f] transition-all"
+              >
+                <div className="font-medium text-sm text-gray-800">Apt {apartment.displayName || apartment.apartmentNumber} keeps the data</div>
+                <div className="text-xs text-gray-400 mt-0.5">Apt {mergedPartner.displayName || mergedPartner.apartmentNumber} — stage &amp; drive link will be cleared</div>
+              </button>
+              <button
+                onClick={() => handleConfirmUnmerge(mergedPartner.id)}
+                className="w-full text-left px-4 py-3 rounded-xl border-2 border-gray-200 hover:border-[#1e3a5f] transition-all"
+              >
+                <div className="font-medium text-sm text-gray-800">Apt {mergedPartner.displayName || mergedPartner.apartmentNumber} keeps the data</div>
+                <div className="text-xs text-gray-400 mt-0.5">Apt {apartment.displayName || apartment.apartmentNumber} — stage &amp; drive link will be cleared</div>
+              </button>
+              <button
+                onClick={() => handleConfirmUnmerge('both')}
+                className="w-full text-left px-4 py-3 rounded-xl border-2 border-gray-200 hover:border-[#1e3a5f] transition-all"
+              >
+                <div className="font-medium text-sm text-gray-800">Both keep their current data</div>
+                <div className="text-xs text-gray-400 mt-0.5">Just removes the link — no data is cleared</div>
+              </button>
+            </div>
+            <button
+              onClick={() => setShowUnmergeModal(false)}
+              className="mt-3 w-full py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </>
+      )}
+
       <div className="drawer-overlay fixed inset-0 bg-black/30 z-40" onClick={onClose} />
 
       <div className="drawer-panel fixed right-0 top-0 h-full w-full max-w-lg bg-white shadow-2xl z-50 flex flex-col">
@@ -180,36 +243,36 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 </select>
               </div>
 
-              {/* Classification — simple toggle, no extra form */}
+              {/* Classification — compact toggle */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-2">Classification</label>
-                <div className="flex gap-2">
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Classification</label>
+                <div className="flex gap-1.5">
                   <button
                     onClick={() => setClassification('standard')}
-                    className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-all ${
+                    className={`px-3 py-1 rounded-lg text-xs font-medium border transition-all ${
                       classification === 'standard'
                         ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]'
-                        : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                        : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
                     }`}
                   >
                     Standard
                   </button>
                   <button
                     onClick={() => setClassification('shinui')}
-                    className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-all ${
+                    className={`px-3 py-1 rounded-lg text-xs font-medium border transition-all ${
                       classification === 'shinui'
                         ? 'bg-amber-500 text-white border-amber-500'
-                        : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                        : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
                     }`}
                   >
                     Changes
                   </button>
+                  {classification === 'shinui' && (
+                    <span className="text-xs text-amber-600 flex items-center gap-1 ml-1">
+                      <AlertTriangle size={11} /> Logged automatically
+                    </span>
+                  )}
                 </div>
-                {classification === 'shinui' && (
-                  <p className="text-xs text-amber-600 mt-1.5">
-                    Marked as Changes — change is logged automatically.
-                  </p>
-                )}
               </div>
 
               {/* General notes */}
@@ -226,10 +289,20 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
 
               {/* Google Drive link */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1.5">
-                  <ExternalLink size={11} />
-                  Google Drive Folder Link
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
+                    <ExternalLink size={11} />
+                    Google Drive Folder
+                  </label>
+                  <button
+                    onClick={() => setShowHealthCheck(v => !v)}
+                    className={`flex items-center gap-1 text-xs transition-colors ${showHealthCheck ? 'text-[#1e3a5f]' : 'text-gray-400 hover:text-[#1e3a5f]'}`}
+                    title="Drive folder health check"
+                  >
+                    <Activity size={11} />
+                    Health
+                  </button>
+                </div>
                 <div className="flex gap-2">
                   <input
                     value={driveLink}
@@ -248,7 +321,25 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     </a>
                   )}
                 </div>
-                {/* Show error if merged partner has a different drive link */}
+                {showHealthCheck && (
+                  <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-1.5">
+                    <p className="text-xs font-medium text-gray-600 mb-2">Folder Health</p>
+                    {[
+                      { label: 'Main Drive folder linked', ok: !!driveLink.trim() },
+                      { label: 'Engineering Plans PDF linked', ok: !!plansPdfLink.trim() },
+                    ].map(({ label, ok }) => (
+                      <div key={label} className="flex items-center gap-2 text-xs">
+                        <span className={`w-4 h-4 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0 ${ok ? 'bg-green-500' : 'bg-red-400'}`} style={{ fontSize: '9px' }}>
+                          {ok ? '✓' : '✗'}
+                        </span>
+                        <span className="text-gray-600">{label}</span>
+                      </div>
+                    ))}
+                    <p className="text-[10px] text-gray-400 mt-1.5 pt-1.5 border-t border-gray-200">
+                      Connect Google Drive in Settings → App for full folder verification.
+                    </p>
+                  </div>
+                )}
                 {mergedPartner && mergedPartner.driveLink && driveLink && mergedPartner.driveLink !== driveLink.trim() && (
                   <div className="mt-1.5 flex items-start gap-1.5 text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 border border-red-200">
                     <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" />
@@ -258,6 +349,68 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     </span>
                   </div>
                 )}
+              </div>
+
+              {/* Engineering Plans PDF */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1.5">
+                  <BookOpen size={11} />
+                  Engineering Plans PDF
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    value={plansPdfLink}
+                    onChange={e => setPlansPdfLink(e.target.value)}
+                    placeholder="https://drive.google.com/file/d/..."
+                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                  />
+                  {plansPdfLink && (() => {
+                    const fileId = extractFileId(plansPdfLink);
+                    return (
+                      <>
+                        <button
+                          onClick={() => setShowPdfViewer(v => !v)}
+                          className="flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 text-gray-500 hover:text-[#1e3a5f] hover:border-[#1e3a5f] transition-all text-xs font-medium"
+                          title={showPdfViewer ? 'Hide PDF' : 'View PDF'}
+                        >
+                          {showPdfViewer ? <EyeOff size={14} /> : <Eye size={14} />}
+                        </button>
+                        {fileId && (
+                          <a
+                            href={driveDownloadUrl(fileId)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center px-3 py-2 rounded-lg border border-gray-200 text-gray-500 hover:text-[#4aa8d8] hover:border-[#4aa8d8] transition-all"
+                            title="Download PDF"
+                          >
+                            <Download size={14} />
+                          </a>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+                {showPdfViewer && plansPdfLink && (() => {
+                  const fileId = extractFileId(plansPdfLink);
+                  if (!fileId) return (
+                    <a href={plansPdfLink} target="_blank" rel="noopener noreferrer"
+                      className="mt-2 block text-xs text-[#1e3a5f] underline">
+                      Open in Google Drive
+                    </a>
+                  );
+                  return (
+                    <div className="mt-2 rounded-xl overflow-hidden border border-gray-200 relative" style={{ height: '440px' }}>
+                      <iframe
+                        src={drivePreviewUrl(fileId)}
+                        width="100%"
+                        height="100%"
+                        allow="autoplay"
+                        title="Engineering Plans"
+                        style={{ border: 'none', display: 'block' }}
+                      />
+                    </div>
+                  );
+                })()}
               </div>
 
               <button
