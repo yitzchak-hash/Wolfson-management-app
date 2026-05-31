@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Download, Printer, Filter, SlidersHorizontal } from 'lucide-react';
+import { Download, Printer, Filter, SlidersHorizontal, Search, X } from 'lucide-react';
 import { useStore } from '../data/store';
 import { format } from 'date-fns';
 import { saveAs } from 'file-saver';
@@ -28,6 +28,8 @@ export function ReportsPage() {
   const [stageFilter, setStageFilter] = useState<string[]>([]);
   const [classFilter, setClassFilter] = useState<ClassFilter>('all');
   const [includeNoStage, setIncludeNoStage] = useState(true);
+  const [searchInput, setSearchInput] = useState('');
+  const [appliedSearch, setAppliedSearch] = useState('');
   const [showColumnPicker, setShowColumnPicker] = useState(false);
   const [enabledCols, setEnabledCols] = useState<Set<string>>(() =>
     new Set(['building', 'apartment', 'floor', 'stage', 'classification', 'generalNotes', 'lastUpdated', 'updatedBy'])
@@ -40,11 +42,18 @@ export function ReportsPage() {
     return apartments.filter(apt => {
       if (buildingFilter !== 'all' && apt.buildingId !== buildingFilter) return false;
       if (classFilter !== 'all' && apt.classification !== classFilter) return false;
-      if (!includeNoStage && !apt.currentStageId) return false;
-      if (stageFilter.length > 0 && apt.currentStageId && !stageFilter.includes(apt.currentStageId)) return false;
+      // When stage filters are selected, only show apartments at those exact stages
+      if (stageFilter.length > 0 && !stageFilter.includes(apt.currentStageId ?? '')) return false;
+      // When no stage filter, respect the includeNoStage toggle
+      if (stageFilter.length === 0 && !includeNoStage && !apt.currentStageId) return false;
+      if (appliedSearch) {
+        const q = appliedSearch.toLowerCase();
+        const label = (apt.displayName || apt.apartmentNumber || '').toLowerCase();
+        if (!label.includes(q)) return false;
+      }
       return true;
     });
-  }, [apartments, buildingFilter, classFilter, stageFilter, includeNoStage]);
+  }, [apartments, buildingFilter, classFilter, stageFilter, includeNoStage, appliedSearch]);
 
   function toggleStage(id: string) {
     setStageFilter(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -173,9 +182,39 @@ export function ReportsPage() {
 
       {/* Filters */}
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
-        <div className="flex items-center gap-2 mb-4">
-          <Filter size={16} className="text-gray-500" />
-          <h2 className="font-semibold text-gray-700 text-sm">Filters</h2>
+        <div className="flex items-center justify-between gap-2 mb-4">
+          <div className="flex items-center gap-2">
+            <Filter size={16} className="text-gray-500" />
+            <h2 className="font-semibold text-gray-700 text-sm">Filters</h2>
+          </div>
+          {/* Apartment search with Enter button */}
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && setAppliedSearch(searchInput)}
+                placeholder="Search apartment…"
+                className="pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg w-48 focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+              />
+            </div>
+            <button
+              onClick={() => setAppliedSearch(searchInput)}
+              className="px-3 py-1.5 bg-[#1e3a5f] text-white text-sm font-medium rounded-lg hover:bg-[#162d4a] transition-colors"
+            >
+              Enter
+            </button>
+            {appliedSearch && (
+              <button
+                onClick={() => { setSearchInput(''); setAppliedSearch(''); }}
+                className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
+                title="Clear search"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           <div>

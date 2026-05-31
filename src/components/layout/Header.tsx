@@ -2,24 +2,14 @@ import React from 'react';
 import { LogOut, User, Sun, Moon } from 'lucide-react';
 import { useStore } from '../../data/store';
 
-function TzviAirLogo({ light }: { light: boolean }) {
+function TzviAirLogo() {
   return (
-    <div className="flex items-center gap-2.5">
-      <svg width="48" height="34" viewBox="0 0 48 34" fill="none">
-        <path d="M4 6 Q24 -2 44 6" stroke="#f5a623" strokeWidth="3" strokeLinecap="round" fill="none"/>
-        <path d="M6 11 Q24 3 42 11" stroke="#f9c840" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
-        <path d="M8 16 Q24 9 40 16" stroke="#4aa8d8" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
-        <path d="M10 21 Q24 15 38 21" stroke="#1e6fa5" strokeWidth="2" strokeLinecap="round" fill="none"/>
-      </svg>
-      <div>
-        <div className="leading-none">
-          <span className={`text-xl font-extrabold tracking-tight italic ${light ? 'text-[#1e3a5f]' : 'text-white'}`}>Tzvi</span>
-          <span className="text-xl font-extrabold tracking-tight italic text-[#4aa8d8]">Air</span>
-        </div>
-        <div className={`text-[9px] tracking-[0.18em] uppercase mt-0.5 leading-none ${light ? 'text-gray-400' : 'text-gray-400'}`}>
-          Air Conditioning Engineering
-        </div>
-      </div>
+    <div className="rounded-xl overflow-hidden flex-shrink-0" style={{ backgroundColor: 'white', padding: '3px 10px' }}>
+      <img
+        src="/tzviair-logo.png"
+        alt="TzviAir"
+        style={{ height: '38px', width: 'auto', display: 'block' }}
+      />
     </div>
   );
 }
@@ -44,7 +34,7 @@ export function Header() {
       style={{ backgroundColor: lightTheme ? '#ffffff' : '#1e3a5f', borderBottom: lightTheme ? '1px solid #e5e7eb' : 'none' }}
     >
       <div className="flex items-center gap-5">
-        <TzviAirLogo light={lightTheme} />
+        <TzviAirLogo />
         <div className="w-px h-10" style={{ backgroundColor: lightTheme ? '#e5e7eb' : 'rgba(255,255,255,0.2)' }} />
         <WolfsonLogo />
       </div>

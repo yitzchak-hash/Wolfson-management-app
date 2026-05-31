@@ -102,19 +102,13 @@ export function LoginPage() {
         <div className="relative z-10 w-full max-w-xs">
           {/* Logo */}
           <div className="text-center mb-10">
-            <div className="flex items-center justify-center gap-3 mb-5">
-              <svg width="52" height="38" viewBox="0 0 52 38" fill="none">
-                <path d="M4 7 Q26 -2 48 7" stroke="#f5a623" strokeWidth="3.5" strokeLinecap="round" fill="none"/>
-                <path d="M6 14 Q26 4 46 14" stroke="#f9c840" strokeWidth="3" strokeLinecap="round" fill="none"/>
-                <path d="M8 21 Q26 11 44 21" stroke="#4aa8d8" strokeWidth="3" strokeLinecap="round" fill="none"/>
-                <path d="M10 28 Q26 18 42 28" stroke="#1e6fa5" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
-              </svg>
-              <div>
-                <div>
-                  <span className="text-4xl font-extrabold tracking-tight italic text-white">Tzvi</span>
-                  <span className="text-4xl font-extrabold tracking-tight italic text-[#4aa8d8]">Air</span>
-                </div>
-                <div className="text-[10px] text-gray-500 tracking-[0.22em] uppercase">Air Conditioning Engineering</div>
+            <div className="flex items-center justify-center mb-5">
+              <div className="rounded-xl overflow-hidden shadow-lg" style={{ backgroundColor: 'white', padding: '6px 16px' }}>
+                <img
+                  src="/tzviair-logo.png"
+                  alt="TzviAir"
+                  style={{ height: '48px', width: 'auto', display: 'block' }}
+                />
               </div>
             </div>
 
