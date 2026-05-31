@@ -53,6 +53,45 @@ export async function requestGoogleToken(clientId: string): Promise<{ token: str
   });
 }
 
+/** Silent token refresh — skips consent prompt if user already approved. Falls back to visible prompt on failure. */
+export async function refreshGoogleToken(clientId: string): Promise<{ token: string; expiry: number }> {
+  await loadGIS();
+  return new Promise((resolve, reject) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const client = (window.google!.accounts.oauth2.initTokenClient as any)({
+      client_id: clientId,
+      scope: DRIVE_SCOPE,
+      prompt: '',
+      callback: (resp: { access_token?: string; error?: string; expires_in?: number }) => {
+        if (resp.error || !resp.access_token) {
+          reject(new Error(resp.error ?? 'Silent refresh failed'));
+        } else {
+          resolve({ token: resp.access_token, expiry: Date.now() + (resp.expires_in ?? 3600) * 1000 });
+        }
+      },
+    });
+    client.requestAccessToken();
+  });
+}
+
+/** Returns a valid token, auto-refreshing silently if expired. Returns null if no clientId configured. */
+export async function ensureValidToken(
+  clientId: string,
+  currentToken: string | null,
+  currentExpiry: number | null,
+  setToken: (token: string | null, expiry: number | null) => void,
+): Promise<string | null> {
+  if (currentToken && currentExpiry && Date.now() < currentExpiry - 60_000) return currentToken;
+  if (!clientId) return null;
+  try {
+    const { token, expiry } = await refreshGoogleToken(clientId);
+    setToken(token, expiry);
+    return token;
+  } catch {
+    return null;
+  }
+}
+
 /** Extract folder ID from a Google Drive folder URL */
 export function extractFolderId(url: string): string | null {
   if (!url) return null;

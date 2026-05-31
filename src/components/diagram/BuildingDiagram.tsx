@@ -151,23 +151,24 @@ function AptCell({
         <span className="opacity-20 italic" style={{ fontSize: compact ? '8px' : '10px' }}>–</span>
       )}
 
-      {/* Stage name — non-compact only */}
+      {/* Stage name with inline completion indicator */}
       {!compact && displayLabel && (
         <span
           className="w-full text-center leading-none block truncate px-0.5"
           style={{ fontSize: '7px', opacity: hasStage ? 0.9 : 0.45, fontStyle: hasStage ? 'normal' : 'italic' }}
         >
           {hasStage ? stage!.name : 'Not started'}
+          {allTasksDone && <span style={{ color: '#22c55e', fontStyle: 'normal', marginLeft: '1px' }}>✓</span>}
         </span>
       )}
 
-      {/* Task info or next-step hint — non-compact only */}
-      {!compact && displayLabel && (taskInfo || nextStageName) && (
+      {/* Task info — non-compact only */}
+      {!compact && displayLabel && taskInfo && (
         <span
           className="w-full text-center leading-none block truncate px-0.5"
-          style={{ fontSize: '7px', opacity: taskInfo ? 0.85 : 0.5 }}
+          style={{ fontSize: '7px', opacity: 0.85 }}
         >
-          {taskInfo ?? `→ ${nextStageName}`}
+          {taskInfo}
         </span>
       )}
 
@@ -221,16 +222,6 @@ function AptCell({
         </button>
       )}
 
-      {/* All-tasks-complete green indicator */}
-      {allTasksDone && !compact && (
-        <div
-          className="absolute bottom-0.5 right-0.5 w-3 h-3 rounded-full flex items-center justify-center"
-          style={{ backgroundColor: '#22c55e', border: '1px solid rgba(255,255,255,0.8)' }}
-          title="All tasks complete"
-        >
-          <span style={{ fontSize: '7px', color: 'white', fontWeight: 'bold', lineHeight: 1 }}>✓</span>
-        </div>
-      )}
 
       {isBulkSelected && (
         <div

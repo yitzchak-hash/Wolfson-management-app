@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2 } from 'lucide-react';
 import { Apartment, User } from '../../types';
 import { useStore } from '../../data/store';
 import { format } from 'date-fns';
@@ -16,7 +16,9 @@ interface Props {
 
 export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast }: Props) {
   const { stages, activityLogs, apartments, updateApartment, mergeApartments, unmergeApartments,
-    googleAccessToken, googleTokenExpiry, autoBackup, backupSnapshots, restoreFromSnapshot } = useStore();
+    googleAccessToken, googleTokenExpiry, autoBackup, backupSnapshots, restoreFromSnapshot,
+    officeNoteFiles, addOfficeNoteFile, deleteOfficeNoteFile } = useStore();
+  const officeFileRef = useRef<HTMLInputElement>(null);
 
   const [displayName, setDisplayName] = useState('');
   const [currentStageId, setCurrentStageId] = useState<string>('');
@@ -289,7 +291,17 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
 
               {/* General notes */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">General Notes</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-medium text-gray-600">General Notes</label>
+                  <button
+                    type="button"
+                    onClick={() => officeFileRef.current?.click()}
+                    className="flex items-center gap-1 text-xs text-gray-400 hover:text-[#1e3a5f] transition-colors"
+                    title="Attach file to notes"
+                  >
+                    <Paperclip size={11} /> Attach
+                  </button>
+                </div>
                 <textarea
                   value={generalNotes}
                   onChange={e => setGeneralNotes(e.target.value)}
@@ -297,6 +309,69 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   placeholder="General notes about this apartment..."
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 resize-none"
                 />
+                <input
+                  ref={officeFileRef}
+                  type="file"
+                  className="hidden"
+                  accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
+                  onChange={e => {
+                    const file = e.target.files?.[0];
+                    if (!file || !apartment) return;
+                    const reader = new FileReader();
+                    reader.onload = ev => {
+                      addOfficeNoteFile({
+                        apartmentId: apartment.id,
+                        dataUrl: ev.target?.result as string,
+                        filename: file.name,
+                        mimeType: file.type,
+                        uploadedBy: currentUser.id,
+                        uploadedByName: currentUser.name,
+                      });
+                      onToast('File attached to notes');
+                    };
+                    reader.readAsDataURL(file);
+                    if (officeFileRef.current) officeFileRef.current.value = '';
+                  }}
+                />
+                {/* Attached files thumbnails */}
+                {(() => {
+                  const aptFiles = officeNoteFiles.filter(f => f.apartmentId === apartment.id);
+                  if (!aptFiles.length) return null;
+                  return (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {aptFiles.map(f => {
+                        const isImage = f.mimeType.startsWith('image/');
+                        return (
+                          <div key={f.id} className="relative group w-16 h-16 rounded-lg border border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center">
+                            {isImage ? (
+                              <img src={f.dataUrl} alt={f.filename} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="flex flex-col items-center justify-center p-1">
+                                <BookOpen size={18} className="text-gray-400" />
+                                <span className="text-[8px] text-gray-400 truncate w-full text-center mt-0.5">{f.filename}</span>
+                              </div>
+                            )}
+                            <button
+                              onClick={() => deleteOfficeNoteFile(f.id)}
+                              className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                              title="Remove file"
+                            >
+                              <Trash2 size={8} color="white" />
+                            </button>
+                            <a
+                              href={f.dataUrl}
+                              download={f.filename}
+                              className="absolute bottom-0.5 right-0.5 w-4 h-4 bg-gray-700/60 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                              title="Download"
+                            >
+                              <Download size={8} color="white" />
+                            </a>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Google Drive link */}

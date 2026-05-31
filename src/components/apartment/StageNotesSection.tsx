@@ -67,6 +67,13 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
     }
   }
 
+  const allAptAssignmentIds = contractorAssignments
+    .filter(a => a.apartmentId === apartmentId)
+    .map(a => a.id);
+  const allContractorNotes = contractorNotes.filter(
+    n => allAptAssignmentIds.includes(n.assignmentId) && n.authorType === 'contractor',
+  );
+
   return (
     <div className="space-y-1.5">
       {sortedStages.map(stage => {
@@ -170,14 +177,17 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                   </div>
                 </div>
 
-                {/* Contractor notes for this stage */}
+                {/* Contractor notes linked to this stage's assignments */}
                 {(() => {
-                  const assignmentIds = contractorAssignments
-                    .filter(a => a.apartmentId === apartmentId && a.stageId === stage.id)
+                  const aptAssignmentIds = contractorAssignments
+                    .filter(a => a.apartmentId === apartmentId)
                     .map(a => a.id);
                   const cNotes = contractorNotes.filter(
-                    n => assignmentIds.includes(n.assignmentId) && n.authorType === 'contractor',
-                  );
+                    n => aptAssignmentIds.includes(n.assignmentId) && n.authorType === 'contractor',
+                  ).filter(n => {
+                    const asgn = contractorAssignments.find(a => a.id === n.assignmentId);
+                    return asgn?.stageId === stage.id || (!asgn?.stageId && stage.id === sortedStages[0]?.id);
+                  });
                   if (!cNotes.length) return null;
                   return (
                     <div className="mt-2 pt-2 border-t border-gray-100">
@@ -203,6 +213,42 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
           </div>
         );
       })}
+
+      {/* All contractor notes for this apartment */}
+      {allContractorNotes.length > 0 && (
+        <div className="mt-3 border border-blue-100 rounded-lg overflow-hidden">
+          <div className="px-3 py-2 bg-blue-50 flex items-center gap-2">
+            <MessageSquare size={13} className="text-blue-500" />
+            <span className="text-xs font-semibold text-blue-700">All Contractor Notes ({allContractorNotes.length})</span>
+          </div>
+          <div className="p-3 space-y-2 bg-white">
+            {allContractorNotes.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map(n => {
+              const asgn = contractorAssignments.find(a => a.id === n.assignmentId);
+              const contractor = asgn ? contractors.find(c => c.id === asgn.contractorId) : null;
+              return (
+                <div key={n.id} className="px-2.5 py-2 rounded-lg bg-gray-50 border border-gray-100 text-xs">
+                  <div className="flex items-center gap-1 mb-0.5 flex-wrap">
+                    <span className="font-medium text-gray-700">{n.authorName}</span>
+                    {contractor && contractor.name !== n.authorName && (
+                      <span className="text-gray-400 text-[10px]">({contractor.name})</span>
+                    )}
+                    {asgn?.stageId && (
+                      <span className="text-[10px] px-1 bg-gray-200 text-gray-500 rounded">
+                        {stages.find(s => s.id === asgn.stageId)?.name ?? 'Unknown stage'}
+                      </span>
+                    )}
+                    <span className="text-gray-400 ml-auto">{format(new Date(n.createdAt), 'MMM d, HH:mm')}</span>
+                  </div>
+                  <p className="text-gray-600 leading-snug">{n.text}</p>
+                  {n.attachmentFilename && (
+                    <p className="text-[10px] text-blue-500 mt-0.5">📎 {n.attachmentFilename}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

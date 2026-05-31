@@ -8,7 +8,7 @@ import { Stage, User, Contractor, ContractorCategory } from '../types';
 import { Toast } from '../components/ui/Toast';
 import { format } from 'date-fns';
 import { saveAs } from 'file-saver';
-import { requestGoogleToken } from '../data/driveApi';
+import { requestGoogleToken, ensureValidToken, extractFolderId, findOrCreateFolder, uploadFileToDrive } from '../data/driveApi';
 
 type Tab = 'stages' | 'users' | 'contractors' | 'app';
 
@@ -369,7 +369,7 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
 function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
   lightTheme: boolean; setLightTheme: (v: boolean) => void; onToast: (msg: string, type?: 'success' | 'error') => void;
 }) {
-  const { users, googleClientId, googleAccessToken, setGoogleClientId, setGoogleToken } = useStore();
+  const { users, googleClientId, googleAccessToken, googleTokenExpiry, setGoogleClientId, setGoogleToken } = useStore();
   const [clientIdDraft, setClientIdDraft] = useState(googleClientId);
   const [connecting, setConnecting] = useState(false);
 
@@ -388,7 +388,21 @@ function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
     }
   }
 
-  const isConnected = !!googleAccessToken && (Date.now() < (useStore.getState().googleTokenExpiry ?? 0));
+  async function handleReconnect() {
+    if (!googleClientId) return;
+    setConnecting(true);
+    try {
+      const token = await ensureValidToken(googleClientId, null, null, setGoogleToken);
+      if (token) onToast('Google Drive reconnected!', 'success');
+      else onToast('Reconnect failed — please use Connect Drive', 'error');
+    } catch (e) {
+      onToast(`Reconnect failed: ${(e as Error).message}`, 'error');
+    } finally {
+      setConnecting(false);
+    }
+  }
+
+  const isConnected = !!googleAccessToken && (Date.now() < (googleTokenExpiry ?? 0));
 
   return (
     <div className="space-y-5">
@@ -475,7 +489,13 @@ function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
           </button>
         </div>
         {isConnected && (
-          <p className="mt-2 text-xs text-green-600">Drive API access active. Token expires in ~{Math.round(((useStore.getState().googleTokenExpiry ?? 0) - Date.now()) / 60000)} min.</p>
+          <div className="mt-2 flex items-center justify-between">
+            <p className="text-xs text-green-600">Drive API active — auto-reconnects when token expires.</p>
+            <button onClick={handleReconnect} disabled={connecting}
+              className="text-xs text-gray-400 hover:text-[#1e3a5f] disabled:opacity-40 transition-colors">
+              Reconnect now
+            </button>
+          </div>
         )}
       </div>
 
@@ -491,17 +511,43 @@ function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
 }
 
 function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
-  const { exportData, importData, getDataSummary, autoBackup, setAutoBackup, backupSnapshots } = useStore();
+  const {
+    exportData, importData, getDataSummary,
+    autoBackup, setAutoBackup, backupSnapshots,
+    backupDriveFolderLink, setBackupDriveFolder,
+    googleClientId, googleAccessToken, googleTokenExpiry, setGoogleToken,
+  } = useStore();
   const importRef = useRef<HTMLInputElement>(null);
-  const [exportModal, setExportModal] = useState<ReturnType<typeof getDataSummary> & { sizeKB: number } | null>(null);
+  const [exportModal, setExportModal] = useState<ReturnType<typeof getDataSummary> & { sizeKB: number; driveUploaded?: boolean } | null>(null);
   const [importModal, setImportModal] = useState<ReturnType<typeof getDataSummary> | null>(null);
+  const [driveFolderDraft, setDriveFolderDraft] = useState(backupDriveFolderLink);
 
-  function handleExport() {
+  async function handleExport() {
     const json = exportData();
     const sizeKB = Math.round(json.length / 1024);
+    const filename = `wolfson-backup-${format(new Date(), 'yyyy-MM-dd-HHmm')}.json`;
     const blob = new Blob([json], { type: 'application/json' });
-    saveAs(blob, `wolfson-backup-${format(new Date(), 'yyyy-MM-dd-HHmm')}.json`);
-    setExportModal({ ...getDataSummary(), sizeKB });
+    saveAs(blob, filename);
+
+    let driveUploaded = false;
+    if (backupDriveFolderLink && googleClientId) {
+      try {
+        const token = await ensureValidToken(googleClientId, googleAccessToken, googleTokenExpiry, setGoogleToken);
+        if (token) {
+          const folderId = extractFolderId(backupDriveFolderLink);
+          if (folderId) {
+            const backupsFolder = await findOrCreateFolder(folderId, 'Backups', token);
+            const dataUrl = `data:application/json;base64,${btoa(unescape(encodeURIComponent(json)))}`;
+            await uploadFileToDrive(backupsFolder, filename, dataUrl, 'application/json', token);
+            driveUploaded = true;
+          }
+        }
+      } catch {
+        // Drive upload failure is non-fatal
+      }
+    }
+
+    setExportModal({ ...getDataSummary(), sizeKB, driveUploaded });
   }
 
   function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -556,6 +602,12 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
                 <SummaryRow label="File size" value={`${exportModal.sizeKB} KB`} />
               </div>
             </div>
+            {exportModal.driveUploaded && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg text-xs text-blue-700 mb-3">
+                <HardDriveDownload size={13} className="flex-shrink-0" />
+                Also uploaded to Google Drive backup folder.
+              </div>
+            )}
             <p className="text-xs text-gray-400 text-center">
               Exported {format(new Date(), 'MMM d, yyyy · HH:mm')}
             </p>
@@ -612,7 +664,7 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
           <p className="text-sm font-medium text-gray-700">Auto-backup on activity</p>
           <p className="text-xs text-gray-500 mt-0.5">
             Saves a snapshot on each change — allows restoring from Activity History.
-            {backupSnapshots.length > 0 && ` ${backupSnapshots.length}/30 snapshots stored.`}
+            {backupSnapshots.length > 0 && ` ${backupSnapshots.length} snapshot${backupSnapshots.length !== 1 ? 's' : ''} stored.`}
           </p>
         </div>
         <button
@@ -624,6 +676,34 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
             : <ToggleLeft size={28} className="text-gray-400" />
           }
         </button>
+      </div>
+
+      {/* Drive backup folder */}
+      <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+        <p className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-1.5">
+          <HardDriveDownload size={14} className="text-[#4aa8d8]" />
+          Google Drive Backup Folder
+        </p>
+        <p className="text-xs text-gray-500 mb-2">When set, exports are also saved to a "Backups" subfolder here.</p>
+        <div className="flex gap-2">
+          <input
+            value={driveFolderDraft}
+            onChange={e => setDriveFolderDraft(e.target.value)}
+            placeholder="https://drive.google.com/drive/folders/…"
+            className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+          />
+          <button
+            onClick={() => { setBackupDriveFolder(driveFolderDraft.trim()); onToast('Drive backup folder saved'); }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-xs font-medium hover:bg-[#162d4a] transition-colors whitespace-nowrap"
+          >
+            <Save size={12} /> Save
+          </button>
+        </div>
+        {backupDriveFolderLink && (
+          <p className="mt-1.5 text-xs text-green-600 flex items-center gap-1">
+            <Check size={11} /> Folder configured — exports will upload automatically.
+          </p>
+        )}
       </div>
 
       <p className="text-sm text-gray-500 mb-4">

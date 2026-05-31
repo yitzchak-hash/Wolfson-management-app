@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Apartment, ActivityLog, Stage, StageNote, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary } from '../types';
+import { Apartment, ActivityLog, Stage, StageNote, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile } from '../types';
 import {
   DEFAULT_BUILDINGS, DEFAULT_STAGES, DEFAULT_USERS, buildDefaultApartments, DATA_VERSION,
 } from './initialData';
@@ -82,6 +82,7 @@ interface AppState {
   contractorAssignments: ContractorAssignment[];
   contractorNotes: ContractorNote[];
   contractorPhotos: ContractorPhoto[];
+  officeNoteFiles: OfficeNoteFile[];
 
   login: (code: string) => User | null;
   logout: () => void;
@@ -127,9 +128,15 @@ interface AppState {
   // Auto-backup / snapshot restore
   autoBackup: boolean;
   backupSnapshots: BackupSnapshot[];
+  backupDriveFolderLink: string;
   setAutoBackup: (v: boolean) => void;
+  setBackupDriveFolder: (url: string) => void;
   restoreFromSnapshot: (snapshotId: string) => void;
   getDataSummary: () => DataSummary;
+
+  // Office note files
+  addOfficeNoteFile: (f: Omit<OfficeNoteFile, 'id' | 'uploadedAt'>) => void;
+  deleteOfficeNoteFile: (id: string) => void;
 
   // Backup / restore
   exportData: () => string;
@@ -153,12 +160,14 @@ export const useStore = create<AppState>((set, get) => ({
   contractorAssignments: (stored?.contractorAssignments as ContractorAssignment[] | null) ?? [],
   contractorNotes: (stored?.contractorNotes as ContractorNote[] | null) ?? [],
   contractorPhotos: (stored?.contractorPhotos as ContractorPhoto[] | null) ?? [],
+  officeNoteFiles: (stored?.officeNoteFiles as OfficeNoteFile[] | null) ?? [],
   firebaseListening: false,
   googleClientId: (stored?.googleClientId as string | null) ?? '',
   googleAccessToken: null,
   googleTokenExpiry: null,
   autoBackup: (stored?.autoBackup as boolean | null) ?? false,
   backupSnapshots: (stored?.backupSnapshots as BackupSnapshot[] | null) ?? [],
+  backupDriveFolderLink: (stored?.backupDriveFolderLink as string | null) ?? '',
   lightTheme: localStorage.getItem(THEME_KEY) === 'light',
   setLightTheme: (v: boolean) => {
     set({ lightTheme: v });
@@ -529,6 +538,7 @@ export const useStore = create<AppState>((set, get) => ({
       contractorAssignments: state.contractorAssignments,
       contractorNotes: state.contractorNotes,
       contractorPhotos: state.contractorPhotos,
+      officeNoteFiles: state.officeNoteFiles,
     };
     return JSON.stringify(snapshot, null, 2);
   },
@@ -549,6 +559,7 @@ export const useStore = create<AppState>((set, get) => ({
         contractorAssignments: data.contractorAssignments ?? [],
         contractorNotes: data.contractorNotes ?? [],
         contractorPhotos: data.contractorPhotos ?? [],
+        officeNoteFiles: data.officeNoteFiles ?? [],
       });
       persist(get);
       const summary: DataSummary = {
@@ -608,7 +619,7 @@ export const useStore = create<AppState>((set, get) => ({
       };
       return {
         activityLogs: newLogs,
-        backupSnapshots: [snapshot, ...state.backupSnapshots].slice(0, 30),
+        backupSnapshots: [snapshot, ...state.backupSnapshots],
       };
     });
     persist(get);
@@ -617,6 +628,22 @@ export const useStore = create<AppState>((set, get) => ({
 
   setAutoBackup: (v) => {
     set({ autoBackup: v });
+    persist(get);
+  },
+
+  setBackupDriveFolder: (url) => {
+    set({ backupDriveFolderLink: url });
+    persist(get);
+  },
+
+  addOfficeNoteFile: (fields) => {
+    const f: OfficeNoteFile = { ...fields, id: generateId(), uploadedAt: new Date().toISOString() };
+    set(state => ({ officeNoteFiles: [...state.officeNoteFiles, f] }));
+    persist(get);
+  },
+
+  deleteOfficeNoteFile: (id) => {
+    set(state => ({ officeNoteFiles: state.officeNoteFiles.filter(f => f.id !== id) }));
     persist(get);
   },
 
@@ -726,8 +753,10 @@ function persist(get: () => AppState) {
     contractorAssignments: state.contractorAssignments,
     contractorNotes: state.contractorNotes,
     contractorPhotos: state.contractorPhotos,
+    officeNoteFiles: state.officeNoteFiles,
     googleClientId: state.googleClientId,
     autoBackup: state.autoBackup,
     backupSnapshots: state.backupSnapshots,
+    backupDriveFolderLink: state.backupDriveFolderLink,
   });
 }

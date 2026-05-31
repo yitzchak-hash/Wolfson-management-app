@@ -11,14 +11,14 @@ interface ActivitySectionProps {
 }
 
 function actionLabel(log: ActivityLog): string {
-  if (log.actionType === 'note') return 'added/updated stage note';
+  if (log.actionType === 'note') return 'updated stage note';
   if (log.actionType === 'contractor_upload') return `uploaded file: ${log.newValue}`;
-  if (log.actionType === 'contractor_note') return `added note: "${log.newValue}"`;
+  if (log.actionType === 'contractor_note') return 'added a note';
   if (log.actionType === 'contractor_complete') return 'marked task complete';
-  if (log.fieldChanged === 'currentStageId') return `changed stage: "${log.previousValue}" → "${log.newValue}"`;
+  if (log.fieldChanged === 'currentStageId') return 'changed stage';
   if (log.fieldChanged === 'classification') return `changed classification: ${log.previousValue} → ${log.newValue}`;
   if (log.fieldChanged === 'generalNotes') return 'updated general notes';
-  if (log.fieldChanged === 'displayName') return `renamed to "${log.newValue}"`;
+  if (log.fieldChanged === 'displayName') return `renamed apartment to "${log.newValue}"`;
   return `updated ${log.fieldChanged}`;
 }
 
@@ -40,6 +40,9 @@ export function ActivitySection({ logs, autoBackup, backupSnapshots, onRestore }
         const snapshot = autoBackup ? backupSnapshots?.find(s => s.activityLogId === log.id) : undefined;
         const isConfirming = confirmingId === log.id;
 
+        const hasNoteContent = (log.actionType === 'note' || log.actionType === 'contractor_note' || log.fieldChanged === 'generalNotes') && log.newValue;
+        const hasStageChange = log.fieldChanged === 'currentStageId';
+
         return (
           <div key={log.id} className="flex gap-3 text-xs">
             <div className="flex-shrink-0 w-7 h-7 rounded-full bg-[#1e3a5f]/10 flex items-center justify-center text-[#1e3a5f] font-bold">
@@ -49,6 +52,26 @@ export function ActivitySection({ logs, autoBackup, backupSnapshots, onRestore }
               <span className="font-medium text-gray-800">{log.userName}</span>
               {' '}
               <span className="text-gray-600">{actionLabel(log)}</span>
+              {log.apartmentNumber && (
+                <span className="text-gray-400"> · Apt {log.apartmentNumber}</span>
+              )}
+
+              {/* Note content block */}
+              {hasNoteContent && (
+                <div className="mt-1 px-2 py-1.5 rounded-md bg-gray-50 border border-gray-100 text-gray-700 leading-snug text-[11px] whitespace-pre-wrap break-words">
+                  {log.newValue}
+                </div>
+              )}
+
+              {/* Stage change visualization */}
+              {hasStageChange && (
+                <div className="mt-1 flex items-center gap-1.5 text-[11px] flex-wrap">
+                  <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{log.previousValue || 'Not started'}</span>
+                  <span className="text-gray-400">→</span>
+                  <span className="px-1.5 py-0.5 rounded bg-[#1e3a5f]/10 text-[#1e3a5f] font-medium">{log.newValue || 'Not started'}</span>
+                </div>
+              )}
+
               <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                 <span className="text-gray-400">{format(new Date(log.createdAt), 'MMM d, yyyy · HH:mm')}</span>
 

@@ -167,3 +167,14 @@ export interface ContractorPhoto {
   driveFileId?: string;
   driveUrl?: string;
 }
+
+export interface OfficeNoteFile {
+  id: string;
+  apartmentId: string;
+  dataUrl: string;
+  filename: string;
+  mimeType: string;
+  uploadedAt: string;
+  uploadedBy: string;
+  uploadedByName: string;
+}
