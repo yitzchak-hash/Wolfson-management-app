@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useStore } from '../data/store';
-import { Plus, Trash2, Save, ChevronUp, ChevronDown, Shield, Sun, Moon } from 'lucide-react';
-import { Stage, User } from '../types';
+import { Plus, Trash2, Save, ChevronUp, ChevronDown, Shield, Sun, Moon, Copy, Check, Link2, Download, Upload, HardDrive } from 'lucide-react';
+import { Stage, User, Contractor, ContractorCategory, ContractorAssignment } from '../types';
 import { Toast } from '../components/ui/Toast';
+import { format } from 'date-fns';
+import { saveAs } from 'file-saver';
 
-type Tab = 'stages' | 'users' | 'app';
+type Tab = 'stages' | 'users' | 'contractors' | 'app';
 
 const PRESET_COLORS = [
   '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16',
@@ -24,17 +26,24 @@ export function SettingsPage() {
 
   const sortedStages = [...stages].sort((a, b) => a.order - b.order);
 
+  const TAB_LABELS: Record<Tab, string> = {
+    stages: 'Stages',
+    users: 'Users',
+    contractors: 'Contractors',
+    app: 'App',
+  };
+
   return (
     <div className="p-6 max-w-3xl mx-auto">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Settings</h1>
 
-      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-6 w-fit">
-        {(['stages', 'users', 'app'] as const).map(tab => (
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-6 flex-wrap">
+        {(['stages', 'users', 'contractors', 'app'] as Tab[]).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
-            className={`px-5 py-2 rounded-lg text-sm font-medium transition-all capitalize ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
               activeTab === tab ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
             }`}>
-            {tab === 'app' ? 'App Settings' : tab}
+            {TAB_LABELS[tab]}
           </button>
         ))}
       </div>
@@ -44,6 +53,9 @@ export function SettingsPage() {
       )}
       {activeTab === 'users' && (
         <UserSettings users={users} updateUser={updateUser} addUser={addUser} onToast={showToast} />
+      )}
+      {activeTab === 'contractors' && (
+        <ContractorsTab onToast={showToast} />
       )}
       {activeTab === 'app' && (
         <AppSettingsTab lightTheme={lightTheme} setLightTheme={setLightTheme} onToast={showToast} />
@@ -322,6 +334,248 @@ function UserSettings({ users, updateUser, addUser, onToast }: {
   );
 }
 
+// ─── Contractors settings ────────────────────────────────────────────────────
+const CAT_COLORS: Record<ContractorCategory, string> = { drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981' };
+const CAT_LABELS: Record<ContractorCategory, string> = { drywall: 'Drywall', ac: 'AC / HVAC', general: 'General' };
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  function copy() {
+    navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+  }
+  return (
+    <button onClick={copy} className="flex items-center gap-1 text-xs px-2 py-1 rounded border border-gray-200 text-gray-500 hover:border-[#4aa8d8] hover:text-[#4aa8d8] transition-all">
+      {copied ? <Check size={12} /> : <Copy size={12} />}
+      {copied ? 'Copied!' : 'Copy link'}
+    </button>
+  );
+}
+
+function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
+  const {
+    contractors, contractorAssignments, apartments, stages,
+    addContractor, updateContractor, deleteContractor,
+    addContractorAssignment, deleteContractorAssignment,
+  } = useStore();
+
+  const [form, setForm] = useState({ name: '', email: '', category: 'ac' as ContractorCategory });
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [assForm, setAssForm] = useState<Record<string, { aptId: string; task: string; dueDate: string; stageId: string }>>({});
+
+  const sortedStages = [...stages].filter(s => s.active).sort((a, b) => a.order - b.order);
+  const grouped = (['drywall', 'ac', 'general'] as ContractorCategory[]).map(cat => ({
+    cat,
+    items: contractors.filter(c => c.category === cat),
+  }));
+
+  function handleAdd() {
+    if (!form.name.trim()) return;
+    addContractor({ name: form.name.trim(), email: form.email.trim(), category: form.category, active: true });
+    setForm({ name: '', email: '', category: 'ac' });
+    onToast('Contractor added');
+  }
+
+  function handleAddAssignment(contractorId: string, buildingApts: typeof apartments) {
+    const f = assForm[contractorId];
+    if (!f?.aptId || !f?.task?.trim()) return;
+    const apt = buildingApts.find(a => a.id === f.aptId);
+    if (!apt) return;
+    addContractorAssignment({
+      contractorId,
+      apartmentId: f.aptId,
+      buildingId: apt.buildingId,
+      taskDescription: f.task.trim(),
+      dueDate: f.dueDate || null,
+      stageId: f.stageId || null,
+      completedAt: null,
+      createdBy: '',
+      createdByName: 'Office',
+    });
+    setAssForm(prev => ({ ...prev, [contractorId]: { aptId: '', task: '', dueDate: '', stageId: '' } }));
+    onToast('Assignment added');
+  }
+
+  const portalBase = `${window.location.origin}/c/`;
+
+  return (
+    <div className="space-y-6">
+      {grouped.map(({ cat, items }) => (
+        <div key={cat}>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: CAT_COLORS[cat] }} />
+            <h2 className="font-semibold text-gray-800">{CAT_LABELS[cat]}</h2>
+            <span className="text-xs text-gray-400">{items.length} contractor{items.length !== 1 ? 's' : ''}</span>
+          </div>
+
+          <div className="space-y-3">
+            {items.map(c => {
+              const cAssignments = contractorAssignments.filter(a => a.contractorId === c.id);
+              const isExpanded = expandedId === c.id;
+              const af = assForm[c.id] ?? { aptId: '', task: '', dueDate: '', stageId: '' };
+              const resApts = apartments.filter(a => !a.isUnnamed && a.floor > 0).sort((a, b) => a.buildingId.localeCompare(b.buildingId) || (Number(a.apartmentNumber) - Number(b.apartmentNumber)));
+
+              return (
+                <div key={c.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                  {/* Contractor row */}
+                  <div className="flex items-center gap-3 p-4">
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-sm flex-shrink-0"
+                      style={{ backgroundColor: CAT_COLORS[cat] }}>
+                      {c.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-gray-900 text-sm">{c.name}</span>
+                        {c.email && <span className="text-xs text-gray-400">{c.email}</span>}
+                      </div>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className="text-xs text-gray-500">{cAssignments.length} assignment{cAssignments.length !== 1 ? 's' : ''} · {cAssignments.filter(a => a.completedAt).length} done</span>
+                        <CopyButton text={portalBase + c.token} />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button onClick={() => updateContractor(c.id, { active: !c.active })}
+                        className={`text-xs px-2.5 py-1 rounded-lg border font-medium ${c.active ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-100 border-gray-200 text-gray-500'}`}>
+                        {c.active ? 'Active' : 'Off'}
+                      </button>
+                      <button onClick={() => setExpandedId(isExpanded ? null : c.id)} className="p-1.5 rounded-lg hover:bg-gray-50">
+                        {isExpanded ? <ChevronUp size={16} className="text-gray-500" /> : <ChevronDown size={16} className="text-gray-500" />}
+                      </button>
+                      <button onClick={() => { if (confirm(`Delete "${c.name}"?`)) { deleteContractor(c.id); onToast('Deleted'); } }}
+                        className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600">
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Expanded: assignments */}
+                  {isExpanded && (
+                    <div className="border-t border-gray-100 p-4 bg-gray-50">
+                      {/* Portal link */}
+                      <div className="flex items-center gap-2 mb-4 p-3 bg-white rounded-lg border border-gray-200">
+                        <Link2 size={14} className="text-[#4aa8d8] flex-shrink-0" />
+                        <span className="text-xs text-gray-500 truncate flex-1">{portalBase + c.token}</span>
+                        <CopyButton text={portalBase + c.token} />
+                      </div>
+
+                      {/* Assignment list */}
+                      {cAssignments.length > 0 && (
+                        <div className="space-y-2 mb-4">
+                          {cAssignments.map(a => {
+                            const apt = apartments.find(ap => ap.id === a.apartmentId);
+                            const stage = stages.find(s => s.id === a.stageId);
+                            return (
+                              <div key={a.id} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 border border-gray-200 text-sm">
+                                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${a.completedAt ? 'bg-green-400' : 'bg-amber-400'}`} />
+                                <span className="font-medium text-gray-800">{a.buildingId} · Apt {apt?.displayName || apt?.apartmentNumber}</span>
+                                {stage && <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: stage.color + '22', color: stage.color }}>{stage.name}</span>}
+                                <span className="flex-1 text-gray-500 truncate text-xs">{a.taskDescription}</span>
+                                {a.dueDate && <span className="text-xs text-gray-400">{format(new Date(a.dueDate), 'MMM d')}</span>}
+                                <button onClick={() => { if (confirm('Remove this assignment?')) deleteContractorAssignment(a.id); }}
+                                  className="text-red-400 hover:text-red-600 flex-shrink-0">
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Add assignment form */}
+                      <div className="bg-white rounded-lg border border-dashed border-gray-300 p-3">
+                        <h4 className="text-xs font-semibold text-gray-600 mb-2">Add Assignment</h4>
+                        <div className="grid grid-cols-2 gap-2 mb-2">
+                          <select
+                            value={af.aptId}
+                            onChange={e => setAssForm(p => ({ ...p, [c.id]: { ...af, aptId: e.target.value } }))}
+                            className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 col-span-2"
+                          >
+                            <option value="">Select apartment…</option>
+                            {['A1', 'A2', 'A3'].map(bid => (
+                              <optgroup key={bid} label={`Building ${bid}`}>
+                                {resApts.filter(a => a.buildingId === bid).map(a => (
+                                  <option key={a.id} value={a.id}>Apt {a.displayName || a.apartmentNumber} (Floor {a.floor})</option>
+                                ))}
+                              </optgroup>
+                            ))}
+                          </select>
+                          <select
+                            value={af.stageId}
+                            onChange={e => setAssForm(p => ({ ...p, [c.id]: { ...af, stageId: e.target.value } }))}
+                            className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                          >
+                            <option value="">Stage (optional)</option>
+                            {sortedStages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                          </select>
+                          <input
+                            type="date"
+                            value={af.dueDate}
+                            onChange={e => setAssForm(p => ({ ...p, [c.id]: { ...af, dueDate: e.target.value } }))}
+                            className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                          />
+                        </div>
+                        <textarea
+                          value={af.task}
+                          onChange={e => setAssForm(p => ({ ...p, [c.id]: { ...af, task: e.target.value } }))}
+                          rows={2}
+                          placeholder="Task description…"
+                          className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 resize-none mb-2"
+                        />
+                        <button
+                          onClick={() => handleAddAssignment(c.id, apartments)}
+                          disabled={!af.aptId || !af.task?.trim()}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-xs font-medium disabled:opacity-40"
+                        >
+                          <Plus size={14} /> Add Assignment
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
+      {/* Add contractor form */}
+      <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-4">
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">Add New Contractor</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+          <input
+            value={form.name}
+            onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+            placeholder="Full name *"
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+          />
+          <input
+            value={form.email}
+            onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+            placeholder="Email address"
+            type="email"
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+          />
+          <select
+            value={form.category}
+            onChange={e => setForm(f => ({ ...f, category: e.target.value as ContractorCategory }))}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+          >
+            <option value="ac">AC / HVAC</option>
+            <option value="drywall">Drywall</option>
+            <option value="general">General</option>
+          </select>
+        </div>
+        <button
+          onClick={handleAdd}
+          disabled={!form.name.trim()}
+          className="flex items-center gap-1.5 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] disabled:opacity-40 transition-colors"
+        >
+          <Plus size={16} /> Add Contractor
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── App settings ─────────────────────────────────────────────────────────────
 function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
   lightTheme: boolean;
@@ -400,12 +654,74 @@ function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
         </div>
       </div>
 
+      {/* Backup & Restore */}
+      <BackupRestoreSection onToast={onToast} />
+
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
         <h3 className="font-semibold text-amber-800 mb-2 text-sm">Data Storage</h3>
         <p className="text-sm text-amber-700">
           Data is stored in localStorage and synced to Firebase if configured.
           See <code className="font-mono bg-amber-100 px-1 rounded">.env.example</code> for Firebase setup.
         </p>
+      </div>
+    </div>
+  );
+}
+
+function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
+  const { exportData, importData } = useStore();
+  const importRef = useRef<HTMLInputElement>(null);
+
+  function handleExport() {
+    const json = exportData();
+    const blob = new Blob([json], { type: 'application/json' });
+    saveAs(blob, `wolfson-backup-${format(new Date(), 'yyyy-MM-dd-HHmm')}.json`);
+    onToast('Backup downloaded');
+  }
+
+  function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const json = ev.target?.result as string;
+      const result = importData(json);
+      if (result.ok) {
+        onToast('Backup restored successfully');
+      } else {
+        onToast(result.error ?? 'Import failed', 'error');
+      }
+    };
+    reader.readAsText(file);
+    if (importRef.current) importRef.current.value = '';
+  }
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <HardDrive size={18} className="text-[#1e3a5f]" />
+        <h2 className="font-semibold text-gray-800">Backup &amp; Restore</h2>
+      </div>
+      <p className="text-sm text-gray-500 mb-4">
+        Export all data (apartments, stages, notes, contractors, photos) to a JSON file.
+        Import it later to fully restore the system — including all contractor photos stored as compressed images.
+      </p>
+      <div className="flex gap-3 flex-wrap">
+        <button
+          onClick={handleExport}
+          className="flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors"
+        >
+          <Download size={16} />
+          Export Backup
+        </button>
+        <button
+          onClick={() => importRef.current?.click()}
+          className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+        >
+          <Upload size={16} />
+          Import Backup
+        </button>
+        <input ref={importRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
       </div>
     </div>
   );

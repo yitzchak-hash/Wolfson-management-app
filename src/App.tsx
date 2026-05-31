@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useStore } from './data/store';
 import { AppLayout } from './components/layout/AppLayout';
@@ -8,6 +8,8 @@ import { DashboardPage } from './pages/DashboardPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ActivityLogPage } from './pages/ActivityLogPage';
+import { AnalyticsDashboard } from './pages/AnalyticsDashboard';
+import { ContractorPortal } from './pages/ContractorPortal';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { currentUser } = useStore();
@@ -20,6 +22,8 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        {/* Public contractor portal — no auth */}
+        <Route path="/c/:token" element={<ContractorPortal />} />
         <Route
           path="/"
           element={
@@ -31,6 +35,7 @@ export default function App() {
           <Route index element={<Navigate to="/project" replace />} />
           <Route path="project" element={<ProjectDiagramPage />} />
           <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="analytics" element={<AnalyticsDashboard />} />
           <Route path="reports" element={<ReportsPage />} />
           <Route path="activity" element={<ActivityLogPage />} />
           <Route path="settings" element={<SettingsPage />} />

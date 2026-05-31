@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Apartment, ActivityLog, Stage, StageNote, User, Building } from '../types';
+import { Apartment, ActivityLog, Stage, StageNote, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto } from '../types';
 import {
   DEFAULT_BUILDINGS, DEFAULT_STAGES, DEFAULT_USERS, buildDefaultApartments, DATA_VERSION,
 } from './initialData';
@@ -44,6 +44,11 @@ checkAndMigrateData();
 
 const stored = loadFromStorage(STORAGE_KEY, null) as Record<string, unknown> | null;
 
+function generateToken(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  return Array.from({ length: 24 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
 const defaultData = {
   dataVersion: DATA_VERSION,
   currentUser: null as User | null,
@@ -53,6 +58,10 @@ const defaultData = {
   apartments: buildDefaultApartments(),
   stageNotes: [] as StageNote[],
   activityLogs: [] as ActivityLog[],
+  contractors: [] as Contractor[],
+  contractorAssignments: [] as ContractorAssignment[],
+  contractorNotes: [] as ContractorNote[],
+  contractorPhotos: [] as ContractorPhoto[],
 };
 
 interface AppState {
@@ -67,6 +76,12 @@ interface AppState {
   firebaseListening: boolean;
   lightTheme: boolean;
   setLightTheme: (v: boolean) => void;
+
+  // Contractors
+  contractors: Contractor[];
+  contractorAssignments: ContractorAssignment[];
+  contractorNotes: ContractorNote[];
+  contractorPhotos: ContractorPhoto[];
 
   login: (code: string) => User | null;
   logout: () => void;
@@ -88,6 +103,21 @@ interface AppState {
 
   addActivityLog: (log: Omit<ActivityLog, 'id' | 'createdAt'>) => void;
 
+  // Contractor actions
+  addContractor: (c: Omit<Contractor, 'id' | 'token' | 'createdAt'>) => Contractor;
+  updateContractor: (id: string, changes: Partial<Contractor>) => void;
+  deleteContractor: (id: string) => void;
+  addContractorAssignment: (a: Omit<ContractorAssignment, 'id' | 'createdAt'>) => void;
+  updateContractorAssignment: (id: string, changes: Partial<ContractorAssignment>) => void;
+  deleteContractorAssignment: (id: string) => void;
+  addContractorNote: (n: Omit<ContractorNote, 'id' | 'createdAt'>) => void;
+  addContractorPhoto: (p: Omit<ContractorPhoto, 'id' | 'uploadedAt'>) => void;
+  deleteContractorPhoto: (id: string) => void;
+
+  // Backup / restore
+  exportData: () => string;
+  importData: (json: string) => { ok: boolean; error?: string };
+
   // Firebase sync
   startFirebaseSync: () => void;
   applyFirebaseData: (data: Partial<AppState>) => void;
@@ -102,6 +132,10 @@ export const useStore = create<AppState>((set, get) => ({
   apartments: (stored?.apartments as Apartment[] | null) ?? defaultData.apartments,
   stageNotes: (stored?.stageNotes as StageNote[] | null) ?? [],
   activityLogs: (stored?.activityLogs as ActivityLog[] | null) ?? [],
+  contractors: (stored?.contractors as Contractor[] | null) ?? [],
+  contractorAssignments: (stored?.contractorAssignments as ContractorAssignment[] | null) ?? [],
+  contractorNotes: (stored?.contractorNotes as ContractorNote[] | null) ?? [],
+  contractorPhotos: (stored?.contractorPhotos as ContractorPhoto[] | null) ?? [],
   firebaseListening: false,
   lightTheme: localStorage.getItem(THEME_KEY) === 'light',
   setLightTheme: (v: boolean) => {
@@ -279,6 +313,116 @@ export const useStore = create<AppState>((set, get) => ({
     updates.forEach((updated, id) => fsSet('apartments', id, updated));
   },
 
+  // ─── Contractor actions ────────────────────────────────────────────────────
+  addContractor: (fields) => {
+    const c: Contractor = {
+      ...fields,
+      id: generateId(),
+      token: generateToken(),
+      createdAt: new Date().toISOString(),
+    };
+    set(state => ({ contractors: [...state.contractors, c] }));
+    persist(get);
+    return c;
+  },
+
+  updateContractor: (id, changes) => {
+    set(state => ({ contractors: state.contractors.map(c => c.id === id ? { ...c, ...changes } : c) }));
+    persist(get);
+  },
+
+  deleteContractor: (id) => {
+    set(state => ({
+      contractors: state.contractors.filter(c => c.id !== id),
+      contractorAssignments: state.contractorAssignments.filter(a => a.contractorId !== id),
+      contractorNotes: state.contractorNotes.filter(n => n.contractorId !== id),
+      contractorPhotos: state.contractorPhotos.filter(p => p.contractorId !== id),
+    }));
+    persist(get);
+  },
+
+  addContractorAssignment: (fields) => {
+    const a: ContractorAssignment = { ...fields, id: generateId(), createdAt: new Date().toISOString() };
+    set(state => ({ contractorAssignments: [...state.contractorAssignments, a] }));
+    persist(get);
+  },
+
+  updateContractorAssignment: (id, changes) => {
+    set(state => ({
+      contractorAssignments: state.contractorAssignments.map(a => a.id === id ? { ...a, ...changes } : a),
+    }));
+    persist(get);
+  },
+
+  deleteContractorAssignment: (id) => {
+    set(state => ({
+      contractorAssignments: state.contractorAssignments.filter(a => a.id !== id),
+      contractorNotes: state.contractorNotes.filter(n => n.assignmentId !== id),
+      contractorPhotos: state.contractorPhotos.filter(p => p.assignmentId !== id),
+    }));
+    persist(get);
+  },
+
+  addContractorNote: (fields) => {
+    const n: ContractorNote = { ...fields, id: generateId(), createdAt: new Date().toISOString() };
+    set(state => ({ contractorNotes: [...state.contractorNotes, n] }));
+    persist(get);
+  },
+
+  addContractorPhoto: (fields) => {
+    const p: ContractorPhoto = { ...fields, id: generateId(), uploadedAt: new Date().toISOString() };
+    set(state => ({ contractorPhotos: [...state.contractorPhotos, p] }));
+    persist(get);
+  },
+
+  deleteContractorPhoto: (id) => {
+    set(state => ({ contractorPhotos: state.contractorPhotos.filter(p => p.id !== id) }));
+    persist(get);
+  },
+
+  // ─── Backup / Restore ──────────────────────────────────────────────────────
+  exportData: () => {
+    const state = get();
+    const snapshot = {
+      exportedAt: new Date().toISOString(),
+      version: DATA_VERSION,
+      users: state.users,
+      stages: state.stages,
+      apartments: state.apartments,
+      stageNotes: state.stageNotes,
+      activityLogs: state.activityLogs,
+      contractors: state.contractors,
+      contractorAssignments: state.contractorAssignments,
+      contractorNotes: state.contractorNotes,
+      contractorPhotos: state.contractorPhotos,
+    };
+    return JSON.stringify(snapshot, null, 2);
+  },
+
+  importData: (json) => {
+    try {
+      const data = JSON.parse(json);
+      if (!data.apartments || !data.stages) {
+        return { ok: false, error: 'Invalid backup file — missing required fields.' };
+      }
+      set({
+        users: data.users ?? get().users,
+        stages: data.stages,
+        apartments: data.apartments,
+        stageNotes: data.stageNotes ?? [],
+        activityLogs: data.activityLogs ?? [],
+        contractors: data.contractors ?? [],
+        contractorAssignments: data.contractorAssignments ?? [],
+        contractorNotes: data.contractorNotes ?? [],
+        contractorPhotos: data.contractorPhotos ?? [],
+      });
+      persist(get);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: 'Could not parse backup file.' };
+    }
+  },
+
   updateUser: (id, changes) => {
     set(state => ({
       users: state.users.map(u => u.id === id ? { ...u, ...changes } : u),
@@ -373,5 +517,9 @@ function persist(get: () => AppState) {
     apartments: state.apartments,
     stageNotes: state.stageNotes,
     activityLogs: state.activityLogs,
+    contractors: state.contractors,
+    contractorAssignments: state.contractorAssignments,
+    contractorNotes: state.contractorNotes,
+    contractorPhotos: state.contractorPhotos,
   });
 }

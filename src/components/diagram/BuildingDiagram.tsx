@@ -32,8 +32,7 @@ function getFloorRows(buildingId: BuildingId): FloorRowDef[] {
   const rows: FloorRowDef[] = [];
 
   rows.push({ floorLabel: 'גג', type: 'roof', height: 26 });
-  rows.push({ floorLabel: '17', type: 'duplex', aptNums: [55, 56], height: 52 });
-  rows.push({ floorLabel: '16', type: 'duplex', aptNums: [55, 56], height: 52 });
+  rows.push({ floorLabel: '16', type: 'wide', aptNums: [55, 56], height: 52 });
   rows.push({ floorLabel: '15', type: 'wide', aptNums: [53, 54], height: 52 });
 
   for (let fl = 14; fl >= 2; fl--) {

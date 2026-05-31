@@ -1,11 +1,12 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Building2, LayoutDashboard, FileText, Settings, Activity } from 'lucide-react';
+import { Building2, LayoutDashboard, FileText, Settings, Activity, TrendingUp } from 'lucide-react';
 import { useStore } from '../../data/store';
 
 const navItems = [
   { to: '/project', icon: Building2, label: 'Project' },
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/analytics', icon: TrendingUp, label: 'Analytics' },
   { to: '/reports', icon: FileText, label: 'Reports' },
   { to: '/activity', icon: Activity, label: 'Activity' },
   { to: '/settings', icon: Settings, label: 'Settings' },

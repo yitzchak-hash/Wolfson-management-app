@@ -114,9 +114,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               Changes
             </span>
           )}
-          {apartment.isDuplexApt && (
-            <span className="text-xs text-gray-400 italic">duplex</span>
-          )}
           {apartment.updatedByName && (
             <span className="ml-auto text-xs text-gray-400">
               {apartment.updatedByName} · {format(new Date(apartment.updatedAt), 'MMM d')}

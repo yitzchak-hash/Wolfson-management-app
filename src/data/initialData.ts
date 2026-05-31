@@ -25,10 +25,10 @@ export const DEFAULT_STAGES: Stage[] = [
   { id: 's7', name: 'Registers & Access Panels', color: '#14b8a6', order: 7, active: true, description: 'Registers, grilles, and access panels', createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z' },
 ];
 
-// Exact layout derived from the Wolfson project PDF:
-// Each building (A1, A2, A3) has apartments numbered 1-56.
-// Floors 16-17: duplex apts 55 (left) and 56 (right) - span both floors
-// Floor 15:     wide apts 53 (left half) and 54 (right half)
+// Building layout (A1, A2, A3 are identical in floor structure):
+// Each building has apartments numbered 1-56.
+// Floor 16:    apts 55 (left) and 56 (right) — 2-wide, no duplexes
+// Floor 15:    apts 53 (left half) and 54 (right half)
 // Floors 2-14:  4 apts per floor in 4 columns
 //   Col 1 (leftmost):  1, 5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45, 49
 //   Col 2:             2, 6, 10, 14, 18, 22, 26, 30, 34, 38, 42, 46, 50
@@ -66,7 +66,7 @@ function makeApt(
     floor,
     colPosition: col,
     colSpan: aptNum >= 53 ? 2 : 1,
-    isDuplexApt: aptNum >= 55,
+    isDuplexApt: false,
     currentStageId: null,
     classification: 'standard',
     shinuiDetails: null,

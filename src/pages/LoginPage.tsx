@@ -103,13 +103,11 @@ export function LoginPage() {
           {/* Logo */}
           <div className="text-center mb-10">
             <div className="flex items-center justify-center mb-5">
-              <div className="rounded-xl overflow-hidden shadow-lg" style={{ backgroundColor: 'white', padding: '6px 16px' }}>
-                <img
-                  src="/tzviair-logo.png"
-                  alt="TzviAir"
-                  style={{ height: '48px', width: 'auto', display: 'block' }}
-                />
-              </div>
+              <img
+                src="/tzviair-logo.png"
+                alt="TzviAir"
+                style={{ height: '64px', width: 'auto', display: 'block', filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.35))' }}
+              />
             </div>
 
             <div className="flex items-center gap-2 justify-center mb-2">

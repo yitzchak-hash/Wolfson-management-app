@@ -77,3 +77,53 @@ export interface ActivityLog {
 export interface AppSettings {
   loginCodes: { code: string; userId: string }[];
 }
+
+// ─── Contractors ───────────────────────────────────────────────────────────────
+
+export type ContractorCategory = 'drywall' | 'ac' | 'general';
+
+export interface Contractor {
+  id: string;
+  name: string;
+  email: string;
+  category: ContractorCategory;
+  token: string; // 24-char random alphanumeric — used in shareable /c/:token URL
+  active: boolean;
+  createdAt: string;
+}
+
+export interface ContractorAssignment {
+  id: string;
+  contractorId: string;
+  apartmentId: string;
+  buildingId: BuildingId;
+  taskDescription: string;
+  dueDate: string | null;      // ISO date string (YYYY-MM-DD)
+  stageId: string | null;      // links to a Stage
+  completedAt: string | null;  // null = pending
+  createdAt: string;
+  createdBy: string;
+  createdByName: string;
+}
+
+export interface ContractorNote {
+  id: string;
+  assignmentId: string;
+  apartmentId: string;
+  contractorId: string;
+  text: string;
+  authorType: 'contractor' | 'office';
+  authorId: string;
+  authorName: string;
+  createdAt: string;
+}
+
+export interface ContractorPhoto {
+  id: string;
+  assignmentId: string;
+  apartmentId: string;
+  contractorId: string;
+  dataUrl: string;   // compressed base64; will be Drive URL after migration
+  filename: string;
+  uploadedAt: string;
+}

@@ -4,13 +4,12 @@ import { useStore } from '../../data/store';
 
 function TzviAirLogo() {
   return (
-    <div className="rounded-xl overflow-hidden flex-shrink-0" style={{ backgroundColor: 'white', padding: '3px 10px' }}>
-      <img
-        src="/tzviair-logo.png"
-        alt="TzviAir"
-        style={{ height: '38px', width: 'auto', display: 'block' }}
-      />
-    </div>
+    <img
+      src="/tzviair-logo.png"
+      alt="TzviAir"
+      className="flex-shrink-0"
+      style={{ height: '40px', width: 'auto', display: 'block', filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.18))' }}
+    />
   );
 }
 
