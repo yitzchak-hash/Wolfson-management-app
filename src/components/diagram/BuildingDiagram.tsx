@@ -75,9 +75,10 @@ interface AptCellProps {
   onClick: () => void;
   isDuplex?: boolean;
   isBasement?: boolean;
+  isMerged?: boolean;
 }
 
-function AptCell({ apt, stage, isHighlighted, isDimmed, showShinuiBadge, onClick, isDuplex, isBasement }: AptCellProps) {
+function AptCell({ apt, stage, isHighlighted, isDimmed, showShinuiBadge, onClick, isDuplex, isBasement, isMerged }: AptCellProps) {
   const hasStage = !!stage;
   const bgColor = hasStage
     ? stage!.color
@@ -129,6 +130,15 @@ function AptCell({ apt, stage, isHighlighted, isDimmed, showShinuiBadge, onClick
           <span style={{ fontSize: '6px', color: 'white', fontWeight: 'bold', lineHeight: 1 }}>C</span>
         </div>
       )}
+      {isMerged && (
+        <div
+          className="absolute bottom-0.5 left-0.5 w-3 h-3 rounded-full flex items-center justify-center"
+          style={{ backgroundColor: '#3b82f6', border: '1px solid rgba(255,255,255,0.9)' }}
+          title="Connected unit"
+        >
+          <span style={{ fontSize: '6px', color: 'white', fontWeight: 'bold', lineHeight: 1 }}>⛓</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -151,13 +161,14 @@ function Stairwell() {
 }
 
 function FourCellRow({
-  aptNums, getApt, getStage, isHighlighted, isDimmed, showShinuiBadge, onApartmentClick, isBasement = false,
+  aptNums, getApt, getStage, isHighlighted, isDimmed, isMerged, showShinuiBadge, onApartmentClick, isBasement = false,
 }: {
   aptNums: number[];
   getApt: (n: number) => Apartment | undefined;
   getStage: (a: Apartment | undefined) => Stage | null;
   isHighlighted: (a: Apartment | undefined) => boolean;
   isDimmed: (a: Apartment | undefined) => boolean;
+  isMerged: (a: Apartment | undefined) => boolean;
   showShinuiBadge: boolean;
   onApartmentClick: (a: Apartment) => void;
   isBasement?: boolean;
@@ -178,6 +189,7 @@ function FourCellRow({
               showShinuiBadge={showShinuiBadge}
               onClick={() => apt && onApartmentClick(apt)}
               isBasement={isBasement}
+              isMerged={isMerged(apt)}
             />
           );
         })}
@@ -199,6 +211,7 @@ function FourCellRow({
               showShinuiBadge={showShinuiBadge}
               onClick={() => apt && onApartmentClick(apt)}
               isBasement={isBasement}
+              isMerged={isMerged(apt)}
             />
           );
         })}
@@ -254,6 +267,10 @@ function BuildingColumn({
     if (activeStageIds.length === 0) return false;
     if (!apt.currentStageId) return !activeStageIds.includes('__none__');
     return !activeStageIds.includes(apt.currentStageId);
+  }
+
+  function isMerged(apt: Apartment | undefined): boolean {
+    return !!apt?.mergedWith;
   }
 
   const LABEL_W = 34;
@@ -340,6 +357,7 @@ function BuildingColumn({
                     getStage={getStage}
                     isHighlighted={isHighlighted}
                     isDimmed={isDimmed}
+                    isMerged={isMerged}
                     showShinuiBadge={showShinuiBadge}
                     onApartmentClick={onApartmentClick}
                     isBasement={row.type === 'basement'}
@@ -354,6 +372,7 @@ function BuildingColumn({
                       showShinuiBadge={showShinuiBadge}
                       onClick={() => { const a = getApt(row.aptNums![0]); if (a) onApartmentClick(a); }}
                       isDuplex={row.type === 'duplex'}
+                      isMerged={isMerged(getApt(row.aptNums![0]))}
                     />
                     <Stairwell />
                     <AptCell
@@ -364,6 +383,7 @@ function BuildingColumn({
                       showShinuiBadge={showShinuiBadge}
                       onClick={() => { const a = getApt(row.aptNums![1]); if (a) onApartmentClick(a); }}
                       isDuplex={row.type === 'duplex'}
+                      isMerged={isMerged(getApt(row.aptNums![1]))}
                     />
                   </>
                 ) : null}

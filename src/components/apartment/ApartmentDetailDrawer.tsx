@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Building2, AlertTriangle } from 'lucide-react';
+import { X, Save, Building2, AlertTriangle, Link, Unlink } from 'lucide-react';
 import { Apartment, User } from '../../types';
 import { useStore } from '../../data/store';
 import { format } from 'date-fns';
@@ -14,12 +14,13 @@ interface Props {
 }
 
 export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast }: Props) {
-  const { stages, activityLogs, updateApartment } = useStore();
+  const { stages, activityLogs, apartments, updateApartment, mergeApartments } = useStore();
 
   const [displayName, setDisplayName] = useState('');
   const [currentStageId, setCurrentStageId] = useState<string>('');
   const [classification, setClassification] = useState<'standard' | 'shinui'>('standard');
   const [generalNotes, setGeneralNotes] = useState('');
+  const [mergedWithId, setMergedWithId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'details' | 'stages' | 'history'>('details');
 
   useEffect(() => {
@@ -28,6 +29,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       setCurrentStageId(apartment.currentStageId ?? '');
       setClassification(apartment.classification);
       setGeneralNotes(apartment.generalNotes);
+      setMergedWithId(apartment.mergedWith ?? '');
       setActiveTab('details');
     }
   }, [apartment?.id]);
@@ -38,6 +40,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const currentStage = stages.find(s => s.id === currentStageId);
   const aptLogs = activityLogs.filter(l => l.apartmentId === apartment.id).slice(0, 20);
 
+  const sameBuildingApts = apartments
+    .filter(a => a.buildingId === apartment.buildingId && a.id !== apartment.id && !a.isUnnamed)
+    .sort((a, b) => (Number(a.apartmentNumber) || 0) - (Number(b.apartmentNumber) || 0));
+
+  const mergedPartner = apartments.find(a => a.id === apartment.mergedWith);
+
   function handleSaveBasic() {
     updateApartment(apartment!.id, {
       displayName,
@@ -47,6 +55,16 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       generalNotes,
     }, currentUser);
     onToast('Apartment details saved');
+  }
+
+  function handleSaveMerge() {
+    mergeApartments(apartment!.id, mergedWithId || null, currentUser);
+    const partner = apartments.find(a => a.id === mergedWithId);
+    if (partner) {
+      onToast(`Linked with Apt ${partner.displayName || partner.apartmentNumber}`);
+    } else {
+      onToast('Merge link cleared');
+    }
   }
 
   return (
@@ -204,6 +222,42 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 <Save size={16} />
                 Save Changes
               </button>
+
+              {/* Merged / connected units */}
+              <div className="border-t border-gray-100 pt-4">
+                <label className="block text-xs font-medium text-gray-600 mb-1.5 flex items-center gap-1.5">
+                  <Link size={12} />
+                  Connected Unit (buyer merged two apartments)
+                </label>
+                {mergedPartner && (
+                  <div className="mb-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-700">
+                    <Link size={12} />
+                    Currently linked to Apt <strong>{mergedPartner.displayName || mergedPartner.apartmentNumber}</strong>
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <select
+                    value={mergedWithId}
+                    onChange={e => setMergedWithId(e.target.value)}
+                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                  >
+                    <option value="">— No connection —</option>
+                    {sameBuildingApts.map(a => (
+                      <option key={a.id} value={a.id}>
+                        Apt {a.displayName || a.apartmentNumber} (Floor {a.floor > 0 ? a.floor : 'B'})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={handleSaveMerge}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border transition-all bg-blue-600 text-white hover:bg-blue-700"
+                  >
+                    {mergedWithId ? <Link size={14} /> : <Unlink size={14} />}
+                    {mergedWithId ? 'Link' : 'Clear'}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400 mt-1.5">Linking is mutual — both apartments will show the connection.</p>
+              </div>
             </div>
           )}
 

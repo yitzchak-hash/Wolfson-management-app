@@ -81,6 +81,8 @@ interface AppState {
   addStage: (stage: Stage) => void;
   deleteStage: (id: string) => void;
 
+  mergeApartments: (aptId: string, partnerId: string | null, user: User) => void;
+
   updateUser: (id: string, changes: Partial<User>) => void;
   addUser: (user: User) => void;
 
@@ -236,6 +238,45 @@ export const useStore = create<AppState>((set, get) => ({
       apartments: state.apartments.map(a => a.currentStageId === id ? { ...a, currentStageId: null } : a),
     }));
     persist(get);
+  },
+
+  mergeApartments: (aptId, partnerId, user) => {
+    const state = get();
+    const apt = state.apartments.find(a => a.id === aptId);
+    if (!apt) return;
+
+    const now = new Date().toISOString();
+    const updates = new Map<string, Apartment>();
+
+    // Clear old partner's back-link
+    if (apt.mergedWith && apt.mergedWith !== partnerId) {
+      const oldPartner = state.apartments.find(a => a.id === apt.mergedWith);
+      if (oldPartner) {
+        updates.set(oldPartner.id, { ...oldPartner, mergedWith: undefined, updatedAt: now, updatedBy: user.id, updatedByName: user.name });
+      }
+    }
+
+    // Update this apartment
+    updates.set(aptId, { ...apt, mergedWith: partnerId ?? undefined, updatedAt: now, updatedBy: user.id, updatedByName: user.name });
+
+    // Update new partner
+    if (partnerId) {
+      const partner = state.apartments.find(a => a.id === partnerId);
+      if (partner) {
+        // If partner was linked to someone else, clear that too
+        if (partner.mergedWith && partner.mergedWith !== aptId) {
+          const partnerOld = state.apartments.find(a => a.id === partner.mergedWith);
+          if (partnerOld && !updates.has(partnerOld.id)) {
+            updates.set(partnerOld.id, { ...partnerOld, mergedWith: undefined, updatedAt: now, updatedBy: user.id, updatedByName: user.name });
+          }
+        }
+        updates.set(partnerId, { ...partner, mergedWith: aptId, updatedAt: now, updatedBy: user.id, updatedByName: user.name });
+      }
+    }
+
+    set(state => ({ apartments: state.apartments.map(a => updates.has(a.id) ? updates.get(a.id)! : a) }));
+    persist(get);
+    updates.forEach((updated, id) => fsSet('apartments', id, updated));
   },
 
   updateUser: (id, changes) => {

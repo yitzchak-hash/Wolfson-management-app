@@ -52,6 +52,7 @@ export interface Apartment {
   shinuiDetails: null; // kept for data compat, form removed from UI
   generalNotes: string;
   isUnnamed: boolean;
+  mergedWith?: string; // id of partner apartment when buyer physically connected two units
   createdAt: string;
   updatedAt: string;
   updatedBy: string;
