@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useStore } from '../data/store';
 import {
   Plus, Trash2, Save, ChevronUp, ChevronDown, Shield, Sun, Moon,
-  Copy, Check, Download, Upload, HardDrive, X, HardDriveDownload,
+  Copy, Check, Download, Upload, HardDrive, X, HardDriveDownload, ToggleLeft, ToggleRight,
 } from 'lucide-react';
 import { Stage, User, Contractor, ContractorCategory } from '../types';
 import { Toast } from '../components/ui/Toast';
@@ -491,14 +491,17 @@ function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
 }
 
 function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
-  const { exportData, importData } = useStore();
+  const { exportData, importData, getDataSummary, autoBackup, setAutoBackup, backupSnapshots } = useStore();
   const importRef = useRef<HTMLInputElement>(null);
+  const [exportModal, setExportModal] = useState<ReturnType<typeof getDataSummary> & { sizeKB: number } | null>(null);
+  const [importModal, setImportModal] = useState<ReturnType<typeof getDataSummary> | null>(null);
 
   function handleExport() {
     const json = exportData();
+    const sizeKB = Math.round(json.length / 1024);
     const blob = new Blob([json], { type: 'application/json' });
     saveAs(blob, `wolfson-backup-${format(new Date(), 'yyyy-MM-dd-HHmm')}.json`);
-    onToast('Backup downloaded');
+    setExportModal({ ...getDataSummary(), sizeKB });
   }
 
   function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -508,22 +511,124 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
     reader.onload = ev => {
       const json = ev.target?.result as string;
       const result = importData(json);
-      if (result.ok) { onToast('Backup restored successfully'); }
-      else { onToast(result.error ?? 'Import failed', 'error'); }
+      if (result.ok) {
+        setImportModal(result.summary ?? null);
+        onToast('Backup restored successfully');
+      } else {
+        onToast(result.error ?? 'Import failed', 'error');
+      }
     };
     reader.readAsText(file);
     if (importRef.current) importRef.current.value = '';
   }
 
+  const SummaryRow = ({ label, value }: { label: string; value: number | string }) => (
+    <div className="flex items-center justify-between text-sm">
+      <span className="text-gray-600">{label}</span>
+      <span className="font-semibold text-gray-800">{value}</span>
+    </div>
+  );
+
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-5">
+      {/* Export summary modal */}
+      {exportModal && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                <Download size={16} className="text-[#1e3a5f]" /> Export Summary
+              </h3>
+              <button onClick={() => setExportModal(null)} className="text-gray-400 hover:text-gray-600">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="space-y-2 mb-4">
+              <SummaryRow label="Apartments" value={exportModal.apartments} />
+              <SummaryRow label="Active stages" value={exportModal.stages} />
+              <SummaryRow label="Active contractors" value={exportModal.contractors} />
+              <SummaryRow label="Tasks" value={exportModal.tasks} />
+              <SummaryRow label="Completed tasks" value={exportModal.completedTasks} />
+              <SummaryRow label="Photos & files" value={exportModal.photos} />
+              <SummaryRow label="Notes" value={exportModal.notes} />
+              <SummaryRow label="Activity entries" value={exportModal.activityLogs} />
+              <div className="pt-2 border-t border-gray-100">
+                <SummaryRow label="File size" value={`${exportModal.sizeKB} KB`} />
+              </div>
+            </div>
+            <p className="text-xs text-gray-400 text-center">
+              Exported {format(new Date(), 'MMM d, yyyy · HH:mm')}
+            </p>
+            <button onClick={() => setExportModal(null)}
+              className="mt-4 w-full py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors">
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Import summary modal */}
+      {importModal && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                <Upload size={16} className="text-green-600" /> Import Successful
+              </h3>
+              <button onClick={() => setImportModal(null)} className="text-gray-400 hover:text-gray-600">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="space-y-2 mb-4">
+              <SummaryRow label="Apartments restored" value={importModal.apartments} />
+              <SummaryRow label="Stages" value={importModal.stages} />
+              <SummaryRow label="Contractors" value={importModal.contractors} />
+              <SummaryRow label="Tasks" value={importModal.tasks} />
+              <SummaryRow label="Completed tasks" value={importModal.completedTasks} />
+              <SummaryRow label="Photos & files" value={importModal.photos} />
+              <SummaryRow label="Notes" value={importModal.notes} />
+              <SummaryRow label="Activity entries" value={importModal.activityLogs} />
+            </div>
+            <div className="flex items-center gap-2 px-3 py-2 bg-green-50 rounded-lg text-xs text-green-700 mb-4">
+              <Check size={13} className="flex-shrink-0" />
+              All data has been fully restored. This replaced the previous state.
+            </div>
+            <button onClick={() => setImportModal(null)}
+              className="w-full py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors">
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center gap-2 mb-4">
         <HardDrive size={18} className="text-[#1e3a5f]" />
         <h2 className="font-semibold text-gray-800">Backup &amp; Restore</h2>
       </div>
+
+      {/* Auto-backup toggle */}
+      <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 mb-4">
+        <div>
+          <p className="text-sm font-medium text-gray-700">Auto-backup on activity</p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Saves a snapshot on each change — allows restoring from Activity History.
+            {backupSnapshots.length > 0 && ` ${backupSnapshots.length}/30 snapshots stored.`}
+          </p>
+        </div>
+        <button
+          onClick={() => setAutoBackup(!autoBackup)}
+          className="flex-shrink-0 ml-3"
+        >
+          {autoBackup
+            ? <ToggleRight size={28} className="text-[#1e3a5f]" />
+            : <ToggleLeft size={28} className="text-gray-400" />
+          }
+        </button>
+      </div>
+
       <p className="text-sm text-gray-500 mb-4">
-        Export all data (apartments, stages, notes, contractors, photos) to a JSON file.
-        Import it later to fully restore — including all media stored as compressed data.
+        Export all data to a JSON file (apartments, stages, notes, contractors, photos).
+        Import to fully restore — including all media.
       </p>
       <div className="flex gap-3 flex-wrap">
         <button onClick={handleExport}

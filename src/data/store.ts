@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Apartment, ActivityLog, Stage, StageNote, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto } from '../types';
+import { Apartment, ActivityLog, Stage, StageNote, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary } from '../types';
 import {
   DEFAULT_BUILDINGS, DEFAULT_STAGES, DEFAULT_USERS, buildDefaultApartments, DATA_VERSION,
 } from './initialData';
@@ -124,9 +124,16 @@ interface AppState {
   updateContractorPhoto: (id: string, changes: Partial<ContractorPhoto>) => void;
   deleteContractorPhoto: (id: string) => void;
 
+  // Auto-backup / snapshot restore
+  autoBackup: boolean;
+  backupSnapshots: BackupSnapshot[];
+  setAutoBackup: (v: boolean) => void;
+  restoreFromSnapshot: (snapshotId: string) => void;
+  getDataSummary: () => DataSummary;
+
   // Backup / restore
   exportData: () => string;
-  importData: (json: string) => { ok: boolean; error?: string };
+  importData: (json: string) => { ok: boolean; error?: string; summary?: DataSummary };
 
   // Firebase sync
   startFirebaseSync: () => void;
@@ -150,6 +157,8 @@ export const useStore = create<AppState>((set, get) => ({
   googleClientId: (stored?.googleClientId as string | null) ?? '',
   googleAccessToken: null,
   googleTokenExpiry: null,
+  autoBackup: (stored?.autoBackup as boolean | null) ?? false,
+  backupSnapshots: (stored?.backupSnapshots as BackupSnapshot[] | null) ?? [],
   lightTheme: localStorage.getItem(THEME_KEY) === 'light',
   setLightTheme: (v: boolean) => {
     set({ lightTheme: v });
@@ -542,7 +551,17 @@ export const useStore = create<AppState>((set, get) => ({
         contractorPhotos: data.contractorPhotos ?? [],
       });
       persist(get);
-      return { ok: true };
+      const summary: DataSummary = {
+        apartments: (data.apartments as Apartment[]).filter(a => !a.isUnnamed).length,
+        stages: (data.stages as Stage[]).filter(s => s.active).length,
+        contractors: (data.contractors ?? []).filter((c: Contractor) => c.active).length,
+        tasks: (data.contractorAssignments ?? []).length,
+        completedTasks: (data.contractorAssignments ?? []).filter((a: ContractorAssignment) => !!a.completedAt).length,
+        photos: (data.contractorPhotos ?? []).length,
+        notes: (data.contractorNotes ?? []).length,
+        activityLogs: (data.activityLogs ?? []).length,
+      };
+      return { ok: true, summary };
     } catch (e) {
       return { ok: false, error: 'Could not parse backup file.' };
     }
@@ -566,9 +585,70 @@ export const useStore = create<AppState>((set, get) => ({
 
   addActivityLog: (log) => {
     const entry: ActivityLog = { ...log, id: generateId(), createdAt: new Date().toISOString() };
-    set(state => ({ activityLogs: [entry, ...state.activityLogs].slice(0, 500) }));
+    set(state => {
+      const newLogs = [entry, ...state.activityLogs].slice(0, 500);
+      if (!state.autoBackup) return { activityLogs: newLogs };
+      const snapshot: BackupSnapshot = {
+        id: generateId(),
+        activityLogId: entry.id,
+        createdAt: entry.createdAt,
+        label: `${entry.userName} · ${entry.fieldChanged}${entry.apartmentNumber ? ` · Apt ${entry.apartmentNumber}` : ''}`,
+        apartmentStates: state.apartments.map(a => ({
+          id: a.id,
+          currentStageId: a.currentStageId,
+          classification: a.classification,
+          generalNotes: a.generalNotes,
+          driveLink: a.driveLink,
+          plansPdfLink: a.plansPdfLink,
+          displayName: a.displayName,
+          mergedWith: a.mergedWith,
+        })),
+        stageNotes: state.stageNotes,
+        contractorAssignments: state.contractorAssignments,
+      };
+      return {
+        activityLogs: newLogs,
+        backupSnapshots: [snapshot, ...state.backupSnapshots].slice(0, 30),
+      };
+    });
     persist(get);
     fsSet('activityLogs', entry.id, entry);
+  },
+
+  setAutoBackup: (v) => {
+    set({ autoBackup: v });
+    persist(get);
+  },
+
+  restoreFromSnapshot: (snapshotId) => {
+    const snapshot = get().backupSnapshots.find(s => s.id === snapshotId);
+    if (!snapshot) return;
+    set(state => ({
+      apartments: state.apartments.map(a => {
+        const s = snapshot.apartmentStates.find(x => x.id === a.id);
+        if (!s) return a;
+        return { ...a, currentStageId: s.currentStageId, classification: s.classification as Apartment['classification'],
+          generalNotes: s.generalNotes, driveLink: s.driveLink, plansPdfLink: s.plansPdfLink,
+          displayName: s.displayName, mergedWith: s.mergedWith };
+      }),
+      stageNotes: snapshot.stageNotes,
+      contractorAssignments: snapshot.contractorAssignments,
+    }));
+    persist(get);
+  },
+
+  getDataSummary: (): DataSummary => {
+    const s = get();
+    return {
+      apartments: s.apartments.filter(a => !a.isUnnamed).length,
+      stages: s.stages.filter(st => st.active).length,
+      contractors: s.contractors.filter(c => c.active).length,
+      tasks: s.contractorAssignments.length,
+      completedTasks: s.contractorAssignments.filter(a => !!a.completedAt).length,
+      photos: s.contractorPhotos.length,
+      notes: s.contractorNotes.length,
+      activityLogs: s.activityLogs.length,
+    };
   },
 
   startFirebaseSync: async () => {
@@ -647,5 +727,7 @@ function persist(get: () => AppState) {
     contractorNotes: state.contractorNotes,
     contractorPhotos: state.contractorPhotos,
     googleClientId: state.googleClientId,
+    autoBackup: state.autoBackup,
+    backupSnapshots: state.backupSnapshots,
   });
 }

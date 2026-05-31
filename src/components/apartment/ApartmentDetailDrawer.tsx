@@ -16,7 +16,7 @@ interface Props {
 
 export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast }: Props) {
   const { stages, activityLogs, apartments, updateApartment, mergeApartments, unmergeApartments,
-    googleAccessToken, googleTokenExpiry } = useStore();
+    googleAccessToken, googleTokenExpiry, autoBackup, backupSnapshots, restoreFromSnapshot } = useStore();
 
   const [displayName, setDisplayName] = useState('');
   const [currentStageId, setCurrentStageId] = useState<string>('');
@@ -494,8 +494,21 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
 
           {activeTab === 'history' && (
             <div>
-              <h4 className="text-sm font-semibold text-gray-700 mb-3">Recent Activity</h4>
-              <ActivitySection logs={aptLogs} />
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-semibold text-gray-700">Recent Activity</h4>
+                {autoBackup && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 font-medium">Auto-backup on</span>
+                )}
+              </div>
+              <ActivitySection
+                logs={aptLogs}
+                autoBackup={autoBackup}
+                backupSnapshots={backupSnapshots}
+                onRestore={(snapshotId) => {
+                  restoreFromSnapshot(snapshotId);
+                  onToast('Restored to selected point in time');
+                }}
+              />
             </div>
           )}
         </div>

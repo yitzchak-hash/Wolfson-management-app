@@ -124,6 +124,36 @@ export interface ContractorNote {
   attachmentMimeType?: string;
 }
 
+export interface DataSummary {
+  apartments: number;
+  stages: number;
+  contractors: number;
+  tasks: number;
+  completedTasks: number;
+  photos: number;
+  notes: number;
+  activityLogs: number;
+}
+
+export interface BackupSnapshot {
+  id: string;
+  activityLogId: string;
+  createdAt: string;
+  label: string;
+  apartmentStates: {
+    id: string;
+    currentStageId: string | null;
+    classification: string;
+    generalNotes: string;
+    driveLink?: string;
+    plansPdfLink?: string;
+    displayName: string;
+    mergedWith?: string;
+  }[];
+  stageNotes: StageNote[];
+  contractorAssignments: ContractorAssignment[];
+}
+
 export interface ContractorPhoto {
   id: string;
   assignmentId: string;
