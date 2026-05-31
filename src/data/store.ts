@@ -183,11 +183,28 @@ export const useStore = create<AppState>((set, get) => ({
       updatedBy: user.id,
       updatedByName: user.name,
     };
-    set(state => ({ apartments: state.apartments.map(a => a.id === id ? updated : a) }));
+
+    // Sync driveLink to merged partner when it changes
+    let extraUpdates: Apartment[] = [];
+    if (changes.driveLink !== undefined && updated.mergedWith) {
+      const partner = get().apartments.find(a => a.id === updated.mergedWith);
+      if (partner && partner.driveLink !== changes.driveLink) {
+        extraUpdates = [{ ...partner, driveLink: changes.driveLink, updatedAt: now, updatedBy: user.id, updatedByName: user.name }];
+      }
+    }
+
+    set(state => ({
+      apartments: state.apartments.map(a => {
+        if (a.id === id) return updated;
+        const extra = extraUpdates.find(e => e.id === a.id);
+        return extra ?? a;
+      }),
+    }));
     persist(get);
 
     // Firebase sync
     fsSet('apartments', id, updated);
+    extraUpdates.forEach(e => fsSet('apartments', e.id, e));
 
     // Log changes
     const loggable: Array<keyof Apartment> = ['currentStageId', 'classification', 'generalNotes', 'displayName'];
@@ -330,7 +347,11 @@ export const useStore = create<AppState>((set, get) => ({
             updates.set(partnerOld.id, { ...partnerOld, mergedWith: undefined, updatedAt: now, updatedBy: user.id, updatedByName: user.name });
           }
         }
-        updates.set(partnerId, { ...partner, mergedWith: aptId, updatedAt: now, updatedBy: user.id, updatedByName: user.name });
+        // Sync driveLink: use whichever partner has one set
+        const sharedLink = apt.driveLink || partner.driveLink || undefined;
+        const thisApt = updates.get(aptId)!;
+        updates.set(aptId, { ...thisApt, driveLink: sharedLink });
+        updates.set(partnerId, { ...partner, mergedWith: aptId, driveLink: sharedLink, updatedAt: now, updatedBy: user.id, updatedByName: user.name });
       }
     }
 

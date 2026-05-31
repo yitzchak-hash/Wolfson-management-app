@@ -12,6 +12,8 @@ interface BuildingDiagramProps {
   showShinuiBadge: boolean;
   bulkMode?: boolean;
   bulkSelected?: Set<string>;
+  highlightedApartmentIds?: Set<string>; // contractor view: highlight these, dim others
+  compact?: boolean; // smaller row heights for embedded views
 }
 
 function getTextColor(bgHex: string): string {
@@ -30,20 +32,24 @@ interface FloorRowDef {
   height: number;
 }
 
-function getFloorRows(buildingId: BuildingId): FloorRowDef[] {
+function getFloorRows(buildingId: BuildingId, compact = false): FloorRowDef[] {
+  const h = compact
+    ? { roof: 16, wide: 36, normal: 36, basement: 30, lobby: 26, ground: 26 }
+    : { roof: 26, wide: 52, normal: 52, basement: 48, lobby: 40, ground: 40 };
+
   const rows: FloorRowDef[] = [];
 
-  rows.push({ floorLabel: 'גג', type: 'roof', height: 26 });
-  rows.push({ floorLabel: '16', type: 'wide', aptNums: [55, 56], height: 52 });
-  rows.push({ floorLabel: '15', type: 'wide', aptNums: [53, 54], height: 52 });
+  rows.push({ floorLabel: 'גג', type: 'roof', height: h.roof });
+  rows.push({ floorLabel: '16', type: 'wide', aptNums: [55, 56], height: h.wide });
+  rows.push({ floorLabel: '15', type: 'wide', aptNums: [53, 54], height: h.wide });
 
   for (let fl = 14; fl >= 2; fl--) {
     const base = (fl - 2) * 4 + 1;
-    rows.push({ floorLabel: String(fl), type: 'normal', aptNums: [base, base + 1, base + 2, base + 3], height: 52 });
+    rows.push({ floorLabel: String(fl), type: 'normal', aptNums: [base, base + 1, base + 2, base + 3], height: h.normal });
   }
 
-  rows.push({ floorLabel: '1', type: 'lobby', height: 40 });
-  rows.push({ floorLabel: 'קרקע', type: 'ground', height: 40 });
+  rows.push({ floorLabel: '1', type: 'lobby', height: h.lobby });
+  rows.push({ floorLabel: 'קרקע', type: 'ground', height: h.ground });
 
   const basementDef = buildingId === 'A1'
     ? [
@@ -61,7 +67,7 @@ function getFloorRows(buildingId: BuildingId): FloorRowDef[] {
       ];
 
   basementDef.forEach(b =>
-    rows.push({ floorLabel: b.label, type: 'basement', aptNums: b.aptNums, height: 48 })
+    rows.push({ floorLabel: b.label, type: 'basement', aptNums: b.aptNums, height: h.basement })
   );
 
   return rows;
@@ -77,26 +83,37 @@ interface AptCellProps {
   isDuplex?: boolean;
   isBasement?: boolean;
   isMerged?: boolean;
+  mergedLabel?: string; // "A/B" label when two apartments are connected
   isBulkSelected?: boolean;
+  isContractorHighlighted?: boolean; // gold glow in contractor view
+  compact?: boolean;
 }
 
-function AptCell({ apt, stage, isHighlighted, isDimmed, showShinuiBadge, onClick, isDuplex, isBasement, isMerged, isBulkSelected }: AptCellProps) {
+function AptCell({
+  apt, stage, isHighlighted, isDimmed, showShinuiBadge, onClick,
+  isDuplex, isBasement, isMerged, mergedLabel, isBulkSelected, isContractorHighlighted, compact,
+}: AptCellProps) {
   const hasStage = !!stage;
-  const bgColor = hasStage
-    ? stage!.color
-    : isBasement
-      ? '#eef3f9'
-      : '#ffffff';
+  const bgColor = hasStage ? stage!.color : isBasement ? '#eef3f9' : '#ffffff';
 
-  const borderColor = hasStage
-    ? stage!.color
-    : isBasement ? '#c8d8ec' : '#e2e8f0';
+  const borderColor = isMerged ? '#3b82f6' : hasStage ? stage!.color : isBasement ? '#c8d8ec' : '#e2e8f0';
+  const borderWidth = isMerged ? '2px' : '1.5px';
 
   const textColor = hasStage ? getTextColor(stage!.color) : '#374151';
-  const label = apt ? (apt.displayName || (apt.isUnnamed ? '' : apt.apartmentNumber)) : '';
+
+  // Merged label takes priority; fall back to normal label
+  const displayLabel = mergedLabel || (apt ? (apt.displayName || (apt.isUnnamed ? '' : apt.apartmentNumber)) : '');
 
   const opacity = isDimmed ? 0.28 : 1;
   const scale = isHighlighted && !isDimmed ? 'scale-[1.04] z-10' : '';
+
+  const boxShadow = isContractorHighlighted
+    ? `0 0 0 2px #f59e0b, 0 2px 10px ${borderColor}88`
+    : hasStage ? `0 1px 3px ${borderColor}55` : '0 1px 2px rgba(0,0,0,0.06)';
+
+  const fontSize = compact
+    ? '9px'
+    : mergedLabel ? '10px' : '12px';
 
   return (
     <div
@@ -105,22 +122,25 @@ function AptCell({ apt, stage, isHighlighted, isDimmed, showShinuiBadge, onClick
         backgroundColor: bgColor,
         color: textColor,
         flex: 1,
-        border: `1.5px solid ${borderColor}`,
+        border: `${borderWidth} solid ${borderColor}`,
         minWidth: 0,
         opacity,
-        boxShadow: hasStage ? `0 1px 3px ${borderColor}55` : '0 1px 2px rgba(0,0,0,0.06)',
+        boxShadow,
       }}
       onClick={apt ? onClick : undefined}
-      title={label
-        ? `${isBasement ? 'Basement' : 'Apt'} ${label}${isDuplex ? ' (duplex)' : ''}`
-        : isBasement ? 'Click to label this slot' : ''}
+      title={displayLabel ? `${isBasement ? 'Basement' : 'Apt'} ${displayLabel}` : ''}
     >
-      {label ? (
-        <span className="text-[12px] font-bold leading-tight text-center px-0.5 overflow-hidden w-full block text-center">{label}</span>
+      {displayLabel ? (
+        <span
+          className="font-bold leading-tight text-center overflow-hidden w-full block text-center"
+          style={{ fontSize, padding: '0 1px' }}
+        >
+          {displayLabel}
+        </span>
       ) : (
-        <span className="opacity-20 italic" style={{ fontSize: '11px' }}>–</span>
+        <span className="opacity-20 italic" style={{ fontSize: compact ? '8px' : '11px' }}>–</span>
       )}
-      {isDuplex && label && (
+      {isDuplex && displayLabel && (
         <span className="text-[7px] opacity-50 leading-none mt-0.5">↑</span>
       )}
 
@@ -130,15 +150,6 @@ function AptCell({ apt, stage, isHighlighted, isDimmed, showShinuiBadge, onClick
           style={{ backgroundColor: '#f59e0b', border: '1px solid rgba(255,255,255,0.9)' }}
         >
           <span style={{ fontSize: '6px', color: 'white', fontWeight: 'bold', lineHeight: 1 }}>C</span>
-        </div>
-      )}
-      {isMerged && (
-        <div
-          className="absolute bottom-0.5 left-0.5 w-3 h-3 rounded-full flex items-center justify-center"
-          style={{ backgroundColor: '#3b82f6', border: '1px solid rgba(255,255,255,0.9)' }}
-          title="Connected unit"
-        >
-          <span style={{ fontSize: '6px', color: 'white', fontWeight: 'bold', lineHeight: 1 }}>⛓</span>
         </div>
       )}
       {isBulkSelected && (
@@ -153,25 +164,20 @@ function AptCell({ apt, stage, isHighlighted, isDimmed, showShinuiBadge, onClick
   );
 }
 
-// Thin stairwell separator between the two halves of each floor
-function Stairwell() {
+function Stairwell({ compact }: { compact?: boolean }) {
   return (
-    <div className="flex-shrink-0 flex items-center justify-center" style={{ width: '10px' }}>
+    <div className="flex-shrink-0 flex items-center justify-center" style={{ width: compact ? '6px' : '10px' }}>
       <div
         className="rounded-full"
-        style={{
-          width: '3px',
-          height: '100%',
-          backgroundColor: '#f59e0b',
-          opacity: 0.55,
-        }}
+        style={{ width: '3px', height: '100%', backgroundColor: '#f59e0b', opacity: 0.55 }}
       />
     </div>
   );
 }
 
 function FourCellRow({
-  aptNums, getApt, getStage, isHighlighted, isDimmed, isMerged, isBulkSelected, showShinuiBadge, onApartmentClick, isBasement = false,
+  aptNums, getApt, getStage, isHighlighted, isDimmed, isMerged, getMergedLabel,
+  isContractorHighlighted, isBulkSelected, showShinuiBadge, onApartmentClick, isBasement = false, compact,
 }: {
   aptNums: number[];
   getApt: (n: number) => Apartment | undefined;
@@ -179,15 +185,19 @@ function FourCellRow({
   isHighlighted: (a: Apartment | undefined) => boolean;
   isDimmed: (a: Apartment | undefined) => boolean;
   isMerged: (a: Apartment | undefined) => boolean;
+  getMergedLabel: (a: Apartment | undefined) => string | undefined;
+  isContractorHighlighted: (a: Apartment | undefined) => boolean;
   isBulkSelected: (a: Apartment | undefined) => boolean;
   showShinuiBadge: boolean;
   onApartmentClick: (a: Apartment) => void;
   isBasement?: boolean;
+  compact?: boolean;
 }) {
+  const gapClass = compact ? 'gap-0.5' : 'gap-1';
+
   return (
     <>
-      {/* Left pair */}
-      <div className="flex flex-1 gap-1 min-w-0">
+      <div className={`flex flex-1 ${gapClass} min-w-0`}>
         {[0, 1].map(ci => {
           const apt = getApt(aptNums[ci]);
           return (
@@ -201,16 +211,18 @@ function FourCellRow({
               onClick={() => apt && onApartmentClick(apt)}
               isBasement={isBasement}
               isMerged={isMerged(apt)}
+              mergedLabel={getMergedLabel(apt)}
               isBulkSelected={isBulkSelected(apt)}
+              isContractorHighlighted={isContractorHighlighted(apt)}
+              compact={compact}
             />
           );
         })}
       </div>
 
-      <Stairwell />
+      <Stairwell compact={compact} />
 
-      {/* Right pair */}
-      <div className="flex flex-1 gap-1 min-w-0">
+      <div className={`flex flex-1 ${gapClass} min-w-0`}>
         {[2, 3].map(ci => {
           const apt = getApt(aptNums[ci]);
           return (
@@ -224,7 +236,10 @@ function FourCellRow({
               onClick={() => apt && onApartmentClick(apt)}
               isBasement={isBasement}
               isMerged={isMerged(apt)}
+              mergedLabel={getMergedLabel(apt)}
               isBulkSelected={isBulkSelected(apt)}
+              isContractorHighlighted={isContractorHighlighted(apt)}
+              compact={compact}
             />
           );
         })}
@@ -234,18 +249,12 @@ function FourCellRow({
 }
 
 function BuildingColumn({
-  buildingId,
-  apartments,
-  stages,
-  activeStageIds,
-  classFilter,
-  searchQuery,
-  onApartmentClick,
-  showShinuiBadge,
-  bulkSelected,
+  buildingId, apartments, mergedLabels, stages, activeStageIds, classFilter, searchQuery,
+  onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, compact,
 }: {
   buildingId: BuildingId;
   apartments: Apartment[];
+  mergedLabels: Map<string, string>;
   stages: Stage[];
   activeStageIds: string[];
   classFilter: 'all' | 'standard' | 'shinui';
@@ -253,6 +262,8 @@ function BuildingColumn({
   onApartmentClick: (apt: Apartment) => void;
   showShinuiBadge: boolean;
   bulkSelected?: Set<string>;
+  highlightedApartmentIds?: Set<string>;
+  compact?: boolean;
 }) {
   const stageMap = useMemo(() => new Map(stages.map(s => [s.id, s])), [stages]);
   const aptMap = useMemo(() => {
@@ -261,7 +272,9 @@ function BuildingColumn({
     return m;
   }, [apartments]);
 
-  const floorRows = getFloorRows(buildingId);
+  const floorRows = getFloorRows(buildingId, compact);
+  const LABEL_W = compact ? 26 : 34;
+  const padClass = compact ? 'p-0.5 gap-0.5' : 'p-1 gap-1';
 
   const getApt = (num: number) => aptMap.get(String(num));
   const getStage = (apt: Apartment | undefined): Stage | null =>
@@ -269,6 +282,8 @@ function BuildingColumn({
 
   function isHighlighted(apt: Apartment | undefined): boolean {
     if (!apt) return false;
+    // Contractor view: only highlight assigned apartments
+    if (highlightedApartmentIds) return highlightedApartmentIds.has(apt.id);
     if (searchQuery) return (apt.displayName || apt.apartmentNumber).toLowerCase().includes(searchQuery.toLowerCase());
     if (activeStageIds.length === 0) return true;
     if (!apt.currentStageId) return activeStageIds.includes('__none__');
@@ -277,6 +292,7 @@ function BuildingColumn({
 
   function isDimmed(apt: Apartment | undefined): boolean {
     if (!apt) return false;
+    if (highlightedApartmentIds) return !highlightedApartmentIds.has(apt.id);
     if (classFilter !== 'all' && apt.classification !== classFilter) return true;
     if (searchQuery) return !(apt.displayName || apt.apartmentNumber).toLowerCase().includes(searchQuery.toLowerCase());
     if (activeStageIds.length === 0) return false;
@@ -284,36 +300,33 @@ function BuildingColumn({
     return !activeStageIds.includes(apt.currentStageId);
   }
 
-  function isMerged(apt: Apartment | undefined): boolean {
-    return !!apt?.mergedWith;
+  function isMerged(apt: Apartment | undefined): boolean { return !!apt?.mergedWith; }
+  function getMergedLabel(apt: Apartment | undefined): string | undefined {
+    if (!apt?.mergedWith) return undefined;
+    return mergedLabels.get(apt.id);
   }
-
+  function isContractorHighlighted(apt: Apartment | undefined): boolean {
+    return !!apt && !!highlightedApartmentIds?.has(apt.id);
+  }
   function isBulkSelected(apt: Apartment | undefined): boolean {
     return !!apt && !!bulkSelected?.has(apt.id);
   }
 
-  const LABEL_W = 34;
-
   return (
-    <div className="flex flex-col flex-1" style={{ minWidth: '180px' }}>
-      {/* Building header */}
+    <div className="flex flex-col flex-1" style={{ minWidth: compact ? '110px' : '180px' }}>
       <div
-        className="text-center py-2 font-bold text-white text-sm tracking-widest rounded-t-lg mb-0.5"
+        className={`text-center font-bold text-white tracking-widest rounded-t-lg mb-0.5 ${compact ? 'py-1 text-xs' : 'py-2 text-sm'}`}
         style={{ backgroundColor: '#1e3a5f' }}
       >
         {buildingId}
       </div>
 
-      {/* Floor rows */}
       <div
         className="flex flex-col rounded-b-lg overflow-hidden"
         style={{ border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}
       >
         {floorRows.map((row, ri) => {
-          const isNonApt =
-            row.type === 'roof' ||
-            row.type === 'lobby' ||
-            row.type === 'ground';
+          const isNonApt = row.type === 'roof' || row.type === 'lobby' || row.type === 'ground';
 
           return (
             <div
@@ -325,7 +338,6 @@ function BuildingColumn({
                 borderBottom: ri < floorRows.length - 1 ? '1px solid #e9edf2' : 'none',
               }}
             >
-              {/* Floor label */}
               <div
                 className="flex items-center justify-center flex-shrink-0 text-gray-500"
                 style={{
@@ -350,8 +362,7 @@ function BuildingColumn({
                 )}
               </div>
 
-              {/* Cell area */}
-              <div className="flex flex-1 items-stretch p-1 gap-1 min-w-0">
+              <div className={`flex flex-1 items-stretch ${padClass} min-w-0`}>
                 {isNonApt ? (
                   <div
                     className="flex-1 flex items-center justify-center rounded-md"
@@ -366,8 +377,8 @@ function BuildingColumn({
                       fontStyle: 'italic',
                     }}
                   >
-                    {row.type === 'ground' && 'Ground / Commercial'}
-                    {row.type === 'lobby' && 'Lobby'}
+                    {!compact && row.type === 'ground' && 'Ground / Commercial'}
+                    {!compact && row.type === 'lobby' && 'Lobby'}
                   </div>
                 ) : row.type === 'normal' || row.type === 'basement' ? (
                   <FourCellRow
@@ -377,36 +388,38 @@ function BuildingColumn({
                     isHighlighted={isHighlighted}
                     isDimmed={isDimmed}
                     isMerged={isMerged}
+                    getMergedLabel={getMergedLabel}
+                    isContractorHighlighted={isContractorHighlighted}
                     isBulkSelected={isBulkSelected}
                     showShinuiBadge={showShinuiBadge}
                     onApartmentClick={onApartmentClick}
                     isBasement={row.type === 'basement'}
+                    compact={compact}
                   />
                 ) : (row.type === 'wide' || row.type === 'duplex') ? (
                   <>
-                    <AptCell
-                      apt={getApt(row.aptNums![0])}
-                      stage={getStage(getApt(row.aptNums![0]))}
-                      isHighlighted={isHighlighted(getApt(row.aptNums![0]))}
-                      isDimmed={isDimmed(getApt(row.aptNums![0]))}
-                      showShinuiBadge={showShinuiBadge}
-                      onClick={() => { const a = getApt(row.aptNums![0]); if (a) onApartmentClick(a); }}
-                      isDuplex={row.type === 'duplex'}
-                      isMerged={isMerged(getApt(row.aptNums![0]))}
-                      isBulkSelected={isBulkSelected(getApt(row.aptNums![0]))}
-                    />
-                    <Stairwell />
-                    <AptCell
-                      apt={getApt(row.aptNums![1])}
-                      stage={getStage(getApt(row.aptNums![1]))}
-                      isHighlighted={isHighlighted(getApt(row.aptNums![1]))}
-                      isDimmed={isDimmed(getApt(row.aptNums![1]))}
-                      showShinuiBadge={showShinuiBadge}
-                      onClick={() => { const a = getApt(row.aptNums![1]); if (a) onApartmentClick(a); }}
-                      isDuplex={row.type === 'duplex'}
-                      isMerged={isMerged(getApt(row.aptNums![1]))}
-                      isBulkSelected={isBulkSelected(getApt(row.aptNums![1]))}
-                    />
+                    {[0, 1].map(idx => {
+                      const apt = getApt(row.aptNums![idx]);
+                      return (
+                        <React.Fragment key={idx}>
+                          {idx === 1 && <Stairwell compact={compact} />}
+                          <AptCell
+                            apt={apt}
+                            stage={getStage(apt)}
+                            isHighlighted={isHighlighted(apt)}
+                            isDimmed={isDimmed(apt)}
+                            showShinuiBadge={showShinuiBadge}
+                            onClick={() => { if (apt) onApartmentClick(apt); }}
+                            isDuplex={row.type === 'duplex'}
+                            isMerged={isMerged(apt)}
+                            mergedLabel={getMergedLabel(apt)}
+                            isBulkSelected={isBulkSelected(apt)}
+                            isContractorHighlighted={isContractorHighlighted(apt)}
+                            compact={compact}
+                          />
+                        </React.Fragment>
+                      );
+                    })}
                   </>
                 ) : null}
               </div>
@@ -419,15 +432,8 @@ function BuildingColumn({
 }
 
 export function BuildingDiagram({
-  apartments,
-  stages,
-  activeStageIds,
-  classFilter,
-  searchQuery,
-  selectedBuilding,
-  onApartmentClick,
-  showShinuiBadge,
-  bulkSelected,
+  apartments, stages, activeStageIds, classFilter, searchQuery, selectedBuilding,
+  onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, compact,
 }: BuildingDiagramProps) {
   const buildingOrder: BuildingId[] = ['A3', 'A2', 'A1'];
   const visibleBuildings = selectedBuilding === 'all' ? buildingOrder : [selectedBuilding];
@@ -443,16 +449,37 @@ export function BuildingDiagram({
     return m;
   }, [apartments]);
 
+  // Pre-compute combined "A/B" labels for merged apartment pairs
+  const mergedLabels = useMemo(() => {
+    const m = new Map<string, string>();
+    apartments.forEach(apt => {
+      if (!apt.mergedWith) return;
+      const partner = apartments.find(a => a.id === apt.mergedWith);
+      if (!partner) return;
+      const numA = Number(apt.displayName || apt.apartmentNumber) || 0;
+      const numB = Number(partner.displayName || partner.apartmentNumber) || 0;
+      const labelA = apt.displayName || apt.apartmentNumber;
+      const labelB = partner.displayName || partner.apartmentNumber;
+      const label = numA <= numB ? `${labelA}/${labelB}` : `${labelB}/${labelA}`;
+      m.set(apt.id, label);
+    });
+    return m;
+  }, [apartments]);
+
+  const gapClass = compact ? 'gap-3' : 'gap-5';
+  const padClass = compact ? 'p-3' : 'p-5';
+
   return (
     <div
-      className={`flex gap-5 p-5 ${single ? 'justify-center' : 'w-full'}`}
-      style={single ? { maxWidth: '560px', margin: '0 auto' } : {}}
+      className={`flex ${gapClass} ${padClass} ${single && !compact ? 'justify-center' : 'w-full'}`}
+      style={single && !compact ? { maxWidth: '560px', margin: '0 auto' } : {}}
     >
       {visibleBuildings.map(bId => (
         <BuildingColumn
           key={bId}
           buildingId={bId}
           apartments={aptsByBuilding.get(bId) ?? []}
+          mergedLabels={mergedLabels}
           stages={stages}
           activeStageIds={activeStageIds}
           classFilter={classFilter}
@@ -460,6 +487,8 @@ export function BuildingDiagram({
           onApartmentClick={onApartmentClick}
           showShinuiBadge={showShinuiBadge}
           bulkSelected={bulkSelected}
+          highlightedApartmentIds={highlightedApartmentIds}
+          compact={compact}
         />
       ))}
     </div>

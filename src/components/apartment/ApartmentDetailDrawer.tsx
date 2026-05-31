@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Building2, AlertTriangle, Link, Unlink } from 'lucide-react';
+import { X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink } from 'lucide-react';
 import { Apartment, User } from '../../types';
 import { useStore } from '../../data/store';
 import { format } from 'date-fns';
@@ -20,6 +20,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [currentStageId, setCurrentStageId] = useState<string>('');
   const [classification, setClassification] = useState<'standard' | 'shinui'>('standard');
   const [generalNotes, setGeneralNotes] = useState('');
+  const [driveLink, setDriveLink] = useState('');
   const [mergedWithId, setMergedWithId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'details' | 'stages' | 'history'>('details');
 
@@ -29,6 +30,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       setCurrentStageId(apartment.currentStageId ?? '');
       setClassification(apartment.classification);
       setGeneralNotes(apartment.generalNotes);
+      setDriveLink(apartment.driveLink ?? '');
       setMergedWithId(apartment.mergedWith ?? '');
       setActiveTab('details');
     }
@@ -53,6 +55,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       currentStageId: currentStageId || null,
       classification,
       generalNotes,
+      driveLink: driveLink.trim() || undefined,
     }, currentUser);
     onToast('Apartment details saved');
   }
@@ -81,8 +84,17 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
             </div>
             <span className="text-white/40 flex-shrink-0">·</span>
             <span className="font-bold text-lg truncate">
-              {apartment.displayName || apartment.apartmentNumber ||
-                <span className="italic text-white/60 text-base">Unnamed</span>}
+              {mergedPartner
+                ? (() => {
+                    const numA = Number(apartment.displayName || apartment.apartmentNumber) || 0;
+                    const numB = Number(mergedPartner.displayName || mergedPartner.apartmentNumber) || 0;
+                    const labelA = apartment.displayName || apartment.apartmentNumber;
+                    const labelB = mergedPartner.displayName || mergedPartner.apartmentNumber;
+                    return numA <= numB ? `Apt ${labelA} / ${labelB}` : `Apt ${labelB} / ${labelA}`;
+                  })()
+                : (apartment.displayName || apartment.apartmentNumber ||
+                    <span className="italic text-white/60 text-base">Unnamed</span>)
+              }
             </span>
             {apartment.floor > 0 && (
               <span className="text-white/60 text-sm flex-shrink-0">Floor {apartment.floor}</span>
@@ -210,6 +222,42 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   placeholder="General notes about this apartment..."
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 resize-none"
                 />
+              </div>
+
+              {/* Google Drive link */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1.5">
+                  <ExternalLink size={11} />
+                  Google Drive Folder Link
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    value={driveLink}
+                    onChange={e => setDriveLink(e.target.value)}
+                    placeholder="https://drive.google.com/drive/folders/..."
+                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                  />
+                  {driveLink && (
+                    <a
+                      href={driveLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center px-3 py-2 rounded-lg border border-gray-200 text-gray-500 hover:text-[#4aa8d8] hover:border-[#4aa8d8] transition-all"
+                    >
+                      <ExternalLink size={14} />
+                    </a>
+                  )}
+                </div>
+                {/* Show error if merged partner has a different drive link */}
+                {mergedPartner && mergedPartner.driveLink && driveLink && mergedPartner.driveLink !== driveLink.trim() && (
+                  <div className="mt-1.5 flex items-start gap-1.5 text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 border border-red-200">
+                    <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" />
+                    <span>
+                      Merged partner (Apt {mergedPartner.displayName || mergedPartner.apartmentNumber}) has a different Drive link.
+                      Saving will sync both to the same link.
+                    </span>
+                  </div>
+                )}
               </div>
 
               <button

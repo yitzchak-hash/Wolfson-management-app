@@ -54,6 +54,7 @@ export interface Apartment {
   isUnnamed: boolean;
   mergedWith?: string; // id of partner apartment when buyer physically connected two units
   stageDates?: Record<string, string>; // stageId → ISO timestamp of when that stage was first set
+  driveLink?: string; // Google Drive folder URL for this apartment's files
   createdAt: string;
   updatedAt: string;
   updatedBy: string;
@@ -126,5 +127,7 @@ export interface ContractorPhoto {
   contractorId: string;
   dataUrl: string;   // compressed base64; will be Drive URL after migration
   filename: string;
+  fileType?: 'image' | 'video' | 'file'; // default: 'image' (for backward compat)
+  mimeType?: string;
   uploadedAt: string;
 }
