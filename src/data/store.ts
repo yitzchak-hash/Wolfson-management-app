@@ -893,17 +893,10 @@ export const useStore = create<AppState>((set, get) => ({
 
       const appSettings = (fbSettings.find(s => (s as Record<string,unknown>).id === 'app') ?? {}) as Record<string, unknown>;
 
-      // Helper: merge two arrays by id, preferring the version with a more recent updatedAt
-      function mergeById<T extends { id: string; updatedAt?: string }>(local: T[], remote: T[]): T[] {
+      // Helper: merge two arrays by id, Firebase wins for any item that exists remotely
+      function mergeById<T extends { id: string }>(local: T[], remote: T[]): T[] {
         const remoteMap = new Map(remote.map(r => [r.id, r]));
-        const merged = local.map(a => {
-          const r = remoteMap.get(a.id);
-          if (!r) return a; // local-only → keep
-          const lt = new Date(a.updatedAt || 0).getTime();
-          const rt = new Date(r.updatedAt || 0).getTime();
-          return rt >= lt ? r : a; // newer wins; ties go to Firestore
-        });
-        // Add Firestore docs that don't exist locally (added on another device)
+        const merged = local.map(a => (remoteMap.get(a.id) as T | undefined) ?? a);
         remote.forEach(r => { if (!local.find(a => a.id === r.id)) merged.push(r); });
         return merged;
       }
@@ -978,25 +971,15 @@ export const useStore = create<AppState>((set, get) => ({
     // Store every unsubscribe fn so logout() can cancel them cleanly.
     _firebaseUnsubscribers = [
       fsListen('apartments', (docs) => {
-        if (docs.length > 0) {
-          const fbMap = new Map((docs as unknown as Apartment[]).map(a => [a.id, a]));
-          set(state => ({
-            apartments: (() => {
-              const merged = state.apartments.map(a => {
-                const r = fbMap.get(a.id);
-                if (!r) return a;
-                const lt = new Date(a.updatedAt || 0).getTime();
-                const rt = new Date(r.updatedAt || 0).getTime();
-                return rt >= lt ? r : a;
-              });
-              (docs as unknown as Apartment[]).forEach(r => {
-                if (!state.apartments.find(a => a.id === r.id)) merged.push(r);
-              });
-              return merged;
-            })(),
-          }));
-          persist(get);
-        }
+        if (docs.length === 0) return;
+        const fbMap = new Map((docs as unknown as Apartment[]).map(a => [a.id, a]));
+        set(state => {
+          const updated = state.apartments.map(a => (fbMap.get(a.id) as Apartment | undefined) ?? a);
+          const localIds = new Set(state.apartments.map(a => a.id));
+          (docs as unknown as Apartment[]).forEach(r => { if (!localIds.has(r.id)) updated.push(r as Apartment); });
+          return { apartments: updated };
+        });
+        persist(get);
       }),
       fsListen('stageNotes', (docs) => {
         if (docs.length > 0) { set({ stageNotes: docs as unknown as StageNote[] }); persist(get); }

@@ -173,10 +173,16 @@ All collections are synced to Firestore in real time:
 
 `startFirebaseSync()` (called on login):
 1. Loads all 11 collections in parallel
-2. If data exists → merges binary fields from localStorage and sets state
+2. If data exists → merges binary fields from localStorage and sets state; seeds any missing apartments to Firestore
 3. If empty → pushes entire localStorage snapshot as first-run seed
 4. Attaches real-time listeners on all collections
 
-`fsDelete(collectionName, docId)` added to `firebase.ts` — used by `deleteContractor`, `deleteContractorAssignment`, `deleteContractorPhoto`, `deleteOfficeNoteFile`, and cascade deletes.
+**Listener pattern — Firebase always wins:** All real-time listeners use the simple "Firebase wins" pattern — no `updatedAt` timestamp comparison. When Firestore sends an update, the listener replaces the local version with the Firebase version unconditionally (local only kept for items not yet in Firestore). This is what makes cross-device sync reliable. Never reintroduce `updatedAt` tiebreakers in listeners — they caused apartments to silently block incoming updates.
+
+`forcePushToFirestore()` action: pushes ALL current in-memory state to Firestore. Accessible via Settings → App → "Force Push Local → Cloud" button. Use this to recover from a state where local data is ahead of Firebase.
+
+`fsDelete(collectionName, docId)` in `firebase.ts` — used by `deleteContractor`, `deleteContractorAssignment`, `deleteContractorPhoto`, `deleteOfficeNoteFile`, and cascade deletes.
+
+**Offline persistence**: `initializeFirestore` with `persistentLocalCache` + `persistentMultipleTabManager` enables IndexedDB queuing so writes survive connectivity loss and are retried on reconnect.
 
 **Setup**: copy `.env.example` to `.env.local` and fill in `VITE_FIREBASE_*` vars (or set in Vercel dashboard)
