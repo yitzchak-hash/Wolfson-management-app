@@ -5,7 +5,7 @@ import { useStore } from '../../data/store';
 import { format } from 'date-fns';
 import { StageNotesSection } from './StageNotesSection';
 import { ActivitySection } from './ActivitySection';
-import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdf } from '../../data/driveApi';
+import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, isUploadBackendConfigured } from '../../data/driveApi';
 
 interface Props {
   apartment: Apartment | null;
@@ -16,8 +16,9 @@ interface Props {
 
 export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast }: Props) {
   const { stages, activityLogs, apartments, updateApartment, mergeApartments, unmergeApartments,
-    googleAccessToken, googleTokenExpiry, autoBackup, backupSnapshots, restoreFromSnapshot,
+    autoBackup, backupSnapshots, restoreFromSnapshot,
     officeNoteFiles, addOfficeNoteFile, deleteOfficeNoteFile } = useStore();
+  const backendConfigured = isUploadBackendConfigured();
   const officeFileRef = useRef<HTMLInputElement>(null);
 
   const [displayName, setDisplayName] = useState('');
@@ -49,9 +50,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       // Auto-detect PDF if drive link is present and token available
       const existingFileId = apartment.plansPdfLink ? extractFileId(apartment.plansPdfLink) : null;
       setDetectedPdfId(existingFileId);
-      if (!existingFileId && apartment.driveLink && googleAccessToken && Date.now() < (googleTokenExpiry ?? 0)) {
+      if (!existingFileId && apartment.driveLink && backendConfigured) {
         setFetchingPdf(true);
-        findPlansPdf(apartment.driveLink, googleAccessToken).then(f => {
+        findPlansPdfViaBackend(apartment.driveLink).then(f => {
           if (f) setDetectedPdfId(f.id);
         }).finally(() => setFetchingPdf(false));
       }
@@ -424,7 +425,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     ))}
                     {!detectedPdfId && !fetchingPdf && (
                       <p className="text-[10px] text-gray-400 mt-1.5 pt-1.5 border-t border-gray-200">
-                        {googleAccessToken ? 'Refresh to re-check.' : 'Connect Google Drive in Settings → App to check.'}
+                        {backendConfigured ? 'No PDF found in Engineered Plans subfolder.' : 'Drive backend not configured.'}
                       </p>
                     )}
                   </div>
@@ -446,11 +447,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
                     <BookOpen size={11} /> Engineering Plans
                   </label>
-                  {driveLink && googleAccessToken && Date.now() < (googleTokenExpiry ?? 0) && (
+                  {driveLink && backendConfigured && (
                     <button
                       onClick={() => {
                         setFetchingPdf(true);
-                        findPlansPdf(driveLink, googleAccessToken!).then(f => {
+                        findPlansPdfViaBackend(driveLink).then(f => {
                           if (f) { setDetectedPdfId(f.id); setPlansPdfLink(`https://drive.google.com/file/d/${f.id}/view`); }
                         }).finally(() => setFetchingPdf(false));
                       }}
@@ -504,9 +505,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 ) : (
                   <div className="text-xs text-gray-400 italic py-1">
                     {driveLink
-                      ? googleAccessToken && Date.now() < (googleTokenExpiry ?? 0)
-                        ? 'No Plans PDF found in Drive folder. Click Refresh to retry.'
-                        : 'Connect Google Drive in Settings to auto-detect the Plans PDF.'
+                      ? 'No Plans PDF found in Drive folder. Click Refresh to retry.'
                       : 'Set the Drive folder link above to auto-detect Plans PDF.'}
                   </div>
                 )}

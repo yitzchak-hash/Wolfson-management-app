@@ -244,16 +244,71 @@ export async function findPlansPdf(driveLink: string, token: string): Promise<Dr
   }
 }
 
-// ─── Backend (Vercel serverless) upload helpers ────────────────────────────────
-// These route through /api/* so contractors on any device can upload to Drive
-// via the service account — no per-user OAuth token required.
+// ─── Backend helpers (service account, no user OAuth needed) ──────────────────
 
 const DRIVE_API_KEY = (import.meta.env.VITE_DRIVE_API_KEY as string | undefined) ?? '';
 
-/** True when the Drive upload backend is configured (API key present). */
 export function isUploadBackendConfigured(): boolean {
   return !!DRIVE_API_KEY;
 }
+
+async function listFolderViaBackend(folderId: string): Promise<DriveFile[]> {
+  const resp = await fetch('/api/drive-files', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': DRIVE_API_KEY },
+    body: JSON.stringify({ folderId }),
+  });
+  if (!resp.ok) throw new Error(`drive-files ${resp.status}`);
+  const data = await resp.json();
+  return (data.files ?? []) as DriveFile[];
+}
+
+export async function findPlansPdfViaBackend(driveLink: string): Promise<DriveFile | null> {
+  const folderId = extractFolderId(driveLink);
+  if (!folderId) return null;
+  try {
+    const files = await listFolderViaBackend(folderId);
+    const plansFolder = files.find(
+      f => f.mimeType === 'application/vnd.google-apps.folder' && /(plan|engineer)/i.test(f.name),
+    );
+    if (!plansFolder) return null;
+    const planFiles = await listFolderViaBackend(plansFolder.id);
+    return planFiles.find(f => f.mimeType === 'application/pdf') ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function checkFolderHealthViaBackend(
+  driveLink: string | undefined,
+  plansPdfLink: string | undefined,
+): Promise<FolderHealth> {
+  const folderId = driveLink ? extractFolderId(driveLink) : null;
+  const health: FolderHealth = { mainFolderLinked: !!driveLink, plansPdfLinked: !!plansPdfLink };
+  if (!folderId) return health;
+  try {
+    const files = await listFolderViaBackend(folderId);
+    health.mainFolderAccessible = true;
+    health.photosFolderFound = files.some(
+      f => f.mimeType === 'application/vnd.google-apps.folder' && /photo/i.test(f.name),
+    );
+    const plansFolder = files.find(
+      f => f.mimeType === 'application/vnd.google-apps.folder' && /(plan|engineer)/i.test(f.name),
+    );
+    health.plansFolderFound = !!plansFolder;
+    if (plansFolder) {
+      const planFiles = await listFolderViaBackend(plansFolder.id);
+      health.plansPdfFound = planFiles.find(f => f.mimeType === 'application/pdf') ?? null;
+    }
+  } catch {
+    health.mainFolderAccessible = false;
+  }
+  return health;
+}
+
+// ─── Backend (Vercel serverless) upload helpers ────────────────────────────────
+// These route through /api/* so contractors on any device can upload to Drive
+// via the service account — no per-user OAuth token required.
 
 /** Find or create a subfolder by name under a parent, via the backend service account. */
 export async function findOrCreateFolderViaBackend(parentId: string, name: string): Promise<string> {
