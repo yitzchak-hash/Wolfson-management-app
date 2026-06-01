@@ -390,6 +390,14 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                 />
                               : <div className="flex flex-col items-center p-1"><BookOpen size={16} className="text-gray-400" /><span className="text-[8px] text-gray-400 truncate w-full text-center mt-0.5">{f.filename}</span></div>
                             }
+                            {!f.driveFileId && (
+                              <div
+                                title="Stored locally only — not synced to Drive"
+                                className="absolute bottom-0.5 left-0.5 w-3 h-3 rounded-full bg-amber-400 flex items-center justify-center"
+                              >
+                                <AlertTriangle size={6} color="white" />
+                              </div>
+                            )}
                             <button onClick={() => deleteOfficeNoteFile(f.id)}
                               title="Remove file"
                               className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">

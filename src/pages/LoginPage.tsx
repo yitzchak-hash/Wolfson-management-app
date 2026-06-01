@@ -76,17 +76,6 @@ export function LoginPage() {
           <p className="text-gray-300 text-sm leading-relaxed max-w-sm">
             Internal project management system for HVAC installation tracking across all three buildings.
           </p>
-          <div className="mt-5 flex items-center gap-2">
-            <svg width="18" height="14" viewBox="0 0 48 34" fill="none">
-              <path d="M4 6 Q24 -2 44 6" stroke="#f5a623" strokeWidth="3" strokeLinecap="round" fill="none"/>
-              <path d="M8 14 Q24 6 40 14" stroke="#4aa8d8" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
-            </svg>
-            <span className="text-gray-400 text-xs tracking-wider">
-              <span className="text-white font-semibold italic">Tzvi</span>
-              <span className="text-[#4aa8d8] font-semibold italic">Air</span>
-              <span className="text-gray-400"> · Air Conditioning Engineering</span>
-            </span>
-          </div>
         </div>
       </div>
 

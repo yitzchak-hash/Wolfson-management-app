@@ -251,13 +251,20 @@ function MediaItem({ photo, onDelete, onOpen }: { photo: ContractorPhoto; onDele
           <span className="text-[10px] text-gray-600 mt-1.5 text-center break-all leading-tight line-clamp-3">{photo.filename}</span>
         </div>
       )}
-      {/* Cloud badge */}
-      {(photo.driveFileId || photo.storageUrl) && (
+      {/* Cloud / local badge */}
+      {(photo.driveFileId || photo.storageUrl) ? (
         <div
           className={`absolute bottom-1 left-1 rounded-full w-3.5 h-3.5 flex items-center justify-center ${photo.storageUrl && !photo.driveFileId ? 'bg-blue-500' : 'bg-green-500'}`}
           title={photo.driveFileId ? 'Saved in Google Drive' : 'Saved in Firebase Storage'}
         >
           <CloudUpload size={8} className="text-white" />
+        </div>
+      ) : (
+        <div
+          className="absolute bottom-1 left-1 rounded-full w-3.5 h-3.5 flex items-center justify-center bg-amber-400"
+          title="Saved locally only — not synced to cloud"
+        >
+          <AlertCircle size={8} className="text-white" />
         </div>
       )}
       <button
