@@ -266,7 +266,7 @@ export function ContractorPortal() {
           // ── Primary: Firebase Storage ─────────────────────────────────────
           setUploadProgress({ name: file.name, pct: 0 });
           try {
-            const uploadBlob: Blob = fType === 'image' ? await compressImageToBlob(file) : file;
+            const uploadBlob: Blob = file;
             const ext = file.name.includes('.') ? file.name.split('.').pop() : '';
             const uid = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
             const path = `contractorPhotos/${selectedAssignment.id}/${uid}${ext ? '.' + ext : ''}`;
