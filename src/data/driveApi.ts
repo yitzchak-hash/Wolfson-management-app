@@ -317,6 +317,25 @@ export async function checkFolderHealthViaBackend(
 // These route through /api/* so contractors on any device can upload to Drive
 // via the service account — no per-user OAuth token required.
 
+/** Returns a thumbnail URL for a Drive file (file must be shared publicly) */
+export function driveThumbUrl(fileId: string, maxPx = 1200): string {
+  return `https://drive.google.com/thumbnail?id=${fileId}&sz=w${maxPx}`;
+}
+
+/** Make a Drive file readable by anyone with the link, via backend service account */
+export async function shareFileToDrive(fileId: string): Promise<void> {
+  if (!DRIVE_API_KEY) return;
+  try {
+    await fetch('/api/share', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': DRIVE_API_KEY },
+      body: JSON.stringify({ fileId }),
+    });
+  } catch (e) {
+    console.warn('Failed to share Drive file:', e);
+  }
+}
+
 /** Find or create a subfolder by name under a parent, via the backend service account. */
 export async function findOrCreateFolderViaBackend(parentId: string, name: string): Promise<string> {
   const resp = await fetch('/api/folder', {
@@ -330,6 +349,55 @@ export async function findOrCreateFolderViaBackend(parentId: string, name: strin
   }
   const data = await resp.json();
   return data.folderId as string;
+}
+
+/**
+ * Upload ANY size file directly to Drive via a resumable session.
+ * Browser → /api/drive-session (tiny JSON) → browser PUT directly to Drive.
+ * No Vercel body limit applies; shows real upload progress.
+ */
+export async function uploadFileViaResumableSession(
+  folderId: string,
+  file: File,
+  onProgress?: (pct: number) => void,
+): Promise<{ fileId: string; webViewLink: string }> {
+  const sessionResp = await fetch('/api/drive-session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': DRIVE_API_KEY },
+    body: JSON.stringify({ folderId, filename: file.name, mimeType: file.type || 'application/octet-stream' }),
+  });
+  if (!sessionResp.ok) {
+    const msg = await sessionResp.text().catch(() => '');
+    throw new Error(`Drive session failed (${sessionResp.status}): ${msg}`);
+  }
+  const { uploadUrl } = await sessionResp.json();
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', uploadUrl);
+    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+    xhr.upload.onprogress = e => {
+      if (e.lengthComputable) onProgress?.(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          const fileId = data.id as string;
+          resolve({
+            fileId,
+            webViewLink: data.webViewLink ?? `https://drive.google.com/file/d/${fileId}/view`,
+          });
+        } catch {
+          reject(new Error('Could not parse Drive upload response'));
+        }
+      } else {
+        reject(new Error(`Drive upload failed: ${xhr.status}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Network error during Drive upload'));
+    xhr.send(file);
+  });
 }
 
 /**

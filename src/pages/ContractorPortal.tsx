@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useStore } from '../data/store';
 import { ContractorAssignment, ContractorPhoto } from '../types';
@@ -7,11 +7,13 @@ import {
   Camera, CheckCircle2, Clock, Building2, CalendarDays, FileText,
   Plus, Send, AlertCircle, X, Play, File as FileIcon, MapPin,
   BookOpen, Download, Paperclip, MessageSquare, CloudUpload,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
 import {
-  extractFileId, drivePreviewUrl, driveDownloadUrl, extractFolderId,
-  isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaBackend,
+  extractFileId, drivePreviewUrl, driveDownloadUrl, driveThumbUrl,
+  extractFolderId, isUploadBackendConfigured, findOrCreateFolderViaBackend,
+  uploadFileViaResumableSession, shareFileToDrive,
 } from '../data/driveApi';
 import { isStorageConfigured, fsUploadFile } from '../data/firebase';
 
@@ -100,64 +102,168 @@ function getDueBadge(dueDate: string | null): { text: string; cls: string } | nu
   return null;
 }
 
-function MediaItem({ photo, onDelete }: { photo: ContractorPhoto; onDelete: () => void }) {
-  const [playing, setPlaying] = useState(false);
+function PhotoGallery({
+  photos, initialIndex, onClose,
+}: { photos: ContractorPhoto[]; initialIndex: number; onClose: () => void }) {
+  const [idx, setIdx] = useState(initialIndex);
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const photo = photos[idx];
+  const prev = () => setIdx(i => Math.max(0, i - 1));
+  const next = () => setIdx(i => Math.min(photos.length - 1, i + 1));
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') prev();
+      else if (e.key === 'ArrowRight') next();
+      else if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   const type = photo.fileType ?? 'image';
-  // Firebase Storage URL is the primary source; fall back to local base64
-  const directSrc = photo.storageUrl || (photo.dataUrl || null);
-  const hasDriveOnly = !directSrc && !!photo.driveUrl;
-  const fileHref = photo.storageUrl || photo.driveUrl || photo.dataUrl;
+  const imgSrc = photo.storageUrl
+    || (photo.driveFileId ? driveThumbUrl(photo.driveFileId, 2000) : null)
+    || (photo.dataUrl || null);
+  const videoSrc = photo.storageUrl || photo.dataUrl || null;
+  const downloadHref = photo.driveFileId
+    ? `https://drive.google.com/uc?export=download&id=${photo.driveFileId}`
+    : (photo.storageUrl || photo.dataUrl);
 
   return (
-    <div className="relative rounded-xl overflow-hidden aspect-square bg-gray-100">
-      {type === 'image' && (
-        directSrc
-          ? <img src={directSrc} alt={photo.filename} className="w-full h-full object-cover" />
-          : hasDriveOnly
-            ? <a href={photo.driveUrl} target="_blank" rel="noopener noreferrer"
-                className="w-full h-full flex flex-col items-center justify-center bg-gray-100 hover:bg-gray-200 transition-colors px-2">
-                <Camera size={24} className="text-gray-400" />
-                <span className="text-[10px] text-gray-600 mt-1.5 text-center break-all leading-tight line-clamp-2">{photo.filename}</span>
+    <div
+      className="fixed inset-0 z-[300] bg-black flex flex-col select-none"
+      onTouchStart={e => setTouchStart(e.touches[0].clientX)}
+      onTouchEnd={e => {
+        if (touchStart === null) return;
+        const d = touchStart - e.changedTouches[0].clientX;
+        if (d > 60) next();
+        else if (d < -60) prev();
+        setTouchStart(null);
+      }}
+    >
+      {/* Top bar */}
+      <div className="flex items-center justify-between px-4 py-3 bg-black/80 flex-shrink-0">
+        <span className="text-white text-sm font-medium truncate max-w-[55%]">{photo.filename}</span>
+        <div className="flex items-center gap-3">
+          <span className="text-gray-400 text-xs">{idx + 1} / {photos.length}</span>
+          {downloadHref && (
+            <a
+              href={downloadHref}
+              download={!photo.driveFileId && !photo.storageUrl ? photo.filename : undefined}
+              target={photo.driveFileId || photo.storageUrl ? '_blank' : undefined}
+              rel="noopener noreferrer"
+              className="p-1.5 text-gray-300 hover:text-white"
+              title="Download"
+            >
+              <Download size={18} />
+            </a>
+          )}
+          <button onClick={onClose} className="p-1.5 text-gray-300 hover:text-white">
+            <X size={20} />
+          </button>
+        </div>
+      </div>
+
+      {/* Image / video */}
+      <div className="flex-1 flex items-center justify-center relative overflow-hidden px-12">
+        {type === 'image' && (
+          imgSrc
+            ? <img src={imgSrc} alt={photo.filename} className="max-w-full max-h-full object-contain" draggable={false} />
+            : photo.driveUrl
+              ? <a href={photo.driveUrl} target="_blank" rel="noopener noreferrer" className="text-blue-400 underline text-sm">View on Google Drive</a>
+              : <div className="text-gray-500 text-sm">Image unavailable</div>
+        )}
+        {type === 'video' && (
+          videoSrc
+            ? <video src={videoSrc} controls className="max-w-full max-h-full" />
+            : photo.driveUrl
+              ? <a href={photo.driveUrl} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-2 text-white">
+                  <Play size={48} />
+                  <span className="text-sm">Open video on Drive</span>
+                </a>
+              : null
+        )}
+        {type === 'file' && (
+          <div className="flex flex-col items-center gap-4">
+            <FileIcon size={56} className="text-blue-400" />
+            <span className="text-white text-sm">{photo.filename}</span>
+            {downloadHref && (
+              <a href={downloadHref} target="_blank" rel="noopener noreferrer"
+                className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-medium">
+                Open / Download
               </a>
-            : <div className="w-full h-full flex items-center justify-center"><Camera size={24} className="text-gray-300" /></div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Prev / Next arrows */}
+      {idx > 0 && (
+        <button onClick={prev}
+          className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center text-white z-10">
+          <ChevronLeft size={22} />
+        </button>
+      )}
+      {idx < photos.length - 1 && (
+        <button onClick={next}
+          className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center text-white z-10">
+          <ChevronRight size={22} />
+        </button>
+      )}
+
+      {/* Dot indicators */}
+      {photos.length > 1 && (
+        <div className="flex justify-center gap-1.5 pb-4 pt-2 flex-shrink-0">
+          {photos.map((_, i) => (
+            <button key={i} onClick={() => setIdx(i)}
+              className={`rounded-full transition-all ${i === idx ? 'w-4 h-2 bg-white' : 'w-2 h-2 bg-gray-600 hover:bg-gray-400'}`} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MediaItem({ photo, onDelete, onOpen }: { photo: ContractorPhoto; onDelete: () => void; onOpen: () => void }) {
+  const type = photo.fileType ?? 'image';
+  // Thumbnail: Drive thumbnailURL (publicly shared) → Firebase Storage URL → base64
+  const thumbSrc = photo.driveFileId
+    ? driveThumbUrl(photo.driveFileId, 800)
+    : (photo.storageUrl || (photo.dataUrl || null));
+
+  return (
+    <div className="relative rounded-xl overflow-hidden aspect-square bg-gray-100 cursor-pointer" onClick={onOpen}>
+      {(type === 'image') && (
+        thumbSrc
+          ? <img src={thumbSrc} alt={photo.filename} className="w-full h-full object-cover" loading="lazy" />
+          : <div className="w-full h-full flex items-center justify-center"><Camera size={24} className="text-gray-300" /></div>
       )}
       {type === 'video' && (
-        directSrc
-          ? playing
-            ? <video src={directSrc} className="w-full h-full object-contain bg-black" controls autoPlay />
-            : <button className="w-full h-full flex flex-col items-center justify-center bg-gray-800 active:opacity-90" onClick={() => setPlaying(true)}>
-                <Play size={28} className="text-white" />
-                <span className="text-white text-[10px] mt-1 opacity-60">Tap to play</span>
-              </button>
-          : hasDriveOnly
-            ? <a href={photo.driveUrl} target="_blank" rel="noopener noreferrer"
-                className="w-full h-full flex flex-col items-center justify-center bg-gray-800 active:opacity-90">
-                <Play size={28} className="text-white" />
-                <span className="text-white text-[10px] mt-1 opacity-60">View on Drive</span>
-              </a>
-            : null
+        <div className="w-full h-full flex flex-col items-center justify-center bg-gray-800">
+          <Play size={28} className="text-white" />
+          <span className="text-white text-[10px] mt-1 opacity-60 truncate px-2 max-w-full">{photo.filename}</span>
+        </div>
       )}
       {type === 'file' && (
-        <a href={fileHref}
-          download={!photo.storageUrl && !photo.driveUrl ? photo.filename : undefined}
-          target={photo.storageUrl || photo.driveUrl ? '_blank' : undefined}
-          rel={photo.storageUrl || photo.driveUrl ? 'noopener noreferrer' : undefined}
-          className="w-full h-full flex flex-col items-center justify-center bg-blue-50 hover:bg-blue-100 transition-colors px-2">
+        <div className="w-full h-full flex flex-col items-center justify-center bg-blue-50 px-2">
           <FileIcon size={24} className="text-blue-400 flex-shrink-0" />
           <span className="text-[10px] text-gray-600 mt-1.5 text-center break-all leading-tight line-clamp-3">{photo.filename}</span>
-        </a>
+        </div>
       )}
-      {/* Cloud badge: blue = Firebase Storage, green = Google Drive */}
-      {(photo.storageUrl || photo.driveFileId) && (
+      {/* Cloud badge */}
+      {(photo.driveFileId || photo.storageUrl) && (
         <div
-          className={`absolute bottom-1 left-1 rounded-full w-3.5 h-3.5 flex items-center justify-center ${photo.storageUrl ? 'bg-blue-500' : 'bg-green-500'}`}
-          title={photo.storageUrl ? 'Saved in Firebase Storage' : 'Synced to Drive'}
+          className={`absolute bottom-1 left-1 rounded-full w-3.5 h-3.5 flex items-center justify-center ${photo.storageUrl && !photo.driveFileId ? 'bg-blue-500' : 'bg-green-500'}`}
+          title={photo.driveFileId ? 'Saved in Google Drive' : 'Saved in Firebase Storage'}
         >
           <CloudUpload size={8} className="text-white" />
         </div>
       )}
-      <button onClick={onDelete}
-        className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 flex items-center justify-center z-10">
+      <button
+        onClick={e => { e.stopPropagation(); onDelete(); }}
+        className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 flex items-center justify-center z-10"
+      >
         <X size={12} className="text-white" />
       </button>
     </div>
@@ -183,6 +289,7 @@ export function ContractorPortal() {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ name: string; pct: number } | null>(null);
   const [completing, setCompleting] = useState(false);
+  const [lightboxInfo, setLightboxInfo] = useState<{ photos: ContractorPhoto[]; index: number } | null>(null);
   const [uploadError, setUploadError] = useState('');
   const [mapFilter, setMapFilter] = useState<'all' | 'overdue' | 'today' | 'tomorrow' | 'week'>('all');
   const [showPlansPdf, setShowPlansPdf] = useState(false);
@@ -262,15 +369,42 @@ export function ContractorPortal() {
       for (const file of Array.from(e.target.files)) {
         const fType = detectFileType(file);
 
-        if (isStorageConfigured) {
-          // ── Primary: Firebase Storage ─────────────────────────────────────
+        if (canUseDrive) {
+          // ── Primary: Google Drive (resumable, no file size limit) ─────────
           setUploadProgress({ name: file.name, pct: 0 });
           try {
-            const uploadBlob: Blob = file;
+            const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId!, 'Photos');
+            const { fileId, webViewLink } = await uploadFileViaResumableSession(
+              photosFolderId, file, pct => setUploadProgress({ name: file.name, pct }),
+            );
+            // Make publicly readable so thumbnail URLs work in <img> tags
+            await shareFileToDrive(fileId);
+            addContractorPhoto({
+              assignmentId: selectedAssignment.id,
+              apartmentId: selectedAssignment.apartmentId,
+              contractorId,
+              dataUrl: '',
+              filename: file.name,
+              fileType: fType,
+              mimeType: file.type,
+              driveFileId: fileId,
+              driveUrl: webViewLink,
+            });
+          } catch (err) {
+            setUploadError(`"${file.name}" failed: ${(err as Error).message}`);
+            continue;
+          } finally {
+            setUploadProgress(null);
+          }
+
+        } else if (isStorageConfigured) {
+          // ── Fallback: Firebase Storage ────────────────────────────────────
+          setUploadProgress({ name: file.name, pct: 0 });
+          try {
             const ext = file.name.includes('.') ? file.name.split('.').pop() : '';
             const uid = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
             const path = `contractorPhotos/${selectedAssignment.id}/${uid}${ext ? '.' + ext : ''}`;
-            const storageUrl = await fsUploadFile(path, uploadBlob, pct => setUploadProgress({ name: file.name, pct }));
+            const storageUrl = await fsUploadFile(path, file, pct => setUploadProgress({ name: file.name, pct }));
             addContractorPhoto({
               assignmentId: selectedAssignment.id,
               apartmentId: selectedAssignment.apartmentId,
@@ -281,34 +415,7 @@ export function ContractorPortal() {
               mimeType: file.type,
               storageUrl,
               storagePath: path,
-              fileSizeBytes: uploadBlob.size,
-            });
-          } catch (err) {
-            setUploadError(`"${file.name}" failed: ${(err as Error).message}`);
-            continue;
-          } finally {
-            setUploadProgress(null);
-          }
-
-        } else if (canUseDrive) {
-          // ── Fallback: Google Drive backend ────────────────────────────────
-          setUploadProgress({ name: file.name, pct: 0 });
-          try {
-            const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId!, 'Photos');
-            const { fileId, webViewLink } = await uploadFileViaBackend(
-              photosFolderId, file, pct => setUploadProgress({ name: file.name, pct }),
-            );
-            const thumb = fType === 'image' ? await compressImage(file) : '';
-            addContractorPhoto({
-              assignmentId: selectedAssignment.id,
-              apartmentId: selectedAssignment.apartmentId,
-              contractorId,
-              dataUrl: thumb,
-              filename: file.name,
-              fileType: fType,
-              mimeType: file.type,
-              driveFileId: fileId,
-              driveUrl: webViewLink,
+              fileSizeBytes: file.size,
             });
           } catch (err) {
             setUploadError(`"${file.name}" failed: ${(err as Error).message}`);
@@ -778,8 +885,13 @@ export function ContractorPortal() {
                     </button>
                   ) : (
                     <div className="grid grid-cols-3 gap-2">
-                      {selMedia.map(m => (
-                        <MediaItem key={m.id} photo={m} onDelete={() => deleteContractorPhoto(m.id)} />
+                      {selMedia.map((m, i) => (
+                        <MediaItem
+                          key={m.id}
+                          photo={m}
+                          onDelete={() => deleteContractorPhoto(m.id)}
+                          onOpen={() => setLightboxInfo({ photos: selMedia, index: i })}
+                        />
                       ))}
                       <button onClick={() => mediaInputRef.current?.click()}
                         className="aspect-square rounded-xl border-2 border-dashed border-gray-200 flex items-center justify-center hover:border-[#4aa8d8] transition-all">
@@ -920,6 +1032,15 @@ export function ContractorPortal() {
           </>
         );
       })()}
+
+      {/* Full-screen photo gallery lightbox */}
+      {lightboxInfo && (
+        <PhotoGallery
+          photos={lightboxInfo.photos}
+          initialIndex={lightboxInfo.index}
+          onClose={() => setLightboxInfo(null)}
+        />
+      )}
     </div>
   );
 }
