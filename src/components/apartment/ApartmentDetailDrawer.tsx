@@ -575,6 +575,106 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
             </div>
           )}
 
+          {activeTab === 'tasks' && (
+            <div className="space-y-3">
+              {/* Add Task button */}
+              {onRequestAddTask && (
+                <button
+                  onClick={() => { onClose(); onRequestAddTask(apartment); }}
+                  className="w-full flex items-center justify-center gap-2 py-2 bg-[#1e3a5f]/5 border border-dashed border-[#1e3a5f]/20 rounded-lg text-sm text-[#1e3a5f] hover:bg-[#1e3a5f]/10 transition-colors font-medium"
+                >
+                  <Plus size={14} /> Add Task
+                </button>
+              )}
+
+              {aptTasks.length === 0 ? (
+                <div className="text-center py-10 text-gray-400">
+                  <UserCheck size={28} className="mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">No tasks assigned to this apartment.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {aptTasks.map(a => {
+                    const contractor = contractors.find(c => c.id === a.contractorId);
+                    const stage = stages.find(s => s.id === a.stageId);
+                    const badge = getTaskDueBadge(a.dueDate);
+                    const CAT_COLORS: Record<string, string> = { drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981' };
+                    return (
+                      <div key={a.id} className={`rounded-xl border p-3 transition-all ${
+                        a.completedAt ? 'border-green-100 bg-green-50/40 opacity-75' : 'border-gray-200 bg-white'
+                      }`}>
+                        <div className="flex items-start gap-2">
+                          <button
+                            onClick={() => updateContractorAssignment(a.id, { completedAt: a.completedAt ? null : new Date().toISOString() })}
+                            className="mt-0.5 flex-shrink-0"
+                            title={a.completedAt ? 'Mark incomplete' : 'Mark complete'}
+                          >
+                            {a.completedAt
+                              ? <CheckCircle2 size={17} className="text-green-500" />
+                              : <div className="w-4 h-4 rounded-full border-2 border-gray-300 hover:border-green-400 transition-colors" />
+                            }
+                          </button>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                              {contractor && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                                  style={{ backgroundColor: (CAT_COLORS[contractor.category] ?? '#888') + '22', color: CAT_COLORS[contractor.category] ?? '#888' }}>
+                                  {contractor.name}
+                                </span>
+                              )}
+                              {stage && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded"
+                                  style={{ backgroundColor: stage.color + '20', color: stage.color }}>
+                                  {stage.name}
+                                </span>
+                              )}
+                            </div>
+                            <p className={`text-xs leading-snug ${a.completedAt ? 'line-through text-gray-400' : 'text-gray-700'}`}>
+                              {a.taskDescription}
+                            </p>
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                              {a.dueDate && (
+                                <span className="flex items-center gap-0.5 text-[10px] text-gray-400">
+                                  <CalendarDays size={9} /> {format(parseISO(a.dueDate), 'MMM d')}
+                                </span>
+                              )}
+                              {badge && !a.completedAt && (
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${badge.cls}`}>
+                                  {badge.text}
+                                </span>
+                              )}
+                              {a.completedAt && (
+                                <span className="text-[10px] text-green-600">Done {format(new Date(a.completedAt), 'MMM d')}</span>
+                              )}
+                              {(a.attachments?.length ?? 0) > 0 && (
+                                <span className="flex items-center gap-0.5 text-[10px] text-gray-400">
+                                  <Paperclip size={9} /> {a.attachments!.length}
+                                </span>
+                              )}
+                            </div>
+                            {/* Attachment thumbnails */}
+                            {(a.attachments?.length ?? 0) > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {a.attachments!.map(att => (
+                                  <div key={att.id} className="w-10 h-10 rounded-lg border border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center flex-shrink-0">
+                                    {att.mimeType.startsWith('image/')
+                                      ? <img src={att.dataUrl} alt={att.filename} className="w-full h-full object-cover" />
+                                      : <FileText size={14} className="text-gray-400" />
+                                    }
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === 'stages' && (
             <StageNotesSection
               apartmentId={apartment.id}
