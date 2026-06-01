@@ -1,13 +1,13 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useStore } from '../data/store';
-import { ContractorAssignment, ContractorPhoto } from '../types';
+import { ContractorAssignment, ContractorPhoto, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS } from '../types';
 import { format, isPast, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import {
   Camera, CheckCircle2, Clock, Building2, CalendarDays, FileText,
   Plus, Send, AlertCircle, X, Play, File as FileIcon, MapPin,
   BookOpen, Download, Paperclip, MessageSquare, CloudUpload,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Languages,
 } from 'lucide-react';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
 import {
@@ -287,7 +287,10 @@ export function ContractorPortal() {
     contractorUiStrings,
   } = useStore();
 
-  const s = contractorUiStrings;
+  const [langOverride, setLangOverride] = useState<'en' | 'he' | null>(null);
+  const s = langOverride === 'en' ? DEFAULT_CONTRACTOR_UI_STRINGS
+           : langOverride === 'he' ? HEBREW_CONTRACTOR_UI_STRINGS
+           : contractorUiStrings;
 
   const [activeTab, setActiveTab] = useState<'tasks' | 'map'>('tasks');
   const [selectedAssignment, setSelectedAssignment] = useState<ContractorAssignment | null>(null);
@@ -567,7 +570,16 @@ export function ContractorPortal() {
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-3 shadow-md flex-shrink-0" style={{ backgroundColor: '#0f1f35' }}>
         <img src="/tzviair-logo.png" alt="TzviAir" style={{ height: '32px', filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.9)) drop-shadow(0 1px 3px rgba(0,0,0,0.7))' }} />
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
+          {/* Language toggle — always visible */}
+          <button
+            onClick={() => setLangOverride(s.isRtl ? 'en' : 'he')}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-white/25 text-white/80 hover:bg-white/10 active:bg-white/20 transition-colors text-xs font-bold tracking-wide"
+            title={s.isRtl ? 'Switch to English' : 'עבור לעברית'}
+          >
+            <Languages size={14} />
+            {s.isRtl ? 'EN' : 'עב'}
+          </button>
           <span className="text-xs font-semibold px-2.5 py-1 rounded-full"
             style={{ backgroundColor: catColor + '22', color: catColor, border: `1px solid ${catColor}44` }}>
             {CATEGORY_LABELS[contractor.category]}

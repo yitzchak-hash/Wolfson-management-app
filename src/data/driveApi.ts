@@ -395,7 +395,26 @@ export async function uploadFileViaResumableSession(
         reject(new Error(`Drive upload failed: ${xhr.status}`));
       }
     };
-    xhr.onerror = () => reject(new Error('Network error during Drive upload'));
+    // Google's resumable upload URL may not include CORS headers in its response,
+    // causing onerror even when the file reached Drive successfully.
+    // Recover by listing the target folder and matching by filename.
+    xhr.onerror = () => {
+      setTimeout(() => {
+        listFolderViaBackend(folderId)
+          .then(files => {
+            const match = files.find(f => f.name === file.name);
+            if (match) {
+              resolve({
+                fileId: match.id,
+                webViewLink: `https://drive.google.com/file/d/${match.id}/view`,
+              });
+            } else {
+              reject(new Error('Network error during Drive upload'));
+            }
+          })
+          .catch(() => reject(new Error('Network error during Drive upload')));
+      }, 1000);
+    };
     xhr.send(file);
   });
 }
