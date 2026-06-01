@@ -23,10 +23,16 @@ function loadFromStorage<T>(key: string, fallback: T): T {
   }
 }
 
-function saveToStorage(key: string, value: unknown) {
+function saveToStorage(key: string, value: unknown): boolean {
   try {
     localStorage.setItem(key, JSON.stringify(value));
-  } catch {}
+    return true;
+  } catch (e) {
+    if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
+      console.warn('[wolfson] localStorage quota exceeded — trying trimmed save');
+    }
+    return false;
+  }
 }
 
 // Check if stored data version matches current; reset if not
@@ -786,25 +792,43 @@ export const useStore = create<AppState>((set, get) => ({
 
 function persist(get: () => AppState) {
   const state = get();
-  saveToStorage(STORAGE_KEY, {
+
+  // Strip base64 from photos already on Drive (driveUrl is the source of truth)
+  const photosLean = state.contractorPhotos.map(p =>
+    p.driveUrl ? { ...p, dataUrl: '' } : p
+  );
+
+  const payload = {
     currentUser: state.currentUser,
     users: state.users,
     stages: state.stages,
     apartments: state.apartments,
     stageNotes: state.stageNotes,
-    activityLogs: state.activityLogs,
+    activityLogs: state.activityLogs.slice(0, 200),
     contractors: state.contractors,
     contractorAssignments: state.contractorAssignments,
     contractorNotes: state.contractorNotes,
-    contractorPhotos: state.contractorPhotos,
+    contractorPhotos: photosLean,
     officeNoteFiles: state.officeNoteFiles,
     googleClientId: state.googleClientId,
     autoBackup: state.autoBackup,
     backupFrequency: state.backupFrequency,
     lastAutoBackupAt: state.lastAutoBackupAt,
-    backupSnapshots: state.backupSnapshots,
-    backupLogs: state.backupLogs,
+    backupSnapshots: state.backupSnapshots.slice(0, 5),
+    backupLogs: state.backupLogs.slice(0, 50),
     backupDriveFolderLink: state.backupDriveFolderLink,
     contractorUiStrings: state.contractorUiStrings,
-  });
+  };
+
+  const ok = saveToStorage(STORAGE_KEY, payload);
+  if (!ok) {
+    // Quota still exceeded — strip all binary data and try again
+    saveToStorage(STORAGE_KEY, {
+      ...payload,
+      contractorPhotos: state.contractorPhotos.map(p => ({ ...p, dataUrl: '' })),
+      officeNoteFiles: state.officeNoteFiles.map(f => ({ ...f, dataUrl: '' })),
+      backupSnapshots: [],
+      activityLogs: state.activityLogs.slice(0, 50),
+    });
+  }
 }
