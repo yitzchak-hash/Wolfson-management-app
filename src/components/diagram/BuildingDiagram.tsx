@@ -199,6 +199,7 @@ function AptCell({
       {showShinuiBadge && apt?.classification === 'shinui' && (
         <div
           className="absolute top-0.5 left-0.5 w-3 h-3 rounded-full flex items-center justify-center"
+          title="Apartment has modifications (Shinui)"
           style={{ backgroundColor: '#f59e0b', border: '1px solid rgba(255,255,255,0.9)' }}
         >
           <span style={{ fontSize: '6px', color: 'white', fontWeight: 'bold', lineHeight: 1 }}>C</span>

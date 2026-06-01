@@ -6,6 +6,7 @@ import {
   Languages, Clock, RotateCcw,
 } from 'lucide-react';
 import { Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, BackupFrequency } from '../types';
+import { Tooltip } from '../components/ui/Tooltip';
 import { Toast } from '../components/ui/Toast';
 import { format } from 'date-fns';
 import { saveAs } from 'file-saver';
@@ -167,21 +168,33 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast }: 
             <div key={stage.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
               <div className="flex items-center gap-3 p-3">
                 <div className="flex flex-col gap-0.5">
-                  <button onClick={() => moveStage(stage.id, -1)} disabled={i === 0} className="p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-20"><ChevronUp size={14} /></button>
-                  <button onClick={() => moveStage(stage.id, 1)} disabled={i === stages.length - 1} className="p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-20"><ChevronDown size={14} /></button>
+                  <Tooltip text="Move up" side="left">
+                    <button onClick={() => moveStage(stage.id, -1)} disabled={i === 0} className="p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-20"><ChevronUp size={14} /></button>
+                  </Tooltip>
+                  <Tooltip text="Move down" side="left">
+                    <button onClick={() => moveStage(stage.id, 1)} disabled={i === stages.length - 1} className="p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-20"><ChevronDown size={14} /></button>
+                  </Tooltip>
                 </div>
-                <button onClick={() => setExpandedId(isExpanded ? null : stage.id)}
-                  className="w-8 h-8 rounded-lg border-2 border-white shadow-md flex-shrink-0 ring-1 ring-gray-200 hover:scale-105 transition-transform"
-                  style={{ backgroundColor: color }} title="Change color" />
+                <Tooltip text="Change color">
+                  <button onClick={() => setExpandedId(isExpanded ? null : stage.id)}
+                    className="w-8 h-8 rounded-lg border-2 border-white shadow-md flex-shrink-0 ring-1 ring-gray-200 hover:scale-105 transition-transform"
+                    style={{ backgroundColor: color }} />
+                </Tooltip>
                 <input value={name} onChange={e => setEdit(stage.id, { name: e.target.value })}
                   className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
-                <button onClick={() => setEdit(stage.id, { active: !active })}
-                  className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-all whitespace-nowrap ${active ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-100 border-gray-200 text-gray-500'}`}>
-                  {active ? 'Active' : 'Hidden'}
-                </button>
-                <button onClick={() => saveStage(stage)} className="p-2 text-[#1e3a5f] hover:bg-[#1e3a5f]/5 rounded-lg"><Save size={16} /></button>
-                <button onClick={() => { if (confirm(`Delete "${stage.name}"?`)) deleteStage(stage.id); }}
-                  className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+                <Tooltip text={active ? 'Click to hide stage' : 'Click to activate stage'}>
+                  <button onClick={() => setEdit(stage.id, { active: !active })}
+                    className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-all whitespace-nowrap ${active ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-100 border-gray-200 text-gray-500'}`}>
+                    {active ? 'Active' : 'Hidden'}
+                  </button>
+                </Tooltip>
+                <Tooltip text="Save changes">
+                  <button onClick={() => saveStage(stage)} className="p-2 text-[#1e3a5f] hover:bg-[#1e3a5f]/5 rounded-lg"><Save size={16} /></button>
+                </Tooltip>
+                <Tooltip text="Delete stage">
+                  <button onClick={() => { if (confirm(`Delete "${stage.name}"?`)) deleteStage(stage.id); }}
+                    className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+                </Tooltip>
               </div>
               {isExpanded && (
                 <div className="px-4 pb-4 border-t border-gray-100 pt-3 bg-gray-50">
@@ -331,14 +344,18 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
                     <CopyButton text={portalBase + c.token} />
                   </div>
                 </div>
-                <button onClick={() => updateContractor(c.id, { active: !c.active })}
-                  className={`text-xs px-2.5 py-1 rounded-lg border font-medium flex-shrink-0 ${c.active ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-100 border-gray-200 text-gray-500'}`}>
-                  {c.active ? 'Active' : 'Off'}
-                </button>
-                <button onClick={() => { if (confirm(`Delete "${c.name}"?`)) { deleteContractor(c.id); onToast('Deleted'); } }}
-                  className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 flex-shrink-0">
-                  <Trash2 size={15} />
-                </button>
+                <Tooltip text={c.active ? 'Click to deactivate' : 'Click to activate'}>
+                  <button onClick={() => updateContractor(c.id, { active: !c.active })}
+                    className={`text-xs px-2.5 py-1 rounded-lg border font-medium flex-shrink-0 ${c.active ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-100 border-gray-200 text-gray-500'}`}>
+                    {c.active ? 'Active' : 'Off'}
+                  </button>
+                </Tooltip>
+                <Tooltip text="Delete contractor">
+                  <button onClick={() => { if (confirm(`Delete "${c.name}"?`)) { deleteContractor(c.id); onToast('Deleted'); } }}
+                    className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 flex-shrink-0">
+                    <Trash2 size={15} />
+                  </button>
+                </Tooltip>
               </div>
             ))}
           </div>

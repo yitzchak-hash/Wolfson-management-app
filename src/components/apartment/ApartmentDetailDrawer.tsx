@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import { StageNotesSection } from './StageNotesSection';
 import { ActivitySection } from './ActivitySection';
 import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, isUploadBackendConfigured } from '../../data/driveApi';
+import { Tooltip } from '../ui/Tooltip';
 
 interface Props {
   apartment: Apartment | null;
@@ -194,9 +195,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               </span>
             )}
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0">
-            <X size={20} />
-          </button>
+          <Tooltip text="Close" side="left">
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0">
+              <X size={20} />
+            </button>
+          </Tooltip>
         </div>
 
         {/* Tabs */}
@@ -240,22 +243,26 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 <div className="flex-shrink-0">
                   <label className="block text-[10px] font-medium text-gray-500 mb-1">Type</label>
                   <div className="flex gap-1">
-                    <button
-                      onClick={() => setClassification('standard')}
-                      className={`px-2.5 py-2 rounded-lg text-xs font-medium border transition-all ${
-                        classification === 'standard' ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      Std
-                    </button>
-                    <button
-                      onClick={() => setClassification('shinui')}
-                      className={`px-2 py-2 rounded-lg text-xs font-medium border transition-all flex items-center gap-0.5 ${
-                        classification === 'shinui' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <AlertTriangle size={10} /> Chg
-                    </button>
+                    <Tooltip text="Standard apartment">
+                      <button
+                        onClick={() => setClassification('standard')}
+                        className={`px-2.5 py-2 rounded-lg text-xs font-medium border transition-all ${
+                          classification === 'standard' ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        Std
+                      </button>
+                    </Tooltip>
+                    <Tooltip text="Has modifications (Shinui)">
+                      <button
+                        onClick={() => setClassification('shinui')}
+                        className={`px-2 py-2 rounded-lg text-xs font-medium border transition-all flex items-center gap-0.5 ${
+                          classification === 'shinui' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <AlertTriangle size={10} /> Chg
+                      </button>
+                    </Tooltip>
                   </div>
                 </div>
 
@@ -280,14 +287,15 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-medium text-gray-600">General Notes</label>
-                  <button
-                    type="button"
-                    onClick={() => officeFileRef.current?.click()}
-                    className="flex items-center gap-1 text-xs text-gray-400 hover:text-[#1e3a5f] transition-colors"
-                    title="Attach file to notes"
-                  >
-                    <Paperclip size={11} /> Attach
-                  </button>
+                  <Tooltip text="Attach a file to office notes">
+                    <button
+                      type="button"
+                      onClick={() => officeFileRef.current?.click()}
+                      className="flex items-center gap-1 text-xs text-gray-400 hover:text-[#1e3a5f] transition-colors"
+                    >
+                      <Paperclip size={11} /> Attach
+                    </button>
+                  </Tooltip>
                 </div>
                 <textarea
                   value={generalNotes}
@@ -334,10 +342,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                               : <div className="flex flex-col items-center p-1"><BookOpen size={16} className="text-gray-400" /><span className="text-[8px] text-gray-400 truncate w-full text-center mt-0.5">{f.filename}</span></div>
                             }
                             <button onClick={() => deleteOfficeNoteFile(f.id)}
+                              title="Remove file"
                               className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                               <Trash2 size={8} color="white" />
                             </button>
                             <a href={f.dataUrl} download={f.filename}
+                              title="Download file"
                               className="absolute bottom-0.5 right-0.5 w-4 h-4 bg-gray-700/60 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                               <Download size={8} color="white" />
                             </a>
@@ -357,26 +367,30 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   </label>
                   <div className="flex items-center gap-2">
                     {driveLink && backendConfigured && (
-                      <button
-                        onClick={() => {
-                          setFetchingPdf(true);
-                          findPlansPdfViaBackend(driveLink).then(f => {
-                            if (f) { setDetectedPdfId(f.id); setPlansPdfLink(`https://drive.google.com/file/d/${f.id}/view`); onToast('PDF found'); }
-                            else onToast('No PDF found in Drive folder', 'error');
-                          }).finally(() => setFetchingPdf(false));
-                        }}
-                        className="flex items-center gap-1 text-xs text-gray-400 hover:text-[#1e3a5f] transition-colors"
-                      >
-                        <RefreshCw size={11} className={fetchingPdf ? 'animate-spin' : ''} />
-                        {fetchingPdf ? 'Detecting…' : 'Refresh'}
-                      </button>
+                      <Tooltip text="Re-scan Drive folder for Plans PDF">
+                        <button
+                          onClick={() => {
+                            setFetchingPdf(true);
+                            findPlansPdfViaBackend(driveLink).then(f => {
+                              if (f) { setDetectedPdfId(f.id); setPlansPdfLink(`https://drive.google.com/file/d/${f.id}/view`); onToast('PDF found'); }
+                              else onToast('No PDF found in Drive folder', 'error');
+                            }).finally(() => setFetchingPdf(false));
+                          }}
+                          className="flex items-center gap-1 text-xs text-gray-400 hover:text-[#1e3a5f] transition-colors"
+                        >
+                          <RefreshCw size={11} className={fetchingPdf ? 'animate-spin' : ''} />
+                          {fetchingPdf ? 'Detecting…' : 'Refresh'}
+                        </button>
+                      </Tooltip>
                     )}
-                    <button
-                      onClick={() => setShowHealthCheck(v => !v)}
-                      className={`flex items-center gap-1 text-xs transition-colors ${showHealthCheck ? 'text-[#1e3a5f]' : 'text-gray-400 hover:text-[#1e3a5f]'}`}
-                    >
-                      <Activity size={11} /> Health
-                    </button>
+                    <Tooltip text={showHealthCheck ? 'Hide health check' : 'Show Drive folder health check'}>
+                      <button
+                        onClick={() => setShowHealthCheck(v => !v)}
+                        className={`flex items-center gap-1 text-xs transition-colors ${showHealthCheck ? 'text-[#1e3a5f]' : 'text-gray-400 hover:text-[#1e3a5f]'}`}
+                      >
+                        <Activity size={11} /> Health
+                      </button>
+                    </Tooltip>
                   </div>
                 </div>
 
@@ -458,6 +472,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 <button
                   onClick={() => setShowSettings(v => !v)}
                   className="w-full flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors"
+                  title={showSettings ? 'Collapse settings' : 'Expand: Drive folder & connected unit'}
                 >
                   {showSettings ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                   Settings
@@ -481,10 +496,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                           className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                         />
                         {driveLink && (
-                          <a href={driveLink} target="_blank" rel="noopener noreferrer"
-                            className="flex items-center px-3 py-2 rounded-lg border border-gray-200 text-gray-500 hover:text-[#4aa8d8] hover:border-[#4aa8d8] transition-all">
-                            <ExternalLink size={14} />
-                          </a>
+                          <Tooltip text="Open folder in Google Drive">
+                            <a href={driveLink} target="_blank" rel="noopener noreferrer"
+                              className="flex items-center px-3 py-2 rounded-lg border border-gray-200 text-gray-500 hover:text-[#4aa8d8] hover:border-[#4aa8d8] transition-all">
+                              <ExternalLink size={14} />
+                            </a>
+                          </Tooltip>
                         )}
                       </div>
                       {mergedPartner?.driveLink && driveLink && mergedPartner.driveLink !== driveLink.trim() && (
@@ -519,13 +536,15 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                             </option>
                           ))}
                         </select>
-                        <button
-                          onClick={handleSaveMerge}
-                          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border transition-all bg-blue-600 text-white hover:bg-blue-700"
-                        >
-                          {mergedWithId ? <Link size={14} /> : <Unlink size={14} />}
-                          {mergedWithId ? 'Link' : 'Clear'}
-                        </button>
+                        <Tooltip text={mergedWithId ? 'Link these apartments as a merged unit' : 'Clear the connected unit link'}>
+                          <button
+                            onClick={handleSaveMerge}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border transition-all bg-blue-600 text-white hover:bg-blue-700"
+                          >
+                            {mergedWithId ? <Link size={14} /> : <Unlink size={14} />}
+                            {mergedWithId ? 'Link' : 'Clear'}
+                          </button>
+                        </Tooltip>
                       </div>
                       <p className="text-xs text-gray-400 mt-1.5">Linking is mutual — both apartments show the connection.</p>
                     </div>

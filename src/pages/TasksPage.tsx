@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { ContractorAssignment, ContractorCategory } from '../types';
 import { Toast } from '../components/ui/Toast';
+import { Tooltip } from '../components/ui/Tooltip';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 
 const CAT_COLORS: Record<ContractorCategory, string> = {
@@ -221,16 +222,17 @@ export function TasksPage() {
                   className={`bg-white border rounded-xl overflow-hidden transition-all ${a.completedAt ? 'border-green-200 opacity-80' : 'border-gray-200'}`}
                 >
                   <div className="flex items-start gap-3 p-4">
-                    <button
-                      onClick={() => updateContractorAssignment(a.id, { completedAt: a.completedAt ? null : new Date().toISOString() })}
-                      className="mt-0.5 flex-shrink-0"
-                      title={a.completedAt ? 'Mark incomplete' : 'Mark complete'}
-                    >
-                      {a.completedAt
-                        ? <CheckCircle2 size={20} className="text-green-500" />
-                        : <div className="w-5 h-5 rounded-full border-2 border-gray-300 hover:border-green-400 transition-colors" />
-                      }
-                    </button>
+                    <Tooltip text={a.completedAt ? 'Mark as incomplete' : 'Mark as complete'} side="right">
+                      <button
+                        onClick={() => updateContractorAssignment(a.id, { completedAt: a.completedAt ? null : new Date().toISOString() })}
+                        className="mt-0.5 flex-shrink-0"
+                      >
+                        {a.completedAt
+                          ? <CheckCircle2 size={20} className="text-green-500" />
+                          : <div className="w-5 h-5 rounded-full border-2 border-gray-300 hover:border-green-400 transition-colors" />
+                        }
+                      </button>
+                    </Tooltip>
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -273,18 +275,22 @@ export function TasksPage() {
                     </div>
 
                     <div className="flex items-center gap-1 flex-shrink-0">
-                      <button
-                        onClick={() => isEditing ? setEditingId(null) : startEdit(a)}
-                        className={`p-1.5 rounded-lg transition-colors ${isEditing ? 'bg-[#1e3a5f]/10 text-[#1e3a5f]' : 'text-gray-400 hover:bg-gray-100'}`}
-                      >
-                        <Edit2 size={14} />
-                      </button>
-                      <button
-                        onClick={() => { if (confirm('Delete this task?')) { deleteContractorAssignment(a.id); onToast('Task deleted'); } }}
-                        className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      <Tooltip text={isEditing ? 'Cancel edit' : 'Edit task'}>
+                        <button
+                          onClick={() => isEditing ? setEditingId(null) : startEdit(a)}
+                          className={`p-1.5 rounded-lg transition-colors ${isEditing ? 'bg-[#1e3a5f]/10 text-[#1e3a5f]' : 'text-gray-400 hover:bg-gray-100'}`}
+                        >
+                          <Edit2 size={14} />
+                        </button>
+                      </Tooltip>
+                      <Tooltip text="Delete task">
+                        <button
+                          onClick={() => { if (confirm('Delete this task?')) { deleteContractorAssignment(a.id); onToast('Task deleted'); } }}
+                          className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </Tooltip>
                     </div>
                   </div>
 

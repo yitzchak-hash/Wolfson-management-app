@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { Search, X, ToggleLeft, CheckSquare, Printer, ChevronDown } from 'lucide-react';
+import { Tooltip } from '../components/ui/Tooltip';
 import { useStore } from '../data/store';
 import { Apartment, BuildingId } from '../types';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
@@ -211,44 +212,52 @@ export function ProjectDiagramPage() {
             </div>
 
             {/* Changes badge toggle */}
-            <button
-              onClick={() => setShowShinuiBadge(v => !v)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
-                showShinuiBadge ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-gray-100 border-gray-200 text-gray-500'
-              }`}
-            >
-              <ToggleLeft size={14} />
-              Changes
-            </button>
+            <Tooltip text={showShinuiBadge ? 'Hide the "C" badge on apartments with modifications' : 'Show badge on apartments with modifications (Shinui)'}>
+              <button
+                onClick={() => setShowShinuiBadge(v => !v)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
+                  showShinuiBadge ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-gray-100 border-gray-200 text-gray-500'
+                }`}
+              >
+                <ToggleLeft size={14} />
+                Changes
+              </button>
+            </Tooltip>
 
             {/* Bulk update toggle */}
-            <button
-              onClick={() => { if (bulkMode) exitBulkMode(); else setBulkMode(true); }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
-                bulkMode ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'bg-gray-100 border-gray-200 text-gray-600 hover:border-gray-300'
-              }`}
-            >
-              <CheckSquare size={14} />
-              Bulk Update
-            </button>
+            <Tooltip text={bulkMode ? 'Exit bulk update mode' : 'Select multiple apartments to update their stage at once'}>
+              <button
+                onClick={() => { if (bulkMode) exitBulkMode(); else setBulkMode(true); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
+                  bulkMode ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'bg-gray-100 border-gray-200 text-gray-600 hover:border-gray-300'
+                }`}
+              >
+                <CheckSquare size={14} />
+                Bulk Update
+              </button>
+            </Tooltip>
 
             {/* Print */}
-            <button
-              onClick={handlePrint}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-all"
-            >
-              <Printer size={14} />
-              Print
-            </button>
+            <Tooltip text="Print building diagram">
+              <button
+                onClick={handlePrint}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-all"
+              >
+                <Printer size={14} />
+                Print
+              </button>
+            </Tooltip>
 
             {hasFilters && !bulkMode && (
-              <button
-                onClick={clearFilters}
-                className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 transition-colors px-2 py-1.5"
-              >
-                <X size={12} />
-                Clear
-              </button>
+              <Tooltip text="Clear all active filters">
+                <button
+                  onClick={clearFilters}
+                  className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 transition-colors px-2 py-1.5"
+                >
+                  <X size={12} />
+                  Clear
+                </button>
+              </Tooltip>
             )}
 
             {/* Quick stats */}

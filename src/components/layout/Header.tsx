@@ -1,6 +1,7 @@
 import React from 'react';
 import { LogOut, User, Sun, Moon } from 'lucide-react';
 import { useStore } from '../../data/store';
+import { Tooltip } from '../ui/Tooltip';
 
 function TzviAirLogo() {
   return (
@@ -40,14 +41,15 @@ export function Header() {
 
       <div className="flex items-center gap-2">
         {/* Theme toggle */}
-        <button
-          onClick={() => setLightTheme(!lightTheme)}
-          title={lightTheme ? 'Switch to dark theme' : 'Switch to light theme'}
-          className="p-2 rounded-lg transition-colors"
-          style={{ color: lightTheme ? '#6b7280' : '#9ca3af' }}
-        >
-          {lightTheme ? <Moon size={17} /> : <Sun size={17} />}
-        </button>
+        <Tooltip text={lightTheme ? 'Switch to dark theme' : 'Switch to light theme'}>
+          <button
+            onClick={() => setLightTheme(!lightTheme)}
+            className="p-2 rounded-lg transition-colors"
+            style={{ color: lightTheme ? '#6b7280' : '#9ca3af' }}
+          >
+            {lightTheme ? <Moon size={17} /> : <Sun size={17} />}
+          </button>
+        </Tooltip>
 
         {currentUser && (
           <>
@@ -59,14 +61,15 @@ export function Header() {
               style={{ backgroundColor: 'rgba(74,168,216,0.2)', borderColor: 'rgba(74,168,216,0.4)' }}>
               <User size={16} className="text-[#4aa8d8]" />
             </div>
-            <button
-              onClick={logout}
-              title="Sign out"
-              className="p-2 rounded-lg transition-colors"
-              style={{ color: lightTheme ? '#6b7280' : '#9ca3af' }}
-            >
-              <LogOut size={18} />
-            </button>
+            <Tooltip text="Sign out">
+              <button
+                onClick={logout}
+                className="p-2 rounded-lg transition-colors"
+                style={{ color: lightTheme ? '#6b7280' : '#9ca3af' }}
+              >
+                <LogOut size={18} />
+              </button>
+            </Tooltip>
           </>
         )}
       </div>
