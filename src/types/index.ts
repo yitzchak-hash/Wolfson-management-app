@@ -95,6 +95,13 @@ export interface Contractor {
   createdAt: string;
 }
 
+export interface TaskAttachment {
+  id: string;
+  filename: string;
+  mimeType: string;
+  dataUrl: string;
+}
+
 export interface ContractorAssignment {
   id: string;
   contractorId: string;
@@ -107,6 +114,7 @@ export interface ContractorAssignment {
   createdAt: string;
   createdBy: string;
   createdByName: string;
+  attachments?: TaskAttachment[];
 }
 
 export interface ContractorNote {

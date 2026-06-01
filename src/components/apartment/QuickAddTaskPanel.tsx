@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { X, Plus, CheckCircle2, Clock, CalendarDays, ArrowRight, User2 } from 'lucide-react';
-import { Apartment, User, ContractorCategory } from '../../types';
+import React, { useState, useRef } from 'react';
+import { X, Plus, CheckCircle2, Clock, CalendarDays, ArrowRight, User2, Paperclip, FileText, ImageIcon, X as XIcon } from 'lucide-react';
+import { Apartment, User, ContractorCategory, TaskAttachment } from '../../types';
 import { useStore } from '../../data/store';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 
@@ -34,6 +34,8 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
   const [stageId, setStageId] = useState(apartment.currentStageId ?? '');
   const [showForm, setShowForm] = useState(true);
   const [hideCompleted, setHideCompleted] = useState(false);
+  const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
+  const attachRef = useRef<HTMLInputElement>(null);
 
   const sortedStages = [...stages].filter(s => s.active).sort((a, b) => a.order - b.order);
   const currentStage = stages.find(s => s.id === apartment.currentStageId);
@@ -67,10 +69,12 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
       completedAt: null,
       createdBy: currentUser.id,
       createdByName: currentUser.name,
+      ...(attachments.length ? { attachments } : {}),
     });
     setTask('');
     setContractorId('');
     setDueDate('');
+    setAttachments([]);
     onToast('Task added');
   }
 
@@ -196,6 +200,11 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                               {dueBadge.text}
                             </span>
                           )}
+                          {(a.attachments?.length ?? 0) > 0 && (
+                            <span className="flex items-center gap-0.5 text-[10px] text-gray-400">
+                              <Paperclip size={9} /> {a.attachments!.length}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -248,6 +257,63 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                     placeholder="Task description *"
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 resize-none"
                   />
+
+                  {/* Attachments row */}
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => attachRef.current?.click()}
+                      className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-[#1e3a5f] transition-colors px-2 py-1 rounded-lg border border-dashed border-gray-300 hover:border-[#1e3a5f]/40"
+                    >
+                      <Paperclip size={12} /> Attach
+                    </button>
+                    <input
+                      ref={attachRef}
+                      type="file"
+                      multiple
+                      accept="image/*,application/pdf,.doc,.docx"
+                      className="hidden"
+                      onChange={e => {
+                        const files = Array.from(e.target.files ?? []);
+                        files.forEach(file => {
+                          const reader = new FileReader();
+                          reader.onload = ev => {
+                            setAttachments(prev => [...prev, {
+                              id: Math.random().toString(36).substr(2, 9),
+                              filename: file.name,
+                              mimeType: file.type,
+                              dataUrl: ev.target?.result as string,
+                            }]);
+                          };
+                          reader.readAsDataURL(file);
+                        });
+                        if (attachRef.current) attachRef.current.value = '';
+                      }}
+                    />
+                    {attachments.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {attachments.map(att => (
+                          <div key={att.id} className="relative flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg overflow-hidden" style={{ maxWidth: '120px' }}>
+                            {att.mimeType.startsWith('image/') ? (
+                              <img src={att.dataUrl} alt={att.filename} className="w-8 h-8 object-cover flex-shrink-0" />
+                            ) : (
+                              <div className="w-8 h-8 flex items-center justify-center flex-shrink-0 bg-gray-100">
+                                <FileText size={14} className="text-gray-400" />
+                              </div>
+                            )}
+                            <span className="text-[10px] text-gray-500 truncate pr-1" style={{ maxWidth: '60px' }}>{att.filename}</span>
+                            <button
+                              type="button"
+                              onClick={() => setAttachments(prev => prev.filter(a => a.id !== att.id))}
+                              className="absolute top-0.5 right-0.5 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center"
+                            >
+                              <XIcon size={8} color="white" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
 
                   <div className="grid grid-cols-2 gap-2">
                     <select

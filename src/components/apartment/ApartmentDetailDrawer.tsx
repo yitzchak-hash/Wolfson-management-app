@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList } from 'lucide-react';
+import { X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus } from 'lucide-react';
 import { Apartment, User } from '../../types';
 import { useStore } from '../../data/store';
-import { format } from 'date-fns';
+import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import { StageNotesSection } from './StageNotesSection';
 import { ActivitySection } from './ActivitySection';
 import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, isUploadBackendConfigured } from '../../data/driveApi';
@@ -19,7 +19,8 @@ interface Props {
 export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast, onRequestAddTask }: Props) {
   const { stages, activityLogs, apartments, updateApartment, mergeApartments, unmergeApartments,
     autoBackup, backupSnapshots, restoreFromSnapshot,
-    officeNoteFiles, addOfficeNoteFile, deleteOfficeNoteFile } = useStore();
+    officeNoteFiles, addOfficeNoteFile, deleteOfficeNoteFile,
+    contractorAssignments, contractors, updateContractorAssignment } = useStore();
   const backendConfigured = isUploadBackendConfigured();
   const officeFileRef = useRef<HTMLInputElement>(null);
 
@@ -30,7 +31,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [driveLink, setDriveLink] = useState('');
   const [plansPdfLink, setPlansPdfLink] = useState('');
   const [mergedWithId, setMergedWithId] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'details' | 'stages' | 'history'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'tasks' | 'stages' | 'history'>('details');
   const [showUnmergeModal, setShowUnmergeModal] = useState(false);
   const [showPdfViewer, setShowPdfViewer] = useState(false);
   const [showHealthCheck, setShowHealthCheck] = useState(false);
@@ -74,6 +75,21 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     .filter(a => a.buildingId === apartment.buildingId && a.id !== apartment.id && !a.isUnnamed)
     .sort((a, b) => (Number(a.apartmentNumber) || 0) - (Number(b.apartmentNumber) || 0));
   const mergedPartner = apartments.find(a => a.id === apartment.mergedWith);
+
+  const aptTasks = contractorAssignments
+    .filter(a => a.apartmentId === apartment.id)
+    .sort((a, b) => (a.completedAt ? 1 : 0) - (b.completedAt ? 1 : 0) || (a.dueDate ?? 'z').localeCompare(b.dueDate ?? 'z'));
+  const pendingTaskCount = aptTasks.filter(a => !a.completedAt).length;
+
+  function getTaskDueBadge(dueDate: string | null) {
+    if (!dueDate) return null;
+    const days = differenceInCalendarDays(parseISO(dueDate), startOfDay(new Date()));
+    if (days < 0) return { text: 'Overdue', cls: 'bg-red-100 text-red-700' };
+    if (days === 0) return { text: 'Today', cls: 'bg-orange-100 text-orange-700' };
+    if (days === 1) return { text: 'Tomorrow', cls: 'bg-amber-100 text-amber-700' };
+    if (days <= 3) return { text: `${days}d`, cls: 'bg-yellow-100 text-yellow-700' };
+    return { text: format(parseISO(dueDate), 'MMM d'), cls: 'bg-gray-100 text-gray-500' };
+  }
 
   function handleSaveBasic() {
     const stageChanged = currentStageId !== prevStageId;
@@ -204,12 +220,17 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
 
         {/* Tabs */}
         <div className="flex border-b border-gray-200 flex-shrink-0">
-          {(['details', 'stages', 'history'] as const).map(tab => (
+          {(['details', 'tasks', 'stages', 'history'] as const).map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)}
-              className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+              className={`flex-1 py-2.5 text-sm font-medium transition-colors relative ${
                 activeTab === tab ? 'border-b-2 border-[#1e3a5f] text-[#1e3a5f]' : 'text-gray-500 hover:text-gray-700'
               }`}>
-              {tab === 'stages' ? 'Stage Notes' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+              {tab === 'tasks' ? 'Tasks' : tab === 'stages' ? 'Stage Notes' : tab === 'history' ? 'History' : 'Details'}
+              {tab === 'tasks' && pendingTaskCount > 0 && (
+                <span className="ml-1 text-[10px] bg-orange-500 text-white rounded-full px-1.5 py-0.5 font-bold">
+                  {pendingTaskCount}
+                </span>
+              )}
             </button>
           ))}
         </div>
