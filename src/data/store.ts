@@ -84,6 +84,7 @@ interface AppState {
   stageNotes: StageNote[];
   activityLogs: ActivityLog[];
   firebaseListening: boolean;
+  firebaseSyncError: string | null;
   lightTheme: boolean;
   setLightTheme: (v: boolean) => void;
 
@@ -182,6 +183,7 @@ export const useStore = create<AppState>((set, get) => ({
   contractorPhotos: (stored?.contractorPhotos as ContractorPhoto[] | null) ?? [],
   officeNoteFiles: (stored?.officeNoteFiles as OfficeNoteFile[] | null) ?? [],
   firebaseListening: false,
+  firebaseSyncError: null,
   googleClientId: (stored?.googleClientId as string | null) ?? '',
   googleAccessToken: null,
   googleTokenExpiry: null,
@@ -796,6 +798,7 @@ export const useStore = create<AppState>((set, get) => ({
   startFirebaseSync: async () => {
     if (get().firebaseListening) return;
     set({ firebaseListening: true });
+    try {
 
     // Load all collections from Firestore in parallel
     const [
@@ -873,6 +876,9 @@ export const useStore = create<AppState>((set, get) => ({
         fsBatchSet('apartments',  state.apartments.map(a => ({ id: a.id, data: a }))),
         fsBatchSet('stages',      state.stages.map(s => ({ id: s.id, data: s }))),
         fsBatchSet('users',       state.users.map(u => ({ id: u.id, data: u }))),
+        state.stageNotes.length > 0
+          ? fsBatchSet('stageNotes', state.stageNotes.map(n => ({ id: n.id, data: n })))
+          : Promise.resolve(),
         state.contractors.length > 0
           ? fsBatchSet('contractors', state.contractors.map(c => ({ id: c.id, data: c })))
           : Promise.resolve(),
@@ -951,6 +957,12 @@ export const useStore = create<AppState>((set, get) => ({
         });
         set({ officeNoteFiles: merged }); persist(get);
       }),
+      fsListen('stages', (docs) => {
+        if (docs.length > 0) { set({ stages: docs as unknown as Stage[] }); persist(get); }
+      }),
+      fsListen('users', (docs) => {
+        if (docs.length > 0) { set({ users: docs as unknown as User[] }); persist(get); }
+      }),
       fsListen('settings', (docs) => {
         const appS = (docs.find(d => (d as Record<string,unknown>).id === 'app') ?? {}) as Record<string, unknown>;
         set(state => ({
@@ -963,6 +975,11 @@ export const useStore = create<AppState>((set, get) => ({
         persist(get);
       }),
     ];
+    set({ firebaseSyncError: null });
+    } catch (e) {
+      console.error('[wolfson] Firebase sync failed:', e);
+      set({ firebaseListening: false, firebaseSyncError: 'Cloud sync is offline — changes are saved locally only. Check Firebase Console → Firestore → Rules.' });
+    }
   },
 
   applyFirebaseData: (data) => {

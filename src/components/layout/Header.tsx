@@ -29,7 +29,7 @@ function WolfsonLogo() {
 }
 
 export function Header() {
-  const { currentUser, logout, lightTheme, setLightTheme, totalStorageBytes } = useStore();
+  const { currentUser, logout, lightTheme, setLightTheme, totalStorageBytes, firebaseSyncError } = useStore();
   const storageGB = totalStorageBytes / 1024 / 1024 / 1024;
   const showStorageWarning = currentUser && totalStorageBytes >= WARN_THRESHOLD;
 
@@ -80,6 +80,12 @@ export function Header() {
         )}
       </div>
     </header>
+    {firebaseSyncError && (
+      <div className="flex items-center gap-2 px-5 py-2 text-sm font-medium bg-red-600 text-white">
+        <AlertTriangle size={15} className="flex-shrink-0" />
+        <span>{firebaseSyncError}</span>
+      </div>
+    )}
     {showStorageWarning && (
       <div className="flex items-center gap-2 px-5 py-2 text-sm font-medium bg-amber-500 text-white">
         <AlertTriangle size={15} className="flex-shrink-0" />
