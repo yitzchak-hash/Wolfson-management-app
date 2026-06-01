@@ -3,7 +3,7 @@ import { Apartment, ActivityLog, Stage, StageNote, User, Building, Contractor, C
 import {
   DEFAULT_BUILDINGS, DEFAULT_STAGES, DEFAULT_USERS, buildDefaultApartments, DATA_VERSION,
 } from './initialData';
-import { fsSet, fsDelete, fsDeleteFile, fsBatchSet, fsGetAll, fsListen, isFirebaseConfigured } from './firebase';
+import { fsSet, fsDelete, fsDeleteFile, fsBatchSet, fsGetAll, fsListen, isFirebaseConfigured, db } from './firebase';
 
 const STORAGE_KEY = 'wolfson_app_data';
 const VERSION_KEY = 'wolfson_app_version';
@@ -799,6 +799,15 @@ export const useStore = create<AppState>((set, get) => ({
     if (get().firebaseListening) return;
     set({ firebaseListening: true });
     try {
+
+    // If Firebase env vars are present but db failed to initialize, surface that clearly
+    if (isFirebaseConfigured && !db) {
+      set({
+        firebaseListening: false,
+        firebaseSyncError: 'Firebase env vars are set but connection failed. Check browser console for [Firebase] logs to see which fields are missing.',
+      });
+      return;
+    }
 
     // Load all collections from Firestore in parallel
     const [

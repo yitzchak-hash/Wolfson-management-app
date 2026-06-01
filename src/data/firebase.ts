@@ -44,7 +44,12 @@ const firebaseConfig = {
 };
 
 export const isFirebaseConfigured = Boolean(
-  firebaseConfig.apiKey && firebaseConfig.projectId
+  firebaseConfig.apiKey &&
+  firebaseConfig.authDomain &&
+  firebaseConfig.projectId &&
+  firebaseConfig.storageBucket &&
+  firebaseConfig.messagingSenderId &&
+  firebaseConfig.appId
 );
 
 let app: FirebaseApp | null = null;
@@ -60,6 +65,18 @@ if (isFirebaseConfigured) {
     console.warn('Firebase init failed, using localStorage only:', e);
   }
 }
+
+// Diagnostic log — visible in browser DevTools console on every page load
+console.log('[Firebase] Config fields:', {
+  apiKey:            firebaseConfig.apiKey            ? '✓' : '✗ MISSING',
+  authDomain:        firebaseConfig.authDomain        ? '✓' : '✗ MISSING',
+  projectId:         firebaseConfig.projectId         ? '✓' : '✗ MISSING',
+  storageBucket:     firebaseConfig.storageBucket     ? '✓' : '✗ MISSING',
+  messagingSenderId: firebaseConfig.messagingSenderId ? '✓' : '✗ MISSING',
+  appId:             firebaseConfig.appId             ? '✓' : '✗ MISSING',
+});
+console.log('[Firebase] isFirebaseConfigured:', isFirebaseConfigured);
+console.log('[Firebase] db:', db !== null ? 'initialized ✓' : 'NULL — all Firestore sync disabled');
 
 export { db };
 export const isStorageConfigured = Boolean(storage);
