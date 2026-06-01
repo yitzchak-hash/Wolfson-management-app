@@ -30,6 +30,10 @@ Tracks apartment-level progress through installation stages, contractor assignme
 - Upload flow: Browser → `/api/drive-session` (tiny JSON) → browser streams file directly to Google Drive
 - Supports any file size including 500MB+ videos; Vercel never touches the file bytes
 - The `backend/` folder in the repo is superseded by these API routes and can be ignored
+- **Frontend integration** (`src/data/driveApi.ts`): `isUploadBackendConfigured()` (checks `VITE_DRIVE_API_KEY`), `findOrCreateFolderViaBackend(parentId, name)`, `uploadFileViaBackend(folderId, file, onProgress)` — uploads raw `File` via XHR PUT to the resumable session URL with progress events
+- **ContractorPortal upload logic**: if backend configured AND apartment has `driveLink` → stream file to Drive (Photos subfolder), store only `driveFileId`/`driveUrl` + a small image thumbnail (videos/files keep no local bytes); otherwise fall back to local base64 with 50 MB cap
+- **MediaItem** handles `driveOnly` files (empty `dataUrl`, has `driveUrl`) by linking out to Drive instead of rendering base64
+- `VITE_DRIVE_API_KEY` must equal the backend's `API_KEY`; it lives in the public bundle (deters casual abuse, not a true secret — real protection is the Contributor-only service account)
 
 ## Directory Layout
 ```

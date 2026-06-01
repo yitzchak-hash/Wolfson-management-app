@@ -10,8 +10,8 @@ import {
 } from 'lucide-react';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
 import {
-  extractFileId, drivePreviewUrl, driveDownloadUrl,
-  extractFolderId, findOrCreateFolder, uploadFileToDrive,
+  extractFileId, drivePreviewUrl, driveDownloadUrl, extractFolderId,
+  isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaBackend,
 } from '../data/driveApi';
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -74,24 +74,43 @@ function getDueBadge(dueDate: string | null): { text: string; cls: string } | nu
 function MediaItem({ photo, onDelete }: { photo: ContractorPhoto; onDelete: () => void }) {
   const [playing, setPlaying] = useState(false);
   const type = photo.fileType ?? 'image';
+  // When stored on Drive, large files keep no local bytes — open them on Drive instead.
+  const driveOnly = !photo.dataUrl && !!photo.driveUrl;
 
   return (
     <div className="relative rounded-xl overflow-hidden aspect-square bg-gray-100">
       {type === 'image' && (
-        <img src={photo.dataUrl} alt={photo.filename} className="w-full h-full object-cover" />
-      )}
-      {type === 'video' && (
-        playing
-          ? <video src={photo.dataUrl} className="w-full h-full object-contain bg-black" controls autoPlay />
+        photo.dataUrl
+          ? <img src={photo.dataUrl} alt={photo.filename} className="w-full h-full object-cover" />
           : (
-            <button className="w-full h-full flex flex-col items-center justify-center bg-gray-800 active:opacity-90" onClick={() => setPlaying(true)}>
-              <Play size={28} className="text-white" />
-              <span className="text-white text-[10px] mt-1 opacity-60">Tap to play</span>
-            </button>
+            <a href={photo.driveUrl} target="_blank" rel="noopener noreferrer"
+              className="w-full h-full flex flex-col items-center justify-center bg-gray-100 hover:bg-gray-200 transition-colors px-2">
+              <Camera size={24} className="text-gray-400" />
+              <span className="text-[10px] text-gray-600 mt-1.5 text-center break-all leading-tight line-clamp-2">{photo.filename}</span>
+            </a>
           )
       )}
+      {type === 'video' && (
+        driveOnly
+          ? (
+            <a href={photo.driveUrl} target="_blank" rel="noopener noreferrer"
+              className="w-full h-full flex flex-col items-center justify-center bg-gray-800 active:opacity-90">
+              <Play size={28} className="text-white" />
+              <span className="text-white text-[10px] mt-1 opacity-60">View on Drive</span>
+            </a>
+          )
+          : playing
+            ? <video src={photo.dataUrl} className="w-full h-full object-contain bg-black" controls autoPlay />
+            : (
+              <button className="w-full h-full flex flex-col items-center justify-center bg-gray-800 active:opacity-90" onClick={() => setPlaying(true)}>
+                <Play size={28} className="text-white" />
+                <span className="text-white text-[10px] mt-1 opacity-60">Tap to play</span>
+              </button>
+            )
+      )}
       {type === 'file' && (
-        <a href={photo.dataUrl} download={photo.filename}
+        <a href={driveOnly ? photo.driveUrl : photo.dataUrl} download={driveOnly ? undefined : photo.filename}
+          target={driveOnly ? '_blank' : undefined} rel={driveOnly ? 'noopener noreferrer' : undefined}
           className="w-full h-full flex flex-col items-center justify-center bg-blue-50 hover:bg-blue-100 transition-colors px-2">
           <FileIcon size={24} className="text-blue-400 flex-shrink-0" />
           <span className="text-[10px] text-gray-600 mt-1.5 text-center break-all leading-tight line-clamp-3">{photo.filename}</span>
@@ -115,9 +134,8 @@ export function ContractorPortal() {
   const {
     contractors, contractorAssignments, contractorNotes, contractorPhotos,
     apartments, stages,
-    addContractorNote, addContractorPhoto, updateContractorPhoto, deleteContractorPhoto,
+    addContractorNote, addContractorPhoto, deleteContractorPhoto,
     updateContractorAssignment, addActivityLog,
-    googleAccessToken, googleTokenExpiry,
   } = useStore();
 
   const [activeTab, setActiveTab] = useState<'tasks' | 'map'>('tasks');
@@ -125,6 +143,7 @@ export function ContractorPortal() {
   const [noteText, setNoteText] = useState('');
   const [noteAttachment, setNoteAttachment] = useState<{ dataUrl: string; filename: string; mimeType: string } | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ name: string; pct: number } | null>(null);
   const [completing, setCompleting] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [mapFilter, setMapFilter] = useState<'all' | 'overdue' | 'today' | 'tomorrow' | 'week'>('all');
@@ -191,57 +210,64 @@ export function ContractorPortal() {
     return matching;
   }, [mapFilter, assignments]);
 
-  const hasValidToken = !!googleAccessToken && Date.now() < (googleTokenExpiry ?? 0);
-
-  async function tryUploadToDrive(
-    photo: { id: string; dataUrl: string; filename: string; mimeType?: string },
-    apartmentId: string,
-  ) {
-    if (!hasValidToken) return;
-    const apt = getApt(apartmentId);
-    if (!apt?.driveLink) return;
-    const folderId = extractFolderId(apt.driveLink);
-    if (!folderId) return;
-    try {
-      const photosFolderId = await findOrCreateFolder(folderId, 'Photos', googleAccessToken!);
-      const result = await uploadFileToDrive(
-        photosFolderId,
-        photo.filename,
-        photo.dataUrl,
-        photo.mimeType ?? 'image/jpeg',
-        googleAccessToken!,
-      );
-      updateContractorPhoto(photo.id, { driveFileId: result.id, driveUrl: result.webViewLink });
-    } catch {
-      // silent fail — photo stays local if Drive upload fails
-    }
-  }
-
   async function handleMediaUpload(e: React.ChangeEvent<HTMLInputElement>) {
     if (!selectedAssignment || !e.target.files?.length) return;
     setUploading(true);
     setUploadError('');
-    const MAX_SIZE = 50 * 1024 * 1024;
+    const LOCAL_MAX = 50 * 1024 * 1024; // 50 MB cap when storing locally (no Drive)
     const apt = getApt(selectedAssignment.apartmentId);
+    const backendOn = isUploadBackendConfigured();
+    const mainFolderId = apt?.driveLink ? extractFolderId(apt.driveLink) : null;
+    const canUseDrive = backendOn && !!mainFolderId;
     try {
       for (const file of Array.from(e.target.files)) {
-        if (file.size > MAX_SIZE) {
-          setUploadError(`"${file.name}" exceeds 50 MB limit — skipped.`);
-          continue;
-        }
         const fType = detectFileType(file);
-        const dataUrl = fType === 'image' ? await compressImage(file) : await readAsDataUrl(file);
-        const photoId = addContractorPhoto({
-          assignmentId: selectedAssignment.id,
-          apartmentId: selectedAssignment.apartmentId,
-          contractorId,
-          dataUrl,
-          filename: file.name,
-          fileType: fType,
-          mimeType: file.type,
-        });
-        // Try to sync to Drive in background
-        await tryUploadToDrive({ id: photoId, dataUrl, filename: file.name, mimeType: file.type }, selectedAssignment.apartmentId);
+
+        if (canUseDrive) {
+          // Stream the file straight to Drive (browser → Drive, any size)
+          setUploadProgress({ name: file.name, pct: 0 });
+          try {
+            const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId!, 'Photos');
+            const { fileId, webViewLink } = await uploadFileViaBackend(
+              photosFolderId, file, pct => setUploadProgress({ name: file.name, pct }),
+            );
+            // Keep a small thumbnail locally for images; videos/files store no bytes
+            const thumb = fType === 'image' ? await compressImage(file) : '';
+            addContractorPhoto({
+              assignmentId: selectedAssignment.id,
+              apartmentId: selectedAssignment.apartmentId,
+              contractorId,
+              dataUrl: thumb,
+              filename: file.name,
+              fileType: fType,
+              mimeType: file.type,
+              driveFileId: fileId,
+              driveUrl: webViewLink,
+            });
+          } catch (err) {
+            setUploadError(`"${file.name}" failed to upload to Drive: ${(err as Error).message}`);
+            continue;
+          } finally {
+            setUploadProgress(null);
+          }
+        } else {
+          // No Drive backend — store locally with a hard size cap
+          if (file.size > LOCAL_MAX) {
+            setUploadError(`"${file.name}" exceeds 50 MB and Drive upload isn't set up for this apartment — skipped.`);
+            continue;
+          }
+          const dataUrl = fType === 'image' ? await compressImage(file) : await readAsDataUrl(file);
+          addContractorPhoto({
+            assignmentId: selectedAssignment.id,
+            apartmentId: selectedAssignment.apartmentId,
+            contractorId,
+            dataUrl,
+            filename: file.name,
+            fileType: fType,
+            mimeType: file.type,
+          });
+        }
+
         // Log activity
         addActivityLog({
           apartmentId: selectedAssignment.apartmentId,
@@ -258,6 +284,7 @@ export function ContractorPortal() {
       }
     } finally {
       setUploading(false);
+      setUploadProgress(null);
       if (mediaInputRef.current) mediaInputRef.current.value = '';
     }
   }
@@ -654,6 +681,22 @@ export function ContractorPortal() {
                       accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip"
                       multiple className="hidden" onChange={handleMediaUpload} />
                   </div>
+
+                  {uploadProgress && (
+                    <div className="mb-3">
+                      <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                        <span className="flex items-center gap-1.5 truncate">
+                          <CloudUpload size={13} className="flex-shrink-0 text-[#4aa8d8]" />
+                          <span className="truncate">{uploadProgress.name}</span>
+                        </span>
+                        <span className="flex-shrink-0 ml-2 font-medium">{uploadProgress.pct}%</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                        <div className="h-full bg-[#4aa8d8] transition-all duration-150"
+                          style={{ width: `${uploadProgress.pct}%` }} />
+                      </div>
+                    </div>
+                  )}
 
                   {uploadError && (
                     <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-3 border border-amber-200">

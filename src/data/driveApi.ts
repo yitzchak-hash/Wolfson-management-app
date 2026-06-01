@@ -243,3 +243,81 @@ export async function findPlansPdf(driveLink: string, token: string): Promise<Dr
     return null;
   }
 }
+
+// ─── Backend (Vercel serverless) upload helpers ────────────────────────────────
+// These route through /api/* so contractors on any device can upload to Drive
+// via the service account — no per-user OAuth token required.
+
+const DRIVE_API_KEY = (import.meta.env.VITE_DRIVE_API_KEY as string | undefined) ?? '';
+
+/** True when the Drive upload backend is configured (API key present). */
+export function isUploadBackendConfigured(): boolean {
+  return !!DRIVE_API_KEY;
+}
+
+/** Find or create a subfolder by name under a parent, via the backend service account. */
+export async function findOrCreateFolderViaBackend(parentId: string, name: string): Promise<string> {
+  const resp = await fetch('/api/folder', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': DRIVE_API_KEY },
+    body: JSON.stringify({ parentId, name }),
+  });
+  if (!resp.ok) {
+    const msg = await resp.text().catch(() => '');
+    throw new Error(`Folder API ${resp.status}: ${msg}`);
+  }
+  const data = await resp.json();
+  return data.folderId as string;
+}
+
+/**
+ * Upload a file directly to Drive using a backend-issued resumable session.
+ * The file streams browser → Google Drive; it never passes through Vercel.
+ * Works for any size (500MB+ videos). Optional progress callback (0-100).
+ */
+export async function uploadFileViaBackend(
+  folderId: string,
+  file: File,
+  onProgress?: (pct: number) => void,
+): Promise<{ fileId: string; webViewLink: string }> {
+  // 1. Ask backend for a one-time resumable upload URL
+  const sessResp = await fetch('/api/drive-session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': DRIVE_API_KEY },
+    body: JSON.stringify({
+      folderId,
+      filename: file.name,
+      mimeType: file.type || 'application/octet-stream',
+    }),
+  });
+  if (!sessResp.ok) {
+    const msg = await sessResp.text().catch(() => '');
+    throw new Error(`Session API ${sessResp.status}: ${msg}`);
+  }
+  const { uploadUrl } = await sessResp.json();
+  if (!uploadUrl) throw new Error('No upload URL returned');
+
+  // 2. Upload the raw file straight to Google Drive (XHR for progress events)
+  const result = await new Promise<{ id: string; webViewLink?: string }>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', uploadUrl);
+    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try { resolve(JSON.parse(xhr.responseText)); }
+        catch { resolve({ id: '' }); }
+      } else {
+        reject(new Error(`Drive upload failed: ${xhr.status}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Network error during Drive upload'));
+    xhr.send(file);
+  });
+
+  const fileId = result.id;
+  const webViewLink = result.webViewLink ?? (fileId ? `https://drive.google.com/file/d/${fileId}/view` : '');
+  return { fileId, webViewLink };
+}
