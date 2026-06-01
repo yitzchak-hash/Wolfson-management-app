@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { X, Plus, CheckCircle2, Clock, CalendarDays, ArrowRight, User2, Paperclip, FileText, ImageIcon, X as XIcon, AlertTriangle } from 'lucide-react';
+import { X, Plus, CheckCircle2, Clock, CalendarDays, ArrowRight, User2, Paperclip, FileText, ImageIcon, X as XIcon, AlertTriangle, Pencil, Save } from 'lucide-react';
 import { Apartment, User, ContractorCategory, TaskAttachment } from '../../types';
 import { useStore } from '../../data/store';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
@@ -38,7 +38,31 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
   const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editContractorId, setEditContractorId] = useState('');
+  const [editTask, setEditTask] = useState('');
+  const [editDueDate, setEditDueDate] = useState('');
+  const [editStageId, setEditStageId] = useState('');
   const attachRef = useRef<HTMLInputElement>(null);
+
+  function startEdit(a: typeof aptTasks[0]) {
+    setEditingTaskId(a.id);
+    setEditContractorId(a.contractorId);
+    setEditTask(a.taskDescription);
+    setEditDueDate(a.dueDate ?? '');
+    setEditStageId(a.stageId ?? '');
+  }
+
+  function saveEdit(id: string) {
+    if (!editTask.trim()) return;
+    updateContractorAssignment(id, {
+      contractorId: editContractorId,
+      taskDescription: editTask.trim(),
+      dueDate: editDueDate || null,
+      stageId: editStageId || null,
+    });
+    setEditingTaskId(null);
+  }
 
   const sortedStages = [...stages].filter(s => s.active).sort((a, b) => a.order - b.order);
   const currentStage = stages.find(s => s.id === apartment.currentStageId);
@@ -185,6 +209,68 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                   const contractor = contractors.find(c => c.id === a.contractorId);
                   const stage = stages.find(s => s.id === a.stageId);
                   const dueBadge = getDueBadge(a.dueDate);
+                  const isEditing = editingTaskId === a.id;
+
+                  if (isEditing) {
+                    return (
+                      <div key={a.id} className="rounded-xl border-2 border-[#1e3a5f]/20 bg-blue-50/50 p-3 space-y-2">
+                        <select
+                          value={editContractorId}
+                          onChange={e => setEditContractorId(e.target.value)}
+                          className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                        >
+                          <option value="">Select contractor *</option>
+                          {(['drywall', 'ac', 'general'] as ContractorCategory[]).map(cat => {
+                            const items = contractors.filter(c => c.category === cat && c.active);
+                            if (!items.length) return null;
+                            return (
+                              <optgroup key={cat} label={cat === 'ac' ? 'AC / HVAC' : cat.charAt(0).toUpperCase() + cat.slice(1)}>
+                                {items.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                              </optgroup>
+                            );
+                          })}
+                        </select>
+                        <textarea
+                          value={editTask}
+                          onChange={e => setEditTask(e.target.value)}
+                          rows={2}
+                          className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 resize-none"
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <select
+                            value={editStageId}
+                            onChange={e => setEditStageId(e.target.value)}
+                            className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                          >
+                            <option value="">Stage</option>
+                            {sortedStages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                          </select>
+                          <input
+                            type="date"
+                            value={editDueDate}
+                            onChange={e => setEditDueDate(e.target.value)}
+                            className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setEditingTaskId(null)}
+                            className="flex-1 py-1.5 text-xs font-medium border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => saveEdit(a.id)}
+                            disabled={!editTask.trim() || !editContractorId}
+                            className="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-medium bg-[#1e3a5f] text-white rounded-lg hover:bg-[#162d4a] disabled:opacity-40 transition-colors"
+                          >
+                            <Save size={11} /> Save
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
                   return (
                     <div
                       key={a.id}
@@ -239,6 +325,13 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                           )}
                         </div>
                       </div>
+                      <button
+                        onClick={() => startEdit(a)}
+                        className="flex-shrink-0 mt-0.5 p-1 rounded-lg text-gray-300 hover:text-[#1e3a5f] hover:bg-gray-100 transition-colors"
+                        title="Edit task"
+                      >
+                        <Pencil size={12} />
+                      </button>
                     </div>
                   );
                 })}
