@@ -99,7 +99,9 @@ export interface TaskAttachment {
   id: string;
   filename: string;
   mimeType: string;
-  dataUrl: string;
+  dataUrl: string;       // base64 preview (empty when driveFileId is set)
+  driveFileId?: string;  // Google Drive file ID after upload
+  driveUrl?: string;     // Google Drive web view link
 }
 
 export interface ContractorAssignment {
@@ -182,12 +184,14 @@ export interface ContractorPhoto {
 export interface OfficeNoteFile {
   id: string;
   apartmentId: string;
-  dataUrl: string;
+  dataUrl: string;       // base64 (empty when driveFileId is set)
   filename: string;
   mimeType: string;
   uploadedAt: string;
   uploadedBy: string;
   uploadedByName: string;
+  driveFileId?: string;
+  driveUrl?: string;
 }
 
 export type BackupFrequency = 'activity' | 'daily' | 'weekly' | 'monthly';

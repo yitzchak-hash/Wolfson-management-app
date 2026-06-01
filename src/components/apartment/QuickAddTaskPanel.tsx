@@ -1,8 +1,9 @@
 import React, { useState, useRef } from 'react';
-import { X, Plus, CheckCircle2, Clock, CalendarDays, ArrowRight, User2, Paperclip, FileText, ImageIcon, X as XIcon } from 'lucide-react';
+import { X, Plus, CheckCircle2, Clock, CalendarDays, ArrowRight, User2, Paperclip, FileText, ImageIcon, X as XIcon, AlertTriangle } from 'lucide-react';
 import { Apartment, User, ContractorCategory, TaskAttachment } from '../../types';
 import { useStore } from '../../data/store';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
+import { findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, isUploadBackendConfigured, extractFolderId } from '../../data/driveApi';
 
 const CAT_COLORS: Record<ContractorCategory, string> = {
   drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981',
@@ -35,6 +36,8 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
   const [showForm, setShowForm] = useState(true);
   const [hideCompleted, setHideCompleted] = useState(false);
   const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
+  const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
   const attachRef = useRef<HTMLInputElement>(null);
 
   const sortedStages = [...stages].filter(s => s.active).sort((a, b) => a.order - b.order);
@@ -57,8 +60,37 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
   const completedCount = aptTasks.filter(a => !!a.completedAt).length;
   const visibleTasks = hideCompleted ? aptTasks.filter(a => !a.completedAt) : aptTasks;
 
-  function handleAdd() {
-    if (!contractorId || !task.trim()) return;
+  async function handleAdd() {
+    if (!contractorId || !task.trim() || !apartment.driveLink) return;
+
+    let finalAttachments = attachments;
+
+    const backendOn = isUploadBackendConfigured();
+    const mainFolderId = extractFolderId(apartment.driveLink);
+    if (backendOn && mainFolderId && attachmentFiles.length > 0) {
+      setUploading(true);
+      try {
+        const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');
+        const notesFolderId = await findOrCreateFolderViaBackend(photosFolderId, 'Task Notes');
+        finalAttachments = await Promise.all(
+          attachmentFiles.map(async (file, i) => {
+            const att = attachments[i];
+            try {
+              const { fileId, webViewLink } = await uploadFileViaResumableSession(notesFolderId, file);
+              await shareFileToDrive(fileId);
+              return { ...att, dataUrl: '', driveFileId: fileId, driveUrl: webViewLink };
+            } catch {
+              return att;
+            }
+          }),
+        );
+      } catch {
+        // folder creation failed — fall back to base64 attachments
+      } finally {
+        setUploading(false);
+      }
+    }
+
     addContractorAssignment({
       contractorId,
       apartmentId: apartment.id,
@@ -69,12 +101,13 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
       completedAt: null,
       createdBy: currentUser.id,
       createdByName: currentUser.name,
-      ...(attachments.length ? { attachments } : {}),
+      ...(finalAttachments.length ? { attachments: finalAttachments } : {}),
     });
     setTask('');
     setContractorId('');
     setDueDate('');
     setAttachments([]);
+    setAttachmentFiles([]);
     onToast('Task added');
   }
 
@@ -233,6 +266,13 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                     <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600"><X size={14} /></button>
                   </div>
 
+                  {!apartment.driveLink && (
+                    <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 border border-amber-200">
+                      <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" />
+                      <span>Set a Google Drive folder in the Details tab before creating tasks.</span>
+                    </div>
+                  )}
+
                   <select
                     value={contractorId}
                     onChange={e => setContractorId(e.target.value)}
@@ -284,6 +324,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                               mimeType: file.type,
                               dataUrl: ev.target?.result as string,
                             }]);
+                            setAttachmentFiles(prev => [...prev, file]);
                           };
                           reader.readAsDataURL(file);
                         });
@@ -304,7 +345,11 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                             <span className="text-[10px] text-gray-500 truncate pr-1" style={{ maxWidth: '60px' }}>{att.filename}</span>
                             <button
                               type="button"
-                              onClick={() => setAttachments(prev => prev.filter(a => a.id !== att.id))}
+                              onClick={() => {
+                                const idx = attachments.findIndex(a => a.id === att.id);
+                                setAttachments(prev => prev.filter(a => a.id !== att.id));
+                                setAttachmentFiles(prev => prev.filter((_, i) => i !== idx));
+                              }}
                               className="absolute top-0.5 right-0.5 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center"
                             >
                               <XIcon size={8} color="white" />
@@ -334,10 +379,10 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
 
                   <button
                     onClick={handleAdd}
-                    disabled={!contractorId || !task.trim()}
+                    disabled={!contractorId || !task.trim() || !apartment.driveLink || uploading}
                     className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] disabled:opacity-40 transition-colors"
                   >
-                    <Plus size={15} /> Create Task
+                    <Plus size={15} /> {uploading ? 'Uploading…' : 'Create Task'}
                   </button>
                 </div>
               )}

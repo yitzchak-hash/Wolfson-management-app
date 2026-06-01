@@ -374,8 +374,10 @@ export function ContractorPortal() {
           setUploadProgress({ name: file.name, pct: 0 });
           try {
             const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId!, 'Photos');
+            const stageName = getStage(selectedAssignment.stageId)?.name ?? 'General';
+            const stageFolderId = await findOrCreateFolderViaBackend(photosFolderId, stageName);
             const { fileId, webViewLink } = await uploadFileViaResumableSession(
-              photosFolderId, file, pct => setUploadProgress({ name: file.name, pct }),
+              stageFolderId, file, pct => setUploadProgress({ name: file.name, pct }),
             );
             // Make publicly readable so thumbnail URLs work in <img> tags
             await shareFileToDrive(fileId);

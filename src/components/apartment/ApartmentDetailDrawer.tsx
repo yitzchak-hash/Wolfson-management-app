@@ -5,7 +5,7 @@ import { useStore } from '../../data/store';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import { StageNotesSection } from './StageNotesSection';
 import { ActivitySection } from './ActivitySection';
-import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, isUploadBackendConfigured } from '../../data/driveApi';
+import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, extractFolderId, driveThumbUrl } from '../../data/driveApi';
 import { Tooltip } from '../ui/Tooltip';
 
 interface Props {
@@ -330,9 +330,34 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   type="file"
                   className="hidden"
                   accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
-                  onChange={e => {
+                  onChange={async e => {
                     const file = e.target.files?.[0];
                     if (!file || !apartment) return;
+                    if (officeFileRef.current) officeFileRef.current.value = '';
+
+                    const mainFolderId = apartment.driveLink ? extractFolderId(apartment.driveLink) : null;
+                    if (backendConfigured && mainFolderId) {
+                      try {
+                        const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');
+                        const notesFolderId = await findOrCreateFolderViaBackend(photosFolderId, 'Job Notes');
+                        const { fileId, webViewLink } = await uploadFileViaResumableSession(notesFolderId, file);
+                        await shareFileToDrive(fileId);
+                        addOfficeNoteFile({
+                          apartmentId: apartment.id,
+                          dataUrl: '',
+                          filename: file.name,
+                          mimeType: file.type,
+                          uploadedBy: currentUser.id,
+                          uploadedByName: currentUser.name,
+                          driveFileId: fileId,
+                          driveUrl: webViewLink,
+                        });
+                        onToast('File attached');
+                        return;
+                      } catch {
+                        // fall through to base64 fallback
+                      }
+                    }
                     const reader = new FileReader();
                     reader.onload = ev => {
                       addOfficeNoteFile({
@@ -346,7 +371,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                       onToast('File attached');
                     };
                     reader.readAsDataURL(file);
-                    if (officeFileRef.current) officeFileRef.current.value = '';
                   }}
                 />
                 {(() => {
@@ -359,7 +383,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                         return (
                           <div key={f.id} className="relative group w-14 h-14 rounded-lg border border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center">
                             {isImage
-                              ? <img src={f.dataUrl} alt={f.filename} className="w-full h-full object-cover" />
+                              ? <img
+                                  src={f.driveFileId ? driveThumbUrl(f.driveFileId, 400) : f.dataUrl}
+                                  alt={f.filename}
+                                  className="w-full h-full object-cover"
+                                />
                               : <div className="flex flex-col items-center p-1"><BookOpen size={16} className="text-gray-400" /><span className="text-[8px] text-gray-400 truncate w-full text-center mt-0.5">{f.filename}</span></div>
                             }
                             <button onClick={() => deleteOfficeNoteFile(f.id)}
@@ -367,7 +395,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                               className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                               <Trash2 size={8} color="white" />
                             </button>
-                            <a href={f.dataUrl} download={f.filename}
+                            <a
+                              href={f.driveFileId ? `https://drive.google.com/uc?export=download&id=${f.driveFileId}` : f.dataUrl}
+                              download={!f.driveFileId ? f.filename : undefined}
+                              target={f.driveFileId ? '_blank' : undefined}
+                              rel={f.driveFileId ? 'noopener noreferrer' : undefined}
                               title="Download file"
                               className="absolute bottom-0.5 right-0.5 w-4 h-4 bg-gray-700/60 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                               <Download size={8} color="white" />
