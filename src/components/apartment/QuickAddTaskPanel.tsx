@@ -72,17 +72,16 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
       try {
         const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');
         const notesFolderId = await findOrCreateFolderViaBackend(photosFolderId, 'Task Notes');
-        finalAttachments = await Promise.all(
+        const results = await Promise.allSettled(
           attachmentFiles.map(async (file, i) => {
             const att = attachments[i];
-            try {
-              const { fileId, webViewLink } = await uploadFileViaResumableSession(notesFolderId, file);
-              await shareFileToDrive(fileId);
-              return { ...att, dataUrl: '', driveFileId: fileId, driveUrl: webViewLink };
-            } catch {
-              return att;
-            }
+            const { fileId, webViewLink } = await uploadFileViaResumableSession(notesFolderId, file);
+            await shareFileToDrive(fileId);
+            return { ...att, dataUrl: '', driveFileId: fileId, driveUrl: webViewLink };
           }),
+        );
+        finalAttachments = results.map((r, i) =>
+          r.status === 'fulfilled' ? r.value : attachments[i]
         );
       } catch {
         // folder creation failed — fall back to base64 attachments

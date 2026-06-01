@@ -396,6 +396,7 @@ export function ContractorPortal() {
               filename: file.name,
               fileType: fType,
               mimeType: file.type,
+              fileSizeBytes: file.size,
               driveFileId: fileId,
               driveUrl: webViewLink,
             });

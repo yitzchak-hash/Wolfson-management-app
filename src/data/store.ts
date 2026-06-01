@@ -9,6 +9,10 @@ const STORAGE_KEY = 'wolfson_app_data';
 const VERSION_KEY = 'wolfson_app_version';
 const THEME_KEY = 'wolfson_theme';
 
+// Holds unsubscribe functions for all active Firestore real-time listeners.
+// Stored outside the Zustand state (not serializable) so they survive re-renders.
+let _firebaseUnsubscribers: Array<() => void> = [];
+
 function generateId(): string {
   return Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
 }
@@ -209,7 +213,10 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   logout: () => {
-    set({ currentUser: null });
+    // Cancel all real-time Firestore listeners so they don't fire after sign-out
+    _firebaseUnsubscribers.forEach(unsub => unsub());
+    _firebaseUnsubscribers = [];
+    set({ currentUser: null, firebaseListening: false });
     persist(get);
   },
 
@@ -373,11 +380,19 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   deleteStage: (id) => {
+    // Capture which apartments are affected before mutating state
+    const affectedAptIds = new Set(
+      get().apartments.filter(a => a.currentStageId === id).map(a => a.id)
+    );
     set(state => ({
       stages: state.stages.filter(s => s.id !== id),
       apartments: state.apartments.map(a => a.currentStageId === id ? { ...a, currentStageId: null } : a),
     }));
     persist(get);
+    fsDelete('stages', id);
+    get().apartments
+      .filter(a => affectedAptIds.has(a.id))
+      .forEach(a => fsSet('apartments', a.id, a));
   },
 
   mergeApartments: (aptId, partnerId, user) => {
@@ -800,7 +815,8 @@ export const useStore = create<AppState>((set, get) => ({
       fsGetAll('settings'),
     ]);
 
-    const hasFirebaseData = fbApts.length > 0 || fbContractors.length > 0 || fbAssignments.length > 0;
+    const hasFirebaseData = fbApts.length > 0 || fbContractors.length > 0 || fbAssignments.length > 0
+      || fbStages.length > 0 || fbUsers.length > 0;
 
     if (hasFirebaseData) {
       const localPhotos = get().contractorPhotos;
@@ -886,64 +902,67 @@ export const useStore = create<AppState>((set, get) => ({
     }
 
     // ── Real-time listeners for all collections ──────────────────────────────
-    fsListen('apartments', (docs) => {
-      if (docs.length > 0) { set({ apartments: docs as unknown as Apartment[] }); persist(get); }
-    });
-    fsListen('stageNotes', (docs) => {
-      set({ stageNotes: docs as unknown as StageNote[] }); persist(get);
-    });
-    fsListen('activityLogs', (docs) => {
-      const sorted = (docs as unknown as ActivityLog[])
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 500);
-      set({ activityLogs: sorted }); persist(get);
-    });
-    fsListen('contractors', (docs) => {
-      set({ contractors: docs as unknown as Contractor[] }); persist(get);
-    });
-    fsListen('contractorAssignments', (docs) => {
-      const localA = get().contractorAssignments;
-      const merged = (docs as unknown as ContractorAssignment[]).map(fbA => {
-        const local = localA.find(a => a.id === fbA.id);
-        return {
-          ...fbA,
-          attachments: fbA.attachments?.map((att, i) => ({
-            ...att,
-            dataUrl: local?.attachments?.[i]?.dataUrl ?? '',
-          })),
-        };
-      });
-      set({ contractorAssignments: merged }); persist(get);
-    });
-    fsListen('contractorNotes', (docs) => {
-      set({ contractorNotes: docs as unknown as ContractorNote[] }); persist(get);
-    });
-    fsListen('contractorPhotos', (docs) => {
-      const localP = get().contractorPhotos;
-      const merged = (docs as unknown as ContractorPhoto[]).map(fbP => {
-        const local = localP.find(p => p.id === fbP.id);
-        return { ...fbP, dataUrl: fbP.driveUrl ? '' : (local?.dataUrl ?? '') };
-      });
-      set({ contractorPhotos: merged }); persist(get);
-    });
-    fsListen('officeNoteFiles', (docs) => {
-      const localF = get().officeNoteFiles;
-      const merged = (docs as unknown as OfficeNoteFile[]).map(fbF => {
-        const local = localF.find(f => f.id === fbF.id);
-        return { ...fbF, dataUrl: local?.dataUrl ?? '' };
-      });
-      set({ officeNoteFiles: merged }); persist(get);
-    });
-    fsListen('settings', (docs) => {
-      const appS = (docs.find(d => (d as Record<string,unknown>).id === 'app') ?? {}) as Record<string, unknown>;
-      set(state => ({
-        ...(appS.backupFrequency      ? { backupFrequency:      appS.backupFrequency as BackupFrequency }      : {}),
-        ...(appS.backupDriveFolderLink !== undefined ? { backupDriveFolderLink: appS.backupDriveFolderLink as string } : {}),
-        ...(appS.contractorUiStrings  ? { contractorUiStrings:  appS.contractorUiStrings as ContractorUiStrings } : {}),
-        ...(appS.autoBackup           !== undefined ? { autoBackup: appS.autoBackup as boolean } : {}),
-        ...(appS.totalStorageBytes    !== undefined ? { totalStorageBytes: appS.totalStorageBytes as number } : {}),
-      }));
-      persist(get);
-    });
+    // Store every unsubscribe fn so logout() can cancel them cleanly.
+    _firebaseUnsubscribers = [
+      fsListen('apartments', (docs) => {
+        if (docs.length > 0) { set({ apartments: docs as unknown as Apartment[] }); persist(get); }
+      }),
+      fsListen('stageNotes', (docs) => {
+        set({ stageNotes: docs as unknown as StageNote[] }); persist(get);
+      }),
+      fsListen('activityLogs', (docs) => {
+        const sorted = (docs as unknown as ActivityLog[])
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 500);
+        set({ activityLogs: sorted }); persist(get);
+      }),
+      fsListen('contractors', (docs) => {
+        set({ contractors: docs as unknown as Contractor[] }); persist(get);
+      }),
+      fsListen('contractorAssignments', (docs) => {
+        const localA = get().contractorAssignments;
+        const merged = (docs as unknown as ContractorAssignment[]).map(fbA => {
+          const local = localA.find(a => a.id === fbA.id);
+          return {
+            ...fbA,
+            attachments: fbA.attachments?.map((att, i) => ({
+              ...att,
+              dataUrl: local?.attachments?.[i]?.dataUrl ?? '',
+            })),
+          };
+        });
+        set({ contractorAssignments: merged }); persist(get);
+      }),
+      fsListen('contractorNotes', (docs) => {
+        set({ contractorNotes: docs as unknown as ContractorNote[] }); persist(get);
+      }),
+      fsListen('contractorPhotos', (docs) => {
+        const localP = get().contractorPhotos;
+        const merged = (docs as unknown as ContractorPhoto[]).map(fbP => {
+          const local = localP.find(p => p.id === fbP.id);
+          return { ...fbP, dataUrl: fbP.driveUrl ? '' : (local?.dataUrl ?? '') };
+        });
+        set({ contractorPhotos: merged }); persist(get);
+      }),
+      fsListen('officeNoteFiles', (docs) => {
+        const localF = get().officeNoteFiles;
+        const merged = (docs as unknown as OfficeNoteFile[]).map(fbF => {
+          const local = localF.find(f => f.id === fbF.id);
+          return { ...fbF, dataUrl: local?.dataUrl ?? '' };
+        });
+        set({ officeNoteFiles: merged }); persist(get);
+      }),
+      fsListen('settings', (docs) => {
+        const appS = (docs.find(d => (d as Record<string,unknown>).id === 'app') ?? {}) as Record<string, unknown>;
+        set(state => ({
+          ...(appS.backupFrequency      ? { backupFrequency:      appS.backupFrequency as BackupFrequency }      : {}),
+          ...(appS.backupDriveFolderLink !== undefined ? { backupDriveFolderLink: appS.backupDriveFolderLink as string } : {}),
+          ...(appS.contractorUiStrings  ? { contractorUiStrings:  appS.contractorUiStrings as ContractorUiStrings } : {}),
+          ...(appS.autoBackup           !== undefined ? { autoBackup: appS.autoBackup as boolean } : {}),
+          ...(appS.totalStorageBytes    !== undefined ? { totalStorageBytes: appS.totalStorageBytes as number } : {}),
+        }));
+        persist(get);
+      }),
+    ];
   },
 
   applyFirebaseData: (data) => {
