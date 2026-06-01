@@ -17,6 +17,20 @@ Tracks apartment-level progress through installation stages, contractor assignme
 ## Repository
 `yitzchak-hash/wolfson-management-app` — development branch: `claude/blissful-cray-spTFY`
 
+## Deployment
+- **Hosting**: Vercel (connected to GitHub repo, auto-deploys on push)
+- **Serverless API**: `/api` folder at repo root — Vercel auto-deploys each `.js` file as a serverless function
+- **Environment variables**: Set in Vercel dashboard (Firebase config, Google service account, API key)
+
+## Drive Upload Backend (Vercel API routes)
+- `/api/drive-session.js` — creates a Google Drive resumable upload session via service account; returns a one-time `uploadUrl` so the browser uploads the file directly to Drive (no bytes pass through Vercel)
+- `/api/folder.js` — finds or creates a Drive subfolder by name under a given parent folder ID
+- Service account JSON stored as `GOOGLE_SERVICE_ACCOUNT_JSON` env var in Vercel
+- Shared secret stored as `API_KEY` env var — sent as `x-api-key` header from the React app
+- Upload flow: Browser → `/api/drive-session` (tiny JSON) → browser streams file directly to Google Drive
+- Supports any file size including 500MB+ videos; Vercel never touches the file bytes
+- The `backend/` folder in the repo is superseded by these API routes and can be ignored
+
 ## Directory Layout
 ```
 src/
