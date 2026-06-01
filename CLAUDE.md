@@ -88,8 +88,13 @@ src/
 - Contractor can upload photos, videos, and files; office notes visible read-only
 - **Completed button is disabled until at least one file exists**
 - Engineering Plans PDF shown in task detail sheet when `apartment.plansPdfLink` is set
-- File storage: images compressed (max 1200px, 72% JPEG), videos/files stored as raw base64 (max 50 MB)
+- **Upload priority**: Firebase Storage (primary) → Google Drive backend (fallback) → local base64 (last resort)
+- Images compressed client-side (max 1200px, 72% JPEG blob) before upload to Firebase Storage
 - `ContractorPhoto.fileType`: `'image' | 'video' | 'file'` (default `'image'` for backward compat)
+- `ContractorPhoto.storageUrl`: Firebase Storage download URL — any device can load directly from this URL
+- `ContractorPhoto.storagePath`: Firebase Storage path used for deletion
+- `ContractorPhoto.fileSizeBytes`: tracked for quota accounting (`totalStorageBytes` in settings)
+- `MediaItem` renders `storageUrl` as direct `<img>`/`<video>` src; blue badge = Firebase, green badge = Drive
 
 ## Backup / Restore
 - **Export**: full JSON snapshot of all app data including photos (Settings > App > Backup)
@@ -149,6 +154,14 @@ src/
   - `findOrCreateFolderViaBackend(parentId, name)` — finds/creates subfolder via `/api/folder`
   - `uploadFileViaBackend(folderId, file, onProgress)` — streams file to Drive via `/api/drive-session`
   - `checkFolderHealth(driveLink, plansPdfLink, token)` → `FolderHealth` — kept for read-only folder health checks
+
+## Firebase Storage (Photo / File Uploads)
+- All contractor photo uploads go to Firebase Storage under `contractorPhotos/{assignmentId}/{uid}.{ext}`
+- `fsUploadFile(path, blob, onProgress)` in `firebase.ts` — uses resumable upload with progress callback
+- `fsDeleteFile(path)` in `firebase.ts` — called on photo delete to free storage
+- `totalStorageBytes` tracked in state + `settings/app` Firestore doc; updated on every add/delete
+- Admin **Header** shows an amber warning banner when storage exceeds 80% of the 5 GB free tier
+- Firebase Storage security rules must allow public read + write on `contractorPhotos/**` (no Firebase Auth used)
 
 ## Firebase Sync (Full)
 All collections are synced to Firestore in real time:

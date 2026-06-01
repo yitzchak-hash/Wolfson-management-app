@@ -3,7 +3,7 @@ import { Apartment, ActivityLog, Stage, StageNote, User, Building, Contractor, C
 import {
   DEFAULT_BUILDINGS, DEFAULT_STAGES, DEFAULT_USERS, buildDefaultApartments, DATA_VERSION,
 } from './initialData';
-import { fsSet, fsDelete, fsBatchSet, fsGetAll, fsListen, isFirebaseConfigured } from './firebase';
+import { fsSet, fsDelete, fsDeleteFile, fsBatchSet, fsGetAll, fsListen, isFirebaseConfigured } from './firebase';
 
 const STORAGE_KEY = 'wolfson_app_data';
 const VERSION_KEY = 'wolfson_app_version';
@@ -127,6 +127,7 @@ interface AppState {
   updateContractorAssignment: (id: string, changes: Partial<ContractorAssignment>) => void;
   deleteContractorAssignment: (id: string) => void;
   addContractorNote: (n: Omit<ContractorNote, 'id' | 'createdAt'>) => void;
+  totalStorageBytes: number;
   addContractorPhoto: (p: Omit<ContractorPhoto, 'id' | 'uploadedAt'>) => string;
   updateContractorPhoto: (id: string, changes: Partial<ContractorPhoto>) => void;
   deleteContractorPhoto: (id: string) => void;
@@ -187,6 +188,7 @@ export const useStore = create<AppState>((set, get) => ({
   backupLogs: (stored?.backupLogs as BackupLogEntry[] | null) ?? [],
   backupDriveFolderLink: (stored?.backupDriveFolderLink as string | null) ?? '',
   contractorUiStrings: (stored?.contractorUiStrings as ContractorUiStrings | null) ?? DEFAULT_CONTRACTOR_UI_STRINGS,
+  totalStorageBytes: (stored?.totalStorageBytes as number | null) ?? 0,
   lightTheme: localStorage.getItem(THEME_KEY) === 'light',
   setLightTheme: (v: boolean) => {
     set({ lightTheme: v });
@@ -551,10 +553,14 @@ export const useStore = create<AppState>((set, get) => ({
 
   addContractorPhoto: (fields) => {
     const p: ContractorPhoto = { ...fields, id: generateId(), uploadedAt: new Date().toISOString() };
-    set(state => ({ contractorPhotos: [...state.contractorPhotos, p] }));
+    set(state => ({
+      contractorPhotos: [...state.contractorPhotos, p],
+      totalStorageBytes: state.totalStorageBytes + (fields.fileSizeBytes ?? 0),
+    }));
     persist(get);
-    // Store metadata only in Firestore — dataUrl stays in localStorage
+    // Store metadata only in Firestore — dataUrl stays local
     fsSet('contractorPhotos', p.id, { ...p, dataUrl: '' });
+    fsSet('settings', 'app', { totalStorageBytes: get().totalStorageBytes });
     return p.id;
   },
 
@@ -568,9 +574,15 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   deleteContractorPhoto: (id) => {
-    set(state => ({ contractorPhotos: state.contractorPhotos.filter(p => p.id !== id) }));
+    const photo = get().contractorPhotos.find(p => p.id === id);
+    set(state => ({
+      contractorPhotos: state.contractorPhotos.filter(p => p.id !== id),
+      totalStorageBytes: Math.max(0, state.totalStorageBytes - (photo?.fileSizeBytes ?? 0)),
+    }));
     persist(get);
     fsDelete('contractorPhotos', id);
+    if (photo?.storagePath) fsDeleteFile(photo.storagePath);
+    fsSet('settings', 'app', { totalStorageBytes: get().totalStorageBytes });
   },
 
   // ─── Backup / Restore ──────────────────────────────────────────────────────
@@ -835,6 +847,7 @@ export const useStore = create<AppState>((set, get) => ({
         ...(appSettings.backupDriveFolderLink !== undefined ? { backupDriveFolderLink: appSettings.backupDriveFolderLink as string } : {}),
         ...(appSettings.contractorUiStrings  ? { contractorUiStrings:  appSettings.contractorUiStrings as ContractorUiStrings } : {}),
         ...(appSettings.autoBackup           !== undefined ? { autoBackup: appSettings.autoBackup as boolean } : {}),
+        ...(appSettings.totalStorageBytes    !== undefined ? { totalStorageBytes: appSettings.totalStorageBytes as number } : {}),
       }));
       persist(get);
     } else {
@@ -867,6 +880,7 @@ export const useStore = create<AppState>((set, get) => ({
           backupFrequency:       state.backupFrequency,
           backupDriveFolderLink: state.backupDriveFolderLink,
           contractorUiStrings:   state.contractorUiStrings,
+          totalStorageBytes:     state.totalStorageBytes,
         }),
       ]);
     }
@@ -926,6 +940,7 @@ export const useStore = create<AppState>((set, get) => ({
         ...(appS.backupDriveFolderLink !== undefined ? { backupDriveFolderLink: appS.backupDriveFolderLink as string } : {}),
         ...(appS.contractorUiStrings  ? { contractorUiStrings:  appS.contractorUiStrings as ContractorUiStrings } : {}),
         ...(appS.autoBackup           !== undefined ? { autoBackup: appS.autoBackup as boolean } : {}),
+        ...(appS.totalStorageBytes    !== undefined ? { totalStorageBytes: appS.totalStorageBytes as number } : {}),
       }));
       persist(get);
     });
@@ -965,6 +980,7 @@ function persist(get: () => AppState) {
     backupLogs: state.backupLogs.slice(0, 50),
     backupDriveFolderLink: state.backupDriveFolderLink,
     contractorUiStrings: state.contractorUiStrings,
+    totalStorageBytes: state.totalStorageBytes,
   };
 
   const ok = saveToStorage(STORAGE_KEY, payload);

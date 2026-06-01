@@ -167,13 +167,16 @@ export interface ContractorPhoto {
   assignmentId: string;
   apartmentId: string;
   contractorId: string;
-  dataUrl: string;   // compressed base64 (or 'drive:' prefix when synced)
+  dataUrl: string;       // base64 fallback — empty when storageUrl or driveUrl is set
   filename: string;
   fileType?: 'image' | 'video' | 'file'; // default: 'image' (for backward compat)
   mimeType?: string;
   uploadedAt: string;
-  driveFileId?: string;
-  driveUrl?: string;
+  fileSizeBytes?: number;  // original file size for quota tracking
+  storageUrl?: string;     // Firebase Storage download URL (primary remote store)
+  storagePath?: string;    // Firebase Storage path (needed for deletion)
+  driveFileId?: string;    // Google Drive file ID (legacy/fallback)
+  driveUrl?: string;       // Google Drive web view link (legacy/fallback)
 }
 
 export interface OfficeNoteFile {

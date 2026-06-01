@@ -13,6 +13,7 @@ import {
   extractFileId, drivePreviewUrl, driveDownloadUrl, extractFolderId,
   isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaBackend,
 } from '../data/driveApi';
+import { isStorageConfigured, fsUploadFile } from '../data/firebase';
 
 const CATEGORY_LABELS: Record<string, string> = {
   drywall: 'Drywall', ac: 'AC / HVAC', general: 'General',
@@ -37,6 +38,34 @@ async function compressImage(file: File, maxPx = 1200, quality = 0.72): Promise<
         canvas.width = width; canvas.height = height;
         canvas.getContext('2d')!.drawImage(img, 0, 0, width, height);
         resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function compressImageToBlob(file: File, maxPx = 1200, quality = 0.72): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new window.Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxPx || height > maxPx) {
+          const scale = maxPx / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d')!.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          blob => blob ? resolve(blob) : reject(new Error('Image compression failed')),
+          'image/jpeg', quality,
+        );
       };
       img.onerror = reject;
       img.src = e.target?.result as string;
@@ -74,49 +103,56 @@ function getDueBadge(dueDate: string | null): { text: string; cls: string } | nu
 function MediaItem({ photo, onDelete }: { photo: ContractorPhoto; onDelete: () => void }) {
   const [playing, setPlaying] = useState(false);
   const type = photo.fileType ?? 'image';
-  const driveOnly = !photo.dataUrl && !!photo.driveUrl;
+  // Firebase Storage URL is the primary source; fall back to local base64
+  const directSrc = photo.storageUrl || (photo.dataUrl || null);
+  const hasDriveOnly = !directSrc && !!photo.driveUrl;
+  const fileHref = photo.storageUrl || photo.driveUrl || photo.dataUrl;
 
   return (
     <div className="relative rounded-xl overflow-hidden aspect-square bg-gray-100">
       {type === 'image' && (
-        photo.dataUrl
-          ? <img src={photo.dataUrl} alt={photo.filename} className="w-full h-full object-cover" />
-          : (
-            <a href={photo.driveUrl} target="_blank" rel="noopener noreferrer"
-              className="w-full h-full flex flex-col items-center justify-center bg-gray-100 hover:bg-gray-200 transition-colors px-2">
-              <Camera size={24} className="text-gray-400" />
-              <span className="text-[10px] text-gray-600 mt-1.5 text-center break-all leading-tight line-clamp-2">{photo.filename}</span>
-            </a>
-          )
+        directSrc
+          ? <img src={directSrc} alt={photo.filename} className="w-full h-full object-cover" />
+          : hasDriveOnly
+            ? <a href={photo.driveUrl} target="_blank" rel="noopener noreferrer"
+                className="w-full h-full flex flex-col items-center justify-center bg-gray-100 hover:bg-gray-200 transition-colors px-2">
+                <Camera size={24} className="text-gray-400" />
+                <span className="text-[10px] text-gray-600 mt-1.5 text-center break-all leading-tight line-clamp-2">{photo.filename}</span>
+              </a>
+            : <div className="w-full h-full flex items-center justify-center"><Camera size={24} className="text-gray-300" /></div>
       )}
       {type === 'video' && (
-        driveOnly
-          ? (
-            <a href={photo.driveUrl} target="_blank" rel="noopener noreferrer"
-              className="w-full h-full flex flex-col items-center justify-center bg-gray-800 active:opacity-90">
-              <Play size={28} className="text-white" />
-              <span className="text-white text-[10px] mt-1 opacity-60">View on Drive</span>
-            </a>
-          )
-          : playing
-            ? <video src={photo.dataUrl} className="w-full h-full object-contain bg-black" controls autoPlay />
-            : (
-              <button className="w-full h-full flex flex-col items-center justify-center bg-gray-800 active:opacity-90" onClick={() => setPlaying(true)}>
+        directSrc
+          ? playing
+            ? <video src={directSrc} className="w-full h-full object-contain bg-black" controls autoPlay />
+            : <button className="w-full h-full flex flex-col items-center justify-center bg-gray-800 active:opacity-90" onClick={() => setPlaying(true)}>
                 <Play size={28} className="text-white" />
                 <span className="text-white text-[10px] mt-1 opacity-60">Tap to play</span>
               </button>
-            )
+          : hasDriveOnly
+            ? <a href={photo.driveUrl} target="_blank" rel="noopener noreferrer"
+                className="w-full h-full flex flex-col items-center justify-center bg-gray-800 active:opacity-90">
+                <Play size={28} className="text-white" />
+                <span className="text-white text-[10px] mt-1 opacity-60">View on Drive</span>
+              </a>
+            : null
       )}
       {type === 'file' && (
-        <a href={driveOnly ? photo.driveUrl : photo.dataUrl} download={driveOnly ? undefined : photo.filename}
-          target={driveOnly ? '_blank' : undefined} rel={driveOnly ? 'noopener noreferrer' : undefined}
+        <a href={fileHref}
+          download={!photo.storageUrl && !photo.driveUrl ? photo.filename : undefined}
+          target={photo.storageUrl || photo.driveUrl ? '_blank' : undefined}
+          rel={photo.storageUrl || photo.driveUrl ? 'noopener noreferrer' : undefined}
           className="w-full h-full flex flex-col items-center justify-center bg-blue-50 hover:bg-blue-100 transition-colors px-2">
           <FileIcon size={24} className="text-blue-400 flex-shrink-0" />
           <span className="text-[10px] text-gray-600 mt-1.5 text-center break-all leading-tight line-clamp-3">{photo.filename}</span>
         </a>
       )}
-      {photo.driveFileId && (
-        <div className="absolute bottom-1 left-1 bg-green-500 rounded-full w-3.5 h-3.5 flex items-center justify-center" title="Synced to Drive">
+      {/* Cloud badge: blue = Firebase Storage, green = Google Drive */}
+      {(photo.storageUrl || photo.driveFileId) && (
+        <div
+          className={`absolute bottom-1 left-1 rounded-full w-3.5 h-3.5 flex items-center justify-center ${photo.storageUrl ? 'bg-blue-500' : 'bg-green-500'}`}
+          title={photo.storageUrl ? 'Saved in Firebase Storage' : 'Synced to Drive'}
+        >
           <CloudUpload size={8} className="text-white" />
         </div>
       )}
@@ -221,11 +257,41 @@ export function ContractorPortal() {
     const backendOn = isUploadBackendConfigured();
     const mainFolderId = apt?.driveLink ? extractFolderId(apt.driveLink) : null;
     const canUseDrive = backendOn && !!mainFolderId;
+
     try {
       for (const file of Array.from(e.target.files)) {
         const fType = detectFileType(file);
 
-        if (canUseDrive) {
+        if (isStorageConfigured) {
+          // ── Primary: Firebase Storage ─────────────────────────────────────
+          setUploadProgress({ name: file.name, pct: 0 });
+          try {
+            const uploadBlob: Blob = fType === 'image' ? await compressImageToBlob(file) : file;
+            const ext = file.name.includes('.') ? file.name.split('.').pop() : '';
+            const uid = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+            const path = `contractorPhotos/${selectedAssignment.id}/${uid}${ext ? '.' + ext : ''}`;
+            const storageUrl = await fsUploadFile(path, uploadBlob, pct => setUploadProgress({ name: file.name, pct }));
+            addContractorPhoto({
+              assignmentId: selectedAssignment.id,
+              apartmentId: selectedAssignment.apartmentId,
+              contractorId,
+              dataUrl: '',
+              filename: file.name,
+              fileType: fType,
+              mimeType: file.type,
+              storageUrl,
+              storagePath: path,
+              fileSizeBytes: uploadBlob.size,
+            });
+          } catch (err) {
+            setUploadError(`"${file.name}" failed: ${(err as Error).message}`);
+            continue;
+          } finally {
+            setUploadProgress(null);
+          }
+
+        } else if (canUseDrive) {
+          // ── Fallback: Google Drive backend ────────────────────────────────
           setUploadProgress({ name: file.name, pct: 0 });
           try {
             const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId!, 'Photos');
@@ -250,7 +316,9 @@ export function ContractorPortal() {
           } finally {
             setUploadProgress(null);
           }
+
         } else {
+          // ── Last resort: local base64 ─────────────────────────────────────
           if (file.size > LOCAL_MAX) {
             setUploadError(`"${file.name}" exceeds 50 MB — skipped.`);
             continue;
