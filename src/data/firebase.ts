@@ -65,6 +65,11 @@ if (isFirebaseConfigured) {
     // Enable IndexedDB persistence so writes are queued offline and retried on reconnect
     db = initializeFirestore(app, {
       localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+      // Firestore rejects any document containing `undefined` field values and throws,
+      // which silently failed writes for every collection that has optional fields
+      // (apartments, contractors, assignments, photos…). Activity logs have no optional
+      // fields, so they were the only thing that saved. Ignoring undefined fixes all writes.
+      ignoreUndefinedProperties: true,
     });
     storage = getStorage(app);
   } catch (e) {
