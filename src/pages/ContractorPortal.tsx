@@ -18,7 +18,7 @@ import {
 import { isStorageConfigured, fsUploadFile } from '../data/firebase';
 
 const CATEGORY_LABELS: Record<string, string> = {
-  drywall: 'Drywall', ac: 'AC / HVAC', general: 'General',
+  drywall: 'Drywall', ac: 'AC', general: 'General',
 };
 const CATEGORY_COLORS: Record<string, string> = {
   drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981',

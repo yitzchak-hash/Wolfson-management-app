@@ -118,6 +118,17 @@ function LightboxOverlay({ items, initialIndex, onClose }: { items: LightboxItem
   );
 }
 
+function DriveImg({ src, alt, className }: { src: string; alt: string; className?: string }) {
+  const [failed, setFailed] = React.useState(false);
+  if (failed) return (
+    <div className="w-full h-full flex flex-col items-center justify-center bg-gray-50 px-1">
+      <FileText size={14} className="text-gray-300" />
+      <span className="text-[8px] text-gray-400 text-center break-all leading-tight mt-0.5 truncate w-full">{alt}</span>
+    </div>
+  );
+  return <img src={src} alt={alt} className={className} onError={() => setFailed(true)} />;
+}
+
 export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast, onRequestAddTask }: Props) {
   const { stages, activityLogs, apartments, updateApartment, mergeApartments, unmergeApartments,
     autoBackup, backupSnapshots, restoreFromSnapshot,
@@ -138,6 +149,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [loadingPhotos, setLoadingPhotos] = useState(false);
   const [photosLoaded, setPhotosLoaded] = useState(false);
   const [lightbox, setLightbox] = useState<{ items: { fileId: string; filename: string; mimeType: string; thumbSrc: string; downloadHref: string }[]; index: number } | null>(null);
+  const [officeUploadPct, setOfficeUploadPct] = useState<number | null>(null);
   const [showUnmergeModal, setShowUnmergeModal] = useState(false);
   const [showPdfViewer, setShowPdfViewer] = useState(false);
   const [showHealthCheck, setShowHealthCheck] = useState(false);
@@ -458,7 +470,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                       try {
                         const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');
                         const notesFolderId = await findOrCreateFolderViaBackend(photosFolderId, 'Job Notes');
-                        const { fileId, webViewLink } = await uploadFileViaResumableSession(notesFolderId, file);
+                        setOfficeUploadPct(0);
+                        const { fileId, webViewLink } = await uploadFileViaResumableSession(notesFolderId, file, pct => setOfficeUploadPct(pct));
+                        setOfficeUploadPct(null);
                         await shareFileToDrive(fileId);
                         addOfficeNoteFile({
                           apartmentId: apartment.id,
@@ -473,6 +487,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                         onToast('File attached');
                         return;
                       } catch {
+                        setOfficeUploadPct(null);
                         // fall through to base64 fallback
                       }
                     }
@@ -487,10 +502,19 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                         uploadedByName: currentUser.name,
                       });
                       onToast('File attached');
+                      setOfficeUploadPct(null);
                     };
                     reader.readAsDataURL(file);
                   }}
                 />
+                {officeUploadPct !== null && (
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                      <div className="h-full bg-[#4aa8d8] transition-all" style={{ width: `${officeUploadPct}%` }} />
+                    </div>
+                    <span className="text-[10px] text-gray-500 flex-shrink-0">{officeUploadPct}%</span>
+                  </div>
+                )}
                 {(() => {
                   const aptFiles = officeNoteFiles.filter(f => f.apartmentId === apartment.id);
                   if (!aptFiles.length) return null;
@@ -513,7 +537,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                             }}
                           >
                             {isImage
-                              ? <img
+                              ? <DriveImg
                                   src={f.driveFileId ? driveThumbUrl(f.driveFileId, 400) : f.dataUrl}
                                   alt={f.filename}
                                   className="w-full h-full object-cover"
@@ -528,9 +552,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                 <AlertTriangle size={6} color="white" />
                               </div>
                             )}
-                            <button onClick={() => deleteOfficeNoteFile(f.id)}
+                            <button onClick={e => { e.stopPropagation(); deleteOfficeNoteFile(f.id); }}
                               title="Remove file"
-                              className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
                               <Trash2 size={8} color="white" />
                             </button>
                             <a
@@ -831,23 +855,32 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                             {(a.attachments?.length ?? 0) > 0 && (
                               <div className="mt-2 flex flex-wrap gap-1.5">
                                 {a.attachments!.map((att, attIdx) => (
-                                  <div key={att.id}
-                                    className="w-10 h-10 rounded-lg border border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center flex-shrink-0 cursor-pointer"
-                                    onClick={() => {
-                                      const items = a.attachments!.map(at => ({
-                                        fileId: at.driveFileId ?? '',
-                                        filename: at.filename,
-                                        mimeType: at.mimeType,
-                                        thumbSrc: at.driveFileId ? driveThumbUrl(at.driveFileId, 800) : at.dataUrl,
-                                        downloadHref: at.driveFileId ? `https://drive.google.com/uc?export=download&id=${at.driveFileId}` : at.dataUrl,
-                                      }));
-                                      setLightbox({ items, index: attIdx });
-                                    }}
-                                  >
-                                    {att.mimeType.startsWith('image/')
-                                      ? <img src={att.driveFileId ? driveThumbUrl(att.driveFileId, 200) : att.dataUrl} alt={att.filename} className="w-full h-full object-cover" />
-                                      : <FileText size={14} className="text-gray-400" />
-                                    }
+                                  <div key={att.id} className="relative flex-shrink-0">
+                                    <div
+                                      className="w-10 h-10 rounded-lg border border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center cursor-pointer"
+                                      onClick={() => {
+                                        const items = a.attachments!.map(at => ({
+                                          fileId: at.driveFileId ?? '',
+                                          filename: at.filename,
+                                          mimeType: at.mimeType,
+                                          thumbSrc: at.driveFileId ? driveThumbUrl(at.driveFileId, 800) : at.dataUrl,
+                                          downloadHref: at.driveFileId ? `https://drive.google.com/uc?export=download&id=${at.driveFileId}` : at.dataUrl,
+                                        }));
+                                        setLightbox({ items, index: attIdx });
+                                      }}
+                                    >
+                                      {att.mimeType.startsWith('image/')
+                                        ? <DriveImg src={att.driveFileId ? driveThumbUrl(att.driveFileId, 200) : att.dataUrl} alt={att.filename} className="w-full h-full object-cover" />
+                                        : <FileText size={14} className="text-gray-400" />
+                                      }
+                                    </div>
+                                    <button
+                                      onClick={e => { e.stopPropagation(); updateContractorAssignment(a.id, { attachments: (a.attachments ?? []).filter(at => at.id !== att.id) }); }}
+                                      className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center z-10"
+                                      title="Remove attachment"
+                                    >
+                                      <X size={8} color="white" />
+                                    </button>
                                   </div>
                                 ))}
                               </div>
@@ -918,7 +951,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                   }}
                                 >
                                   {isImg ? (
-                                    <img src={driveThumbUrl(photo.fileId, 400)} alt={photo.filename} className="w-full h-full object-cover" loading="lazy" />
+                                    <DriveImg src={driveThumbUrl(photo.fileId, 400)} alt={photo.filename} className="w-full h-full object-cover" />
                                   ) : isVid ? (
                                     <div className="w-full h-full flex flex-col items-center justify-center bg-gray-800">
                                       <Play size={22} className="text-white" />

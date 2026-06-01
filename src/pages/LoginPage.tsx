@@ -74,7 +74,7 @@ export function LoginPage() {
             </div>
           </div>
           <p className="text-gray-300 text-sm leading-relaxed max-w-sm">
-            Internal project management system for HVAC installation tracking across all three buildings.
+            Internal project management system for AC installation tracking across all three buildings.
           </p>
         </div>
       </div>

@@ -12,7 +12,7 @@ const CAT_COLORS: Record<ContractorCategory, string> = {
   drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981',
 };
 const CAT_LABELS: Record<ContractorCategory, string> = {
-  drywall: 'Drywall', ac: 'AC / HVAC', general: 'General',
+  drywall: 'Drywall', ac: 'AC', general: 'General',
 };
 
 function getDueBadge(dueDate: string | null): { text: string; cls: string } | null {

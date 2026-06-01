@@ -224,7 +224,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                             const items = contractors.filter(c => c.category === cat && c.active);
                             if (!items.length) return null;
                             return (
-                              <optgroup key={cat} label={cat === 'ac' ? 'AC / HVAC' : cat.charAt(0).toUpperCase() + cat.slice(1)}>
+                              <optgroup key={cat} label={cat === 'ac' ? 'AC' : cat.charAt(0).toUpperCase() + cat.slice(1)}>
                                 {items.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                               </optgroup>
                             );
@@ -375,7 +375,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                       const items = contractors.filter(c => c.category === cat && c.active);
                       if (!items.length) return null;
                       return (
-                        <optgroup key={cat} label={cat === 'ac' ? 'AC / HVAC' : cat.charAt(0).toUpperCase() + cat.slice(1)}>
+                        <optgroup key={cat} label={cat === 'ac' ? 'AC' : cat.charAt(0).toUpperCase() + cat.slice(1)}>
                           {items.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                         </optgroup>
                       );

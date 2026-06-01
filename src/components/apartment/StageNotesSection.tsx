@@ -138,7 +138,7 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                       {['drywall', 'ac', 'general'].map(cat => {
                         const catContractors = activeContractors.filter(c => c.category === cat);
                         if (!catContractors.length) return null;
-                        const labels: Record<string, string> = { drywall: 'Drywall', ac: 'AC / HVAC', general: 'General' };
+                        const labels: Record<string, string> = { drywall: 'Drywall', ac: 'AC', general: 'General' };
                         return (
                           <optgroup key={cat} label={labels[cat]}>
                             {catContractors.map(c => (

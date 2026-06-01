@@ -23,7 +23,7 @@ const PRESET_COLORS = [
 ];
 
 const CAT_COLORS: Record<ContractorCategory, string> = { drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981' };
-const CAT_LABELS: Record<ContractorCategory, string> = { drywall: 'Drywall', ac: 'AC / HVAC', general: 'General' };
+const CAT_LABELS: Record<ContractorCategory, string> = { drywall: 'Drywall', ac: 'AC', general: 'General' };
 
 export function SettingsPage() {
   const { stages, users, updateStage, addStage, deleteStage, updateUser, addUser, lightTheme, setLightTheme } = useStore();
@@ -374,7 +374,7 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
             className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
           <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value as ContractorCategory }))}
             className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30">
-            <option value="ac">AC / HVAC</option>
+            <option value="ac">AC</option>
             <option value="drywall">Drywall</option>
             <option value="general">General</option>
           </select>
