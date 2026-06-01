@@ -3,8 +3,9 @@ import { useStore } from '../data/store';
 import {
   Plus, Trash2, Save, ChevronUp, ChevronDown, Shield, Sun, Moon,
   Copy, Check, Download, Upload, HardDrive, X, HardDriveDownload, ToggleLeft, ToggleRight,
-  Languages, Clock, RotateCcw,
+  Languages, Clock, RotateCcw, Wifi, WifiOff, Loader, Database,
 } from 'lucide-react';
+import { isFirebaseConfigured, db, fsSet, fsGetAll, isStorageConfigured } from '../data/firebase';
 import { Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, BackupFrequency } from '../types';
 import { Tooltip } from '../components/ui/Tooltip';
 import { Toast } from '../components/ui/Toast';
@@ -387,6 +388,127 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
   );
 }
 
+// ─── Firebase status tester ───────────────────────────────────────────────────
+const FIREBASE_VARS = [
+  { key: 'VITE_FIREBASE_API_KEY',            label: 'API Key' },
+  { key: 'VITE_FIREBASE_AUTH_DOMAIN',        label: 'Auth Domain' },
+  { key: 'VITE_FIREBASE_PROJECT_ID',         label: 'Project ID' },
+  { key: 'VITE_FIREBASE_STORAGE_BUCKET',     label: 'Storage Bucket' },
+  { key: 'VITE_FIREBASE_MESSAGING_SENDER_ID',label: 'Messaging Sender ID' },
+  { key: 'VITE_FIREBASE_APP_ID',             label: 'App ID' },
+] as const;
+
+type TestStatus = 'idle' | 'testing' | 'ok' | 'error';
+
+function FirebaseStatusSection() {
+  const [testStatus, setTestStatus] = useState<TestStatus>('idle');
+  const [testMsg, setTestMsg]       = useState('');
+
+  const envValues: Record<string, string | undefined> = {
+    VITE_FIREBASE_API_KEY:             import.meta.env.VITE_FIREBASE_API_KEY,
+    VITE_FIREBASE_AUTH_DOMAIN:         import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    VITE_FIREBASE_PROJECT_ID:          import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    VITE_FIREBASE_STORAGE_BUCKET:      import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    VITE_FIREBASE_MESSAGING_SENDER_ID: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    VITE_FIREBASE_APP_ID:              import.meta.env.VITE_FIREBASE_APP_ID,
+  };
+  const missingVars = FIREBASE_VARS.filter(v => !envValues[v.key]);
+
+  async function runTest() {
+    setTestStatus('testing');
+    setTestMsg('');
+    try {
+      if (!isFirebaseConfigured) {
+        const missing = missingVars.map(v => v.label).join(', ');
+        setTestStatus('error');
+        setTestMsg(`Missing env var${missingVars.length > 1 ? 's' : ''}: ${missing}`);
+        return;
+      }
+      if (!db) {
+        setTestStatus('error');
+        setTestMsg('Firebase SDK failed to initialize — check that all 6 env vars are correct.');
+        return;
+      }
+      // Write a test document then immediately read it back
+      const testId = '_connection_test_';
+      await fsSet('_healthcheck', testId, { ts: Date.now() });
+      const docs = await fsGetAll('_healthcheck');
+      const found = docs.some(d => (d as { id?: string }).id === testId);
+      if (!found) {
+        setTestStatus('error');
+        setTestMsg('Write succeeded but read returned nothing — check Firestore security rules.');
+        return;
+      }
+      setTestStatus('ok');
+      setTestMsg(`Firestore read/write OK${isStorageConfigured ? ' · Storage configured ✓' : ' · Storage not configured'}`);
+    } catch (e: unknown) {
+      setTestStatus('error');
+      setTestMsg(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <Database size={18} className="text-[#1e3a5f]" />
+        <h2 className="font-semibold text-gray-800">Firebase Connection</h2>
+      </div>
+
+      {/* Env var checklist */}
+      <div className="space-y-1.5 mb-4">
+        {FIREBASE_VARS.map(({ key, label }) => {
+          const present = Boolean(envValues[key]);
+          return (
+            <div key={key} className="flex items-center gap-2 text-sm">
+              {present
+                ? <Check size={14} className="text-green-500 flex-shrink-0" />
+                : <X     size={14} className="text-red-500  flex-shrink-0" />}
+              <span className={present ? 'text-gray-700' : 'text-red-600 font-medium'}>
+                {label}
+              </span>
+              {!present && (
+                <code className="text-xs font-mono text-red-400 ml-auto">{key}</code>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Connection test button + result */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <button
+          onClick={runTest}
+          disabled={testStatus === 'testing'}
+          className="flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] disabled:opacity-50 transition-colors"
+        >
+          {testStatus === 'testing'
+            ? <Loader size={15} className="animate-spin" />
+            : <Wifi size={15} />}
+          {testStatus === 'testing' ? 'Testing…' : 'Test Connection'}
+        </button>
+
+        {testStatus === 'ok' && (
+          <div className="flex items-center gap-1.5 text-sm text-green-700 font-medium">
+            <Wifi size={14} className="text-green-500" /> {testMsg}
+          </div>
+        )}
+        {testStatus === 'error' && (
+          <div className="flex items-center gap-1.5 text-sm text-red-600">
+            <WifiOff size={14} className="flex-shrink-0" />
+            <span>{testMsg}</span>
+          </div>
+        )}
+      </div>
+
+      {missingVars.length > 0 && (
+        <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          Set missing variables in Vercel → Project → Settings → Environment Variables, then redeploy.
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ─── App settings ─────────────────────────────────────────────────────────────
 function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
   lightTheme: boolean; setLightTheme: (v: boolean) => void; onToast: (msg: string, type?: 'success' | 'error') => void;
@@ -446,13 +568,7 @@ function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
 
       <BackupRestoreSection onToast={onToast} />
 
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
-        <h3 className="font-semibold text-amber-800 mb-2 text-sm">Data Storage</h3>
-        <p className="text-sm text-amber-700">
-          Data is stored in localStorage and synced to Firebase if configured.
-          See <code className="font-mono bg-amber-100 px-1 rounded">.env.example</code> for Firebase setup.
-        </p>
-      </div>
+      <FirebaseStatusSection />
     </div>
   );
 }
