@@ -12,7 +12,7 @@
 
 import { initializeApp, FirebaseApp } from 'firebase/app';
 import {
-  getFirestore,
+  initializeFirestore,
   Firestore,
   collection,
   doc,
@@ -58,7 +58,14 @@ let storage: FirebaseStorage | null = null;
 if (isFirebaseConfigured) {
   try {
     app = initializeApp(firebaseConfig);
-    db = getFirestore(app);
+    // Firestore rejects any document containing `undefined` field values and throws,
+    // which silently failed writes for every collection that has optional fields
+    // (apartments, contractors, assignments, photos…). Activity logs have no optional
+    // fields, so they were the only thing that saved. Ignoring undefined fixes all writes.
+    // (No persistentLocalCache — it was removed to fix cross-device sync on mobile.)
+    db = initializeFirestore(app, {
+      ignoreUndefinedProperties: true,
+    });
     storage = getStorage(app);
   } catch (e) {
     console.warn('Firebase init failed, using localStorage only:', e);
