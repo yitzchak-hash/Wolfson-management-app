@@ -389,21 +389,52 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
 }
 
 // ─── Firebase status tester ───────────────────────────────────────────────────
-const FIREBASE_VARS = [
-  { key: 'VITE_FIREBASE_API_KEY',            label: 'API Key' },
-  { key: 'VITE_FIREBASE_AUTH_DOMAIN',        label: 'Auth Domain' },
+const FIREBASE_ENV_VARS = [
+  { key: 'VITE_FIREBASE_API_KEY',             label: 'API Key' },
+  { key: 'VITE_FIREBASE_AUTH_DOMAIN',         label: 'Auth Domain' },
   { key: 'VITE_FIREBASE_PROJECT_ID',         label: 'Project ID' },
   { key: 'VITE_FIREBASE_STORAGE_BUCKET',     label: 'Storage Bucket' },
   { key: 'VITE_FIREBASE_MESSAGING_SENDER_ID',label: 'Messaging Sender ID' },
   { key: 'VITE_FIREBASE_APP_ID',             label: 'App ID' },
 ] as const;
 
-type TestStatus = 'idle' | 'testing' | 'ok' | 'error';
+type StepState = 'pending' | 'running' | 'ok' | 'fail';
+interface TestStep { id: string; label: string; detail: string; state: StepState }
+
+const INITIAL_STEPS: TestStep[] = [
+  { id: 'env',     label: 'Environment variables', detail: '', state: 'pending' },
+  { id: 'sdk',     label: 'SDK initialization',    detail: '', state: 'pending' },
+  { id: 'write',   label: 'Firestore write',        detail: '', state: 'pending' },
+  { id: 'read',    label: 'Firestore read',         detail: '', state: 'pending' },
+  { id: 'storage', label: 'Firebase Storage',       detail: '', state: 'pending' },
+];
+
+function StepRow({ step }: { step: TestStep }) {
+  return (
+    <div className="flex items-start gap-3 py-2">
+      <div className="mt-0.5 flex-shrink-0">
+        {step.state === 'pending' && <div className="w-4 h-4 rounded-full border-2 border-gray-200" />}
+        {step.state === 'running' && <Loader size={16} className="text-[#4aa8d8] animate-spin" />}
+        {step.state === 'ok'      && <Check  size={16} className="text-green-500" />}
+        {step.state === 'fail'    && <X      size={16} className="text-red-500" />}
+      </div>
+      <div className="min-w-0">
+        <p className={`text-sm font-medium leading-tight ${
+          step.state === 'pending' ? 'text-gray-400' :
+          step.state === 'ok'     ? 'text-green-700' :
+          step.state === 'fail'   ? 'text-red-600'   : 'text-gray-700'
+        }`}>{step.label}</p>
+        {step.detail && (
+          <p className={`text-xs mt-0.5 ${step.state === 'fail' ? 'text-red-500' : 'text-gray-500'}`}>
+            {step.detail}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function FirebaseStatusSection() {
-  const [testStatus, setTestStatus] = useState<TestStatus>('idle');
-  const [testMsg, setTestMsg]       = useState('');
-
   const envValues: Record<string, string | undefined> = {
     VITE_FIREBASE_API_KEY:             import.meta.env.VITE_FIREBASE_API_KEY,
     VITE_FIREBASE_AUTH_DOMAIN:         import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -412,97 +443,132 @@ function FirebaseStatusSection() {
     VITE_FIREBASE_MESSAGING_SENDER_ID: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
     VITE_FIREBASE_APP_ID:              import.meta.env.VITE_FIREBASE_APP_ID,
   };
-  const missingVars = FIREBASE_VARS.filter(v => !envValues[v.key]);
+
+  const [steps, setSteps]     = useState<TestStep[]>(INITIAL_STEPS);
+  const [running, setRunning] = useState(false);
+  const [done, setDone]       = useState(false);
+
+  function patch(id: string, updates: Partial<TestStep>) {
+    setSteps(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+  }
 
   async function runTest() {
-    setTestStatus('testing');
-    setTestMsg('');
-    try {
-      if (!isFirebaseConfigured) {
-        const missing = missingVars.map(v => v.label).join(', ');
-        setTestStatus('error');
-        setTestMsg(`Missing env var${missingVars.length > 1 ? 's' : ''}: ${missing}`);
-        return;
-      }
-      if (!db) {
-        setTestStatus('error');
-        setTestMsg('Firebase SDK failed to initialize — check that all 6 env vars are correct.');
-        return;
-      }
-      // Write a test document then immediately read it back
-      const testId = '_connection_test_';
-      await fsSet('_healthcheck', testId, { ts: Date.now() });
-      const docs = await fsGetAll('_healthcheck');
-      const found = docs.some(d => (d as { id?: string }).id === testId);
-      if (!found) {
-        setTestStatus('error');
-        setTestMsg('Write succeeded but read returned nothing — check Firestore security rules.');
-        return;
-      }
-      setTestStatus('ok');
-      setTestMsg(`Firestore read/write OK${isStorageConfigured ? ' · Storage configured ✓' : ' · Storage not configured'}`);
-    } catch (e: unknown) {
-      setTestStatus('error');
-      setTestMsg(e instanceof Error ? e.message : String(e));
+    setSteps(INITIAL_STEPS);
+    setRunning(true);
+    setDone(false);
+
+    // Step 1 — env vars
+    patch('env', { state: 'running' });
+    await new Promise(r => setTimeout(r, 300));
+    const missing = FIREBASE_ENV_VARS.filter(v => !envValues[v.key]);
+    if (missing.length > 0) {
+      patch('env', { state: 'fail', detail: `Missing: ${missing.map(v => v.label).join(', ')}` });
+      setRunning(false); setDone(true); return;
     }
+    patch('env', { state: 'ok', detail: 'All 6 variables present' });
+
+    // Step 2 — SDK init
+    patch('sdk', { state: 'running' });
+    await new Promise(r => setTimeout(r, 200));
+    if (!db) {
+      patch('sdk', { state: 'fail', detail: 'SDK failed to initialize — values may be wrong or mismatched' });
+      setRunning(false); setDone(true); return;
+    }
+    patch('sdk', { state: 'ok', detail: `Project: ${envValues.VITE_FIREBASE_PROJECT_ID}` });
+
+    // Step 3 — Firestore write
+    patch('write', { state: 'running' });
+    try {
+      await fsSet('_healthcheck', '_test_', { ts: Date.now() });
+      patch('write', { state: 'ok', detail: 'Document written to _healthcheck collection' });
+    } catch (e: unknown) {
+      patch('write', { state: 'fail', detail: e instanceof Error ? e.message : String(e) });
+      setRunning(false); setDone(true); return;
+    }
+
+    // Step 4 — Firestore read
+    patch('read', { state: 'running' });
+    try {
+      const docs = await fsGetAll('_healthcheck');
+      const found = docs.some(d => (d as { id?: string }).id === '_test_');
+      if (!found) {
+        patch('read', { state: 'fail', detail: 'Document not returned — check Firestore security rules (allow read, write: if true)' });
+        setRunning(false); setDone(true); return;
+      }
+      patch('read', { state: 'ok', detail: `Read back ${docs.length} document${docs.length !== 1 ? 's' : ''}` });
+    } catch (e: unknown) {
+      patch('read', { state: 'fail', detail: e instanceof Error ? e.message : String(e) });
+      setRunning(false); setDone(true); return;
+    }
+
+    // Step 5 — Storage
+    patch('storage', { state: 'running' });
+    await new Promise(r => setTimeout(r, 200));
+    if (isStorageConfigured) {
+      patch('storage', { state: 'ok', detail: `Bucket: ${envValues.VITE_FIREBASE_STORAGE_BUCKET}` });
+    } else {
+      patch('storage', { state: 'fail', detail: 'Storage not initialized — storageBucket may be wrong' });
+    }
+
+    setRunning(false);
+    setDone(true);
   }
+
+  const allOk  = done && steps.every(s => s.state === 'ok');
+  const anyFail = done && steps.some(s => s.state === 'fail');
+  const missingCount = FIREBASE_ENV_VARS.filter(v => !envValues[v.key]).length;
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-5">
-      <div className="flex items-center gap-2 mb-4">
-        <Database size={18} className="text-[#1e3a5f]" />
-        <h2 className="font-semibold text-gray-800">Firebase Connection</h2>
-      </div>
-
-      {/* Env var checklist */}
-      <div className="space-y-1.5 mb-4">
-        {FIREBASE_VARS.map(({ key, label }) => {
-          const present = Boolean(envValues[key]);
-          return (
-            <div key={key} className="flex items-center gap-2 text-sm">
-              {present
-                ? <Check size={14} className="text-green-500 flex-shrink-0" />
-                : <X     size={14} className="text-red-500  flex-shrink-0" />}
-              <span className={present ? 'text-gray-700' : 'text-red-600 font-medium'}>
-                {label}
-              </span>
-              {!present && (
-                <code className="text-xs font-mono text-red-400 ml-auto">{key}</code>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Connection test button + result */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <button
-          onClick={runTest}
-          disabled={testStatus === 'testing'}
-          className="flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] disabled:opacity-50 transition-colors"
-        >
-          {testStatus === 'testing'
-            ? <Loader size={15} className="animate-spin" />
-            : <Wifi size={15} />}
-          {testStatus === 'testing' ? 'Testing…' : 'Test Connection'}
-        </button>
-
-        {testStatus === 'ok' && (
-          <div className="flex items-center gap-1.5 text-sm text-green-700 font-medium">
-            <Wifi size={14} className="text-green-500" /> {testMsg}
-          </div>
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2">
+          <Database size={18} className="text-[#1e3a5f]" />
+          <h2 className="font-semibold text-gray-800">Firebase Connection</h2>
+        </div>
+        {missingCount > 0 && !running && (
+          <span className="text-xs font-medium text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+            {missingCount} var{missingCount > 1 ? 's' : ''} missing
+          </span>
         )}
-        {testStatus === 'error' && (
-          <div className="flex items-center gap-1.5 text-sm text-red-600">
-            <WifiOff size={14} className="flex-shrink-0" />
-            <span>{testMsg}</span>
-          </div>
+        {allOk && (
+          <span className="text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-2 py-0.5 flex items-center gap-1">
+            <Wifi size={11} /> All systems go
+          </span>
+        )}
+        {anyFail && (
+          <span className="text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-full px-2 py-0.5 flex items-center gap-1">
+            <WifiOff size={11} /> Connection issue
+          </span>
         )}
       </div>
 
-      {missingVars.length > 0 && (
+      <p className="text-xs text-gray-400 mb-4">Tests each service one by one — runs a live read/write to confirm Firestore works.</p>
+
+      {/* Step list */}
+      <div className="divide-y divide-gray-100 mb-4 rounded-lg border border-gray-100 overflow-hidden">
+        {steps.map(step => (
+          <div key={step.id} className={`px-3 transition-colors ${
+            step.state === 'ok'   ? 'bg-green-50/60' :
+            step.state === 'fail' ? 'bg-red-50/60'   :
+            step.state === 'running' ? 'bg-blue-50/40' : 'bg-white'
+          }`}>
+            <StepRow step={step} />
+          </div>
+        ))}
+      </div>
+
+      <button
+        onClick={runTest}
+        disabled={running}
+        className="flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] disabled:opacity-50 transition-colors"
+      >
+        {running ? <Loader size={15} className="animate-spin" /> : <Wifi size={15} />}
+        {running ? 'Running tests…' : done ? 'Run Again' : 'Run Connection Test'}
+      </button>
+
+      {missingCount > 0 && (
         <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-          Set missing variables in Vercel → Project → Settings → Environment Variables, then redeploy.
+          Fix missing variables in Vercel → Project → Settings → Environment Variables, then redeploy.
         </p>
       )}
     </div>
@@ -738,12 +804,25 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
           <div>
             <p className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
               <Clock size={14} className="text-[#1e3a5f]" />
-              Auto-backup frequency
+              Auto-backup
             </p>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Saves a snapshot for Activity History restore.
-              {backupSnapshots.length > 0 && ` ${backupSnapshots.length} snapshot${backupSnapshots.length !== 1 ? 's' : ''} stored.`}
-            </p>
+            {autoBackup ? (() => {
+              const lastAuto = [...backupLogs].reverse().find(e => e.triggeredBy !== 'manual');
+              const lastAny  = [...backupLogs].reverse()[0];
+              const last     = lastAuto ?? lastAny;
+              return (
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {last
+                    ? <>Last backup: <span className="font-medium text-gray-700">{format(new Date(last.createdAt), 'MMM d · HH:mm')}</span>
+                      {last.driveUploaded && <span className="ml-1 text-[#4aa8d8]">· Drive ✓</span>}
+                    </>
+                    : 'No backups yet — will run on next activity.'}
+                  {backupSnapshots.length > 0 && <span className="ml-1 text-gray-400">({backupSnapshots.length} snapshot{backupSnapshots.length !== 1 ? 's' : ''} stored)</span>}
+                </p>
+              );
+            })() : (
+              <p className="text-xs text-gray-500 mt-0.5">Saves a snapshot for Activity History restore.</p>
+            )}
           </div>
           <button
             onClick={() => setAutoBackup(!autoBackup)}
