@@ -426,8 +426,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
                     <BookOpen size={11} /> Engineering Plans
                   </label>
-                  <div className="flex items-center gap-2">
-                    {driveLink && backendConfigured && (
+                  {driveLink && backendConfigured && (
                       <Tooltip text="Re-scan Drive folder for Plans PDF">
                         <button
                           onClick={() => {
@@ -444,37 +443,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                         </button>
                       </Tooltip>
                     )}
-                    <Tooltip text={showHealthCheck ? 'Hide health check' : 'Show Drive folder health check'}>
-                      <button
-                        onClick={() => setShowHealthCheck(v => !v)}
-                        className={`flex items-center gap-1 text-xs transition-colors ${showHealthCheck ? 'text-[#1e3a5f]' : 'text-gray-400 hover:text-[#1e3a5f]'}`}
-                      >
-                        <Activity size={11} /> Health
-                      </button>
-                    </Tooltip>
-                  </div>
                 </div>
-
-                {showHealthCheck && (
-                  <div className="mb-2 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-1.5">
-                    {[
-                      { label: 'Drive folder linked', ok: !!driveLink.trim() },
-                      { label: 'Plans PDF detected', ok: !!detectedPdfId },
-                    ].map(({ label, ok }) => (
-                      <div key={label} className="flex items-center gap-2 text-xs">
-                        <span className={`w-4 h-4 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0 ${ok ? 'bg-green-500' : 'bg-red-400'}`} style={{ fontSize: '9px' }}>
-                          {ok ? '✓' : '✗'}
-                        </span>
-                        <span className="text-gray-600">{label}</span>
-                      </div>
-                    ))}
-                    {!detectedPdfId && !fetchingPdf && driveLink && (
-                      <p className="text-[10px] text-gray-400 mt-1 pt-1 border-t border-gray-200">
-                        No PDF found. Check folder has "Engineered Plans" subfolder or PDF at root.
-                      </p>
-                    )}
-                  </div>
-                )}
 
                 {detectedPdfId ? (
                   <>
@@ -548,7 +517,37 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                         <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
                           <ExternalLink size={11} /> Google Drive Folder
                         </label>
+                        <Tooltip text={showHealthCheck ? 'Hide status' : 'Show Drive folder status'}>
+                          <button
+                            onClick={() => setShowHealthCheck(v => !v)}
+                            className={`flex items-center gap-1 text-xs transition-colors ${showHealthCheck ? 'text-[#1e3a5f]' : 'text-gray-400 hover:text-[#1e3a5f]'}`}
+                          >
+                            <Activity size={11} /> Status
+                          </button>
+                        </Tooltip>
                       </div>
+
+                      {showHealthCheck && (
+                        <div className="mb-2 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-1.5">
+                          {[
+                            { label: 'Drive folder linked', ok: !!driveLink.trim() },
+                            { label: 'Plans PDF detected', ok: !!detectedPdfId },
+                          ].map(({ label, ok }) => (
+                            <div key={label} className="flex items-center gap-2 text-xs">
+                              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0 ${ok ? 'bg-green-500' : 'bg-red-400'}`} style={{ fontSize: '9px' }}>
+                                {ok ? '✓' : '✗'}
+                              </span>
+                              <span className="text-gray-600">{label}</span>
+                            </div>
+                          ))}
+                          {!detectedPdfId && !fetchingPdf && driveLink && (
+                            <p className="text-[10px] text-gray-400 mt-1 pt-1 border-t border-gray-200">
+                              No PDF found. Check folder has "Engineered Plans" subfolder or PDF at root.
+                            </p>
+                          )}
+                        </div>
+                      )}
+
                       <div className="flex gap-2">
                         <input
                           value={driveLink}
@@ -571,6 +570,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                           <span>Merged partner has a different Drive link. Saving will sync both.</span>
                         </div>
                       )}
+                      <button
+                        onClick={handleSaveBasic}
+                        className="mt-2 w-full flex items-center justify-center gap-2 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors"
+                      >
+                        <Save size={14} /> Save Drive Link
+                      </button>
                     </div>
 
                     {/* Connected unit */}
