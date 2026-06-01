@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Apartment, ActivityLog, Stage, StageNote, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile } from '../types';
+import { Apartment, ActivityLog, Stage, StageNote, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS } from '../types';
 import {
   DEFAULT_BUILDINGS, DEFAULT_STAGES, DEFAULT_USERS, buildDefaultApartments, DATA_VERSION,
 } from './initialData';
@@ -127,12 +127,21 @@ interface AppState {
 
   // Auto-backup / snapshot restore
   autoBackup: boolean;
+  backupFrequency: BackupFrequency;
+  lastAutoBackupAt: string | null;
   backupSnapshots: BackupSnapshot[];
+  backupLogs: BackupLogEntry[];
   backupDriveFolderLink: string;
   setAutoBackup: (v: boolean) => void;
+  setBackupFrequency: (f: BackupFrequency) => void;
   setBackupDriveFolder: (url: string) => void;
+  addBackupLog: (entry: Omit<BackupLogEntry, 'id' | 'createdAt'>) => void;
   restoreFromSnapshot: (snapshotId: string) => void;
   getDataSummary: () => DataSummary;
+
+  // Contractor UI language strings
+  contractorUiStrings: ContractorUiStrings;
+  updateContractorUiStrings: (partial: Partial<ContractorUiStrings>) => void;
 
   // Office note files
   addOfficeNoteFile: (f: Omit<OfficeNoteFile, 'id' | 'uploadedAt'>) => void;
@@ -166,8 +175,12 @@ export const useStore = create<AppState>((set, get) => ({
   googleAccessToken: null,
   googleTokenExpiry: null,
   autoBackup: (stored?.autoBackup as boolean | null) ?? false,
+  backupFrequency: (stored?.backupFrequency as BackupFrequency | null) ?? 'activity',
+  lastAutoBackupAt: (stored?.lastAutoBackupAt as string | null) ?? null,
   backupSnapshots: (stored?.backupSnapshots as BackupSnapshot[] | null) ?? [],
+  backupLogs: (stored?.backupLogs as BackupLogEntry[] | null) ?? [],
   backupDriveFolderLink: (stored?.backupDriveFolderLink as string | null) ?? '',
+  contractorUiStrings: (stored?.contractorUiStrings as ContractorUiStrings | null) ?? DEFAULT_CONTRACTOR_UI_STRINGS,
   lightTheme: localStorage.getItem(THEME_KEY) === 'light',
   setLightTheme: (v: boolean) => {
     set({ lightTheme: v });
@@ -599,6 +612,20 @@ export const useStore = create<AppState>((set, get) => ({
     set(state => {
       const newLogs = [entry, ...state.activityLogs].slice(0, 500);
       if (!state.autoBackup) return { activityLogs: newLogs };
+
+      // Check frequency before snapshotting
+      const freq = state.backupFrequency ?? 'activity';
+      const now = Date.now();
+      const last = state.lastAutoBackupAt ? new Date(state.lastAutoBackupAt).getTime() : 0;
+      const DAY = 86_400_000;
+      let shouldSnapshot = false;
+      if (freq === 'activity') shouldSnapshot = true;
+      else if (freq === 'daily' && now - last > DAY) shouldSnapshot = true;
+      else if (freq === 'weekly' && now - last > 7 * DAY) shouldSnapshot = true;
+      else if (freq === 'monthly' && now - last > 30 * DAY) shouldSnapshot = true;
+
+      if (!shouldSnapshot) return { activityLogs: newLogs };
+
       const snapshot: BackupSnapshot = {
         id: generateId(),
         activityLogId: entry.id,
@@ -620,6 +647,7 @@ export const useStore = create<AppState>((set, get) => ({
       return {
         activityLogs: newLogs,
         backupSnapshots: [snapshot, ...state.backupSnapshots],
+        lastAutoBackupAt: entry.createdAt,
       };
     });
     persist(get);
@@ -631,8 +659,24 @@ export const useStore = create<AppState>((set, get) => ({
     persist(get);
   },
 
+  setBackupFrequency: (f) => {
+    set({ backupFrequency: f });
+    persist(get);
+  },
+
   setBackupDriveFolder: (url) => {
     set({ backupDriveFolderLink: url });
+    persist(get);
+  },
+
+  addBackupLog: (fields) => {
+    const entry: BackupLogEntry = { ...fields, id: generateId(), createdAt: new Date().toISOString() };
+    set(state => ({ backupLogs: [entry, ...state.backupLogs].slice(0, 50) }));
+    persist(get);
+  },
+
+  updateContractorUiStrings: (partial) => {
+    set(state => ({ contractorUiStrings: { ...state.contractorUiStrings, ...partial } }));
     persist(get);
   },
 
@@ -756,7 +800,11 @@ function persist(get: () => AppState) {
     officeNoteFiles: state.officeNoteFiles,
     googleClientId: state.googleClientId,
     autoBackup: state.autoBackup,
+    backupFrequency: state.backupFrequency,
+    lastAutoBackupAt: state.lastAutoBackupAt,
     backupSnapshots: state.backupSnapshots,
+    backupLogs: state.backupLogs,
     backupDriveFolderLink: state.backupDriveFolderLink,
+    contractorUiStrings: state.contractorUiStrings,
   });
 }

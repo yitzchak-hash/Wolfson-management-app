@@ -3,14 +3,15 @@ import { useStore } from '../data/store';
 import {
   Plus, Trash2, Save, ChevronUp, ChevronDown, Shield, Sun, Moon,
   Copy, Check, Download, Upload, HardDrive, X, HardDriveDownload, ToggleLeft, ToggleRight,
+  Languages, Clock, RotateCcw,
 } from 'lucide-react';
-import { Stage, User, Contractor, ContractorCategory } from '../types';
+import { Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, BackupFrequency } from '../types';
 import { Toast } from '../components/ui/Toast';
 import { format } from 'date-fns';
 import { saveAs } from 'file-saver';
 import { requestGoogleToken, ensureValidToken, extractFolderId, findOrCreateFolder, uploadFileToDrive } from '../data/driveApi';
 
-type Tab = 'stages' | 'users' | 'contractors' | 'app';
+type Tab = 'stages' | 'users' | 'contractors' | 'app' | 'language';
 
 const PRESET_COLORS = [
   '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16',
@@ -38,6 +39,7 @@ export function SettingsPage() {
     users: 'Users',
     contractors: 'Contractors',
     app: 'App',
+    language: 'Language',
   };
 
   return (
@@ -45,7 +47,7 @@ export function SettingsPage() {
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Settings</h1>
 
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-6 flex-wrap">
-        {(['stages', 'users', 'contractors', 'app'] as Tab[]).map(tab => (
+        {(['stages', 'users', 'contractors', 'app', 'language'] as Tab[]).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
               activeTab === tab ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
@@ -66,6 +68,9 @@ export function SettingsPage() {
       )}
       {activeTab === 'app' && (
         <AppSettingsTab lightTheme={lightTheme} setLightTheme={setLightTheme} onToast={showToast} />
+      )}
+      {activeTab === 'language' && (
+        <LanguageTab onToast={showToast} />
       )}
 
       {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
@@ -516,6 +521,7 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
     autoBackup, setAutoBackup, backupSnapshots,
     backupDriveFolderLink, setBackupDriveFolder,
     googleClientId, googleAccessToken, googleTokenExpiry, setGoogleToken,
+    backupFrequency, setBackupFrequency, backupLogs, addBackupLog,
   } = useStore();
   const importRef = useRef<HTMLInputElement>(null);
   const [exportModal, setExportModal] = useState<ReturnType<typeof getDataSummary> & { sizeKB: number; driveUploaded?: boolean } | null>(null);
@@ -547,6 +553,7 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
       }
     }
 
+    addBackupLog({ filename, sizeKB, driveUploaded, triggeredBy: 'manual' });
     setExportModal({ ...getDataSummary(), sizeKB, driveUploaded });
   }
 
@@ -658,24 +665,46 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
         <h2 className="font-semibold text-gray-800">Backup &amp; Restore</h2>
       </div>
 
-      {/* Auto-backup toggle */}
-      <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 mb-4">
-        <div>
-          <p className="text-sm font-medium text-gray-700">Auto-backup on activity</p>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Saves a snapshot on each change — allows restoring from Activity History.
-            {backupSnapshots.length > 0 && ` ${backupSnapshots.length} snapshot${backupSnapshots.length !== 1 ? 's' : ''} stored.`}
-          </p>
+      {/* Auto-backup frequency */}
+      <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <p className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+              <Clock size={14} className="text-[#1e3a5f]" />
+              Auto-backup frequency
+            </p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Saves a snapshot for Activity History restore.
+              {backupSnapshots.length > 0 && ` ${backupSnapshots.length} snapshot${backupSnapshots.length !== 1 ? 's' : ''} stored.`}
+            </p>
+          </div>
+          <button
+            onClick={() => setAutoBackup(!autoBackup)}
+            className="flex-shrink-0 ml-3"
+          >
+            {autoBackup
+              ? <ToggleRight size={28} className="text-[#1e3a5f]" />
+              : <ToggleLeft size={28} className="text-gray-400" />
+            }
+          </button>
         </div>
-        <button
-          onClick={() => setAutoBackup(!autoBackup)}
-          className="flex-shrink-0 ml-3"
-        >
-          {autoBackup
-            ? <ToggleRight size={28} className="text-[#1e3a5f]" />
-            : <ToggleLeft size={28} className="text-gray-400" />
-          }
-        </button>
+        {autoBackup && (
+          <div className="flex gap-1 flex-wrap mt-2">
+            {(['activity', 'daily', 'weekly', 'monthly'] as BackupFrequency[]).map(f => (
+              <button
+                key={f}
+                onClick={() => setBackupFrequency(f)}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors capitalize ${
+                  (backupFrequency ?? 'activity') === f
+                    ? 'bg-[#1e3a5f] text-white'
+                    : 'bg-white border border-gray-200 text-gray-600 hover:border-[#1e3a5f]/40'
+                }`}
+              >
+                {f === 'activity' ? 'Every Activity' : f.charAt(0).toUpperCase() + f.slice(1)}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Drive backup folder */}
@@ -710,7 +739,7 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
         Export all data to a JSON file (apartments, stages, notes, contractors, photos).
         Import to fully restore — including all media.
       </p>
-      <div className="flex gap-3 flex-wrap">
+      <div className="flex gap-3 flex-wrap mb-5">
         <button onClick={handleExport}
           className="flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors">
           <Download size={16} /> Export Backup
@@ -720,6 +749,163 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
           <Upload size={16} /> Import Backup
         </button>
         <input ref={importRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
+      </div>
+
+      {/* Backup log */}
+      {backupLogs.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Backup History</p>
+          <div className="space-y-1 max-h-48 overflow-y-auto">
+            {backupLogs.map(entry => (
+              <div key={entry.id} className="flex items-center justify-between text-xs px-3 py-2 bg-gray-50 rounded-lg border border-gray-100">
+                <div className="flex items-center gap-2 min-w-0">
+                  <HardDrive size={12} className={entry.driveUploaded ? 'text-[#4aa8d8]' : 'text-gray-400'} />
+                  <span className="text-gray-700 truncate font-mono">{entry.filename}</span>
+                </div>
+                <div className="flex items-center gap-3 flex-shrink-0 ml-2">
+                  <span className="text-gray-400">{entry.sizeKB} KB</span>
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                    entry.triggeredBy === 'manual' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'
+                  }`}>{entry.triggeredBy}</span>
+                  <span className="text-gray-400">{format(new Date(entry.createdAt), 'MMM d, HH:mm')}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Language Tab ────────────────────────────────────────────────────────────
+
+const STRING_FIELD_LABELS: { key: keyof Omit<ContractorUiStrings, 'isRtl'>; label: string; group: string }[] = [
+  { key: 'myTasks',              label: 'My Tasks tab',          group: 'Navigation' },
+  { key: 'buildingMap',          label: 'Building Map tab',      group: 'Navigation' },
+  { key: 'taskSingular',         label: 'Task (singular)',        group: 'Navigation' },
+  { key: 'taskPlural',           label: 'Task (plural)',          group: 'Navigation' },
+  { key: 'doneLabel',            label: 'Done label',             group: 'Navigation' },
+  { key: 'noAssignments',        label: 'No assignments title',   group: 'Task List' },
+  { key: 'noAssignmentsHint',    label: 'No assignments hint',    group: 'Task List' },
+  { key: 'filterAll',            label: 'Filter: All',            group: 'Task List' },
+  { key: 'filterOverdue',        label: 'Filter: Overdue',        group: 'Task List' },
+  { key: 'filterToday',          label: 'Filter: Today',          group: 'Task List' },
+  { key: 'filterTomorrow',       label: 'Filter: Tomorrow',       group: 'Task List' },
+  { key: 'filterThisWeek',       label: 'Filter: This Week',      group: 'Task List' },
+  { key: 'duePrefix',            label: 'Due prefix',             group: 'Task List' },
+  { key: 'noApartmentsAssigned', label: 'No apts on map',         group: 'Map' },
+  { key: 'mapHint',              label: 'Map hint text',          group: 'Map' },
+  { key: 'tapToExpand',          label: 'Tap to expand',          group: 'Map' },
+  { key: 'sectionTask',          label: 'Task section header',    group: 'Task Detail' },
+  { key: 'fromOffice',           label: 'Office notes label',     group: 'Task Detail' },
+  { key: 'engineeringPlans',     label: 'Engineering Plans label', group: 'Task Detail' },
+  { key: 'completed',            label: 'Completed badge',        group: 'Task Detail' },
+  { key: 'undo',                 label: 'Undo button',            group: 'Task Detail' },
+  { key: 'filesAndPhotos',       label: 'Files & Photos header',  group: 'Files' },
+  { key: 'uploading',            label: 'Uploading label',        group: 'Files' },
+  { key: 'addFile',              label: 'Add File button',        group: 'Files' },
+  { key: 'tapToAddMedia',        label: 'Tap to add media hint',  group: 'Files' },
+  { key: 'requiredBeforeComplete', label: 'Required before complete', group: 'Files' },
+  { key: 'viewOnDrive',          label: 'View on Drive',          group: 'Files' },
+  { key: 'hide',                 label: 'Hide button',            group: 'Files' },
+  { key: 'view',                 label: 'View button',            group: 'Files' },
+  { key: 'download',             label: 'Download button',        group: 'Files' },
+  { key: 'sectionNotes',         label: 'Notes section header',   group: 'Notes' },
+  { key: 'yourNotes',            label: 'Your Notes label',       group: 'Notes' },
+  { key: 'addNote',              label: 'Add note placeholder',   group: 'Notes' },
+  { key: 'addMediaBeforeComplete', label: 'Add media prompt',     group: 'Complete' },
+  { key: 'markCompletePrompt',   label: 'Confirm dialog title',   group: 'Complete' },
+  { key: 'markCompleteHint',     label: 'Confirm dialog hint',    group: 'Complete' },
+  { key: 'cancel',               label: 'Cancel button',          group: 'Complete' },
+  { key: 'confirmComplete',      label: 'Confirm Complete button', group: 'Complete' },
+  { key: 'markingComplete',      label: 'Marking complete label', group: 'Complete' },
+  { key: 'markAsComplete',       label: 'Mark as Complete button', group: 'Complete' },
+  { key: 'linkNotFound',         label: 'Link not found title',   group: 'Errors' },
+  { key: 'linkInvalid',          label: 'Link invalid message',   group: 'Errors' },
+];
+
+function LanguageTab({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
+  const { contractorUiStrings, updateContractorUiStrings } = useStore();
+  const [draft, setDraft] = useState<ContractorUiStrings>({ ...contractorUiStrings });
+
+  function save() {
+    updateContractorUiStrings(draft);
+    onToast('Language settings saved');
+  }
+
+  function resetTo(preset: ContractorUiStrings) {
+    setDraft({ ...preset });
+    updateContractorUiStrings(preset);
+    onToast('Reset to ' + (preset.isRtl ? 'Hebrew' : 'English'));
+  }
+
+  const groups = Array.from(new Set(STRING_FIELD_LABELS.map(f => f.group)));
+
+  return (
+    <div className="space-y-5">
+      <div className="bg-white border border-gray-200 rounded-xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Languages size={18} className="text-[#1e3a5f]" />
+            <h2 className="font-semibold text-gray-800">Contractor Portal Language</h2>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => resetTo(DEFAULT_CONTRACTOR_UI_STRINGS)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              <RotateCcw size={12} /> English
+            </button>
+            <button
+              onClick={() => resetTo(HEBREW_CONTRACTOR_UI_STRINGS)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              <RotateCcw size={12} /> עברית
+            </button>
+          </div>
+        </div>
+
+        {/* RTL toggle */}
+        <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 mb-5">
+          <div>
+            <p className="text-sm font-medium text-gray-700">Right-to-Left (RTL) layout</p>
+            <p className="text-xs text-gray-500 mt-0.5">Enable for Hebrew, Arabic, and other RTL languages.</p>
+          </div>
+          <button onClick={() => setDraft(d => ({ ...d, isRtl: !d.isRtl }))} className="flex-shrink-0 ml-3">
+            {draft.isRtl
+              ? <ToggleRight size={28} className="text-[#1e3a5f]" />
+              : <ToggleLeft size={28} className="text-gray-400" />
+            }
+          </button>
+        </div>
+
+        {/* Fields grouped by section */}
+        {groups.map(group => (
+          <div key={group} className="mb-5">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{group}</p>
+            <div className="space-y-2">
+              {STRING_FIELD_LABELS.filter(f => f.group === group).map(({ key, label }) => (
+                <div key={key} className="flex items-start gap-3">
+                  <label className="text-xs text-gray-500 w-44 flex-shrink-0 pt-2">{label}</label>
+                  <input
+                    value={draft[key] as string}
+                    onChange={e => setDraft(d => ({ ...d, [key]: e.target.value }))}
+                    className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                    dir={draft.isRtl ? 'rtl' : 'ltr'}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        <button
+          onClick={save}
+          className="flex items-center gap-2 px-5 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors"
+        >
+          <Save size={15} /> Save Language Settings
+        </button>
       </div>
     </div>
   );

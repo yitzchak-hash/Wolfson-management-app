@@ -105,23 +105,25 @@ function AptCell({
   aptSubLabel, taskInfo, nextStageName, onAddTask, allTasksDone, compact,
 }: AptCellProps) {
   const hasStage = !!stage;
-  const bgColor = hasStage ? stage!.color : isBasement ? '#eef3f9' : '#ffffff';
-
-  const borderColor = isMerged ? '#3b82f6' : hasStage ? stage!.color : isBasement ? '#c8d8ec' : '#e2e8f0';
-  const borderWidth = isMerged ? '2px' : '1.5px';
-
-  const textColor = hasStage ? getTextColor(stage!.color) : '#374151';
+  // Dimmed cells use a gray palette to make the filter visually obvious
+  const bgColor = isDimmed ? '#e5e7eb' : (hasStage ? stage!.color : isBasement ? '#eef3f9' : '#ffffff');
+  const borderColor = isDimmed ? '#d1d5db' : (isMerged ? '#3b82f6' : hasStage ? stage!.color : isBasement ? '#c8d8ec' : '#e2e8f0');
+  const borderWidth = isMerged && !isDimmed ? '2px' : '1.5px';
+  const textColor = isDimmed ? '#9ca3af' : (hasStage ? getTextColor(stage!.color) : '#374151');
 
   const displayLabel = mergedLabel || (apt ? (apt.displayName || (apt.isUnnamed ? '' : apt.apartmentNumber)) : '');
 
-  const opacity = isDimmed ? 0.28 : 1;
   const scale = isHighlighted && !isDimmed ? 'scale-[1.04] z-10' : '';
 
-  const boxShadow = isContractorHighlighted
-    ? `0 0 0 2px #f59e0b, 0 2px 10px ${borderColor}88`
-    : hasStage ? `0 1px 3px ${borderColor}55` : '0 1px 2px rgba(0,0,0,0.06)';
+  const boxShadow = isDimmed ? 'none'
+    : isContractorHighlighted ? `0 0 0 2px #f59e0b, 0 2px 10px ${borderColor}88`
+    : hasStage ? `0 1px 3px ${borderColor}55`
+    : '0 1px 2px rgba(0,0,0,0.06)';
 
   const numFontSize = compact ? '9px' : mergedLabel ? '10px' : '11px';
+
+  // Pending task indicator: orange dot when has tasks but NOT all done
+  const hasPendingTask = !!taskInfo && !allTasksDone;
 
   return (
     <div
@@ -132,7 +134,6 @@ function AptCell({
         flex: 1,
         border: `${borderWidth} solid ${borderColor}`,
         minWidth: 0,
-        opacity,
         boxShadow,
         padding: compact ? '1px 1px' : '2px 2px',
         gap: compact ? undefined : '1px',
@@ -155,10 +156,10 @@ function AptCell({
       {!compact && displayLabel && (
         <span
           className="w-full text-center leading-none block truncate px-0.5"
-          style={{ fontSize: '7px', opacity: hasStage ? 0.9 : 0.45, fontStyle: hasStage ? 'normal' : 'italic' }}
+          style={{ fontSize: '9px', opacity: isDimmed ? 0.5 : (hasStage ? 0.9 : 0.45), fontStyle: hasStage ? 'normal' : 'italic' }}
         >
           {hasStage ? stage!.name : 'Not started'}
-          {allTasksDone && <span style={{ color: '#22c55e', fontStyle: 'normal', marginLeft: '1px' }}>✓</span>}
+          {allTasksDone && <span style={{ color: isDimmed ? '#9ca3af' : '#22c55e', fontStyle: 'normal', marginLeft: '1px' }}>✓</span>}
         </span>
       )}
 
@@ -166,9 +167,9 @@ function AptCell({
       {!compact && displayLabel && taskInfo && (
         <span
           className="w-full text-center leading-none block truncate px-0.5"
-          style={{ fontSize: '7px', opacity: 0.85 }}
+          style={{ fontSize: '9px', opacity: isDimmed ? 0.4 : 0.9, color: isDimmed ? undefined : (allTasksDone ? '#22c55e' : '#f97316'), fontWeight: 600 }}
         >
-          {taskInfo}
+          {allTasksDone ? '✓ Done' : `⏳ ${taskInfo}`}
         </span>
       )}
 

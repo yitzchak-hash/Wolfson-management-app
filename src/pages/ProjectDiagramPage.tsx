@@ -321,6 +321,7 @@ export function ProjectDiagramPage() {
             onClose={() => setSelectedApt(null)}
             currentUser={currentUser}
             onToast={showToast}
+            onRequestAddTask={(apt) => { setSelectedApt(null); setAddTaskApt(apt); }}
           />
         )}
 

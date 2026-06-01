@@ -268,12 +268,19 @@ export async function findPlansPdfViaBackend(driveLink: string): Promise<DriveFi
   if (!folderId) return null;
   try {
     const files = await listFolderViaBackend(folderId);
+    // Look for any subfolder that sounds like an engineering/plans folder
     const plansFolder = files.find(
-      f => f.mimeType === 'application/vnd.google-apps.folder' && /(plan|engineer)/i.test(f.name),
+      f => f.mimeType === 'application/vnd.google-apps.folder' &&
+           /(plan|engineer|תכנ|תוכנ|הנד|drawing|blueprint|dwg)/i.test(f.name),
     );
-    if (!plansFolder) return null;
-    const planFiles = await listFolderViaBackend(plansFolder.id);
-    return planFiles.find(f => f.mimeType === 'application/pdf') ?? null;
+    if (plansFolder) {
+      const planFiles = await listFolderViaBackend(plansFolder.id);
+      const pdf = planFiles.find(f => f.mimeType === 'application/pdf');
+      if (pdf) return pdf;
+    }
+    // Fallback: look for any PDF directly in the main folder
+    const directPdf = files.find(f => f.mimeType === 'application/pdf');
+    return directPdf ?? null;
   } catch {
     return null;
   }
@@ -326,53 +333,52 @@ export async function findOrCreateFolderViaBackend(parentId: string, name: strin
 }
 
 /**
- * Upload a file directly to Drive using a backend-issued resumable session.
- * The file streams browser → Google Drive; it never passes through Vercel.
- * Works for any size (500MB+ videos). Optional progress callback (0-100).
+ * Upload a file to Drive via the backend service account.
+ * Files are base64-encoded and POSTed to /api/drive-upload (max ~14 MB raw).
+ * For larger files the function throws with a clear message.
  */
 export async function uploadFileViaBackend(
   folderId: string,
   file: File,
   onProgress?: (pct: number) => void,
 ): Promise<{ fileId: string; webViewLink: string }> {
-  // 1. Ask backend for a one-time resumable upload URL
-  const sessResp = await fetch('/api/drive-session', {
+  const MAX_BYTES = 14 * 1024 * 1024; // 14 MB raw → ~19 MB base64 → within 20 MB body limit
+  if (file.size > MAX_BYTES) {
+    throw new Error(`File too large for Drive upload (${Math.round(file.size / 1024 / 1024)} MB). Max is 14 MB.`);
+  }
+
+  // Read file as base64
+  onProgress?.(5);
+  const base64 = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const result = e.target?.result as string;
+      // strip data URL prefix
+      resolve(result.includes(',') ? result.split(',')[1] : result);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  onProgress?.(30);
+
+  const resp = await fetch('/api/drive-upload', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': DRIVE_API_KEY },
     body: JSON.stringify({
       folderId,
       filename: file.name,
       mimeType: file.type || 'application/octet-stream',
+      data: base64,
     }),
   });
-  if (!sessResp.ok) {
-    const msg = await sessResp.text().catch(() => '');
-    throw new Error(`Session API ${sessResp.status}: ${msg}`);
+  onProgress?.(90);
+
+  if (!resp.ok) {
+    const msg = await resp.text().catch(() => '');
+    throw new Error(`Drive upload failed (${resp.status}): ${msg}`);
   }
-  const { uploadUrl } = await sessResp.json();
-  if (!uploadUrl) throw new Error('No upload URL returned');
 
-  // 2. Upload the raw file straight to Google Drive (XHR for progress events)
-  const result = await new Promise<{ id: string; webViewLink?: string }>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('PUT', uploadUrl);
-    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
-    };
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try { resolve(JSON.parse(xhr.responseText)); }
-        catch { resolve({ id: '' }); }
-      } else {
-        reject(new Error(`Drive upload failed: ${xhr.status}`));
-      }
-    };
-    xhr.onerror = () => reject(new Error('Network error during Drive upload'));
-    xhr.send(file);
-  });
-
-  const fileId = result.id;
-  const webViewLink = result.webViewLink ?? (fileId ? `https://drive.google.com/file/d/${fileId}/view` : '');
-  return { fileId, webViewLink };
+  const result = await resp.json();
+  onProgress?.(100);
+  return { fileId: result.fileId, webViewLink: result.webViewLink };
 }

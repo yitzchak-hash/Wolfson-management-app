@@ -74,7 +74,6 @@ function getDueBadge(dueDate: string | null): { text: string; cls: string } | nu
 function MediaItem({ photo, onDelete }: { photo: ContractorPhoto; onDelete: () => void }) {
   const [playing, setPlaying] = useState(false);
   const type = photo.fileType ?? 'image';
-  // When stored on Drive, large files keep no local bytes — open them on Drive instead.
   const driveOnly = !photo.dataUrl && !!photo.driveUrl;
 
   return (
@@ -136,7 +135,10 @@ export function ContractorPortal() {
     apartments, stages,
     addContractorNote, addContractorPhoto, deleteContractorPhoto,
     updateContractorAssignment, addActivityLog,
+    contractorUiStrings,
   } = useStore();
+
+  const s = contractorUiStrings;
 
   const [activeTab, setActiveTab] = useState<'tasks' | 'map'>('tasks');
   const [selectedAssignment, setSelectedAssignment] = useState<ContractorAssignment | null>(null);
@@ -159,8 +161,8 @@ export function ContractorPortal() {
       <div className="min-h-screen flex flex-col items-center justify-center px-6" style={{ backgroundColor: '#0f1f35' }}>
         <img src="/tzviair-logo.png" alt="TzviAir" className="h-16 mb-8"
           style={{ filter: 'drop-shadow(0 2px 12px rgba(0,0,0,0.8)) drop-shadow(0 0 4px rgba(0,0,0,0.6))' }} />
-        <div className="text-white text-xl font-semibold mb-2">Link not found</div>
-        <p className="text-gray-400 text-sm text-center">This link is invalid or has been deactivated. Contact your project manager.</p>
+        <div className="text-white text-xl font-semibold mb-2">{s.linkNotFound}</div>
+        <p className="text-gray-400 text-sm text-center">{s.linkInvalid}</p>
       </div>
     );
   }
@@ -186,14 +188,14 @@ export function ContractorPortal() {
         if (m.has(a.apartmentId)) return;
         const days = differenceInCalendarDays(parseISO(a.dueDate!), today);
         const label =
-          days < 0 ? 'Overdue' :
-          days === 0 ? 'Today' :
-          days === 1 ? 'Tomorrow' :
+          days < 0 ? s.filterOverdue :
+          days === 0 ? s.filterToday :
+          days === 1 ? s.filterTomorrow :
           format(parseISO(a.dueDate!), 'MMM d');
         m.set(a.apartmentId, label);
       });
     return m;
-  }, [assignments]);
+  }, [assignments, s]);
 
   const filteredAptIds = useMemo(() => {
     if (mapFilter === 'all') return assignedAptIds;
@@ -214,7 +216,7 @@ export function ContractorPortal() {
     if (!selectedAssignment || !e.target.files?.length) return;
     setUploading(true);
     setUploadError('');
-    const LOCAL_MAX = 50 * 1024 * 1024; // 50 MB cap when storing locally (no Drive)
+    const LOCAL_MAX = 50 * 1024 * 1024;
     const apt = getApt(selectedAssignment.apartmentId);
     const backendOn = isUploadBackendConfigured();
     const mainFolderId = apt?.driveLink ? extractFolderId(apt.driveLink) : null;
@@ -224,14 +226,12 @@ export function ContractorPortal() {
         const fType = detectFileType(file);
 
         if (canUseDrive) {
-          // Stream the file straight to Drive (browser → Drive, any size)
           setUploadProgress({ name: file.name, pct: 0 });
           try {
             const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId!, 'Photos');
             const { fileId, webViewLink } = await uploadFileViaBackend(
               photosFolderId, file, pct => setUploadProgress({ name: file.name, pct }),
             );
-            // Keep a small thumbnail locally for images; videos/files store no bytes
             const thumb = fType === 'image' ? await compressImage(file) : '';
             addContractorPhoto({
               assignmentId: selectedAssignment.id,
@@ -245,15 +245,14 @@ export function ContractorPortal() {
               driveUrl: webViewLink,
             });
           } catch (err) {
-            setUploadError(`"${file.name}" failed to upload to Drive: ${(err as Error).message}`);
+            setUploadError(`"${file.name}" failed: ${(err as Error).message}`);
             continue;
           } finally {
             setUploadProgress(null);
           }
         } else {
-          // No Drive backend — store locally with a hard size cap
           if (file.size > LOCAL_MAX) {
-            setUploadError(`"${file.name}" exceeds 50 MB and Drive upload isn't set up for this apartment — skipped.`);
+            setUploadError(`"${file.name}" exceeds 50 MB — skipped.`);
             continue;
           }
           const dataUrl = fType === 'image' ? await compressImage(file) : await readAsDataUrl(file);
@@ -268,7 +267,6 @@ export function ContractorPortal() {
           });
         }
 
-        // Log activity
         addActivityLog({
           apartmentId: selectedAssignment.apartmentId,
           apartmentNumber: apt?.apartmentNumber ?? '',
@@ -371,8 +369,16 @@ export function ContractorPortal() {
   const selContractorNotes = selNotes.filter(n => n.authorType === 'contractor');
   const canComplete = selMedia.length > 0 && !selectedAssignment?.completedAt;
 
+  const mapFilterLabels: Record<string, string> = {
+    all: s.filterAll,
+    overdue: s.filterOverdue,
+    today: s.filterToday,
+    tomorrow: s.filterTomorrow,
+    week: s.filterThisWeek,
+  };
+
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#f0f4f8' }}>
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#f0f4f8' }} dir={s.isRtl ? 'rtl' : 'ltr'}>
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-3 shadow-md flex-shrink-0" style={{ backgroundColor: '#0f1f35' }}>
         <img src="/tzviair-logo.png" alt="TzviAir" style={{ height: '32px', filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.9)) drop-shadow(0 1px 3px rgba(0,0,0,0.7))' }} />
@@ -381,10 +387,10 @@ export function ContractorPortal() {
             style={{ backgroundColor: catColor + '22', color: catColor, border: `1px solid ${catColor}44` }}>
             {CATEGORY_LABELS[contractor.category]}
           </span>
-          <div className="text-right">
+          <div className={s.isRtl ? 'text-left' : 'text-right'}>
             <div className="text-white text-sm font-semibold">{contractor!.name}</div>
             <div className="text-gray-400 text-xs">
-              {assignments.length} task{assignments.length !== 1 ? 's' : ''} · {assignments.filter(a => a.completedAt).length} done
+              {assignments.length} {assignments.length !== 1 ? s.taskPlural : s.taskSingular} · {assignments.filter(a => a.completedAt).length} {s.doneLabel}
             </div>
           </div>
         </div>
@@ -392,21 +398,17 @@ export function ContractorPortal() {
 
       {/* Tab bar */}
       <div className="flex bg-white border-b border-gray-200 flex-shrink-0">
-        <button
-          onClick={() => setActiveTab('tasks')}
+        <button onClick={() => setActiveTab('tasks')}
           className={`flex-1 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
             activeTab === 'tasks' ? 'text-[#1e3a5f] border-b-2 border-[#1e3a5f]' : 'text-gray-500'
-          }`}
-        >
-          <FileText size={15} /> My Tasks
+          }`}>
+          <FileText size={15} /> {s.myTasks}
         </button>
-        <button
-          onClick={() => setActiveTab('map')}
+        <button onClick={() => setActiveTab('map')}
           className={`flex-1 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
             activeTab === 'map' ? 'text-[#1e3a5f] border-b-2 border-[#1e3a5f]' : 'text-gray-500'
-          }`}
-        >
-          <MapPin size={15} /> Building Map
+          }`}>
+          <MapPin size={15} /> {s.buildingMap}
         </button>
       </div>
 
@@ -418,8 +420,8 @@ export function ContractorPortal() {
               <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mb-4">
                 <FileText size={28} className="text-blue-400" />
               </div>
-              <p className="text-gray-600 font-medium">No assignments yet</p>
-              <p className="text-gray-400 text-sm mt-1">Your project manager will assign tasks here.</p>
+              <p className="text-gray-600 font-medium">{s.noAssignments}</p>
+              <p className="text-gray-400 text-sm mt-1">{s.noAssignmentsHint}</p>
             </div>
           ) : (
             <div className="space-y-3 py-2">
@@ -492,15 +494,13 @@ export function ContractorPortal() {
           {assignedAptIds.size === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center px-6">
               <MapPin size={32} className="text-gray-300 mb-3" />
-              <p className="text-gray-500 text-sm">No apartments assigned yet.</p>
+              <p className="text-gray-500 text-sm">{s.noApartmentsAssigned}</p>
             </div>
           ) : (
             <>
               <div className="px-4 pt-3 pb-2 flex items-center gap-2 flex-wrap">
                 {(['all', 'overdue', 'today', 'tomorrow', 'week'] as const).map(f => (
-                  <button
-                    key={f}
-                    onClick={() => setMapFilter(f)}
+                  <button key={f} onClick={() => setMapFilter(f)}
                     className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
                       mapFilter === f
                         ? f === 'overdue' ? 'bg-red-500 text-white border-red-500'
@@ -509,16 +509,15 @@ export function ContractorPortal() {
                         : f === 'week'    ? 'bg-blue-500 text-white border-blue-500'
                         : 'bg-[#1e3a5f] text-white border-[#1e3a5f]'
                         : 'bg-white text-gray-600 border-gray-200'
-                    }`}
-                  >
-                    {f === 'all' ? 'All' : f === 'overdue' ? 'Overdue' : f === 'today' ? 'Today' : f === 'tomorrow' ? 'Tomorrow' : 'This Week'}
+                    }`}>
+                    {mapFilterLabels[f]}
                   </button>
                 ))}
                 <span className="text-xs text-gray-400 ml-auto">
                   {filteredAptIds.size} apt{filteredAptIds.size !== 1 ? 's' : ''}
                 </span>
               </div>
-              <p className="px-4 pb-1 text-xs text-gray-400">Highlighted apartments are your assignments. Tap to open task.</p>
+              <p className="px-4 pb-1 text-xs text-gray-400">{s.mapHint}</p>
               <BuildingDiagram
                 apartments={apartments}
                 stages={stages}
@@ -579,7 +578,7 @@ export function ContractorPortal() {
                 {a.dueDate && (
                   <div className={`flex items-center gap-1.5 text-xs font-medium mt-2 ${isOverdue ? 'text-red-500' : 'text-gray-500'}`}>
                     <CalendarDays size={13} />
-                    Due {format(parseISO(a.dueDate), 'MMMM d, yyyy')}
+                    {s.duePrefix} {format(parseISO(a.dueDate), 'MMMM d, yyyy')}
                     {dueBadge && !a.completedAt && (
                       <span className={`ml-1 px-1.5 py-0.5 rounded border font-semibold text-xs ${dueBadge.cls}`}>
                         {dueBadge.text}
@@ -593,41 +592,39 @@ export function ContractorPortal() {
               <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5" style={{ overscrollBehavior: 'contain' }}>
                 {/* Task description */}
                 <div>
-                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Task</h3>
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{s.sectionTask}</h3>
                   <p className="text-gray-800 text-sm leading-relaxed">{a.taskDescription}</p>
                 </div>
 
-                {/* Office notes — shown before contractor starts */}
+                {/* Office notes */}
                 {apt?.generalNotes && (
                   <div className="px-3 py-2.5 rounded-xl bg-blue-50 border border-blue-100">
                     <div className="flex items-center gap-1.5 mb-1">
                       <MessageSquare size={12} className="text-blue-500" />
-                      <span className="text-xs font-semibold text-blue-700">From Office</span>
+                      <span className="text-xs font-semibold text-blue-700">{s.fromOffice}</span>
                     </div>
                     <p className="text-sm text-blue-800 leading-relaxed whitespace-pre-line">{apt.generalNotes}</p>
                   </div>
                 )}
 
-                {/* Engineering Plans PDF thumbnail */}
+                {/* Engineering Plans PDF */}
                 {plansPdfFileId && (
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-                        <BookOpen size={12} /> Engineering Plans
+                        <BookOpen size={12} /> {s.engineeringPlans}
                       </h3>
                       <div className="flex items-center gap-2">
                         <a href={driveDownloadUrl(plansPdfFileId)} target="_blank" rel="noopener noreferrer"
                           className="flex items-center gap-1 text-xs text-[#1e3a5f] hover:underline">
-                          <Download size={11} /> Download
+                          <Download size={11} /> {s.download}
                         </a>
-                        <button
-                          onClick={() => setShowPlansPdf(v => !v)}
+                        <button onClick={() => setShowPlansPdf(v => !v)}
                           className="text-xs px-2.5 py-1 rounded-lg bg-[#1e3a5f] text-white font-medium">
-                          {showPlansPdf ? 'Hide' : 'View'}
+                          {showPlansPdf ? s.hide : s.view}
                         </button>
                       </div>
                     </div>
-                    {/* Thumbnail — always visible when PDF is set */}
                     <div
                       className="rounded-xl overflow-hidden border border-gray-200 cursor-pointer relative"
                       style={{ height: showPlansPdf ? '420px' : '160px' }}
@@ -643,7 +640,7 @@ export function ContractorPortal() {
                       />
                       {!showPlansPdf && (
                         <div className="absolute inset-0 flex items-end justify-center pb-2 bg-gradient-to-t from-black/20 to-transparent">
-                          <span className="text-white text-xs font-medium bg-black/40 px-2 py-0.5 rounded">Tap to expand</span>
+                          <span className="text-white text-xs font-medium bg-black/40 px-2 py-0.5 rounded">{s.tapToExpand}</span>
                         </div>
                       )}
                     </div>
@@ -655,10 +652,10 @@ export function ContractorPortal() {
                   <div className="flex items-center gap-2.5 px-4 py-3 bg-green-50 rounded-xl border border-green-200">
                     <CheckCircle2 size={20} className="text-green-500 flex-shrink-0" />
                     <div>
-                      <div className="text-sm font-semibold text-green-700">Completed</div>
+                      <div className="text-sm font-semibold text-green-700">{s.completed}</div>
                       <div className="text-xs text-green-600">{format(new Date(a.completedAt), 'MMM d, yyyy · HH:mm')}</div>
                     </div>
-                    <button onClick={handleUncomplete} className="ml-auto text-xs text-gray-400 hover:text-gray-600">Undo</button>
+                    <button onClick={handleUncomplete} className="ml-auto text-xs text-gray-400 hover:text-gray-600">{s.undo}</button>
                   </div>
                 )}
 
@@ -666,7 +663,7 @@ export function ContractorPortal() {
                 <div>
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                      Files &amp; Photos ({selMedia.length})
+                      {s.filesAndPhotos} ({selMedia.length})
                     </h3>
                     <button
                       onClick={() => mediaInputRef.current?.click()}
@@ -675,7 +672,7 @@ export function ContractorPortal() {
                       style={{ backgroundColor: '#1e3a5f' }}
                     >
                       <Plus size={14} />
-                      {uploading ? 'Uploading…' : 'Add File'}
+                      {uploading ? s.uploading : s.addFile}
                     </button>
                     <input ref={mediaInputRef} type="file"
                       accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip"
@@ -708,8 +705,8 @@ export function ContractorPortal() {
                     <button onClick={() => mediaInputRef.current?.click()}
                       className="w-full border-2 border-dashed border-gray-200 rounded-xl py-8 flex flex-col items-center gap-2 text-gray-400 hover:border-[#4aa8d8] hover:text-[#4aa8d8] transition-all">
                       <Camera size={28} />
-                      <span className="text-sm font-medium">Tap to add photos, videos, or files</span>
-                      <span className="text-xs">Required before marking complete</span>
+                      <span className="text-sm font-medium">{s.tapToAddMedia}</span>
+                      <span className="text-xs">{s.requiredBeforeComplete}</span>
                     </button>
                   ) : (
                     <div className="grid grid-cols-3 gap-2">
@@ -724,16 +721,15 @@ export function ContractorPortal() {
                   )}
                 </div>
 
-                {/* Notes — split by type */}
+                {/* Notes */}
                 <div>
                   <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                    <MessageSquare size={12} /> Notes
+                    <MessageSquare size={12} /> {s.sectionNotes}
                   </h3>
 
-                  {/* Office notes — read-only */}
                   {selOfficeNotes.length > 0 && (
                     <div className="mb-3 space-y-2">
-                      <p className="text-[10px] font-semibold text-blue-600 uppercase tracking-wider">From Office</p>
+                      <p className="text-[10px] font-semibold text-blue-600 uppercase tracking-wider">{s.fromOffice}</p>
                       {selOfficeNotes.map(n => (
                         <div key={n.id} className="px-3 py-2.5 rounded-xl text-sm bg-blue-50 border border-blue-100">
                           <div className="flex items-center gap-1.5 mb-1">
@@ -752,10 +748,9 @@ export function ContractorPortal() {
                     </div>
                   )}
 
-                  {/* Contractor notes */}
                   {selContractorNotes.length > 0 && (
                     <div className="mb-3 space-y-2">
-                      {selOfficeNotes.length > 0 && <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Your Notes</p>}
+                      {selOfficeNotes.length > 0 && <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{s.yourNotes}</p>}
                       {selContractorNotes.map(n => (
                         <div key={n.id} className="px-3 py-2.5 rounded-xl text-sm bg-gray-50 border border-gray-100">
                           <div className="flex items-center gap-1.5 mb-1">
@@ -774,14 +769,11 @@ export function ContractorPortal() {
                     </div>
                   )}
 
-                  {/* Note input */}
                   {noteAttachment && (
                     <div className="flex items-center gap-2 mb-2 px-2 py-1.5 bg-blue-50 rounded-lg border border-blue-100 text-xs text-blue-700">
                       <Paperclip size={11} />
                       <span className="flex-1 truncate">{noteAttachment.filename}</span>
-                      <button onClick={() => setNoteAttachment(null)} className="text-blue-400 hover:text-blue-600">
-                        <X size={12} />
-                      </button>
+                      <button onClick={() => setNoteAttachment(null)} className="text-blue-400 hover:text-blue-600"><X size={12} /></button>
                     </div>
                   )}
                   <div className="flex gap-2 items-end">
@@ -799,7 +791,7 @@ export function ContractorPortal() {
                       value={noteText}
                       onChange={e => setNoteText(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSendNote()}
-                      placeholder="Add a note…"
+                      placeholder={s.addNote}
                       className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                     />
                     <button onClick={handleSendNote} disabled={!noteText.trim()}
@@ -818,28 +810,23 @@ export function ContractorPortal() {
                     {selMedia.length === 0 && (
                       <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 mb-3">
                         <AlertCircle size={14} />
-                        Add at least one photo or file to mark this task complete.
+                        {s.addMediaBeforeComplete}
                       </div>
                     )}
 
-                    {/* Confirmation state */}
                     {showCompleteConfirm ? (
                       <div className="space-y-2">
-                        <p className="text-sm font-medium text-gray-800 text-center">Mark this task as complete?</p>
-                        <p className="text-xs text-gray-500 text-center">This will notify the office. You can undo afterwards.</p>
+                        <p className="text-sm font-medium text-gray-800 text-center">{s.markCompletePrompt}</p>
+                        <p className="text-xs text-gray-500 text-center">{s.markCompleteHint}</p>
                         <div className="flex gap-2 mt-2">
-                          <button
-                            onClick={() => setShowCompleteConfirm(false)}
-                            className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50"
-                          >
-                            Cancel
+                          <button onClick={() => setShowCompleteConfirm(false)}
+                            className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">
+                            {s.cancel}
                           </button>
-                          <button
-                            onClick={handleConfirmComplete}
+                          <button onClick={handleConfirmComplete}
                             className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2"
-                            style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}
-                          >
-                            <CheckCircle2 size={16} /> Confirm Complete
+                            style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}>
+                            <CheckCircle2 size={16} /> {s.confirmComplete}
                           </button>
                         </div>
                       </div>
@@ -855,7 +842,7 @@ export function ContractorPortal() {
                         }}
                       >
                         <CheckCircle2 size={18} />
-                        {completing ? 'Marking complete…' : 'Mark as Complete'}
+                        {completing ? s.markingComplete : s.markAsComplete}
                       </button>
                     )}
                   </>

@@ -178,3 +178,152 @@ export interface OfficeNoteFile {
   uploadedBy: string;
   uploadedByName: string;
 }
+
+export type BackupFrequency = 'activity' | 'daily' | 'weekly' | 'monthly';
+
+export interface BackupLogEntry {
+  id: string;
+  filename: string;
+  sizeKB: number;
+  driveUploaded: boolean;
+  triggeredBy: 'manual' | 'scheduled';
+  createdAt: string;
+}
+
+export interface ContractorUiStrings {
+  isRtl: boolean;
+  linkNotFound: string;
+  linkInvalid: string;
+  myTasks: string;
+  buildingMap: string;
+  noAssignments: string;
+  noAssignmentsHint: string;
+  filterAll: string;
+  filterOverdue: string;
+  filterToday: string;
+  filterTomorrow: string;
+  filterThisWeek: string;
+  mapHint: string;
+  sectionTask: string;
+  fromOffice: string;
+  engineeringPlans: string;
+  completed: string;
+  undo: string;
+  filesAndPhotos: string;
+  uploading: string;
+  addFile: string;
+  tapToAddMedia: string;
+  requiredBeforeComplete: string;
+  sectionNotes: string;
+  yourNotes: string;
+  addNote: string;
+  addMediaBeforeComplete: string;
+  markCompletePrompt: string;
+  markCompleteHint: string;
+  cancel: string;
+  confirmComplete: string;
+  markingComplete: string;
+  markAsComplete: string;
+  noApartmentsAssigned: string;
+  tapToExpand: string;
+  viewOnDrive: string;
+  hide: string;
+  view: string;
+  download: string;
+  taskSingular: string;
+  taskPlural: string;
+  doneLabel: string;
+  duePrefix: string;
+}
+
+export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
+  isRtl: false,
+  linkNotFound: 'Link not found',
+  linkInvalid: 'This link is invalid or has been deactivated. Contact your project manager.',
+  myTasks: 'My Tasks',
+  buildingMap: 'Building Map',
+  noAssignments: 'No assignments yet',
+  noAssignmentsHint: 'Your project manager will assign tasks here.',
+  filterAll: 'All',
+  filterOverdue: 'Overdue',
+  filterToday: 'Today',
+  filterTomorrow: 'Tomorrow',
+  filterThisWeek: 'This Week',
+  mapHint: 'Highlighted apartments are your assignments. Tap to open task.',
+  sectionTask: 'Task',
+  fromOffice: 'From Office',
+  engineeringPlans: 'Engineering Plans',
+  completed: 'Completed',
+  undo: 'Undo',
+  filesAndPhotos: 'Files & Photos',
+  uploading: 'Uploading…',
+  addFile: 'Add File',
+  tapToAddMedia: 'Tap to add photos, videos, or files',
+  requiredBeforeComplete: 'Required before marking complete',
+  sectionNotes: 'Notes',
+  yourNotes: 'Your Notes',
+  addNote: 'Add a note…',
+  addMediaBeforeComplete: 'Add at least one photo or file to mark this task complete.',
+  markCompletePrompt: 'Mark this task as complete?',
+  markCompleteHint: 'This will notify the office. You can undo afterwards.',
+  cancel: 'Cancel',
+  confirmComplete: 'Confirm Complete',
+  markingComplete: 'Marking complete…',
+  markAsComplete: 'Mark as Complete',
+  noApartmentsAssigned: 'No apartments assigned yet.',
+  tapToExpand: 'Tap to expand',
+  viewOnDrive: 'View on Drive',
+  hide: 'Hide',
+  view: 'View',
+  download: 'Download',
+  taskSingular: 'task',
+  taskPlural: 'tasks',
+  doneLabel: 'done',
+  duePrefix: 'Due',
+};
+
+export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
+  isRtl: true,
+  linkNotFound: 'הקישור לא נמצא',
+  linkInvalid: 'קישור זה אינו תקין או שהושבת. פנו למנהל הפרויקט.',
+  myTasks: 'המשימות שלי',
+  buildingMap: 'מפת הבניין',
+  noAssignments: 'אין משימות עדיין',
+  noAssignmentsHint: 'מנהל הפרויקט שלך יקצה משימות כאן.',
+  filterAll: 'הכל',
+  filterOverdue: 'באיחור',
+  filterToday: 'היום',
+  filterTomorrow: 'מחר',
+  filterThisWeek: 'השבוע',
+  mapHint: 'הדירות המודגשות הן המשימות שלך. הקש לפתיחה.',
+  sectionTask: 'משימה',
+  fromOffice: 'מהמשרד',
+  engineeringPlans: 'תוכניות הנדסיות',
+  completed: 'הושלם',
+  undo: 'בטל',
+  filesAndPhotos: 'קבצים ותמונות',
+  uploading: 'מעלה...',
+  addFile: 'הוסף קובץ',
+  tapToAddMedia: 'הקש להוסיף תמונות, סרטונים או קבצים',
+  requiredBeforeComplete: 'נדרש לפני סימון כהושלם',
+  sectionNotes: 'הערות',
+  yourNotes: 'ההערות שלך',
+  addNote: 'הוסף הערה...',
+  addMediaBeforeComplete: 'הוסף לפחות תמונה או קובץ אחד לפני סימון המשימה כהושלמה.',
+  markCompletePrompt: 'לסמן משימה זו כהושלמה?',
+  markCompleteHint: 'פעולה זו תודיע למשרד. ניתן לבטל לאחר מכן.',
+  cancel: 'ביטול',
+  confirmComplete: 'אישור הושלם',
+  markingComplete: 'מסמן כהושלם...',
+  markAsComplete: 'סמן כהושלם',
+  noApartmentsAssigned: 'לא הוקצו דירות עדיין.',
+  tapToExpand: 'הקש להרחיב',
+  viewOnDrive: 'הצג ב-Drive',
+  hide: 'הסתר',
+  view: 'הצג',
+  download: 'הורד',
+  taskSingular: 'משימה',
+  taskPlural: 'משימות',
+  doneLabel: 'הושלם',
+  duePrefix: 'תאריך יעד',
+};
