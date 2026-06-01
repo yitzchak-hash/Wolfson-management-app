@@ -25,5 +25,9 @@ export default function handler(req, res) {
     clientEmail,
     hasApiKey: !!process.env.API_KEY,
     allowedOrigin: process.env.ALLOWED_ORIGIN || '(not set — defaults to *)',
+    // Vercel built-in vars — always present if functions are running correctly
+    vercelEnv: process.env.VERCEL_ENV || '(not set)',
+    nodeEnv: process.env.NODE_ENV || '(not set)',
+    vercelRegion: process.env.VERCEL_REGION || '(not set)',
   });
 }
