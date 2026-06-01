@@ -132,6 +132,8 @@ export interface ContractorNote {
   attachmentDataUrl?: string;
   attachmentFilename?: string;
   attachmentMimeType?: string;
+  attachmentDriveFileId?: string;  // Drive file ID for note attachments uploaded to Drive
+  attachmentDriveUrl?: string;     // Drive web view link
 }
 
 export interface DataSummary {

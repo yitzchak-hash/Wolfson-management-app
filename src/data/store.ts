@@ -563,7 +563,7 @@ export const useStore = create<AppState>((set, get) => ({
     const n: ContractorNote = { ...fields, id: generateId(), createdAt: new Date().toISOString() };
     set(state => ({ contractorNotes: [...state.contractorNotes, n] }));
     persist(get);
-    fsSet('contractorNotes', n.id, n);
+    fsSet('contractorNotes', n.id, { ...n, attachmentDataUrl: undefined });
   },
 
   addContractorPhoto: (fields) => {

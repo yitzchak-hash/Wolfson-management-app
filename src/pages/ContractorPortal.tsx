@@ -295,7 +295,7 @@ export function ContractorPortal() {
   const [activeTab, setActiveTab] = useState<'tasks' | 'map'>('tasks');
   const [selectedAssignment, setSelectedAssignment] = useState<ContractorAssignment | null>(null);
   const [noteText, setNoteText] = useState('');
-  const [noteAttachment, setNoteAttachment] = useState<{ dataUrl: string; filename: string; mimeType: string } | null>(null);
+  const [noteAttachment, setNoteAttachment] = useState<{ dataUrl: string; filename: string; mimeType: string; driveFileId?: string; driveUrl?: string } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ name: string; pct: number } | null>(null);
   const [completing, setCompleting] = useState(false);
@@ -478,9 +478,24 @@ export function ContractorPortal() {
   async function handleNoteAttachmentPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const dataUrl = detectFileType(file) === 'image' ? await compressImage(file) : await readAsDataUrl(file);
-    setNoteAttachment({ dataUrl, filename: file.name, mimeType: file.type });
     if (noteAttachRef.current) noteAttachRef.current.value = '';
+    const isImg = detectFileType(file) === 'image';
+    const dataUrl = isImg ? await compressImage(file) : await readAsDataUrl(file);
+
+    // Try Drive upload if backend is configured and the apartment has a Drive folder
+    const apt = selectedAssignment ? getApt(selectedAssignment.apartmentId) : null;
+    const mainFolderId = apt?.driveLink ? extractFolderId(apt.driveLink) : null;
+    if (isUploadBackendConfigured() && mainFolderId) {
+      try {
+        const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');
+        const notesFolderId = await findOrCreateFolderViaBackend(photosFolderId, 'Contractor Notes');
+        const { fileId, webViewLink } = await uploadFileViaResumableSession(notesFolderId, file);
+        await shareFileToDrive(fileId);
+        setNoteAttachment({ dataUrl: isImg ? dataUrl : '', filename: file.name, mimeType: file.type, driveFileId: fileId, driveUrl: webViewLink });
+        return;
+      } catch { /* fall through to local */ }
+    }
+    setNoteAttachment({ dataUrl, filename: file.name, mimeType: file.type });
   }
 
   function handleSendNote() {
@@ -494,7 +509,13 @@ export function ContractorPortal() {
       authorType: 'contractor',
       authorId: contractorId,
       authorName: contractor?.name ?? '',
-      ...(noteAttachment ?? {}),
+      ...(noteAttachment ? {
+        attachmentDataUrl: noteAttachment.driveFileId ? '' : noteAttachment.dataUrl,
+        attachmentFilename: noteAttachment.filename,
+        attachmentMimeType: noteAttachment.mimeType,
+        attachmentDriveFileId: noteAttachment.driveFileId,
+        attachmentDriveUrl: noteAttachment.driveUrl,
+      } : {}),
     });
     addActivityLog({
       apartmentId: selectedAssignment.apartmentId,
@@ -939,12 +960,29 @@ export function ContractorPortal() {
                             <span className="text-[10px] text-gray-400 ml-auto">{format(new Date(n.createdAt), 'MMM d, HH:mm')}</span>
                           </div>
                           <p className="text-gray-700 leading-relaxed">{n.text}</p>
-                          {n.attachmentDataUrl && (
-                            <a href={n.attachmentDataUrl} download={n.attachmentFilename}
-                              className="mt-1.5 flex items-center gap-1 text-xs text-[#1e3a5f] hover:underline">
-                              <Paperclip size={10} /> {n.attachmentFilename}
-                            </a>
-                          )}
+                          {(n.attachmentDataUrl || n.attachmentDriveFileId) && (() => {
+                            const isImg = n.attachmentMimeType?.startsWith('image/');
+                            const thumbSrc = n.attachmentDriveFileId
+                              ? driveThumbUrl(n.attachmentDriveFileId, 400)
+                              : (isImg ? n.attachmentDataUrl : null);
+                            const openHref = n.attachmentDriveUrl || n.attachmentDataUrl;
+                            return (
+                              <div className="mt-1.5">
+                                {isImg && thumbSrc ? (
+                                  <a href={openHref} target="_blank" rel="noopener noreferrer" className="block">
+                                    <img src={thumbSrc} alt={n.attachmentFilename} className="max-h-32 rounded-lg object-cover border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity" />
+                                  </a>
+                                ) : (
+                                  <a href={openHref} target={n.attachmentDriveUrl ? '_blank' : undefined}
+                                    download={!n.attachmentDriveUrl ? n.attachmentFilename : undefined}
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-1 text-xs text-[#1e3a5f] hover:underline">
+                                    <Paperclip size={10} /> {n.attachmentFilename}
+                                  </a>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       ))}
                     </div>
@@ -960,12 +998,29 @@ export function ContractorPortal() {
                             <span className="text-[10px] text-gray-400 ml-auto">{format(new Date(n.createdAt), 'MMM d, HH:mm')}</span>
                           </div>
                           <p className="text-gray-700 leading-relaxed">{n.text}</p>
-                          {n.attachmentDataUrl && (
-                            <a href={n.attachmentDataUrl} download={n.attachmentFilename}
-                              className="mt-1.5 flex items-center gap-1 text-xs text-[#1e3a5f] hover:underline">
-                              <Paperclip size={10} /> {n.attachmentFilename}
-                            </a>
-                          )}
+                          {(n.attachmentDataUrl || n.attachmentDriveFileId) && (() => {
+                            const isImg = n.attachmentMimeType?.startsWith('image/');
+                            const thumbSrc = n.attachmentDriveFileId
+                              ? driveThumbUrl(n.attachmentDriveFileId, 400)
+                              : (isImg ? n.attachmentDataUrl : null);
+                            const openHref = n.attachmentDriveUrl || n.attachmentDataUrl;
+                            return (
+                              <div className="mt-1.5">
+                                {isImg && thumbSrc ? (
+                                  <a href={openHref} target="_blank" rel="noopener noreferrer" className="block">
+                                    <img src={thumbSrc} alt={n.attachmentFilename} className="max-h-32 rounded-lg object-cover border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity" />
+                                  </a>
+                                ) : (
+                                  <a href={openHref} target={n.attachmentDriveUrl ? '_blank' : undefined}
+                                    download={!n.attachmentDriveUrl ? n.attachmentFilename : undefined}
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-1 text-xs text-[#1e3a5f] hover:underline">
+                                    <Paperclip size={10} /> {n.attachmentFilename}
+                                  </a>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       ))}
                     </div>

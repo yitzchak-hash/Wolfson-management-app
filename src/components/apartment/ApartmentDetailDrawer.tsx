@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus } from 'lucide-react';
+import { X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft } from 'lucide-react';
 import { Apartment, User } from '../../types';
 import { useStore } from '../../data/store';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import { StageNotesSection } from './StageNotesSection';
 import { ActivitySection } from './ActivitySection';
-import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, extractFolderId, driveThumbUrl } from '../../data/driveApi';
+import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, extractFolderId, driveThumbUrl, listAllPhotosViaBackend, DrivePhotoItem } from '../../data/driveApi';
 import { Tooltip } from '../ui/Tooltip';
 
 interface Props {
@@ -14,6 +14,108 @@ interface Props {
   currentUser: User;
   onToast: (msg: string, type?: 'success' | 'error') => void;
   onRequestAddTask?: (apt: Apartment) => void;
+}
+
+interface LightboxItem {
+  fileId: string;
+  filename: string;
+  mimeType: string;
+  thumbSrc: string;
+  downloadHref: string;
+}
+
+function LightboxOverlay({ items, initialIndex, onClose }: { items: LightboxItem[]; initialIndex: number; onClose: () => void }) {
+  const [idx, setIdx] = React.useState(initialIndex);
+  const [touchStart, setTouchStart] = React.useState<number | null>(null);
+  const item = items[idx];
+  const prev = () => setIdx(i => Math.max(0, i - 1));
+  const next = () => setIdx(i => Math.min(items.length - 1, i + 1));
+  const isImg = item.mimeType.startsWith('image/');
+  const isVid = item.mimeType.startsWith('video/');
+
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') prev();
+      else if (e.key === 'ArrowRight') next();
+      else if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  return (
+    <div
+      className="fixed inset-0 z-[300] bg-black flex flex-col select-none"
+      onTouchStart={e => setTouchStart(e.touches[0].clientX)}
+      onTouchEnd={e => {
+        if (touchStart === null) return;
+        const d = touchStart - e.changedTouches[0].clientX;
+        if (d > 60) next(); else if (d < -60) prev();
+        setTouchStart(null);
+      }}
+    >
+      {/* Top bar */}
+      <div className="flex items-center justify-between px-4 py-3 bg-black/80 flex-shrink-0">
+        <span className="text-white text-sm font-medium truncate max-w-[60%]">{item.filename}</span>
+        <div className="flex items-center gap-3">
+          <span className="text-gray-400 text-xs">{idx + 1} / {items.length}</span>
+          {item.downloadHref && (
+            <a href={item.downloadHref} target="_blank" rel="noopener noreferrer" download={!item.fileId ? item.filename : undefined}
+              className="p-1.5 text-gray-300 hover:text-white" title="Download">
+              <Download size={18} />
+            </a>
+          )}
+          <button onClick={onClose} className="p-1.5 text-gray-300 hover:text-white"><X size={20} /></button>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 flex items-center justify-center relative overflow-hidden px-12">
+        {isImg ? (
+          item.thumbSrc
+            ? <img src={item.thumbSrc} alt={item.filename} className="max-w-full max-h-full object-contain" draggable={false} />
+            : <div className="text-gray-500 text-sm">Image unavailable</div>
+        ) : isVid ? (
+          <video src={item.thumbSrc} controls className="max-w-full max-h-full" />
+        ) : (
+          <div className="flex flex-col items-center gap-4">
+            <FileText size={56} className="text-blue-400" />
+            <span className="text-white text-sm">{item.filename}</span>
+            {item.downloadHref && (
+              <a href={item.downloadHref} target="_blank" rel="noopener noreferrer"
+                className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-medium">
+                Open / Download
+              </a>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Prev / Next */}
+      {idx > 0 && (
+        <button onClick={prev}
+          className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center text-white z-10">
+          <ChevronLeft size={22} />
+        </button>
+      )}
+      {idx < items.length - 1 && (
+        <button onClick={next}
+          className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center text-white z-10">
+          <ChevronRight size={22} />
+        </button>
+      )}
+
+      {/* Dot indicators */}
+      {items.length > 1 && (
+        <div className="flex justify-center gap-1.5 pb-4 pt-2 flex-shrink-0">
+          {items.map((_, i) => (
+            <button key={i} onClick={() => setIdx(i)}
+              className={`rounded-full transition-all ${i === idx ? 'w-4 h-2 bg-white' : 'w-2 h-2 bg-gray-600 hover:bg-gray-400'}`} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast, onRequestAddTask }: Props) {
@@ -31,7 +133,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [driveLink, setDriveLink] = useState('');
   const [plansPdfLink, setPlansPdfLink] = useState('');
   const [mergedWithId, setMergedWithId] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'details' | 'tasks' | 'stages' | 'history'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'tasks' | 'stages' | 'history' | 'photos'>('details');
+  const [drivePhotos, setDrivePhotos] = useState<DrivePhotoItem[]>([]);
+  const [loadingPhotos, setLoadingPhotos] = useState(false);
+  const [photosLoaded, setPhotosLoaded] = useState(false);
+  const [lightbox, setLightbox] = useState<{ items: { fileId: string; filename: string; mimeType: string; thumbSrc: string; downloadHref: string }[]; index: number } | null>(null);
   const [showUnmergeModal, setShowUnmergeModal] = useState(false);
   const [showPdfViewer, setShowPdfViewer] = useState(false);
   const [showHealthCheck, setShowHealthCheck] = useState(false);
@@ -55,6 +161,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       setShowHealthCheck(false);
       setShowSettings(false);
       setActiveTab('details');
+      setDrivePhotos([]);
+      setPhotosLoaded(false);
+      setLightbox(null);
       const existingFileId = apartment.plansPdfLink ? extractFileId(apartment.plansPdfLink) : null;
       setDetectedPdfId(existingFileId);
       if (!existingFileId && apartment.driveLink && backendConfigured) {
@@ -219,13 +328,22 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-200 flex-shrink-0">
-          {(['details', 'tasks', 'stages', 'history'] as const).map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)}
+        <div className="flex border-b border-gray-200 flex-shrink-0 overflow-x-auto">
+          {(['details', 'tasks', 'stages', 'history', 'photos'] as const).map(tab => (
+            <button key={tab} onClick={() => {
+              setActiveTab(tab);
+              if (tab === 'photos' && !photosLoaded && apartment?.driveLink && backendConfigured) {
+                setLoadingPhotos(true);
+                listAllPhotosViaBackend(apartment.driveLink)
+                  .then(photos => { setDrivePhotos(photos); setPhotosLoaded(true); })
+                  .catch(() => setPhotosLoaded(true))
+                  .finally(() => setLoadingPhotos(false));
+              }
+            }}
               className={`flex-1 py-2.5 text-sm font-medium transition-colors relative ${
                 activeTab === tab ? 'border-b-2 border-[#1e3a5f] text-[#1e3a5f]' : 'text-gray-500 hover:text-gray-700'
               }`}>
-              {tab === 'tasks' ? 'Tasks' : tab === 'stages' ? 'Stage Notes' : tab === 'history' ? 'History' : 'Details'}
+              {tab === 'tasks' ? 'Tasks' : tab === 'stages' ? 'Notes' : tab === 'history' ? 'History' : tab === 'photos' ? 'Photos' : 'Details'}
               {tab === 'tasks' && pendingTaskCount > 0 && (
                 <span className="ml-1 text-[10px] bg-orange-500 text-white rounded-full px-1.5 py-0.5 font-bold">
                   {pendingTaskCount}
@@ -381,7 +499,19 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                       {aptFiles.map(f => {
                         const isImage = f.mimeType.startsWith('image/');
                         return (
-                          <div key={f.id} className="relative group w-14 h-14 rounded-lg border border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center">
+                          <div key={f.id} className="relative group w-14 h-14 rounded-lg border border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center cursor-pointer"
+                            onClick={() => {
+                              const allFiles = officeNoteFiles.filter(of => of.apartmentId === apartment.id);
+                              const items = allFiles.map(of => ({
+                                fileId: of.driveFileId ?? '',
+                                filename: of.filename,
+                                mimeType: of.mimeType,
+                                thumbSrc: of.driveFileId ? driveThumbUrl(of.driveFileId, 800) : of.dataUrl,
+                                downloadHref: of.driveFileId ? `https://drive.google.com/uc?export=download&id=${of.driveFileId}` : of.dataUrl,
+                              }));
+                              setLightbox({ items, index: allFiles.findIndex(of => of.id === f.id) });
+                            }}
+                          >
                             {isImage
                               ? <img
                                   src={f.driveFileId ? driveThumbUrl(f.driveFileId, 400) : f.dataUrl}
@@ -700,10 +830,22 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                             {/* Attachment thumbnails */}
                             {(a.attachments?.length ?? 0) > 0 && (
                               <div className="mt-2 flex flex-wrap gap-1.5">
-                                {a.attachments!.map(att => (
-                                  <div key={att.id} className="w-10 h-10 rounded-lg border border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center flex-shrink-0">
+                                {a.attachments!.map((att, attIdx) => (
+                                  <div key={att.id}
+                                    className="w-10 h-10 rounded-lg border border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center flex-shrink-0 cursor-pointer"
+                                    onClick={() => {
+                                      const items = a.attachments!.map(at => ({
+                                        fileId: at.driveFileId ?? '',
+                                        filename: at.filename,
+                                        mimeType: at.mimeType,
+                                        thumbSrc: at.driveFileId ? driveThumbUrl(at.driveFileId, 800) : at.dataUrl,
+                                        downloadHref: at.driveFileId ? `https://drive.google.com/uc?export=download&id=${at.driveFileId}` : at.dataUrl,
+                                      }));
+                                      setLightbox({ items, index: attIdx });
+                                    }}
+                                  >
                                     {att.mimeType.startsWith('image/')
-                                      ? <img src={att.dataUrl} alt={att.filename} className="w-full h-full object-cover" />
+                                      ? <img src={att.driveFileId ? driveThumbUrl(att.driveFileId, 200) : att.dataUrl} alt={att.filename} className="w-full h-full object-cover" />
                                       : <FileText size={14} className="text-gray-400" />
                                     }
                                   </div>
@@ -715,6 +857,92 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                       </div>
                     );
                   })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'photos' && (
+            <div>
+              {!apartment.driveLink ? (
+                <div className="flex flex-col items-center py-16 text-center px-4">
+                  <Camera size={32} className="text-gray-300 mb-3" />
+                  <p className="text-sm font-medium text-gray-500">No Drive folder linked</p>
+                  <p className="text-xs text-gray-400 mt-1">Set the Drive folder in Details → Settings to load photos.</p>
+                </div>
+              ) : !backendConfigured ? (
+                <div className="flex flex-col items-center py-16 text-center px-4">
+                  <Camera size={32} className="text-gray-300 mb-3" />
+                  <p className="text-sm font-medium text-gray-500">Drive backend not configured</p>
+                  <p className="text-xs text-gray-400 mt-1">Set VITE_DRIVE_API_KEY to enable photo browsing.</p>
+                </div>
+              ) : loadingPhotos ? (
+                <div className="flex items-center justify-center py-16 text-gray-400">
+                  <RefreshCw size={18} className="animate-spin mr-2" /> Loading photos from Drive…
+                </div>
+              ) : photosLoaded && drivePhotos.length === 0 ? (
+                <div className="flex flex-col items-center py-16 text-center px-4">
+                  <Camera size={32} className="text-gray-300 mb-3" />
+                  <p className="text-sm font-medium text-gray-500">No photos yet</p>
+                  <p className="text-xs text-gray-400 mt-1">Photos uploaded by contractors will appear here.</p>
+                </div>
+              ) : drivePhotos.length > 0 ? (
+                (() => {
+                  const groups = drivePhotos.reduce<Record<string, DrivePhotoItem[]>>((acc, p) => {
+                    (acc[p.folderName] = acc[p.folderName] || []).push(p);
+                    return acc;
+                  }, {});
+                  return (
+                    <div className="space-y-5">
+                      {Object.entries(groups).map(([folder, items]) => (
+                        <div key={folder}>
+                          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{folder}</h4>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            {items.map((photo) => {
+                              const isImg = photo.mimeType.startsWith('image/');
+                              const isVid = photo.mimeType.startsWith('video/');
+                              return (
+                                <div
+                                  key={photo.fileId}
+                                  className="aspect-square rounded-lg overflow-hidden bg-gray-100 cursor-pointer relative"
+                                  onClick={() => {
+                                    const allItems = drivePhotos.map(p => ({
+                                      fileId: p.fileId,
+                                      filename: p.filename,
+                                      mimeType: p.mimeType,
+                                      thumbSrc: driveThumbUrl(p.fileId, 800),
+                                      downloadHref: `https://drive.google.com/uc?export=download&id=${p.fileId}`,
+                                    }));
+                                    const globalIdx = drivePhotos.findIndex(p => p.fileId === photo.fileId);
+                                    setLightbox({ items: allItems, index: globalIdx });
+                                  }}
+                                >
+                                  {isImg ? (
+                                    <img src={driveThumbUrl(photo.fileId, 400)} alt={photo.filename} className="w-full h-full object-cover" loading="lazy" />
+                                  ) : isVid ? (
+                                    <div className="w-full h-full flex flex-col items-center justify-center bg-gray-800">
+                                      <Play size={22} className="text-white" />
+                                      <span className="text-white text-[9px] mt-1 opacity-60 truncate px-1 max-w-full">{photo.filename}</span>
+                                    </div>
+                                  ) : (
+                                    <div className="w-full h-full flex flex-col items-center justify-center bg-blue-50 px-1">
+                                      <FileText size={18} className="text-blue-400" />
+                                      <span className="text-[9px] text-gray-500 text-center break-all leading-tight line-clamp-2 mt-1">{photo.filename}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()
+              ) : (
+                <div className="flex flex-col items-center py-16 text-center px-4">
+                  <Camera size={32} className="text-gray-300 mb-3" />
+                  <p className="text-xs text-gray-400">Click the Photos tab to load from Drive.</p>
                 </div>
               )}
             </div>
@@ -750,6 +978,15 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           )}
         </div>
       </div>
+
+      {/* Lightbox */}
+      {lightbox && (
+        <LightboxOverlay
+          items={lightbox.items}
+          initialIndex={lightbox.index}
+          onClose={() => setLightbox(null)}
+        />
+      )}
     </>
   );
 }

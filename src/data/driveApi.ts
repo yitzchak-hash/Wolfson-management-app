@@ -469,3 +469,50 @@ export async function uploadFileViaBackend(
   onProgress?.(100);
   return { fileId: result.fileId, webViewLink: result.webViewLink };
 }
+
+export interface DrivePhotoItem {
+  fileId: string;
+  filename: string;
+  mimeType: string;
+  folderName: string;  // which subfolder inside Photos/ it came from
+}
+
+/** List all files inside the apartment's Drive folder Photos/ subtree (one level deep into subfolders). */
+export async function listAllPhotosViaBackend(driveLink: string): Promise<DrivePhotoItem[]> {
+  const mainFolderId = extractFolderId(driveLink);
+  if (!mainFolderId) return [];
+  try {
+    const mainFiles = await listFolderViaBackend(mainFolderId);
+    const photosFolder = mainFiles.find(
+      f => f.mimeType === 'application/vnd.google-apps.folder' && /^photos?$/i.test(f.name),
+    );
+    if (!photosFolder) return [];
+
+    const photosContents = await listFolderViaBackend(photosFolder.id);
+    const results: DrivePhotoItem[] = [];
+
+    // Files directly under Photos/
+    for (const f of photosContents) {
+      if (f.mimeType !== 'application/vnd.google-apps.folder') {
+        results.push({ fileId: f.id, filename: f.name, mimeType: f.mimeType, folderName: 'Photos' });
+      }
+    }
+
+    // One level of subfolders (stage names, Task Notes, Job Notes, Contractor Notes, etc.)
+    const subFolders = photosContents.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
+    await Promise.all(subFolders.map(async sf => {
+      try {
+        const sfFiles = await listFolderViaBackend(sf.id);
+        for (const f of sfFiles) {
+          if (f.mimeType !== 'application/vnd.google-apps.folder') {
+            results.push({ fileId: f.id, filename: f.name, mimeType: f.mimeType, folderName: sf.name });
+          }
+        }
+      } catch { /* skip failing subfolders */ }
+    }));
+
+    return results;
+  } catch {
+    return [];
+  }
+}
