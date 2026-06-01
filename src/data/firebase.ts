@@ -87,11 +87,39 @@ console.log('[Firebase] db:', db !== null ? 'initialized ✓' : 'NULL — all Fi
 export { db };
 export const isStorageConfigured = Boolean(storage);
 
+// ── Cloud-sync status tracker ─────────────────────────────────────────────
+// Lets the UI show "Saving…" / "Saved ✓" without threading state through the store.
+type SyncStatus = 'idle' | 'saving' | 'saved';
+type SyncListener = (s: SyncStatus) => void;
+const _syncListeners: SyncListener[] = [];
+let _pendingWrites = 0;
+let _savedTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function subscribeCloudSync(fn: SyncListener): () => void {
+  _syncListeners.push(fn);
+  return () => { const i = _syncListeners.indexOf(fn); if (i >= 0) _syncListeners.splice(i, 1); };
+}
+
+function _notifySyncListeners(s: SyncStatus) { _syncListeners.forEach(fn => fn(s)); }
+
+function _trackWrite<T>(promise: Promise<T>): Promise<T> {
+  _pendingWrites++;
+  if (_savedTimer) { clearTimeout(_savedTimer); _savedTimer = null; }
+  _notifySyncListeners('saving');
+  return promise.finally(() => {
+    _pendingWrites = Math.max(0, _pendingWrites - 1);
+    if (_pendingWrites === 0) {
+      _notifySyncListeners('saved');
+      _savedTimer = setTimeout(() => { _notifySyncListeners('idle'); _savedTimer = null; }, 3000);
+    }
+  });
+}
+
 // Generic document write
 export async function fsSet(collectionName: string, docId: string, data: object) {
   if (!db) return;
   try {
-    await setDoc(doc(db, collectionName, docId), { ...data, _updatedAt: serverTimestamp() }, { merge: true });
+    await _trackWrite(setDoc(doc(db, collectionName, docId), { ...data, _updatedAt: serverTimestamp() }, { merge: true }));
   } catch (e) {
     console.warn(`Firestore write failed for ${collectionName}/${docId}:`, e);
   }
@@ -159,7 +187,7 @@ export async function fsDeleteFile(path: string): Promise<void> {
 export async function fsDelete(collectionName: string, docId: string) {
   if (!db) return;
   try {
-    await deleteDoc(doc(db, collectionName, docId));
+    await _trackWrite(deleteDoc(doc(db, collectionName, docId)));
   } catch (e) {
     console.warn(`Firestore delete failed for ${collectionName}/${docId}:`, e);
   }
@@ -173,7 +201,7 @@ export async function fsBatchSet(collectionName: string, items: Array<{ id: stri
     items.forEach(({ id, data }) => {
       batch.set(doc(db!, collectionName, id), { ...data, _updatedAt: serverTimestamp() }, { merge: true });
     });
-    await batch.commit();
+    await _trackWrite(batch.commit());
   } catch (e) {
     console.warn(`Firestore batch write failed for ${collectionName}:`, e);
   }

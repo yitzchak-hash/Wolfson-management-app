@@ -161,6 +161,7 @@ src/
 - `fsDeleteFile(path)` in `firebase.ts` — called on photo delete to free storage
 - `totalStorageBytes` tracked in state + `settings/app` Firestore doc; updated on every add/delete
 - Admin **Header** shows an amber warning banner when storage exceeds 80% of the 5 GB free tier
+- Admin **Header** shows a `CloudSyncBadge`: spins "Saving…" while any `fsSet`/`fsDelete`/`fsBatchSet` is in flight, turns green "Saved ✓" for 3 s after all writes complete, then hides. Uses `subscribeCloudSync()` from `firebase.ts` (no Zustand state needed). Hidden when Firebase is not configured.
 - Firebase Storage security rules must allow public read + write on `contractorPhotos/**` (no Firebase Auth used)
 
 ## Firebase Sync (Full)

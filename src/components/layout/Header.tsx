@@ -1,7 +1,23 @@
-import React from 'react';
-import { LogOut, User, Sun, Moon, AlertTriangle } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { LogOut, User, Sun, Moon, AlertTriangle, Loader2, CheckCircle2 } from 'lucide-react';
 import { useStore } from '../../data/store';
 import { Tooltip } from '../ui/Tooltip';
+import { subscribeCloudSync } from '../../data/firebase';
+import { isFirebaseConfigured } from '../../data/firebase';
+
+function CloudSyncBadge({ light }: { light: boolean }) {
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  useEffect(() => subscribeCloudSync(setStatus), []);
+  if (!isFirebaseConfigured) return null;
+  if (status === 'idle') return null;
+  return (
+    <div className={`flex items-center gap-1.5 text-xs font-medium transition-all ${status === 'saved' ? 'text-green-400' : light ? 'text-gray-400' : 'text-gray-300'}`}>
+      {status === 'saving'
+        ? <><Loader2 size={13} className="animate-spin" /> Saving…</>
+        : <><CheckCircle2 size={13} /> Saved</>}
+    </div>
+  );
+}
 
 const FREE_TIER_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB
 const WARN_THRESHOLD  = FREE_TIER_BYTES * 0.8;   // warn at 80%
@@ -46,6 +62,8 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-2">
+        <CloudSyncBadge light={lightTheme} />
+
         {/* Theme toggle */}
         <Tooltip text={lightTheme ? 'Switch to dark theme' : 'Switch to light theme'}>
           <button
