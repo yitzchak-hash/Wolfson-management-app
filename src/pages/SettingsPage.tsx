@@ -10,7 +10,7 @@ import { Tooltip } from '../components/ui/Tooltip';
 import { Toast } from '../components/ui/Toast';
 import { format } from 'date-fns';
 import { saveAs } from 'file-saver';
-import { requestGoogleToken, ensureValidToken, extractFolderId, findOrCreateFolder, uploadFileToDrive } from '../data/driveApi';
+import { extractFolderId, isUploadBackendConfigured } from '../data/driveApi';
 
 type Tab = 'stages' | 'users' | 'contractors' | 'app' | 'language';
 
@@ -391,40 +391,7 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
 function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
   lightTheme: boolean; setLightTheme: (v: boolean) => void; onToast: (msg: string, type?: 'success' | 'error') => void;
 }) {
-  const { users, googleClientId, googleAccessToken, googleTokenExpiry, setGoogleClientId, setGoogleToken } = useStore();
-  const [clientIdDraft, setClientIdDraft] = useState(googleClientId);
-  const [connecting, setConnecting] = useState(false);
-
-  async function handleConnectDrive() {
-    if (!clientIdDraft.trim()) return;
-    setConnecting(true);
-    try {
-      setGoogleClientId(clientIdDraft.trim());
-      const { token, expiry } = await requestGoogleToken(clientIdDraft.trim());
-      setGoogleToken(token, expiry);
-      onToast('Google Drive connected!', 'success');
-    } catch (e) {
-      onToast(`Drive connection failed: ${(e as Error).message}`, 'error');
-    } finally {
-      setConnecting(false);
-    }
-  }
-
-  async function handleReconnect() {
-    if (!googleClientId) return;
-    setConnecting(true);
-    try {
-      const token = await ensureValidToken(googleClientId, null, null, setGoogleToken);
-      if (token) onToast('Google Drive reconnected!', 'success');
-      else onToast('Reconnect failed — please use Connect Drive', 'error');
-    } catch (e) {
-      onToast(`Reconnect failed: ${(e as Error).message}`, 'error');
-    } finally {
-      setConnecting(false);
-    }
-  }
-
-  const isConnected = !!googleAccessToken && (Date.now() < (googleTokenExpiry ?? 0));
+  const { users } = useStore();
 
   return (
     <div className="space-y-5">
@@ -479,48 +446,6 @@ function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
 
       <BackupRestoreSection onToast={onToast} />
 
-      {/* Google Drive connection */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <div className="flex items-center gap-2 mb-1">
-          <HardDriveDownload size={18} className="text-[#1e3a5f]" />
-          <h2 className="font-semibold text-gray-800">Google Drive</h2>
-          {isConnected && (
-            <span className="ml-auto text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-medium">Connected</span>
-          )}
-        </div>
-        <p className="text-sm text-gray-500 mb-4">
-          Connect Google Drive to verify folder health and auto-discover Engineering Plans PDFs.
-          <br />
-          <span className="text-xs text-gray-400">
-            Need a Client ID? Go to <strong>console.cloud.google.com</strong> → New Project → APIs &amp; Services → Credentials → Create OAuth Client ID (Web application, origin: {window.location.origin}).
-          </span>
-        </p>
-        <div className="flex gap-2">
-          <input
-            value={clientIdDraft}
-            onChange={e => setClientIdDraft(e.target.value)}
-            placeholder="Google OAuth Client ID (…apps.googleusercontent.com)"
-            className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
-          />
-          <button
-            onClick={handleConnectDrive}
-            disabled={!clientIdDraft.trim() || connecting}
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] disabled:opacity-40 transition-colors whitespace-nowrap"
-          >
-            {connecting ? 'Connecting…' : isConnected ? 'Reconnect' : 'Connect Drive'}
-          </button>
-        </div>
-        {isConnected && (
-          <div className="mt-2 flex items-center justify-between">
-            <p className="text-xs text-green-600">Drive API active — auto-reconnects when token expires.</p>
-            <button onClick={handleReconnect} disabled={connecting}
-              className="text-xs text-gray-400 hover:text-[#1e3a5f] disabled:opacity-40 transition-colors">
-              Reconnect now
-            </button>
-          </div>
-        )}
-      </div>
-
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
         <h3 className="font-semibold text-amber-800 mb-2 text-sm">Data Storage</h3>
         <p className="text-sm text-amber-700">
@@ -537,13 +462,14 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
     exportData, importData, getDataSummary,
     autoBackup, setAutoBackup, backupSnapshots,
     backupDriveFolderLink, setBackupDriveFolder,
-    googleClientId, googleAccessToken, googleTokenExpiry, setGoogleToken,
     backupFrequency, setBackupFrequency, backupLogs, addBackupLog,
   } = useStore();
   const importRef = useRef<HTMLInputElement>(null);
   const [exportModal, setExportModal] = useState<ReturnType<typeof getDataSummary> & { sizeKB: number; driveUploaded?: boolean } | null>(null);
   const [importModal, setImportModal] = useState<ReturnType<typeof getDataSummary> | null>(null);
   const [driveFolderDraft, setDriveFolderDraft] = useState(backupDriveFolderLink);
+
+  const apiKey = import.meta.env.VITE_DRIVE_API_KEY ?? '';
 
   async function handleExport() {
     const json = exportData();
@@ -553,16 +479,24 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
     saveAs(blob, filename);
 
     let driveUploaded = false;
-    if (backupDriveFolderLink && googleClientId) {
+    if (backupDriveFolderLink && isUploadBackendConfigured()) {
       try {
-        const token = await ensureValidToken(googleClientId, googleAccessToken, googleTokenExpiry, setGoogleToken);
-        if (token) {
-          const folderId = extractFolderId(backupDriveFolderLink);
-          if (folderId) {
-            const backupsFolder = await findOrCreateFolder(folderId, 'Backups', token);
-            const dataUrl = `data:application/json;base64,${btoa(unescape(encodeURIComponent(json)))}`;
-            await uploadFileToDrive(backupsFolder, filename, dataUrl, 'application/json', token);
-            driveUploaded = true;
+        const parentId = extractFolderId(backupDriveFolderLink);
+        if (parentId) {
+          const folderRes = await fetch('/api/folder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+            body: JSON.stringify({ parentId, name: 'Backups' }),
+          });
+          if (folderRes.ok) {
+            const { folderId } = await folderRes.json();
+            const data = btoa(unescape(encodeURIComponent(json)));
+            const uploadRes = await fetch('/api/drive-upload', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+              body: JSON.stringify({ folderId, filename, mimeType: 'application/json', data }),
+            });
+            if (uploadRes.ok) driveUploaded = true;
           }
         }
       } catch {
