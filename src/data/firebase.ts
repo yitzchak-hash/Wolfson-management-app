@@ -13,6 +13,9 @@
 import { initializeApp, FirebaseApp } from 'firebase/app';
 import {
   getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   Firestore,
   collection,
   doc,
@@ -59,7 +62,10 @@ let storage: FirebaseStorage | null = null;
 if (isFirebaseConfigured) {
   try {
     app = initializeApp(firebaseConfig);
-    db = getFirestore(app);
+    // Enable IndexedDB persistence so writes are queued offline and retried on reconnect
+    db = initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    });
     storage = getStorage(app);
   } catch (e) {
     console.warn('Firebase init failed, using localStorage only:', e);

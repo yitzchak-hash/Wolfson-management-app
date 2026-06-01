@@ -999,15 +999,17 @@ export const useStore = create<AppState>((set, get) => ({
         }
       }),
       fsListen('stageNotes', (docs) => {
-        set({ stageNotes: docs as unknown as StageNote[] }); persist(get);
+        if (docs.length > 0) { set({ stageNotes: docs as unknown as StageNote[] }); persist(get); }
       }),
       fsListen('activityLogs', (docs) => {
-        const sorted = (docs as unknown as ActivityLog[])
-          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 500);
-        set({ activityLogs: sorted }); persist(get);
+        if (docs.length > 0) {
+          const sorted = (docs as unknown as ActivityLog[])
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 500);
+          set({ activityLogs: sorted }); persist(get);
+        }
       }),
       fsListen('contractors', (docs) => {
-        set({ contractors: docs as unknown as Contractor[] }); persist(get);
+        if (docs.length > 0) { set({ contractors: docs as unknown as Contractor[] }); persist(get); }
       }),
       fsListen('contractorAssignments', (docs) => {
         const localA = get().contractorAssignments;
@@ -1024,7 +1026,7 @@ export const useStore = create<AppState>((set, get) => ({
         set({ contractorAssignments: merged }); persist(get);
       }),
       fsListen('contractorNotes', (docs) => {
-        set({ contractorNotes: docs as unknown as ContractorNote[] }); persist(get);
+        if (docs.length > 0) { set({ contractorNotes: docs as unknown as ContractorNote[] }); persist(get); }
       }),
       fsListen('contractorPhotos', (docs) => {
         const localP = get().contractorPhotos;
