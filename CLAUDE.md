@@ -184,6 +184,6 @@ All collections are synced to Firestore in real time:
 
 `fsDelete(collectionName, docId)` in `firebase.ts` — used by `deleteContractor`, `deleteContractorAssignment`, `deleteContractorPhoto`, `deleteOfficeNoteFile`, and cascade deletes.
 
-**Offline persistence**: `initializeFirestore` with `persistentLocalCache` + `persistentMultipleTabManager` enables IndexedDB queuing so writes survive connectivity loss and are retried on reconnect.
+**No custom Firestore cache**: Uses plain `getFirestore(app)` — no `persistentLocalCache` / `persistentMultipleTabManager`. The app's own localStorage (`persist()`) handles offline caching; Firestore's built-in IndexedDB cache was causing `onSnapshot` to misbehave on mobile browsers (listeners receiving stale cached data instead of server updates).
 
 **Setup**: copy `.env.example` to `.env.local` and fill in `VITE_FIREBASE_*` vars (or set in Vercel dashboard)
