@@ -165,6 +165,7 @@ interface AppState {
 
   // Firebase sync
   startFirebaseSync: () => void;
+  forcePushToFirestore: () => Promise<void>;
   applyFirebaseData: (data: Partial<AppState>) => void;
 }
 
@@ -795,6 +796,41 @@ export const useStore = create<AppState>((set, get) => ({
     };
   },
 
+  forcePushToFirestore: async () => {
+    if (!db) return;
+    const state = get();
+    await Promise.all([
+      fsBatchSet('apartments', state.apartments.map(a => ({ id: a.id, data: a }))),
+      fsBatchSet('stages',     state.stages.map(s => ({ id: s.id, data: s }))),
+      fsBatchSet('users',      state.users.map(u => ({ id: u.id, data: u }))),
+      state.stageNotes.length > 0
+        ? fsBatchSet('stageNotes', state.stageNotes.map(n => ({ id: n.id, data: n })))
+        : Promise.resolve(),
+      state.contractors.length > 0
+        ? fsBatchSet('contractors', state.contractors.map(c => ({ id: c.id, data: c })))
+        : Promise.resolve(),
+      state.contractorAssignments.length > 0
+        ? fsBatchSet('contractorAssignments', state.contractorAssignments.map(a => ({
+            id: a.id, data: { ...a, attachments: a.attachments?.map(att => ({ ...att, dataUrl: '' })) },
+          })))
+        : Promise.resolve(),
+      state.contractorNotes.length > 0
+        ? fsBatchSet('contractorNotes', state.contractorNotes.map(n => ({ id: n.id, data: n })))
+        : Promise.resolve(),
+      state.contractorPhotos.length > 0
+        ? fsBatchSet('contractorPhotos', state.contractorPhotos.map(p => ({ id: p.id, data: { ...p, dataUrl: '' } })))
+        : Promise.resolve(),
+      state.officeNoteFiles.length > 0
+        ? fsBatchSet('officeNoteFiles', state.officeNoteFiles.map(f => ({ id: f.id, data: { ...f, dataUrl: '' } })))
+        : Promise.resolve(),
+      fsSet('settings', 'app', {
+        autoBackup: state.autoBackup, backupFrequency: state.backupFrequency,
+        backupDriveFolderLink: state.backupDriveFolderLink,
+        contractorUiStrings: state.contractorUiStrings, totalStorageBytes: state.totalStorageBytes,
+      }),
+    ]);
+  },
+
   startFirebaseSync: async () => {
     if (get().firebaseListening) return;
     set({ firebaseListening: true });
@@ -857,8 +893,23 @@ export const useStore = create<AppState>((set, get) => ({
 
       const appSettings = (fbSettings.find(s => (s as Record<string,unknown>).id === 'app') ?? {}) as Record<string, unknown>;
 
+      // Helper: merge two arrays by id, preferring the version with a more recent updatedAt
+      function mergeById<T extends { id: string; updatedAt?: string }>(local: T[], remote: T[]): T[] {
+        const remoteMap = new Map(remote.map(r => [r.id, r]));
+        const merged = local.map(a => {
+          const r = remoteMap.get(a.id);
+          if (!r) return a; // local-only → keep
+          const lt = new Date(a.updatedAt || 0).getTime();
+          const rt = new Date(r.updatedAt || 0).getTime();
+          return rt >= lt ? r : a; // newer wins; ties go to Firestore
+        });
+        // Add Firestore docs that don't exist locally (added on another device)
+        remote.forEach(r => { if (!local.find(a => a.id === r.id)) merged.push(r); });
+        return merged;
+      }
+
       set(state => ({
-        apartments:            fbApts.length > 0        ? (fbApts as unknown as Apartment[])   : state.apartments,
+        apartments:            mergeById(state.apartments, fbApts as unknown as Apartment[]),
         stageNotes:            fbStageNotes.length > 0  ? (fbStageNotes as unknown as StageNote[]) : state.stageNotes,
         stages:                fbStages.length > 0      ? (fbStages as unknown as Stage[])     : state.stages,
         users:                 fbUsers.length > 0       ? (fbUsers as unknown as User[])       : state.users,
@@ -878,6 +929,13 @@ export const useStore = create<AppState>((set, get) => ({
         ...(appSettings.totalStorageBytes    !== undefined ? { totalStorageBytes: appSettings.totalStorageBytes as number } : {}),
       }));
       persist(get);
+
+      // Seed any apartments that are missing from Firestore (in case the first-run seed was partial)
+      const fbAptIds = new Set((fbApts as unknown as Apartment[]).map(a => a.id));
+      const missingApts = get().apartments.filter(a => !fbAptIds.has(a.id));
+      if (missingApts.length > 0) {
+        fsBatchSet('apartments', missingApts.map(a => ({ id: a.id, data: a })));
+      }
     } else {
       // First run — push everything from localStorage to Firestore
       const state = get();
@@ -920,7 +978,25 @@ export const useStore = create<AppState>((set, get) => ({
     // Store every unsubscribe fn so logout() can cancel them cleanly.
     _firebaseUnsubscribers = [
       fsListen('apartments', (docs) => {
-        if (docs.length > 0) { set({ apartments: docs as unknown as Apartment[] }); persist(get); }
+        if (docs.length > 0) {
+          const fbMap = new Map((docs as unknown as Apartment[]).map(a => [a.id, a]));
+          set(state => ({
+            apartments: (() => {
+              const merged = state.apartments.map(a => {
+                const r = fbMap.get(a.id);
+                if (!r) return a;
+                const lt = new Date(a.updatedAt || 0).getTime();
+                const rt = new Date(r.updatedAt || 0).getTime();
+                return rt >= lt ? r : a;
+              });
+              (docs as unknown as Apartment[]).forEach(r => {
+                if (!state.apartments.find(a => a.id === r.id)) merged.push(r);
+              });
+              return merged;
+            })(),
+          }));
+          persist(get);
+        }
       }),
       fsListen('stageNotes', (docs) => {
         set({ stageNotes: docs as unknown as StageNote[] }); persist(get);

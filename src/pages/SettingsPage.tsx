@@ -435,6 +435,23 @@ function StepRow({ step }: { step: TestStep }) {
 }
 
 function FirebaseStatusSection() {
+  const { forcePushToFirestore, apartments, stages, contractors } = useStore();
+  const [pushing, setPushing]   = useState(false);
+  const [pushDone, setPushDone] = useState<'ok' | 'error' | null>(null);
+
+  async function handleForcePush() {
+    setPushing(true);
+    setPushDone(null);
+    try {
+      await forcePushToFirestore();
+      setPushDone('ok');
+    } catch {
+      setPushDone('error');
+    } finally {
+      setPushing(false);
+    }
+  }
+
   const envValues: Record<string, string | undefined> = {
     VITE_FIREBASE_API_KEY:             import.meta.env.VITE_FIREBASE_API_KEY,
     VITE_FIREBASE_AUTH_DOMAIN:         import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -571,6 +588,25 @@ function FirebaseStatusSection() {
           Fix missing variables in Vercel → Project → Settings → Environment Variables, then redeploy.
         </p>
       )}
+
+      <div className="mt-4 pt-4 border-t border-gray-100">
+        <p className="text-xs text-gray-500 mb-2">
+          If cloud data looks out of date, push your current local state to overwrite it.
+          ({apartments.length} apartments · {stages.length} stages · {contractors.length} contractors)
+        </p>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleForcePush}
+            disabled={pushing || !isFirebaseConfigured || !db}
+            className="flex items-center gap-2 px-4 py-2 border border-[#1e3a5f] text-[#1e3a5f] rounded-lg text-sm font-medium hover:bg-[#1e3a5f]/5 disabled:opacity-40 transition-colors"
+          >
+            {pushing ? <Loader size={15} className="animate-spin" /> : <Database size={15} />}
+            {pushing ? 'Uploading…' : 'Force Push Local → Cloud'}
+          </button>
+          {pushDone === 'ok'    && <span className="text-xs text-green-600 flex items-center gap-1"><Check size={12} /> Pushed successfully</span>}
+          {pushDone === 'error' && <span className="text-xs text-red-500 flex items-center gap-1"><X size={12} /> Push failed — check console</span>}
+        </div>
+      </div>
     </div>
   );
 }
