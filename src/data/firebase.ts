@@ -19,6 +19,7 @@ import {
   setDoc,
   getDoc,
   getDocs,
+  deleteDoc,
   onSnapshot,
   writeBatch,
   serverTimestamp,
@@ -87,6 +88,16 @@ export function fsListen(
   } catch (e) {
     console.warn(`Firestore listener failed for ${collectionName}:`, e);
     return () => {};
+  }
+}
+
+// Delete a single document
+export async function fsDelete(collectionName: string, docId: string) {
+  if (!db) return;
+  try {
+    await deleteDoc(doc(db, collectionName, docId));
+  } catch (e) {
+    console.warn(`Firestore delete failed for ${collectionName}/${docId}:`, e);
   }
 }
 

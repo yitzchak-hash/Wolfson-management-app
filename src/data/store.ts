@@ -3,7 +3,7 @@ import { Apartment, ActivityLog, Stage, StageNote, User, Building, Contractor, C
 import {
   DEFAULT_BUILDINGS, DEFAULT_STAGES, DEFAULT_USERS, buildDefaultApartments, DATA_VERSION,
 } from './initialData';
-import { fsSet, fsBatchSet, fsGetAll, fsListen, isFirebaseConfigured } from './firebase';
+import { fsSet, fsDelete, fsBatchSet, fsGetAll, fsListen, isFirebaseConfigured } from './firebase';
 
 const STORAGE_KEY = 'wolfson_app_data';
 const VERSION_KEY = 'wolfson_app_version';
@@ -477,28 +477,42 @@ export const useStore = create<AppState>((set, get) => ({
     };
     set(state => ({ contractors: [...state.contractors, c] }));
     persist(get);
+    fsSet('contractors', c.id, c);
     return c;
   },
 
   updateContractor: (id, changes) => {
     set(state => ({ contractors: state.contractors.map(c => c.id === id ? { ...c, ...changes } : c) }));
     persist(get);
+    const updated = get().contractors.find(c => c.id === id);
+    if (updated) fsSet('contractors', id, updated);
   },
 
   deleteContractor: (id) => {
-    set(state => ({
-      contractors: state.contractors.filter(c => c.id !== id),
-      contractorAssignments: state.contractorAssignments.filter(a => a.contractorId !== id),
-      contractorNotes: state.contractorNotes.filter(n => n.contractorId !== id),
-      contractorPhotos: state.contractorPhotos.filter(p => p.contractorId !== id),
+    const state = get();
+    const assignmentIds = state.contractorAssignments.filter(a => a.contractorId === id).map(a => a.id);
+    const noteIds = state.contractorNotes.filter(n => n.contractorId === id).map(n => n.id);
+    const photoIds = state.contractorPhotos.filter(p => p.contractorId === id).map(p => p.id);
+    set(s => ({
+      contractors: s.contractors.filter(c => c.id !== id),
+      contractorAssignments: s.contractorAssignments.filter(a => a.contractorId !== id),
+      contractorNotes: s.contractorNotes.filter(n => n.contractorId !== id),
+      contractorPhotos: s.contractorPhotos.filter(p => p.contractorId !== id),
     }));
     persist(get);
+    fsDelete('contractors', id);
+    assignmentIds.forEach(aid => fsDelete('contractorAssignments', aid));
+    noteIds.forEach(nid => fsDelete('contractorNotes', nid));
+    photoIds.forEach(pid => fsDelete('contractorPhotos', pid));
   },
 
   addContractorAssignment: (fields) => {
     const a: ContractorAssignment = { ...fields, id: generateId(), createdAt: new Date().toISOString() };
     set(state => ({ contractorAssignments: [...state.contractorAssignments, a] }));
     persist(get);
+    // Strip attachment dataUrls before Firestore (keep metadata only)
+    const aForFs = { ...a, attachments: a.attachments?.map(att => ({ ...att, dataUrl: '' })) };
+    fsSet('contractorAssignments', a.id, aForFs);
   },
 
   updateContractorAssignment: (id, changes) => {
@@ -506,27 +520,41 @@ export const useStore = create<AppState>((set, get) => ({
       contractorAssignments: state.contractorAssignments.map(a => a.id === id ? { ...a, ...changes } : a),
     }));
     persist(get);
+    const updated = get().contractorAssignments.find(a => a.id === id);
+    if (updated) {
+      const updForFs = { ...updated, attachments: updated.attachments?.map(att => ({ ...att, dataUrl: '' })) };
+      fsSet('contractorAssignments', id, updForFs);
+    }
   },
 
   deleteContractorAssignment: (id) => {
-    set(state => ({
-      contractorAssignments: state.contractorAssignments.filter(a => a.id !== id),
-      contractorNotes: state.contractorNotes.filter(n => n.assignmentId !== id),
-      contractorPhotos: state.contractorPhotos.filter(p => p.assignmentId !== id),
+    const state = get();
+    const noteIds = state.contractorNotes.filter(n => n.assignmentId === id).map(n => n.id);
+    const photoIds = state.contractorPhotos.filter(p => p.assignmentId === id).map(p => p.id);
+    set(s => ({
+      contractorAssignments: s.contractorAssignments.filter(a => a.id !== id),
+      contractorNotes: s.contractorNotes.filter(n => n.assignmentId !== id),
+      contractorPhotos: s.contractorPhotos.filter(p => p.assignmentId !== id),
     }));
     persist(get);
+    fsDelete('contractorAssignments', id);
+    noteIds.forEach(nid => fsDelete('contractorNotes', nid));
+    photoIds.forEach(pid => fsDelete('contractorPhotos', pid));
   },
 
   addContractorNote: (fields) => {
     const n: ContractorNote = { ...fields, id: generateId(), createdAt: new Date().toISOString() };
     set(state => ({ contractorNotes: [...state.contractorNotes, n] }));
     persist(get);
+    fsSet('contractorNotes', n.id, n);
   },
 
   addContractorPhoto: (fields) => {
     const p: ContractorPhoto = { ...fields, id: generateId(), uploadedAt: new Date().toISOString() };
     set(state => ({ contractorPhotos: [...state.contractorPhotos, p] }));
     persist(get);
+    // Store metadata only in Firestore — dataUrl stays in localStorage
+    fsSet('contractorPhotos', p.id, { ...p, dataUrl: '' });
     return p.id;
   },
 
@@ -535,11 +563,14 @@ export const useStore = create<AppState>((set, get) => ({
       contractorPhotos: state.contractorPhotos.map(p => p.id === id ? { ...p, ...changes } : p),
     }));
     persist(get);
+    const updated = get().contractorPhotos.find(p => p.id === id);
+    if (updated) fsSet('contractorPhotos', id, { ...updated, dataUrl: '' });
   },
 
   deleteContractorPhoto: (id) => {
     set(state => ({ contractorPhotos: state.contractorPhotos.filter(p => p.id !== id) }));
     persist(get);
+    fsDelete('contractorPhotos', id);
   },
 
   // ─── Backup / Restore ──────────────────────────────────────────────────────
@@ -663,16 +694,19 @@ export const useStore = create<AppState>((set, get) => ({
   setAutoBackup: (v) => {
     set({ autoBackup: v });
     persist(get);
+    fsSet('settings', 'app', { autoBackup: v });
   },
 
   setBackupFrequency: (f) => {
     set({ backupFrequency: f });
     persist(get);
+    fsSet('settings', 'app', { backupFrequency: f });
   },
 
   setBackupDriveFolder: (url) => {
     set({ backupDriveFolderLink: url });
     persist(get);
+    fsSet('settings', 'app', { backupDriveFolderLink: url });
   },
 
   addBackupLog: (fields) => {
@@ -684,17 +718,21 @@ export const useStore = create<AppState>((set, get) => ({
   updateContractorUiStrings: (partial) => {
     set(state => ({ contractorUiStrings: { ...state.contractorUiStrings, ...partial } }));
     persist(get);
+    fsSet('settings', 'app', { contractorUiStrings: get().contractorUiStrings });
   },
 
   addOfficeNoteFile: (fields) => {
     const f: OfficeNoteFile = { ...fields, id: generateId(), uploadedAt: new Date().toISOString() };
     set(state => ({ officeNoteFiles: [...state.officeNoteFiles, f] }));
     persist(get);
+    // dataUrl stays local; only metadata goes to Firestore
+    fsSet('officeNoteFiles', f.id, { ...f, dataUrl: '' });
   },
 
   deleteOfficeNoteFile: (id) => {
     set(state => ({ officeNoteFiles: state.officeNoteFiles.filter(f => f.id !== id) }));
     persist(get);
+    fsDelete('officeNoteFiles', id);
   },
 
   restoreFromSnapshot: (snapshotId) => {
@@ -732,54 +770,163 @@ export const useStore = create<AppState>((set, get) => ({
     if (get().firebaseListening) return;
     set({ firebaseListening: true });
 
-    // Load existing data from Firestore
-    const [fbApts, fbStageNotes, fbStages, fbUsers, fbLogs] = await Promise.all([
+    // Load all collections from Firestore in parallel
+    const [
+      fbApts, fbStageNotes, fbStages, fbUsers, fbLogs,
+      fbContractors, fbAssignments, fbNotes, fbPhotos, fbOfficeFiles, fbSettings,
+    ] = await Promise.all([
       fsGetAll('apartments'),
       fsGetAll('stageNotes'),
       fsGetAll('stages'),
       fsGetAll('users'),
       fsGetAll('activityLogs'),
+      fsGetAll('contractors'),
+      fsGetAll('contractorAssignments'),
+      fsGetAll('contractorNotes'),
+      fsGetAll('contractorPhotos'),
+      fsGetAll('officeNoteFiles'),
+      fsGetAll('settings'),
     ]);
 
-    if (fbApts.length > 0 || fbStageNotes.length > 0) {
+    const hasFirebaseData = fbApts.length > 0 || fbContractors.length > 0 || fbAssignments.length > 0;
+
+    if (hasFirebaseData) {
+      const localPhotos = get().contractorPhotos;
+      const localFiles = get().officeNoteFiles;
+      const localAssignments = get().contractorAssignments;
+
+      // Merge: restore local dataUrl for binary fields Firestore doesn't store
+      const mergedPhotos = (fbPhotos as unknown as ContractorPhoto[]).map(fbP => {
+        const local = localPhotos.find(p => p.id === fbP.id);
+        return { ...fbP, dataUrl: fbP.driveUrl ? '' : (local?.dataUrl ?? '') };
+      });
+      const mergedFiles = (fbOfficeFiles as unknown as OfficeNoteFile[]).map(fbF => {
+        const local = localFiles.find(f => f.id === fbF.id);
+        return { ...fbF, dataUrl: local?.dataUrl ?? '' };
+      });
+      const mergedAssignments = (fbAssignments as unknown as ContractorAssignment[]).map(fbA => {
+        const local = localAssignments.find(a => a.id === fbA.id);
+        return {
+          ...fbA,
+          attachments: fbA.attachments?.map((att, i) => ({
+            ...att,
+            dataUrl: local?.attachments?.[i]?.dataUrl ?? '',
+          })),
+        };
+      });
+
+      const appSettings = (fbSettings.find(s => (s as Record<string,unknown>).id === 'app') ?? {}) as Record<string, unknown>;
+
       set(state => ({
-        apartments: fbApts.length > 0 ? (fbApts as unknown as Apartment[]) : state.apartments,
-        stageNotes: fbStageNotes.length > 0 ? (fbStageNotes as unknown as StageNote[]) : state.stageNotes,
-        stages: fbStages.length > 0 ? (fbStages as unknown as Stage[]) : state.stages,
-        users: fbUsers.length > 0 ? (fbUsers as unknown as User[]) : state.users,
-        activityLogs: fbLogs.length > 0
+        apartments:            fbApts.length > 0        ? (fbApts as unknown as Apartment[])   : state.apartments,
+        stageNotes:            fbStageNotes.length > 0  ? (fbStageNotes as unknown as StageNote[]) : state.stageNotes,
+        stages:                fbStages.length > 0      ? (fbStages as unknown as Stage[])     : state.stages,
+        users:                 fbUsers.length > 0       ? (fbUsers as unknown as User[])       : state.users,
+        activityLogs:          fbLogs.length > 0
           ? (fbLogs as unknown as ActivityLog[]).sort((a, b) =>
-              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-            ).slice(0, 500)
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 500)
           : state.activityLogs,
+        contractors:           fbContractors.length > 0 ? (fbContractors as unknown as Contractor[]) : state.contractors,
+        contractorAssignments: mergedAssignments.length > 0 ? mergedAssignments : state.contractorAssignments,
+        contractorNotes:       fbNotes.length > 0       ? (fbNotes as unknown as ContractorNote[]) : state.contractorNotes,
+        contractorPhotos:      mergedPhotos.length > 0  ? mergedPhotos : state.contractorPhotos,
+        officeNoteFiles:       mergedFiles.length > 0   ? mergedFiles  : state.officeNoteFiles,
+        ...(appSettings.backupFrequency      ? { backupFrequency:      appSettings.backupFrequency as BackupFrequency }      : {}),
+        ...(appSettings.backupDriveFolderLink !== undefined ? { backupDriveFolderLink: appSettings.backupDriveFolderLink as string } : {}),
+        ...(appSettings.contractorUiStrings  ? { contractorUiStrings:  appSettings.contractorUiStrings as ContractorUiStrings } : {}),
+        ...(appSettings.autoBackup           !== undefined ? { autoBackup: appSettings.autoBackup as boolean } : {}),
       }));
       persist(get);
     } else {
-      // First time: push local data to Firebase
+      // First run — push everything from localStorage to Firestore
       const state = get();
-      await fsBatchSet('apartments', state.apartments.map(a => ({ id: a.id, data: a })));
-      await fsBatchSet('stages', state.stages.map(s => ({ id: s.id, data: s })));
-      await fsBatchSet('users', state.users.map(u => ({ id: u.id, data: u })));
+      await Promise.all([
+        fsBatchSet('apartments',  state.apartments.map(a => ({ id: a.id, data: a }))),
+        fsBatchSet('stages',      state.stages.map(s => ({ id: s.id, data: s }))),
+        fsBatchSet('users',       state.users.map(u => ({ id: u.id, data: u }))),
+        state.contractors.length > 0
+          ? fsBatchSet('contractors', state.contractors.map(c => ({ id: c.id, data: c })))
+          : Promise.resolve(),
+        state.contractorAssignments.length > 0
+          ? fsBatchSet('contractorAssignments', state.contractorAssignments.map(a => ({
+              id: a.id,
+              data: { ...a, attachments: a.attachments?.map(att => ({ ...att, dataUrl: '' })) },
+            })))
+          : Promise.resolve(),
+        state.contractorNotes.length > 0
+          ? fsBatchSet('contractorNotes', state.contractorNotes.map(n => ({ id: n.id, data: n })))
+          : Promise.resolve(),
+        state.contractorPhotos.length > 0
+          ? fsBatchSet('contractorPhotos', state.contractorPhotos.map(p => ({ id: p.id, data: { ...p, dataUrl: '' } })))
+          : Promise.resolve(),
+        state.officeNoteFiles.length > 0
+          ? fsBatchSet('officeNoteFiles', state.officeNoteFiles.map(f => ({ id: f.id, data: { ...f, dataUrl: '' } })))
+          : Promise.resolve(),
+        fsSet('settings', 'app', {
+          autoBackup:            state.autoBackup,
+          backupFrequency:       state.backupFrequency,
+          backupDriveFolderLink: state.backupDriveFolderLink,
+          contractorUiStrings:   state.contractorUiStrings,
+        }),
+      ]);
     }
 
-    // Real-time listeners
+    // ── Real-time listeners for all collections ──────────────────────────────
     fsListen('apartments', (docs) => {
-      if (docs.length > 0) {
-        set({ apartments: docs as unknown as Apartment[] });
-        persist(get);
-      }
+      if (docs.length > 0) { set({ apartments: docs as unknown as Apartment[] }); persist(get); }
     });
-
     fsListen('stageNotes', (docs) => {
-      set({ stageNotes: docs as unknown as StageNote[] });
-      persist(get);
+      set({ stageNotes: docs as unknown as StageNote[] }); persist(get);
     });
-
     fsListen('activityLogs', (docs) => {
       const sorted = (docs as unknown as ActivityLog[])
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        .slice(0, 500);
-      set({ activityLogs: sorted });
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 500);
+      set({ activityLogs: sorted }); persist(get);
+    });
+    fsListen('contractors', (docs) => {
+      set({ contractors: docs as unknown as Contractor[] }); persist(get);
+    });
+    fsListen('contractorAssignments', (docs) => {
+      const localA = get().contractorAssignments;
+      const merged = (docs as unknown as ContractorAssignment[]).map(fbA => {
+        const local = localA.find(a => a.id === fbA.id);
+        return {
+          ...fbA,
+          attachments: fbA.attachments?.map((att, i) => ({
+            ...att,
+            dataUrl: local?.attachments?.[i]?.dataUrl ?? '',
+          })),
+        };
+      });
+      set({ contractorAssignments: merged }); persist(get);
+    });
+    fsListen('contractorNotes', (docs) => {
+      set({ contractorNotes: docs as unknown as ContractorNote[] }); persist(get);
+    });
+    fsListen('contractorPhotos', (docs) => {
+      const localP = get().contractorPhotos;
+      const merged = (docs as unknown as ContractorPhoto[]).map(fbP => {
+        const local = localP.find(p => p.id === fbP.id);
+        return { ...fbP, dataUrl: fbP.driveUrl ? '' : (local?.dataUrl ?? '') };
+      });
+      set({ contractorPhotos: merged }); persist(get);
+    });
+    fsListen('officeNoteFiles', (docs) => {
+      const localF = get().officeNoteFiles;
+      const merged = (docs as unknown as OfficeNoteFile[]).map(fbF => {
+        const local = localF.find(f => f.id === fbF.id);
+        return { ...fbF, dataUrl: local?.dataUrl ?? '' };
+      });
+      set({ officeNoteFiles: merged }); persist(get);
+    });
+    fsListen('settings', (docs) => {
+      const appS = (docs.find(d => (d as Record<string,unknown>).id === 'app') ?? {}) as Record<string, unknown>;
+      set(state => ({
+        ...(appS.backupFrequency      ? { backupFrequency:      appS.backupFrequency as BackupFrequency }      : {}),
+        ...(appS.backupDriveFolderLink !== undefined ? { backupDriveFolderLink: appS.backupDriveFolderLink as string } : {}),
+        ...(appS.contractorUiStrings  ? { contractorUiStrings:  appS.contractorUiStrings as ContractorUiStrings } : {}),
+        ...(appS.autoBackup           !== undefined ? { autoBackup: appS.autoBackup as boolean } : {}),
+      }));
       persist(get);
     });
   },

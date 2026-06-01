@@ -57,15 +57,23 @@ Visual floor-plan grid for all three buildings (A1, A2, A3). Each apartment cell
 - **"+" button** to open a quick-add task panel without leaving the diagram
 - Changes (shinui) badge
 
+### Apartment Detail Drawer
+Right-side drawer with 4 tabs:
+- **Details** — stage, classification, Drive link, plans PDF
+- **Tasks** — all active/completed assignments for that apartment; mark complete inline; pending badge
+- **Stages** — per-stage notes
+- **History** — activity log for that apartment
+
 ### Contractor Portal
 Public URL at `/c/:token` — no login required. Contractors can:
 - View their assigned apartments on a building map with schedule labels (Today/Tomorrow/Overdue)
 - Filter assignments by timeframe
-- Upload photos (compressed base64), add notes, mark tasks complete
+- Upload photos/videos/files, add notes, mark tasks complete (requires at least one uploaded file)
 - View engineering plans PDF (from Google Drive)
+- Task attachments: contractors see files attached by admin at task-creation time
 
 ### Tasks
-Dedicated `/tasks` page for assigning, editing, and completing contractor tasks. Supports due dates with countdown badges (Overdue / Today / Tomorrow / N days).
+Dedicated `/tasks` page for assigning, editing, and completing contractor tasks. Supports due dates with countdown badges (Overdue / Today / Tomorrow / N days). Task creation supports file attachments (images, PDFs, docs).
 
 ### Stage Management
 Configurable stages with custom colors and sort order. Bulk-update apartments to a new stage from the diagram view.
@@ -78,15 +86,35 @@ Configurable stages with custom colors and sort order. Bulk-update apartments to
 - Drive health report (checks folder structure)
 
 ### Backup / Restore
-Full JSON export/import from Settings → App → Backup. Includes all photos.
+Full JSON export/import from Settings → App → Backup. Supports scheduled backups (every activity / daily / weekly / monthly) with a history log. Backups can be uploaded automatically to Google Drive.
 
-## Google Drive Setup
+### Settings
+- **Stages / Users / Contractors** — full CRUD
+- **App** — theme, backup schedule, backup history, Drive backup folder
+- **Language** — edit all text shown in the contractor portal (supports Hebrew RTL)
 
-1. Go to [console.cloud.google.com](https://console.cloud.google.com) and create a project.
-2. Enable the **Google Drive API**.
-3. Create an **OAuth 2.0 Client ID** (Web application). Add your app's origin to Authorized JavaScript origins.
-4. Paste the Client ID into Settings → App → Google Drive.
-5. Click **Connect** to authorize read access.
+## Firebase Setup
+
+This app uses Firebase Firestore as its primary database. All collections sync in real time across browser tabs and devices.
+
+1. Create a Firebase project at [console.firebase.google.com](https://console.firebase.google.com).
+2. Enable **Firestore Database**.
+3. Copy `.env.example` to `.env.local` and fill in the `VITE_FIREBASE_*` values.
+4. In production, add those same values to the **Vercel environment variables** dashboard.
+
+On first login after Firebase is configured, the app automatically pushes all local data to Firestore.
+
+## Google Drive Setup (File Uploads)
+
+File uploads go through a service-account backend — no OAuth popup required.
+
+1. Create a Google Cloud project and enable the **Google Drive API**.
+2. Create a **Service Account** and give it Contributor access to your Drive folder.
+3. Download the service account JSON and paste it as `GOOGLE_SERVICE_ACCOUNT_JSON` in Vercel.
+4. Add `API_KEY` (any random secret) to Vercel and set `VITE_DRIVE_API_KEY` to the same value.
+5. Paste the target Drive folder URL into each apartment's Drive link field.
+
+The `/api/drive-session.js` endpoint creates a resumable upload URL; the browser streams the file directly to Drive so Vercel never handles the bytes.
 
 ## Data Model Notes
 
@@ -94,3 +122,4 @@ Full JSON export/import from Settings → App → Backup. Includes all photos.
 - **Apartment numbering**: 1–52 (floors 2–14, 4/floor), 53–54 (floor 15), 55–56 (floor 16), 57+ (basement)
 - A1 is missing apartment 37 (`isUnnamed: true` placeholder)
 - Bumping `DATA_VERSION` in `initialData.ts` wipes localStorage (dev only)
+- Binary data (`dataUrl` on photos, files, task attachments) is stored in localStorage only — Firestore stores metadata only to stay under the 1 MB document limit
