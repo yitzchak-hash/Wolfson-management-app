@@ -236,7 +236,7 @@ export const useStore = create<AppState>((set, get) => ({
   backupDriveFolderLink: (stored?.backupDriveFolderLink as string | null) ?? '',
   contractorUiStrings: (stored?.contractorUiStrings as ContractorUiStrings | null) ?? DEFAULT_CONTRACTOR_UI_STRINGS,
   mainUiStrings: (stored?.mainUiStrings as MainUiStrings | null) ?? DEFAULT_MAIN_UI_STRINGS,
-  lightTheme: localStorage.getItem(THEME_KEY) === 'light',
+  lightTheme: localStorage.getItem(THEME_KEY) !== 'dark',
   setLightTheme: (v: boolean) => {
     set({ lightTheme: v });
     localStorage.setItem(THEME_KEY, v ? 'light' : 'dark');

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Download, Printer, Filter, SlidersHorizontal, Search, X } from 'lucide-react';
+import { Download, Printer, Filter, SlidersHorizontal, Search, X, ClipboardList } from 'lucide-react';
 import { useStore } from '../data/store';
 import { format } from 'date-fns';
 import { saveAs } from 'file-saver';
@@ -21,8 +21,10 @@ const ALL_COLUMNS = [
 
 type ColKey = typeof ALL_COLUMNS[number]['key'];
 
+const TASK_SUB_COLS = ['Description', 'Contractor', 'Stage', 'Due Date', 'Status', 'Completed'] as const;
+
 export function ReportsPage() {
-  const { apartments, stages, stageNotes } = useStore();
+  const { apartments, stages, stageNotes, contractorAssignments, contractors } = useStore();
 
   const [buildingFilter, setBuildingFilter] = useState<BuildingFilter>('all');
   const [stageFilter, setStageFilter] = useState<string[]>([]);
@@ -35,6 +37,11 @@ export function ReportsPage() {
     new Set(['building', 'apartment', 'floor', 'stage', 'classification', 'generalNotes', 'lastUpdated', 'updatedBy'])
   );
   const [enabledStageCols, setEnabledStageCols] = useState<Set<string>>(() => new Set());
+  const [includeTaskCols, setIncludeTaskCols] = useState(false);
+
+  // Date range filter
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   const sortedStages = [...stages].filter(s => s.active).sort((a, b) => a.order - b.order);
 
@@ -42,18 +49,27 @@ export function ReportsPage() {
     return apartments.filter(apt => {
       if (buildingFilter !== 'all' && apt.buildingId !== buildingFilter) return false;
       if (classFilter !== 'all' && apt.classification !== classFilter) return false;
-      // When stage filters are selected, only show apartments at those exact stages
       if (stageFilter.length > 0 && !stageFilter.includes(apt.currentStageId ?? '')) return false;
-      // When no stage filter, respect the includeNoStage toggle
       if (stageFilter.length === 0 && !includeNoStage && !apt.currentStageId) return false;
       if (appliedSearch) {
         const q = appliedSearch.toLowerCase();
         const label = (apt.displayName || apt.apartmentNumber || '').toLowerCase();
         if (!label.includes(q)) return false;
       }
+      if (dateFrom && apt.updatedAt && apt.updatedAt.slice(0, 10) < dateFrom) return false;
+      if (dateTo && apt.updatedAt && apt.updatedAt.slice(0, 10) > dateTo) return false;
       return true;
     });
-  }, [apartments, buildingFilter, classFilter, stageFilter, includeNoStage, appliedSearch]);
+  }, [apartments, buildingFilter, classFilter, stageFilter, includeNoStage, appliedSearch, dateFrom, dateTo]);
+
+  // Max tasks for any apartment in filtered set (used to generate CSV columns)
+  const maxTasks = useMemo(() => {
+    if (!includeTaskCols) return 0;
+    return filtered.reduce((max, apt) => {
+      const count = contractorAssignments.filter(a => a.apartmentId === apt.id).length;
+      return Math.max(max, count);
+    }, 0);
+  }, [filtered, contractorAssignments, includeTaskCols]);
 
   function toggleStage(id: string) {
     setStageFilter(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -79,9 +95,19 @@ export function ReportsPage() {
     return stageNotes.find(n => n.apartmentId === aptId && n.stageId === stageId)?.noteText ?? '';
   }
 
-  function getStageName(stageId: string | null): string {
+  function getStageName(stageId: string | null | undefined): string {
     if (!stageId) return 'Not Started';
     return stages.find(s => s.id === stageId)?.name ?? stageId;
+  }
+
+  function getAptTasks(aptId: string) {
+    return contractorAssignments
+      .filter(a => a.apartmentId === aptId)
+      .sort((a, b) => {
+        // completed last, then by due date
+        if (!!a.completedAt !== !!b.completedAt) return a.completedAt ? 1 : -1;
+        return (a.dueDate ?? '').localeCompare(b.dueDate ?? '');
+      });
   }
 
   function buildRow(apt: typeof apartments[0]): Record<string, string> {
@@ -97,6 +123,21 @@ export function ReportsPage() {
     });
     if (enabledCols.has('lastUpdated')) row['Last Updated'] = apt.updatedAt ? format(new Date(apt.updatedAt), 'yyyy-MM-dd HH:mm') : '';
     if (enabledCols.has('updatedBy')) row['Updated By'] = apt.updatedByName || '';
+
+    if (includeTaskCols) {
+      const tasks = getAptTasks(apt.id);
+      for (let i = 0; i < maxTasks; i++) {
+        const t = tasks[i];
+        const n = i + 1;
+        row[`Task ${n} Description`] = t?.taskDescription ?? '';
+        row[`Task ${n} Contractor`] = t ? (contractors.find(c => c.id === t.contractorId)?.name ?? '') : '';
+        row[`Task ${n} Stage`] = t ? getStageName(t.stageId) : '';
+        row[`Task ${n} Due Date`] = t?.dueDate ?? '';
+        row[`Task ${n} Status`] = t ? (t.completedAt ? 'Completed' : 'Pending') : '';
+        row[`Task ${n} Completed`] = t?.completedAt ? t.completedAt.slice(0, 10) : '';
+      }
+    }
+
     return row;
   }
 
@@ -109,6 +150,8 @@ export function ReportsPage() {
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     saveAs(blob, `wolfson-report-${format(new Date(), 'yyyy-MM-dd')}.csv`);
   }
+
+  const hasDateFilter = !!dateFrom || !!dateTo;
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -159,23 +202,42 @@ export function ReportsPage() {
                 {col.always && <span className="text-xs text-gray-400">(required)</span>}
               </label>
             ))}
-            <div className="col-span-full border-t border-gray-100 mt-1 pt-2">
-              <span className="text-xs font-medium text-gray-500 mb-2 block">Stage Notes Columns</span>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2">
-                {sortedStages.map(s => (
-                  <label key={s.id} className="flex items-center gap-2 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={enabledStageCols.has(s.id)}
-                      onChange={() => toggleStageCol(s.id)}
-                      className="rounded border-gray-300"
-                    />
-                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
-                    <span className="text-sm text-gray-700 truncate">{s.name}</span>
-                  </label>
-                ))}
-              </div>
+          </div>
+
+          {/* Stage notes columns */}
+          <div className="border-t border-gray-100 mt-3 pt-3">
+            <span className="text-xs font-medium text-gray-500 mb-2 block">Stage Notes Columns</span>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2">
+              {sortedStages.map(s => (
+                <label key={s.id} className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={enabledStageCols.has(s.id)}
+                    onChange={() => toggleStageCol(s.id)}
+                    className="rounded border-gray-300"
+                  />
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
+                  <span className="text-sm text-gray-700 truncate">{s.name}</span>
+                </label>
+              ))}
             </div>
+          </div>
+
+          {/* Task columns */}
+          <div className="border-t border-gray-100 mt-3 pt-3">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={includeTaskCols}
+                onChange={() => setIncludeTaskCols(v => !v)}
+                className="rounded border-gray-300 text-[#1e3a5f] focus:ring-[#1e3a5f]"
+              />
+              <ClipboardList size={14} className="text-gray-500" />
+              <span className="text-sm text-gray-700 font-medium">Include Tasks</span>
+              <span className="text-xs text-gray-400">
+                (adds Task 1–N columns: description, contractor, stage, due date, status, completion date)
+              </span>
+            </label>
           </div>
         </div>
       )}
@@ -187,7 +249,7 @@ export function ReportsPage() {
             <Filter size={16} className="text-gray-500" />
             <h2 className="font-semibold text-gray-700 text-sm">Filters</h2>
           </div>
-          {/* Apartment search with Enter button */}
+          {/* Apartment search */}
           <div className="flex items-center gap-2">
             <div className="relative">
               <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -209,13 +271,13 @@ export function ReportsPage() {
               <button
                 onClick={() => { setSearchInput(''); setAppliedSearch(''); }}
                 className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
-                title="Clear search"
               >
                 <X size={14} />
               </button>
             )}
           </div>
         </div>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           <div>
             <label className="text-xs font-medium text-gray-500 mb-2 block">Building</label>
@@ -255,6 +317,37 @@ export function ReportsPage() {
             </button>
           </div>
         </div>
+
+        {/* Date range filter */}
+        <div className="mt-4 flex flex-wrap items-end gap-4">
+          <div>
+            <label className="text-xs font-medium text-gray-500 mb-1.5 block">Last Updated — From</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={e => setDateFrom(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-500 mb-1.5 block">To</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={e => setDateTo(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+            />
+          </div>
+          {hasDateFilter && (
+            <button
+              onClick={() => { setDateFrom(''); setDateTo(''); }}
+              className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors pb-1.5"
+            >
+              <X size={12} /> Clear dates
+            </button>
+          )}
+        </div>
+
         <div className="mt-4">
           <label className="text-xs font-medium text-gray-500 mb-2 block">Stages (empty = all)</label>
           <div className="flex flex-wrap gap-2">
@@ -302,6 +395,7 @@ export function ReportsPage() {
                     </span>
                   </th>
                 ))}
+                {includeTaskCols && <th className="text-left px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">Tasks</th>}
                 {enabledCols.has('lastUpdated') && <th className="text-left px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">Updated</th>}
                 {enabledCols.has('updatedBy') && <th className="text-left px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">By</th>}
               </tr>
@@ -312,6 +406,8 @@ export function ReportsPage() {
               ) : (
                 filtered.map((apt, i) => {
                   const stage = stages.find(s => s.id === apt.currentStageId);
+                  const aptTasks = includeTaskCols ? getAptTasks(apt.id) : [];
+                  const doneCount = aptTasks.filter(t => t.completedAt).length;
                   return (
                     <tr key={apt.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
                       {enabledCols.has('building') && (
@@ -355,6 +451,16 @@ export function ReportsPage() {
                           {getNotes(apt.id, s.id) || '—'}
                         </td>
                       ))}
+                      {includeTaskCols && (
+                        <td className="px-4 py-2.5 text-xs whitespace-nowrap">
+                          {aptTasks.length === 0
+                            ? <span className="text-gray-400">—</span>
+                            : <span className={doneCount === aptTasks.length ? 'text-green-600 font-medium' : 'text-gray-600'}>
+                                {doneCount}/{aptTasks.length} done
+                              </span>
+                          }
+                        </td>
+                      )}
                       {enabledCols.has('lastUpdated') && (
                         <td className="px-4 py-2.5 text-gray-500 whitespace-nowrap text-xs">
                           {apt.updatedAt ? format(new Date(apt.updatedAt), 'MMM d, yyyy') : '—'}
