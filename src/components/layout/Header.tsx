@@ -19,8 +19,6 @@ function CloudSyncBadge({ light }: { light: boolean }) {
   );
 }
 
-const FREE_TIER_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB
-const WARN_THRESHOLD  = FREE_TIER_BYTES * 0.8;   // warn at 80%
 
 function TzviAirLogo() {
   return (
@@ -45,9 +43,7 @@ function WolfsonLogo() {
 }
 
 export function Header() {
-  const { currentUser, logout, lightTheme, setLightTheme, totalStorageBytes, firebaseSyncError } = useStore();
-  const storageGB = totalStorageBytes / 1024 / 1024 / 1024;
-  const showStorageWarning = currentUser && totalStorageBytes >= WARN_THRESHOLD;
+  const { currentUser, logout, lightTheme, setLightTheme, firebaseSyncError } = useStore();
 
   return (
     <>
@@ -104,16 +100,6 @@ export function Header() {
         <span>{firebaseSyncError}</span>
       </div>
     )}
-    {showStorageWarning && (
-      <div className="flex items-center gap-2 px-5 py-2 text-sm font-medium bg-amber-500 text-white">
-        <AlertTriangle size={15} className="flex-shrink-0" />
-        <span>
-          Firebase Storage at {Math.round(storageGB * 10) / 10} GB of 5 GB free limit
-          ({Math.round((totalStorageBytes / FREE_TIER_BYTES) * 100)}%).
-          Ask your developer to upgrade the Firebase plan before it fills up.
-        </span>
-      </div>
-    )}
-    </>
+</>
   );
 }

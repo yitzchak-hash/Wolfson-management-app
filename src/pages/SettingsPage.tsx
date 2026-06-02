@@ -5,7 +5,7 @@ import {
   Copy, Check, Download, Upload, HardDrive, X, HardDriveDownload, ToggleLeft, ToggleRight,
   Languages, Clock, RotateCcw, Wifi, WifiOff, Loader, Database,
 } from 'lucide-react';
-import { isFirebaseConfigured, db, fsSet, fsGetAll, isStorageConfigured } from '../data/firebase';
+import { isFirebaseConfigured, db, fsSet, fsGetAll } from '../data/firebase';
 import { Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, BackupFrequency } from '../types';
 import { Tooltip } from '../components/ui/Tooltip';
 import { Toast } from '../components/ui/Toast';
@@ -406,7 +406,6 @@ const INITIAL_STEPS: TestStep[] = [
   { id: 'sdk',     label: 'SDK initialization',    detail: '', state: 'pending' },
   { id: 'write',   label: 'Firestore write',        detail: '', state: 'pending' },
   { id: 'read',    label: 'Firestore read',         detail: '', state: 'pending' },
-  { id: 'storage', label: 'Firebase Storage',       detail: '', state: 'pending' },
 ];
 
 function StepRow({ step }: { step: TestStep }) {
@@ -516,15 +515,6 @@ function FirebaseStatusSection() {
     } catch (e: unknown) {
       patch('read', { state: 'fail', detail: e instanceof Error ? e.message : String(e) });
       setRunning(false); setDone(true); return;
-    }
-
-    // Step 5 — Storage
-    patch('storage', { state: 'running' });
-    await new Promise(r => setTimeout(r, 200));
-    if (isStorageConfigured) {
-      patch('storage', { state: 'ok', detail: `Bucket: ${envValues.VITE_FIREBASE_STORAGE_BUCKET}` });
-    } else {
-      patch('storage', { state: 'fail', detail: 'Storage not initialized — storageBucket may be wrong' });
     }
 
     setRunning(false);

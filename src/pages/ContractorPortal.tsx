@@ -15,7 +15,6 @@ import {
   extractFolderId, isUploadBackendConfigured, findOrCreateFolderViaBackend,
   uploadFileViaResumableSession, shareFileToDrive,
 } from '../data/driveApi';
-import { isStorageConfigured, fsUploadFile } from '../data/firebase';
 
 const CATEGORY_LABELS: Record<string, string> = {
   drywall: 'Drywall', ac: 'AC', general: 'General',
@@ -122,13 +121,11 @@ function PhotoGallery({
   }, []);
 
   const type = photo.fileType ?? 'image';
-  const imgSrc = photo.storageUrl
-    || (photo.driveFileId ? driveThumbUrl(photo.driveFileId, 2000) : null)
-    || (photo.dataUrl || null);
-  const videoSrc = photo.storageUrl || photo.dataUrl || null;
+  const imgSrc = (photo.driveFileId ? driveThumbUrl(photo.driveFileId, 2000) : null) || (photo.dataUrl || null);
+  const videoSrc = photo.dataUrl || null;
   const downloadHref = photo.driveFileId
     ? `https://drive.google.com/uc?export=download&id=${photo.driveFileId}`
-    : (photo.storageUrl || photo.dataUrl);
+    : photo.dataUrl;
 
   return (
     <div
@@ -150,8 +147,8 @@ function PhotoGallery({
           {downloadHref && (
             <a
               href={downloadHref}
-              download={!photo.driveFileId && !photo.storageUrl ? photo.filename : undefined}
-              target={photo.driveFileId || photo.storageUrl ? '_blank' : undefined}
+              download={!photo.driveFileId ? photo.filename : undefined}
+              target={photo.driveFileId ? '_blank' : undefined}
               rel="noopener noreferrer"
               className="p-1.5 text-gray-300 hover:text-white"
               title="Download"
@@ -227,10 +224,9 @@ function PhotoGallery({
 
 function MediaItem({ photo, onDelete, onOpen }: { photo: ContractorPhoto; onDelete: () => void; onOpen: () => void }) {
   const type = photo.fileType ?? 'image';
-  // Thumbnail: Drive thumbnailURL (publicly shared) → Firebase Storage URL → base64
   const thumbSrc = photo.driveFileId
     ? driveThumbUrl(photo.driveFileId, 800)
-    : (photo.storageUrl || (photo.dataUrl || null));
+    : (photo.dataUrl || null);
 
   return (
     <div className="relative rounded-xl overflow-hidden aspect-square bg-gray-100 cursor-pointer" onClick={onOpen}>
@@ -252,10 +248,10 @@ function MediaItem({ photo, onDelete, onOpen }: { photo: ContractorPhoto; onDele
         </div>
       )}
       {/* Cloud / local badge */}
-      {(photo.driveFileId || photo.storageUrl) ? (
+      {photo.driveFileId ? (
         <div
-          className={`absolute bottom-1 left-1 rounded-full w-3.5 h-3.5 flex items-center justify-center ${photo.storageUrl && !photo.driveFileId ? 'bg-blue-500' : 'bg-green-500'}`}
-          title={photo.driveFileId ? 'Saved in Google Drive' : 'Saved in Firebase Storage'}
+          className="absolute bottom-1 left-1 rounded-full w-3.5 h-3.5 flex items-center justify-center bg-green-500"
+          title="Saved in Google Drive"
         >
           <CloudUpload size={8} className="text-white" />
         </div>
@@ -402,33 +398,6 @@ export function ContractorPortal() {
               fileSizeBytes: file.size,
               driveFileId: fileId,
               driveUrl: webViewLink,
-            });
-          } catch (err) {
-            setUploadError(`"${file.name}" failed: ${(err as Error).message}`);
-            continue;
-          } finally {
-            setUploadProgress(null);
-          }
-
-        } else if (isStorageConfigured) {
-          // ── Fallback: Firebase Storage ────────────────────────────────────
-          setUploadProgress({ name: file.name, pct: 0 });
-          try {
-            const ext = file.name.includes('.') ? file.name.split('.').pop() : '';
-            const uid = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
-            const path = `contractorPhotos/${selectedAssignment.id}/${uid}${ext ? '.' + ext : ''}`;
-            const storageUrl = await fsUploadFile(path, file, pct => setUploadProgress({ name: file.name, pct }));
-            addContractorPhoto({
-              assignmentId: selectedAssignment.id,
-              apartmentId: selectedAssignment.apartmentId,
-              contractorId,
-              dataUrl: '',
-              filename: file.name,
-              fileType: fType,
-              mimeType: file.type,
-              storageUrl,
-              storagePath: path,
-              fileSizeBytes: file.size,
             });
           } catch (err) {
             setUploadError(`"${file.name}" failed: ${(err as Error).message}`);
