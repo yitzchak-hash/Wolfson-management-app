@@ -170,10 +170,10 @@ export function DashboardPage() {
                     {' '}
                     <span className="text-gray-600">
                       {log.fieldChanged === 'currentStageId'
-                        ? `changed stage of Apt ${log.apartmentNumber} (${log.buildingId}): "${log.previousValue}" → "${log.newValue}"`
+                        ? `${s.activityChangedStage} ${s.aptPrefix} ${log.apartmentNumber} (${log.buildingId}): "${log.previousValue}" → "${log.newValue}"`
                         : log.actionType === 'note'
-                          ? `added note on Apt ${log.apartmentNumber} (${log.buildingId})`
-                          : `updated ${log.fieldChanged} of Apt ${log.apartmentNumber} (${log.buildingId})`
+                          ? `${s.activityAddedNote} ${s.aptPrefix} ${log.apartmentNumber} (${log.buildingId})`
+                          : `${s.activityUpdatedField} ${log.fieldChanged} ${s.activityOf} ${s.aptPrefix} ${log.apartmentNumber} (${log.buildingId})`
                       }
                     </span>
                   </div>

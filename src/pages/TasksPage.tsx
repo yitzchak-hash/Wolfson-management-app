@@ -14,28 +14,9 @@ import {
   shareFileToDrive, driveThumbUrl,
 } from '../data/driveApi';
 
-const PRIORITY_CONFIG: Record<TaskPriority, { label: string; cls: string; dot: string }> = {
-  urgent: { label: 'Urgent', cls: 'text-red-600 bg-red-50 border-red-200', dot: 'bg-red-500' },
-  normal: { label: 'Normal', cls: 'text-gray-500 bg-gray-50 border-gray-200', dot: 'bg-gray-400' },
-  low:    { label: 'Low',    cls: 'text-green-600 bg-green-50 border-green-200', dot: 'bg-green-500' },
-};
-
 const CAT_COLORS: Record<ContractorCategory, string> = {
   drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981',
 };
-const CAT_LABELS: Record<ContractorCategory, string> = {
-  drywall: 'Drywall', ac: 'AC', general: 'General',
-};
-
-function getDueBadge(dueDate: string | null): { text: string; cls: string } | null {
-  if (!dueDate) return null;
-  const days = differenceInCalendarDays(parseISO(dueDate), startOfDay(new Date()));
-  if (days < 0) return { text: 'Overdue', cls: 'bg-red-100 text-red-700 border-red-200' };
-  if (days === 0) return { text: 'Today', cls: 'bg-orange-100 text-orange-700 border-orange-200' };
-  if (days === 1) return { text: 'Tomorrow', cls: 'bg-amber-100 text-amber-700 border-amber-200' };
-  if (days <= 3) return { text: `${days} days`, cls: 'bg-yellow-100 text-yellow-700 border-yellow-200' };
-  return { text: format(parseISO(dueDate), 'MMM d'), cls: 'bg-gray-100 text-gray-500 border-gray-200' };
-}
 
 export function TasksPage() {
   const {
@@ -43,6 +24,26 @@ export function TasksPage() {
     addContractorAssignment, updateContractorAssignment, deleteContractorAssignment,
     updateApartment, currentUser, mainUiStrings: s,
   } = useStore();
+
+  const PRIORITY_CONFIG: Record<TaskPriority, { label: string; cls: string; dot: string }> = {
+    urgent: { label: s.urgentPriority, cls: 'text-red-600 bg-red-50 border-red-200', dot: 'bg-red-500' },
+    normal: { label: s.normalPriority, cls: 'text-gray-500 bg-gray-50 border-gray-200', dot: 'bg-gray-400' },
+    low:    { label: s.lowPriority,    cls: 'text-green-600 bg-green-50 border-green-200', dot: 'bg-green-500' },
+  };
+
+  const CAT_LABELS: Record<ContractorCategory, string> = {
+    drywall: s.categoryDrywall, ac: s.categoryAC, general: s.categoryGeneral,
+  };
+
+  function getDueBadge(dueDate: string | null): { text: string; cls: string } | null {
+    if (!dueDate) return null;
+    const days = differenceInCalendarDays(parseISO(dueDate), startOfDay(new Date()));
+    if (days < 0) return { text: s.overdue, cls: 'bg-red-100 text-red-700 border-red-200' };
+    if (days === 0) return { text: s.today, cls: 'bg-orange-100 text-orange-700 border-orange-200' };
+    if (days === 1) return { text: s.tomorrow, cls: 'bg-amber-100 text-amber-700 border-amber-200' };
+    if (days <= 3) return { text: `${days} ${s.daysLabel}`, cls: 'bg-yellow-100 text-yellow-700 border-yellow-200' };
+    return { text: format(parseISO(dueDate), 'MMM d'), cls: 'bg-gray-100 text-gray-500 border-gray-200' };
+  }
 
   const [filterContractorId, setFilterContractorId] = useState('');
   const [filterBuilding, setFilterBuilding] = useState<'all' | 'A1' | 'A2' | 'A3'>('all');
@@ -218,7 +219,7 @@ export function TasksPage() {
     setAddForm({ contractorId: '', aptId: '', task: '', dueDate: '', stageId: '', priority: '' });
     setAddAttachments([]);
     setShowAdd(false);
-    onToast('Task added');
+    onToast(s.taskAdded);
   }
 
   return (
@@ -302,7 +303,7 @@ export function TasksPage() {
               </div>
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">Stage</label>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">{s.stageLabel}</label>
               <select
                 value={filterStage}
                 onChange={e => setFilterStage(e.target.value)}
@@ -313,7 +314,7 @@ export function TasksPage() {
               </select>
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">Priority</label>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">{s.priorityLabel}</label>
               <select
                 value={filterPriority}
                 onChange={e => setFilterPriority(e.target.value)}
@@ -379,7 +380,7 @@ export function TasksPage() {
               >
                 <option value="">{s.selectApartment}</option>
                 {['A1', 'A2', 'A3'].map(bid => (
-                  <optgroup key={bid} label={`Building ${bid}`}>
+                  <optgroup key={bid} label={`${s.buildingPrefix} ${bid}`}>
                     {resApts.filter(a => a.buildingId === bid).map(a => (
                       <option key={a.id} value={a.id}>
                         {s.aptPrefix} {a.displayName || a.apartmentNumber} ({s.floorPrefix} {a.floor})
@@ -560,7 +561,7 @@ export function TasksPage() {
                           </span>
                         )}
                         {a.completedAt && (
-                          <span className="text-xs text-green-600">Done {format(new Date(a.completedAt), 'MMM d')}</span>
+                          <span className="text-xs text-green-600">{s.doneSuffix} {format(new Date(a.completedAt), 'MMM d')}</span>
                         )}
                       </div>
 

@@ -43,7 +43,7 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
   const [fileInputTarget, setFileInputTarget] = useState<string | null>(null);
 
   const apt = apartments.find(a => a.id === apartmentId);
-  const sortedStages = [...stages].filter(s => s.active).sort((a, b) => a.order - b.order);
+  const sortedStages = [...stages].filter(st => st.active).sort((a, b) => a.order - b.order);
   const activeContractors = contractors.filter(c => c.active);
 
   async function compressImage(file: File): Promise<File> {
@@ -171,7 +171,7 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
         contractorId,
         apartmentId,
         buildingId: apt.buildingId,
-        taskDescription: `${stages.find(s => s.id === stageId)?.name ?? 'Stage'} work`,
+        taskDescription: `${stages.find(st => st.id === stageId)?.name ?? 'Stage'} work`,
         dueDate: null,
         stageId,
         completedAt: null,
@@ -273,13 +273,13 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                       onChange={e => handleContractorChange(stage.id, e.target.value)}
                       className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                     >
-                      <option value="">— None —</option>
+                      <option value="">{s.noneSelected}</option>
                       {['drywall', 'ac', 'general'].map(cat => {
                         const catContractors = activeContractors.filter(c => c.category === cat);
                         if (!catContractors.length) return null;
-                        const labels: Record<string, string> = { drywall: 'Drywall', ac: 'AC', general: 'General' };
+                        const catLabel = cat === 'ac' ? s.categoryAC : cat === 'drywall' ? s.categoryDrywall : s.categoryGeneral;
                         return (
-                          <optgroup key={cat} label={labels[cat]}>
+                          <optgroup key={cat} label={catLabel}>
                             {catContractors.map(c => (
                               <option key={c.id} value={c.id}>{c.name}</option>
                             ))}
@@ -392,7 +392,7 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                         <button
                           onClick={() => setHistoryOpen(isHistoryOpen ? null : stage.id)}
                           className={`flex items-center gap-1 px-2.5 py-1.5 border rounded-lg text-xs transition-colors ${isHistoryOpen ? 'bg-purple-50 border-purple-200 text-purple-600' : 'border-gray-200 text-gray-400 hover:bg-gray-50'}`}
-                          title={`${noteVersions.length} version${noteVersions.length !== 1 ? 's' : ''}`}
+                          title={`${noteVersions.length} ${noteVersions.length === 1 ? s.versionCount : s.versionsCount}`}
                         >
                           <Clock size={11} />
                           {noteVersions.length}
@@ -437,7 +437,7 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                               <RotateCcw size={9} /> {s.restore}
                             </button>
                           </div>
-                          <p className="text-gray-600 leading-snug line-clamp-3">{v.noteText || <em className="text-gray-400">empty</em>}</p>
+                          <p className="text-gray-600 leading-snug line-clamp-3">{v.noteText || <em className="text-gray-400">{s.emptyNoteLabel}</em>}</p>
                         </div>
                       ))}
                     </div>
@@ -536,7 +536,7 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                     )}
                     {asgn?.stageId && (
                       <span className="text-[10px] px-1 bg-gray-200 text-gray-500 rounded">
-                        {stages.find(s => s.id === asgn.stageId)?.name ?? 'Unknown stage'}
+                        {stages.find(st => st.id === asgn.stageId)?.name ?? s.unknownStage}
                       </span>
                     )}
                     <span className="text-gray-400 ml-auto">{format(new Date(n.createdAt), 'MMM d, HH:mm')}</span>

@@ -24,7 +24,7 @@ interface LightboxItem {
   downloadHref: string;
 }
 
-function LightboxOverlay({ items, initialIndex, onClose, imageUnavailable, openDownload }: { items: LightboxItem[]; initialIndex: number; onClose: () => void; imageUnavailable: string; openDownload: string }) {
+function LightboxOverlay({ items, initialIndex, onClose, imageUnavailable, openDownload, downloadLabel }: { items: LightboxItem[]; initialIndex: number; onClose: () => void; imageUnavailable: string; openDownload: string; downloadLabel: string }) {
   const [idx, setIdx] = React.useState(initialIndex);
   const [touchStart, setTouchStart] = React.useState<number | null>(null);
   const item = items[idx];
@@ -61,7 +61,7 @@ function LightboxOverlay({ items, initialIndex, onClose, imageUnavailable, openD
           <span className="text-gray-400 text-xs">{idx + 1} / {items.length}</span>
           {item.downloadHref && (
             <a href={item.downloadHref} target="_blank" rel="noopener noreferrer" download={!item.fileId ? item.filename : undefined}
-              className="p-1.5 text-gray-300 hover:text-white" title="Download">
+              className="p-1.5 text-gray-300 hover:text-white" title={downloadLabel}>
               <Download size={18} />
             </a>
           )}
@@ -366,7 +366,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               </span>
             )}
           </div>
-          <Tooltip text="Close" side="left">
+          <Tooltip text={ui.cancel} side="left">
             <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0">
               <X size={20} />
             </button>
@@ -436,7 +436,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                           classification === 'standard' ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
                         }`}
                       >
-                        Std
+                        {ui.stdShort}
                       </button>
                     </Tooltip>
                     <Tooltip text={ui.hasModifications}>
@@ -446,7 +446,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                           classification === 'shinui' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
                         }`}
                       >
-                        <AlertTriangle size={10} /> Chg
+                        <AlertTriangle size={10} /> {ui.chgShort}
                       </button>
                     </Tooltip>
                   </div>
@@ -529,7 +529,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                               type="button"
                               onClick={() => { setGeneralNotes(v.noteText); setGeneralNotesHistoryOpen(false); }}
                               className="flex items-center gap-1 text-[10px] text-[#1e3a5f] hover:underline flex-shrink-0"
-                              title="Restore this version"
+                              title={ui.restoreVersionTitle}
                             >
                               <RotateCcw size={10} /> {ui.restore}
                             </button>
@@ -591,7 +591,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                         reader.readAsDataURL(file);
                       });
                     }
-                    onToast(`${files.length} file${files.length !== 1 ? 's' : ''} attached`);
+                    onToast(`${files.length} ${files.length === 1 ? ui.fileAttachedToast : ui.filesAttachedToast}`);
                   }}
                 />
                 {officeUploadPct !== null && (
@@ -633,14 +633,14 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                             }
                             {!f.driveFileId && (
                               <div
-                                title="Stored locally only — not synced to Drive"
+                                title={ui.storedLocallyTitle}
                                 className="absolute bottom-0.5 left-0.5 w-3 h-3 rounded-full bg-amber-400 flex items-center justify-center"
                               >
                                 <AlertTriangle size={6} color="white" />
                               </div>
                             )}
                             <button onClick={e => { e.stopPropagation(); deleteOfficeNoteFile(f.id); }}
-                              title="Remove file"
+                              title={ui.removeFileTitle}
                               className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
                               <Trash2 size={8} color="white" />
                             </button>
@@ -649,7 +649,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                               download={!f.driveFileId ? f.filename : undefined}
                               target={f.driveFileId ? '_blank' : undefined}
                               rel={f.driveFileId ? 'noopener noreferrer' : undefined}
-                              title="Download file"
+                              title={ui.downloadFileTitle}
                               className="absolute bottom-0.5 right-0.5 w-4 h-4 bg-gray-700/60 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                               <Download size={8} color="white" />
                             </a>
@@ -668,12 +668,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     <BookOpen size={11} /> {ui.engineeringPlans}
                   </label>
                   {driveLink && backendConfigured && (
-                      <Tooltip text="Re-scan Drive folder for Plans PDF">
+                      <Tooltip text={ui.rescanDriveTooltip}>
                         <button
                           onClick={() => {
                             setFetchingPdf(true);
                             findPlansPdfViaBackend(driveLink).then(f => {
-                              if (f) { setDetectedPdfId(f.id); setPlansPdfLink(`https://drive.google.com/file/d/${f.id}/view`); onToast('PDF found'); }
+                              if (f) { setDetectedPdfId(f.id); setPlansPdfLink(`https://drive.google.com/file/d/${f.id}/view`); onToast(ui.pdfFound); }
                               else onToast(ui.noPdfFound, 'error');
                             }).finally(() => setFetchingPdf(false));
                           }}
@@ -711,7 +711,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                       <button onClick={() => setShowPdfViewer(v => !v)}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:border-[#1e3a5f] hover:text-[#1e3a5f] transition-all">
                         {showPdfViewer ? <EyeOff size={12} /> : <Eye size={12} />}
-                        {showPdfViewer ? 'Hide' : ui.fullView}
+                        {showPdfViewer ? ui.hideLabel : ui.fullView}
                       </button>
                       <a href={driveDownloadUrl(detectedPdfId)} target="_blank" rel="noopener noreferrer"
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:border-[#4aa8d8] hover:text-[#4aa8d8] transition-all">
@@ -743,10 +743,10 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 <button
                   onClick={() => setShowSettings(v => !v)}
                   className="w-full flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors"
-                  title={showSettings ? 'Collapse settings' : 'Expand: Drive folder & connected unit'}
+                  title={ui.settingsLabel}
                 >
                   {showSettings ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                  Settings
+                  {ui.settingsLabel}
                   <span className="ml-auto text-xs text-gray-400">{ui.driveFolder} · {ui.connectedUnit}</span>
                 </button>
 
@@ -758,12 +758,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                         <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
                           <ExternalLink size={11} /> {ui.driveFolder}
                         </label>
-                        <Tooltip text={showHealthCheck ? 'Hide status' : 'Show Drive folder status'}>
+                        <Tooltip text={showHealthCheck ? ui.hideLabel : ui.statusLabel}>
                           <button
                             onClick={() => setShowHealthCheck(v => !v)}
                             className={`flex items-center gap-1 text-xs transition-colors ${showHealthCheck ? 'text-[#1e3a5f]' : 'text-gray-400 hover:text-[#1e3a5f]'}`}
                           >
-                            <Activity size={11} /> Status
+                            <Activity size={11} /> {ui.statusLabel}
                           </button>
                         </Tooltip>
                       </div>
@@ -771,8 +771,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                       {showHealthCheck && (
                         <div className="mb-2 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-1.5">
                           {[
-                            { label: 'Drive folder linked', ok: !!driveLink.trim() },
-                            { label: 'Plans PDF detected', ok: !!detectedPdfId },
+                            { label: ui.driveLinkedCheck, ok: !!driveLink.trim() },
+                            { label: ui.plansDetected, ok: !!detectedPdfId },
                           ].map(({ label, ok }) => (
                             <div key={label} className="flex items-center gap-2 text-xs">
                               <span className={`w-4 h-4 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0 ${ok ? 'bg-green-500' : 'bg-red-400'}`} style={{ fontSize: '9px' }}>
@@ -783,7 +783,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                           ))}
                           {!detectedPdfId && !fetchingPdf && driveLink && (
                             <p className="text-[10px] text-gray-400 mt-1 pt-1 border-t border-gray-200">
-                              No PDF found. Check folder has "Engineered Plans" subfolder or PDF at root.
+                              {ui.noPdfHelp}
                             </p>
                           )}
                         </div>
@@ -815,14 +815,14 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                           className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                         />
                         {driveLink && (
-                          <Tooltip text="Open folder in Drive">
+                          <Tooltip text={ui.openFolderTooltip}>
                             <a href={driveLink} target="_blank" rel="noopener noreferrer"
                               className="flex items-center px-2.5 py-2 rounded-lg border border-gray-200 text-gray-500 hover:text-[#4aa8d8] hover:border-[#4aa8d8] transition-all">
                               <ExternalLink size={14} />
                             </a>
                           </Tooltip>
                         )}
-                        <Tooltip text="Save drive link">
+                        <Tooltip text={ui.saveDriveLinkTooltip}>
                           <button
                             onClick={async () => {
                               handleSaveBasic();
@@ -847,7 +847,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                       {mergedPartner?.driveLink && driveLink && mergedPartner.driveLink !== driveLink.trim() && (
                         <div className="mt-1.5 flex items-start gap-1.5 text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 border border-red-200">
                           <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" />
-                          <span>Merged partner has a different Drive link. Saving will sync both.</span>
+                          <span>{ui.mergedDriveDiffers}</span>
                         </div>
                       )}
                     </div>
@@ -1039,7 +1039,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 <div className="flex flex-col items-center py-16 text-center px-4">
                   <Camera size={32} className="text-gray-300 mb-3" />
                   <p className="text-sm font-medium text-gray-500">{ui.driveBackendNotConfigured}</p>
-                  <p className="text-xs text-gray-400 mt-1">Set VITE_DRIVE_API_KEY to enable photo browsing.</p>
+                  <p className="text-xs text-gray-400 mt-1">{ui.driveApiKeyHint}</p>
                 </div>
               ) : loadingPhotos ? (
                 <div className="flex items-center justify-center py-16 text-gray-400">
@@ -1107,7 +1107,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               ) : (
                 <div className="flex flex-col items-center py-16 text-center px-4">
                   <Camera size={32} className="text-gray-300 mb-3" />
-                  <p className="text-xs text-gray-400">Click the Photos tab to load from Drive.</p>
+                  <p className="text-xs text-gray-400">{ui.loadPhotosHint}</p>
                 </div>
               )}
             </div>
@@ -1118,16 +1118,16 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               apartmentId={apartment.id}
               stages={sortedStages}
               currentUser={currentUser}
-              onSaved={() => onToast('Note saved')}
+              onSaved={() => onToast(ui.noteSaved)}
             />
           )}
 
           {activeTab === 'history' && (
             <div>
               <div className="flex items-center justify-between mb-3">
-                <h4 className="text-sm font-semibold text-gray-700">Recent Activity</h4>
+                <h4 className="text-sm font-semibold text-gray-700">{ui.recentActivityLabel}</h4>
                 {autoBackup && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 font-medium">Auto-backup on</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 font-medium">{ui.autoBackupOn}</span>
                 )}
               </div>
               <ActivitySection
@@ -1136,7 +1136,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 backupSnapshots={backupSnapshots}
                 onRestore={(snapshotId) => {
                   restoreFromSnapshot(snapshotId);
-                  onToast('Restored to selected point in time');
+                  onToast(ui.restoredToPoint);
                 }}
               />
             </div>
@@ -1152,6 +1152,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           onClose={() => setLightbox(null)}
           imageUnavailable={ui.imageUnavailable}
           openDownload={ui.openDownload}
+          downloadLabel={ui.downloadLabel}
         />
       )}
     </>

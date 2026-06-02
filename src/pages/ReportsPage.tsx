@@ -8,24 +8,24 @@ import { getStageName as getStageNameBilingual } from '../types';
 type BuildingFilter = 'all' | 'A1' | 'A2' | 'A3';
 type ClassFilter = 'all' | 'standard' | 'shinui';
 
-const ALL_COLUMNS = [
-  { key: 'building',       label: 'Building',          always: true },
-  { key: 'apartment',      label: 'Apartment',         always: true },
-  { key: 'floor',          label: 'Floor',             always: false },
-  { key: 'stage',          label: 'Current Stage',     always: false },
-  { key: 'classification', label: 'Classification',    always: false },
-  { key: 'generalNotes',   label: 'General Notes',     always: false },
-  { key: 'lastUpdated',    label: 'Last Updated',      always: false },
-  { key: 'updatedBy',      label: 'Updated By',        always: false },
-  // Stage note columns added dynamically
-] as const;
-
-type ColKey = typeof ALL_COLUMNS[number]['key'];
-
-const TASK_SUB_COLS = ['Description', 'Contractor', 'Stage', 'Due Date', 'Status', 'Completed'] as const;
-
 export function ReportsPage() {
   const { apartments, stages, stageNotes, contractorAssignments, contractors, mainUiStrings: s } = useStore();
+
+  const ALL_COLUMNS = [
+    { key: 'building',       label: s.colBuilding,        always: true },
+    { key: 'apartment',      label: s.colApartment,       always: true },
+    { key: 'floor',          label: s.colFloor,           always: false },
+    { key: 'stage',          label: s.colCurrentStage,    always: false },
+    { key: 'classification', label: s.colClassification,  always: false },
+    { key: 'generalNotes',   label: s.colGeneralNotes,    always: false },
+    { key: 'lastUpdated',    label: s.colLastUpdated,     always: false },
+    { key: 'updatedBy',      label: s.colUpdatedBy,       always: false },
+    // Stage note columns added dynamically
+  ] as const;
+
+  type ColKey = typeof ALL_COLUMNS[number]['key'];
+
+  const TASK_SUB_COLS = [s.colTaskDesc, s.colContractor, s.stageLabel, s.colDueDate, s.colStatus, s.colCompleted] as const;
 
   const [buildingFilter, setBuildingFilter] = useState<BuildingFilter>('all');
   const [stageFilter, setStageFilter] = useState<string[]>([]);
@@ -97,7 +97,7 @@ export function ReportsPage() {
   }
 
   function getStageName(stageId: string | null | undefined): string {
-    if (!stageId) return 'Not Started';
+    if (!stageId) return s.notStartedOption;
     const stage = stages.find(st => st.id === stageId);
     return stage ? getStageNameBilingual(stage, s.isRtl) : stageId;
   }
@@ -114,29 +114,29 @@ export function ReportsPage() {
 
   function buildRow(apt: typeof apartments[0]): Record<string, string> {
     const row: Record<string, string> = {};
-    if (enabledCols.has('building')) row['Building'] = apt.buildingId;
-    if (enabledCols.has('apartment')) row['Apartment'] = apt.displayName || apt.apartmentNumber || '(unnamed)';
-    if (enabledCols.has('floor')) row['Floor'] = apt.floor === 0 ? 'Ground' : String(apt.floor);
-    if (enabledCols.has('stage')) row['Current Stage'] = getStageName(apt.currentStageId);
-    if (enabledCols.has('classification')) row['Classification'] = apt.classification === 'shinui' ? 'Changes' : 'Standard';
-    if (enabledCols.has('generalNotes')) row['General Notes'] = apt.generalNotes;
-    sortedStages.forEach(s => {
-      if (enabledStageCols.has(s.id)) row[`${s.name} Notes`] = getNotes(apt.id, s.id);
+    if (enabledCols.has('building')) row[s.colBuilding] = apt.buildingId;
+    if (enabledCols.has('apartment')) row[s.colApartment] = apt.displayName || apt.apartmentNumber || '(unnamed)';
+    if (enabledCols.has('floor')) row[s.colFloor] = apt.floor === 0 ? s.groundFloorLabel : String(apt.floor);
+    if (enabledCols.has('stage')) row[s.colCurrentStage] = getStageName(apt.currentStageId);
+    if (enabledCols.has('classification')) row[s.colClassification] = apt.classification === 'shinui' ? s.changes : s.standard;
+    if (enabledCols.has('generalNotes')) row[s.colGeneralNotes] = apt.generalNotes;
+    sortedStages.forEach(st => {
+      if (enabledStageCols.has(st.id)) row[`${st.name} Notes`] = getNotes(apt.id, st.id);
     });
-    if (enabledCols.has('lastUpdated')) row['Last Updated'] = apt.updatedAt ? format(new Date(apt.updatedAt), 'yyyy-MM-dd HH:mm') : '';
-    if (enabledCols.has('updatedBy')) row['Updated By'] = apt.updatedByName || '';
+    if (enabledCols.has('lastUpdated')) row[s.colLastUpdated] = apt.updatedAt ? format(new Date(apt.updatedAt), 'yyyy-MM-dd HH:mm') : '';
+    if (enabledCols.has('updatedBy')) row[s.colUpdatedBy] = apt.updatedByName || '';
 
     if (includeTaskCols) {
       const tasks = getAptTasks(apt.id);
       for (let i = 0; i < maxTasks; i++) {
         const t = tasks[i];
         const n = i + 1;
-        row[`Task ${n} Description`] = t?.taskDescription ?? '';
-        row[`Task ${n} Contractor`] = t ? (contractors.find(c => c.id === t.contractorId)?.name ?? '') : '';
-        row[`Task ${n} Stage`] = t ? getStageName(t.stageId) : '';
-        row[`Task ${n} Due Date`] = t?.dueDate ?? '';
-        row[`Task ${n} Status`] = t ? (t.completedAt ? 'Completed' : 'Pending') : '';
-        row[`Task ${n} Completed`] = t?.completedAt ? t.completedAt.slice(0, 10) : '';
+        row[`${s.colTaskDesc} ${n}`] = t?.taskDescription ?? '';
+        row[`${s.colContractor} ${n}`] = t ? (contractors.find(c => c.id === t.contractorId)?.name ?? '') : '';
+        row[`${s.stageLabel} ${n}`] = t ? getStageName(t.stageId) : '';
+        row[`${s.colDueDate} ${n}`] = t?.dueDate ?? '';
+        row[`${s.colStatus} ${n}`] = t ? (t.completedAt ? s.statusCompleted : s.statusPending) : '';
+        row[`${s.colCompleted} ${n}`] = t?.completedAt ? t.completedAt.slice(0, 10) : '';
       }
     }
 
@@ -167,7 +167,7 @@ export function ReportsPage() {
             }`}
           >
             <SlidersHorizontal size={16} />
-            Columns
+            {s.columnsBtn}
           </button>
           <button
             onClick={() => window.print()}
@@ -383,23 +383,23 @@ export function ReportsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                {enabledCols.has('building') && <th className="text-left px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">Building</th>}
-                {enabledCols.has('apartment') && <th className="text-left px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">Apartment</th>}
-                {enabledCols.has('floor') && <th className="text-left px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">Floor</th>}
-                {enabledCols.has('stage') && <th className="text-left px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">Stage</th>}
-                {enabledCols.has('classification') && <th className="text-left px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">Class</th>}
-                {enabledCols.has('generalNotes') && <th className="text-left px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">Notes</th>}
-                {sortedStages.filter(s => enabledStageCols.has(s.id)).map(s => (
-                  <th key={s.id} className="text-left px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">
+                {enabledCols.has('building') && <th className="text-left px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">{s.colBuilding}</th>}
+                {enabledCols.has('apartment') && <th className="text-left px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">{s.colApartment}</th>}
+                {enabledCols.has('floor') && <th className="text-left px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">{s.colFloor}</th>}
+                {enabledCols.has('stage') && <th className="text-left px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">{s.stageLabel}</th>}
+                {enabledCols.has('classification') && <th className="text-left px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">{s.colClassification}</th>}
+                {enabledCols.has('generalNotes') && <th className="text-left px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">{s.colGeneralNotes}</th>}
+                {sortedStages.filter(st => enabledStageCols.has(st.id)).map(st => (
+                  <th key={st.id} className="text-left px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">
                     <span className="inline-flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
-                      {s.name}
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: st.color }} />
+                      {st.name}
                     </span>
                   </th>
                 ))}
-                {includeTaskCols && <th className="text-left px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">Tasks</th>}
-                {enabledCols.has('lastUpdated') && <th className="text-left px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">Updated</th>}
-                {enabledCols.has('updatedBy') && <th className="text-left px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">By</th>}
+                {includeTaskCols && <th className="text-left px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">{s.includeTasks}</th>}
+                {enabledCols.has('lastUpdated') && <th className="text-left px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">{s.colLastUpdated}</th>}
+                {enabledCols.has('updatedBy') && <th className="text-left px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">{s.colUpdatedBy}</th>}
               </tr>
             </thead>
             <tbody>

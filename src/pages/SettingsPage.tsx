@@ -23,7 +23,6 @@ const PRESET_COLORS = [
 ];
 
 const CAT_COLORS: Record<ContractorCategory, string> = { drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981' };
-const CAT_LABELS: Record<ContractorCategory, string> = { drywall: 'Drywall', ac: 'AC', general: 'General' };
 
 export function SettingsPage() {
   const { stages, users, updateStage, addStage, deleteStage, updateUser, addUser, lightTheme, setLightTheme, mainUiStrings: s } = useStore();
@@ -133,7 +132,7 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast }: 
   function saveStage(stage: Stage) {
     updateStage(stage.id, edits[stage.id] ?? {});
     setEdits(prev => { const n = { ...prev }; delete n[stage.id]; return n; });
-    onToast(`Stage "${stage.name}" saved`);
+    onToast(s.stageNameSaved);
   }
 
   function moveStage(id: string, dir: -1 | 1) {
@@ -157,7 +156,7 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast }: 
     });
     setNewStageName('');
     setNewStageNameHe('');
-    onToast('Stage added');
+    onToast(s.stageNameAdded);
   }
 
   return (
@@ -190,7 +189,7 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast }: 
                   <input
                     value={name}
                     onChange={e => setEdit(stage.id, { name: e.target.value })}
-                    placeholder="English name"
+                    placeholder={s.stageNameEnglishPlaceholder}
                     className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                   />
                   <input
@@ -211,7 +210,7 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast }: 
                   <button onClick={() => saveStage(stage)} className="p-2 text-[#1e3a5f] hover:bg-[#1e3a5f]/5 rounded-lg"><Save size={16} /></button>
                 </Tooltip>
                 <Tooltip text={s.deleteStageTooltip}>
-                  <button onClick={() => { if (confirm(`Delete "${stage.name}"?`)) deleteStage(stage.id); }}
+                  <button onClick={() => { if (confirm(s.deleteStageConfirmMsg)) deleteStage(stage.id); }}
                     className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
                 </Tooltip>
               </div>
@@ -299,7 +298,7 @@ function UserSettings({ users, updateUser, addUser, onToast }: {
             if (!newUser.name.trim() || !newUser.code.trim()) return;
             addUser({ id: 'u' + Math.random().toString(36).substr(2, 6), name: newUser.name.trim(), role: newUser.role.trim() || 'User', code: newUser.code.trim(), active: true, createdAt: new Date().toISOString() });
             setNewUser({ name: '', role: '', code: '' });
-            onToast('User added');
+            onToast(s.userAdded);
           }}
           className="flex items-center gap-1.5 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors">
           <Plus size={16} /> {s.addNewUser}
@@ -334,11 +333,13 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
     cat, items: contractors.filter(c => c.category === cat),
   }));
 
+  const CAT_LABELS: Record<ContractorCategory, string> = { drywall: s.categoryDrywall, ac: s.categoryAC, general: s.categoryGeneral };
+
   function handleAdd() {
     if (!form.name.trim()) return;
     addContractor({ name: form.name.trim(), email: form.email.trim(), category: form.category, active: true });
     setForm({ name: '', email: '', category: 'ac' });
-    onToast('Contractor added');
+    onToast(s.contractorAdded);
   }
 
   return (
@@ -377,7 +378,7 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
                   </button>
                 </Tooltip>
                 <Tooltip text={s.deleteStageTooltip}>
-                  <button onClick={() => { if (confirm(`Delete "${c.name}"?`)) { deleteContractor(c.id); onToast('Deleted'); } }}
+                  <button onClick={() => { if (confirm(s.deleteContractorConfirmMsg)) { deleteContractor(c.id); onToast(s.deletedLabel); } }}
                     className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 flex-shrink-0">
                     <Trash2 size={15} />
                   </button>
@@ -399,9 +400,9 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
             className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
           <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value as ContractorCategory }))}
             className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30">
-            <option value="ac">AC</option>
-            <option value="drywall">Drywall</option>
-            <option value="general">General</option>
+            <option value="ac">{s.categoryAC}</option>
+            <option value="drywall">{s.categoryDrywall}</option>
+            <option value="general">{s.categoryGeneral}</option>
           </select>
         </div>
         <button onClick={handleAdd} disabled={!form.name.trim()}
@@ -640,7 +641,7 @@ function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
           {s.displayTheme}
         </h2>
         <div className="flex gap-3">
-          <button onClick={() => { setLightTheme(false); onToast('Dark theme applied'); }}
+          <button onClick={() => { setLightTheme(false); onToast(s.themeAppliedDark); }}
             className={`flex-1 flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${!lightTheme ? 'border-[#1e3a5f] bg-[#1e3a5f]/5' : 'border-gray-200 hover:border-gray-300'}`}>
             <div className="w-16 h-10 rounded-lg bg-[#1e3a5f] flex items-center gap-1 px-2">
               <div className="w-2 h-6 rounded bg-[#162d4a]" />
@@ -649,7 +650,7 @@ function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
             <div className="flex items-center gap-1.5"><Moon size={14} className="text-[#4aa8d8]" /><span className="text-sm font-medium text-gray-700">{s.dark}</span></div>
             {!lightTheme && <span className="text-xs text-[#1e3a5f] font-semibold">{s.activeLabel}</span>}
           </button>
-          <button onClick={() => { setLightTheme(true); onToast('Light theme applied'); }}
+          <button onClick={() => { setLightTheme(true); onToast(s.themeAppliedLight); }}
             className={`flex-1 flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${lightTheme ? 'border-[#1e3a5f] bg-[#1e3a5f]/5' : 'border-gray-200 hover:border-gray-300'}`}>
             <div className="w-16 h-10 rounded-lg bg-white border border-gray-200 flex items-center gap-1 px-2">
               <div className="w-2 h-6 rounded bg-gray-100 border border-gray-200" />
@@ -762,9 +763,9 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
       const result = importData(json);
       if (result.ok) {
         setImportModal(result.summary ?? null);
-        onToast('Backup restored successfully');
+        onToast(s.backupRestored);
       } else {
-        onToast(result.error ?? 'Import failed', 'error');
+        onToast(result.error ?? s.importFailed, 'error');
       }
     };
     reader.readAsText(file);
@@ -774,7 +775,7 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
   function handleRestoreSnapshot(id: string) {
     restoreFromSnapshot(id);
     setRestoreConfirmId(null);
-    onToast('Snapshot restored');
+    onToast(s.snapshotRestored);
   }
 
   const SummaryRow = ({ label, value }: { label: string; value: number | string }) => (
@@ -796,33 +797,33 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold text-gray-900 flex items-center gap-2">
-                <Download size={16} className="text-[#1e3a5f]" /> Export Summary
+                <Download size={16} className="text-[#1e3a5f]" /> {s.exportSummaryTitle}
               </h3>
               <button onClick={() => setExportModal(null)} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
             </div>
             <div className="space-y-2 mb-4">
-              <SummaryRow label="Apartments" value={exportModal.apartments} />
-              <SummaryRow label="Active stages" value={exportModal.stages} />
-              <SummaryRow label="Active contractors" value={exportModal.contractors} />
-              <SummaryRow label="Tasks" value={exportModal.tasks} />
-              <SummaryRow label="Completed tasks" value={exportModal.completedTasks} />
-              <SummaryRow label="Photos & files" value={exportModal.photos} />
-              <SummaryRow label="Notes" value={exportModal.notes} />
-              <SummaryRow label="Activity entries" value={exportModal.activityLogs} />
+              <SummaryRow label={s.summaryApartments} value={exportModal.apartments} />
+              <SummaryRow label={s.summaryStages} value={exportModal.stages} />
+              <SummaryRow label={s.summaryContractors} value={exportModal.contractors} />
+              <SummaryRow label={s.summaryTasks} value={exportModal.tasks} />
+              <SummaryRow label={s.summaryCompletedTasks} value={exportModal.completedTasks} />
+              <SummaryRow label={s.summaryPhotos} value={exportModal.photos} />
+              <SummaryRow label={s.summaryNotes} value={exportModal.notes} />
+              <SummaryRow label={s.summaryActivity} value={exportModal.activityLogs} />
               <div className="pt-2 border-t border-gray-100">
-                <SummaryRow label="File size" value={`${exportModal.sizeKB} KB`} />
+                <SummaryRow label="File size" value={`${exportModal.sizeKB} ${s.fileSizeKb}`} />
               </div>
             </div>
             {exportModal.driveUploaded && (
               <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg text-xs text-blue-700 mb-3">
                 <HardDriveDownload size={13} className="flex-shrink-0" />
-                Also uploaded to Google Drive backup folder.
+                {s.exportedToDriveNote}
               </div>
             )}
             <p className="text-xs text-gray-400 text-center">Exported {format(new Date(), 'MMM d, yyyy · HH:mm')}</p>
             <button onClick={() => setExportModal(null)}
               className="mt-4 w-full py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors">
-              Done
+              {s.doneBtn}
             </button>
           </div>
         </div>
@@ -834,27 +835,27 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold text-gray-900 flex items-center gap-2">
-                <Upload size={16} className="text-green-600" /> Import Successful
+                <Upload size={16} className="text-green-600" /> {s.importSuccessTitle}
               </h3>
               <button onClick={() => setImportModal(null)} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
             </div>
             <div className="space-y-2 mb-4">
-              <SummaryRow label="Apartments restored" value={importModal.apartments} />
-              <SummaryRow label="Stages" value={importModal.stages} />
-              <SummaryRow label="Contractors" value={importModal.contractors} />
-              <SummaryRow label="Tasks" value={importModal.tasks} />
-              <SummaryRow label="Completed tasks" value={importModal.completedTasks} />
-              <SummaryRow label="Photos & files" value={importModal.photos} />
-              <SummaryRow label="Notes" value={importModal.notes} />
-              <SummaryRow label="Activity entries" value={importModal.activityLogs} />
+              <SummaryRow label={s.summaryApartmentsRestored} value={importModal.apartments} />
+              <SummaryRow label={s.summaryStages} value={importModal.stages} />
+              <SummaryRow label={s.summaryContractors} value={importModal.contractors} />
+              <SummaryRow label={s.summaryTasks} value={importModal.tasks} />
+              <SummaryRow label={s.summaryCompletedTasks} value={importModal.completedTasks} />
+              <SummaryRow label={s.summaryPhotos} value={importModal.photos} />
+              <SummaryRow label={s.summaryNotes} value={importModal.notes} />
+              <SummaryRow label={s.summaryActivity} value={importModal.activityLogs} />
             </div>
             <div className="flex items-center gap-2 px-3 py-2 bg-green-50 rounded-lg text-xs text-green-700 mb-4">
               <Check size={13} className="flex-shrink-0" />
-              All data has been fully restored. This replaced the previous state.
+              {s.importRestoredNote}
             </div>
             <button onClick={() => setImportModal(null)}
               className="w-full py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors">
-              Done
+              {s.doneBtn}
             </button>
           </div>
         </div>
@@ -886,7 +887,7 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
                     ? 'bg-[#1e3a5f] text-white'
                     : 'bg-gray-50 border border-gray-200 text-gray-600 hover:border-[#1e3a5f]/40'
                 }`}>
-                {f === 'activity' ? 'Every Activity' : f.charAt(0).toUpperCase() + f.slice(1)}
+                {f === 'activity' ? s.everyActivity : f.charAt(0).toUpperCase() + f.slice(1)}
               </button>
             ))}
           </div>
@@ -895,7 +896,7 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
         {/* Snapshot history */}
         <div>
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-            {s.snapshotHistoryLabel} {backupSnapshots.length > 0 && <span className="normal-case font-normal text-gray-400">({backupSnapshots.length} stored)</span>}
+            {s.snapshotHistoryLabel} {backupSnapshots.length > 0 && <span className="normal-case font-normal text-gray-400">({backupSnapshots.length} {s.snapshotsStored})</span>}
           </p>
           {backupSnapshots.length === 0 ? (
             <p className="text-xs text-gray-400 italic py-2">{s.noSnapshotsYet}</p>
@@ -907,7 +908,7 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
                     <p className="text-xs font-medium text-gray-700 truncate">{snap.label}</p>
                     <p className="text-[10px] text-gray-400 mt-0.5">
                       {format(new Date(snap.createdAt), 'MMM d, yyyy · HH:mm')}
-                      {' · '}{snap.apartmentStates.length} apts · {snap.contractorAssignments.length} tasks
+                      {' · '}{snap.apartmentStates.length} {s.aptsCount} · {snap.contractorAssignments.length} {s.tasksCount}
                     </p>
                   </div>
                   {restoreConfirmId === snap.id ? (
@@ -938,7 +939,7 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <div className="flex items-center gap-2 mb-3">
           <CloudUpload size={17} className="text-[#4aa8d8]" />
-          <h2 className="font-semibold text-gray-800">Google Drive Auto-Export</h2>
+          <h2 className="font-semibold text-gray-800">{s.driveAutoExportSection}</h2>
         </div>
 
         {/* Drive folder URL */}
@@ -958,7 +959,7 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
             </button>
           </div>
           {backupDriveFolderLink && (
-            <p className="mt-1 text-xs text-green-600 flex items-center gap-1"><Check size={11} /> Folder configured</p>
+            <p className="mt-1 text-xs text-green-600 flex items-center gap-1"><Check size={11} /> {s.folderConfigured}</p>
           )}
         </div>
 
@@ -1427,6 +1428,165 @@ const MAIN_UI_FIELD_LABELS: { key: keyof Omit<MainUiStrings, 'isRtl'>; label: st
   { key: 'driveFolderSave',       label: 'Drive folder save button', group: 'Settings' },
   { key: 'firebaseDesc',          label: 'Firebase description',     group: 'Settings' },
   { key: 'forcePushDesc',         label: 'Force push description',   group: 'Settings' },
+  // Contractor categories group
+  { key: 'categoryDrywall', label: 'Category: Drywall', group: 'Contractor Categories' },
+  { key: 'categoryAC', label: 'Category: AC', group: 'Contractor Categories' },
+  { key: 'categoryGeneral', label: 'Category: General', group: 'Contractor Categories' },
+  // Shared form labels group
+  { key: 'stageLabel', label: 'Form Label: Stage', group: 'Form Labels' },
+  { key: 'dueDateLabel', label: 'Form Label: Due date', group: 'Form Labels' },
+  { key: 'noneOption', label: 'Form Label: None option', group: 'Form Labels' },
+  { key: 'priorityLabel', label: 'Form Label: Priority', group: 'Form Labels' },
+  { key: 'attachmentsLabel', label: 'Form Label: Attachments', group: 'Form Labels' },
+  { key: 'attachBtn', label: 'Button: Attach', group: 'Form Labels' },
+  { key: 'descriptionLabel', label: 'Form Label: Description', group: 'Form Labels' },
+  { key: 'contractorLabel', label: 'Form Label: Contractor', group: 'Form Labels' },
+  { key: 'yesBtn', label: 'Button: Yes', group: 'Form Labels' },
+  { key: 'uploadingLabel', label: 'Uploading… status', group: 'Form Labels' },
+  { key: 'noneSelected', label: '— None — option', group: 'Form Labels' },
+  { key: 'basement', label: 'Floor: Basement', group: 'Form Labels' },
+  { key: 'aptShort', label: 'Apt abbreviation', group: 'Form Labels' },
+  // Toast messages group
+  { key: 'taskAdded', label: 'Toast: Task added', group: 'Toast Messages' },
+  { key: 'noteSaved', label: 'Toast: Note saved', group: 'Toast Messages' },
+  { key: 'stageNameSaved', label: 'Toast: Stage saved', group: 'Toast Messages' },
+  { key: 'stageNameAdded', label: 'Toast: Stage added', group: 'Toast Messages' },
+  { key: 'userAdded', label: 'Toast: User added', group: 'Toast Messages' },
+  { key: 'contractorAdded', label: 'Toast: Contractor added', group: 'Toast Messages' },
+  { key: 'deletedLabel', label: 'Toast: Deleted', group: 'Toast Messages' },
+  { key: 'restoredLabel', label: 'Toast: Restored', group: 'Toast Messages' },
+  { key: 'backupRestored', label: 'Toast: Backup restored', group: 'Toast Messages' },
+  { key: 'importFailed', label: 'Toast: Import failed', group: 'Toast Messages' },
+  { key: 'snapshotRestored', label: 'Toast: Snapshot restored', group: 'Toast Messages' },
+  { key: 'pdfFound', label: 'Toast: PDF found', group: 'Toast Messages' },
+  { key: 'themeAppliedDark', label: 'Toast: Dark theme applied', group: 'Toast Messages' },
+  { key: 'themeAppliedLight', label: 'Toast: Light theme applied', group: 'Toast Messages' },
+  { key: 'deleteStageConfirmMsg', label: 'Confirm: Delete stage', group: 'Toast Messages' },
+  { key: 'deleteContractorConfirmMsg', label: 'Confirm: Delete contractor', group: 'Toast Messages' },
+  // QuickAdd / BulkAdd group
+  { key: 'newTaskHeading', label: 'Heading: New Task', group: 'Task Panels' },
+  { key: 'describeWorkPlaceholder', label: 'Placeholder: Describe work', group: 'Task Panels' },
+  { key: 'tasksHeading', label: 'Heading: Tasks', group: 'Task Panels' },
+  { key: 'noTasksYet', label: 'Empty: No tasks yet', group: 'Task Panels' },
+  { key: 'createBulkTask', label: 'Heading: Create Bulk Task', group: 'Task Panels' },
+  { key: 'whereToStoreFiles', label: 'Heading: Where to store files', group: 'Task Panels' },
+  { key: 'missingDriveLinksTitle', label: 'Heading: Missing Drive Links', group: 'Task Panels' },
+  { key: 'selectTargetApt', label: 'Heading: Select target apartment', group: 'Task Panels' },
+  { key: 'creatingTasksLabel', label: 'Creating tasks…', group: 'Task Panels' },
+  { key: 'filesWillKeepLocal', label: 'Warning: files keep local', group: 'Task Panels' },
+  { key: 'noDriveAnyApt', label: 'Warning: no Drive on any apt', group: 'Task Panels' },
+  { key: 'selectAptForDrive', label: 'Instruction: select apt for Drive', group: 'Task Panels' },
+  { key: 'selectContractorPlaceholder', label: 'Placeholder: Select contractor', group: 'Task Panels' },
+  { key: 'taskDescRequired', label: 'Label: Task description *', group: 'Task Panels' },
+  { key: 'contractorRequired', label: 'Label: Contractor *', group: 'Task Panels' },
+  // Settings modals group
+  { key: 'exportSummaryTitle', label: 'Modal: Export Summary', group: 'Settings Modals' },
+  { key: 'importSuccessTitle', label: 'Modal: Import Successful', group: 'Settings Modals' },
+  { key: 'doneBtn', label: 'Button: Done', group: 'Settings Modals' },
+  { key: 'exportedToDriveNote', label: 'Note: exported to Drive', group: 'Settings Modals' },
+  { key: 'importRestoredNote', label: 'Note: import restored all data', group: 'Settings Modals' },
+  { key: 'summaryApartments', label: 'Summary: Apartments', group: 'Settings Modals' },
+  { key: 'summaryStages', label: 'Summary: Active stages', group: 'Settings Modals' },
+  { key: 'summaryContractors', label: 'Summary: Active contractors', group: 'Settings Modals' },
+  { key: 'summaryTasks', label: 'Summary: Tasks', group: 'Settings Modals' },
+  { key: 'summaryCompletedTasks', label: 'Summary: Completed tasks', group: 'Settings Modals' },
+  { key: 'summaryPhotos', label: 'Summary: Photos & files', group: 'Settings Modals' },
+  { key: 'summaryNotes', label: 'Summary: Notes', group: 'Settings Modals' },
+  { key: 'summaryActivity', label: 'Summary: Activity entries', group: 'Settings Modals' },
+  { key: 'summaryApartmentsRestored', label: 'Summary: Apartments restored', group: 'Settings Modals' },
+  { key: 'fileSizeKb', label: 'File size unit: KB', group: 'Settings Modals' },
+  { key: 'everyActivity', label: 'Backup: Every Activity frequency', group: 'Settings Modals' },
+  { key: 'snapshotsStored', label: 'Backup: stored count label', group: 'Settings Modals' },
+  { key: 'aptsCount', label: 'Backup: apts label', group: 'Settings Modals' },
+  { key: 'tasksCount', label: 'Backup: tasks label', group: 'Settings Modals' },
+  { key: 'driveAutoExportSection', label: 'Section: Google Drive Auto-Export', group: 'Settings Modals' },
+  { key: 'folderConfigured', label: 'Status: Folder configured', group: 'Settings Modals' },
+  { key: 'stageNameEnglishPlaceholder', label: 'Placeholder: English stage name', group: 'Settings Modals' },
+  // Apartment Drawer extra group
+  { key: 'downloadLabel', label: 'Button: Download', group: 'Apartment Drawer Extra' },
+  { key: 'settingsLabel', label: 'Button: Settings', group: 'Apartment Drawer Extra' },
+  { key: 'statusLabel', label: 'Button: Status', group: 'Apartment Drawer Extra' },
+  { key: 'hideLabel', label: 'Button: Hide', group: 'Apartment Drawer Extra' },
+  { key: 'stdShort', label: 'Abbrev: Std (Standard)', group: 'Apartment Drawer Extra' },
+  { key: 'chgShort', label: 'Abbrev: Chg (Changes)', group: 'Apartment Drawer Extra' },
+  { key: 'recentActivityLabel', label: 'Heading: Recent Activity', group: 'Apartment Drawer Extra' },
+  { key: 'autoBackupOn', label: 'Badge: Auto-backup on', group: 'Apartment Drawer Extra' },
+  { key: 'restoredToPoint', label: 'Toast: Restored to point', group: 'Apartment Drawer Extra' },
+  { key: 'filesAttachedToast', label: 'Toast: files attached (plural)', group: 'Apartment Drawer Extra' },
+  { key: 'fileAttachedToast', label: 'Toast: file attached (singular)', group: 'Apartment Drawer Extra' },
+  { key: 'driveLinkedCheck', label: 'Check: Drive folder linked', group: 'Apartment Drawer Extra' },
+  { key: 'plansDetected', label: 'Check: Plans PDF detected', group: 'Apartment Drawer Extra' },
+  { key: 'noPdfHelp', label: 'Help: No PDF found', group: 'Apartment Drawer Extra' },
+  { key: 'mergedDriveDiffers', label: 'Warning: Merged Drive differs', group: 'Apartment Drawer Extra' },
+  { key: 'loadPhotosHint', label: 'Hint: Load photos from Drive', group: 'Apartment Drawer Extra' },
+  { key: 'driveApiKeyHint', label: 'Hint: Set VITE_DRIVE_API_KEY', group: 'Apartment Drawer Extra' },
+  { key: 'restoreVersionTitle', label: 'Tooltip: Restore this version', group: 'Apartment Drawer Extra' },
+  { key: 'storedLocallyTitle', label: 'Tooltip: Stored locally only', group: 'Apartment Drawer Extra' },
+  { key: 'removeFileTitle', label: 'Tooltip: Remove file', group: 'Apartment Drawer Extra' },
+  { key: 'downloadFileTitle', label: 'Tooltip: Download file', group: 'Apartment Drawer Extra' },
+  { key: 'rescanDriveTooltip', label: 'Tooltip: Re-scan Drive', group: 'Apartment Drawer Extra' },
+  { key: 'openFolderTooltip', label: 'Tooltip: Open folder', group: 'Apartment Drawer Extra' },
+  { key: 'saveDriveLinkTooltip', label: 'Tooltip: Save drive link', group: 'Apartment Drawer Extra' },
+  // ActivitySection group
+  { key: 'revertConfirmMsg', label: 'Confirm: Revert to this point', group: 'Activity Section' },
+  { key: 'restoreBtn', label: 'Button: Restore', group: 'Activity Section' },
+  { key: 'restoreTooltip', label: 'Tooltip: Restore to before change', group: 'Activity Section' },
+  { key: 'notStartedFallback', label: 'Fallback: Not started', group: 'Activity Section' },
+  // GlobalSearch group
+  { key: 'searchPlaceholder', label: 'Search: placeholder', group: 'Global Search' },
+  { key: 'searchTypeApartment', label: 'Search: type Apartment', group: 'Global Search' },
+  { key: 'searchTypeTask', label: 'Search: type Task', group: 'Global Search' },
+  { key: 'searchTypeNote', label: 'Search: type Stage Note', group: 'Global Search' },
+  { key: 'searchTypeContractorNote', label: 'Search: type Contractor Note', group: 'Global Search' },
+  { key: 'searchNoResults', label: 'Search: no results', group: 'Global Search' },
+  { key: 'searchStartTyping', label: 'Search: start typing hint', group: 'Global Search' },
+  // Report columns group
+  { key: 'colBuilding', label: 'Column: Building', group: 'Report Columns' },
+  { key: 'colApartment', label: 'Column: Apartment', group: 'Report Columns' },
+  { key: 'colFloor', label: 'Column: Floor', group: 'Report Columns' },
+  { key: 'colCurrentStage', label: 'Column: Current Stage', group: 'Report Columns' },
+  { key: 'colClassification', label: 'Column: Classification', group: 'Report Columns' },
+  { key: 'colGeneralNotes', label: 'Column: General Notes', group: 'Report Columns' },
+  { key: 'colLastUpdated', label: 'Column: Last Updated', group: 'Report Columns' },
+  { key: 'colUpdatedBy', label: 'Column: Updated By', group: 'Report Columns' },
+  { key: 'colTaskDesc', label: 'Column: Task Description', group: 'Report Columns' },
+  { key: 'colContractor', label: 'Column: Contractor', group: 'Report Columns' },
+  { key: 'colDueDate', label: 'Column: Due Date', group: 'Report Columns' },
+  { key: 'colStatus', label: 'Column: Status', group: 'Report Columns' },
+  { key: 'colCompleted', label: 'Column: Completed', group: 'Report Columns' },
+  { key: 'statusCompleted', label: 'Status: Completed', group: 'Report Columns' },
+  { key: 'statusPending', label: 'Status: Pending', group: 'Report Columns' },
+  { key: 'groundFloorLabel', label: 'Floor: Ground', group: 'Report Columns' },
+  { key: 'columnsBtn', label: 'Button: Columns', group: 'Report Columns' },
+  // Diagram tooltips group
+  { key: 'shinuiTooltip', label: 'Tooltip: Shinui apartment', group: 'Diagram Tooltips' },
+  { key: 'addTaskTooltip', label: 'Tooltip: Add task', group: 'Diagram Tooltips' },
+  { key: 'hideShinuiBadgeTooltip', label: 'Tooltip: Hide Shinui badge', group: 'Diagram Tooltips' },
+  { key: 'showShinuiBadgeTooltip', label: 'Tooltip: Show Shinui badge', group: 'Diagram Tooltips' },
+  { key: 'exitBulkModeTooltip', label: 'Tooltip: Exit bulk mode', group: 'Diagram Tooltips' },
+  { key: 'enterBulkModeTooltip', label: 'Tooltip: Enter bulk mode', group: 'Diagram Tooltips' },
+  { key: 'printDiagramTooltip', label: 'Tooltip: Print diagram', group: 'Diagram Tooltips' },
+  { key: 'clearFiltersTooltip', label: 'Tooltip: Clear filters', group: 'Diagram Tooltips' },
+  { key: 'printHeader', label: 'Print: diagram header title', group: 'Diagram Tooltips' },
+  // Activity inline parts group
+  { key: 'activityChangedStage', label: 'Activity: changed stage of', group: 'Activity Inline' },
+  { key: 'activityAddedNote', label: 'Activity: added note on', group: 'Activity Inline' },
+  { key: 'activityUpdatedField', label: 'Activity: updated', group: 'Activity Inline' },
+  { key: 'activityOf', label: 'Activity: of', group: 'Activity Inline' },
+  { key: 'activityMarkedAs', label: 'Activity: marked', group: 'Activity Inline' },
+  { key: 'activityAs', label: 'Activity: as', group: 'Activity Inline' },
+  { key: 'activityUpdatedNotes', label: 'Activity: updated notes for', group: 'Activity Inline' },
+  { key: 'activityRenamed', label: 'Activity: renamed', group: 'Activity Inline' },
+  { key: 'activityIn', label: 'Activity: in', group: 'Activity Inline' },
+  { key: 'activityTo', label: 'Activity: to', group: 'Activity Inline' },
+  // Stage notes group
+  { key: 'versionsCount', label: 'Versions count (plural)', group: 'Stage Notes Extra' },
+  { key: 'versionCount', label: 'Version count (singular)', group: 'Stage Notes Extra' },
+  { key: 'emptyNoteLabel', label: 'Empty note placeholder', group: 'Stage Notes Extra' },
+  { key: 'unknownStage', label: 'Fallback: Unknown stage', group: 'Stage Notes Extra' },
+  // Login group
+  { key: 'loginSubtitle', label: 'Login: subtitle paragraph', group: 'Login' },
+  { key: 'loginFooterBrand', label: 'Login: footer brand name', group: 'Login' },
 ];
 
 function LanguageTab({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {

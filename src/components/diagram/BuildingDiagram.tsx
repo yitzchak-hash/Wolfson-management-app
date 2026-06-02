@@ -141,7 +141,7 @@ function AptCell({
         gap: compact ? undefined : '1px',
       }}
       onClick={apt ? onClick : undefined}
-      title={displayLabel ? `${isBasement ? 'Basement' : 'Apt'} ${displayLabel}` : ''}
+      title={displayLabel ? `${isBasement ? ui.basement : ui.aptShort} ${displayLabel}` : ''}
     >
       {displayLabel ? (
         <span
@@ -160,7 +160,7 @@ function AptCell({
           className="w-full text-center leading-none block truncate px-0.5"
           style={{ fontSize: '9px', opacity: isDimmed ? 0.5 : (hasStage ? 0.9 : 0.45), fontStyle: hasStage ? 'normal' : 'italic' }}
         >
-          {hasStage ? stage!.name : 'Not started'}
+          {hasStage ? stage!.name : ui.notStartedOption}
           {allTasksDone && <span style={{ color: isDimmed ? '#9ca3af' : '#22c55e', fontStyle: 'normal', marginLeft: '1px' }}>✓</span>}
         </span>
       )}
@@ -201,7 +201,7 @@ function AptCell({
       {showShinuiBadge && apt?.classification === 'shinui' && (
         <div
           className="absolute top-0.5 left-0.5 w-3 h-3 rounded-full flex items-center justify-center"
-          title="Apartment has modifications (Shinui)"
+          title={ui.shinuiTooltip}
           style={{ backgroundColor: '#f59e0b', border: '1px solid rgba(255,255,255,0.9)' }}
         >
           <span style={{ fontSize: '6px', color: 'white', fontWeight: 'bold', lineHeight: 1 }}>C</span>
@@ -220,7 +220,7 @@ function AptCell({
             fontWeight: 'bold',
           }}
           onClick={e => { e.stopPropagation(); onAddTask(); }}
-          title="Add task"
+          title={ui.addTaskTooltip}
         >
           +
         </button>

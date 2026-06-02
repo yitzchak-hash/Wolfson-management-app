@@ -74,7 +74,7 @@ export function LoginPage() {
             </div>
           </div>
           <p className="text-gray-300 text-sm leading-relaxed max-w-sm">
-            Internal project management system for AC installation tracking across all three buildings.
+            {s.loginSubtitle}
           </p>
         </div>
       </div>
@@ -106,7 +106,7 @@ export function LoginPage() {
               </div>
               <div className="flex-1 h-px bg-white/8" />
             </div>
-            <p className="text-gray-500 text-xs tracking-wider mb-6">WOLFSON GROUP · PROJECT MANAGEMENT</p>
+            <p className="text-gray-500 text-xs tracking-wider mb-6">{s.loginFooterBrand}</p>
 
             <p className="text-gray-400 text-sm">{s.enterCode}</p>
           </div>

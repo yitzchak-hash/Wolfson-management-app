@@ -9,16 +9,6 @@ const CAT_COLORS: Record<ContractorCategory, string> = {
   drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981',
 };
 
-function getDueBadge(dueDate: string | null) {
-  if (!dueDate) return null;
-  const days = differenceInCalendarDays(parseISO(dueDate), startOfDay(new Date()));
-  if (days < 0) return { text: 'Overdue', cls: 'bg-red-100 text-red-700 border-red-200' };
-  if (days === 0) return { text: 'Today', cls: 'bg-orange-100 text-orange-700 border-orange-200' };
-  if (days === 1) return { text: 'Tomorrow', cls: 'bg-amber-100 text-amber-700 border-amber-200' };
-  if (days <= 3) return { text: `${days} days`, cls: 'bg-yellow-100 text-yellow-700 border-yellow-200' };
-  return { text: format(parseISO(dueDate), 'MMM d'), cls: 'bg-gray-100 text-gray-500 border-gray-200' };
-}
-
 interface Props {
   apartment: Apartment;
   onClose: () => void;
@@ -29,6 +19,18 @@ interface Props {
 export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: Props) {
   const { stages, contractors, contractorAssignments, updateContractorAssignment, addContractorAssignment, updateApartment } = useStore();
   const s = useStore(state => state.mainUiStrings);
+
+  function getDueBadge(dueDate: string | null) {
+    if (!dueDate) return null;
+    const days = differenceInCalendarDays(parseISO(dueDate), startOfDay(new Date()));
+    if (days < 0) return { text: s.overdue, cls: 'bg-red-100 text-red-700 border-red-200' };
+    if (days === 0) return { text: s.today, cls: 'bg-orange-100 text-orange-700 border-orange-200' };
+    if (days === 1) return { text: s.tomorrow, cls: 'bg-amber-100 text-amber-700 border-amber-200' };
+    if (days <= 3) return { text: `${days} ${s.daysLabel}`, cls: 'bg-yellow-100 text-yellow-700 border-yellow-200' };
+    return { text: format(parseISO(dueDate), 'MMM d'), cls: 'bg-gray-100 text-gray-500 border-gray-200' };
+  }
+
+  const catLabel = (c: string) => c === 'ac' ? s.categoryAC : c === 'drywall' ? s.categoryDrywall : s.categoryGeneral;
 
   const [contractorId, setContractorId] = useState('');
   const [task, setTask] = useState('');
@@ -148,7 +150,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
     setAttachments([]);
     setAttachmentFiles([]);
     setAttProgress({});
-    onToast('Task added');
+    onToast(s.taskAdded);
   }
 
   const aptLabel = apartment.displayName || apartment.apartmentNumber;
@@ -162,7 +164,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
         <div className="flex items-center justify-between px-5 py-4 bg-[#1e3a5f] text-white flex-shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <div className="flex flex-col">
-              <span className="font-bold text-lg">Apt {aptLabel}</span>
+              <span className="font-bold text-lg">{s.aptPrefix} {aptLabel}</span>
               <span className="text-[#4aa8d8] text-xs font-medium">{apartment.buildingId}</span>
             </div>
             {/* Stage breadcrumb */}
@@ -171,7 +173,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                 {currentStage ? (
                   <span className="text-xs font-medium" style={{ color: currentStage.color }}>{currentStage.name}</span>
                 ) : (
-                  <span className="text-xs text-white/50 italic">Not started</span>
+                  <span className="text-xs text-white/50 italic">{s.notStartedOption}</span>
                 )}
                 {nextStage && (
                   <>
@@ -195,7 +197,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
                 <Clock size={14} className="text-gray-400" />
-                Tasks
+                {s.tasksHeading}
                 {pendingCount > 0 && (
                   <span className="text-xs bg-[#1e3a5f]/10 text-[#1e3a5f] px-1.5 py-0.5 rounded-full font-medium">
                     {pendingCount} {s.pendingBadge}
@@ -218,7 +220,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
             {aptTasks.length === 0 ? (
               <div className="text-center py-6 text-gray-400">
                 <User2 size={24} className="mx-auto mb-2 opacity-30" />
-                <p className="text-sm">No tasks assigned yet.</p>
+                <p className="text-sm">{s.noTasksYet}</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -241,7 +243,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                             const items = contractors.filter(c => c.category === cat && c.active);
                             if (!items.length) return null;
                             return (
-                              <optgroup key={cat} label={cat === 'ac' ? 'AC' : cat.charAt(0).toUpperCase() + cat.slice(1)}>
+                              <optgroup key={cat} label={catLabel(cat)}>
                                 {items.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                               </optgroup>
                             );
@@ -259,7 +261,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                             onChange={e => setEditStageId(e.target.value)}
                             className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                           >
-                            <option value="">Stage</option>
+                            <option value="">{s.stageLabel}</option>
                             {sortedStages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                           </select>
                           <input
@@ -371,7 +373,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
               ) : (
                 <div className="p-4 space-y-3">
                   <div className="flex items-center justify-between mb-1">
-                    <h3 className="text-sm font-semibold text-[#1e3a5f]">New Task</h3>
+                    <h3 className="text-sm font-semibold text-[#1e3a5f]">{s.newTaskHeading}</h3>
                     <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600"><X size={14} /></button>
                   </div>
 
@@ -392,7 +394,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                       const items = contractors.filter(c => c.category === cat && c.active);
                       if (!items.length) return null;
                       return (
-                        <optgroup key={cat} label={cat === 'ac' ? 'AC' : cat.charAt(0).toUpperCase() + cat.slice(1)}>
+                        <optgroup key={cat} label={catLabel(cat)}>
                           {items.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                         </optgroup>
                       );
@@ -414,7 +416,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                       onClick={() => attachRef.current?.click()}
                       className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-[#1e3a5f] transition-colors px-2 py-1 rounded-lg border border-dashed border-gray-300 hover:border-[#1e3a5f]/40"
                     >
-                      <Paperclip size={12} /> Attach
+                      <Paperclip size={12} /> {s.attachBtn}
                     </button>
                     <input
                       ref={attachRef}
@@ -529,7 +531,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                     disabled={!contractorId || !task.trim() || !apartment.driveLink || uploading}
                     className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] disabled:opacity-40 transition-colors"
                   >
-                    <Plus size={15} /> {uploading ? 'Uploading…' : s.createTask}
+                    <Plus size={15} /> {uploading ? s.uploadingLabel : s.createTask}
                   </button>
                 </div>
               )}

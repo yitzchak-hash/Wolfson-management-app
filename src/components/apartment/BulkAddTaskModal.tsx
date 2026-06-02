@@ -10,9 +10,6 @@ import {
   findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive,
 } from '../../data/driveApi';
 
-const CAT_LABELS: Record<ContractorCategory, string> = {
-  drywall: 'Drywall', ac: 'AC', general: 'General',
-};
 const CAT_COLORS: Record<ContractorCategory, string> = {
   drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981',
 };
@@ -31,6 +28,10 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
     addContractorAssignment, updateApartment, currentUser,
   } = useStore();
   const s = useStore(state => state.mainUiStrings);
+
+  const CAT_LABELS: Record<ContractorCategory, string> = {
+    drywall: s.categoryDrywall, ac: s.categoryAC, general: s.categoryGeneral,
+  };
 
   // ── Form ─────────────────────────────────────────────────────────────────
   const [contractorId, setContractorId] = useState('');
@@ -294,11 +295,11 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
               )}
               <Layers size={18} className="text-[#1e3a5f]" />
               <h2 className="text-base font-bold text-gray-900">
-                {modalStage === 'form' ? 'Create Bulk Task' :
-                 modalStage === 'attachmentChoice' ? 'Where to put the attached files?' :
-                 modalStage === 'missingDriveWarning' ? 'Missing Drive Links' :
-                 modalStage === 'selectTargetApt' ? 'Select target apartment' :
-                 'Creating tasks…'}
+                {modalStage === 'form' ? s.createBulkTask :
+                 modalStage === 'attachmentChoice' ? s.whereToStoreFiles :
+                 modalStage === 'missingDriveWarning' ? s.missingDriveLinksTitle :
+                 modalStage === 'selectTargetApt' ? s.selectTargetApt :
+                 s.creatingTasksLabel}
               </h2>
               {modalStage === 'form' && selectedAptIds.size > 0 && (
                 <span className="ml-1 text-xs bg-[#1e3a5f] text-white px-2 py-0.5 rounded-full font-semibold">
@@ -332,7 +333,7 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                             : 'text-gray-400 hover:text-gray-600'
                         }`}
                       >
-                        {tab === 'all' ? 'All' : tab}
+                        {tab === 'all' ? s.all : tab}
                       </button>
                     ))}
                   </div>
@@ -363,7 +364,7 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                         return (
                           <div key={bid}>
                             <div className="px-4 py-1.5 bg-gray-50/80 border-b border-gray-100">
-                              <span className="text-[10px] font-bold text-[#1e3a5f] uppercase tracking-wider">Building {bid}</span>
+                              <span className="text-[10px] font-bold text-[#1e3a5f] uppercase tracking-wider">{s.buildingPrefix} {bid}</span>
                             </div>
                             {bApts.map(apt => <AptRow key={apt.id} apt={apt} selected={selectedAptIds.has(apt.id)} onToggle={toggleApt} />)}
                           </div>
@@ -380,13 +381,13 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                   <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
                     {/* Contractor */}
                     <div>
-                      <label className="text-xs font-medium text-gray-500 block mb-1">Contractor *</label>
+                      <label className="text-xs font-medium text-gray-500 block mb-1">{s.contractorRequired}</label>
                       <select
                         value={contractorId}
                         onChange={e => setContractorId(e.target.value)}
                         className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white"
                       >
-                        <option value="">Select contractor…</option>
+                        <option value="">{s.selectContractorPlaceholder}</option>
                         {(['drywall', 'ac', 'general'] as ContractorCategory[]).map(cat => {
                           const items = contractors.filter(c => c.category === cat && c.active);
                           if (!items.length) return null;
@@ -401,12 +402,12 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
 
                     {/* Description */}
                     <div>
-                      <label className="text-xs font-medium text-gray-500 block mb-1">Task description *</label>
+                      <label className="text-xs font-medium text-gray-500 block mb-1">{s.taskDescRequired}</label>
                       <textarea
                         value={task}
                         onChange={e => setTask(e.target.value)}
                         rows={3}
-                        placeholder="Describe the work to be done…"
+                        placeholder={s.describeWorkPlaceholder}
                         className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 resize-none"
                       />
                     </div>
@@ -414,18 +415,18 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                     {/* Stage + Due date */}
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="text-xs font-medium text-gray-500 block mb-1">Stage</label>
+                        <label className="text-xs font-medium text-gray-500 block mb-1">{s.stageLabel}</label>
                         <select
                           value={stageId}
                           onChange={e => setStageId(e.target.value)}
                           className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white"
                         >
-                          <option value="">None</option>
+                          <option value="">{s.noneOption}</option>
                           {sortedStages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className="text-xs font-medium text-gray-500 block mb-1">Due date</label>
+                        <label className="text-xs font-medium text-gray-500 block mb-1">{s.dueDateLabel}</label>
                         <input
                           type="date"
                           value={dueDate}
@@ -437,7 +438,7 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
 
                     {/* Priority */}
                     <div>
-                      <label className="text-xs font-medium text-gray-500 block mb-1">Priority</label>
+                      <label className="text-xs font-medium text-gray-500 block mb-1">{s.priorityLabel}</label>
                       <select
                         value={priority}
                         onChange={e => setPriority(e.target.value as TaskPriority | '')}
@@ -452,13 +453,13 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                     {/* Attachments */}
                     <div>
                       <div className="flex items-center gap-2 mb-2">
-                        <label className="text-xs font-medium text-gray-500">Attachments</label>
+                        <label className="text-xs font-medium text-gray-500">{s.attachmentsLabel}</label>
                         <button
                           type="button"
                           onClick={() => attachRef.current?.click()}
                           className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium border border-dashed border-gray-300 text-gray-500 rounded-lg hover:border-[#1e3a5f]/40 hover:text-[#1e3a5f] transition-colors"
                         >
-                          <Paperclip size={11} /> Attach
+                          <Paperclip size={11} /> {s.attachBtn}
                         </button>
                         <input
                           ref={attachRef}
@@ -511,7 +512,7 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                   <div className="px-5 py-3 border-t border-gray-100 flex-shrink-0">
                     {selectedAptIds.size === 0 && (
                       <p className="text-xs text-amber-600 mb-2 flex items-center gap-1">
-                        <AlertTriangle size={11} /> Select at least one apartment
+                        <AlertTriangle size={11} /> {s.noEligibleApts}
                       </p>
                     )}
                     <button
@@ -593,7 +594,7 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                   <div>
                     <p className="text-sm font-semibold text-amber-800">Drive link missing for {missingDriveApts.length} apartment{missingDriveApts.length !== 1 ? 's' : ''}</p>
                     <p className="text-xs text-amber-700 mt-1">
-                      Files can't be uploaded to Drive for these apartments. They'll keep local copies instead.
+                      {s.filesWillKeepLocal}
                     </p>
                   </div>
                 </div>
@@ -634,7 +635,7 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                   <div className="text-center py-8">
                     <AlertTriangle size={28} className="text-amber-400 mx-auto mb-3" />
                     <p className="text-sm font-medium text-gray-700">{s.noEligibleApts}</p>
-                    <p className="text-xs text-gray-500 mt-1">None of the selected apartments have a Google Drive folder configured.</p>
+                    <p className="text-xs text-gray-500 mt-1">{s.noDriveAnyApt}</p>
                     <button
                       onClick={() => setModalStage('attachmentChoice')}
                       className="mt-4 text-xs text-[#1e3a5f] underline"
@@ -645,8 +646,7 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                 ) : (
                   <>
                     <p className="text-sm text-gray-500 mb-4">
-                      Choose which apartment's Drive folder will receive the uploaded files.
-                      All other apartments will keep a local copy.
+                      {s.selectAptForDrive}
                     </p>
                     <div className="space-y-1.5 max-h-72 overflow-y-auto mb-5">
                       {selectedApts.map(apt => {
@@ -701,7 +701,7 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
             {modalStage === 'uploading' && (
               <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
                 <Loader size={36} className="text-[#1e3a5f] animate-spin mb-4" />
-                <p className="text-base font-semibold text-gray-800 mb-1">Creating tasks…</p>
+                <p className="text-base font-semibold text-gray-800 mb-1">{s.creatingTasksLabel}</p>
                 {uploadStatus.total > 0 && (
                   <>
                     <p className="text-sm text-gray-500 mb-3">

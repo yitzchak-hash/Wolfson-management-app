@@ -144,7 +144,7 @@ export function ProjectDiagramPage() {
         <div className="flex items-center gap-4 mb-3">
           <img src="/tzviair-logo.png" alt="TzviAir" style={{ height: '40px' }} />
           <div>
-            <h1 className="text-lg font-bold text-gray-900">W Residence — Building Diagram</h1>
+            <h1 className="text-lg font-bold text-gray-900">{s.printHeader}</h1>
             <p className="text-xs text-gray-500">Printed {new Date().toLocaleDateString()}</p>
           </div>
         </div>
@@ -157,7 +157,7 @@ export function ProjectDiagramPage() {
           ))}
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded bg-white border border-gray-300" />
-            <span className="text-xs">Not Started</span>
+            <span className="text-xs">{s.notStartedOption}</span>
           </div>
         </div>
       </div>
@@ -212,7 +212,7 @@ export function ProjectDiagramPage() {
             </div>
 
             {/* Changes badge toggle */}
-            <Tooltip text={showShinuiBadge ? 'Hide the "C" badge on apartments with modifications' : 'Show badge on apartments with modifications (Shinui)'}>
+            <Tooltip text={showShinuiBadge ? s.hideShinuiBadgeTooltip : s.showShinuiBadgeTooltip}>
               <button
                 onClick={() => setShowShinuiBadge(v => !v)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
@@ -220,12 +220,12 @@ export function ProjectDiagramPage() {
                 }`}
               >
                 <ToggleLeft size={14} />
-                Changes
+                {s.changes}
               </button>
             </Tooltip>
 
             {/* Bulk update toggle */}
-            <Tooltip text={bulkMode ? 'Exit bulk update mode' : 'Select multiple apartments to update their stage at once'}>
+            <Tooltip text={bulkMode ? s.exitBulkModeTooltip : s.enterBulkModeTooltip}>
               <button
                 onClick={() => { if (bulkMode) exitBulkMode(); else setBulkMode(true); }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
@@ -238,7 +238,7 @@ export function ProjectDiagramPage() {
             </Tooltip>
 
             {/* Print */}
-            <Tooltip text="Print building diagram">
+            <Tooltip text={s.printDiagramTooltip}>
               <button
                 onClick={handlePrint}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-all"
@@ -249,7 +249,7 @@ export function ProjectDiagramPage() {
             </Tooltip>
 
             {hasFilters && !bulkMode && (
-              <Tooltip text="Clear all active filters">
+              <Tooltip text={s.clearFiltersTooltip}>
                 <button
                   onClick={clearFilters}
                   className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 transition-colors px-2 py-1.5"

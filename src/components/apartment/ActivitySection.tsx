@@ -68,9 +68,9 @@ export function ActivitySection({ logs, autoBackup, backupSnapshots, onRestore }
               {/* Stage change visualization */}
               {hasStageChange && (
                 <div className="mt-1 flex items-center gap-1.5 text-[11px] flex-wrap">
-                  <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{log.previousValue || 'Not started'}</span>
+                  <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{log.previousValue || s.notStartedFallback}</span>
                   <span className="text-gray-400">→</span>
-                  <span className="px-1.5 py-0.5 rounded bg-[#1e3a5f]/10 text-[#1e3a5f] font-medium">{log.newValue || 'Not started'}</span>
+                  <span className="px-1.5 py-0.5 rounded bg-[#1e3a5f]/10 text-[#1e3a5f] font-medium">{log.newValue || s.notStartedFallback}</span>
                 </div>
               )}
 
@@ -80,23 +80,23 @@ export function ActivitySection({ logs, autoBackup, backupSnapshots, onRestore }
                 {snapshot && onRestore && (
                   isConfirming ? (
                     <span className="flex items-center gap-1">
-                      <span className="text-amber-600 font-medium">Revert all data to this point?</span>
+                      <span className="text-amber-600 font-medium">{s.revertConfirmMsg}</span>
                       <button
                         onClick={() => { onRestore(snapshot.id); setConfirmingId(null); }}
                         className="px-1.5 py-0.5 rounded bg-amber-500 text-white font-medium text-[10px]"
-                      >Yes</button>
+                      >{s.yesBtn}</button>
                       <button
                         onClick={() => setConfirmingId(null)}
                         className="px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 font-medium text-[10px]"
-                      >Cancel</button>
+                      >{s.cancel}</button>
                     </span>
                   ) : (
                     <button
                       onClick={() => setConfirmingId(log.id)}
                       className="flex items-center gap-0.5 text-[10px] text-gray-400 hover:text-amber-600 transition-colors"
-                      title="Restore to state before this change"
+                      title={s.restoreTooltip}
                     >
-                      <RotateCcw size={9} /> Restore
+                      <RotateCcw size={9} /> {s.restoreBtn}
                     </button>
                   )
                 )}

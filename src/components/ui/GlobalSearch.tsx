@@ -18,6 +18,7 @@ interface GlobalSearchProps {
 
 export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
   const { apartments, contractorAssignments, stageNotes, contractorNotes, contractors, stages } = useStore();
+  const s = useStore(state => state.mainUiStrings);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -115,7 +116,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
   };
 
   const TYPE_LABEL: Record<SearchResult['type'], string> = {
-    apartment: 'Apartment', task: 'Task', note: 'Stage Note', contractor_note: 'Contractor Note',
+    apartment: s.searchTypeApartment, task: s.searchTypeTask, note: s.searchTypeNote, contractor_note: s.searchTypeContractorNote,
   };
 
   if (!open) return null;
@@ -130,7 +131,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
             ref={inputRef}
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Search apartments, tasks, notes…"
+            placeholder={s.searchPlaceholder}
             className="flex-1 text-sm focus:outline-none text-gray-900 placeholder:text-gray-400"
           />
           <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600">
@@ -156,9 +157,9 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
             ))}
           </div>
         ) : query.trim() ? (
-          <div className="px-4 py-8 text-center text-gray-400 text-sm">No results for "{query}"</div>
+          <div className="px-4 py-8 text-center text-gray-400 text-sm">{s.searchNoResults} "{query}"</div>
         ) : (
-          <div className="px-4 py-6 text-center text-gray-400 text-sm">Start typing to search…</div>
+          <div className="px-4 py-6 text-center text-gray-400 text-sm">{s.searchStartTyping}</div>
         )}
       </div>
     </div>

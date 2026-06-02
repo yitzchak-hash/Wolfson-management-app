@@ -69,15 +69,15 @@ export function ActivityLogPage() {
       return `${s.stageFieldChange} of ${apt}: "${log.previousValue}" → "${log.newValue}"`;
     }
     if (log.fieldChanged === 'classification') {
-      return `marked ${apt} as ${log.newValue}`;
+      return `${s.activityMarkedAs} ${apt} ${s.activityAs} ${log.newValue}`;
     }
     if (log.fieldChanged === 'generalNotes') {
-      return `updated notes for ${apt}`;
+      return `${s.activityUpdatedNotes} ${apt}`;
     }
     if (log.fieldChanged === 'displayName') {
-      return `renamed ${s.aptPrefix} in ${log.buildingId} to "${log.newValue}"`;
+      return `${s.activityRenamed} ${s.aptPrefix} ${s.activityIn} ${log.buildingId} ${s.activityTo} "${log.newValue}"`;
     }
-    return `updated ${log.fieldChanged} for ${apt}`;
+    return `${s.activityUpdatedField} ${log.fieldChanged} ${s.activityOf} ${apt}`;
   }
 
   function actionIcon(actionType: string): string {
