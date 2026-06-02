@@ -22,6 +22,7 @@ import {
   onSnapshot,
   writeBatch,
   serverTimestamp,
+  deleteField,
   Unsubscribe,
 } from 'firebase/firestore';
 
@@ -106,7 +107,11 @@ function _trackWrite<T>(promise: Promise<T>): Promise<T> {
 export async function fsSet(collectionName: string, docId: string, data: object) {
   if (!db) return;
   try {
-    await _trackWrite(setDoc(doc(db, collectionName, docId), { ...data, _updatedAt: serverTimestamp() }, { merge: true }));
+    // Replace undefined values with deleteField() so merge:true actually removes them from Firestore
+    const sanitized = Object.fromEntries(
+      Object.entries({ ...data, _updatedAt: serverTimestamp() }).map(([k, v]) => [k, v === undefined ? deleteField() : v])
+    );
+    await _trackWrite(setDoc(doc(db, collectionName, docId), sanitized, { merge: true }));
   } catch (e) {
     console.warn(`Firestore write failed for ${collectionName}/${docId}:`, e);
   }
