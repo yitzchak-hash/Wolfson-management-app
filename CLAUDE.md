@@ -3,6 +3,7 @@
 ## Project Overview
 Internal project-management system for TzviAir's HVAC installation across W Residence (buildings A1, A2, A3).
 Tracks apartment-level progress through installation stages, contractor assignments, and photo evidence.
+The entire admin UI and contractor portal are fully bilingual (English/Hebrew with RTL).
 
 ## Tech Stack
 - **React 19** + **TypeScript** + **Vite 8**
@@ -10,6 +11,7 @@ Tracks apartment-level progress through installation stages, contractor assignme
 - **Zustand v5** for state (auto-persists to localStorage via `persist()`)
 - **React Router v6** (nested routes under `AppLayout`)
 - **Firebase Firestore** (optional — falls back to localStorage if not configured)
+- **Firebase Storage** for contractor photo/file uploads
 - **date-fns** for date formatting
 - **file-saver** for CSV download
 - **lucide-react** for icons
@@ -34,11 +36,12 @@ Tracks apartment-level progress through installation stages, contractor assignme
 - **ContractorPortal upload logic**: if backend configured AND apartment has `driveLink` → stream file to Drive (Photos subfolder), store only `driveFileId`/`driveUrl` + a small image thumbnail (videos/files keep no local bytes); otherwise fall back to local base64 with 50 MB cap
 - **MediaItem** handles `driveOnly` files (empty `dataUrl`, has `driveUrl`) by linking out to Drive instead of rendering base64
 - `VITE_DRIVE_API_KEY` must equal the backend's `API_KEY`; it lives in the public bundle (deters casual abuse, not a true secret — real protection is the Contributor-only service account)
+- **SECURITY**: The service account JSON key must NEVER be committed to the repository. It lives in Vercel env vars only.
 
 ## Directory Layout
 ```
 src/
-  types/index.ts          — all shared TypeScript interfaces
+  types/index.ts          — all shared TypeScript interfaces + MainUiStrings + ContractorUiStrings + getStageName()
   data/
     store.ts              — Zustand store (state + all actions)
     initialData.ts        — default seed data (bump DATA_VERSION to reset)
@@ -56,11 +59,12 @@ src/
     LoginPage
   components/
     layout/               — AppLayout, Header, Sidebar
-    apartment/            — ApartmentDetailDrawer (4 tabs: details/tasks/stages/history), StageNotesSection, ActivitySection, QuickAddTaskPanel
+    apartment/            — ApartmentDetailDrawer (5 tabs: details/tasks/stages/history/photos),
+                            StageNotesSection, ActivitySection, QuickAddTaskPanel, BulkAddTaskModal
     diagram/              — BuildingDiagram (supports compact, highlightedApartmentIds, aptSubLabels)
     dashboard/            — summary cards
     reports/              — table/export
-    ui/                   — Toast, Tooltip, shared primitives
+    ui/                   — Toast, Tooltip, GlobalSearch (Cmd+K), shared primitives
 ```
 
 ## Data Model Key Points
@@ -68,20 +72,52 @@ src/
 - **Apartment numbering per building**: 1-52 (floors 2-14, 4/floor), 53-54 (floor 15, 2 wide), 55-56 (floor 16, 2 wide), basement slots 57+ (unnamed by default)
 - **A1 is missing apartment 37** (blank placeholder with `isUnnamed: true`)
 - **No duplex apartments** — `isDuplexApt` field retained for data compat but always `false`
-- **Classification**: `'standard'` or `'shinui'` (displayed as "Changes" in UI, internal value preserved)
+- **Classification**: `'standard'` or `'shinui'` (displayed as "Changes"/"שינוי" in UI, internal value preserved)
 - **mergedWith**: optional field on Apartment for buyer-merged units (bilateral link, managed via `mergeApartments()` action)
 - **Merged apartment sync**: `currentStageId`, `classification`, `driveLink`, and `plansPdfLink` auto-sync to the partner on every `updateApartment` call
 - **unmergeApartments(aptId, keepDataAptId, user)**: unlinking action; `keepDataAptId` is `aptId | partnerId | 'both'`; the loser gets `currentStageId=null`, `driveLink=undefined`, `plansPdfLink=undefined`
+- **Critical**: When `fsSet` writes a field as `undefined`, the `deleteField()` sanitizer in `firebase.ts` ensures it is actually removed from Firestore. This is essential for `mergedWith` — without it, the stale value persists and the apartment stays linked even after unlinking.
 - **driveLink**: Google Drive folder URL for the apartment; stored on Apartment, editable in drawer
 - **plansPdfLink**: Google Drive file URL for the Engineering Plans PDF; shown as embedded iframe viewer + download in both admin drawer and contractor portal
 - **DATA_VERSION** in `initialData.ts` — bumping forces a localStorage reset (dev only; production data would need a migration)
 - **TaskAttachment**: `{ id, filename, mimeType, dataUrl }` — files attached to a task when creating it; `dataUrl` stripped before Firestore writes (stays in localStorage only)
+- **Task priority**: `'urgent' | 'normal' | 'low'` on `ContractorAssignment` — shown as colored badges, urgent sorts first
+
+## Bilingual System (Admin UI)
+
+### MainUiStrings
+The `MainUiStrings` interface in `src/types/index.ts` defines every user-facing string in the admin UI (~400+ keys). Two preset objects:
+- `DEFAULT_MAIN_UI_STRINGS` — English values
+- `HEBREW_MAIN_UI_STRINGS` — Hebrew values
+
+The store exposes `mainUiStrings` which reflects whichever preset is active. Components read strings via:
+```
+const s = useStore(state => state.mainUiStrings);
+```
+
+### ContractorUiStrings
+Contractor portal strings live in a separate `ContractorUiStrings` interface. These are user-editable via Settings → Language and stored in Firestore `settings/app`. Admin UI strings are preset-only.
+
+### getStageName helper
+```
+getStageName(stage: Stage, isRtl: boolean): string
+```
+Returns `stage.nameHe` when RTL mode is active and `nameHe` is set; falls back to `stage.name`. Used in: BuildingDiagram cells, stage legend, ApartmentDetailDrawer, ReportsPage, StageNotesSection. Exported from `src/types/index.ts`.
+
+### Stage Hebrew names
+Each `Stage` has an optional `nameHe?: string` field. Set it via Settings → Stages (Hebrew name input per stage row, must click Save). The `getStageName()` helper uses it automatically everywhere.
+
+### Module-level constants and s
+Module-level constants cannot access the translation store. Any constant that outputs user-visible strings must be defined inside the component body (after `const s = useStore(...)`). This applies to: `getDueBadge`, `PRIORITY_CONFIG`, `CAT_LABELS`, `ALL_COLUMNS`, `TASK_SUB_COLS`.
+
+### RTL
+`settings.isRtl` controls text direction. `dir="rtl"` is applied to the root layout when true.
 
 ## Contractor Portal
 - Public URL: `/c/:token` — no auth required, token-based access
 - Contractors have category: `'drywall' | 'ac' | 'general'`
 - Each contractor has a unique random token; link is copyable from Settings > Contractors
-- Assignments link contractor → apartment with task description, stage, due date
+- Assignments link contractor → apartment with task description, stage, due date, priority
 - Two tabs: **My Tasks** (assignment cards with countdown badges) and **Building Map**
 - Building map highlights assigned apartments with gold glow; filter buttons: All / Overdue / Today / Tomorrow / This Week
 - Each highlighted cell shows a tiny schedule label (Today / Tomorrow / Overdue / date) at cell bottom
@@ -109,33 +145,46 @@ src/
 - **No DATA_VERSION bump** without explicit need — it wipes all user data
 - All store mutations call `persist(get)` + `fsSet(...)`/`fsDelete(...)` for Firebase sync
 - Binary fields (`dataUrl` on photos, office files, task attachments) are stripped before Firestore writes; merged back from localStorage on read
+- **`fsSet` sanitizes `undefined` → `deleteField()`**: before every Firestore write, `undefined` values in the payload are replaced with `deleteField()` sentinels. This ensures optional fields that are cleared actually get removed from Firestore documents rather than being silently preserved by `merge: true`.
 - App settings (backupFrequency, backupDriveFolderLink, contractorUiStrings, autoBackup) live in `settings/app` Firestore document
 - Loggable fields (those that appear in activity log): `currentStageId`, `classification`, `generalNotes`, `displayName`
 - CSS colors: primary `#1e3a5f` (navy), accent `#4aa8d8` (blue), amber for Changes badge
 - Always use Tailwind utility classes; only reach for inline `style` for dynamic/computed values
 - Contractor token generation: `generateToken()` → 24-char alphanumeric random string
-- `getDueBadge(dueDate)` → `{ text, cls }` — shared countdown badge logic (copy used in TasksPage and ContractorPortal)
+- `getDueBadge(dueDate)` is always defined inside the component body (not at module level) — uses `s.overdue/today/tomorrow/daysLabel`
 - **Tooltip component** (`src/components/ui/Tooltip.tsx`): `<Tooltip text="…" side="top|bottom|left|right">`. Uses CSS `group/tip` hover pattern, `z-[200]`, renders nothing when `text` is empty. Applied to all icon-only buttons throughout the app.
 - **Always update this CLAUDE.md** when new types, pages, or conventions are added
+- **Plain language only in all responses** — no code blocks in conversation, talk naturally to the user
 
 ## Tasks Page
 - Route: `/tasks` — requires auth, accessible via sidebar (ClipboardList icon, between Dashboard and Analytics)
 - Full CRUD for contractor assignments: create, inline edit, mark complete/incomplete, delete
 - Filter by contractor; sorted incomplete-first then by due date
-- Countdown badges via `getDueBadge()` for overdue/today/tomorrow/within-3-days tasks
+- Countdown badges via `getDueBadge()` (inside component body) for overdue/today/tomorrow/within-3-days tasks
 - Task creation supports file attachments (`TaskAttachment[]`) via Paperclip button in `QuickAddTaskPanel`
+- Task edit form shows existing attachments via `editAttachments` state with hover-reveal × remove buttons
+- **Bulk task creation**: `BulkAddTaskModal` lets you create the same task for many apartments at once with per-apartment Drive folder routing
 
 ## ApartmentDetailDrawer
-- 4 tabs: **details** / **tasks** / **stages** / **history**
-- **Tasks tab**: shows all `ContractorAssignment` records for that apartment; pending badge on tab button; mark complete inline; attachment thumbnails; Add Task button opens `QuickAddTaskPanel`
+- 5 tabs: **details** / **tasks** / **stages** / **history** / **photos**
+- **Tasks tab**: shows all `ContractorAssignment` records for that apartment; pending badge on tab button; mark complete inline; attachment thumbnails; Add Task / Bulk Add Task buttons open `QuickAddTaskPanel` / `BulkAddTaskModal`
 - `getTaskDueBadge()` helper defined inside component (mirrors `getDueBadge()` logic)
+- **Photos tab**: loads Drive folder contents via backend API when `driveLink` is set; lightbox viewer
+- **Unmerge flow**: `unmergeTarget` state captures partner apartment at modal-open time (prevents modal disappearing due to Firebase re-renders). `handleConfirmUnmerge` calls `unmergeApartments` which sets `mergedWith: undefined` on both apartments — the `fsSet` sanitizer ensures this actually removes the field from Firestore.
+
+## GlobalSearch
+- Triggered by Cmd+K (Mac) or Ctrl+K (Windows/Linux)
+- Searches: apartment `displayName`/`generalNotes`, stage notes text, task descriptions, contractor notes
+- Result type badges: Apartment / Task / Stage Note / Contractor Note
+- All data in Zustand state — no backend call needed
+- Strings via `s.searchPlaceholder`, `s.searchTypeApartment`, `s.searchNoResults`, `s.searchStartTyping`
 
 ## Settings Page Tabs
-- **Stages** — add/edit/reorder/delete stages with color picker
+- **Stages** — add/edit/reorder/delete stages with color picker, `nameHe` Hebrew name field, description
 - **Users** — manage admin users (name, code, role)
-- **Contractors** — manage contractors, copy portal link, see token
-- **App** — theme toggle, backup frequency, backup history log, Drive backup folder, export/import
-- **Language** — edit all `ContractorUiStrings` fields (grouped by section), Reset to English / Reset to Hebrew buttons, RTL toggle
+- **Contractors** — manage contractors, copy portal link, see token, category (drywall/AC/general)
+- **App** — theme toggle, backup frequency, backup history log, Drive backup folder, export/import, Firebase test panel, Force Push to Firestore
+- **Language** — edit all `ContractorUiStrings` fields (grouped by section), Reset to English / Reset to Hebrew presets, RTL toggle; `MAIN_UI_FIELD_LABELS` lists all admin string keys for reference
 
 ## localStorage Persistence
 - `persist(get)` in store: tiered save — first attempt keeps photos with Drive URL lean (`dataUrl: ''`); if quota still exceeded, strips ALL binary data and truncates logs
@@ -183,6 +232,8 @@ All collections are synced to Firestore in real time:
 `forcePushToFirestore()` action: pushes ALL current in-memory state to Firestore. Accessible via Settings → App → "Force Push Local → Cloud" button. Use this to recover from a state where local data is ahead of Firebase.
 
 `fsDelete(collectionName, docId)` in `firebase.ts` — used by `deleteContractor`, `deleteContractorAssignment`, `deleteContractorPhoto`, `deleteOfficeNoteFile`, and cascade deletes.
+
+**`fsSet` and `deleteField()`**: Every call to `fsSet` sanitizes the payload — any key whose value is `undefined` is replaced with Firestore's `deleteField()` sentinel before the write. This ensures that optional fields that are cleared (e.g. `mergedWith`, `driveLink`, `plansPdfLink`) are actually removed from the Firestore document, not silently preserved by `merge: true`.
 
 **No custom Firestore cache**: Uses plain `getFirestore(app)` — no `persistentLocalCache` / `persistentMultipleTabManager`. The app's own localStorage (`persist()`) handles offline caching; Firestore's built-in IndexedDB cache was causing `onSnapshot` to misbehave on mobile browsers (listeners receiving stale cached data instead of server updates).
 

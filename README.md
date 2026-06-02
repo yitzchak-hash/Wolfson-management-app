@@ -1,6 +1,8 @@
 # Wolfson Management App
 
-An internal project-management system for TzviAir's HVAC installation across W Residence (buildings A1, A2, A3). The app tracks apartment-level progress through configurable installation stages, contractor assignments, photo/file evidence, and engineering plans — all synced in real time via Firebase Firestore with a public contractor portal that requires no login.
+An internal project-management system for TzviAir's HVAC installation across W Residence (buildings A1, A2, A3). The app tracks apartment-level progress through configurable installation stages, contractor assignments, photo/file evidence, and engineering plans — all synced in real time via Firebase Firestore, with a public contractor portal that requires no login.
+
+The entire admin UI and contractor portal are fully bilingual — switching between English and Hebrew (with RTL layout) is instant, with every string editable in Settings.
 
 ---
 
@@ -22,64 +24,73 @@ An internal project-management system for TzviAir's HVAC installation across W R
 14. [Data Model](#data-model)
 15. [Settings](#settings)
 16. [Backup and Restore](#backup-and-restore)
-17. [localStorage Persistence](#localstorage-persistence)
-18. [Security Notes](#security-notes)
-19. [Directory Layout](#directory-layout)
+17. [Bilingual Support](#bilingual-support)
+18. [localStorage Persistence](#localstorage-persistence)
+19. [Security Notes](#security-notes)
+20. [Directory Layout](#directory-layout)
+21. [Future Development Notes](#future-development-notes)
 
 ---
 
 ## What the App Does
 
-The Wolfson Management App is a purpose-built internal tool for tracking HVAC installation progress across a multi-building residential complex. Every apartment in buildings A1, A2, and A3 has a current installation stage, classification, notes, assigned contractors, and a photo/document record. Managers can see the entire project at a glance on a building diagram, drill into any apartment's detail, assign tasks to contractors, and export reports.
+The Wolfson Management App is a purpose-built internal tool for tracking HVAC installation progress across a multi-building residential complex. Every apartment in buildings A1, A2, and A3 has a current installation stage, classification, notes, assigned contractors, and a photo/document record. Managers can see the entire project at a glance on a building diagram, drill into any apartment's detail, assign tasks to contractors, and export reports — all in Hebrew or English.
 
 ---
 
 ## Who Uses It
 
-- **Project managers / admins** — log in with a PIN code, update apartment stages, assign tasks, review photos, export reports, and manage all settings.
-- **Contractors** — access a public, token-based portal (`/c/:token`) with no login required. Contractors see only their assigned apartments, upload photos and files, write notes, and mark tasks complete.
+- **Project managers / admins** — log in with a PIN code, update apartment stages, assign tasks, review photos, export reports, and manage all settings. The entire admin interface is bilingual (Hebrew/English).
+- **Contractors** — access a public, token-based portal (`/c/:token`) with no login required. Contractors see only their assigned apartments, upload photos and files, write notes, and mark tasks complete. The contractor portal is fully bilingual.
 
 ---
 
 ## Feature Overview
 
 ### Project Diagram (`/`)
-Interactive building diagram for all three buildings. Each apartment cell is color-coded by its current stage. Supports:
+Interactive building diagram for all three buildings. Each apartment cell is color-coded by its current stage and shows the stage name in the active language (Hebrew or English). Supports:
 - Filter by building, stage, classification, or contractor
-- Bulk-select and bulk-edit apartments (change stage, classification, or both at once)
+- Bulk-select and bulk-edit apartments (change stage or classification across multiple apartments at once)
 - Compact view mode
 - Click any apartment to open its detail drawer
+- Shinui (Changes/שינוי) badge toggle
+- Print building diagram
 
 ### Dashboard (`/dashboard`)
-Summary cards showing total apartments, stage distribution, pending contractor tasks, overdue tasks, completion percentages by building, and recent activity.
+Summary cards showing total apartments, stage distribution, pending contractor tasks, overdue tasks, completion percentages by building, and a recent activity feed.
 
 ### Tasks Page (`/tasks`)
 Full CRUD interface for contractor assignments:
-- Create tasks with a task description, due date, linked stage, and optional file attachments
-- Inline edit any field
+- Create tasks with a description, contractor, apartment, due date, linked stage, optional file attachments, and priority (Urgent / Normal / Low)
+- Inline edit any field, including attachments — hover any attached file to reveal the × remove button
 - Mark tasks complete or incomplete
 - Filter by contractor
 - Sorted incomplete-first, then by due date
-- Countdown badges (Overdue / Today / Tomorrow / Within 3 Days) via shared `getDueBadge()` logic
+- Countdown badges: Overdue / Today / Tomorrow / Within 3 Days
+- **Bulk task creation** — open a single modal to create the same task across many apartments at once, with Drive folder routing per apartment
 
 ### Analytics (`/analytics`)
-Stage-by-stage breakdown charts by building. Shows how many apartments are in each stage, completion trends, and per-building statistics.
+Stage-by-stage breakdown by building. Shows how many apartments are in each stage, active contractors, tasks completed, and per-contractor done/total counts.
 
 ### Reports (`/reports`)
-Tabular view of all apartment data. Export to CSV with one click (uses `file-saver`).
+Tabular view of all apartment data. Column picker lets you choose which fields to show. Export to CSV with one click.
 
 ### Activity Log (`/activity`)
-Global change log of all apartment updates. Tracked fields: `currentStageId`, `classification`, `generalNotes`, `displayName`. Each entry records the user, timestamp, field changed, previous value, and new value.
+Global change log of all apartment updates. Tracked fields: `currentStageId`, `classification`, `generalNotes`, `displayName`. Each entry records the user, timestamp, field changed, previous value, and new value. Filter by user or building.
+
+### Global Search (⌘K / Ctrl+K)
+Keyboard-triggered search modal that searches across all apartment names, general notes, stage notes, task descriptions, and contractor notes in real time. Results show type badges (Apartment / Task / Stage Note / Contractor Note).
 
 ### Apartment Detail Drawer
-Opens from any apartment cell. Four tabs:
+Opens from any apartment cell. Five tabs:
 
 | Tab | Content |
 |-----|---------|
-| **Details** | Stage selector, classification, general notes, Drive folder link, Engineering Plans PDF viewer, merge/unmerge controls |
-| **Tasks** | All contractor assignments for this apartment; mark complete inline; add new tasks via `QuickAddTaskPanel` |
-| **Stages** | Per-stage notes with optional file attachments |
-| **History** | Apartment-scoped activity log |
+| **Details** | Stage selector, classification, general notes, Drive folder link, Engineering Plans PDF viewer (inline iframe), apartment merge/unmerge controls |
+| **Tasks** | All contractor assignments for this apartment; mark complete inline; pending count badge; Add Task and Bulk Add Task buttons |
+| **Stages** | Per-stage notes with file attachments, contractor assignment dropdown per stage, contractor notes read-only |
+| **History** | Activity log scoped to this apartment; point-in-time restore |
+| **Photos** | Google Drive photo gallery loaded from the apartment's Drive folder (requires `VITE_DRIVE_API_KEY`) |
 
 ### Settings (`/settings`)
 Five tabs — see [Settings](#settings) section below.
@@ -105,7 +116,7 @@ PIN-code authentication. Each admin user has a numeric code stored in the users 
 | Cloud storage | Firebase Storage (contractor photos/files) |
 | File uploads | Google Drive via Vercel serverless backend (service account, no OAuth) |
 | Date utilities | date-fns |
-| CSV export | file-saver + xlsx |
+| CSV export | file-saver |
 | Icons | lucide-react |
 | Hosting | Vercel |
 | Serverless API | Vercel `/api` folder (Node.js ES modules) |
@@ -221,7 +232,7 @@ Vercel never handles the actual file bytes, so there are no Vercel payload limit
 1. In Google Cloud Console, create a service account. Assign it **Contributor** (not Owner/Editor) on a specific Drive folder only — this allows uploading but not deleting or browsing other Drive content.
 2. Generate and download a service account JSON key.
 3. Share the target Drive folder with the service account email address (give it Editor access on that folder).
-4. In Vercel, set `GOOGLE_SERVICE_ACCOUNT_JSON` to the full contents of the JSON key file (as a single line — escape any newlines if needed).
+4. In Vercel, set `GOOGLE_SERVICE_ACCOUNT_JSON` to the full contents of the JSON key file (as a single line).
 5. Set `API_KEY` to a random secret string in Vercel.
 6. Set `VITE_DRIVE_API_KEY` to the same value in the frontend environment (both local `.env.local` and Vercel dashboard).
 7. Set `ALLOWED_ORIGIN` to your deployed app URL.
@@ -239,7 +250,7 @@ Vercel never handles the actual file bytes, so there are no Vercel payload limit
 
 ## Vercel Deployment
 
-The app auto-deploys on every push to the connected GitHub branch (`claude/blissful-cray-spTFY`).
+The app auto-deploys on every push to the connected GitHub branch.
 
 - **Static frontend**: Vite builds to `dist/`; Vercel serves it.
 - **SPA routing**: `vercel.json` rewrites all non-`/api/` paths to `/index.html`, so React Router handles client-side navigation.
@@ -247,7 +258,6 @@ The app auto-deploys on every push to the connected GitHub branch (`claude/bliss
 - **Environment variables**: Set in Vercel dashboard → Project Settings → Environment Variables. Both `VITE_*` (frontend) and non-prefixed (backend-only) variables are configured here.
 
 ```json
-// vercel.json
 {
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }
@@ -265,7 +275,7 @@ The app auto-deploys on every push to the connected GitHub branch (`claude/bliss
 |-----------|-------|
 | `apartments` | All apartment records |
 | `stageNotes` | Per-apartment, per-stage notes |
-| `stages` | Stage definitions (name, color, order) |
+| `stages` | Stage definitions (name, Hebrew name, color, order) |
 | `users` | Admin users |
 | `activityLogs` | Global change history |
 | `contractors` | Contractor records |
@@ -275,14 +285,18 @@ The app auto-deploys on every push to the connected GitHub branch (`claude/bliss
 | `officeNoteFiles` | Office attachment metadata only — binary `dataUrl` is stripped |
 | `settings/app` | `autoBackup`, `backupFrequency`, `backupDriveFolderLink`, `contractorUiStrings` |
 
-Binary fields (`dataUrl` on photos, office files, and task attachments) are never written to Firestore — they are stored in localStorage only and merged back into memory on read. This keeps Firestore documents well under the 1 MB limit.
+Binary fields (`dataUrl` on photos, office files, and task attachments) are never written to Firestore — they are stored in localStorage only and merged back into memory on read.
+
+### Important: undefined fields and Firestore
+
+When a field on an apartment or assignment is cleared (set to `undefined`), `fsSet` in `src/data/firebase.ts` automatically replaces `undefined` values with Firestore's `deleteField()` sentinel before writing. This ensures that clearing a field (e.g. unlinking apartments via `mergedWith: undefined`) actually removes it from the Firestore document rather than leaving the stale value behind. Without this, `merge: true` writes would silently preserve old values.
 
 ### Sync lifecycle
 
 `startFirebaseSync()` is called on login and runs the following sequence:
 
 1. Loads all 11 collections from Firestore in parallel.
-2. If Firestore has data → merges binary fields (photos, office files) from localStorage and sets in-memory state; seeds any apartments missing from Firestore.
+2. If Firestore has data → merges binary fields from localStorage and sets in-memory state; seeds any missing apartments to Firestore.
 3. If Firestore is empty → pushes the entire localStorage snapshot as a first-run seed.
 4. Attaches real-time `onSnapshot` listeners on all collections.
 
@@ -309,7 +323,7 @@ All contractor photo and file uploads go to Firebase Storage:
 - **Delete**: `fsDeleteFile(path)` — called on photo delete to free storage quota.
 - **Quota tracking**: `fileSizeBytes` is stored on every `ContractorPhoto` and summed into `totalStorageBytes` in app state and the `settings/app` Firestore document.
 - **Storage warning**: The admin Header shows an amber warning banner when total usage exceeds 80% of the 5 GB free Firebase Storage tier.
-- **Cloud sync badge**: The admin Header shows a `CloudSyncBadge` that spins "Saving…" while any Firestore write is in flight and shows "Saved ✓" for 3 seconds after all writes complete. Hidden when Firebase is not configured.
+- **Cloud sync badge**: The admin Header shows a `CloudSyncBadge` that spins "Saving…" while any Firestore write is in flight and shows "Saved ✓" for 3 seconds after all writes complete.
 
 Images are compressed client-side before upload: maximum 1200 px on the longest side, 72% JPEG quality.
 
@@ -351,15 +365,15 @@ Each contractor has a unique 24-character alphanumeric token (generated by `gene
 ### Portal tabs
 
 **My Tasks** — one card per assignment with:
-- Task description and due date
+- Task description, priority badge, and due date
 - Countdown badges: Overdue / Today / Tomorrow / This Week
 - Office notes (read-only, shown above contractor notes)
 - Engineering Plans PDF embedded inline via iframe when `apartment.plansPdfLink` is set
 - File/photo upload with real-time progress indicator
 - Notes section (contractor can write notes)
-- **Mark as Complete** button — disabled until at least one file has been uploaded; requires confirmation
+- **Mark as Complete** button — disabled until at least one file has been uploaded
 
-**Building Map** — building diagram highlighting the contractor's assigned apartments with a gold glow. Filter buttons: All / Overdue / Today / Tomorrow / This Week. Each highlighted cell shows a small schedule label (Today / Tomorrow / Overdue / date) at the bottom of the cell.
+**Building Map** — building diagram highlighting the contractor's assigned apartments with a gold glow. Filter buttons: All / Overdue / Today / Tomorrow / This Week. Each highlighted cell shows a small schedule label at the bottom.
 
 ### Contractor categories
 
@@ -368,13 +382,6 @@ Each contractor has a unique 24-character alphanumeric token (generated by `gene
 | `drywall` | Drywall contractor |
 | `ac` | HVAC/AC contractor |
 | `general` | General contractor |
-
-### Upload behavior (portal)
-
-1. Images are compressed client-side (max 1200 px, 72% JPEG) before upload.
-2. Upload goes to Firebase Storage if configured.
-3. Falls back to Google Drive backend if `VITE_DRIVE_API_KEY` is set and the apartment has a `driveLink`.
-4. Falls back to local base64 (50 MB cap) as a last resort.
 
 ### Internationalization
 
@@ -404,7 +411,7 @@ Key apartment fields:
 | `buildingId` | `'A1' \| 'A2' \| 'A3'` | Building |
 | `apartmentNumber` | `string` | Display number |
 | `currentStageId` | `string \| null` | Active installation stage |
-| `classification` | `'standard' \| 'shinui'` | `'shinui'` is displayed as "Changes" in the UI; the internal value is always preserved |
+| `classification` | `'standard' \| 'shinui'` | `'shinui'` is displayed as "Changes" in English or "שינוי" in Hebrew; the internal value is always preserved |
 | `generalNotes` | `string` | Free-form admin notes |
 | `mergedWith` | `string?` | ID of partner apartment (bilateral buyer merge) |
 | `driveLink` | `string?` | Google Drive folder URL for this apartment's files |
@@ -412,11 +419,19 @@ Key apartment fields:
 | `stageDates` | `Record<string, string>?` | ISO timestamp of when each stage was first set |
 | `isUnnamed` | `boolean` | `true` for blank placeholder cells |
 
-**Merged apartments**: When a buyer physically connects two units, both are linked via `mergedWith`. On every `updateApartment` call, `currentStageId`, `classification`, `driveLink`, and `plansPdfLink` are automatically synced to the partner apartment. Unlinking is done via `unmergeApartments(aptId, keepDataAptId, user)` — the losing side gets `currentStageId=null` and its drive links cleared.
+**Merged apartments**: When a buyer physically connects two units, both are linked via `mergedWith`. On every `updateApartment` call, `currentStageId`, `classification`, `driveLink`, and `plansPdfLink` are automatically synced to the partner apartment. Unlinking is done via `unmergeApartments(aptId, keepDataAptId, user)` — the losing side gets `currentStageId=null` and its drive links cleared. The `mergedWith` field is removed from both apartments in Firestore using `deleteField()`.
 
 ### Stages
 
-Configurable installation stages, each with a name, color, display order, description, and active flag. Managed in Settings → Stages.
+Configurable installation stages, each with:
+- `name` — English name
+- `nameHe` — Hebrew name (optional; shown when admin UI is in Hebrew mode)
+- `color` — hex color for the diagram
+- `order` — display order
+- `description` — free-text description
+- `active` — whether the stage is in use
+
+The helper `getStageName(stage, isRtl)` in `src/types/index.ts` returns `nameHe` when `isRtl` is true and a Hebrew name exists, otherwise returns `name`. This is used in the building diagram, stage legend, drawer, reports, and stage notes.
 
 ### Contractors
 
@@ -438,6 +453,7 @@ Configurable installation stages, each with a name, color, display order, descri
 | `taskDescription` | `string` | What needs to be done |
 | `dueDate` | `string \| null` | ISO date (YYYY-MM-DD) |
 | `stageId` | `string \| null` | Optional linked stage |
+| `priority` | `'urgent' \| 'normal' \| 'low'` | Task priority (default `'normal'`) |
 | `completedAt` | `string \| null` | ISO timestamp when marked complete; `null` = pending |
 | `attachments` | `TaskAttachment[]?` | Files attached at task-creation time (base64 only, not stored in Firestore) |
 
@@ -459,7 +475,7 @@ Configurable installation stages, each with a name, color, display order, descri
 |-------|-------------|
 | `name` | Display name |
 | `code` | Numeric PIN for login |
-| `role` | Role label (e.g. "Manager") |
+| `role` | Role label (e.g. "Manager", "Coordinator") |
 | `active` | Whether the account is active |
 
 ### Activity Logs
@@ -473,7 +489,12 @@ Each log entry records: user ID and name, building and apartment, action type, f
 The Settings page (`/settings`) has five tabs:
 
 ### Stages
-Add, edit, reorder, and delete installation stages. Each stage has a name, description, color (color picker), and display order.
+Add, edit, reorder, and delete installation stages. Each stage has:
+- English name and optional Hebrew name (used when admin UI is in Hebrew mode)
+- Description
+- Color (color picker)
+- Display order
+- Active/inactive toggle
 
 ### Users
 Manage admin users: create accounts, set names, PINs, and roles, activate or deactivate.
@@ -484,18 +505,20 @@ Create and manage contractor accounts. Copy the public portal link for any contr
 ### App
 - **Theme** — toggle between dark mode (default) and light mode
 - **Auto-backup** — enable/disable automatic backups
-- **Backup frequency** — `activity` (on every change) / `daily` / `weekly` / `monthly`
+- **Backup frequency** — `Every Activity` / `Daily` / `Weekly` / `Monthly`
 - **Backup Drive folder** — set a Google Drive folder URL for automatic backup uploads
-- **Backup history log** — view past backup entries (filename, size, trigger type, timestamp)
+- **Backup history log** — view past backup entries (filename, size, trigger type, timestamp, Drive link)
 - **Export data** — download a full JSON snapshot of all app data
 - **Import data** — restore state from a previously exported JSON file
 - **Force Push Local → Cloud** — push all in-memory state to Firestore (recovery tool)
+- **Firebase connection test** — verify all Firebase environment variables are set correctly
 
 ### Language
-Edit all contractor portal UI strings. Changes apply immediately to the contractor-facing pages. Built-in presets:
-- **Reset to English** — restores `DEFAULT_CONTRACTOR_UI_STRINGS`
-- **Reset to Hebrew** — restores `HEBREW_CONTRACTOR_UI_STRINGS` with RTL layout enabled
-- **RTL toggle** — controls text direction in the contractor portal independently
+Edit all UI strings for both the contractor portal **and** the admin interface. Changes apply immediately to all pages. Built-in presets:
+- **Reset to English** — restores default English strings
+- **Reset to Hebrew** — restores Hebrew strings with RTL layout enabled
+- **RTL toggle** — controls text direction independently
+- Every string visible anywhere in the app is listed and editable here, grouped by section
 
 ---
 
@@ -511,7 +534,27 @@ Upload a previously exported JSON file to fully restore state. All current data 
 When enabled, the app automatically creates snapshots at the configured frequency. Each backup is logged with filename, size (KB), trigger type (`manual` or `scheduled`), and timestamp.
 
 ### Drive backup
-When a backup Drive folder URL is configured, backup JSON files are uploaded to Google Drive via the `/api/drive-upload` serverless function. This uses the same service account as photo uploads — no OAuth needed. `BackupLogEntry.driveUploaded` is `true` on success and `driveUrl` links to the uploaded file on Drive.
+When a backup Drive folder URL is configured, backup JSON files are uploaded to Google Drive via the `/api/drive-upload` serverless function. This uses the same service account as photo uploads — no OAuth needed. `BackupLogEntry.driveUrl` links to the uploaded file on Drive.
+
+---
+
+## Bilingual Support
+
+The app supports full Hebrew/English switching throughout. Every visible string in both the admin UI and the contractor portal can be changed without touching code.
+
+### How it works
+
+**Admin UI strings** are stored in the `MainUiStrings` interface in `src/types/index.ts`. The Zustand store exposes `mainUiStrings` which is either `DEFAULT_MAIN_UI_STRINGS` (English) or `HEBREW_MAIN_UI_STRINGS` (Hebrew), depending on the language setting. Every component reads strings via `const s = useStore(state => state.mainUiStrings)`.
+
+**Contractor portal strings** are stored in the `ContractorUiStrings` interface and are fully user-editable via Settings → Language.
+
+**Bilingual stage names**: Each stage has an optional `nameHe` field for its Hebrew name. The helper function `getStageName(stage, isRtl)` in `src/types/index.ts` automatically returns the Hebrew name when the UI is in Hebrew mode, falling back to the English name. This is used in the building diagram cells, stage legend, apartment detail drawer, reports, and stage notes. To set up Hebrew stage names, go to Settings → Stages and fill in the Hebrew name field for each stage, then click Save.
+
+**RTL layout**: When Hebrew mode is active, `isRtl` is set to `true` in the store, which applies `dir="rtl"` throughout both the admin UI and contractor portal.
+
+### Switching languages
+
+Settings → Language → Reset to Hebrew (or Reset to English). The change is instant and applies to every page. The language setting persists in localStorage and Firestore (`settings/app`).
 
 ---
 
@@ -542,6 +585,9 @@ Contractor portal URLs (`/c/:token`) use 24-character random alphanumeric tokens
 ### Admin access
 Admin login uses numeric PIN codes stored in the users list. There is no OAuth or JWT-based authentication. The app is designed for internal use on a trusted network.
 
+### Service account credentials
+The Google service account JSON key **must never** be committed to the repository. It must be stored only in Vercel environment variables. The `GOOGLE_SERVICE_ACCOUNT_JSON` env var is backend-only and never reaches the browser.
+
 ---
 
 ## Directory Layout
@@ -558,15 +604,16 @@ wolfson-management-app/
 ├── public/                       Static assets
 ├── src/
 │   ├── types/
-│   │   └── index.ts              All shared TypeScript interfaces and types
+│   │   └── index.ts              All shared TypeScript interfaces, types,
+│   │                             MainUiStrings, ContractorUiStrings, getStageName()
 │   ├── data/
 │   │   ├── store.ts              Zustand store — all state and actions
 │   │   ├── initialData.ts        Default seed data and DATA_VERSION
-│   │   ├── firebase.ts           Firestore + Storage helpers
+│   │   ├── firebase.ts           Firestore + Storage helpers (fsSet uses deleteField())
 │   │   └── driveApi.ts           Google Drive upload helpers (service account, no OAuth)
 │   ├── pages/
 │   │   ├── ProjectDiagramPage.tsx      Building diagram with filters and bulk edit
-│   │   ├── DashboardPage.tsx           Summary cards
+│   │   ├── DashboardPage.tsx           Summary cards and recent activity
 │   │   ├── TasksPage.tsx               Contractor task management (/tasks)
 │   │   ├── AnalyticsDashboard.tsx      Stage/building analytics
 │   │   ├── ReportsPage.tsx             Table view and CSV export
@@ -576,12 +623,13 @@ wolfson-management-app/
 │   │   └── LoginPage.tsx               PIN login
 │   └── components/
 │       ├── layout/               AppLayout, Header (with CloudSyncBadge), Sidebar
-│       ├── apartment/            ApartmentDetailDrawer (4 tabs), StageNotesSection,
-│       │                         ActivitySection, QuickAddTaskPanel
-│       ├── diagram/              BuildingDiagram (compact mode, highlights, sub-labels)
+│       ├── apartment/            ApartmentDetailDrawer (5 tabs), StageNotesSection,
+│       │                         ActivitySection, QuickAddTaskPanel, BulkAddTaskModal
+│       ├── diagram/              BuildingDiagram (compact mode, highlights, sub-labels,
+│       │                         bilingual stage names via getStageName())
 │       ├── dashboard/            Summary card components
 │       ├── reports/              Table and export components
-│       └── ui/                   Toast, Tooltip, shared primitives
+│       └── ui/                   Toast, Tooltip, GlobalSearch (⌘K), shared primitives
 ├── .env.example                  Environment variable template
 ├── vercel.json                   SPA rewrite rule
 ├── vite.config.ts
@@ -592,8 +640,34 @@ wolfson-management-app/
 
 ---
 
+## Future Development Notes
+
+The app is feature-complete for its current use case. The following are known potential improvements for future consideration, ordered by operational impact:
+
+### High priority if the project grows
+
+- **Notification system for task completion** — when a contractor marks a task done, office staff currently have to manually check. An in-app unread badge on the sidebar Tasks icon and a "Needs Review" filter would be the minimum; email notifications via a Vercel function + SendGrid would be the complete solution.
+- **More Task page filters** — filter by building, stage, due-date range, and overdue-only. Currently only contractor filter exists.
+- **Dashboard overdue/pending task cards** — the dashboard shows stage progress but not the most urgent operational metric: overdue tasks.
+- **Activity log records task events** — task creation, completion, and undo are not currently logged in the activity log.
+- **Reports CSV includes task data** — currently only apartment-level fields are exported; assigned contractor and task status are not included.
+
+### Medium priority
+
+- **Task priority system** is already implemented (urgent/normal/low) — if more granularity is needed, priorities could be extended.
+- **Multiple attachments per stage note** — currently only one file attachment per stage note is supported.
+- **Apartment-level photo gallery** — Firebase Storage photos are currently only visible inside individual task cards; a combined gallery per apartment would help quality review.
+- **Bulk task assignment from diagram** — the bulk-select mode could be extended to create one task per selected apartment simultaneously.
+
+### Infrastructure improvements (if scaling to many users)
+
+- **Enable Firestore offline persistence** — switching from `getFirestore(app)` to `initializeFirestore(app, { localCache: persistentLocalCache() })` would give offline write queuing for free, eliminating silent data loss when editing on a flaky connection.
+- **Field-level merge writes** — instead of writing whole apartment documents, writing only changed fields would prevent two admins editing different fields of the same apartment from clobbering each other.
+- **Role-based access control** — currently all admin users have identical permissions. A read-only viewer role would be the simplest first step.
+
+---
+
 ## Repository
 
 GitHub: `yitzchak-hash/wolfson-management-app`
-Development branch: `claude/blissful-cray-spTFY`
-Hosting: Vercel (auto-deploys on push to the development branch)
+Hosting: Vercel (auto-deploys on push to the connected branch)
