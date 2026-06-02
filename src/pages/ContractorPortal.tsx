@@ -1027,10 +1027,26 @@ export function ContractorPortal() {
                   )}
 
                   {noteAttachment && (
-                    <div className="flex items-center gap-2 mb-2 px-2 py-1.5 bg-blue-50 rounded-lg border border-blue-100 text-xs text-blue-700">
-                      <Paperclip size={11} />
-                      <span className="flex-1 truncate">{noteAttachment.filename}</span>
-                      <button onClick={() => setNoteAttachment(null)} className="text-blue-400 hover:text-blue-600"><X size={12} /></button>
+                    <div className="mb-2">
+                      {noteAttachment.mimeType.startsWith('image/') && noteAttachment.dataUrl ? (
+                        <div className="relative inline-block">
+                          <img
+                            src={noteAttachment.dataUrl}
+                            alt={noteAttachment.filename}
+                            className="max-h-28 rounded-xl object-cover border border-gray-200"
+                          />
+                          <button
+                            onClick={() => setNoteAttachment(null)}
+                            className="absolute top-1 right-1 w-5 h-5 flex items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70"
+                          ><X size={11} /></button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 px-2 py-1.5 bg-blue-50 rounded-lg border border-blue-100 text-xs text-blue-700">
+                          <Paperclip size={11} />
+                          <span className="flex-1 truncate">{noteAttachment.filename}</span>
+                          <button onClick={() => setNoteAttachment(null)} className="text-blue-400 hover:text-blue-600"><X size={12} /></button>
+                        </div>
+                      )}
                     </div>
                   )}
                   <div className="flex gap-2 items-end">
