@@ -1,12 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useStore } from '../data/store';
 import {
-  Plus, Trash2, Save, Edit2, X, CheckCircle2, Clock,
+  Plus, Trash2, Save, Edit2, X, CheckCircle2, Clock, Paperclip, ExternalLink,
 } from 'lucide-react';
-import { ContractorAssignment, ContractorCategory } from '../types';
+import { ContractorAssignment, ContractorCategory, TaskAttachment } from '../types';
 import { Toast } from '../components/ui/Toast';
 import { Tooltip } from '../components/ui/Tooltip';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
+import {
+  isUploadBackendConfigured, extractFolderId,
+  findOrCreateFolderViaBackend, uploadFileViaResumableSession,
+  shareFileToDrive, driveThumbUrl,
+} from '../data/driveApi';
 
 const CAT_COLORS: Record<ContractorCategory, string> = {
   drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981',
@@ -39,7 +44,71 @@ export function TasksPage() {
   }>({ taskDescription: '', dueDate: '', stageId: '', completedAt: null });
   const [showAdd, setShowAdd] = useState(false);
   const [addForm, setAddForm] = useState({ contractorId: '', aptId: '', task: '', dueDate: '', stageId: '' });
+  const [addAttachments, setAddAttachments] = useState<TaskAttachment[]>([]);
+  const [addUploadProgress, setAddUploadProgress] = useState<number | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const addFileInputRef = useRef<HTMLInputElement>(null);
+
+  async function compressImage(file: File): Promise<File> {
+    if (!file.type.startsWith('image/')) return file;
+    return new Promise(resolve => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const MAX = 1200;
+        const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(blob => {
+          resolve(blob ? new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }) : file);
+        }, 'image/jpeg', 0.72);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
+  }
+
+  async function handleAddFileChosen(file: File) {
+    const processed = await compressImage(file);
+    const id = crypto.randomUUID();
+
+    const apt = apartments.find(a => a.id === addForm.aptId);
+    if (isUploadBackendConfigured() && apt?.driveLink) {
+      try {
+        const mainFolderId = extractFolderId(apt.driveLink);
+        if (mainFolderId) {
+          setAddUploadProgress(1);
+          const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');
+          const taskNotesFolderId = await findOrCreateFolderViaBackend(photosFolderId, 'Task Notes');
+          const { fileId, webViewLink } = await uploadFileViaResumableSession(
+            taskNotesFolderId, processed,
+            pct => setAddUploadProgress(pct),
+          );
+          await shareFileToDrive(fileId);
+          setAddUploadProgress(null);
+          setAddAttachments(prev => [...prev, {
+            id, filename: processed.name, mimeType: processed.type,
+            dataUrl: '', driveFileId: fileId, driveUrl: webViewLink,
+          }]);
+          return;
+        }
+      } catch (e) {
+        console.warn('Drive upload failed for task attachment, falling back to base64:', e);
+        setAddUploadProgress(null);
+      }
+    }
+
+    const reader = new FileReader();
+    reader.onload = e => {
+      const dataUrl = e.target?.result as string ?? '';
+      setAddAttachments(prev => [...prev, { id, filename: processed.name, mimeType: processed.type, dataUrl }]);
+    };
+    reader.readAsDataURL(processed);
+  }
 
   function onToast(msg: string, type: 'success' | 'error' = 'success') {
     setToast({ msg, type });
@@ -94,17 +163,30 @@ export function TasksPage() {
       completedAt: null,
       createdBy: currentUser?.id ?? '',
       createdByName: currentUser?.name ?? 'Office',
+      attachments: addAttachments.length > 0 ? addAttachments : undefined,
     });
     if (addForm.stageId && addForm.stageId !== apt.currentStageId && currentUser) {
       updateApartment(apt.id, { currentStageId: addForm.stageId }, currentUser);
     }
     setAddForm({ contractorId: '', aptId: '', task: '', dueDate: '', stageId: '' });
+    setAddAttachments([]);
     setShowAdd(false);
     onToast('Task added');
   }
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
+      <input
+        ref={addFileInputRef}
+        type="file"
+        accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx"
+        className="hidden"
+        onChange={e => {
+          const file = e.target.files?.[0];
+          if (file) handleAddFileChosen(file);
+          e.target.value = '';
+        }}
+      />
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Tasks</h1>
 
       <div className="space-y-4">
@@ -197,13 +279,69 @@ export function TasksPage() {
               placeholder="Task description *"
               className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white resize-none mb-3"
             />
-            <button
-              onClick={handleAdd}
-              disabled={!addForm.contractorId || !addForm.aptId || !addForm.task.trim()}
-              className="flex items-center gap-1.5 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium disabled:opacity-40"
-            >
-              <Plus size={15} /> Create Task
-            </button>
+
+            {/* Attachment previews */}
+            {addAttachments.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {addAttachments.map(att => (
+                  <div key={att.id} className="relative">
+                    {att.mimeType.startsWith('image/') ? (
+                      <>
+                        <img
+                          src={att.driveFileId ? driveThumbUrl(att.driveFileId, 300) : att.dataUrl}
+                          alt={att.filename}
+                          className="h-16 w-16 object-cover rounded-lg border border-blue-200"
+                        />
+                        <button
+                          onClick={() => setAddAttachments(prev => prev.filter(a => a.id !== att.id))}
+                          className="absolute -top-1 -right-1 w-4 h-4 flex items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80"
+                        >
+                          <X size={9} />
+                        </button>
+                      </>
+                    ) : (
+                      <div className="flex items-center gap-1.5 px-2 py-1.5 bg-blue-50 rounded-lg border border-blue-100 text-xs text-blue-700">
+                        <Paperclip size={10} />
+                        <span className="truncate max-w-[120px]">{att.filename}</span>
+                        <button
+                          onClick={() => setAddAttachments(prev => prev.filter(a => a.id !== att.id))}
+                          className="text-blue-400 hover:text-blue-600"
+                        >
+                          <X size={11} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Upload progress */}
+            {addUploadProgress !== null && (
+              <div className="mb-3 h-1.5 bg-blue-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-blue-400 transition-all duration-300 rounded-full"
+                  style={{ width: `${addUploadProgress}%` }}
+                />
+              </div>
+            )}
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => addFileInputRef.current?.click()}
+                className="flex items-center gap-1 px-3 py-2 border border-blue-200 text-blue-600 rounded-lg text-sm hover:bg-blue-100 transition-colors"
+                title="Attach file"
+              >
+                <Paperclip size={14} />
+              </button>
+              <button
+                onClick={handleAdd}
+                disabled={!addForm.contractorId || !addForm.aptId || !addForm.task.trim()}
+                className="flex items-center gap-1.5 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium disabled:opacity-40"
+              >
+                <Plus size={15} /> Create Task
+              </button>
+            </div>
           </div>
         )}
 
@@ -278,6 +416,44 @@ export function TasksPage() {
                           <span className="text-xs text-green-600">Done {format(new Date(a.completedAt), 'MMM d')}</span>
                         )}
                       </div>
+
+                      {/* Task attachments */}
+                      {a.attachments && a.attachments.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {a.attachments.map(att => (
+                            att.mimeType?.startsWith('image/') ? (
+                              att.driveFileId ? (
+                                <a key={att.id} href={att.driveUrl ?? '#'} target="_blank" rel="noopener noreferrer">
+                                  <img
+                                    src={driveThumbUrl(att.driveFileId, 300)}
+                                    alt={att.filename}
+                                    className="h-14 w-14 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-90"
+                                  />
+                                </a>
+                              ) : att.dataUrl ? (
+                                <img
+                                  key={att.id}
+                                  src={att.dataUrl}
+                                  alt={att.filename}
+                                  className="h-14 w-14 object-cover rounded-lg border border-gray-200"
+                                />
+                              ) : null
+                            ) : (
+                              <a
+                                key={att.id}
+                                href={att.driveUrl ?? '#'}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-lg text-xs text-gray-600 hover:bg-gray-200 transition-colors"
+                              >
+                                <Paperclip size={10} />
+                                <span className="truncate max-w-[120px]">{att.filename}</span>
+                                <ExternalLink size={9} className="text-gray-400 flex-shrink-0" />
+                              </a>
+                            )
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-1 flex-shrink-0">

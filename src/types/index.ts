@@ -36,6 +36,11 @@ export interface StageNote {
   updatedAt: string;
   updatedBy: string;
   updatedByName: string;
+  attachmentFilename?: string;
+  attachmentMimeType?: string;
+  attachmentDataUrl?: string;
+  attachmentDriveFileId?: string;
+  attachmentDriveUrl?: string;
 }
 
 export interface Apartment {

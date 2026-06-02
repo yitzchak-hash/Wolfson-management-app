@@ -102,7 +102,7 @@ interface AppState {
   bulkUpdateApartments: (ids: string[], changes: Partial<Apartment>, user: User) => void;
   addApartment: (apt: Apartment) => void;
 
-  upsertStageNote: (apartmentId: string, stageId: string, noteText: string, user: User) => void;
+  upsertStageNote: (apartmentId: string, stageId: string, noteText: string, user: User, attachment?: { filename?: string; mimeType?: string; dataUrl?: string; driveFileId?: string; driveUrl?: string } | null) => void;
   getStageNote: (apartmentId: string, stageId: string) => StageNote | undefined;
 
   updateStage: (id: string, changes: Partial<Stage>) => void;
@@ -325,21 +325,27 @@ export const useStore = create<AppState>((set, get) => ({
     fsSet('apartments', apt.id, apt);
   },
 
-  upsertStageNote: (apartmentId, stageId, noteText, user) => {
+  upsertStageNote: (apartmentId, stageId, noteText, user, attachment) => {
     const now = new Date().toISOString();
     const existing = get().stageNotes.find(n => n.apartmentId === apartmentId && n.stageId === stageId);
     const prevText = existing?.noteText ?? '';
 
+    const attachFields = attachment === null
+      ? { attachmentFilename: undefined, attachmentMimeType: undefined, attachmentDataUrl: undefined, attachmentDriveFileId: undefined, attachmentDriveUrl: undefined }
+      : attachment
+        ? { attachmentFilename: attachment.filename, attachmentMimeType: attachment.mimeType, attachmentDataUrl: attachment.dataUrl, attachmentDriveFileId: attachment.driveFileId, attachmentDriveUrl: attachment.driveUrl }
+        : {};
+
     let note: StageNote;
     if (existing) {
-      note = { ...existing, noteText, updatedAt: now, updatedBy: user.id, updatedByName: user.name };
+      note = { ...existing, noteText, updatedAt: now, updatedBy: user.id, updatedByName: user.name, ...attachFields };
       set(state => ({
         stageNotes: state.stageNotes.map(n =>
           n.apartmentId === apartmentId && n.stageId === stageId ? note : n
         ),
       }));
     } else {
-      note = { id: generateId(), apartmentId, stageId, noteText, updatedAt: now, updatedBy: user.id, updatedByName: user.name };
+      note = { id: generateId(), apartmentId, stageId, noteText, updatedAt: now, updatedBy: user.id, updatedByName: user.name, ...attachFields };
       set(state => ({ stageNotes: [...state.stageNotes, note] }));
     }
     persist(get);
