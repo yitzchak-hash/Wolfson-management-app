@@ -153,6 +153,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [lightbox, setLightbox] = useState<{ items: { fileId: string; filename: string; mimeType: string; thumbSrc: string; downloadHref: string }[]; index: number } | null>(null);
   const [officeUploadPct, setOfficeUploadPct] = useState<number | null>(null);
   const [showUnmergeModal, setShowUnmergeModal] = useState(false);
+  const [unmergeTarget, setUnmergeTarget] = useState<Apartment | null>(null);
   const [showPdfViewer, setShowPdfViewer] = useState(false);
   const [showHealthCheck, setShowHealthCheck] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -248,6 +249,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
 
   function handleSaveMerge() {
     if (!mergedWithId && mergedPartner) {
+      setUnmergeTarget(mergedPartner);
       setShowUnmergeModal(true);
       return;
     }
@@ -273,7 +275,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
 
   function handleConfirmUnmerge(keepDataAptId: string | 'both') {
     setShowUnmergeModal(false);
+    setUnmergeTarget(null);
     unmergeApartments(apartment!.id, keepDataAptId, currentUser);
+    setMergedWithId('');
     onToast(ui.apartmentUnlinked);
   }
 
@@ -317,9 +321,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       )}
 
       {/* Unmerge modal */}
-      {showUnmergeModal && mergedPartner && (
+      {showUnmergeModal && unmergeTarget && (
         <>
-          <div className="fixed inset-0 bg-black/50 z-[60]" onClick={() => setShowUnmergeModal(false)} />
+          <div className="fixed inset-0 bg-black/50 z-[60]" onClick={() => { setShowUnmergeModal(false); setUnmergeTarget(null); }} />
           <div className="fixed z-[70] bg-white rounded-2xl shadow-2xl p-6" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 'min(400px, 90vw)' }}>
             <h3 className="font-bold text-gray-900 mb-1 text-base">{ui.unlinkApartments}</h3>
             <p className="text-sm text-gray-500 mb-4">
@@ -329,11 +333,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               <button onClick={() => handleConfirmUnmerge(apartment.id)}
                 className="w-full text-left px-4 py-3 rounded-xl border-2 border-gray-200 hover:border-[#1e3a5f] transition-all">
                 <div className="font-medium text-sm text-gray-800">{ui.aptPrefix} {apartment.displayName || apartment.apartmentNumber} {ui.keepsData}</div>
-                <div className="text-xs text-gray-400 mt-0.5">{ui.aptPrefix} {mergedPartner.displayName || mergedPartner.apartmentNumber} — {ui.stageWillBeCleared}</div>
+                <div className="text-xs text-gray-400 mt-0.5">{ui.aptPrefix} {unmergeTarget.displayName || unmergeTarget.apartmentNumber} — {ui.stageWillBeCleared}</div>
               </button>
-              <button onClick={() => handleConfirmUnmerge(mergedPartner.id)}
+              <button onClick={() => handleConfirmUnmerge(unmergeTarget.id)}
                 className="w-full text-left px-4 py-3 rounded-xl border-2 border-gray-200 hover:border-[#1e3a5f] transition-all">
-                <div className="font-medium text-sm text-gray-800">{ui.aptPrefix} {mergedPartner.displayName || mergedPartner.apartmentNumber} {ui.keepsData}</div>
+                <div className="font-medium text-sm text-gray-800">{ui.aptPrefix} {unmergeTarget.displayName || unmergeTarget.apartmentNumber} {ui.keepsData}</div>
                 <div className="text-xs text-gray-400 mt-0.5">{ui.aptPrefix} {apartment.displayName || apartment.apartmentNumber} — {ui.stageWillBeCleared}</div>
               </button>
               <button onClick={() => handleConfirmUnmerge('both')}
@@ -342,7 +346,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 <div className="text-xs text-gray-400 mt-0.5">{ui.justRemovesLink}</div>
               </button>
             </div>
-            <button onClick={() => setShowUnmergeModal(false)} className="mt-3 w-full py-2 text-sm text-gray-500 hover:text-gray-700">{ui.cancel}</button>
+            <button onClick={() => { setShowUnmergeModal(false); setUnmergeTarget(null); }} className="mt-3 w-full py-2 text-sm text-gray-500 hover:text-gray-700">{ui.cancel}</button>
           </div>
         </>
       )}
@@ -872,15 +876,17 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                             </option>
                           ))}
                         </select>
-                        <Tooltip text={mergedWithId ? 'Link these apartments as a merged unit' : 'Clear the connected unit link'}>
-                          <button
-                            onClick={handleSaveMerge}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border transition-all bg-blue-600 text-white hover:bg-blue-700"
-                          >
-                            {mergedWithId ? <Link size={14} /> : <Unlink size={14} />}
-                            {mergedWithId ? 'Link' : 'Clear'}
-                          </button>
-                        </Tooltip>
+                        {mergedWithId !== (apartment.mergedWith ?? '') && (
+                          <Tooltip text={mergedWithId ? ui.linkMutualHint : ui.unlinkApartments}>
+                            <button
+                              onClick={handleSaveMerge}
+                              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border transition-all bg-blue-600 text-white hover:bg-blue-700"
+                            >
+                              {mergedWithId ? <Link size={14} /> : <Unlink size={14} />}
+                              {ui.save}
+                            </button>
+                          </Tooltip>
+                        )}
                       </div>
                       <p className="text-xs text-gray-400 mt-1.5">{ui.linkMutualHint}</p>
                     </div>

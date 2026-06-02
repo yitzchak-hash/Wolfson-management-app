@@ -56,6 +56,7 @@ export function TasksPage() {
   const [editFields, setEditFields] = useState<{
     taskDescription: string; dueDate: string; stageId: string; completedAt: string | null; priority: string;
   }>({ taskDescription: '', dueDate: '', stageId: '', completedAt: null, priority: '' });
+  const [editAttachments, setEditAttachments] = useState<TaskAttachment[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [showBulkAdd, setShowBulkAdd] = useState(false);
   const [addForm, setAddForm] = useState({ contractorId: '', aptId: '', task: '', dueDate: '', stageId: '', priority: '' });
@@ -177,6 +178,7 @@ export function TasksPage() {
       completedAt: a.completedAt,
       priority: a.priority ?? 'normal',
     });
+    setEditAttachments(a.attachments ?? []);
   }
 
   function saveEdit(id: string) {
@@ -186,8 +188,10 @@ export function TasksPage() {
       stageId: editFields.stageId || null,
       completedAt: editFields.completedAt,
       priority: (editFields.priority as TaskPriority) || undefined,
+      attachments: editAttachments.length > 0 ? editAttachments : undefined,
     });
     setEditingId(null);
+    setEditAttachments([]);
     onToast(s.taskUpdated);
   }
 
@@ -654,6 +658,40 @@ export function TasksPage() {
                           <option value="low">{s.lowPriority}</option>
                         </select>
                       </div>
+                      {editAttachments.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {editAttachments.map(att => (
+                            <div key={att.id} className="relative group">
+                              {att.mimeType?.startsWith('image/') ? (
+                                att.driveFileId ? (
+                                  <img
+                                    src={driveThumbUrl(att.driveFileId, 200)}
+                                    alt={att.filename}
+                                    className="h-12 w-12 object-cover rounded-lg border border-gray-200"
+                                  />
+                                ) : att.dataUrl ? (
+                                  <img
+                                    src={att.dataUrl}
+                                    alt={att.filename}
+                                    className="h-12 w-12 object-cover rounded-lg border border-gray-200"
+                                  />
+                                ) : null
+                              ) : (
+                                <div className="inline-flex items-center gap-1 px-2 py-1.5 bg-gray-100 rounded-lg text-xs text-gray-600 border border-gray-200">
+                                  <Paperclip size={10} />
+                                  <span className="truncate max-w-[100px]">{att.filename}</span>
+                                </div>
+                              )}
+                              <button
+                                onClick={() => setEditAttachments(prev => prev.filter(a => a.id !== att.id))}
+                                className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white rounded-full text-xs items-center justify-center hidden group-hover:flex leading-none"
+                              >
+                                <X size={10} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       <div className="flex items-center gap-3">
                         <button
                           onClick={() => saveEdit(a.id)}
@@ -661,7 +699,7 @@ export function TasksPage() {
                         >
                           <Save size={13} /> {s.save}
                         </button>
-                        <button onClick={() => setEditingId(null)} className="text-xs text-gray-500 hover:text-gray-700">
+                        <button onClick={() => { setEditingId(null); setEditAttachments([]); }} className="text-xs text-gray-500 hover:text-gray-700">
                           {s.cancel}
                         </button>
                       </div>
