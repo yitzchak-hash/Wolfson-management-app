@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw } from 'lucide-react';
-import { Apartment, User } from '../../types';
+import { Apartment, User, getStageName } from '../../types';
 import { useStore } from '../../data/store';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import { StageNotesSection } from './StageNotesSection';
@@ -940,7 +940,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                               {stage && (
                                 <span className="text-[10px] px-1.5 py-0.5 rounded"
                                   style={{ backgroundColor: stage.color + '20', color: stage.color }}>
-                                  {stage.name}
+                                  {getStageName(stage, ui.isRtl)}
                                 </span>
                               )}
                               {a.priority === 'urgent' && (

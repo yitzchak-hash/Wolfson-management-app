@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { X, Plus, CheckCircle2, Clock, CalendarDays, ArrowRight, User2, Paperclip, FileText, X as XIcon, AlertTriangle, Pencil, Save, ZoomIn } from 'lucide-react';
-import { Apartment, User, ContractorCategory, TaskAttachment } from '../../types';
+import { Apartment, User, ContractorCategory, TaskAttachment, getStageName } from '../../types';
 import { useStore } from '../../data/store';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import { findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, isUploadBackendConfigured, extractFolderId } from '../../data/driveApi';
@@ -317,7 +317,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                           {stage && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded"
                               style={{ backgroundColor: stage.color + '20', color: stage.color }}>
-                              {stage.name}
+                              {getStageName(stage, s.isRtl)}
                             </span>
                           )}
                         </div>

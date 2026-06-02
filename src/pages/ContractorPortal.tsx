@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useStore } from '../data/store';
-import { ContractorAssignment, ContractorPhoto, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS } from '../types';
+import { ContractorAssignment, ContractorPhoto, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, getStageName } from '../types';
 import { format, isPast, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import {
   Camera, CheckCircle2, Clock, Building2, CalendarDays, FileText,
@@ -694,7 +694,7 @@ export function ContractorPortal() {
                           {stage && (
                             <span className="text-xs px-2 py-0.5 rounded-full font-medium"
                               style={{ backgroundColor: stage.color + '22', color: stage.color }}>
-                              {stage.name}
+                              {getStageName(stage, s.isRtl)}
                             </span>
                           )}
                         </div>
@@ -800,7 +800,7 @@ export function ContractorPortal() {
                     {stage && (
                       <span className="text-xs px-2.5 py-1 rounded-full font-medium"
                         style={{ backgroundColor: stage.color + '22', color: stage.color, border: `1px solid ${stage.color}33` }}>
-                        {stage.name}
+                        {getStageName(stage, s.isRtl)}
                       </span>
                     )}
                   </div>

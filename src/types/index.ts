@@ -20,12 +20,17 @@ export interface Building {
 export interface Stage {
   id: string;
   name: string;
+  nameHe?: string;  // Hebrew name for bilingual support
   color: string;
   order: number;
   active: boolean;
   description?: string; // kept for data compat; no longer shown in UI
   createdAt: string;
   updatedAt: string;
+}
+
+export function getStageName(stage: Stage, isRtl: boolean): string {
+  return (isRtl && stage.nameHe) ? stage.nameHe : stage.name;
 }
 
 export interface StageNoteAttachment {
@@ -721,6 +726,20 @@ export interface MainUiStrings {
   invalidCode: string;
   enterProject: string;
   footerText: string;
+  // Settings Language tab chrome
+  rtlLayoutLabel: string;
+  rtlLayoutHint: string;
+  langSearchPlaceholder: string;
+  langFieldsMatch: string;
+  langNoMatch: string;
+  adminUiLangSection: string;
+  contractorLangSection: string;
+  saveAdminLang: string;
+  saveLang: string;
+  // Settings App chrome
+  driveFolderSave: string;
+  firebaseDesc: string;
+  forcePushDesc: string;
 }
 
 export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
@@ -1044,6 +1063,20 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   invalidCode: 'Invalid code. Please try again.',
   enterProject: 'Enter Project',
   footerText: 'TzviAir Internal System',
+  // Settings Language tab chrome
+  rtlLayoutLabel: 'Right-to-Left (RTL) layout',
+  rtlLayoutHint: 'Enable for Hebrew, Arabic, and other RTL languages.',
+  langSearchPlaceholder: 'Search language fields…',
+  langFieldsMatch: 'fields match',
+  langNoMatch: 'No fields match',
+  adminUiLangSection: 'Admin UI Language',
+  contractorLangSection: 'Contractor Portal Language',
+  saveAdminLang: 'Save Admin UI Language',
+  saveLang: 'Save Language Settings',
+  // Settings App chrome
+  driveFolderSave: 'Save',
+  firebaseDesc: 'Tests each service one by one — runs a live read/write to confirm Firestore works.',
+  forcePushDesc: 'If cloud data looks out of date, push your current local state to overwrite it.',
 };
 
 export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
@@ -1367,4 +1400,18 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   invalidCode: 'קוד שגוי. נסה שוב.',
   enterProject: 'כנס לפרויקט',
   footerText: 'מערכת פנימית של TzviAir',
+  // Settings Language tab chrome
+  rtlLayoutLabel: 'פריסת ימין לשמאל (RTL)',
+  rtlLayoutHint: 'הפעל עבור עברית, ערבית ושפות RTL אחרות.',
+  langSearchPlaceholder: 'חפש שדות שפה…',
+  langFieldsMatch: 'שדות תואמים',
+  langNoMatch: 'אין שדות תואמים',
+  adminUiLangSection: 'שפת ממשק ניהול',
+  contractorLangSection: 'שפת פורטל קבלנים',
+  saveAdminLang: 'שמור שפת ממשק ניהול',
+  saveLang: 'שמור הגדרות שפה',
+  // Settings App chrome
+  driveFolderSave: 'שמור',
+  firebaseDesc: 'בודק כל שירות אחד אחד — מבצע קריאה/כתיבה חיה כדי לאשר ש-Firestore פועל.',
+  forcePushDesc: 'אם נתוני הענן נראים לא מעודכנים, דחוף את המצב המקומי הנוכחי שלך כדי לדרוס אותם.',
 };

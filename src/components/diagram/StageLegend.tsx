@@ -1,5 +1,6 @@
 import React from 'react';
-import { Stage } from '../../types';
+import { Stage, getStageName } from '../../types';
+import { useStore } from '../../data/store';
 
 interface StageLegendProps {
   stages: Stage[];
@@ -8,6 +9,7 @@ interface StageLegendProps {
 }
 
 export function StageLegend({ stages, activeStageIds, onToggle }: StageLegendProps) {
+  const isRtl = useStore(state => state.mainUiStrings.isRtl);
   const sorted = [...stages].filter(s => s.active).sort((a, b) => a.order - b.order);
 
   return (
@@ -30,7 +32,7 @@ export function StageLegend({ stages, activeStageIds, onToggle }: StageLegendPro
             }}
           >
             <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color }} />
-            {stage.name}
+            {getStageName(stage, isRtl)}
           </button>
         );
       })}

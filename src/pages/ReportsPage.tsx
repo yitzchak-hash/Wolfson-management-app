@@ -3,6 +3,7 @@ import { Download, Printer, Filter, SlidersHorizontal, Search, X, ClipboardList 
 import { useStore } from '../data/store';
 import { format } from 'date-fns';
 import { saveAs } from 'file-saver';
+import { getStageName as getStageNameBilingual } from '../types';
 
 type BuildingFilter = 'all' | 'A1' | 'A2' | 'A3';
 type ClassFilter = 'all' | 'standard' | 'shinui';
@@ -97,7 +98,8 @@ export function ReportsPage() {
 
   function getStageName(stageId: string | null | undefined): string {
     if (!stageId) return 'Not Started';
-    return stages.find(s => s.id === stageId)?.name ?? stageId;
+    const stage = stages.find(st => st.id === stageId);
+    return stage ? getStageNameBilingual(stage, s.isRtl) : stageId;
   }
 
   function getAptTasks(aptId: string) {
@@ -429,7 +431,7 @@ export function ReportsPage() {
                             <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium"
                               style={{ backgroundColor: stage.color + '22', color: stage.color }}>
                               <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: stage.color }} />
-                              {stage.name}
+                              {getStageNameBilingual(stage, s.isRtl)}
                             </span>
                           ) : (
                             <span className="text-gray-400 text-xs">{s.notStarted}</span>

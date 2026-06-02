@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { ChevronDown, ChevronUp, Save, Calendar, User, MessageSquare, Paperclip, X, ExternalLink, Clock, RotateCcw } from 'lucide-react';
-import { Stage, User as UserType, StageNoteAttachment } from '../../types';
+import { Stage, User as UserType, StageNoteAttachment, getStageName } from '../../types';
 import { useStore } from '../../data/store';
 import { format } from 'date-fns';
 import {
@@ -226,7 +226,7 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
             >
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color }} />
-                <span className="text-sm font-medium text-gray-800">{stage.name}</span>
+                <span className="text-sm font-medium text-gray-800">{getStageName(stage, s.isRtl)}</span>
                 {hasNote && (
                   <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">{s.noteLabel}</span>
                 )}
@@ -296,7 +296,7 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                   <textarea
                     value={getDraft(stage.id)}
                     onChange={e => setDrafts(d => ({ ...d, [stage.id]: e.target.value }))}
-                    placeholder={`${s.officeNotesFor} ${stage.name}...`}
+                    placeholder={`${s.officeNotesFor} ${getStageName(stage, s.isRtl)}...`}
                     rows={2}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
                   />

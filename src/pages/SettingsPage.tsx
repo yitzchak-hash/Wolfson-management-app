@@ -6,7 +6,7 @@ import {
   Languages, Clock, RotateCcw, Wifi, WifiOff, Loader, Database, RefreshCw, CloudUpload, Search,
 } from 'lucide-react';
 import { isFirebaseConfigured, db, fsSet, fsGetAll } from '../data/firebase';
-import { Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency } from '../types';
+import { Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency, getStageName } from '../types';
 import { Tooltip } from '../components/ui/Tooltip';
 import { Toast } from '../components/ui/Toast';
 import { format } from 'date-fns';
@@ -121,6 +121,7 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast }: 
   const s = useStore(state => state.mainUiStrings);
   const [edits, setEdits] = useState<Record<string, Partial<Stage>>>({});
   const [newStageName, setNewStageName] = useState('');
+  const [newStageNameHe, setNewStageNameHe] = useState('');
   const [newStageColor, setNewStageColor] = useState('#6366f1');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -148,11 +149,14 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast }: 
     const maxOrder = stages.reduce((m, s) => Math.max(m, s.order), 0);
     addStage({
       id: 's' + Math.random().toString(36).substr(2, 6),
-      name: newStageName.trim(), color: newStageColor,
+      name: newStageName.trim(),
+      nameHe: newStageNameHe.trim() || undefined,
+      color: newStageColor,
       order: maxOrder + 1, active: true,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     });
     setNewStageName('');
+    setNewStageNameHe('');
     onToast('Stage added');
   }
 
@@ -182,8 +186,21 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast }: 
                     className="w-8 h-8 rounded-lg border-2 border-white shadow-md flex-shrink-0 ring-1 ring-gray-200 hover:scale-105 transition-transform"
                     style={{ backgroundColor: color }} />
                 </Tooltip>
-                <input value={name} onChange={e => setEdit(stage.id, { name: e.target.value })}
-                  className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
+                <div className="flex-1 flex flex-col gap-1">
+                  <input
+                    value={name}
+                    onChange={e => setEdit(stage.id, { name: e.target.value })}
+                    placeholder="English name"
+                    className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                  />
+                  <input
+                    value={(edit.nameHe ?? stage.nameHe) ?? ''}
+                    onChange={e => setEdit(stage.id, { nameHe: e.target.value })}
+                    placeholder="שם בעברית"
+                    dir="rtl"
+                    className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 text-right"
+                  />
+                </div>
                 <Tooltip text={active ? s.hideStage : s.activateStage}>
                   <button onClick={() => setEdit(stage.id, { active: !active })}
                     className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-all whitespace-nowrap ${active ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-100 border-gray-200 text-gray-500'}`}>
@@ -218,6 +235,11 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast }: 
               onKeyDown={e => e.key === 'Enter' && handleAddStage()}
               placeholder={s.stageName}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
+            <input value={newStageNameHe} onChange={e => setNewStageNameHe(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleAddStage()}
+              placeholder="שם בעברית (אופציונלי)"
+              dir="rtl"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 text-right" />
             <button onClick={handleAddStage}
               className="flex items-center gap-1.5 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors">
               <Plus size={16} /> {s.addNewStage}
@@ -552,7 +574,7 @@ function FirebaseStatusSection() {
         )}
       </div>
 
-      <p className="text-xs text-gray-400 mb-4">Tests each service one by one — runs a live read/write to confirm Firestore works.</p>
+      <p className="text-xs text-gray-400 mb-4">{s.firebaseDesc}</p>
 
       {/* Step list */}
       <div className="divide-y divide-gray-100 mb-4 rounded-lg border border-gray-100 overflow-hidden">
@@ -584,7 +606,7 @@ function FirebaseStatusSection() {
 
       <div className="mt-4 pt-4 border-t border-gray-100">
         <p className="text-xs text-gray-500 mb-2">
-          If cloud data looks out of date, push your current local state to overwrite it.
+          {s.forcePushDesc}
           ({apartments.length} apartments · {stages.length} stages · {contractors.length} contractors)
         </p>
         <div className="flex items-center gap-3">
@@ -932,7 +954,7 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
             <button
               onClick={() => { setBackupDriveFolder(driveFolderDraft.trim()); onToast('Drive folder saved'); }}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-xs font-medium hover:bg-[#162d4a] transition-colors whitespace-nowrap">
-              <Save size={12} /> Save
+              <Save size={12} /> {s.driveFolderSave}
             </button>
           </div>
           {backupDriveFolderLink && (
@@ -1392,10 +1414,24 @@ const MAIN_UI_FIELD_LABELS: { key: keyof Omit<MainUiStrings, 'isRtl'>; label: st
   { key: 'invalidCode',      label: 'Invalid code error',      group: 'Login' },
   { key: 'enterProject',     label: 'Enter project button',    group: 'Login' },
   { key: 'footerText',       label: 'Footer text',             group: 'Login' },
+  // Language Tab
+  { key: 'rtlLayoutLabel',        label: 'RTL layout label',         group: 'Language Tab' },
+  { key: 'rtlLayoutHint',         label: 'RTL layout hint',          group: 'Language Tab' },
+  { key: 'langSearchPlaceholder', label: 'Lang search placeholder',  group: 'Language Tab' },
+  { key: 'langFieldsMatch',       label: 'Fields match suffix',      group: 'Language Tab' },
+  { key: 'langNoMatch',           label: 'No fields match text',     group: 'Language Tab' },
+  { key: 'adminUiLangSection',    label: 'Admin UI section title',   group: 'Language Tab' },
+  { key: 'contractorLangSection', label: 'Contractor section title', group: 'Language Tab' },
+  { key: 'saveAdminLang',         label: 'Save admin lang button',   group: 'Language Tab' },
+  { key: 'saveLang',              label: 'Save lang button',         group: 'Language Tab' },
+  { key: 'driveFolderSave',       label: 'Drive folder save button', group: 'Settings' },
+  { key: 'firebaseDesc',          label: 'Firebase description',     group: 'Settings' },
+  { key: 'forcePushDesc',         label: 'Force push description',   group: 'Settings' },
 ];
 
 function LanguageTab({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
   const { contractorUiStrings, updateContractorUiStrings, mainUiStrings, updateMainUiStrings } = useStore();
+  const s = mainUiStrings;
   const [draft, setDraft] = useState<ContractorUiStrings>({ ...contractorUiStrings });
   const [mainDraft, setMainDraft] = useState<MainUiStrings>({ ...mainUiStrings });
   const [langSearch, setLangSearch] = useState('');
@@ -1442,7 +1478,7 @@ function LanguageTab({ onToast }: { onToast: (msg: string, type?: 'success' | 'e
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Languages size={18} className="text-[#1e3a5f]" />
-            <h2 className="font-semibold text-gray-800">Admin UI Language</h2>
+            <h2 className="font-semibold text-gray-800">{s.adminUiLangSection}</h2>
           </div>
           <div className="flex gap-2">
             <button
@@ -1467,7 +1503,7 @@ function LanguageTab({ onToast }: { onToast: (msg: string, type?: 'success' | 'e
             type="text"
             value={langSearch}
             onChange={e => setLangSearch(e.target.value)}
-            placeholder="Search language fields…"
+            placeholder={s.langSearchPlaceholder}
             className="w-full pl-8 pr-8 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
           />
           {langSearch && (
@@ -1480,14 +1516,14 @@ function LanguageTab({ onToast }: { onToast: (msg: string, type?: 'success' | 'e
           )}
         </div>
         {filteredMainFields && (
-          <p className="text-xs text-gray-400 mb-3">{filteredMainFields.length} field{filteredMainFields.length !== 1 ? 's' : ''} match</p>
+          <p className="text-xs text-gray-400 mb-3">{filteredMainFields.length} {s.langFieldsMatch}</p>
         )}
 
         {/* RTL toggle */}
         <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 mb-5">
           <div>
-            <p className="text-sm font-medium text-gray-700">Right-to-Left (RTL) layout</p>
-            <p className="text-xs text-gray-500 mt-0.5">Enable for Hebrew, Arabic, and other RTL languages.</p>
+            <p className="text-sm font-medium text-gray-700">{s.rtlLayoutLabel}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{s.rtlLayoutHint}</p>
           </div>
           <button onClick={() => setMainDraft(d => ({ ...d, isRtl: !d.isRtl }))} className="flex-shrink-0 ml-3">
             {mainDraft.isRtl
@@ -1499,7 +1535,7 @@ function LanguageTab({ onToast }: { onToast: (msg: string, type?: 'success' | 'e
 
         {filteredMainFields ? (
           filteredMainFields.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-4">No fields match "{langSearch}"</p>
+            <p className="text-sm text-gray-400 text-center py-4">{s.langNoMatch} "{langSearch}"</p>
           ) : (
             <div className="space-y-2 mb-5">
               {filteredMainFields.map(({ key, label, group }) => (
@@ -1543,7 +1579,7 @@ function LanguageTab({ onToast }: { onToast: (msg: string, type?: 'success' | 'e
           onClick={saveMain}
           className="flex items-center gap-2 px-5 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors"
         >
-          <Save size={15} /> Save Admin UI Language
+          <Save size={15} /> {s.saveAdminLang}
         </button>
       </div>
 
@@ -1552,7 +1588,7 @@ function LanguageTab({ onToast }: { onToast: (msg: string, type?: 'success' | 'e
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Languages size={18} className="text-[#1e3a5f]" />
-            <h2 className="font-semibold text-gray-800">Contractor Portal Language</h2>
+            <h2 className="font-semibold text-gray-800">{s.contractorLangSection}</h2>
           </div>
           <div className="flex gap-2">
             <button
@@ -1573,8 +1609,8 @@ function LanguageTab({ onToast }: { onToast: (msg: string, type?: 'success' | 'e
         {/* RTL toggle */}
         <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 mb-5">
           <div>
-            <p className="text-sm font-medium text-gray-700">Right-to-Left (RTL) layout</p>
-            <p className="text-xs text-gray-500 mt-0.5">Enable for Hebrew, Arabic, and other RTL languages.</p>
+            <p className="text-sm font-medium text-gray-700">{s.rtlLayoutLabel}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{s.rtlLayoutHint}</p>
           </div>
           <button onClick={() => setDraft(d => ({ ...d, isRtl: !d.isRtl }))} className="flex-shrink-0 ml-3">
             {draft.isRtl
@@ -1608,7 +1644,7 @@ function LanguageTab({ onToast }: { onToast: (msg: string, type?: 'success' | 'e
           onClick={save}
           className="flex items-center gap-2 px-5 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors"
         >
-          <Save size={15} /> Save Language Settings
+          <Save size={15} /> {s.saveLang}
         </button>
       </div>
     </div>

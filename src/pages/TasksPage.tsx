@@ -4,7 +4,7 @@ import {
   Plus, Trash2, Save, Edit2, X, CheckCircle2, Clock, Paperclip, ExternalLink, Layers, Filter,
 } from 'lucide-react';
 import { BulkAddTaskModal } from '../components/apartment/BulkAddTaskModal';
-import { ContractorAssignment, ContractorCategory, TaskAttachment, TaskPriority } from '../types';
+import { ContractorAssignment, ContractorCategory, TaskAttachment, TaskPriority, getStageName } from '../types';
 import { Toast } from '../components/ui/Toast';
 import { Tooltip } from '../components/ui/Tooltip';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
@@ -533,7 +533,7 @@ export function TasksPage() {
                             className="text-xs px-1.5 py-0.5 rounded"
                             style={{ backgroundColor: stage.color + '22', color: stage.color }}
                           >
-                            {stage.name}
+                            {getStageName(stage, s.isRtl)}
                           </span>
                         )}
                         {a.priority && a.priority !== 'normal' && (

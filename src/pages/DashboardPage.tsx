@@ -3,6 +3,7 @@ import { useStore } from '../data/store';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { Building2, AlertTriangle, CheckCircle2, Clock, FileText, ClipboardList, AlertCircle } from 'lucide-react';
+import { getStageName } from '../types';
 
 export function DashboardPage() {
   const { apartments, stages, activityLogs, contractorAssignments, mainUiStrings: s } = useStore();
@@ -81,7 +82,7 @@ export function DashboardPage() {
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
                       <span className="w-3 h-3 rounded-full" style={{ backgroundColor: stage.color }} />
-                      <span className="text-sm text-gray-700">{stage.name}</span>
+                      <span className="text-sm text-gray-700">{getStageName(stage, s.isRtl)}</span>
                     </div>
                     <span className="text-sm font-medium text-gray-800">{count} <span className="text-gray-400 font-normal text-xs">({pct}%)</span></span>
                   </div>
