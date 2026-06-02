@@ -740,6 +740,166 @@ export interface MainUiStrings {
   driveFolderSave: string;
   firebaseDesc: string;
   forcePushDesc: string;
+  // Contractor categories
+  categoryDrywall: string;
+  categoryAC: string;
+  categoryGeneral: string;
+  // Shared form labels
+  stageLabel: string;
+  dueDateLabel: string;
+  noneOption: string;
+  priorityLabel: string;
+  attachmentsLabel: string;
+  attachBtn: string;
+  descriptionLabel: string;
+  contractorLabel: string;
+  yesBtn: string;
+  uploadingLabel: string;
+  noneSelected: string;
+  basement: string;
+  aptShort: string;
+  // Toast / confirm messages
+  taskAdded: string;
+  noteSaved: string;
+  stageNameSaved: string;
+  stageNameAdded: string;
+  userAdded: string;
+  contractorAdded: string;
+  deletedLabel: string;
+  restoredLabel: string;
+  backupRestored: string;
+  importFailed: string;
+  snapshotRestored: string;
+  pdfFound: string;
+  themeAppliedDark: string;
+  themeAppliedLight: string;
+  deleteStageConfirmMsg: string;
+  deleteContractorConfirmMsg: string;
+  // QuickAdd / BulkAdd
+  newTaskHeading: string;
+  describeWorkPlaceholder: string;
+  tasksHeading: string;
+  noTasksYet: string;
+  createBulkTask: string;
+  whereToStoreFiles: string;
+  missingDriveLinksTitle: string;
+  selectTargetApt: string;
+  creatingTasksLabel: string;
+  filesWillKeepLocal: string;
+  noDriveAnyApt: string;
+  selectAptForDrive: string;
+  selectContractorPlaceholder: string;
+  taskDescRequired: string;
+  contractorRequired: string;
+  // Settings Page — export/import modals
+  exportSummaryTitle: string;
+  importSuccessTitle: string;
+  doneBtn: string;
+  exportedToDriveNote: string;
+  importRestoredNote: string;
+  summaryApartments: string;
+  summaryStages: string;
+  summaryContractors: string;
+  summaryTasks: string;
+  summaryCompletedTasks: string;
+  summaryPhotos: string;
+  summaryNotes: string;
+  summaryActivity: string;
+  summaryApartmentsRestored: string;
+  fileSizeKb: string;
+  // Settings Page — backup section
+  everyActivity: string;
+  snapshotsStored: string;
+  aptsCount: string;
+  tasksCount: string;
+  driveAutoExportSection: string;
+  folderConfigured: string;
+  stageNameEnglishPlaceholder: string;
+  // Apartment Drawer extra
+  downloadLabel: string;
+  settingsLabel: string;
+  statusLabel: string;
+  hideLabel: string;
+  stdShort: string;
+  chgShort: string;
+  recentActivityLabel: string;
+  autoBackupOn: string;
+  restoredToPoint: string;
+  filesAttachedToast: string;
+  fileAttachedToast: string;
+  driveLinkedCheck: string;
+  plansDetected: string;
+  noPdfHelp: string;
+  mergedDriveDiffers: string;
+  loadPhotosHint: string;
+  driveApiKeyHint: string;
+  restoreVersionTitle: string;
+  storedLocallyTitle: string;
+  removeFileTitle: string;
+  downloadFileTitle: string;
+  rescanDriveTooltip: string;
+  openFolderTooltip: string;
+  saveDriveLinkTooltip: string;
+  // ActivitySection
+  revertConfirmMsg: string;
+  restoreBtn: string;
+  restoreTooltip: string;
+  notStartedFallback: string;
+  // GlobalSearch
+  searchPlaceholder: string;
+  searchTypeApartment: string;
+  searchTypeTask: string;
+  searchTypeNote: string;
+  searchTypeContractorNote: string;
+  searchNoResults: string;
+  searchStartTyping: string;
+  // Reports — column headers
+  colBuilding: string;
+  colApartment: string;
+  colFloor: string;
+  colCurrentStage: string;
+  colClassification: string;
+  colGeneralNotes: string;
+  colLastUpdated: string;
+  colUpdatedBy: string;
+  colTaskDesc: string;
+  colContractor: string;
+  colDueDate: string;
+  colStatus: string;
+  colCompleted: string;
+  statusCompleted: string;
+  statusPending: string;
+  groundFloorLabel: string;
+  columnsBtn: string;
+  // BuildingDiagram / ProjectDiagram tooltips
+  shinuiTooltip: string;
+  addTaskTooltip: string;
+  hideShinuiBadgeTooltip: string;
+  showShinuiBadgeTooltip: string;
+  exitBulkModeTooltip: string;
+  enterBulkModeTooltip: string;
+  printDiagramTooltip: string;
+  clearFiltersTooltip: string;
+  printHeader: string;
+  // Activity inline template parts
+  activityChangedStage: string;
+  activityAddedNote: string;
+  activityUpdatedField: string;
+  activityOf: string;
+  activityMarkedAs: string;
+  activityAs: string;
+  activityUpdatedNotes: string;
+  activityRenamed: string;
+  activityIn: string;
+  activityTo: string;
+  // StageNotes
+  versionsCount: string;
+  versionCount: string;
+  emptyNoteLabel: string;
+  unknownStage: string;
+  // Login extra
+  loginSubtitle: string;
+  loginFooterBrand: string;
 }
 
 export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
@@ -1077,6 +1237,166 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   driveFolderSave: 'Save',
   firebaseDesc: 'Tests each service one by one — runs a live read/write to confirm Firestore works.',
   forcePushDesc: 'If cloud data looks out of date, push your current local state to overwrite it.',
+  // Contractor categories
+  categoryDrywall: 'Drywall',
+  categoryAC: 'AC',
+  categoryGeneral: 'General',
+  // Shared form labels
+  stageLabel: 'Stage',
+  dueDateLabel: 'Due date',
+  noneOption: 'None',
+  priorityLabel: 'Priority',
+  attachmentsLabel: 'Attachments',
+  attachBtn: 'Attach',
+  descriptionLabel: 'Description',
+  contractorLabel: 'Contractor',
+  yesBtn: 'Yes',
+  uploadingLabel: 'Uploading…',
+  noneSelected: '— None —',
+  basement: 'Basement',
+  aptShort: 'Apt',
+  // Toast / confirm messages
+  taskAdded: 'Task added',
+  noteSaved: 'Note saved',
+  stageNameSaved: 'Stage saved',
+  stageNameAdded: 'Stage added',
+  userAdded: 'User added',
+  contractorAdded: 'Contractor added',
+  deletedLabel: 'Deleted',
+  restoredLabel: 'Restored',
+  backupRestored: 'Backup restored successfully',
+  importFailed: 'Import failed',
+  snapshotRestored: 'Snapshot restored',
+  pdfFound: 'PDF found',
+  themeAppliedDark: 'Dark theme applied',
+  themeAppliedLight: 'Light theme applied',
+  deleteStageConfirmMsg: 'Delete this stage?',
+  deleteContractorConfirmMsg: 'Delete this contractor?',
+  // QuickAdd / BulkAdd
+  newTaskHeading: 'New Task',
+  describeWorkPlaceholder: 'Describe the work to be done…',
+  tasksHeading: 'Tasks',
+  noTasksYet: 'No tasks assigned yet.',
+  createBulkTask: 'Create Bulk Task',
+  whereToStoreFiles: 'Where to put the attached files?',
+  missingDriveLinksTitle: 'Missing Drive Links',
+  selectTargetApt: 'Select target apartment',
+  creatingTasksLabel: 'Creating tasks…',
+  filesWillKeepLocal: "Files can't be uploaded to Drive for these apartments. They'll keep local copies instead.",
+  noDriveAnyApt: 'None of the selected apartments have a Google Drive folder configured.',
+  selectAptForDrive: "Choose which apartment's Drive folder will receive the uploaded files. All other apartments will keep a local copy.",
+  selectContractorPlaceholder: 'Select contractor…',
+  taskDescRequired: 'Task description *',
+  contractorRequired: 'Contractor *',
+  // Settings Page — export/import modals
+  exportSummaryTitle: 'Export Summary',
+  importSuccessTitle: 'Import Successful',
+  doneBtn: 'Done',
+  exportedToDriveNote: 'Also uploaded to Google Drive backup folder.',
+  importRestoredNote: 'All data has been fully restored. This replaced the previous state.',
+  summaryApartments: 'Apartments',
+  summaryStages: 'Active stages',
+  summaryContractors: 'Active contractors',
+  summaryTasks: 'Tasks',
+  summaryCompletedTasks: 'Completed tasks',
+  summaryPhotos: 'Photos & files',
+  summaryNotes: 'Notes',
+  summaryActivity: 'Activity entries',
+  summaryApartmentsRestored: 'Apartments restored',
+  fileSizeKb: 'KB',
+  // Settings Page — backup section
+  everyActivity: 'Every Activity',
+  snapshotsStored: 'stored',
+  aptsCount: 'apts',
+  tasksCount: 'tasks',
+  driveAutoExportSection: 'Google Drive Auto-Export',
+  folderConfigured: 'Folder configured',
+  stageNameEnglishPlaceholder: 'English name',
+  // Apartment Drawer extra
+  downloadLabel: 'Download',
+  settingsLabel: 'Settings',
+  statusLabel: 'Status',
+  hideLabel: 'Hide',
+  stdShort: 'Std',
+  chgShort: 'Chg',
+  recentActivityLabel: 'Recent Activity',
+  autoBackupOn: 'Auto-backup on',
+  restoredToPoint: 'Restored to selected point in time',
+  filesAttachedToast: 'files attached',
+  fileAttachedToast: 'file attached',
+  driveLinkedCheck: 'Drive folder linked',
+  plansDetected: 'Plans PDF detected',
+  noPdfHelp: 'No PDF found. Check folder has "Engineered Plans" subfolder or PDF at root.',
+  mergedDriveDiffers: 'Merged partner has a different Drive link. Saving will sync both.',
+  loadPhotosHint: 'Click the Photos tab to load from Drive.',
+  driveApiKeyHint: 'Set VITE_DRIVE_API_KEY to enable photo browsing.',
+  restoreVersionTitle: 'Restore this version',
+  storedLocallyTitle: 'Stored locally only — not synced to Drive',
+  removeFileTitle: 'Remove file',
+  downloadFileTitle: 'Download file',
+  rescanDriveTooltip: 'Re-scan Drive folder for Plans PDF',
+  openFolderTooltip: 'Open folder in Drive',
+  saveDriveLinkTooltip: 'Save drive link',
+  // ActivitySection
+  revertConfirmMsg: 'Revert all data to this point?',
+  restoreBtn: 'Restore',
+  restoreTooltip: 'Restore to state before this change',
+  notStartedFallback: 'Not started',
+  // GlobalSearch
+  searchPlaceholder: 'Search apartments, tasks, notes…',
+  searchTypeApartment: 'Apartment',
+  searchTypeTask: 'Task',
+  searchTypeNote: 'Stage Note',
+  searchTypeContractorNote: 'Contractor Note',
+  searchNoResults: 'No results',
+  searchStartTyping: 'Start typing to search…',
+  // Reports — column headers
+  colBuilding: 'Building',
+  colApartment: 'Apartment',
+  colFloor: 'Floor',
+  colCurrentStage: 'Current Stage',
+  colClassification: 'Classification',
+  colGeneralNotes: 'General Notes',
+  colLastUpdated: 'Last Updated',
+  colUpdatedBy: 'Updated By',
+  colTaskDesc: 'Description',
+  colContractor: 'Contractor',
+  colDueDate: 'Due Date',
+  colStatus: 'Status',
+  colCompleted: 'Completed',
+  statusCompleted: 'Completed',
+  statusPending: 'Pending',
+  groundFloorLabel: 'Ground',
+  columnsBtn: 'Columns',
+  // BuildingDiagram / ProjectDiagram tooltips
+  shinuiTooltip: 'Apartment has modifications (Shinui)',
+  addTaskTooltip: 'Add task',
+  hideShinuiBadgeTooltip: 'Hide the "C" badge on apartments with modifications',
+  showShinuiBadgeTooltip: 'Show badge on apartments with modifications (Shinui)',
+  exitBulkModeTooltip: 'Exit bulk update mode',
+  enterBulkModeTooltip: 'Select multiple apartments to update their stage at once',
+  printDiagramTooltip: 'Print building diagram',
+  clearFiltersTooltip: 'Clear all active filters',
+  printHeader: 'W Residence — Building Diagram',
+  // Activity inline template parts
+  activityChangedStage: 'changed stage of',
+  activityAddedNote: 'added note on',
+  activityUpdatedField: 'updated',
+  activityOf: 'of',
+  activityMarkedAs: 'marked',
+  activityAs: 'as',
+  activityUpdatedNotes: 'updated notes for',
+  activityRenamed: 'renamed',
+  activityIn: 'in',
+  activityTo: 'to',
+  // StageNotes
+  versionsCount: 'versions',
+  versionCount: 'version',
+  emptyNoteLabel: 'empty',
+  unknownStage: 'Unknown stage',
+  // Login extra
+  loginSubtitle: 'Internal project management system for AC installation tracking across all three buildings.',
+  loginFooterBrand: 'WOLFSON GROUP · PROJECT MANAGEMENT',
 };
 
 export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
@@ -1414,4 +1734,164 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   driveFolderSave: 'שמור',
   firebaseDesc: 'בודק כל שירות אחד אחד — מבצע קריאה/כתיבה חיה כדי לאשר ש-Firestore פועל.',
   forcePushDesc: 'אם נתוני הענן נראים לא מעודכנים, דחוף את המצב המקומי הנוכחי שלך כדי לדרוס אותם.',
+  // Contractor categories
+  categoryDrywall: 'גבס',
+  categoryAC: 'מיזוג',
+  categoryGeneral: 'כללי',
+  // Shared form labels
+  stageLabel: 'שלב',
+  dueDateLabel: 'תאריך יעד',
+  noneOption: 'ללא',
+  priorityLabel: 'עדיפות',
+  attachmentsLabel: 'קבצים מצורפים',
+  attachBtn: 'צרף',
+  descriptionLabel: 'תיאור',
+  contractorLabel: 'קבלן',
+  yesBtn: 'כן',
+  uploadingLabel: 'מעלה…',
+  noneSelected: '— ללא —',
+  basement: 'מרתף',
+  aptShort: 'דירה',
+  // Toast / confirm messages
+  taskAdded: 'משימה נוספה',
+  noteSaved: 'הערה נשמרה',
+  stageNameSaved: 'שלב נשמר',
+  stageNameAdded: 'שלב נוסף',
+  userAdded: 'משתמש נוסף',
+  contractorAdded: 'קבלן נוסף',
+  deletedLabel: 'נמחק',
+  restoredLabel: 'שוחזר',
+  backupRestored: 'גיבוי שוחזר בהצלחה',
+  importFailed: 'ייבוא נכשל',
+  snapshotRestored: 'גרסה שוחזרה',
+  pdfFound: 'PDF נמצא',
+  themeAppliedDark: 'ערכת כהה הופעלה',
+  themeAppliedLight: 'ערכת בהירה הופעלה',
+  deleteStageConfirmMsg: 'למחוק שלב זה?',
+  deleteContractorConfirmMsg: 'למחוק קבלן זה?',
+  // QuickAdd / BulkAdd
+  newTaskHeading: 'משימה חדשה',
+  describeWorkPlaceholder: 'תאר את העבודה שיש לבצע…',
+  tasksHeading: 'משימות',
+  noTasksYet: 'אין משימות מוקצות עדיין.',
+  createBulkTask: 'יצירת משימה מרוכזת',
+  whereToStoreFiles: 'איפה לשמור את הקבצים המצורפים?',
+  missingDriveLinksTitle: 'קישורי Drive חסרים',
+  selectTargetApt: 'בחר דירת יעד',
+  creatingTasksLabel: 'יוצר משימות…',
+  filesWillKeepLocal: 'לא ניתן להעלות קבצים ל-Drive עבור דירות אלה. יישמרו עותקים מקומיים.',
+  noDriveAnyApt: 'לאף אחת מהדירות הנבחרות אין תיקיית Google Drive מוגדרת.',
+  selectAptForDrive: 'בחר את תיקיית ה-Drive של הדירה שתקבל את הקבצים. שאר הדירות ישמרו עותק מקומי.',
+  selectContractorPlaceholder: 'בחר קבלן…',
+  taskDescRequired: 'תיאור משימה *',
+  contractorRequired: 'קבלן *',
+  // Settings Page — export/import modals
+  exportSummaryTitle: 'סיכום ייצוא',
+  importSuccessTitle: 'ייבוא הצליח',
+  doneBtn: 'סיום',
+  exportedToDriveNote: 'הועלה גם לתיקיית הגיבוי ב-Google Drive.',
+  importRestoredNote: 'כל הנתונים שוחזרו במלואם. זה החליף את המצב הקודם.',
+  summaryApartments: 'דירות',
+  summaryStages: 'שלבים פעילים',
+  summaryContractors: 'קבלנים פעילים',
+  summaryTasks: 'משימות',
+  summaryCompletedTasks: 'משימות שהושלמו',
+  summaryPhotos: 'תמונות וקבצים',
+  summaryNotes: 'הערות',
+  summaryActivity: 'פעולות',
+  summaryApartmentsRestored: 'דירות שוחזרו',
+  fileSizeKb: 'KB',
+  // Settings Page — backup section
+  everyActivity: 'כל פעולה',
+  snapshotsStored: 'שמורות',
+  aptsCount: 'דירות',
+  tasksCount: 'משימות',
+  driveAutoExportSection: 'ייצוא אוטומטי ל-Google Drive',
+  folderConfigured: 'תיקייה מוגדרת',
+  stageNameEnglishPlaceholder: 'שם באנגלית',
+  // Apartment Drawer extra
+  downloadLabel: 'הורד',
+  settingsLabel: 'הגדרות',
+  statusLabel: 'סטטוס',
+  hideLabel: 'הסתר',
+  stdShort: 'רגיל',
+  chgShort: 'שינוי',
+  recentActivityLabel: 'פעילות אחרונה',
+  autoBackupOn: 'גיבוי אוטומטי פעיל',
+  restoredToPoint: 'שוחזר לנקודת הזמן שנבחרה',
+  filesAttachedToast: 'קבצים צורפו',
+  fileAttachedToast: 'קובץ צורף',
+  driveLinkedCheck: 'תיקיית Drive מקושרת',
+  plansDetected: 'PDF תכניות זוהה',
+  noPdfHelp: 'לא נמצא PDF. בדוק שיש תיקיית "Engineered Plans" או PDF בשורש.',
+  mergedDriveDiffers: 'לדירה המקושרת יש קישור Drive שונה. השמירה תסנכרן את שניהם.',
+  loadPhotosHint: 'לחץ על לשונית התמונות לטעינה מ-Drive.',
+  driveApiKeyHint: 'הגדר VITE_DRIVE_API_KEY כדי לאפשר עיון בתמונות.',
+  restoreVersionTitle: 'שחזר גרסה זו',
+  storedLocallyTitle: 'נשמר מקומית בלבד — לא מסונכרן ל-Drive',
+  removeFileTitle: 'הסר קובץ',
+  downloadFileTitle: 'הורד קובץ',
+  rescanDriveTooltip: 'סרוק מחדש את תיקיית Drive לחיפוש PDF תכניות',
+  openFolderTooltip: 'פתח תיקייה ב-Drive',
+  saveDriveLinkTooltip: 'שמור קישור Drive',
+  // ActivitySection
+  revertConfirmMsg: 'לשחזר את כל הנתונים לנקודה זו?',
+  restoreBtn: 'שחזר',
+  restoreTooltip: 'שחזר למצב לפני שינוי זה',
+  notStartedFallback: 'לא התחיל',
+  // GlobalSearch
+  searchPlaceholder: 'חפש דירות, משימות, הערות…',
+  searchTypeApartment: 'דירה',
+  searchTypeTask: 'משימה',
+  searchTypeNote: 'הערת שלב',
+  searchTypeContractorNote: 'הערת קבלן',
+  searchNoResults: 'אין תוצאות',
+  searchStartTyping: 'התחל להקליד לחיפוש…',
+  // Reports — column headers
+  colBuilding: 'בניין',
+  colApartment: 'דירה',
+  colFloor: 'קומה',
+  colCurrentStage: 'שלב נוכחי',
+  colClassification: 'סיווג',
+  colGeneralNotes: 'הערות כלליות',
+  colLastUpdated: 'עדכון אחרון',
+  colUpdatedBy: 'עודכן על ידי',
+  colTaskDesc: 'תיאור',
+  colContractor: 'קבלן',
+  colDueDate: 'תאריך יעד',
+  colStatus: 'סטטוס',
+  colCompleted: 'הושלם',
+  statusCompleted: 'הושלם',
+  statusPending: 'ממתין',
+  groundFloorLabel: 'קרקע',
+  columnsBtn: 'עמודות',
+  // BuildingDiagram / ProjectDiagram tooltips
+  shinuiTooltip: 'דירת שינוי',
+  addTaskTooltip: 'הוסף משימה',
+  hideShinuiBadgeTooltip: 'הסתר תג שינוי בדירות',
+  showShinuiBadgeTooltip: 'הצג תג שינוי בדירות',
+  exitBulkModeTooltip: 'צא ממצב עדכון מרוכז',
+  enterBulkModeTooltip: 'בחר מספר דירות לעדכון שלב בבת אחת',
+  printDiagramTooltip: 'הדפס תרשים בניין',
+  clearFiltersTooltip: 'נקה את כל הפילטרים',
+  printHeader: 'ו רזידנס — תרשים בניין',
+  // Activity inline template parts
+  activityChangedStage: 'שינה שלב של',
+  activityAddedNote: 'הוסיף הערה על',
+  activityUpdatedField: 'עדכן',
+  activityOf: 'של',
+  activityMarkedAs: 'סימן',
+  activityAs: 'כ',
+  activityUpdatedNotes: 'עדכן הערות עבור',
+  activityRenamed: 'שינה שם של',
+  activityIn: 'ב',
+  activityTo: 'ל',
+  // StageNotes
+  versionsCount: 'גרסאות',
+  versionCount: 'גרסה',
+  emptyNoteLabel: 'ריק',
+  unknownStage: 'שלב לא ידוע',
+  // Login extra
+  loginSubtitle: 'מערכת ניהול פנימית למעקב אחר התקנות מיזוג בכל שלושת הבניינים.',
+  loginFooterBrand: 'קבוצת וולפסון · ניהול פרויקטים',
 };
