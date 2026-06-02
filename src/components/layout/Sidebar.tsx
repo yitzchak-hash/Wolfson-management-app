@@ -3,18 +3,18 @@ import { NavLink } from 'react-router-dom';
 import { Building2, LayoutDashboard, FileText, Settings, Activity, TrendingUp, ClipboardList } from 'lucide-react';
 import { useStore } from '../../data/store';
 
-const navItems = [
-  { to: '/project', icon: Building2, label: 'Project' },
-  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/tasks', icon: ClipboardList, label: 'Tasks' },
-  { to: '/analytics', icon: TrendingUp, label: 'Analytics' },
-  { to: '/reports', icon: FileText, label: 'Reports' },
-  { to: '/activity', icon: Activity, label: 'Activity' },
-  { to: '/settings', icon: Settings, label: 'Settings' },
-];
-
 export function Sidebar() {
-  const { lightTheme } = useStore();
+  const { lightTheme, mainUiStrings: s } = useStore();
+
+  const navItems = [
+    { to: '/project',   icon: Building2,      label: s.navProject },
+    { to: '/dashboard', icon: LayoutDashboard, label: s.navDashboard },
+    { to: '/tasks',     icon: ClipboardList,   label: s.navTasks },
+    { to: '/analytics', icon: TrendingUp,      label: s.navAnalytics },
+    { to: '/reports',   icon: FileText,        label: s.navReports },
+    { to: '/activity',  icon: Activity,        label: s.navActivity },
+    { to: '/settings',  icon: Settings,        label: s.navSettings },
+  ];
 
   return (
     <aside

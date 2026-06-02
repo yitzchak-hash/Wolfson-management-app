@@ -6,7 +6,7 @@ import { useStore } from '../../data/store';
 import { isFirebaseConfigured } from '../../data/firebase';
 
 export function AppLayout() {
-  const { startFirebaseSync, firebaseListening } = useStore();
+  const { startFirebaseSync, firebaseListening, mainUiStrings } = useStore();
 
   // If the user was already logged in (skipped the login page), Firebase sync
   // never gets triggered by the login action — start it here on first mount.
@@ -17,7 +17,7 @@ export function AppLayout() {
   }, []);
 
   return (
-    <div className="flex flex-col h-screen bg-gray-100">
+    <div className="flex flex-col h-screen bg-gray-100" dir={mainUiStrings.isRtl ? 'rtl' : 'ltr'}>
       <Header />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />

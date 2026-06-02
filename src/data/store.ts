@@ -1,7 +1,7 @@
 import { create } from 'zustand';
-import { Apartment, ActivityLog, Stage, StageNote, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS } from '../types';
+import { Apartment, ActivityLog, Stage, StageNote, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS } from '../types';
 import {
-  DEFAULT_BUILDINGS, DEFAULT_STAGES, DEFAULT_USERS, buildDefaultApartments, DATA_VERSION,
+  DEFAULT_BUILDINGS, DEFAULT_STAGES, DEFAULT_USERS, buildDefaultApartments, buildGroundFirstFloorSlots, DATA_VERSION,
 } from './initialData';
 import { fsSet, fsDelete, fsBatchSet, fsGetAll, fsListen, isFirebaseConfigured, db } from './firebase';
 
@@ -53,6 +53,41 @@ function checkAndMigrateData() {
 checkAndMigrateData();
 
 const stored = loadFromStorage(STORAGE_KEY, null) as Record<string, unknown> | null;
+
+function migrateApartments(apts: Apartment[]): Apartment[] {
+  let changed = false;
+  let result = [...apts];
+
+  // Fix A1 apt 37: was blank placeholder (id A1-BLANK-37), should be a real apartment
+  const blankIdx = result.findIndex(a => a.id === 'A1-BLANK-37');
+  if (blankIdx !== -1) {
+    const old = result[blankIdx];
+    result[blankIdx] = {
+      ...old,
+      id: 'A1-37',
+      apartmentNumber: '37',
+      displayName: old.displayName || '37',
+      isUnnamed: false,
+    };
+    changed = true;
+  }
+
+  // Add ground floor (0) and first floor (1) slots if missing
+  for (const bid of ['A1', 'A2', 'A3'] as const) {
+    const groundStart = bid === 'A1' ? 77 : 73;
+    const hasGround = result.some(a => a.buildingId === bid && a.floor === 0);
+    const hasFirst  = result.some(a => a.buildingId === bid && a.floor === 1);
+    if (!hasGround || !hasFirst) {
+      const newSlots = buildGroundFirstFloorSlots(bid);
+      if (!hasGround) result.push(...newSlots.filter(s => s.floor === 0));
+      if (!hasFirst)  result.push(...newSlots.filter(s => s.floor === 1));
+      changed = true;
+    }
+    void groundStart; // suppress unused-var warning
+  }
+
+  return changed ? result : apts;
+}
 
 function generateToken(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
@@ -153,6 +188,8 @@ interface AppState {
   // Contractor UI language strings
   contractorUiStrings: ContractorUiStrings;
   updateContractorUiStrings: (partial: Partial<ContractorUiStrings>) => void;
+  mainUiStrings: MainUiStrings;
+  updateMainUiStrings: (s: MainUiStrings) => void;
 
   // Office note files
   addOfficeNoteFile: (f: Omit<OfficeNoteFile, 'id' | 'uploadedAt'>) => void;
@@ -174,7 +211,7 @@ export const useStore = create<AppState>((set, get) => ({
   users: (stored?.users as User[] | null) ?? defaultData.users,
   buildings: defaultData.buildings,
   stages: (stored?.stages as Stage[] | null) ?? defaultData.stages,
-  apartments: (stored?.apartments as Apartment[] | null) ?? defaultData.apartments,
+  apartments: migrateApartments((stored?.apartments as Apartment[] | null) ?? defaultData.apartments),
   stageNotes: (stored?.stageNotes as StageNote[] | null) ?? [],
   activityLogs: (stored?.activityLogs as ActivityLog[] | null) ?? [],
   contractors: (stored?.contractors as Contractor[] | null) ?? [],
@@ -194,6 +231,7 @@ export const useStore = create<AppState>((set, get) => ({
   backupLogs: (stored?.backupLogs as BackupLogEntry[] | null) ?? [],
   backupDriveFolderLink: (stored?.backupDriveFolderLink as string | null) ?? '',
   contractorUiStrings: (stored?.contractorUiStrings as ContractorUiStrings | null) ?? DEFAULT_CONTRACTOR_UI_STRINGS,
+  mainUiStrings: (stored?.mainUiStrings as MainUiStrings | null) ?? DEFAULT_MAIN_UI_STRINGS,
   lightTheme: localStorage.getItem(THEME_KEY) === 'light',
   setLightTheme: (v: boolean) => {
     set({ lightTheme: v });
@@ -749,6 +787,12 @@ export const useStore = create<AppState>((set, get) => ({
     fsSet('settings', 'app', { contractorUiStrings: get().contractorUiStrings });
   },
 
+  updateMainUiStrings: (s) => {
+    set({ mainUiStrings: s });
+    persist(get);
+    fsSet('settings', 'app', { mainUiStrings: s });
+  },
+
   addOfficeNoteFile: (fields) => {
     const f: OfficeNoteFile = { ...fields, id: generateId(), uploadedAt: new Date().toISOString() };
     set(state => ({ officeNoteFiles: [...state.officeNoteFiles, f] }));
@@ -825,6 +869,7 @@ export const useStore = create<AppState>((set, get) => ({
         autoBackup: state.autoBackup, backupFrequency: state.backupFrequency,
         backupDriveFolderLink: state.backupDriveFolderLink,
         contractorUiStrings: state.contractorUiStrings,
+        mainUiStrings: state.mainUiStrings,
       }),
     ]);
   },
@@ -917,6 +962,7 @@ export const useStore = create<AppState>((set, get) => ({
         ...(appSettings.backupDriveFolderLink !== undefined ? { backupDriveFolderLink: appSettings.backupDriveFolderLink as string } : {}),
         ...(appSettings.contractorUiStrings  ? { contractorUiStrings:  appSettings.contractorUiStrings as ContractorUiStrings } : {}),
         ...(appSettings.autoBackup           !== undefined ? { autoBackup: appSettings.autoBackup as boolean } : {}),
+        ...(appSettings.mainUiStrings        ? { mainUiStrings: appSettings.mainUiStrings as MainUiStrings } : {}),
       }));
       persist(get);
 
@@ -959,6 +1005,7 @@ export const useStore = create<AppState>((set, get) => ({
           backupFrequency:       state.backupFrequency,
           backupDriveFolderLink: state.backupDriveFolderLink,
           contractorUiStrings:   state.contractorUiStrings,
+          mainUiStrings:         state.mainUiStrings,
         }),
       ]);
     }
@@ -1036,6 +1083,7 @@ export const useStore = create<AppState>((set, get) => ({
           ...(appS.backupDriveFolderLink !== undefined ? { backupDriveFolderLink: appS.backupDriveFolderLink as string } : {}),
           ...(appS.contractorUiStrings  ? { contractorUiStrings:  appS.contractorUiStrings as ContractorUiStrings } : {}),
           ...(appS.autoBackup           !== undefined ? { autoBackup: appS.autoBackup as boolean } : {}),
+          ...(appS.mainUiStrings        ? { mainUiStrings: appS.mainUiStrings as MainUiStrings } : {}),
         }));
         persist(get);
       }),
@@ -1081,6 +1129,7 @@ function persist(get: () => AppState) {
     backupLogs: state.backupLogs.slice(0, 50),
     backupDriveFolderLink: state.backupDriveFolderLink,
     contractorUiStrings: state.contractorUiStrings,
+    mainUiStrings: state.mainUiStrings,
   };
 
   const ok = saveToStorage(STORAGE_KEY, payload);

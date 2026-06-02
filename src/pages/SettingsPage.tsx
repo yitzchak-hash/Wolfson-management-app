@@ -6,7 +6,7 @@ import {
   Languages, Clock, RotateCcw, Wifi, WifiOff, Loader, Database,
 } from 'lucide-react';
 import { isFirebaseConfigured, db, fsSet, fsGetAll } from '../data/firebase';
-import { Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, BackupFrequency } from '../types';
+import { Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency } from '../types';
 import { Tooltip } from '../components/ui/Tooltip';
 import { Toast } from '../components/ui/Toast';
 import { format } from 'date-fns';
@@ -965,6 +965,7 @@ const STRING_FIELD_LABELS: { key: keyof Omit<ContractorUiStrings, 'isRtl'>; labe
   { key: 'filterToday',          label: 'Filter: Today',          group: 'Task List' },
   { key: 'filterTomorrow',       label: 'Filter: Tomorrow',       group: 'Task List' },
   { key: 'filterThisWeek',       label: 'Filter: This Week',      group: 'Task List' },
+  { key: 'filterYesterday',      label: 'Filter: Yesterday',      group: 'Task List' },
   { key: 'duePrefix',            label: 'Due prefix',             group: 'Task List' },
   { key: 'noApartmentsAssigned', label: 'No apts on map',         group: 'Map' },
   { key: 'mapHint',              label: 'Map hint text',          group: 'Map' },
@@ -997,13 +998,61 @@ const STRING_FIELD_LABELS: { key: keyof Omit<ContractorUiStrings, 'isRtl'>; labe
   { key: 'linkInvalid',          label: 'Link invalid message',   group: 'Errors' },
 ];
 
+const MAIN_UI_FIELD_LABELS: { key: keyof Omit<MainUiStrings, 'isRtl'>; label: string; group: string }[] = [
+  { key: 'navProject',      label: 'Project',       group: 'Sidebar' },
+  { key: 'navDashboard',    label: 'Dashboard',     group: 'Sidebar' },
+  { key: 'navTasks',        label: 'Tasks',          group: 'Sidebar' },
+  { key: 'navAnalytics',    label: 'Analytics',      group: 'Sidebar' },
+  { key: 'navReports',      label: 'Reports',        group: 'Sidebar' },
+  { key: 'navActivity',     label: 'Activity',       group: 'Sidebar' },
+  { key: 'navSettings',     label: 'Settings',       group: 'Sidebar' },
+  { key: 'pageDashboard',   label: 'Dashboard title',   group: 'Page Titles' },
+  { key: 'pageProject',     label: 'Project title',     group: 'Page Titles' },
+  { key: 'pageTasks',       label: 'Tasks title',        group: 'Page Titles' },
+  { key: 'pageAnalytics',   label: 'Analytics title',    group: 'Page Titles' },
+  { key: 'pageReports',     label: 'Reports title',      group: 'Page Titles' },
+  { key: 'pageActivity',    label: 'Activity title',     group: 'Page Titles' },
+  { key: 'pageSettings',    label: 'Settings title',     group: 'Page Titles' },
+  { key: 'totalUnits',      label: 'Total Units card',   group: 'Dashboard' },
+  { key: 'notStarted',      label: 'Not Started card',   group: 'Dashboard' },
+  { key: 'changes',         label: 'Changes card',       group: 'Dashboard' },
+  { key: 'withNotes',       label: 'With Notes card',    group: 'Dashboard' },
+  { key: 'progressByStage',    label: 'By Stage header',    group: 'Dashboard' },
+  { key: 'progressByBuilding', label: 'By Building header', group: 'Dashboard' },
+  { key: 'recentActivity',  label: 'Recent Activity',    group: 'Dashboard' },
+  { key: 'noActivity',      label: 'No activity text',   group: 'Dashboard' },
+  { key: 'tabDetails',      label: 'Details tab',        group: 'Drawer Tabs' },
+  { key: 'tabTasks',        label: 'Tasks tab',          group: 'Drawer Tabs' },
+  { key: 'tabNotes',        label: 'Notes tab',          group: 'Drawer Tabs' },
+  { key: 'tabPhotos',       label: 'Photos tab',         group: 'Drawer Tabs' },
+  { key: 'tabHistory',      label: 'History tab',        group: 'Drawer Tabs' },
+  { key: 'addTask',         label: 'Add Task button',    group: 'Tasks' },
+  { key: 'noTasks',         label: 'No tasks text',      group: 'Tasks' },
+  { key: 'allContractors',  label: 'All contractors',    group: 'Tasks' },
+  { key: 'selectContractor', label: 'Select contractor', group: 'Tasks' },
+  { key: 'selectApartment', label: 'Select apartment',   group: 'Tasks' },
+  { key: 'stageOptional',   label: 'Stage (optional)',   group: 'Tasks' },
+  { key: 'taskDescriptionPlaceholder', label: 'Task description', group: 'Tasks' },
+  { key: 'save',    label: 'Save',    group: 'Common' },
+  { key: 'cancel',  label: 'Cancel',  group: 'Common' },
+  { key: 'add',     label: 'Add',     group: 'Common' },
+  { key: 'delete',  label: 'Delete',  group: 'Common' },
+  { key: 'edit',    label: 'Edit',    group: 'Common' },
+  { key: 'settingsStages',      label: 'Stages tab',      group: 'Settings Tabs' },
+  { key: 'settingsUsers',       label: 'Users tab',       group: 'Settings Tabs' },
+  { key: 'settingsContractors', label: 'Contractors tab', group: 'Settings Tabs' },
+  { key: 'settingsApp',         label: 'App tab',         group: 'Settings Tabs' },
+  { key: 'settingsLanguage',    label: 'Language tab',    group: 'Settings Tabs' },
+];
+
 function LanguageTab({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
-  const { contractorUiStrings, updateContractorUiStrings } = useStore();
+  const { contractorUiStrings, updateContractorUiStrings, mainUiStrings, updateMainUiStrings } = useStore();
   const [draft, setDraft] = useState<ContractorUiStrings>({ ...contractorUiStrings });
+  const [mainDraft, setMainDraft] = useState<MainUiStrings>({ ...mainUiStrings });
 
   function save() {
     updateContractorUiStrings(draft);
-    onToast('Language settings saved');
+    onToast('Contractor language settings saved');
   }
 
   function resetTo(preset: ContractorUiStrings) {
@@ -1012,10 +1061,88 @@ function LanguageTab({ onToast }: { onToast: (msg: string, type?: 'success' | 'e
     onToast('Reset to ' + (preset.isRtl ? 'Hebrew' : 'English'));
   }
 
+  function saveMain() {
+    updateMainUiStrings(mainDraft);
+    onToast('Admin UI language settings saved');
+  }
+
+  function resetMainTo(preset: MainUiStrings) {
+    setMainDraft({ ...preset });
+    updateMainUiStrings(preset);
+    onToast('Reset admin UI to ' + (preset.isRtl ? 'Hebrew' : 'English'));
+  }
+
   const groups = Array.from(new Set(STRING_FIELD_LABELS.map(f => f.group)));
+  const mainGroups = Array.from(new Set(MAIN_UI_FIELD_LABELS.map(f => f.group)));
 
   return (
     <div className="space-y-5">
+
+      {/* ── Admin UI Language ──────────────────────────────────────────── */}
+      <div className="bg-white border border-gray-200 rounded-xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Languages size={18} className="text-[#1e3a5f]" />
+            <h2 className="font-semibold text-gray-800">Admin UI Language</h2>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => resetMainTo(DEFAULT_MAIN_UI_STRINGS)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              <RotateCcw size={12} /> English
+            </button>
+            <button
+              onClick={() => resetMainTo(HEBREW_MAIN_UI_STRINGS)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              <RotateCcw size={12} /> עברית
+            </button>
+          </div>
+        </div>
+
+        {/* RTL toggle */}
+        <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 mb-5">
+          <div>
+            <p className="text-sm font-medium text-gray-700">Right-to-Left (RTL) layout</p>
+            <p className="text-xs text-gray-500 mt-0.5">Enable for Hebrew, Arabic, and other RTL languages.</p>
+          </div>
+          <button onClick={() => setMainDraft(d => ({ ...d, isRtl: !d.isRtl }))} className="flex-shrink-0 ml-3">
+            {mainDraft.isRtl
+              ? <ToggleRight size={28} className="text-[#1e3a5f]" />
+              : <ToggleLeft size={28} className="text-gray-400" />
+            }
+          </button>
+        </div>
+
+        {mainGroups.map(group => (
+          <div key={group} className="mb-5">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{group}</p>
+            <div className="space-y-2">
+              {MAIN_UI_FIELD_LABELS.filter(f => f.group === group).map(({ key, label }) => (
+                <div key={key} className="flex items-start gap-3">
+                  <label className="text-xs text-gray-500 w-44 flex-shrink-0 pt-2">{label}</label>
+                  <input
+                    value={mainDraft[key] as string}
+                    onChange={e => setMainDraft(d => ({ ...d, [key]: e.target.value }))}
+                    className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                    dir={mainDraft.isRtl ? 'rtl' : 'ltr'}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        <button
+          onClick={saveMain}
+          className="flex items-center gap-2 px-5 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors"
+        >
+          <Save size={15} /> Save Admin UI Language
+        </button>
+      </div>
+
+      {/* ── Contractor Portal Language ─────────────────────────────────── */}
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">

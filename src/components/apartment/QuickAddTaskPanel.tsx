@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { X, Plus, CheckCircle2, Clock, CalendarDays, ArrowRight, User2, Paperclip, FileText, ImageIcon, X as XIcon, AlertTriangle, Pencil, Save } from 'lucide-react';
+import { X, Plus, CheckCircle2, Clock, CalendarDays, ArrowRight, User2, Paperclip, FileText, X as XIcon, AlertTriangle, Pencil, Save, ZoomIn } from 'lucide-react';
 import { Apartment, User, ContractorCategory, TaskAttachment } from '../../types';
 import { useStore } from '../../data/store';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
@@ -38,6 +38,8 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
   const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [attProgress, setAttProgress] = useState<Record<string, number>>({});
+  const [previewAtt, setPreviewAtt] = useState<TaskAttachment | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editContractorId, setEditContractorId] = useState('');
   const [editTask, setEditTask] = useState('');
@@ -96,21 +98,28 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
       try {
         const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');
         const notesFolderId = await findOrCreateFolderViaBackend(photosFolderId, 'Task Notes');
-        const results = await Promise.allSettled(
-          attachmentFiles.map(async (file, i) => {
-            const att = attachments[i];
-            const { fileId, webViewLink } = await uploadFileViaResumableSession(notesFolderId, file);
+        finalAttachments = [];
+        for (let i = 0; i < attachmentFiles.length; i++) {
+          const file = attachmentFiles[i];
+          const att = attachments[i];
+          setAttProgress(p => ({ ...p, [att.id]: 0 }));
+          try {
+            const { fileId, webViewLink } = await uploadFileViaResumableSession(
+              notesFolderId, file, pct => setAttProgress(p => ({ ...p, [att.id]: pct })),
+            );
             await shareFileToDrive(fileId);
-            return { ...att, dataUrl: '', driveFileId: fileId, driveUrl: webViewLink };
-          }),
-        );
-        finalAttachments = results.map((r, i) =>
-          r.status === 'fulfilled' ? r.value : attachments[i]
-        );
+            finalAttachments.push({ ...att, dataUrl: '', driveFileId: fileId, driveUrl: webViewLink });
+          } catch {
+            finalAttachments.push(att);
+          } finally {
+            setAttProgress(p => { const n = { ...p }; delete n[att.id]; return n; });
+          }
+        }
       } catch {
         // folder creation failed — fall back to base64 attachments
       } finally {
         setUploading(false);
+        setAttProgress({});
       }
     }
 
@@ -134,6 +143,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
     setDueDate('');
     setAttachments([]);
     setAttachmentFiles([]);
+    setAttProgress({});
     onToast('Task added');
   }
 
@@ -428,29 +438,57 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                     />
                     {attachments.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mt-2">
-                        {attachments.map(att => (
-                          <div key={att.id} className="relative flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg overflow-hidden" style={{ maxWidth: '120px' }}>
-                            {att.mimeType.startsWith('image/') ? (
-                              <img src={att.dataUrl} alt={att.filename} className="w-8 h-8 object-cover flex-shrink-0" />
-                            ) : (
-                              <div className="w-8 h-8 flex items-center justify-center flex-shrink-0 bg-gray-100">
-                                <FileText size={14} className="text-gray-400" />
-                              </div>
-                            )}
-                            <span className="text-[10px] text-gray-500 truncate pr-1" style={{ maxWidth: '60px' }}>{att.filename}</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const idx = attachments.findIndex(a => a.id === att.id);
-                                setAttachments(prev => prev.filter(a => a.id !== att.id));
-                                setAttachmentFiles(prev => prev.filter((_, i) => i !== idx));
-                              }}
-                              className="absolute top-0.5 right-0.5 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center"
+                        {attachments.map(att => {
+                          const pct = attProgress[att.id] ?? null;
+                          const isUploading = pct !== null;
+                          return (
+                            <div
+                              key={att.id}
+                              className="relative flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg overflow-hidden cursor-pointer hover:border-[#1e3a5f]/40 transition-colors"
+                              style={{ maxWidth: '120px' }}
+                              onClick={() => att.mimeType.startsWith('image/') && setPreviewAtt(att)}
                             >
-                              <XIcon size={8} color="white" />
-                            </button>
-                          </div>
-                        ))}
+                              {/* Green upload progress bar fills from left */}
+                              {isUploading && (
+                                <div
+                                  className="absolute inset-0 bg-green-400/30 transition-all duration-300 pointer-events-none"
+                                  style={{ width: `${pct}%` }}
+                                />
+                              )}
+                              {att.mimeType.startsWith('image/') ? (
+                                <div className="relative w-8 h-8 flex-shrink-0">
+                                  <img src={att.dataUrl} alt={att.filename} className="w-8 h-8 object-cover" />
+                                  {!isUploading && (
+                                    <div className="absolute inset-0 bg-black/0 hover:bg-black/20 flex items-center justify-center transition-all">
+                                      <ZoomIn size={10} className="text-white opacity-0 hover:opacity-100" />
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="w-8 h-8 flex items-center justify-center flex-shrink-0 bg-gray-100">
+                                  <FileText size={14} className="text-gray-400" />
+                                </div>
+                              )}
+                              <span className="text-[10px] text-gray-500 truncate pr-1 relative z-10" style={{ maxWidth: '60px' }}>
+                                {isUploading ? `${Math.round(pct)}%` : att.filename}
+                              </span>
+                              {!isUploading && (
+                                <button
+                                  type="button"
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    const idx = attachments.findIndex(a => a.id === att.id);
+                                    setAttachments(prev => prev.filter(a => a.id !== att.id));
+                                    setAttachmentFiles(prev => prev.filter((_, i) => i !== idx));
+                                  }}
+                                  className="absolute top-0.5 right-0.5 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center z-10"
+                                >
+                                  <XIcon size={8} color="white" />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -485,6 +523,29 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
           </div>
         </div>
       </div>
+
+      {/* Attachment image preview overlay */}
+      {previewAtt && (
+        <div
+          className="fixed inset-0 z-[400] bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setPreviewAtt(null)}
+        >
+          <div className="relative max-w-full max-h-full" onClick={e => e.stopPropagation()}>
+            <img
+              src={previewAtt.dataUrl}
+              alt={previewAtt.filename}
+              className="max-w-[90vw] max-h-[80vh] object-contain rounded-xl shadow-2xl"
+            />
+            <button
+              onClick={() => setPreviewAtt(null)}
+              className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center text-white"
+            >
+              <X size={16} />
+            </button>
+            <p className="text-center text-white/60 text-xs mt-2 truncate max-w-[90vw]">{previewAtt.filename}</p>
+          </div>
+        </div>
+      )}
     </>
   );
 }

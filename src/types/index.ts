@@ -224,6 +224,7 @@ export interface ContractorUiStrings {
   filterOverdue: string;
   filterToday: string;
   filterTomorrow: string;
+  filterYesterday: string;
   filterThisWeek: string;
   mapHint: string;
   sectionTask: string;
@@ -270,6 +271,7 @@ export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   filterOverdue: 'Overdue',
   filterToday: 'Today',
   filterTomorrow: 'Tomorrow',
+  filterYesterday: 'Yesterday',
   filterThisWeek: 'This Week',
   mapHint: 'Highlighted apartments are your assignments. Tap to open task.',
   sectionTask: 'Task',
@@ -316,6 +318,7 @@ export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   filterOverdue: 'באיחור',
   filterToday: 'היום',
   filterTomorrow: 'מחר',
+  filterYesterday: 'אתמול',
   filterThisWeek: 'השבוע',
   mapHint: 'הדירות המודגשות הן המשימות שלך. הקש לפתיחה.',
   sectionTask: 'משימה',
@@ -348,4 +351,157 @@ export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   taskPlural: 'משימות',
   doneLabel: 'הושלם',
   duePrefix: 'תאריך יעד',
+};
+
+// ─── Main Admin UI Strings ────────────────────────────────────────────────────
+
+export interface MainUiStrings {
+  isRtl: boolean;
+  // Sidebar navigation
+  navProject: string;
+  navDashboard: string;
+  navTasks: string;
+  navAnalytics: string;
+  navReports: string;
+  navActivity: string;
+  navSettings: string;
+  // Page titles
+  pageDashboard: string;
+  pageProject: string;
+  pageTasks: string;
+  pageAnalytics: string;
+  pageReports: string;
+  pageActivity: string;
+  pageSettings: string;
+  // Dashboard
+  totalUnits: string;
+  notStarted: string;
+  changes: string;
+  withNotes: string;
+  progressByStage: string;
+  progressByBuilding: string;
+  recentActivity: string;
+  // Apartment drawer tabs
+  tabDetails: string;
+  tabTasks: string;
+  tabNotes: string;
+  tabHistory: string;
+  tabPhotos: string;
+  // Common actions
+  save: string;
+  cancel: string;
+  add: string;
+  delete: string;
+  edit: string;
+  // Settings tabs
+  settingsStages: string;
+  settingsUsers: string;
+  settingsContractors: string;
+  settingsApp: string;
+  settingsLanguage: string;
+  // Misc
+  noActivity: string;
+  noTasks: string;
+  addTask: string;
+  allContractors: string;
+  selectContractor: string;
+  selectApartment: string;
+  stageOptional: string;
+  taskDescriptionPlaceholder: string;
+}
+
+export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
+  isRtl: false,
+  navProject: 'Project',
+  navDashboard: 'Dashboard',
+  navTasks: 'Tasks',
+  navAnalytics: 'Analytics',
+  navReports: 'Reports',
+  navActivity: 'Activity',
+  navSettings: 'Settings',
+  pageDashboard: 'Project Dashboard',
+  pageProject: 'Project Diagram',
+  pageTasks: 'Tasks',
+  pageAnalytics: 'Analytics',
+  pageReports: 'Reports',
+  pageActivity: 'Activity Log',
+  pageSettings: 'Settings',
+  totalUnits: 'Total Units',
+  notStarted: 'Not Started',
+  changes: 'Changes',
+  withNotes: 'With Notes',
+  progressByStage: 'Progress by Stage',
+  progressByBuilding: 'Progress by Building',
+  recentActivity: 'Recent Activity',
+  tabDetails: 'Details',
+  tabTasks: 'Tasks',
+  tabNotes: 'Notes',
+  tabHistory: 'History',
+  tabPhotos: 'Photos',
+  save: 'Save',
+  cancel: 'Cancel',
+  add: 'Add',
+  delete: 'Delete',
+  edit: 'Edit',
+  settingsStages: 'Stages',
+  settingsUsers: 'Users',
+  settingsContractors: 'Contractors',
+  settingsApp: 'App',
+  settingsLanguage: 'Language',
+  noActivity: 'No recent activity.',
+  noTasks: 'No tasks yet. Add a task to get started.',
+  addTask: 'Add Task',
+  allContractors: 'All contractors',
+  selectContractor: 'Select contractor *',
+  selectApartment: 'Select apartment *',
+  stageOptional: 'Stage (optional)',
+  taskDescriptionPlaceholder: 'Task description *',
+};
+
+export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
+  isRtl: true,
+  navProject: 'פרויקט',
+  navDashboard: 'לוח בקרה',
+  navTasks: 'משימות',
+  navAnalytics: 'ניתוח',
+  navReports: 'דוחות',
+  navActivity: 'פעילות',
+  navSettings: 'הגדרות',
+  pageDashboard: 'לוח בקרה',
+  pageProject: 'תרשים הפרויקט',
+  pageTasks: 'משימות',
+  pageAnalytics: 'ניתוח נתונים',
+  pageReports: 'דוחות',
+  pageActivity: 'יומן פעילות',
+  pageSettings: 'הגדרות',
+  totalUnits: 'סה״כ יחידות',
+  notStarted: 'טרם התחיל',
+  changes: 'שינויים',
+  withNotes: 'עם הערות',
+  progressByStage: 'התקדמות לפי שלב',
+  progressByBuilding: 'התקדמות לפי בניין',
+  recentActivity: 'פעילות אחרונה',
+  tabDetails: 'פרטים',
+  tabTasks: 'משימות',
+  tabNotes: 'הערות',
+  tabHistory: 'היסטוריה',
+  tabPhotos: 'תמונות',
+  save: 'שמור',
+  cancel: 'ביטול',
+  add: 'הוסף',
+  delete: 'מחק',
+  edit: 'ערוך',
+  settingsStages: 'שלבים',
+  settingsUsers: 'משתמשים',
+  settingsContractors: 'קבלנים',
+  settingsApp: 'אפליקציה',
+  settingsLanguage: 'שפה',
+  noActivity: 'אין פעילות אחרונה.',
+  noTasks: 'אין משימות עדיין.',
+  addTask: 'הוסף משימה',
+  allContractors: 'כל הקבלנים',
+  selectContractor: 'בחר קבלן *',
+  selectApartment: 'בחר דירה *',
+  stageOptional: 'שלב (אופציונלי)',
+  taskDescriptionPlaceholder: 'תיאור המשימה *',
 };

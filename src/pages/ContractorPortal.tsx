@@ -297,7 +297,7 @@ export function ContractorPortal() {
   const [completing, setCompleting] = useState(false);
   const [lightboxInfo, setLightboxInfo] = useState<{ photos: ContractorPhoto[]; index: number } | null>(null);
   const [uploadError, setUploadError] = useState('');
-  const [mapFilter, setMapFilter] = useState<'all' | 'overdue' | 'today' | 'tomorrow' | 'week'>('all');
+  const [mapFilter, setMapFilter] = useState<'yesterday' | 'today' | 'tomorrow' | 'week' | 'all'>('today');
   const [showPlansPdf, setShowPlansPdf] = useState(false);
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
   const mediaInputRef = useRef<HTMLInputElement>(null);
@@ -337,7 +337,8 @@ export function ContractorPortal() {
         if (m.has(a.apartmentId)) return;
         const days = differenceInCalendarDays(parseISO(a.dueDate!), today);
         const label =
-          days < 0 ? s.filterOverdue :
+          days === -1 ? s.filterYesterday :
+          days < 0  ? s.filterOverdue :
           days === 0 ? s.filterToday :
           days === 1 ? s.filterTomorrow :
           format(parseISO(a.dueDate!), 'MMM d');
@@ -353,12 +354,27 @@ export function ContractorPortal() {
     assignments.forEach(a => {
       if (a.completedAt || !a.dueDate) return;
       const days = differenceInCalendarDays(parseISO(a.dueDate), today);
-      if (mapFilter === 'overdue' && days < 0) matching.add(a.apartmentId);
+      if (mapFilter === 'yesterday' && days === -1) matching.add(a.apartmentId);
       else if (mapFilter === 'today' && days === 0) matching.add(a.apartmentId);
       else if (mapFilter === 'tomorrow' && days === 1) matching.add(a.apartmentId);
       else if (mapFilter === 'week' && days >= 0 && days <= 7) matching.add(a.apartmentId);
     });
     return matching;
+  }, [mapFilter, assignments]);
+
+  const filteredAssignments = useMemo(() => {
+    if (mapFilter === 'all') return assignments;
+    const today = startOfDay(new Date());
+    return assignments.filter(a => {
+      if (a.completedAt) return false;
+      if (!a.dueDate) return false;
+      const days = differenceInCalendarDays(parseISO(a.dueDate), today);
+      if (mapFilter === 'yesterday') return days === -1;
+      if (mapFilter === 'today') return days === 0;
+      if (mapFilter === 'tomorrow') return days === 1;
+      if (mapFilter === 'week') return days >= 0 && days <= 7;
+      return true;
+    });
   }, [mapFilter, assignments]);
 
   async function handleMediaUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -547,13 +563,14 @@ export function ContractorPortal() {
   const selContractorNotes = selNotes.filter(n => n.authorType === 'contractor');
   const canComplete = selMedia.length > 0 && !selectedAssignment?.completedAt;
 
-  const mapFilterLabels: Record<string, string> = {
-    all: s.filterAll,
-    overdue: s.filterOverdue,
-    today: s.filterToday,
-    tomorrow: s.filterTomorrow,
-    week: s.filterThisWeek,
-  };
+  type FilterKey = 'yesterday' | 'today' | 'tomorrow' | 'week' | 'all';
+  const filterOptions: { key: FilterKey; label: string; color: string }[] = [
+    { key: 'yesterday', label: s.filterYesterday, color: '#6b7280' },
+    { key: 'today',     label: s.filterToday,     color: '#f97316' },
+    { key: 'tomorrow',  label: s.filterTomorrow,  color: '#f59e0b' },
+    { key: 'week',      label: s.filterThisWeek,  color: '#3b82f6' },
+    { key: 'all',       label: s.filterAll,        color: '#1e3a5f' },
+  ];
 
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#f0f4f8' }} dir={s.isRtl ? 'rtl' : 'ltr'}>
@@ -599,6 +616,22 @@ export function ContractorPortal() {
         </button>
       </div>
 
+      {/* Shared filter bar — above both tabs */}
+      <div className="bg-white border-b border-gray-100 px-3 py-2.5 flex gap-2 overflow-x-auto flex-shrink-0">
+        {filterOptions.map(({ key, label, color }) => (
+          <button
+            key={key}
+            onClick={() => setMapFilter(key)}
+            className={`flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-semibold transition-all ${
+              mapFilter === key ? 'text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+            }`}
+            style={mapFilter === key ? { backgroundColor: color } : {}}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* Tasks tab */}
       {activeTab === 'tasks' && (
         <main className="flex-1 p-4 max-w-2xl mx-auto w-full">
@@ -612,7 +645,7 @@ export function ContractorPortal() {
             </div>
           ) : (
             <div className="space-y-3 py-2">
-              {assignments.map(a => {
+              {filteredAssignments.map(a => {
                 const apt = getApt(a.apartmentId);
                 const stage = getStage(a.stageId);
                 const media = getMedia(a.id);
@@ -685,22 +718,8 @@ export function ContractorPortal() {
             </div>
           ) : (
             <>
-              <div className="px-4 pt-3 pb-2 flex items-center gap-2 flex-wrap">
-                {(['all', 'overdue', 'today', 'tomorrow', 'week'] as const).map(f => (
-                  <button key={f} onClick={() => setMapFilter(f)}
-                    className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
-                      mapFilter === f
-                        ? f === 'overdue' ? 'bg-red-500 text-white border-red-500'
-                        : f === 'today'   ? 'bg-orange-500 text-white border-orange-500'
-                        : f === 'tomorrow'? 'bg-amber-500 text-white border-amber-500'
-                        : f === 'week'    ? 'bg-blue-500 text-white border-blue-500'
-                        : 'bg-[#1e3a5f] text-white border-[#1e3a5f]'
-                        : 'bg-white text-gray-600 border-gray-200'
-                    }`}>
-                    {mapFilterLabels[f]}
-                  </button>
-                ))}
-                <span className="text-xs text-gray-400 ml-auto">
+              <div className="px-4 pt-3 pb-1 flex items-center justify-end">
+                <span className="text-xs text-gray-400">
                   {filteredAptIds.size} apt{filteredAptIds.size !== 1 ? 's' : ''}
                 </span>
               </div>

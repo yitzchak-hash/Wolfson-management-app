@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft } from 'lucide-react';
+import { X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen } from 'lucide-react';
 import { Apartment, User } from '../../types';
 import { useStore } from '../../data/store';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
@@ -131,7 +131,7 @@ function DriveImg({ src, alt, className }: { src: string; alt: string; className
 
 export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast, onRequestAddTask }: Props) {
   const { stages, activityLogs, apartments, updateApartment, mergeApartments, unmergeApartments,
-    autoBackup, backupSnapshots, restoreFromSnapshot,
+    autoBackup, backupSnapshots, restoreFromSnapshot, mainUiStrings: ui,
     officeNoteFiles, addOfficeNoteFile, deleteOfficeNoteFile,
     contractorAssignments, contractors, updateContractorAssignment } = useStore();
   const backendConfigured = isUploadBackendConfigured();
@@ -229,6 +229,19 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     } else {
       onToast('Apartment details saved');
     }
+  }
+
+  // Silent auto-save on blur — no toast, no modal
+  function autoSave() {
+    updateApartment(apartment!.id, {
+      displayName: familyName || apartment!.apartmentNumber,
+      currentStageId: currentStageId || null,
+      classification,
+      generalNotes,
+      driveLink: driveLink.trim() || undefined,
+      plansPdfLink: plansPdfLink.trim() || undefined,
+    }, currentUser);
+    setPrevStageId(currentStageId);
   }
 
   function handleSaveMerge() {
@@ -341,7 +354,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
 
         {/* Tabs */}
         <div className="flex border-b border-gray-200 flex-shrink-0 overflow-x-auto">
-          {(['details', 'tasks', 'stages', 'history', 'photos'] as const).map(tab => (
+          {(['details', 'tasks', 'stages', 'photos', 'history'] as const).map(tab => (
             <button key={tab} onClick={() => {
               setActiveTab(tab);
               if (tab === 'photos' && !photosLoaded && apartment?.driveLink && backendConfigured) {
@@ -355,7 +368,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               className={`flex-1 py-2.5 text-sm font-medium transition-colors relative ${
                 activeTab === tab ? 'border-b-2 border-[#1e3a5f] text-[#1e3a5f]' : 'text-gray-500 hover:text-gray-700'
               }`}>
-              {tab === 'tasks' ? 'Tasks' : tab === 'stages' ? 'Notes' : tab === 'history' ? 'History' : tab === 'photos' ? 'Photos' : 'Details'}
+              {tab === 'tasks' ? ui.tabTasks : tab === 'stages' ? ui.tabNotes : tab === 'history' ? ui.tabHistory : tab === 'photos' ? ui.tabPhotos : ui.tabDetails}
               {tab === 'tasks' && pendingTaskCount > 0 && (
                 <span className="ml-1 text-[10px] bg-orange-500 text-white rounded-full px-1.5 py-0.5 font-bold">
                   {pendingTaskCount}
@@ -385,6 +398,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   <input
                     value={familyName}
                     onChange={e => setFamilyName(e.target.value)}
+                    onBlur={autoSave}
                     placeholder="Family name…"
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                   />
@@ -451,6 +465,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 <textarea
                   value={generalNotes}
                   onChange={e => setGeneralNotes(e.target.value)}
+                  onBlur={autoSave}
                   rows={3}
                   placeholder="General notes about this apartment…"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 resize-none"
@@ -706,17 +721,56 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                         <input
                           value={driveLink}
                           onChange={e => setDriveLink(e.target.value)}
+                          onBlur={async () => {
+                            const trimmed = driveLink.trim();
+                            if (trimmed === (apartment.driveLink ?? '')) return;
+                            handleSaveBasic();
+                            // After saving a new drive link, auto-create Photos/ folder and refresh PDF detection
+                            if (trimmed && backendConfigured) {
+                              const folderId = extractFolderId(trimmed);
+                              if (folderId) {
+                                findOrCreateFolderViaBackend(folderId, 'Photos').catch(() => {});
+                                if (!detectedPdfId) {
+                                  setFetchingPdf(true);
+                                  findPlansPdfViaBackend(trimmed)
+                                    .then(f => { if (f) setDetectedPdfId(f.id); })
+                                    .finally(() => setFetchingPdf(false));
+                                }
+                              }
+                            }
+                          }}
                           placeholder="https://drive.google.com/drive/folders/…"
                           className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                         />
                         {driveLink && (
-                          <Tooltip text="Open folder in Google Drive">
+                          <Tooltip text="Open folder in Drive">
                             <a href={driveLink} target="_blank" rel="noopener noreferrer"
-                              className="flex items-center px-3 py-2 rounded-lg border border-gray-200 text-gray-500 hover:text-[#4aa8d8] hover:border-[#4aa8d8] transition-all">
+                              className="flex items-center px-2.5 py-2 rounded-lg border border-gray-200 text-gray-500 hover:text-[#4aa8d8] hover:border-[#4aa8d8] transition-all">
                               <ExternalLink size={14} />
                             </a>
                           </Tooltip>
                         )}
+                        <Tooltip text="Save drive link">
+                          <button
+                            onClick={async () => {
+                              handleSaveBasic();
+                              const trimmed = driveLink.trim();
+                              if (trimmed && backendConfigured) {
+                                const folderId = extractFolderId(trimmed);
+                                if (folderId) {
+                                  findOrCreateFolderViaBackend(folderId, 'Photos').catch(() => {});
+                                  setFetchingPdf(true);
+                                  findPlansPdfViaBackend(trimmed)
+                                    .then(f => { if (f) setDetectedPdfId(f.id); })
+                                    .finally(() => setFetchingPdf(false));
+                                }
+                              }
+                            }}
+                            className="flex items-center px-2.5 py-2 rounded-lg border border-gray-200 text-gray-500 hover:text-[#1e3a5f] hover:border-[#1e3a5f] transition-all"
+                          >
+                            <Save size={14} />
+                          </button>
+                        </Tooltip>
                       </div>
                       {mergedPartner?.driveLink && driveLink && mergedPartner.driveLink !== driveLink.trim() && (
                         <div className="mt-1.5 flex items-start gap-1.5 text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 border border-red-200">
@@ -724,12 +778,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                           <span>Merged partner has a different Drive link. Saving will sync both.</span>
                         </div>
                       )}
-                      <button
-                        onClick={handleSaveBasic}
-                        className="mt-2 w-full flex items-center justify-center gap-2 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors"
-                      >
-                        <Save size={14} /> Save Drive Link
-                      </button>
                     </div>
 
                     {/* Connected unit */}

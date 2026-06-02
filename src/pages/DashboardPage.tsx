@@ -4,7 +4,7 @@ import { format } from 'date-fns';
 import { Building2, AlertTriangle, CheckCircle2, Clock, FileText, Users } from 'lucide-react';
 
 export function DashboardPage() {
-  const { apartments, stages, activityLogs, users } = useStore();
+  const { apartments, stages, activityLogs, users, mainUiStrings: s } = useStore();
 
   const sortedStages = [...stages].filter(s => s.active).sort((a, b) => a.order - b.order);
   const total = apartments.length;
@@ -23,20 +23,20 @@ export function DashboardPage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Project Dashboard</h1>
+      <h1 className="text-2xl font-bold text-gray-900 mb-6">{s.pageDashboard}</h1>
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <SummaryCard icon={<Building2 size={20} />} label="Total Units" value={total} color="#1e3a5f" />
-        <SummaryCard icon={<Clock size={20} />} label="Not Started" value={notStarted} color="#6b7280" />
-        <SummaryCard icon={<AlertTriangle size={20} />} label="Changes" value={shinuiCount} color="#f59e0b" />
-        <SummaryCard icon={<FileText size={20} />} label="With Notes" value={withNotes} color="#10b981" />
+        <SummaryCard icon={<Building2 size={20} />} label={s.totalUnits} value={total} color="#1e3a5f" />
+        <SummaryCard icon={<Clock size={20} />} label={s.notStarted} value={notStarted} color="#6b7280" />
+        <SummaryCard icon={<AlertTriangle size={20} />} label={s.changes} value={shinuiCount} color="#f59e0b" />
+        <SummaryCard icon={<FileText size={20} />} label={s.withNotes} value={withNotes} color="#10b981" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         {/* Stage breakdown */}
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h2 className="font-semibold text-gray-800 mb-4">Progress by Stage</h2>
+          <h2 className="font-semibold text-gray-800 mb-4">{s.progressByStage}</h2>
           <div className="space-y-3">
             {sortedStages.map(stage => {
               const count = apartments.filter(a => a.currentStageId === stage.id).length;
@@ -63,7 +63,7 @@ export function DashboardPage() {
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full bg-gray-300" />
-                  <span className="text-sm text-gray-500">Not Started</span>
+                  <span className="text-sm text-gray-500">{s.notStarted}</span>
                 </div>
                 <span className="text-sm font-medium text-gray-500">{notStarted}</span>
               </div>
@@ -76,7 +76,7 @@ export function DashboardPage() {
 
         {/* Building breakdown */}
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h2 className="font-semibold text-gray-800 mb-4">Progress by Building</h2>
+          <h2 className="font-semibold text-gray-800 mb-4">{s.progressByBuilding}</h2>
           <div className="space-y-5">
             {buildings.map(bid => {
               const { total: bTotal, started, pct } = getBuildingProgress(bid);
@@ -118,9 +118,9 @@ export function DashboardPage() {
 
       {/* Recent activity */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <h2 className="font-semibold text-gray-800 mb-4">Recent Activity</h2>
+        <h2 className="font-semibold text-gray-800 mb-4">{s.recentActivity}</h2>
         {recentLogs.length === 0 ? (
-          <p className="text-gray-400 text-sm text-center py-4">No activity yet</p>
+          <p className="text-gray-400 text-sm text-center py-4">{s.noActivity}</p>
         ) : (
           <div className="space-y-3">
             {recentLogs.map(log => (

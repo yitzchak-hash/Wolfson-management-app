@@ -34,7 +34,7 @@ export function TasksPage() {
   const {
     contractors, contractorAssignments, apartments, stages,
     addContractorAssignment, updateContractorAssignment, deleteContractorAssignment,
-    updateApartment, currentUser,
+    updateApartment, currentUser, mainUiStrings: s,
   } = useStore();
 
   const [filterContractorId, setFilterContractorId] = useState('');
@@ -187,7 +187,7 @@ export function TasksPage() {
           e.target.value = '';
         }}
       />
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Tasks</h1>
+      <h1 className="text-2xl font-bold text-gray-900 mb-6">{s.pageTasks}</h1>
 
       <div className="space-y-4">
         {/* Toolbar */}
@@ -197,7 +197,7 @@ export function TasksPage() {
             onChange={e => setFilterContractorId(e.target.value)}
             className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
           >
-            <option value="">All contractors</option>
+            <option value="">{s.allContractors}</option>
             {contractors.map(c => (
               <option key={c.id} value={c.id}>{c.name} ({CAT_LABELS[c.category]})</option>
             ))}
@@ -212,7 +212,7 @@ export function TasksPage() {
             className="flex items-center gap-1.5 px-3 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors"
           >
             <Plus size={15} />
-            Add Task
+            {s.addTask}
           </button>
         </div>
 
@@ -229,7 +229,7 @@ export function TasksPage() {
                 onChange={e => setAddForm(f => ({ ...f, contractorId: e.target.value }))}
                 className="col-span-2 border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white"
               >
-                <option value="">Select contractor *</option>
+                <option value="">{s.selectContractor}</option>
                 {(['drywall', 'ac', 'general'] as ContractorCategory[]).map(cat => (
                   <optgroup key={cat} label={CAT_LABELS[cat]}>
                     {contractors.filter(c => c.category === cat && c.active).map(c => (
@@ -246,7 +246,7 @@ export function TasksPage() {
                 }}
                 className="col-span-2 border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white"
               >
-                <option value="">Select apartment *</option>
+                <option value="">{s.selectApartment}</option>
                 {['A1', 'A2', 'A3'].map(bid => (
                   <optgroup key={bid} label={`Building ${bid}`}>
                     {resApts.filter(a => a.buildingId === bid).map(a => (
@@ -262,7 +262,7 @@ export function TasksPage() {
                 onChange={e => setAddForm(f => ({ ...f, stageId: e.target.value }))}
                 className="border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white"
               >
-                <option value="">Stage (optional)</option>
+                <option value="">{s.stageOptional}</option>
                 {sortedStages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
               <input
@@ -276,7 +276,7 @@ export function TasksPage() {
               value={addForm.task}
               onChange={e => setAddForm(f => ({ ...f, task: e.target.value }))}
               rows={2}
-              placeholder="Task description *"
+              placeholder={s.taskDescriptionPlaceholder}
               className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white resize-none mb-3"
             />
 
@@ -339,7 +339,7 @@ export function TasksPage() {
                 disabled={!addForm.contractorId || !addForm.aptId || !addForm.task.trim()}
                 className="flex items-center gap-1.5 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium disabled:opacity-40"
               >
-                <Plus size={15} /> Create Task
+                <Plus size={15} /> {s.addTask}
               </button>
             </div>
           </div>
@@ -349,7 +349,7 @@ export function TasksPage() {
         {filtered.length === 0 ? (
           <div className="text-center py-12 text-gray-400">
             <Clock size={32} className="mx-auto mb-3 opacity-30" />
-            <p className="text-sm">No tasks yet. Add a task to get started.</p>
+            <p className="text-sm">{s.noTasks}</p>
           </div>
         ) : (
           <div className="space-y-2">

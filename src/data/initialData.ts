@@ -34,9 +34,12 @@ export const DEFAULT_STAGES: Stage[] = [
 //   Col 2:             2, 6, 10, 14, 18, 22, 26, 30, 34, 38, 42, 46, 50
 //   Col 3:             3, 7, 11, 15, 19, 23, 27, 31, 35, 39, 43, 47, 51
 //   Col 4 (rightmost): 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52
-// Floor 1:      lobby, no numbered apartments
-// Ground:       commercial/ground level
+// Floor 1 (first):  unnamed slots 4 per floor, added for user labelling
+// Floor 0 (ground): unnamed slots 4 per floor, added for user labelling
 // Basement:     -1 to -4 (A1 has -0.5, -1, -2, -3, -4)
+// Apt numbering: 1-56 standard, 57+ basement/ground/first in each building
+//   A1:  basement 57-76, ground 77-80, first 81-84
+//   A2/A3: basement 57-72, ground 73-76, first 77-80
 
 function getFloorForApt(aptNum: number): number {
   if (aptNum >= 55) return 16; // duplex: stored on lower floor (16)
@@ -102,6 +105,37 @@ function getBasementFloors(buildingId: BuildingId): BasementFloorDef[] {
   ];
 }
 
+function makeUnnamedSlot(bid: BuildingId, aptNum: number, floorNum: number, col: number): Apartment {
+  return {
+    id: `${bid}-${aptNum}`,
+    buildingId: bid,
+    apartmentNumber: String(aptNum),
+    displayName: '',
+    floor: floorNum,
+    colPosition: col,
+    colSpan: 1,
+    isDuplexApt: false,
+    currentStageId: null,
+    classification: 'standard',
+    shinuiDetails: null,
+    generalNotes: '',
+    isUnnamed: true,
+    createdAt: '2024-01-01T00:00:00Z',
+    updatedAt: '2024-01-01T00:00:00Z',
+    updatedBy: '',
+    updatedByName: '',
+  };
+}
+
+export function buildGroundFirstFloorSlots(bid: BuildingId): Apartment[] {
+  const groundStart = bid === 'A1' ? 77 : 73;
+  const firstStart  = bid === 'A1' ? 81 : 77;
+  const slots: Apartment[] = [];
+  for (let col = 1; col <= 4; col++) slots.push(makeUnnamedSlot(bid, groundStart + col - 1, 0, col));
+  for (let col = 1; col <= 4; col++) slots.push(makeUnnamedSlot(bid, firstStart  + col - 1, 1, col));
+  return slots;
+}
+
 export function buildDefaultApartments(): Apartment[] {
   const apts: Apartment[] = [];
 
@@ -110,45 +144,24 @@ export function buildDefaultApartments(): Apartment[] {
   buildings.forEach(bid => {
     // Apts 1-52 (floors 2-14, 4 per floor)
     for (let n = 1; n <= 52; n++) {
-      // A1 is missing apartment 37 (blank in original PDF)
-      if (bid === 'A1' && n === 37) {
-        apts.push(makeApt(bid, n, true)); // blank placeholder
-      } else {
-        apts.push(makeApt(bid, n));
-      }
+      apts.push(makeApt(bid, n));
     }
     // Apts 53-54 (floor 15, 2 per floor)
     apts.push(makeApt(bid, 53));
     apts.push(makeApt(bid, 54));
-    // Apts 55-56 (floors 16-17, duplex)
+    // Apts 55-56 (floor 16)
     apts.push(makeApt(bid, 55));
     apts.push(makeApt(bid, 56));
 
     // Basement slots (unnamed by default — user assigns labels via the drawer)
     getBasementFloors(bid).forEach(({ floorNum, startAptNum }) => {
       for (let col = 1; col <= 4; col++) {
-        const aptNum = startAptNum + col - 1;
-        apts.push({
-          id: `${bid}-${aptNum}`,
-          buildingId: bid,
-          apartmentNumber: String(aptNum),
-          displayName: '',
-          floor: floorNum,
-          colPosition: col,
-          colSpan: 1,
-          isDuplexApt: false,
-          currentStageId: null,
-          classification: 'standard',
-          shinuiDetails: null,
-          generalNotes: '',
-          isUnnamed: true,
-          createdAt: '2024-01-01T00:00:00Z',
-          updatedAt: '2024-01-01T00:00:00Z',
-          updatedBy: '',
-          updatedByName: '',
-        });
+        apts.push(makeUnnamedSlot(bid, startAptNum + col - 1, floorNum, col));
       }
     });
+
+    // Ground floor (0) and first floor (1) unnamed slots
+    apts.push(...buildGroundFirstFloorSlots(bid));
   });
 
   return apts;
