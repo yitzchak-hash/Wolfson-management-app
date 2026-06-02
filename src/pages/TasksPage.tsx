@@ -29,7 +29,7 @@ export function TasksPage() {
   const {
     contractors, contractorAssignments, apartments, stages,
     addContractorAssignment, updateContractorAssignment, deleteContractorAssignment,
-    currentUser,
+    updateApartment, currentUser,
   } = useStore();
 
   const [filterContractorId, setFilterContractorId] = useState('');
@@ -95,6 +95,9 @@ export function TasksPage() {
       createdBy: currentUser?.id ?? '',
       createdByName: currentUser?.name ?? 'Office',
     });
+    if (addForm.stageId && addForm.stageId !== apt.currentStageId && currentUser) {
+      updateApartment(apt.id, { currentStageId: addForm.stageId }, currentUser);
+    }
     setAddForm({ contractorId: '', aptId: '', task: '', dueDate: '', stageId: '' });
     setShowAdd(false);
     onToast('Task added');
@@ -155,7 +158,10 @@ export function TasksPage() {
               </select>
               <select
                 value={addForm.aptId}
-                onChange={e => setAddForm(f => ({ ...f, aptId: e.target.value }))}
+                onChange={e => {
+                  const apt = apartments.find(a => a.id === e.target.value);
+                  setAddForm(f => ({ ...f, aptId: e.target.value, stageId: apt?.currentStageId ?? '' }));
+                }}
                 className="col-span-2 border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white"
               >
                 <option value="">Select apartment *</option>

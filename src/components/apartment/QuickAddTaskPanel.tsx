@@ -27,7 +27,7 @@ interface Props {
 }
 
 export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: Props) {
-  const { stages, contractors, contractorAssignments, updateContractorAssignment, addContractorAssignment } = useStore();
+  const { stages, contractors, contractorAssignments, updateContractorAssignment, addContractorAssignment, updateApartment } = useStore();
 
   const [contractorId, setContractorId] = useState('');
   const [task, setTask] = useState('');
@@ -126,6 +126,9 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
       createdByName: currentUser.name,
       ...(finalAttachments.length ? { attachments: finalAttachments } : {}),
     });
+    if (stageId && stageId !== apartment.currentStageId) {
+      updateApartment(apartment.id, { currentStageId: stageId }, currentUser);
+    }
     setTask('');
     setContractorId('');
     setDueDate('');
