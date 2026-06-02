@@ -44,7 +44,7 @@ export function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <SummaryCard
           icon={<AlertCircle size={20} />}
-          label="Overdue Tasks"
+          label={s.overdueTasks}
           value={overdueTasks}
           color="#ef4444"
           onClick={() => navigate('/tasks')}
@@ -52,7 +52,7 @@ export function DashboardPage() {
         />
         <SummaryCard
           icon={<ClipboardList size={20} />}
-          label="Pending Tasks"
+          label={s.pendingTasks}
           value={pendingTasks}
           color="#4aa8d8"
           onClick={() => navigate('/tasks')}
@@ -60,7 +60,7 @@ export function DashboardPage() {
         />
         <SummaryCard
           icon={<CheckCircle2 size={20} />}
-          label="Completed Today"
+          label={s.completedToday}
           value={completedToday}
           color="#10b981"
           onClick={() => navigate('/tasks')}
@@ -119,7 +119,7 @@ export function DashboardPage() {
                 <div key={bid}>
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="font-semibold text-[#1e3a5f]">{bid}</span>
-                    <span className="text-sm text-gray-600">{started}/{bTotal} units started <span className="text-gray-400">({pct}%)</span></span>
+                    <span className="text-sm text-gray-600">{started}/{bTotal} {s.unitsStarted} <span className="text-gray-400">({pct}%)</span></span>
                   </div>
                   <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
                     <div
@@ -137,15 +137,15 @@ export function DashboardPage() {
               <div className="text-2xl font-bold text-[#1e3a5f]">
                 {total > 0 ? Math.round((total - notStarted) / total * 100) : 0}%
               </div>
-              <div className="text-xs text-gray-500">Overall started</div>
+              <div className="text-xs text-gray-500">{s.overallStarted}</div>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-amber-500">{shinuiCount}</div>
-              <div className="text-xs text-gray-500">Changes units</div>
+              <div className="text-xs text-gray-500">{s.changesUnits}</div>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-gray-500">{notStarted}</div>
-              <div className="text-xs text-gray-500">Not started</div>
+              <div className="text-xs text-gray-500">{s.notStarted}</div>
             </div>
           </div>
         </div>

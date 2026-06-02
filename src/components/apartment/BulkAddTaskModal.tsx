@@ -30,6 +30,7 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
     apartments, stages, contractors,
     addContractorAssignment, updateApartment, currentUser,
   } = useStore();
+  const s = useStore(state => state.mainUiStrings);
 
   // ── Form ─────────────────────────────────────────────────────────────────
   const [contractorId, setContractorId] = useState('');
@@ -346,10 +347,10 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                         ? <CheckCircle2 size={13} className="text-[#1e3a5f]" />
                         : <Circle size={13} className="text-gray-400" />
                       }
-                      {allTabSelected ? 'Deselect all' : 'Select all'}
+                      {allTabSelected ? s.deselectAll : s.selectAll}
                     </button>
                     <span className="text-[10px] text-gray-400">
-                      {tabApts.filter(a => selectedAptIds.has(a.id)).length}/{tabApts.length} in view
+                      {tabApts.filter(a => selectedAptIds.has(a.id)).length}/{tabApts.length} {s.inView}
                     </span>
                   </div>
 
@@ -442,9 +443,9 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                         onChange={e => setPriority(e.target.value as TaskPriority | '')}
                         className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white"
                       >
-                        <option value="">Normal (default)</option>
-                        <option value="urgent">🔴 Urgent</option>
-                        <option value="low">🟢 Low</option>
+                        <option value="">{s.normalDefault}</option>
+                        <option value="urgent">{s.urgentPriority}</option>
+                        <option value="low">{s.lowPriority}</option>
                       </select>
                     </div>
 
@@ -519,7 +520,7 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                       className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#1e3a5f] text-white rounded-xl text-sm font-semibold hover:bg-[#162d4a] disabled:opacity-40 transition-colors"
                     >
                       <Plus size={15} />
-                      Create {selectedAptIds.size > 0 ? selectedAptIds.size : ''} Task{selectedAptIds.size !== 1 ? 's' : ''}
+                      {s.createTask}{selectedAptIds.size > 0 ? ` (${selectedAptIds.size})` : ''}
                     </button>
                   </div>
                 </div>
@@ -544,10 +545,9 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                       <Layers size={20} className="text-[#1e3a5f]" />
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-gray-800">Upload to each apartment's Drive</p>
+                      <p className="text-sm font-semibold text-gray-800">{s.eachAptDrive}</p>
                       <p className="text-xs text-gray-500 mt-0.5">
-                        Creates a separate copy in each apartment's <code className="bg-gray-100 px-1 rounded">Photos/Task Notes/</code> folder.
-                        Apartments without a Drive link will keep files locally.
+                        {s.eachAptDriveDesc}
                       </p>
                     </div>
                   </button>
@@ -560,9 +560,9 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                       <HardDrive size={20} className="text-amber-500" />
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-gray-800">Upload to one specific apartment's Drive</p>
+                      <p className="text-sm font-semibold text-gray-800">{s.oneAptDrive}</p>
                       <p className="text-xs text-gray-500 mt-0.5">
-                        You choose which apartment's folder to use. Other apartments keep a local copy.
+                        {s.oneAptDriveDesc}
                       </p>
                     </div>
                   </button>
@@ -575,9 +575,9 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                       <Database size={20} className="text-gray-500" />
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-gray-800">Keep as task data only</p>
+                      <p className="text-sm font-semibold text-gray-800">{s.keepAsData}</p>
                       <p className="text-xs text-gray-500 mt-0.5">
-                        Files are stored as task attachments locally. No Google Drive upload.
+                        {s.keepAsDataDesc}
                       </p>
                     </div>
                   </button>
@@ -602,10 +602,10 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                   {missingDriveApts.map(apt => (
                     <div key={apt.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
                       <span className="text-xs font-medium text-gray-700">
-                        Apt {apt.displayName || apt.apartmentNumber}
+                        {s.aptPrefix} {apt.displayName || apt.apartmentNumber}
                       </span>
                       <span className="text-[10px] text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded-full">{apt.buildingId}</span>
-                      <span className="text-[10px] text-amber-600 ml-auto">No Drive link</span>
+                      <span className="text-[10px] text-amber-600 ml-auto">{s.noDriveLink2}</span>
                     </div>
                   ))}
                 </div>
@@ -615,13 +615,13 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                     onClick={() => setModalStage('attachmentChoice')}
                     className="flex-1 py-2.5 text-sm font-medium border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50"
                   >
-                    Cancel
+                    {s.goBack}
                   </button>
                   <button
                     onClick={() => startUploading('each')}
                     className="flex-1 py-2.5 text-sm font-semibold bg-[#1e3a5f] text-white rounded-xl hover:bg-[#162d4a]"
                   >
-                    Proceed anyway
+                    {s.proceedAnyway}
                   </button>
                 </div>
               </div>
@@ -633,13 +633,13 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                 {eligibleForOne.length === 0 ? (
                   <div className="text-center py-8">
                     <AlertTriangle size={28} className="text-amber-400 mx-auto mb-3" />
-                    <p className="text-sm font-medium text-gray-700">No eligible apartments</p>
+                    <p className="text-sm font-medium text-gray-700">{s.noEligibleApts}</p>
                     <p className="text-xs text-gray-500 mt-1">None of the selected apartments have a Google Drive folder configured.</p>
                     <button
                       onClick={() => setModalStage('attachmentChoice')}
                       className="mt-4 text-xs text-[#1e3a5f] underline"
                     >
-                      Go back
+                      {s.goBack}
                     </button>
                   </div>
                 ) : (
@@ -672,14 +672,14 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                             </div>
                             <div className="flex-1 min-w-0">
                               <span className="text-sm font-medium text-gray-800">
-                                Apt {apt.displayName || apt.apartmentNumber}
+                                {s.aptPrefix} {apt.displayName || apt.apartmentNumber}
                               </span>
                               <span className="ml-2 text-xs text-gray-400">{apt.buildingId}</span>
                             </div>
                             {hasLink ? (
-                              <span className="text-[10px] text-green-600 font-medium flex-shrink-0">Drive ✓</span>
+                              <span className="text-[10px] text-green-600 font-medium flex-shrink-0">{s.driveLinkedBadge}</span>
                             ) : (
-                              <span className="text-[10px] text-gray-400 flex-shrink-0">No Drive link</span>
+                              <span className="text-[10px] text-gray-400 flex-shrink-0">{s.noDriveLink2}</span>
                             )}
                           </button>
                         );
@@ -690,7 +690,7 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                       disabled={!targetAptId}
                       className="w-full py-2.5 text-sm font-semibold bg-[#1e3a5f] text-white rounded-xl hover:bg-[#162d4a] disabled:opacity-40 transition-colors"
                     >
-                      Upload to selected apartment
+                      {s.uploadToSelected}
                     </button>
                   </>
                 )}
@@ -753,6 +753,7 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
 // ── Apartment row ──────────────────────────────────────────────────────────
 function AptRow({ apt, selected, onToggle }: { apt: Apartment; selected: boolean; onToggle: (id: string) => void }) {
   const hasDrive = !!apt.driveLink;
+  const s = useStore(state => state.mainUiStrings);
   return (
     <button
       onClick={() => onToggle(apt.id)}
@@ -771,15 +772,15 @@ function AptRow({ apt, selected, onToggle }: { apt: Apartment; selected: boolean
       </div>
       <div className="flex-1 min-w-0">
         <span className="text-sm font-medium text-gray-800">
-          Apt {apt.displayName || apt.apartmentNumber}
+          {s.aptPrefix} {apt.displayName || apt.apartmentNumber}
         </span>
         <span className="ml-2 text-[10px] text-gray-400">
-          Fl {apt.floor} · {apt.buildingId}
+          {s.floorPrefix} {apt.floor} · {apt.buildingId}
         </span>
       </div>
       <div
         className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${hasDrive ? 'bg-green-400' : 'bg-gray-300'}`}
-        title={hasDrive ? 'Drive linked' : 'No Drive link'}
+        title={hasDrive ? s.driveLinkedBadge : s.noDriveLink2}
       />
     </button>
   );

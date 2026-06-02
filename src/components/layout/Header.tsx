@@ -8,14 +8,15 @@ import { isFirebaseConfigured } from '../../data/firebase';
 
 function CloudSyncBadge({ light }: { light: boolean }) {
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const s = useStore(state => state.mainUiStrings);
   useEffect(() => subscribeCloudSync(setStatus), []);
   if (!isFirebaseConfigured) return null;
   if (status === 'idle') return null;
   return (
     <div className={`flex items-center gap-1.5 text-xs font-medium transition-all ${status === 'saved' ? 'text-green-400' : light ? 'text-gray-400' : 'text-gray-300'}`}>
       {status === 'saving'
-        ? <><Loader2 size={13} className="animate-spin" /> Saving…</>
-        : <><CheckCircle2 size={13} /> Saved</>}
+        ? <><Loader2 size={13} className="animate-spin" /> {s.syncSaving}</>
+        : <><CheckCircle2 size={13} /> {s.syncSaved}</>}
     </div>
   );
 }
@@ -44,7 +45,7 @@ function WolfsonLogo() {
 }
 
 export function Header() {
-  const { currentUser, logout, lightTheme, setLightTheme, firebaseSyncError } = useStore();
+  const { currentUser, logout, lightTheme, setLightTheme, firebaseSyncError, mainUiStrings: s } = useStore();
   const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {
@@ -76,7 +77,7 @@ export function Header() {
         <CloudSyncBadge light={lightTheme} />
 
         {currentUser && (
-          <Tooltip text="Search (⌘K)">
+          <Tooltip text={s.searchTooltip}>
             <button
               onClick={() => setSearchOpen(true)}
               className="p-2 rounded-lg transition-colors"
@@ -88,7 +89,7 @@ export function Header() {
         )}
 
         {/* Theme toggle */}
-        <Tooltip text={lightTheme ? 'Switch to dark theme' : 'Switch to light theme'}>
+        <Tooltip text={lightTheme ? s.switchToDark : s.switchToLight}>
           <button
             onClick={() => setLightTheme(!lightTheme)}
             className="p-2 rounded-lg transition-colors"
@@ -108,7 +109,7 @@ export function Header() {
               style={{ backgroundColor: 'rgba(74,168,216,0.2)', borderColor: 'rgba(74,168,216,0.4)' }}>
               <User size={16} className="text-[#4aa8d8]" />
             </div>
-            <Tooltip text="Sign out">
+            <Tooltip text={s.signOut}>
               <button
                 onClick={logout}
                 className="p-2 rounded-lg transition-colors"

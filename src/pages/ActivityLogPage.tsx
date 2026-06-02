@@ -3,21 +3,21 @@ import { useStore } from '../data/store';
 import { format } from 'date-fns';
 import { Activity } from 'lucide-react';
 
-const ACTION_TYPE_OPTIONS = [
-  { value: 'all', label: 'All actions' },
-  { value: 'update', label: 'Stage/field change' },
-  { value: 'note', label: 'Note' },
-  { value: 'task_created', label: 'Task created' },
-  { value: 'task_completed', label: 'Task completed' },
-  { value: 'task_uncompleted', label: 'Task re-opened' },
-  { value: 'task_deleted', label: 'Task deleted' },
-  { value: 'contractor_upload', label: 'Contractor upload' },
-  { value: 'contractor_note', label: 'Contractor note' },
-  { value: 'contractor_complete', label: 'Contractor completed' },
-];
-
 export function ActivityLogPage() {
-  const { activityLogs, users } = useStore();
+  const { activityLogs, users, mainUiStrings: s } = useStore();
+
+  const ACTION_TYPE_OPTIONS = [
+    { value: 'all', label: s.allActions },
+    { value: 'update', label: s.stageFieldChange },
+    { value: 'note', label: s.noteAction },
+    { value: 'task_created', label: s.taskCreatedAction },
+    { value: 'task_completed', label: s.taskCompletedAction },
+    { value: 'task_uncompleted', label: s.taskReopenedAction },
+    { value: 'task_deleted', label: s.taskDeletedAction },
+    { value: 'contractor_upload', label: s.contractorUploadAction },
+    { value: 'contractor_note', label: s.contractorNoteAction },
+    { value: 'contractor_complete', label: s.contractorCompletedAction },
+  ];
   const [userFilter, setUserFilter] = useState('all');
   const [buildingFilter, setBuildingFilter] = useState('all');
   const [actionTypeFilter, setActionTypeFilter] = useState('all');
@@ -44,39 +44,40 @@ export function ActivityLogPage() {
   }
 
   function actionLabel(log: typeof activityLogs[0]): string {
+    const apt = `${s.aptPrefix} ${log.apartmentNumber} (${log.buildingId})`;
     switch (log.actionType) {
       case 'task_created':
-        return `created task on Apt ${log.apartmentNumber} (${log.buildingId}): "${log.newValue}"`;
+        return `${s.taskCreatedAction} on ${apt}: "${log.newValue}"`;
       case 'task_completed':
-        return `completed task on Apt ${log.apartmentNumber} (${log.buildingId}): "${log.newValue}"`;
+        return `${s.taskCompletedAction} on ${apt}: "${log.newValue}"`;
       case 'task_uncompleted':
-        return `re-opened task on Apt ${log.apartmentNumber} (${log.buildingId}): "${log.previousValue}"`;
+        return `${s.taskReopenedAction} on ${apt}: "${log.previousValue}"`;
       case 'task_deleted':
-        return `deleted task on Apt ${log.apartmentNumber} (${log.buildingId}): "${log.previousValue}"`;
+        return `${s.taskDeletedAction} on ${apt}: "${log.previousValue}"`;
       case 'contractor_upload':
-        return `uploaded file to Apt ${log.apartmentNumber} (${log.buildingId})`;
+        return `${s.contractorUploadAction} to ${apt}`;
       case 'contractor_note':
-        return `added contractor note on Apt ${log.apartmentNumber} (${log.buildingId})`;
+        return `${s.contractorNoteAction} on ${apt}`;
       case 'contractor_complete':
-        return `marked task complete on Apt ${log.apartmentNumber} (${log.buildingId})`;
+        return `${s.contractorCompletedAction} on ${apt}`;
       case 'note':
-        return `added/updated note on Apt ${log.apartmentNumber} (${log.buildingId})`;
+        return `${s.noteAction} on ${apt}`;
       default:
         break;
     }
     if (log.fieldChanged === 'currentStageId') {
-      return `changed stage of Apt ${log.apartmentNumber} (${log.buildingId}): "${log.previousValue}" → "${log.newValue}"`;
+      return `${s.stageFieldChange} of ${apt}: "${log.previousValue}" → "${log.newValue}"`;
     }
     if (log.fieldChanged === 'classification') {
-      return `marked Apt ${log.apartmentNumber} (${log.buildingId}) as ${log.newValue}`;
+      return `marked ${apt} as ${log.newValue}`;
     }
     if (log.fieldChanged === 'generalNotes') {
-      return `updated notes for Apt ${log.apartmentNumber} (${log.buildingId})`;
+      return `updated notes for ${apt}`;
     }
     if (log.fieldChanged === 'displayName') {
-      return `renamed Apt in ${log.buildingId} to "${log.newValue}"`;
+      return `renamed ${s.aptPrefix} in ${log.buildingId} to "${log.newValue}"`;
     }
-    return `updated ${log.fieldChanged} for Apt ${log.apartmentNumber} (${log.buildingId})`;
+    return `updated ${log.fieldChanged} for ${apt}`;
   }
 
   function actionIcon(actionType: string): string {
@@ -97,20 +98,20 @@ export function ActivityLogPage() {
     <div className="p-6 max-w-4xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
         <Activity size={24} className="text-[#1e3a5f]" />
-        <h1 className="text-2xl font-bold text-gray-900">Activity Log</h1>
-        <span className="ml-auto text-sm text-gray-500">{filtered.length} entries</span>
+        <h1 className="text-2xl font-bold text-gray-900">{s.activityLogPage}</h1>
+        <span className="ml-auto text-sm text-gray-500">{filtered.length} {s.entriesLabel}</span>
       </div>
 
       {/* Filters */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-5 flex flex-wrap gap-4 items-end">
         <div>
-          <label className="text-xs font-medium text-gray-500 mb-1.5 block">User</label>
+          <label className="text-xs font-medium text-gray-500 mb-1.5 block">{s.userFilter}</label>
           <select
             value={userFilter}
             onChange={e => setUserFilter(e.target.value)}
             className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
           >
-            <option value="all">All users</option>
+            <option value="all">{s.allUsers}</option>
             {users.map(u => (
               <option key={u.id} value={u.id}>{u.name}</option>
             ))}
@@ -118,7 +119,7 @@ export function ActivityLogPage() {
         </div>
 
         <div>
-          <label className="text-xs font-medium text-gray-500 mb-1.5 block">Building</label>
+          <label className="text-xs font-medium text-gray-500 mb-1.5 block">{s.buildingPrefix}</label>
           <div className="flex gap-1">
             {(['all', 'A1', 'A2', 'A3'] as const).map(b => (
               <button
@@ -128,14 +129,14 @@ export function ActivityLogPage() {
                   buildingFilter === b ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
                 }`}
               >
-                {b === 'all' ? 'All' : b}
+                {b === 'all' ? s.all : b}
               </button>
             ))}
           </div>
         </div>
 
         <div>
-          <label className="text-xs font-medium text-gray-500 mb-1.5 block">Action type</label>
+          <label className="text-xs font-medium text-gray-500 mb-1.5 block">{s.actionTypeFilter}</label>
           <select
             value={actionTypeFilter}
             onChange={e => setActionTypeFilter(e.target.value)}
@@ -148,7 +149,7 @@ export function ActivityLogPage() {
         </div>
 
         <div>
-          <label className="text-xs font-medium text-gray-500 mb-1.5 block">From</label>
+          <label className="text-xs font-medium text-gray-500 mb-1.5 block">{s.fromDate}</label>
           <input
             type="date"
             value={dateFrom}
@@ -158,7 +159,7 @@ export function ActivityLogPage() {
         </div>
 
         <div>
-          <label className="text-xs font-medium text-gray-500 mb-1.5 block">To</label>
+          <label className="text-xs font-medium text-gray-500 mb-1.5 block">{s.toDate}</label>
           <input
             type="date"
             value={dateTo}
@@ -172,7 +173,7 @@ export function ActivityLogPage() {
             onClick={clearFilters}
             className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 underline"
           >
-            Clear filters
+            {s.clearFilters}
           </button>
         )}
       </div>
@@ -182,7 +183,7 @@ export function ActivityLogPage() {
         {filtered.length === 0 ? (
           <div className="text-center py-12 text-gray-400">
             <Activity size={32} className="mx-auto mb-3 opacity-40" />
-            <p>No activity logs match current filters</p>
+            <p>{s.noLogsMatch}</p>
           </div>
         ) : (
           filtered.map(log => (

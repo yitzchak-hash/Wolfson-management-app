@@ -31,6 +31,7 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
     apartments, contractors, contractorAssignments, contractorNotes,
     addContractorAssignment, updateContractorAssignment, deleteContractorAssignment,
   } = useStore();
+  const s = useStore(state => state.mainUiStrings);
 
   const [openStage, setOpenStage] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -227,11 +228,11 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                 <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color }} />
                 <span className="text-sm font-medium text-gray-800">{stage.name}</span>
                 {hasNote && (
-                  <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Note</span>
+                  <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">{s.noteLabel}</span>
                 )}
                 {savedAtts.length > 0 && (
                   <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded flex items-center gap-0.5">
-                    <Paperclip size={9} />{savedAtts.length} file{savedAtts.length !== 1 ? 's' : ''}
+                    <Paperclip size={9} />{savedAtts.length} {savedAtts.length !== 1 ? s.filesLabel : s.fileLabel}
                   </span>
                 )}
                 {stageDate && (
@@ -256,7 +257,7 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                 {stageDate && (
                   <div className="flex items-center gap-1.5 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
                     <Calendar size={12} className="text-[#4aa8d8]" />
-                    Stage reached: <strong>{format(new Date(stageDate), 'MMMM d, yyyy · HH:mm')}</strong>
+                    {s.stageReached} <strong>{format(new Date(stageDate), 'MMMM d, yyyy · HH:mm')}</strong>
                   </div>
                 )}
 
@@ -265,7 +266,7 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                   <div>
                     <label className="text-xs font-medium text-gray-500 mb-1 flex items-center gap-1.5">
                       <User size={11} />
-                      Assign Contractor
+                      {s.assignContractor}
                     </label>
                     <select
                       value={assignment?.contractorId ?? ''}
@@ -291,11 +292,11 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
 
                 {/* Office notes */}
                 <div>
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Office Notes</p>
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">{s.officeNotes}</p>
                   <textarea
                     value={getDraft(stage.id)}
                     onChange={e => setDrafts(d => ({ ...d, [stage.id]: e.target.value }))}
-                    placeholder={`Office notes for ${stage.name}...`}
+                    placeholder={`${s.officeNotesFor} ${stage.name}...`}
                     rows={2}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
                   />
@@ -403,7 +404,7 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                           fileInputRef.current?.click();
                         }}
                         className="flex items-center gap-1 px-2.5 py-1.5 border border-gray-200 text-gray-500 rounded-lg text-xs hover:bg-gray-50 transition-colors"
-                        title="Attach file"
+                        title={s.attachFile}
                       >
                         <Paperclip size={12} />
                       </button>
@@ -412,7 +413,7 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-xs font-medium hover:bg-[#162d4a] transition-colors"
                       >
                         <Save size={12} />
-                        Save
+                        {s.save}
                       </button>
                     </div>
                   </div>
@@ -422,7 +423,7 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                 {isHistoryOpen && noteVersions.length > 0 && (
                   <div className="border-t border-purple-100 bg-purple-50/40 p-3 space-y-2">
                     <p className="text-[10px] font-semibold text-purple-500 uppercase tracking-wider flex items-center gap-1">
-                      <Clock size={9} /> Edit History ({noteVersions.length})
+                      <Clock size={9} /> {s.editHistory} ({noteVersions.length})
                     </p>
                     <div className="space-y-1.5 max-h-48 overflow-y-auto">
                       {noteVersions.map(v => (
@@ -433,7 +434,7 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                               onClick={() => handleRestoreVersion(stage.id, v.noteText)}
                               className="flex items-center gap-1 text-purple-600 hover:text-purple-800 font-medium text-[10px]"
                             >
-                              <RotateCcw size={9} /> Restore
+                              <RotateCcw size={9} /> {s.restore}
                             </button>
                           </div>
                           <p className="text-gray-600 leading-snug line-clamp-3">{v.noteText || <em className="text-gray-400">empty</em>}</p>
@@ -458,7 +459,7 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                   return (
                     <div className="mt-2 pt-2 border-t border-gray-100">
                       <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                        <MessageSquare size={9} /> Contractor Notes
+                        <MessageSquare size={9} /> {s.contractorNotesSection}
                       </p>
                       <div className="space-y-1.5">
                         {cNotes.map(n => (
@@ -520,7 +521,7 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
         <div className="mt-3 border border-blue-100 rounded-lg overflow-hidden">
           <div className="px-3 py-2 bg-blue-50 flex items-center gap-2">
             <MessageSquare size={13} className="text-blue-500" />
-            <span className="text-xs font-semibold text-blue-700">All Contractor Notes ({allContractorNotes.length})</span>
+            <span className="text-xs font-semibold text-blue-700">{s.allContractorNotes} ({allContractorNotes.length})</span>
           </div>
           <div className="p-3 space-y-2 bg-white">
             {allContractorNotes.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map(n => {

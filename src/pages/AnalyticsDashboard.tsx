@@ -80,7 +80,7 @@ function StatCard({ label, value, sub, icon: Icon, color }: {
 }
 
 export function AnalyticsDashboard() {
-  const { apartments, stages, activityLogs, contractors, contractorAssignments, lightTheme } = useStore();
+  const { apartments, stages, activityLogs, contractors, contractorAssignments, lightTheme, mainUiStrings: s } = useStore();
 
   const sortedStages = useMemo(() => [...stages].filter(s => s.active).sort((a, b) => a.order - b.order), [stages]);
 
@@ -154,36 +154,36 @@ export function AnalyticsDashboard() {
     <div className="p-6 max-w-5xl mx-auto" style={{ color: textPrimary }}>
       <div className="flex items-center gap-3 mb-6">
         <TrendingUp size={22} style={{ color: '#4aa8d8' }} />
-        <h1 className="text-2xl font-bold">Analytics</h1>
+        <h1 className="text-2xl font-bold">{s.pageAnalytics}</h1>
       </div>
 
       {/* Top stat cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <StatCard
-          label="Total Apartments"
+          label={s.totalApartments}
           value={stats.total}
-          sub="Residential units"
+          sub={s.residentialUnits}
           icon={Building2}
           color="#1e3a5f"
         />
         <StatCard
-          label="Work Started"
+          label={s.workStarted}
           value={stats.started}
-          sub={`${stats.total - stats.started} not yet started`}
+          sub={`${stats.total - stats.started} ${s.notYetStarted}`}
           icon={TrendingUp}
           color="#4aa8d8"
         />
         <StatCard
-          label="Contractors"
+          label={s.contractorsLabel}
           value={contractors.filter(c => c.active).length}
-          sub={`${contractorStats.total} total assignments`}
+          sub={`${contractorStats.total} ${s.totalAssignments}`}
           icon={Users}
           color="#8b5cf6"
         />
         <StatCard
-          label="Tasks Completed"
+          label={s.tasksCompletedLabel}
           value={contractorStats.completed}
-          sub={`${contractorStats.pending} pending`}
+          sub={`${contractorStats.pending} ${s.pendingLabel.toLowerCase()}`}
           icon={CheckCircle2}
           color="#22c55e"
         />
@@ -192,7 +192,7 @@ export function AnalyticsDashboard() {
       <div className="grid md:grid-cols-2 gap-6 mb-6">
         {/* Progress by building */}
         <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm" style={{ backgroundColor: bgCard, borderColor }}>
-          <h2 className="font-semibold mb-4" style={{ color: textPrimary }}>Progress by Building</h2>
+          <h2 className="font-semibold mb-4" style={{ color: textPrimary }}>{s.progressByBuilding}</h2>
           <div className="space-y-4">
             {stats.byBuilding.map(({ building, total, started }) => (
               <div key={building}>
@@ -208,7 +208,7 @@ export function AnalyticsDashboard() {
 
         {/* Stage distribution */}
         <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm" style={{ backgroundColor: bgCard, borderColor }}>
-          <h2 className="font-semibold mb-4" style={{ color: textPrimary }}>Apartments per Stage</h2>
+          <h2 className="font-semibold mb-4" style={{ color: textPrimary }}>{s.progressByStage}</h2>
           <div className="space-y-3">
             {sortedStages.map(s => {
               const count = stats.byStage.get(s.id) ?? 0;
@@ -229,7 +229,7 @@ export function AnalyticsDashboard() {
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 bg-gray-200" />
-                  <span className="text-xs font-medium" style={{ color: textPrimary }}>Not Started</span>
+                  <span className="text-xs font-medium" style={{ color: textPrimary }}>{s.notStarted}</span>
                 </div>
                 <span className="text-xs font-bold" style={{ color: textSub }}>{stats.total - stats.started}</span>
               </div>
@@ -242,7 +242,7 @@ export function AnalyticsDashboard() {
       {/* Velocity charts */}
       <div className="grid md:grid-cols-2 gap-6 mb-6">
         <VelocityChart
-          title="Stage Completions / Week"
+          title={s.stageCompletionsWeek}
           data={velocityData.map(w => ({ label: w.label, value: w.stageCompletions }))}
           color="#4aa8d8"
           bgCard={bgCard}
@@ -251,7 +251,7 @@ export function AnalyticsDashboard() {
           textSub={textSub}
         />
         <VelocityChart
-          title="Tasks Completed / Week"
+          title={s.tasksCompletedWeek}
           data={velocityData.map(w => ({ label: w.label, value: w.tasksCompleted }))}
           color="#22c55e"
           bgCard={bgCard}
@@ -266,18 +266,18 @@ export function AnalyticsDashboard() {
         <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm" style={{ backgroundColor: bgCard, borderColor }}>
           <div className="flex items-center gap-2 mb-4">
             <Wrench size={16} style={{ color: '#8b5cf6' }} />
-            <h2 className="font-semibold" style={{ color: textPrimary }}>Contractor Tasks</h2>
+            <h2 className="font-semibold" style={{ color: textPrimary }}>{s.contractorTasksSection}</h2>
           </div>
 
           {contractorStats.total === 0 ? (
-            <p className="text-sm" style={{ color: textSub }}>No contractor assignments yet.</p>
+            <p className="text-sm" style={{ color: textSub }}>{s.noContractorAssignments}</p>
           ) : (
             <div className="space-y-3">
               <div className="grid grid-cols-3 gap-3 text-center">
                 {[
-                  { label: 'Pending', value: contractorStats.pending, color: '#f59e0b' },
-                  { label: 'Completed', value: contractorStats.completed, color: '#22c55e' },
-                  { label: 'Overdue', value: contractorStats.overdue, color: '#ef4444' },
+                  { label: s.pendingLabel, value: contractorStats.pending, color: '#f59e0b' },
+                  { label: s.completedLabel, value: contractorStats.completed, color: '#22c55e' },
+                  { label: s.overdue, value: contractorStats.overdue, color: '#ef4444' },
                 ].map(({ label, value, color }) => (
                   <div key={label} className="rounded-xl py-3" style={{ backgroundColor: color + '12' }}>
                     <div className="text-xl font-bold" style={{ color }}>{value}</div>
@@ -316,10 +316,10 @@ export function AnalyticsDashboard() {
         <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm" style={{ backgroundColor: bgCard, borderColor }}>
           <div className="flex items-center gap-2 mb-4">
             <Clock size={16} style={{ color: '#4aa8d8' }} />
-            <h2 className="font-semibold" style={{ color: textPrimary }}>Recent Activity</h2>
+            <h2 className="font-semibold" style={{ color: textPrimary }}>{s.recentActivity}</h2>
           </div>
           {recentActivity.length === 0 ? (
-            <p className="text-sm" style={{ color: textSub }}>No activity yet.</p>
+            <p className="text-sm" style={{ color: textSub }}>{s.noActivity}</p>
           ) : (
             <div className="space-y-2.5">
               {recentActivity.map(log => (
@@ -328,8 +328,8 @@ export function AnalyticsDashboard() {
                   <div className="min-w-0 flex-1">
                     <p className="text-xs leading-relaxed" style={{ color: textPrimary }}>
                       <span className="font-semibold">{log.userName}</span>
-                      {' updated '}
-                      <span className="font-medium">{log.buildingId} · Apt {log.apartmentNumber}</span>
+                      {' '}{s.updatedStageNote}{' '}
+                      <span className="font-medium">{log.buildingId} · {s.aptPrefix} {log.apartmentNumber}</span>
                       {log.fieldChanged === 'currentStageId' && (
                         <> → <span style={{ color: '#4aa8d8' }}>{log.newValue}</span></>
                       )}

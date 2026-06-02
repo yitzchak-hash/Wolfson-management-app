@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ActivityLog, BackupSnapshot } from '../../types';
 import { format } from 'date-fns';
 import { Clock, RotateCcw } from 'lucide-react';
+import { useStore } from '../../data/store';
 
 interface ActivitySectionProps {
   logs: ActivityLog[];
@@ -10,26 +11,27 @@ interface ActivitySectionProps {
   onRestore?: (snapshotId: string) => void;
 }
 
-function actionLabel(log: ActivityLog): string {
-  if (log.actionType === 'note') return 'updated stage note';
-  if (log.actionType === 'contractor_upload') return `uploaded file: ${log.newValue}`;
-  if (log.actionType === 'contractor_note') return 'added a note';
-  if (log.actionType === 'contractor_complete') return 'marked task complete';
-  if (log.fieldChanged === 'currentStageId') return 'changed stage';
-  if (log.fieldChanged === 'classification') return `changed classification: ${log.previousValue} → ${log.newValue}`;
-  if (log.fieldChanged === 'generalNotes') return 'updated general notes';
-  if (log.fieldChanged === 'displayName') return `renamed apartment to "${log.newValue}"`;
-  return `updated ${log.fieldChanged}`;
-}
-
 export function ActivitySection({ logs, autoBackup, backupSnapshots, onRestore }: ActivitySectionProps) {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const s = useStore(state => state.mainUiStrings);
+
+  function actionLabel(log: ActivityLog): string {
+    if (log.actionType === 'note') return s.updatedStageNote;
+    if (log.actionType === 'contractor_upload') return `${s.uploadedFile} ${log.newValue}`;
+    if (log.actionType === 'contractor_note') return s.addedNote;
+    if (log.actionType === 'contractor_complete') return s.markedComplete;
+    if (log.fieldChanged === 'currentStageId') return s.changedStage;
+    if (log.fieldChanged === 'classification') return `${s.changedClassification} ${log.previousValue} → ${log.newValue}`;
+    if (log.fieldChanged === 'generalNotes') return s.updatedGeneralNotes;
+    if (log.fieldChanged === 'displayName') return `${s.renamedApartment}${log.newValue}"`;
+    return `${s.updatedStageNote} ${log.fieldChanged}`;
+  }
 
   if (logs.length === 0) {
     return (
       <div className="text-center text-gray-400 text-sm py-6">
         <Clock size={24} className="mx-auto mb-2 opacity-40" />
-        No activity yet
+        {s.noActivityYet2}
       </div>
     );
   }

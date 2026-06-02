@@ -28,6 +28,7 @@ interface Props {
 
 export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: Props) {
   const { stages, contractors, contractorAssignments, updateContractorAssignment, addContractorAssignment, updateApartment } = useStore();
+  const s = useStore(state => state.mainUiStrings);
 
   const [contractorId, setContractorId] = useState('');
   const [task, setTask] = useState('');
@@ -197,7 +198,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                 Tasks
                 {pendingCount > 0 && (
                   <span className="text-xs bg-[#1e3a5f]/10 text-[#1e3a5f] px-1.5 py-0.5 rounded-full font-medium">
-                    {pendingCount} pending
+                    {pendingCount} {s.pendingBadge}
                   </span>
                 )}
               </h3>
@@ -209,7 +210,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                   }`}
                 >
                   <CheckCircle2 size={11} />
-                  {hideCompleted ? `${completedCount} hidden` : 'Hide done'}
+                  {hideCompleted ? `${completedCount} hidden` : s.hideDone}
                 </button>
               )}
             </div>
@@ -235,7 +236,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                           onChange={e => setEditContractorId(e.target.value)}
                           className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                         >
-                          <option value="">Select contractor *</option>
+                          <option value="">{s.selectContractor}</option>
                           {(['drywall', 'ac', 'general'] as ContractorCategory[]).map(cat => {
                             const items = contractors.filter(c => c.category === cat && c.active);
                             if (!items.length) return null;
@@ -273,14 +274,14 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                             onClick={() => setEditingTaskId(null)}
                             className="flex-1 py-1.5 text-xs font-medium border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 transition-colors"
                           >
-                            Cancel
+                            {s.cancel}
                           </button>
                           <button
                             onClick={() => saveEdit(a.id)}
                             disabled={!editTask.trim() || !editContractorId}
                             className="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-medium bg-[#1e3a5f] text-white rounded-lg hover:bg-[#162d4a] disabled:opacity-40 transition-colors"
                           >
-                            <Save size={11} /> Save
+                            <Save size={11} /> {s.save}
                           </button>
                         </div>
                       </div>
@@ -365,7 +366,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                   onClick={() => setShowForm(true)}
                   className="w-full flex items-center justify-center gap-2 py-3 text-sm font-medium text-gray-500 hover:text-[#1e3a5f] transition-colors"
                 >
-                  <Plus size={15} /> Add Task
+                  <Plus size={15} /> {s.addTask}
                 </button>
               ) : (
                 <div className="p-4 space-y-3">
@@ -377,7 +378,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                   {!apartment.driveLink && (
                     <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 border border-amber-200">
                       <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" />
-                      <span>Set a Google Drive folder in the Details tab before creating tasks.</span>
+                      <span>{s.driveWarning}</span>
                     </div>
                   )}
 
@@ -386,7 +387,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                     onChange={e => setContractorId(e.target.value)}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                   >
-                    <option value="">Select contractor *</option>
+                    <option value="">{s.selectContractor}</option>
                     {(['drywall', 'ac', 'general'] as ContractorCategory[]).map(cat => {
                       const items = contractors.filter(c => c.category === cat && c.active);
                       if (!items.length) return null;
@@ -402,7 +403,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                     value={task}
                     onChange={e => setTask(e.target.value)}
                     rows={2}
-                    placeholder="Task description *"
+                    placeholder={s.taskDescriptionPlaceholder}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 resize-none"
                   />
 
@@ -502,7 +503,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                       onChange={e => setStageId(e.target.value)}
                       className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                     >
-                      <option value="">Stage (optional)</option>
+                      <option value="">{s.stageOptional}</option>
                       {sortedStages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                     <input
@@ -516,10 +517,10 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                       onChange={e => setPriority(e.target.value)}
                       className="col-span-2 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                     >
-                      <option value="">Priority (optional)</option>
-                      <option value="urgent">🔴 Urgent</option>
-                      <option value="normal">⚪ Normal</option>
-                      <option value="low">🟢 Low</option>
+                      <option value="">{s.noPriorityLabel}</option>
+                      <option value="urgent">{s.urgentPriority}</option>
+                      <option value="normal">{s.normalPriority}</option>
+                      <option value="low">{s.lowPriority}</option>
                     </select>
                   </div>
 
@@ -528,7 +529,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                     disabled={!contractorId || !task.trim() || !apartment.driveLink || uploading}
                     className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] disabled:opacity-40 transition-colors"
                   >
-                    <Plus size={15} /> {uploading ? 'Uploading…' : 'Create Task'}
+                    <Plus size={15} /> {uploading ? 'Uploading…' : s.createTask}
                   </button>
                 </div>
               )}

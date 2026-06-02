@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { Apartment, BuildingId, Stage } from '../../types';
+import { useStore } from '../../data/store';
 
 interface BuildingDiagramProps {
   apartments: Apartment[];
@@ -104,6 +105,7 @@ function AptCell({
   isDuplex, isBasement, isMerged, mergedLabel, isBulkSelected, isContractorHighlighted,
   aptSubLabel, taskInfo, nextStageName, onAddTask, allTasksDone, compact,
 }: AptCellProps) {
+  const ui = useStore(state => state.mainUiStrings);
   const hasStage = !!stage;
   // Dimmed cells use a gray palette to make the filter visually obvious
   const bgColor = isDimmed ? '#e5e7eb' : (hasStage ? stage!.color : isBasement ? '#eef3f9' : '#ffffff');
@@ -169,7 +171,7 @@ function AptCell({
           className="w-full text-center leading-none block truncate px-0.5"
           style={{ fontSize: '9px', opacity: isDimmed ? 0.4 : 0.9, color: isDimmed ? undefined : (allTasksDone ? '#22c55e' : '#f97316'), fontWeight: 600 }}
         >
-          {allTasksDone ? '✓ Done' : `⏳ ${taskInfo}`}
+          {allTasksDone ? ui.doneIndicator : `⏳ ${taskInfo}`}
         </span>
       )}
 
@@ -360,6 +362,7 @@ function BuildingColumn({
   aptCompletedData?: Map<string, boolean>;
   compact?: boolean;
 }) {
+  const ui = useStore(state => state.mainUiStrings);
   const stageMap = useMemo(() => new Map(stages.map(s => [s.id, s])), [stages]);
   const aptMap = useMemo(() => {
     const m = new Map<string, Apartment>();
@@ -469,7 +472,7 @@ function BuildingColumn({
                 }}
               >
                 {row.type === 'ground' ? (
-                  <span style={{ fontSize: '7px', textAlign: 'center', lineHeight: 1.1 }}>קרקע</span>
+                  <span style={{ fontSize: '7px', textAlign: 'center', lineHeight: 1.1 }}>{ui.groundCommercial}</span>
                 ) : (
                   <span style={{ fontSize: row.floorLabel.startsWith('-') ? '8px' : '9px' }}>
                     {row.floorLabel}
@@ -492,8 +495,8 @@ function BuildingColumn({
                       fontStyle: 'italic',
                     }}
                   >
-                    {!compact && row.type === 'ground' && 'Ground / Commercial'}
-                    {!compact && row.type === 'lobby' && 'Lobby'}
+                    {!compact && row.type === 'ground' && ui.groundCommercial}
+                    {!compact && row.type === 'lobby' && ui.lobby}
                   </div>
                 ) : row.type === 'normal' || row.type === 'basement' ? (
                   <FourCellRow

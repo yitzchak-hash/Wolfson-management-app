@@ -7,7 +7,7 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const [shake, setShake] = useState(false);
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
-  const { login } = useStore();
+  const { login, mainUiStrings: s } = useStore();
   const navigate = useNavigate();
 
   useEffect(() => { inputRefs.current[0]?.focus(); }, []);
@@ -40,7 +40,7 @@ export function LoginPage() {
     if (user) {
       navigate('/project');
     } else {
-      setError('Invalid code. Please try again.');
+      setError(s.invalidCode);
       setShake(true);
       setDigits(['', '', '', '', '', '']);
       setTimeout(() => { setShake(false); inputRefs.current[0]?.focus(); }, 600);
@@ -108,7 +108,7 @@ export function LoginPage() {
             </div>
             <p className="text-gray-500 text-xs tracking-wider mb-6">WOLFSON GROUP · PROJECT MANAGEMENT</p>
 
-            <p className="text-gray-400 text-sm">Enter your access code</p>
+            <p className="text-gray-400 text-sm">{s.enterCode}</p>
           </div>
 
           {/* Code input */}
@@ -132,15 +132,15 @@ export function LoginPage() {
             {error && <div className="text-red-400 text-sm text-center mb-4 font-medium">{error}</div>}
 
             <button
-              onClick={() => { const c = digits.join(''); if (c.length === 6) attemptLogin(c); else setError('Please enter all 6 digits.'); }}
+              onClick={() => { const c = digits.join(''); if (c.length === 6) attemptLogin(c); else setError(s.pleaseEnterDigits); }}
               className="w-full py-3 font-semibold rounded-xl text-sm tracking-wide text-white transition-all hover:opacity-90 active:scale-98"
               style={{ background: 'linear-gradient(135deg, #4aa8d8, #1e6fa5)' }}
             >
-              Enter Project
+              {s.enterProject}
             </button>
           </div>
 
-          <p className="text-center text-gray-600 text-xs mt-8">TzviAir Internal System</p>
+          <p className="text-center text-gray-600 text-xs mt-8">{s.footerText}</p>
         </div>
       </div>
     </div>

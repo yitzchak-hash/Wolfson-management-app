@@ -24,7 +24,7 @@ type ColKey = typeof ALL_COLUMNS[number]['key'];
 const TASK_SUB_COLS = ['Description', 'Contractor', 'Stage', 'Due Date', 'Status', 'Completed'] as const;
 
 export function ReportsPage() {
-  const { apartments, stages, stageNotes, contractorAssignments, contractors } = useStore();
+  const { apartments, stages, stageNotes, contractorAssignments, contractors, mainUiStrings: s } = useStore();
 
   const [buildingFilter, setBuildingFilter] = useState<BuildingFilter>('all');
   const [stageFilter, setStageFilter] = useState<string[]>([]);
@@ -156,7 +156,7 @@ export function ReportsPage() {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{s.reportsPage}</h1>
         <div className="flex gap-2">
           <button
             onClick={() => setShowColumnPicker(v => !v)}
@@ -172,14 +172,14 @@ export function ReportsPage() {
             className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
           >
             <Printer size={16} />
-            Print
+            {s.print}
           </button>
           <button
             onClick={exportCSV}
             className="flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors"
           >
             <Download size={16} />
-            Export CSV
+            {s.exportCsv}
           </button>
         </div>
       </div>
@@ -187,7 +187,7 @@ export function ReportsPage() {
       {/* Column picker */}
       {showColumnPicker && (
         <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">Select Export Columns</h3>
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">{s.selectExportColumns}</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2">
             {ALL_COLUMNS.map(col => (
               <label key={col.key} className="flex items-center gap-2 cursor-pointer select-none">
@@ -199,14 +199,14 @@ export function ReportsPage() {
                   className="rounded border-gray-300 text-[#1e3a5f] focus:ring-[#1e3a5f]"
                 />
                 <span className="text-sm text-gray-700">{col.label}</span>
-                {col.always && <span className="text-xs text-gray-400">(required)</span>}
+                {col.always && <span className="text-xs text-gray-400">{s.requiredLabel}</span>}
               </label>
             ))}
           </div>
 
           {/* Stage notes columns */}
           <div className="border-t border-gray-100 mt-3 pt-3">
-            <span className="text-xs font-medium text-gray-500 mb-2 block">Stage Notes Columns</span>
+            <span className="text-xs font-medium text-gray-500 mb-2 block">{s.stageNotesColumns}</span>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2">
               {sortedStages.map(s => (
                 <label key={s.id} className="flex items-center gap-2 cursor-pointer select-none">
@@ -233,9 +233,9 @@ export function ReportsPage() {
                 className="rounded border-gray-300 text-[#1e3a5f] focus:ring-[#1e3a5f]"
               />
               <ClipboardList size={14} className="text-gray-500" />
-              <span className="text-sm text-gray-700 font-medium">Include Tasks</span>
+              <span className="text-sm text-gray-700 font-medium">{s.includeTasks}</span>
               <span className="text-xs text-gray-400">
-                (adds Task 1–N columns: description, contractor, stage, due date, status, completion date)
+                {s.includeTasksHint}
               </span>
             </label>
           </div>
@@ -247,7 +247,7 @@ export function ReportsPage() {
         <div className="flex items-center justify-between gap-2 mb-4">
           <div className="flex items-center gap-2">
             <Filter size={16} className="text-gray-500" />
-            <h2 className="font-semibold text-gray-700 text-sm">Filters</h2>
+            <h2 className="font-semibold text-gray-700 text-sm">{s.filtersSection}</h2>
           </div>
           {/* Apartment search */}
           <div className="flex items-center gap-2">
@@ -257,7 +257,7 @@ export function ReportsPage() {
                 value={searchInput}
                 onChange={e => setSearchInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && setAppliedSearch(searchInput)}
-                placeholder="Search apartment…"
+                placeholder={s.searchApartment}
                 className="pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg w-48 focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
               />
             </div>
@@ -265,7 +265,7 @@ export function ReportsPage() {
               onClick={() => setAppliedSearch(searchInput)}
               className="px-3 py-1.5 bg-[#1e3a5f] text-white text-sm font-medium rounded-lg hover:bg-[#162d4a] transition-colors"
             >
-              Enter
+              {s.enterButton}
             </button>
             {appliedSearch && (
               <button
@@ -280,20 +280,20 @@ export function ReportsPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-2 block">Building</label>
+            <label className="text-xs font-medium text-gray-500 mb-2 block">{s.buildingPrefix}</label>
             <div className="flex gap-1.5 flex-wrap">
               {(['all', 'A1', 'A2', 'A3'] as const).map(b => (
                 <button key={b} onClick={() => setBuildingFilter(b)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                     buildingFilter === b ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
                   }`}>
-                  {b === 'all' ? 'All' : b}
+                  {b === 'all' ? s.all : b}
                 </button>
               ))}
             </div>
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-2 block">Classification</label>
+            <label className="text-xs font-medium text-gray-500 mb-2 block">{s.classificationFilter}</label>
             <div className="flex gap-1.5">
               {(['all', 'standard', 'shinui'] as const).map(c => (
                 <button key={c} onClick={() => setClassFilter(c)}
@@ -302,18 +302,18 @@ export function ReportsPage() {
                       ? c === 'shinui' ? 'bg-amber-500 text-white border-amber-500' : 'bg-[#1e3a5f] text-white border-[#1e3a5f]'
                       : 'bg-white text-gray-600 border-gray-200'
                   }`}>
-                  {c === 'shinui' ? 'Changes' : c.charAt(0).toUpperCase() + c.slice(1)}
+                  {c === 'all' ? s.all : c === 'shinui' ? s.changes : s.standard}
                 </button>
               ))}
             </div>
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-2 block">Include Not Started</label>
+            <label className="text-xs font-medium text-gray-500 mb-2 block">{s.includeNotStarted}</label>
             <button onClick={() => setIncludeNoStage(v => !v)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                 includeNoStage ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-500 border-gray-200'
               }`}>
-              {includeNoStage ? 'Yes' : 'No'}
+              {includeNoStage ? s.yes : s.no}
             </button>
           </div>
         </div>
@@ -321,7 +321,7 @@ export function ReportsPage() {
         {/* Date range filter */}
         <div className="mt-4 flex flex-wrap items-end gap-4">
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block">Last Updated — From</label>
+            <label className="text-xs font-medium text-gray-500 mb-1.5 block">{s.lastUpdatedFrom}</label>
             <input
               type="date"
               value={dateFrom}
@@ -330,7 +330,7 @@ export function ReportsPage() {
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block">To</label>
+            <label className="text-xs font-medium text-gray-500 mb-1.5 block">{s.toDate}</label>
             <input
               type="date"
               value={dateTo}
@@ -343,13 +343,13 @@ export function ReportsPage() {
               onClick={() => { setDateFrom(''); setDateTo(''); }}
               className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors pb-1.5"
             >
-              <X size={12} /> Clear dates
+              <X size={12} /> {s.clearDates}
             </button>
           )}
         </div>
 
         <div className="mt-4">
-          <label className="text-xs font-medium text-gray-500 mb-2 block">Stages (empty = all)</label>
+          <label className="text-xs font-medium text-gray-500 mb-2 block">{s.stagesEmptyAll}</label>
           <div className="flex flex-wrap gap-2">
             {sortedStages.map(s => (
               <button key={s.id} onClick={() => toggleStage(s.id)}
@@ -371,7 +371,7 @@ export function ReportsPage() {
 
       <div className="flex items-center justify-between mb-3">
         <span className="text-sm text-gray-500">
-          Showing <strong className="text-gray-800">{filtered.length}</strong> apartments
+          {s.showingLabel} <strong className="text-gray-800">{filtered.length}</strong> {s.apartmentsLabel}
         </span>
       </div>
 
@@ -402,7 +402,7 @@ export function ReportsPage() {
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={20} className="text-center py-10 text-gray-400">No apartments match the current filters</td></tr>
+                <tr><td colSpan={20} className="text-center py-10 text-gray-400">{s.noApartmentsMatch}</td></tr>
               ) : (
                 filtered.map((apt, i) => {
                   const stage = stages.find(s => s.id === apt.currentStageId);
@@ -417,11 +417,11 @@ export function ReportsPage() {
                       )}
                       {enabledCols.has('apartment') && (
                         <td className="px-4 py-2.5 font-medium text-gray-800">
-                          {apt.displayName || apt.apartmentNumber || <span className="text-gray-400 italic">Unnamed</span>}
+                          {apt.displayName || apt.apartmentNumber || <span className="text-gray-400 italic">{s.unnamed}</span>}
                         </td>
                       )}
                       {enabledCols.has('floor') && (
-                        <td className="px-4 py-2.5 text-gray-600">{apt.floor === 0 ? 'G' : apt.floor}</td>
+                        <td className="px-4 py-2.5 text-gray-600">{apt.floor === 0 ? s.groundFloor : apt.floor}</td>
                       )}
                       {enabledCols.has('stage') && (
                         <td className="px-4 py-2.5">
@@ -432,15 +432,15 @@ export function ReportsPage() {
                               {stage.name}
                             </span>
                           ) : (
-                            <span className="text-gray-400 text-xs">Not Started</span>
+                            <span className="text-gray-400 text-xs">{s.notStarted}</span>
                           )}
                         </td>
                       )}
                       {enabledCols.has('classification') && (
                         <td className="px-4 py-2.5">
                           {apt.classification === 'shinui'
-                            ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-700 font-medium">Changes</span>
-                            : <span className="text-gray-500 text-xs">Standard</span>}
+                            ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-700 font-medium">{s.changes}</span>
+                            : <span className="text-gray-500 text-xs">{s.standard}</span>}
                         </td>
                       )}
                       {enabledCols.has('generalNotes') && (
@@ -456,7 +456,7 @@ export function ReportsPage() {
                           {aptTasks.length === 0
                             ? <span className="text-gray-400">—</span>
                             : <span className={doneCount === aptTasks.length ? 'text-green-600 font-medium' : 'text-gray-600'}>
-                                {doneCount}/{aptTasks.length} done
+                                {doneCount}/{aptTasks.length} {s.doneSuffix}
                               </span>
                           }
                         </td>

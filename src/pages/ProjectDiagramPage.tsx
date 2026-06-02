@@ -12,7 +12,7 @@ import { Toast } from '../components/ui/Toast';
 type ClassFilter = 'all' | 'standard' | 'shinui';
 
 export function ProjectDiagramPage() {
-  const { apartments, stages, currentUser, bulkUpdateApartments, contractorAssignments, contractors } = useStore();
+  const { apartments, stages, currentUser, bulkUpdateApartments, contractorAssignments, contractors, mainUiStrings: s } = useStore();
 
   const [selectedBuilding, setSelectedBuilding] = useState<BuildingId | 'all'>('all');
   const [activeStageIds, setActiveStageIds] = useState<string[]>([]);
@@ -178,7 +178,7 @@ export function ProjectDiagramPage() {
                       : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
-                  {b === 'all' ? 'All' : b}
+                  {b === 'all' ? s.all : b}
                 </button>
               ))}
             </div>
@@ -195,7 +195,7 @@ export function ProjectDiagramPage() {
                       : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
-                  {c === 'all' ? 'All' : c === 'standard' ? 'Standard' : 'Changes'}
+                  {c === 'all' ? s.all : c === 'standard' ? s.standard : s.changes}
                 </button>
               ))}
             </div>
@@ -206,7 +206,7 @@ export function ProjectDiagramPage() {
               <input
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search apt..."
+                placeholder={s.searchApt}
                 className="pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-xl w-36 focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-gray-50"
               />
             </div>
@@ -264,12 +264,12 @@ export function ProjectDiagramPage() {
             <div className="ml-auto flex items-center gap-3 text-xs text-gray-500">
               {bulkMode ? (
                 <span className="text-[#1e3a5f] font-semibold">
-                  {bulkSelected.size} selected — click apartments to select
+                  {bulkSelected.size} {s.bulkSelected}
                 </span>
               ) : (
                 <>
-                  <span><strong className="text-gray-800">{total}</strong> units</span>
-                  <span><strong className="text-gray-500">{noStage}</strong> not started</span>
+                  <span><strong className="text-gray-800">{total}</strong> {s.bulkUnits}</span>
+                  <span><strong className="text-gray-500">{noStage}</strong> {s.bulkNotStarted}</span>
                 </>
               )}
             </div>
@@ -363,7 +363,7 @@ export function ProjectDiagramPage() {
                     {sortedStages.find(s => s.id === bulkStageId)?.name}
                   </span>
                 ) : (
-                  <span className="text-white/70">Select stage…</span>
+                  <span className="text-white/70">{s.selectStagePlaceholder}</span>
                 )}
                 <ChevronDown size={14} className="ml-auto" />
               </button>
@@ -373,7 +373,7 @@ export function ProjectDiagramPage() {
                     onClick={() => { setBulkStageId(''); setBulkDropdownOpen(false); }}
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-500 hover:bg-gray-50"
                   >
-                    — Not Started —
+                    {s.notStartedOption}
                   </button>
                   {sortedStages.map(s => (
                     <button
@@ -394,11 +394,11 @@ export function ProjectDiagramPage() {
               disabled={bulkSelected.size === 0}
               className="px-4 py-2 bg-[#4aa8d8] rounded-lg text-sm font-semibold disabled:opacity-40 hover:bg-[#3897c7] transition-colors"
             >
-              Apply to {bulkSelected.size > 0 ? bulkSelected.size : '…'}
+              {s.applyTo} {bulkSelected.size > 0 ? bulkSelected.size : '…'}
             </button>
 
             <button onClick={exitBulkMode} className="ml-auto px-3 py-2 text-white/70 hover:text-white text-sm">
-              Cancel
+              {s.cancel}
             </button>
           </div>
         )}

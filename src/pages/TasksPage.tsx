@@ -188,7 +188,7 @@ export function TasksPage() {
       priority: (editFields.priority as TaskPriority) || undefined,
     });
     setEditingId(null);
-    onToast('Task updated');
+    onToast(s.taskUpdated);
   }
 
   function handleAdd() {
@@ -267,7 +267,7 @@ export function TasksPage() {
             className="flex items-center gap-1.5 px-3 py-2 border border-[#1e3a5f] text-[#1e3a5f] rounded-lg text-sm font-medium hover:bg-[#1e3a5f]/5 transition-colors"
           >
             <Layers size={15} />
-            Bulk Add
+            {s.bulkAdd}
           </button>
           <button
             onClick={() => setShowAdd(v => !v)}
@@ -282,7 +282,7 @@ export function TasksPage() {
         {showFilters && (
           <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 flex flex-wrap gap-3 items-end">
             <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">Building</label>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">{s.buildingPrefix}</label>
               <div className="flex gap-1">
                 {(['all', 'A1', 'A2', 'A3'] as const).map(b => (
                   <button
@@ -292,7 +292,7 @@ export function TasksPage() {
                       filterBuilding === b ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'bg-white text-gray-600 border-gray-200'
                     }`}
                   >
-                    {b === 'all' ? 'All' : b}
+                    {b === 'all' ? s.all : b}
                   </button>
                 ))}
               </div>
@@ -304,7 +304,7 @@ export function TasksPage() {
                 onChange={e => setFilterStage(e.target.value)}
                 className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none"
               >
-                <option value="">All stages</option>
+                <option value="">{s.allStages}</option>
                 {sortedStages.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
               </select>
             </div>
@@ -315,25 +315,25 @@ export function TasksPage() {
                 onChange={e => setFilterPriority(e.target.value)}
                 className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none"
               >
-                <option value="">All priorities</option>
-                <option value="urgent">Urgent</option>
-                <option value="normal">Normal</option>
-                <option value="low">Low</option>
+                <option value="">{s.allPriorities}</option>
+                <option value="urgent">{s.urgentPriority}</option>
+                <option value="normal">{s.normalPriority}</option>
+                <option value="low">{s.lowPriority}</option>
               </select>
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">Due from</label>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">{s.dueFrom}</label>
               <input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)}
                 className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none" />
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">Due to</label>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">{s.dueTo}</label>
               <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)}
                 className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none" />
             </div>
             <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
               <input type="checkbox" checked={filterOverdue} onChange={e => setFilterOverdue(e.target.checked)} className="rounded" />
-              Overdue only
+              {s.overdueOnly}
             </label>
             {hasAdvancedFilters && (
               <button onClick={clearAdvancedFilters} className="text-xs text-gray-400 hover:text-gray-600 underline">
@@ -347,7 +347,7 @@ export function TasksPage() {
         {showAdd && (
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-blue-800">New Task</h3>
+              <h3 className="text-sm font-semibold text-blue-800">{s.newTask}</h3>
               <button onClick={() => setShowAdd(false)} className="text-blue-400 hover:text-blue-600"><X size={16} /></button>
             </div>
             <div className="grid grid-cols-2 gap-3 mb-3">
@@ -378,7 +378,7 @@ export function TasksPage() {
                   <optgroup key={bid} label={`Building ${bid}`}>
                     {resApts.filter(a => a.buildingId === bid).map(a => (
                       <option key={a.id} value={a.id}>
-                        Apt {a.displayName || a.apartmentNumber} (Floor {a.floor})
+                        {s.aptPrefix} {a.displayName || a.apartmentNumber} ({s.floorPrefix} {a.floor})
                       </option>
                     ))}
                   </optgroup>
@@ -403,10 +403,10 @@ export function TasksPage() {
                 onChange={e => setAddForm(f => ({ ...f, priority: e.target.value }))}
                 className="border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white"
               >
-                <option value="">Priority (optional)</option>
-                <option value="urgent">🔴 Urgent</option>
-                <option value="normal">⚪ Normal</option>
-                <option value="low">🟢 Low</option>
+                <option value="">{s.noPriorityLabel}</option>
+                <option value="urgent">{s.urgentPriority}</option>
+                <option value="normal">{s.normalPriority}</option>
+                <option value="low">{s.lowPriority}</option>
               </select>
             </div>
             <textarea
@@ -503,7 +503,7 @@ export function TasksPage() {
                   className={`bg-white border rounded-xl overflow-hidden transition-all ${a.completedAt ? 'border-green-200 opacity-80' : 'border-gray-200'}`}
                 >
                   <div className="flex items-start gap-3 p-4">
-                    <Tooltip text={a.completedAt ? 'Mark as incomplete' : 'Mark as complete'} side="right">
+                    <Tooltip text={a.completedAt ? s.markIncomplete : s.markComplete} side="right">
                       <button
                         onClick={() => updateContractorAssignment(a.id, { completedAt: a.completedAt ? null : new Date().toISOString() })}
                         className="mt-0.5 flex-shrink-0"
@@ -526,7 +526,7 @@ export function TasksPage() {
                           </span>
                         )}
                         <span className="font-medium text-gray-800 text-sm">
-                          {a.buildingId} · Apt {apt?.displayName || apt?.apartmentNumber}
+                          {a.buildingId} · {s.aptPrefix} {apt?.displayName || apt?.apartmentNumber}
                         </span>
                         {stage && (
                           <span
@@ -600,7 +600,7 @@ export function TasksPage() {
                     </div>
 
                     <div className="flex items-center gap-1 flex-shrink-0">
-                      <Tooltip text={isEditing ? 'Cancel edit' : 'Edit task'}>
+                      <Tooltip text={isEditing ? s.cancel : s.editTask}>
                         <button
                           onClick={() => isEditing ? setEditingId(null) : startEdit(a)}
                           className={`p-1.5 rounded-lg transition-colors ${isEditing ? 'bg-[#1e3a5f]/10 text-[#1e3a5f]' : 'text-gray-400 hover:bg-gray-100'}`}
@@ -608,9 +608,9 @@ export function TasksPage() {
                           <Edit2 size={14} />
                         </button>
                       </Tooltip>
-                      <Tooltip text="Delete task">
+                      <Tooltip text={s.deleteTask}>
                         <button
-                          onClick={() => { if (confirm('Delete this task?')) { deleteContractorAssignment(a.id); onToast('Task deleted'); } }}
+                          onClick={() => { if (confirm(s.deleteTaskConfirm)) { deleteContractorAssignment(a.id); onToast(s.taskDeleted); } }}
                           className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600"
                         >
                           <Trash2 size={14} />
@@ -625,7 +625,7 @@ export function TasksPage() {
                         value={editFields.taskDescription}
                         onChange={e => setEditFields(f => ({ ...f, taskDescription: e.target.value }))}
                         rows={2}
-                        placeholder="Task description"
+                        placeholder={s.taskDescriptionPlaceholder}
                         className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 resize-none bg-white"
                       />
                       <div className="grid grid-cols-2 gap-3">
@@ -634,7 +634,7 @@ export function TasksPage() {
                           onChange={e => setEditFields(f => ({ ...f, stageId: e.target.value }))}
                           className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white"
                         >
-                          <option value="">No stage</option>
+                          <option value="">{s.notStartedOption}</option>
                           {sortedStages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
                         <input
@@ -648,10 +648,10 @@ export function TasksPage() {
                           onChange={e => setEditFields(f => ({ ...f, priority: e.target.value }))}
                           className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white"
                         >
-                          <option value="">Priority</option>
-                          <option value="urgent">🔴 Urgent</option>
-                          <option value="normal">⚪ Normal</option>
-                          <option value="low">🟢 Low</option>
+                          <option value="">{s.noPriorityLabel}</option>
+                          <option value="urgent">{s.urgentPriority}</option>
+                          <option value="normal">{s.normalPriority}</option>
+                          <option value="low">{s.lowPriority}</option>
                         </select>
                       </div>
                       <div className="flex items-center gap-3">
@@ -659,10 +659,10 @@ export function TasksPage() {
                           onClick={() => saveEdit(a.id)}
                           className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-xs font-medium hover:bg-[#162d4a]"
                         >
-                          <Save size={13} /> Save
+                          <Save size={13} /> {s.save}
                         </button>
                         <button onClick={() => setEditingId(null)} className="text-xs text-gray-500 hover:text-gray-700">
-                          Cancel
+                          {s.cancel}
                         </button>
                       </div>
                     </div>

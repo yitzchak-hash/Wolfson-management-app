@@ -3,7 +3,7 @@ import { useStore } from '../data/store';
 import {
   Plus, Trash2, Save, ChevronUp, ChevronDown, Shield, Sun, Moon,
   Copy, Check, Download, Upload, HardDrive, X, HardDriveDownload, ToggleLeft, ToggleRight,
-  Languages, Clock, RotateCcw, Wifi, WifiOff, Loader, Database, RefreshCw, CloudUpload,
+  Languages, Clock, RotateCcw, Wifi, WifiOff, Loader, Database, RefreshCw, CloudUpload, Search,
 } from 'lucide-react';
 import { isFirebaseConfigured, db, fsSet, fsGetAll } from '../data/firebase';
 import { Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency } from '../types';
@@ -26,7 +26,7 @@ const CAT_COLORS: Record<ContractorCategory, string> = { drywall: '#f59e0b', ac:
 const CAT_LABELS: Record<ContractorCategory, string> = { drywall: 'Drywall', ac: 'AC', general: 'General' };
 
 export function SettingsPage() {
-  const { stages, users, updateStage, addStage, deleteStage, updateUser, addUser, lightTheme, setLightTheme } = useStore();
+  const { stages, users, updateStage, addStage, deleteStage, updateUser, addUser, lightTheme, setLightTheme, mainUiStrings: s } = useStore();
   const [activeTab, setActiveTab] = useState<Tab>('stages');
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
@@ -37,16 +37,16 @@ export function SettingsPage() {
   const sortedStages = [...stages].sort((a, b) => a.order - b.order);
 
   const TAB_LABELS: Record<Tab, string> = {
-    stages: 'Stages',
-    users: 'Users',
-    contractors: 'Contractors',
-    app: 'App',
-    language: 'Language',
+    stages: s.settingsStages,
+    users: s.settingsUsers,
+    contractors: s.settingsContractors,
+    app: s.settingsApp,
+    language: s.settingsLanguage,
   };
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Settings</h1>
+      <h1 className="text-2xl font-bold text-gray-900 mb-6">{s.pageSettings}</h1>
 
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-6 flex-wrap">
         {(['stages', 'users', 'contractors', 'app', 'language'] as Tab[]).map(tab => (
@@ -118,6 +118,7 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast }: 
   stages: Stage[]; updateStage: (id: string, c: Partial<Stage>) => void;
   addStage: (s: Stage) => void; deleteStage: (id: string) => void; onToast: (msg: string) => void;
 }) {
+  const s = useStore(state => state.mainUiStrings);
   const [edits, setEdits] = useState<Record<string, Partial<Stage>>>({});
   const [newStageName, setNewStageName] = useState('');
   const [newStageColor, setNewStageColor] = useState('#6366f1');
@@ -169,37 +170,37 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast }: 
             <div key={stage.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
               <div className="flex items-center gap-3 p-3">
                 <div className="flex flex-col gap-0.5">
-                  <Tooltip text="Move up" side="left">
+                  <Tooltip text={s.moveUp} side="left">
                     <button onClick={() => moveStage(stage.id, -1)} disabled={i === 0} className="p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-20"><ChevronUp size={14} /></button>
                   </Tooltip>
-                  <Tooltip text="Move down" side="left">
+                  <Tooltip text={s.moveDown} side="left">
                     <button onClick={() => moveStage(stage.id, 1)} disabled={i === stages.length - 1} className="p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-20"><ChevronDown size={14} /></button>
                   </Tooltip>
                 </div>
-                <Tooltip text="Change color">
+                <Tooltip text={s.changeColor}>
                   <button onClick={() => setExpandedId(isExpanded ? null : stage.id)}
                     className="w-8 h-8 rounded-lg border-2 border-white shadow-md flex-shrink-0 ring-1 ring-gray-200 hover:scale-105 transition-transform"
                     style={{ backgroundColor: color }} />
                 </Tooltip>
                 <input value={name} onChange={e => setEdit(stage.id, { name: e.target.value })}
                   className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
-                <Tooltip text={active ? 'Click to hide stage' : 'Click to activate stage'}>
+                <Tooltip text={active ? s.hideStage : s.activateStage}>
                   <button onClick={() => setEdit(stage.id, { active: !active })}
                     className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-all whitespace-nowrap ${active ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-100 border-gray-200 text-gray-500'}`}>
-                    {active ? 'Active' : 'Hidden'}
+                    {active ? s.activeLabel : s.hiddenLabel}
                   </button>
                 </Tooltip>
-                <Tooltip text="Save changes">
+                <Tooltip text={s.saveChanges}>
                   <button onClick={() => saveStage(stage)} className="p-2 text-[#1e3a5f] hover:bg-[#1e3a5f]/5 rounded-lg"><Save size={16} /></button>
                 </Tooltip>
-                <Tooltip text="Delete stage">
+                <Tooltip text={s.deleteStageTooltip}>
                   <button onClick={() => { if (confirm(`Delete "${stage.name}"?`)) deleteStage(stage.id); }}
                     className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
                 </Tooltip>
               </div>
               {isExpanded && (
                 <div className="px-4 pb-4 border-t border-gray-100 pt-3 bg-gray-50">
-                  <p className="text-xs font-medium text-gray-500 mb-2">Pick a color:</p>
+                  <p className="text-xs font-medium text-gray-500 mb-2">{s.pickColor}</p>
                   <ColorPickerWithPresets value={color} onChange={c => setEdit(stage.id, { color: c })} />
                 </div>
               )}
@@ -209,17 +210,17 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast }: 
       </div>
 
       <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-4">
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">Add New Stage</h3>
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">{s.addNewStage}</h3>
         <div className="flex gap-3 items-start">
           <ColorPickerWithPresets value={newStageColor} onChange={setNewStageColor} />
           <div className="flex-1 flex flex-col gap-2">
             <input value={newStageName} onChange={e => setNewStageName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleAddStage()}
-              placeholder="Stage name..."
+              placeholder={s.stageName}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
             <button onClick={handleAddStage}
               className="flex items-center gap-1.5 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors">
-              <Plus size={16} /> Add Stage
+              <Plus size={16} /> {s.addNewStage}
             </button>
           </div>
         </div>
@@ -233,6 +234,7 @@ function UserSettings({ users, updateUser, addUser, onToast }: {
   users: User[]; updateUser: (id: string, c: Partial<User>) => void;
   addUser: (u: User) => void; onToast: (msg: string) => void;
 }) {
+  const s = useStore(state => state.mainUiStrings);
   const [newUser, setNewUser] = useState({ name: '', role: '', code: '' });
 
   return (
@@ -245,29 +247,29 @@ function UserSettings({ users, updateUser, addUser, onToast }: {
             </div>
             <div className="flex-1 grid grid-cols-3 gap-3">
               <input defaultValue={user.name} onBlur={e => updateUser(user.id, { name: e.target.value })}
-                className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" placeholder="Name" />
+                className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" placeholder={s.nameField} />
               <input defaultValue={user.role} onBlur={e => updateUser(user.id, { role: e.target.value })}
-                className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" placeholder="Role" />
+                className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" placeholder={s.roleField} />
               <input defaultValue={user.code} onBlur={e => updateUser(user.id, { code: e.target.value })}
-                className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" placeholder="6-digit code" maxLength={6} />
+                className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" placeholder={s.codeField} maxLength={6} />
             </div>
             <button onClick={() => updateUser(user.id, { active: !user.active })}
               className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-all flex-shrink-0 ${user.active ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-100 border-gray-200 text-gray-500'}`}>
-              {user.active ? 'Active' : 'Inactive'}
+              {user.active ? s.activeLabel : s.hiddenLabel}
             </button>
           </div>
         ))}
       </div>
 
       <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-4">
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">Add New User</h3>
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">{s.addNewUser}</h3>
         <div className="grid grid-cols-3 gap-3 mb-3">
           <input value={newUser.name} onChange={e => setNewUser(n => ({ ...n, name: e.target.value }))}
-            placeholder="Name *" className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
+            placeholder={s.nameField} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
           <input value={newUser.role} onChange={e => setNewUser(n => ({ ...n, role: e.target.value }))}
-            placeholder="Role" className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
+            placeholder={s.roleField} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
           <input value={newUser.code} onChange={e => setNewUser(n => ({ ...n, code: e.target.value.replace(/\D/g, '') }))}
-            placeholder="6-digit code *" maxLength={6}
+            placeholder={s.codeField} maxLength={6}
             className="border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
         </div>
         <button
@@ -278,7 +280,7 @@ function UserSettings({ users, updateUser, addUser, onToast }: {
             onToast('User added');
           }}
           className="flex items-center gap-1.5 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors">
-          <Plus size={16} /> Add User
+          <Plus size={16} /> {s.addNewUser}
         </button>
       </div>
     </div>
@@ -287,6 +289,7 @@ function UserSettings({ users, updateUser, addUser, onToast }: {
 
 // ─── Copy button ──────────────────────────────────────────────────────────────
 function CopyButton({ text }: { text: string }) {
+  const s = useStore(state => state.mainUiStrings);
   const [copied, setCopied] = useState(false);
   function copy() {
     navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
@@ -294,14 +297,14 @@ function CopyButton({ text }: { text: string }) {
   return (
     <button onClick={copy} className="flex items-center gap-1 text-xs px-2 py-1 rounded border border-gray-200 text-gray-500 hover:border-[#4aa8d8] hover:text-[#4aa8d8] transition-all">
       {copied ? <Check size={12} /> : <Copy size={12} />}
-      {copied ? 'Copied!' : 'Copy link'}
+      {copied ? s.copied : s.copyLink}
     </button>
   );
 }
 
 // ─── Contractors tab (add/manage contractor records only) ─────────────────────
 function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
-  const { contractors, addContractor, updateContractor, deleteContractor } = useStore();
+  const { contractors, addContractor, updateContractor, deleteContractor, mainUiStrings: s } = useStore();
   const [form, setForm] = useState({ name: '', email: '', category: 'ac' as ContractorCategory });
 
   const portalBase = `${window.location.origin}/c/`;
@@ -327,7 +330,7 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
           </div>
 
           {items.length === 0 && (
-            <p className="text-sm text-gray-400 italic mb-3">No contractors in this category.</p>
+            <p className="text-sm text-gray-400 italic mb-3">{s.noContractors}</p>
           )}
 
           <div className="space-y-2">
@@ -345,13 +348,13 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
                     <CopyButton text={portalBase + c.token} />
                   </div>
                 </div>
-                <Tooltip text={c.active ? 'Click to deactivate' : 'Click to activate'}>
+                <Tooltip text={c.active ? s.hideStage : s.activateStage}>
                   <button onClick={() => updateContractor(c.id, { active: !c.active })}
                     className={`text-xs px-2.5 py-1 rounded-lg border font-medium flex-shrink-0 ${c.active ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-100 border-gray-200 text-gray-500'}`}>
-                    {c.active ? 'Active' : 'Off'}
+                    {c.active ? s.activeLabel : s.off}
                   </button>
                 </Tooltip>
-                <Tooltip text="Delete contractor">
+                <Tooltip text={s.deleteStageTooltip}>
                   <button onClick={() => { if (confirm(`Delete "${c.name}"?`)) { deleteContractor(c.id); onToast('Deleted'); } }}
                     className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 flex-shrink-0">
                     <Trash2 size={15} />
@@ -364,13 +367,13 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
       ))}
 
       <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-4">
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">Add New Contractor</h3>
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">{s.addNewContractor}</h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
           <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-            placeholder="Full name *"
+            placeholder={s.fullNameField}
             className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
           <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-            placeholder="Email address" type="email"
+            placeholder={s.emailField} type="email"
             className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
           <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value as ContractorCategory }))}
             className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30">
@@ -381,7 +384,7 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
         </div>
         <button onClick={handleAdd} disabled={!form.name.trim()}
           className="flex items-center gap-1.5 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] disabled:opacity-40 transition-colors">
-          <Plus size={16} /> Add Contractor
+          <Plus size={16} /> {s.addNewContractor}
         </button>
       </div>
     </div>
@@ -434,7 +437,7 @@ function StepRow({ step }: { step: TestStep }) {
 }
 
 function FirebaseStatusSection() {
-  const { forcePushToFirestore, apartments, stages, contractors } = useStore();
+  const { forcePushToFirestore, apartments, stages, contractors, mainUiStrings: s } = useStore();
   const [pushing, setPushing]   = useState(false);
   const [pushDone, setPushDone] = useState<'ok' | 'error' | null>(null);
 
@@ -530,7 +533,7 @@ function FirebaseStatusSection() {
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2">
           <Database size={18} className="text-[#1e3a5f]" />
-          <h2 className="font-semibold text-gray-800">Firebase Connection</h2>
+          <h2 className="font-semibold text-gray-800">{s.firebaseConnection}</h2>
         </div>
         {missingCount > 0 && !running && (
           <span className="text-xs font-medium text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
@@ -539,12 +542,12 @@ function FirebaseStatusSection() {
         )}
         {allOk && (
           <span className="text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-2 py-0.5 flex items-center gap-1">
-            <Wifi size={11} /> All systems go
+            <Wifi size={11} /> {s.allSystemsGo}
           </span>
         )}
         {anyFail && (
           <span className="text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-full px-2 py-0.5 flex items-center gap-1">
-            <WifiOff size={11} /> Connection issue
+            <WifiOff size={11} /> {s.connectionIssue}
           </span>
         )}
       </div>
@@ -570,7 +573,7 @@ function FirebaseStatusSection() {
         className="flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] disabled:opacity-50 transition-colors"
       >
         {running ? <Loader size={15} className="animate-spin" /> : <Wifi size={15} />}
-        {running ? 'Running tests…' : done ? 'Run Again' : 'Run Connection Test'}
+        {running ? s.runningTests : done ? s.runAgain : s.runTest}
       </button>
 
       {missingCount > 0 && (
@@ -591,10 +594,10 @@ function FirebaseStatusSection() {
             className="flex items-center gap-2 px-4 py-2 border border-[#1e3a5f] text-[#1e3a5f] rounded-lg text-sm font-medium hover:bg-[#1e3a5f]/5 disabled:opacity-40 transition-colors"
           >
             {pushing ? <Loader size={15} className="animate-spin" /> : <Database size={15} />}
-            {pushing ? 'Uploading…' : 'Force Push Local → Cloud'}
+            {pushing ? s.forceSyncUploading : s.forceSync}
           </button>
-          {pushDone === 'ok'    && <span className="text-xs text-green-600 flex items-center gap-1"><Check size={12} /> Pushed successfully</span>}
-          {pushDone === 'error' && <span className="text-xs text-red-500 flex items-center gap-1"><X size={12} /> Push failed — check console</span>}
+          {pushDone === 'ok'    && <span className="text-xs text-green-600 flex items-center gap-1"><Check size={12} /> {s.forceSyncDone}</span>}
+          {pushDone === 'error' && <span className="text-xs text-red-500 flex items-center gap-1"><X size={12} /> {s.forceSyncFailed}</span>}
         </div>
       </div>
     </div>
@@ -605,14 +608,14 @@ function FirebaseStatusSection() {
 function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
   lightTheme: boolean; setLightTheme: (v: boolean) => void; onToast: (msg: string, type?: 'success' | 'error') => void;
 }) {
-  const { users } = useStore();
+  const { users, mainUiStrings: s } = useStore();
 
   return (
     <div className="space-y-5">
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <h2 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
           {lightTheme ? <Sun size={18} className="text-amber-500" /> : <Moon size={18} className="text-blue-500" />}
-          Display Theme
+          {s.displayTheme}
         </h2>
         <div className="flex gap-3">
           <button onClick={() => { setLightTheme(false); onToast('Dark theme applied'); }}
@@ -621,8 +624,8 @@ function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
               <div className="w-2 h-6 rounded bg-[#162d4a]" />
               <div className="flex-1 h-6 rounded bg-[#162d4a]/50" />
             </div>
-            <div className="flex items-center gap-1.5"><Moon size={14} className="text-[#4aa8d8]" /><span className="text-sm font-medium text-gray-700">Dark</span></div>
-            {!lightTheme && <span className="text-xs text-[#1e3a5f] font-semibold">Active</span>}
+            <div className="flex items-center gap-1.5"><Moon size={14} className="text-[#4aa8d8]" /><span className="text-sm font-medium text-gray-700">{s.dark}</span></div>
+            {!lightTheme && <span className="text-xs text-[#1e3a5f] font-semibold">{s.activeLabel}</span>}
           </button>
           <button onClick={() => { setLightTheme(true); onToast('Light theme applied'); }}
             className={`flex-1 flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${lightTheme ? 'border-[#1e3a5f] bg-[#1e3a5f]/5' : 'border-gray-200 hover:border-gray-300'}`}>
@@ -630,8 +633,8 @@ function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
               <div className="w-2 h-6 rounded bg-gray-100 border border-gray-200" />
               <div className="flex-1 h-6 rounded bg-gray-50" />
             </div>
-            <div className="flex items-center gap-1.5"><Sun size={14} className="text-amber-500" /><span className="text-sm font-medium text-gray-700">Light</span></div>
-            {lightTheme && <span className="text-xs text-[#1e3a5f] font-semibold">Active</span>}
+            <div className="flex items-center gap-1.5"><Sun size={14} className="text-amber-500" /><span className="text-sm font-medium text-gray-700">{s.light}</span></div>
+            {lightTheme && <span className="text-xs text-[#1e3a5f] font-semibold">{s.activeLabel}</span>}
           </button>
         </div>
       </div>
@@ -639,9 +642,9 @@ function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <div className="flex items-center gap-2 mb-4">
           <Shield size={18} className="text-[#1e3a5f]" />
-          <h2 className="font-semibold text-gray-800">Access Codes</h2>
+          <h2 className="font-semibold text-gray-800">{s.accessCodes}</h2>
         </div>
-        <p className="text-sm text-gray-500 mb-4">Edit codes in the Users tab. Changes take effect on next login.</p>
+        <p className="text-sm text-gray-500 mb-4">{s.accessCodesHint}</p>
         <div className="space-y-2">
           {users.filter(u => u.active).map(u => (
             <div key={u.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
@@ -672,6 +675,7 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
     backupDriveFolderLink, setBackupDriveFolder,
     backupFrequency, setBackupFrequency, backupLogs, addBackupLog,
     driveExportFrequency, setDriveExportFrequency, lastDriveExportAt, exportToDrive,
+    mainUiStrings: s,
   } = useStore();
   const importRef = useRef<HTMLInputElement>(null);
   const [exportModal, setExportModal] = useState<ReturnType<typeof getDataSummary> & { sizeKB: number; driveUploaded?: boolean } | null>(null);
@@ -838,13 +842,13 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <div className="flex items-center gap-2 mb-3">
           <Clock size={17} className="text-[#1e3a5f]" />
-          <h2 className="font-semibold text-gray-800">Auto Snapshots</h2>
+          <h2 className="font-semibold text-gray-800">{s.snapshotHistoryLabel}</h2>
         </div>
 
         <div className="flex items-center justify-between mb-3">
           <div>
-            <p className="text-sm font-medium text-gray-700">Enable auto-snapshots</p>
-            <p className="text-xs text-gray-500 mt-0.5">Saves a restore point when data changes</p>
+            <p className="text-sm font-medium text-gray-700">{s.enableAutoSnapshots}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{s.snapshotHint}</p>
           </div>
           <button onClick={() => setAutoBackup(!autoBackup)} className="flex-shrink-0 ml-3">
             {autoBackup ? <ToggleRight size={28} className="text-[#1e3a5f]" /> : <ToggleLeft size={28} className="text-gray-400" />}
@@ -869,10 +873,10 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
         {/* Snapshot history */}
         <div>
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-            Snapshot History {backupSnapshots.length > 0 && <span className="normal-case font-normal text-gray-400">({backupSnapshots.length} stored)</span>}
+            {s.snapshotHistoryLabel} {backupSnapshots.length > 0 && <span className="normal-case font-normal text-gray-400">({backupSnapshots.length} stored)</span>}
           </p>
           {backupSnapshots.length === 0 ? (
-            <p className="text-xs text-gray-400 italic py-2">No snapshots yet — enable auto-snapshots to start saving restore points.</p>
+            <p className="text-xs text-gray-400 italic py-2">{s.noSnapshotsYet}</p>
           ) : (
             <div className="space-y-1 max-h-56 overflow-y-auto">
               {backupSnapshots.slice(0, 20).map(snap => (
@@ -888,17 +892,17 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
                     <div className="flex items-center gap-1 flex-shrink-0">
                       <button onClick={() => handleRestoreSnapshot(snap.id)}
                         className="px-2 py-1 bg-red-500 text-white rounded text-[10px] font-medium hover:bg-red-600 transition-colors">
-                        Confirm
+                        {s.confirmButton}
                       </button>
                       <button onClick={() => setRestoreConfirmId(null)}
                         className="px-2 py-1 bg-gray-200 text-gray-600 rounded text-[10px] font-medium hover:bg-gray-300 transition-colors">
-                        Cancel
+                        {s.cancel}
                       </button>
                     </div>
                   ) : (
                     <button onClick={() => setRestoreConfirmId(snap.id)}
                       className="flex items-center gap-1 px-2 py-1 border border-gray-200 rounded text-[10px] font-medium text-gray-600 hover:border-[#1e3a5f]/50 hover:text-[#1e3a5f] transition-colors flex-shrink-0">
-                      <RotateCcw size={9} /> Restore
+                      <RotateCcw size={9} /> {s.restore}
                     </button>
                   )}
                 </div>
@@ -917,7 +921,7 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
 
         {/* Drive folder URL */}
         <div className="mb-3">
-          <p className="text-xs font-medium text-gray-600 mb-1">Drive folder URL</p>
+          <p className="text-xs font-medium text-gray-600 mb-1">{s.driveFolderUrl}</p>
           <div className="flex gap-2">
             <input
               value={driveFolderDraft}
@@ -938,7 +942,7 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
 
         {/* Auto-export frequency */}
         <div className="mb-3">
-          <p className="text-xs font-medium text-gray-600 mb-1.5">Auto-export frequency</p>
+          <p className="text-xs font-medium text-gray-600 mb-1.5">{s.autoExportFreq}</p>
           <div className="flex gap-1 flex-wrap">
             {(['off', 'hourly', 'every5h', 'every12h', 'daily', 'weekly'] as DriveExportFrequency[]).map(f => (
               <button key={f} onClick={() => setDriveExportFrequency(f)}
@@ -956,10 +960,10 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
         {/* Last export + Export Now */}
         <div className="flex items-center justify-between gap-3 pt-3 border-t border-gray-100">
           <p className="text-xs text-gray-500">
-            Last export:{' '}
+            {s.lastExport}:{' '}
             {lastDriveExportAt
               ? <span className="font-medium text-gray-700">{format(new Date(lastDriveExportAt), 'MMM d, yyyy · HH:mm')}</span>
-              : <span className="text-gray-400">Never</span>
+              : <span className="text-gray-400">{s.never}</span>
             }
           </p>
           <button
@@ -967,7 +971,7 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
             disabled={!backupDriveFolderLink || driveExporting}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-[#4aa8d8] text-white rounded-lg text-xs font-medium hover:bg-[#3a98c8] transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0">
             {driveExporting ? <RefreshCw size={12} className="animate-spin" /> : <CloudUpload size={12} />}
-            {driveExporting ? 'Exporting…' : 'Export Now'}
+            {driveExporting ? s.exportingLabel : s.exportNow}
           </button>
         </div>
       </div>
@@ -976,21 +980,18 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <div className="flex items-center gap-2 mb-3">
           <HardDrive size={17} className="text-[#1e3a5f]" />
-          <h2 className="font-semibold text-gray-800">Manual Backup</h2>
+          <h2 className="font-semibold text-gray-800">{s.manualBackup}</h2>
         </div>
 
-        <p className="text-xs text-gray-500 mb-4">
-          Export all data to a JSON file — apartments, stages, notes, contractors, photos, settings.
-          Import to fully restore.
-        </p>
+        <p className="text-xs text-gray-500 mb-4">{s.manualBackupDesc}</p>
         <div className="flex gap-3 flex-wrap mb-4">
           <button onClick={handleExport}
             className="flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors">
-            <Download size={15} /> Export JSON
+            <Download size={15} /> {s.exportJson}
           </button>
           <button onClick={() => importRef.current?.click()}
             className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
-            <Upload size={15} /> Import JSON
+            <Upload size={15} /> {s.importJson}
           </button>
           <input ref={importRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
         </div>
@@ -998,7 +999,7 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
         {/* Backup log */}
         {backupLogs.length > 0 && (
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Export Log</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{s.exportLogLabel}</p>
             <div className="space-y-1 max-h-44 overflow-y-auto">
               {backupLogs.slice(0, 10).map(entry => (
                 <div key={entry.id} className="flex items-center justify-between text-xs px-3 py-2 bg-gray-50 rounded-lg border border-gray-100">
@@ -1116,12 +1117,288 @@ const MAIN_UI_FIELD_LABELS: { key: keyof Omit<MainUiStrings, 'isRtl'>; label: st
   { key: 'settingsContractors', label: 'Contractors tab', group: 'Settings Tabs' },
   { key: 'settingsApp',         label: 'App tab',         group: 'Settings Tabs' },
   { key: 'settingsLanguage',    label: 'Language tab',    group: 'Settings Tabs' },
+  // Common extras
+  { key: 'confirm',         label: 'Confirm',             group: 'Common' },
+  { key: 'restore',         label: 'Restore',             group: 'Common' },
+  { key: 'download',        label: 'Download',            group: 'Common' },
+  { key: 'upload',          label: 'Upload',              group: 'Common' },
+  { key: 'print',           label: 'Print',               group: 'Common' },
+  { key: 'search',          label: 'Search',              group: 'Common' },
+  { key: 'clearFilters',    label: 'Clear filters',       group: 'Common' },
+  { key: 'noResults',       label: 'No results',          group: 'Common' },
+  { key: 'never',           label: 'Never',               group: 'Common' },
+  { key: 'yes',             label: 'Yes',                 group: 'Common' },
+  { key: 'no',              label: 'No',                  group: 'Common' },
+  { key: 'all',             label: 'All',                 group: 'Common' },
+  { key: 'off',             label: 'Off',                 group: 'Common' },
+  { key: 'overdue',         label: 'Overdue',             group: 'Common' },
+  { key: 'today',           label: 'Today',               group: 'Common' },
+  { key: 'tomorrow',        label: 'Tomorrow',            group: 'Common' },
+  { key: 'daysLabel',       label: 'Days (suffix)',       group: 'Common' },
+  { key: 'urgentPriority',  label: 'Urgent priority',     group: 'Common' },
+  { key: 'normalPriority',  label: 'Normal priority',     group: 'Common' },
+  { key: 'lowPriority',     label: 'Low priority',        group: 'Common' },
+  { key: 'aptPrefix',       label: 'Apt prefix',          group: 'Common' },
+  { key: 'floorPrefix',     label: 'Floor prefix',        group: 'Common' },
+  { key: 'buildingPrefix',  label: 'Building prefix',     group: 'Common' },
+  { key: 'standard',        label: 'Standard',            group: 'Common' },
+  { key: 'notStartedOption',label: 'Not started option',  group: 'Common' },
+  // Header
+  { key: 'syncSaving',      label: 'Sync saving text',    group: 'Header' },
+  { key: 'syncSaved',       label: 'Sync saved text',     group: 'Header' },
+  { key: 'searchTooltip',   label: 'Search tooltip',      group: 'Header' },
+  { key: 'switchToDark',    label: 'Switch to dark',      group: 'Header' },
+  { key: 'switchToLight',   label: 'Switch to light',     group: 'Header' },
+  { key: 'signOut',         label: 'Sign out',            group: 'Header' },
+  // Dashboard extras
+  { key: 'overdueTasks',    label: 'Overdue tasks card',  group: 'Dashboard' },
+  { key: 'pendingTasks',    label: 'Pending tasks card',  group: 'Dashboard' },
+  { key: 'completedToday',  label: 'Completed today card',group: 'Dashboard' },
+  { key: 'overallStarted',  label: 'Overall started',     group: 'Dashboard' },
+  { key: 'changesUnits',    label: 'Changes units',       group: 'Dashboard' },
+  { key: 'unitsStarted',    label: 'Units started',       group: 'Dashboard' },
+  // Project Diagram
+  { key: 'searchApt',              label: 'Search apt placeholder', group: 'Project Diagram' },
+  { key: 'selectStagePlaceholder', label: 'Select stage placeholder', group: 'Project Diagram' },
+  { key: 'applyTo',                label: 'Apply to',               group: 'Project Diagram' },
+  { key: 'bulkSelected',           label: 'Bulk selected prefix',   group: 'Project Diagram' },
+  { key: 'bulkUnits',              label: 'Bulk units suffix',       group: 'Project Diagram' },
+  { key: 'bulkNotStarted',         label: 'Bulk not started',       group: 'Project Diagram' },
+  { key: 'inBulkMode',             label: 'In bulk mode',           group: 'Project Diagram' },
+  // Tasks Page
+  { key: 'newTask',            label: 'New task button',     group: 'Tasks Page' },
+  { key: 'bulkAdd',            label: 'Bulk add button',     group: 'Tasks Page' },
+  { key: 'allStages',          label: 'All stages option',   group: 'Tasks Page' },
+  { key: 'allPriorities',      label: 'All priorities',      group: 'Tasks Page' },
+  { key: 'overdueOnly',        label: 'Overdue only filter', group: 'Tasks Page' },
+  { key: 'dueFrom',            label: 'Due from label',      group: 'Tasks Page' },
+  { key: 'dueTo',              label: 'Due to label',        group: 'Tasks Page' },
+  { key: 'markComplete',       label: 'Mark complete',       group: 'Tasks Page' },
+  { key: 'markIncomplete',     label: 'Mark incomplete',     group: 'Tasks Page' },
+  { key: 'editTask',           label: 'Edit task',           group: 'Tasks Page' },
+  { key: 'deleteTask',         label: 'Delete task',         group: 'Tasks Page' },
+  { key: 'deleteTaskConfirm',  label: 'Delete task confirm', group: 'Tasks Page' },
+  { key: 'taskDeleted',        label: 'Task deleted toast',  group: 'Tasks Page' },
+  { key: 'taskUpdated',        label: 'Task updated toast',  group: 'Tasks Page' },
+  { key: 'noPriorityLabel',    label: 'No priority label',   group: 'Tasks Page' },
+  // Analytics
+  { key: 'totalApartments',         label: 'Total apartments card',  group: 'Analytics' },
+  { key: 'residentialUnits',        label: 'Residential units sub',  group: 'Analytics' },
+  { key: 'workStarted',             label: 'Work started card',      group: 'Analytics' },
+  { key: 'notYetStarted',           label: 'Not yet started sub',    group: 'Analytics' },
+  { key: 'contractorsLabel',        label: 'Contractors card',       group: 'Analytics' },
+  { key: 'totalAssignments',        label: 'Total assignments sub',  group: 'Analytics' },
+  { key: 'tasksCompletedLabel',     label: 'Tasks completed card',   group: 'Analytics' },
+  { key: 'pendingLabel',            label: 'Pending label',          group: 'Analytics' },
+  { key: 'completedLabel',          label: 'Completed label',        group: 'Analytics' },
+  { key: 'stageCompletionsWeek',    label: 'Stage completions chart',group: 'Analytics' },
+  { key: 'tasksCompletedWeek',      label: 'Tasks completed chart',  group: 'Analytics' },
+  { key: 'contractorTasksSection',  label: 'Contractor tasks section',group: 'Analytics' },
+  { key: 'noContractorAssignments', label: 'No assignments text',    group: 'Analytics' },
+  // Activity Log
+  { key: 'activityLogPage',         label: 'Page title',             group: 'Activity Log' },
+  { key: 'entriesLabel',            label: 'Entries suffix',         group: 'Activity Log' },
+  { key: 'userFilter',              label: 'User filter label',      group: 'Activity Log' },
+  { key: 'allUsers',                label: 'All users option',       group: 'Activity Log' },
+  { key: 'actionTypeFilter',        label: 'Action type label',      group: 'Activity Log' },
+  { key: 'fromDate',                label: 'From date label',        group: 'Activity Log' },
+  { key: 'toDate',                  label: 'To date label',          group: 'Activity Log' },
+  { key: 'allActions',              label: 'All actions option',     group: 'Activity Log' },
+  { key: 'stageFieldChange',        label: 'Stage change action',    group: 'Activity Log' },
+  { key: 'noteAction',              label: 'Note action',            group: 'Activity Log' },
+  { key: 'taskCreatedAction',       label: 'Task created action',    group: 'Activity Log' },
+  { key: 'taskCompletedAction',     label: 'Task completed action',  group: 'Activity Log' },
+  { key: 'taskReopenedAction',      label: 'Task reopened action',   group: 'Activity Log' },
+  { key: 'taskDeletedAction',       label: 'Task deleted action',    group: 'Activity Log' },
+  { key: 'contractorUploadAction',  label: 'Contractor upload action',group: 'Activity Log' },
+  { key: 'contractorNoteAction',    label: 'Contractor note action', group: 'Activity Log' },
+  { key: 'contractorCompletedAction', label: 'Contractor complete action', group: 'Activity Log' },
+  { key: 'noLogsMatch',             label: 'No logs match text',     group: 'Activity Log' },
+  // Reports
+  { key: 'reportsPage',          label: 'Page title',               group: 'Reports' },
+  { key: 'exportCsv',            label: 'Export CSV button',        group: 'Reports' },
+  { key: 'selectExportColumns',  label: 'Select columns header',    group: 'Reports' },
+  { key: 'stageNotesColumns',    label: 'Stage notes columns',      group: 'Reports' },
+  { key: 'requiredLabel',        label: 'Required label',           group: 'Reports' },
+  { key: 'includeTasks',         label: 'Include tasks toggle',     group: 'Reports' },
+  { key: 'includeTasksHint',     label: 'Include tasks hint',       group: 'Reports' },
+  { key: 'filtersSection',       label: 'Filters section header',   group: 'Reports' },
+  { key: 'searchApartment',      label: 'Search apartment input',   group: 'Reports' },
+  { key: 'enterButton',          label: 'Enter button',             group: 'Reports' },
+  { key: 'classificationFilter', label: 'Classification filter',    group: 'Reports' },
+  { key: 'includeNotStarted',    label: 'Include not started',      group: 'Reports' },
+  { key: 'lastUpdatedFrom',      label: 'Last updated from',        group: 'Reports' },
+  { key: 'clearDates',           label: 'Clear dates button',       group: 'Reports' },
+  { key: 'stagesEmptyAll',       label: 'Stages empty = all',       group: 'Reports' },
+  { key: 'showingLabel',         label: 'Showing prefix',           group: 'Reports' },
+  { key: 'apartmentsLabel',      label: 'Apartments suffix',        group: 'Reports' },
+  { key: 'unnamed',              label: 'Unnamed label',            group: 'Reports' },
+  { key: 'groundFloor',          label: 'Ground floor label',       group: 'Reports' },
+  { key: 'noApartmentsMatch',    label: 'No apartments match',      group: 'Reports' },
+  { key: 'doneSuffix',           label: 'Done suffix',              group: 'Reports' },
+  // Settings Page
+  { key: 'pickColor',            label: 'Pick color',               group: 'Settings' },
+  { key: 'addNewStage',          label: 'Add new stage',            group: 'Settings' },
+  { key: 'stageName',            label: 'Stage name placeholder',   group: 'Settings' },
+  { key: 'addNewUser',           label: 'Add new user button',      group: 'Settings' },
+  { key: 'nameField',            label: 'Name field',               group: 'Settings' },
+  { key: 'roleField',            label: 'Role field',               group: 'Settings' },
+  { key: 'codeField',            label: 'Code field',               group: 'Settings' },
+  { key: 'addNewContractor',     label: 'Add new contractor',       group: 'Settings' },
+  { key: 'fullNameField',        label: 'Full name field',          group: 'Settings' },
+  { key: 'emailField',           label: 'Email field',              group: 'Settings' },
+  { key: 'copyLink',             label: 'Copy link button',         group: 'Settings' },
+  { key: 'copied',               label: 'Copied confirmation',      group: 'Settings' },
+  { key: 'noContractors',        label: 'No contractors text',      group: 'Settings' },
+  { key: 'firebaseConnection',   label: 'Firebase connection',      group: 'Settings' },
+  { key: 'allSystemsGo',         label: 'All systems go',           group: 'Settings' },
+  { key: 'connectionIssue',      label: 'Connection issue',         group: 'Settings' },
+  { key: 'runTest',              label: 'Run test button',          group: 'Settings' },
+  { key: 'runAgain',             label: 'Run again button',         group: 'Settings' },
+  { key: 'runningTests',         label: 'Running tests text',       group: 'Settings' },
+  { key: 'forceSync',            label: 'Force sync button',        group: 'Settings' },
+  { key: 'forceSyncUploading',   label: 'Force sync uploading',     group: 'Settings' },
+  { key: 'forceSyncDone',        label: 'Force sync done',          group: 'Settings' },
+  { key: 'forceSyncFailed',      label: 'Force sync failed',        group: 'Settings' },
+  { key: 'displayTheme',         label: 'Display theme label',      group: 'Settings' },
+  { key: 'dark',                 label: 'Dark theme option',        group: 'Settings' },
+  { key: 'light',                label: 'Light theme option',       group: 'Settings' },
+  { key: 'activeLabel',          label: 'Active label',             group: 'Settings' },
+  { key: 'hiddenLabel',          label: 'Hidden label',             group: 'Settings' },
+  { key: 'accessCodes',          label: 'Access codes section',     group: 'Settings' },
+  { key: 'accessCodesHint',      label: 'Access codes hint',        group: 'Settings' },
+  { key: 'enableAutoSnapshots',  label: 'Enable auto snapshots',    group: 'Settings' },
+  { key: 'snapshotHint',         label: 'Snapshot hint',            group: 'Settings' },
+  { key: 'snapshotHistoryLabel', label: 'Snapshot history label',   group: 'Settings' },
+  { key: 'noSnapshotsYet',       label: 'No snapshots yet',         group: 'Settings' },
+  { key: 'confirmButton',        label: 'Confirm button',           group: 'Settings' },
+  { key: 'driveFolderUrl',       label: 'Drive folder URL label',   group: 'Settings' },
+  { key: 'autoExportFreq',       label: 'Auto export frequency',    group: 'Settings' },
+  { key: 'lastExport',           label: 'Last export label',        group: 'Settings' },
+  { key: 'exportNow',            label: 'Export now button',        group: 'Settings' },
+  { key: 'exportingLabel',       label: 'Exporting label',          group: 'Settings' },
+  { key: 'manualBackup',         label: 'Manual backup section',    group: 'Settings' },
+  { key: 'manualBackupDesc',     label: 'Manual backup desc',       group: 'Settings' },
+  { key: 'exportJson',           label: 'Export JSON button',       group: 'Settings' },
+  { key: 'importJson',           label: 'Import JSON button',       group: 'Settings' },
+  { key: 'exportLogLabel',       label: 'Export log label',         group: 'Settings' },
+  { key: 'moveUp',               label: 'Move up tooltip',          group: 'Settings' },
+  { key: 'moveDown',             label: 'Move down tooltip',        group: 'Settings' },
+  { key: 'changeColor',          label: 'Change color tooltip',     group: 'Settings' },
+  { key: 'saveChanges',          label: 'Save changes button',      group: 'Settings' },
+  { key: 'deleteStageTooltip',   label: 'Delete stage tooltip',     group: 'Settings' },
+  { key: 'hideStage',            label: 'Hide stage tooltip',       group: 'Settings' },
+  { key: 'activateStage',        label: 'Activate stage tooltip',   group: 'Settings' },
+  // Apartment Drawer
+  { key: 'familyName',              label: 'Family name label',        group: 'Apartment Drawer' },
+  { key: 'familyNamePlaceholder',   label: 'Family name placeholder',  group: 'Apartment Drawer' },
+  { key: 'typeField',               label: 'Type field',               group: 'Apartment Drawer' },
+  { key: 'standardApt',             label: 'Standard apt option',      group: 'Apartment Drawer' },
+  { key: 'hasModifications',        label: 'Has modifications option',  group: 'Apartment Drawer' },
+  { key: 'currentStage',            label: 'Current stage label',      group: 'Apartment Drawer' },
+  { key: 'generalNotes',            label: 'General notes label',      group: 'Apartment Drawer' },
+  { key: 'generalNotesPlaceholder', label: 'General notes placeholder',group: 'Apartment Drawer' },
+  { key: 'attachFiles',             label: 'Attach files button',      group: 'Apartment Drawer' },
+  { key: 'noteHistory',             label: 'Note history tooltip',     group: 'Apartment Drawer' },
+  { key: 'engineeringPlans',        label: 'Engineering plans label',  group: 'Apartment Drawer' },
+  { key: 'detecting',               label: 'Detecting text',           group: 'Apartment Drawer' },
+  { key: 'refreshButton',           label: 'Refresh button',           group: 'Apartment Drawer' },
+  { key: 'clickToExpand',           label: 'Click to expand',          group: 'Apartment Drawer' },
+  { key: 'fullView',                label: 'Full view button',         group: 'Apartment Drawer' },
+  { key: 'lookingForPdf',           label: 'Looking for PDF text',     group: 'Apartment Drawer' },
+  { key: 'noPdfFound',              label: 'No PDF found text',        group: 'Apartment Drawer' },
+  { key: 'setPdfHint',              label: 'Set PDF hint',             group: 'Apartment Drawer' },
+  { key: 'saveChangesBtn',          label: 'Save changes button',      group: 'Apartment Drawer' },
+  { key: 'driveFolder',             label: 'Drive folder label',       group: 'Apartment Drawer' },
+  { key: 'connectedUnit',           label: 'Connected unit label',     group: 'Apartment Drawer' },
+  { key: 'linkedToApt',             label: 'Linked to apt',            group: 'Apartment Drawer' },
+  { key: 'noConnection',            label: 'No connection text',       group: 'Apartment Drawer' },
+  { key: 'linkMutualHint',          label: 'Link mutual hint',         group: 'Apartment Drawer' },
+  { key: 'noTasksAssigned',         label: 'No tasks assigned',        group: 'Apartment Drawer' },
+  { key: 'noPhotosYet',             label: 'No photos yet',            group: 'Apartment Drawer' },
+  { key: 'photosDesc',              label: 'Photos description',       group: 'Apartment Drawer' },
+  { key: 'noDriveLinked',           label: 'No Drive linked',          group: 'Apartment Drawer' },
+  { key: 'setDriveFolderHint',      label: 'Set Drive folder hint',    group: 'Apartment Drawer' },
+  { key: 'driveBackendNotConfigured', label: 'Drive backend not configured', group: 'Apartment Drawer' },
+  { key: 'loadingPhotos',           label: 'Loading photos',           group: 'Apartment Drawer' },
+  { key: 'stageChangedModal',       label: 'Stage changed modal title',group: 'Apartment Drawer' },
+  { key: 'assignTaskQuestion',      label: 'Assign task question',     group: 'Apartment Drawer' },
+  { key: 'noJustSave',              label: 'No just save option',      group: 'Apartment Drawer' },
+  { key: 'assignTaskBtn',           label: 'Assign task button',       group: 'Apartment Drawer' },
+  { key: 'unlinkApartments',        label: 'Unlink apartments button', group: 'Apartment Drawer' },
+  { key: 'unmergeQuestion',         label: 'Unmerge question',         group: 'Apartment Drawer' },
+  { key: 'keepsData',               label: 'Keeps data label',         group: 'Apartment Drawer' },
+  { key: 'stageWillBeCleared',      label: 'Stage will be cleared',    group: 'Apartment Drawer' },
+  { key: 'bothKeepData',            label: 'Both keep data option',    group: 'Apartment Drawer' },
+  { key: 'justRemovesLink',         label: 'Just removes link',        group: 'Apartment Drawer' },
+  { key: 'apartmentSaved',          label: 'Apartment saved toast',    group: 'Apartment Drawer' },
+  { key: 'apartmentUnlinked',       label: 'Apartment unlinked toast', group: 'Apartment Drawer' },
+  { key: 'cannotMergeBldgs',        label: 'Cannot merge buildings',   group: 'Apartment Drawer' },
+  { key: 'alreadyMergedError',      label: 'Already merged error',     group: 'Apartment Drawer' },
+  { key: 'imageUnavailable',        label: 'Image unavailable',        group: 'Apartment Drawer' },
+  { key: 'openDownload',            label: 'Open/download button',     group: 'Apartment Drawer' },
+  // Stage Notes
+  { key: 'officeNotes',             label: 'Office notes header',      group: 'Stage Notes' },
+  { key: 'officeNotesFor',          label: 'Office notes for prefix',  group: 'Stage Notes' },
+  { key: 'noteLabel',               label: 'Note label',               group: 'Stage Notes' },
+  { key: 'fileLabel',               label: 'File label',               group: 'Stage Notes' },
+  { key: 'filesLabel',              label: 'Files label',              group: 'Stage Notes' },
+  { key: 'assignContractor',        label: 'Assign contractor',        group: 'Stage Notes' },
+  { key: 'stageReached',            label: 'Stage reached text',       group: 'Stage Notes' },
+  { key: 'editHistory',             label: 'Edit history button',      group: 'Stage Notes' },
+  { key: 'allContractorNotes',      label: 'All contractor notes',     group: 'Stage Notes' },
+  { key: 'contractorNotesSection',  label: 'Contractor notes section', group: 'Stage Notes' },
+  { key: 'attachFile',              label: 'Attach file button',       group: 'Stage Notes' },
+  // Task Panels
+  { key: 'pendingBadge',     label: 'Pending badge',           group: 'Task Panels' },
+  { key: 'hideDone',         label: 'Hide done toggle',        group: 'Task Panels' },
+  { key: 'driveWarning',     label: 'Drive warning',           group: 'Task Panels' },
+  { key: 'createTask',       label: 'Create task button',      group: 'Task Panels' },
+  { key: 'selectAll',        label: 'Select all button',       group: 'Task Panels' },
+  { key: 'deselectAll',      label: 'Deselect all button',     group: 'Task Panels' },
+  { key: 'inView',           label: 'In view suffix',          group: 'Task Panels' },
+  { key: 'normalDefault',    label: 'Normal (default) label',  group: 'Task Panels' },
+  { key: 'keepAsData',       label: 'Keep as data option',     group: 'Task Panels' },
+  { key: 'keepAsDataDesc',   label: 'Keep as data desc',       group: 'Task Panels' },
+  { key: 'eachAptDrive',     label: 'Each apt Drive option',   group: 'Task Panels' },
+  { key: 'eachAptDriveDesc', label: 'Each apt Drive desc',     group: 'Task Panels' },
+  { key: 'oneAptDrive',      label: 'One apt Drive option',    group: 'Task Panels' },
+  { key: 'oneAptDriveDesc',  label: 'One apt Drive desc',      group: 'Task Panels' },
+  { key: 'driveMissingWarning', label: 'Drive missing warning', group: 'Task Panels' },
+  { key: 'noDriveLink2',     label: 'No Drive link text',      group: 'Task Panels' },
+  { key: 'noEligibleApts',   label: 'No eligible apts',        group: 'Task Panels' },
+  { key: 'goBack',           label: 'Go back button',          group: 'Task Panels' },
+  { key: 'proceedAnyway',    label: 'Proceed anyway button',   group: 'Task Panels' },
+  { key: 'uploadToSelected', label: 'Upload to selected',      group: 'Task Panels' },
+  { key: 'driveLinkedBadge', label: 'Drive linked badge',      group: 'Task Panels' },
+  // Activity Section
+  { key: 'updatedStageNote',       label: 'Updated stage note',       group: 'Activity Section' },
+  { key: 'uploadedFile',           label: 'Uploaded file prefix',     group: 'Activity Section' },
+  { key: 'addedNote',              label: 'Added note',               group: 'Activity Section' },
+  { key: 'markedComplete',         label: 'Marked complete',          group: 'Activity Section' },
+  { key: 'changedStage',           label: 'Changed stage',            group: 'Activity Section' },
+  { key: 'changedClassification',  label: 'Changed classification prefix', group: 'Activity Section' },
+  { key: 'updatedGeneralNotes',    label: 'Updated general notes',    group: 'Activity Section' },
+  { key: 'renamedApartment',       label: 'Renamed apartment prefix', group: 'Activity Section' },
+  { key: 'noActivityYet2',         label: 'No activity yet',          group: 'Activity Section' },
+  { key: 'revertConfirm',          label: 'Revert confirm text',      group: 'Activity Section' },
+  // Building Diagram
+  { key: 'groundCommercial', label: 'Ground/Commercial label', group: 'Building Diagram' },
+  { key: 'lobby',            label: 'Lobby label',             group: 'Building Diagram' },
+  { key: 'doneIndicator',    label: 'Done indicator',          group: 'Building Diagram' },
+  // Login
+  { key: 'enterCode',        label: 'Enter code prompt',       group: 'Login' },
+  { key: 'pleaseEnterDigits',label: 'Please enter digits',     group: 'Login' },
+  { key: 'invalidCode',      label: 'Invalid code error',      group: 'Login' },
+  { key: 'enterProject',     label: 'Enter project button',    group: 'Login' },
+  { key: 'footerText',       label: 'Footer text',             group: 'Login' },
 ];
 
 function LanguageTab({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
   const { contractorUiStrings, updateContractorUiStrings, mainUiStrings, updateMainUiStrings } = useStore();
   const [draft, setDraft] = useState<ContractorUiStrings>({ ...contractorUiStrings });
   const [mainDraft, setMainDraft] = useState<MainUiStrings>({ ...mainUiStrings });
+  const [langSearch, setLangSearch] = useState('');
 
   function save() {
     updateContractorUiStrings(draft);
@@ -1147,6 +1424,15 @@ function LanguageTab({ onToast }: { onToast: (msg: string, type?: 'success' | 'e
 
   const groups = Array.from(new Set(STRING_FIELD_LABELS.map(f => f.group)));
   const mainGroups = Array.from(new Set(MAIN_UI_FIELD_LABELS.map(f => f.group)));
+
+  const lq = langSearch.toLowerCase();
+  const filteredMainFields = langSearch
+    ? MAIN_UI_FIELD_LABELS.filter(f =>
+        f.label.toLowerCase().includes(lq) ||
+        f.key.toLowerCase().includes(lq) ||
+        (mainDraft[f.key] as string ?? '').toLowerCase().includes(lq)
+      )
+    : null;
 
   return (
     <div className="space-y-5">
@@ -1174,6 +1460,29 @@ function LanguageTab({ onToast }: { onToast: (msg: string, type?: 'success' | 'e
           </div>
         </div>
 
+        {/* Search box */}
+        <div className="relative mb-4">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <input
+            type="text"
+            value={langSearch}
+            onChange={e => setLangSearch(e.target.value)}
+            placeholder="Search language fields…"
+            className="w-full pl-8 pr-8 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+          />
+          {langSearch && (
+            <button
+              onClick={() => setLangSearch('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+        {filteredMainFields && (
+          <p className="text-xs text-gray-400 mb-3">{filteredMainFields.length} field{filteredMainFields.length !== 1 ? 's' : ''} match</p>
+        )}
+
         {/* RTL toggle */}
         <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 mb-5">
           <div>
@@ -1188,13 +1497,17 @@ function LanguageTab({ onToast }: { onToast: (msg: string, type?: 'success' | 'e
           </button>
         </div>
 
-        {mainGroups.map(group => (
-          <div key={group} className="mb-5">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{group}</p>
-            <div className="space-y-2">
-              {MAIN_UI_FIELD_LABELS.filter(f => f.group === group).map(({ key, label }) => (
+        {filteredMainFields ? (
+          filteredMainFields.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-4">No fields match "{langSearch}"</p>
+          ) : (
+            <div className="space-y-2 mb-5">
+              {filteredMainFields.map(({ key, label, group }) => (
                 <div key={key} className="flex items-start gap-3">
-                  <label className="text-xs text-gray-500 w-44 flex-shrink-0 pt-2">{label}</label>
+                  <div className="w-44 flex-shrink-0 pt-2">
+                    <label className="text-xs text-gray-500 block">{label}</label>
+                    <span className="text-[10px] text-gray-300">{group}</span>
+                  </div>
                   <input
                     value={mainDraft[key] as string}
                     onChange={e => setMainDraft(d => ({ ...d, [key]: e.target.value }))}
@@ -1204,8 +1517,27 @@ function LanguageTab({ onToast }: { onToast: (msg: string, type?: 'success' | 'e
                 </div>
               ))}
             </div>
-          </div>
-        ))}
+          )
+        ) : (
+          mainGroups.map(group => (
+            <div key={group} className="mb-5">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{group}</p>
+              <div className="space-y-2">
+                {MAIN_UI_FIELD_LABELS.filter(f => f.group === group).map(({ key, label }) => (
+                  <div key={key} className="flex items-start gap-3">
+                    <label className="text-xs text-gray-500 w-44 flex-shrink-0 pt-2">{label}</label>
+                    <input
+                      value={mainDraft[key] as string}
+                      onChange={e => setMainDraft(d => ({ ...d, [key]: e.target.value }))}
+                      className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                      dir={mainDraft.isRtl ? 'rtl' : 'ltr'}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))
+        )}
 
         <button
           onClick={saveMain}

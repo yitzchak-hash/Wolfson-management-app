@@ -24,7 +24,7 @@ interface LightboxItem {
   downloadHref: string;
 }
 
-function LightboxOverlay({ items, initialIndex, onClose }: { items: LightboxItem[]; initialIndex: number; onClose: () => void }) {
+function LightboxOverlay({ items, initialIndex, onClose, imageUnavailable, openDownload }: { items: LightboxItem[]; initialIndex: number; onClose: () => void; imageUnavailable: string; openDownload: string }) {
   const [idx, setIdx] = React.useState(initialIndex);
   const [touchStart, setTouchStart] = React.useState<number | null>(null);
   const item = items[idx];
@@ -74,7 +74,7 @@ function LightboxOverlay({ items, initialIndex, onClose }: { items: LightboxItem
         {isImg ? (
           item.thumbSrc
             ? <img src={item.thumbSrc} alt={item.filename} className="max-w-full max-h-full object-contain" draggable={false} />
-            : <div className="text-gray-500 text-sm">Image unavailable</div>
+            : <div className="text-gray-500 text-sm">{imageUnavailable}</div>
         ) : isVid ? (
           <video src={item.thumbSrc} controls className="max-w-full max-h-full" />
         ) : (
@@ -84,7 +84,7 @@ function LightboxOverlay({ items, initialIndex, onClose }: { items: LightboxItem
             {item.downloadHref && (
               <a href={item.downloadHref} target="_blank" rel="noopener noreferrer"
                 className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-medium">
-                Open / Download
+                {openDownload}
               </a>
             )}
           </div>
@@ -207,9 +207,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   function getTaskDueBadge(dueDate: string | null) {
     if (!dueDate) return null;
     const days = differenceInCalendarDays(parseISO(dueDate), startOfDay(new Date()));
-    if (days < 0) return { text: 'Overdue', cls: 'bg-red-100 text-red-700' };
-    if (days === 0) return { text: 'Today', cls: 'bg-orange-100 text-orange-700' };
-    if (days === 1) return { text: 'Tomorrow', cls: 'bg-amber-100 text-amber-700' };
+    if (days < 0) return { text: ui.overdue, cls: 'bg-red-100 text-red-700' };
+    if (days === 0) return { text: ui.today, cls: 'bg-orange-100 text-orange-700' };
+    if (days === 1) return { text: ui.tomorrow, cls: 'bg-amber-100 text-amber-700' };
     if (days <= 3) return { text: `${days}d`, cls: 'bg-yellow-100 text-yellow-700' };
     return { text: format(parseISO(dueDate), 'MMM d'), cls: 'bg-gray-100 text-gray-500' };
   }
@@ -229,7 +229,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       const newStageName = stages.find(s => s.id === currentStageId)?.name ?? '';
       setStageChangeModal({ newStageId: currentStageId, newStageName });
     } else {
-      onToast('Apartment details saved');
+      onToast(ui.apartmentSaved);
     }
   }
 
@@ -254,27 +254,27 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     if (mergedWithId) {
       const partner = apartments.find(a => a.id === mergedWithId);
       if (partner && partner.buildingId !== apartment!.buildingId) {
-        onToast('Cannot merge apartments from different buildings', 'error');
+        onToast(ui.cannotMergeBldgs, 'error');
         return;
       }
       if (partner && partner.mergedWith && partner.mergedWith !== apartment!.id) {
-        onToast('That apartment is already merged with another unit', 'error');
+        onToast(ui.alreadyMergedError, 'error');
         return;
       }
       if (apartment!.mergedWith && apartment!.mergedWith !== mergedWithId) {
-        onToast('This apartment is already merged with another unit — unmerge first', 'error');
+        onToast(ui.alreadyMergedError, 'error');
         return;
       }
     }
     mergeApartments(apartment!.id, mergedWithId || null, currentUser);
     const partner = apartments.find(a => a.id === mergedWithId);
-    onToast(partner ? `Linked with Apt ${partner.displayName || partner.apartmentNumber}` : 'Merge link cleared');
+    onToast(partner ? `${ui.linkedToApt} ${ui.aptPrefix} ${partner.displayName || partner.apartmentNumber}` : 'Merge link cleared');
   }
 
   function handleConfirmUnmerge(keepDataAptId: string | 'both') {
     setShowUnmergeModal(false);
     unmergeApartments(apartment!.id, keepDataAptId, currentUser);
-    onToast('Apartments unlinked');
+    onToast(ui.apartmentUnlinked);
   }
 
   return (
@@ -286,22 +286,22 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           <div className="fixed z-[70] bg-white rounded-2xl shadow-2xl p-6" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 'min(380px, 90vw)' }}>
             <div className="flex items-center gap-2 mb-2">
               <ClipboardList size={18} className="text-[#1e3a5f]" />
-              <h3 className="font-bold text-gray-900 text-base">Stage Changed</h3>
+              <h3 className="font-bold text-gray-900 text-base">{ui.stageChangedModal}</h3>
             </div>
             <p className="text-sm text-gray-600 mb-4">
-              Stage set to <strong className="text-[#1e3a5f]">{stageChangeModal.newStageName}</strong>. Would you like to assign a contractor task for this stage?
+              Stage set to <strong className="text-[#1e3a5f]">{stageChangeModal.newStageName}</strong>. {ui.assignTaskQuestion}
             </p>
             <div className="flex gap-2">
               <button
-                onClick={() => { setStageChangeModal(null); onToast('Saved'); }}
+                onClick={() => { setStageChangeModal(null); onToast(ui.apartmentSaved); }}
                 className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50"
               >
-                No, just save
+                {ui.noJustSave}
               </button>
               <button
                 onClick={() => {
                   setStageChangeModal(null);
-                  onToast('Saved');
+                  onToast(ui.apartmentSaved);
                   onClose();
                   const liveApt = apartments.find(a => a.id === apartment!.id) ?? apartment!;
                   onRequestAddTask?.(liveApt);
@@ -309,7 +309,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-1.5"
                 style={{ backgroundColor: '#1e3a5f' }}
               >
-                <ClipboardList size={14} /> Assign Task
+                <ClipboardList size={14} /> {ui.assignTaskBtn}
               </button>
             </div>
           </div>
@@ -321,28 +321,28 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         <>
           <div className="fixed inset-0 bg-black/50 z-[60]" onClick={() => setShowUnmergeModal(false)} />
           <div className="fixed z-[70] bg-white rounded-2xl shadow-2xl p-6" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 'min(400px, 90vw)' }}>
-            <h3 className="font-bold text-gray-900 mb-1 text-base">Unlink Apartments</h3>
+            <h3 className="font-bold text-gray-900 mb-1 text-base">{ui.unlinkApartments}</h3>
             <p className="text-sm text-gray-500 mb-4">
-              Which apartment keeps the shared data (stage, drive link)?
+              {ui.unmergeQuestion}
             </p>
             <div className="space-y-2">
               <button onClick={() => handleConfirmUnmerge(apartment.id)}
                 className="w-full text-left px-4 py-3 rounded-xl border-2 border-gray-200 hover:border-[#1e3a5f] transition-all">
-                <div className="font-medium text-sm text-gray-800">Apt {apartment.displayName || apartment.apartmentNumber} keeps the data</div>
-                <div className="text-xs text-gray-400 mt-0.5">Apt {mergedPartner.displayName || mergedPartner.apartmentNumber} — stage &amp; drive link will be cleared</div>
+                <div className="font-medium text-sm text-gray-800">{ui.aptPrefix} {apartment.displayName || apartment.apartmentNumber} {ui.keepsData}</div>
+                <div className="text-xs text-gray-400 mt-0.5">{ui.aptPrefix} {mergedPartner.displayName || mergedPartner.apartmentNumber} — {ui.stageWillBeCleared}</div>
               </button>
               <button onClick={() => handleConfirmUnmerge(mergedPartner.id)}
                 className="w-full text-left px-4 py-3 rounded-xl border-2 border-gray-200 hover:border-[#1e3a5f] transition-all">
-                <div className="font-medium text-sm text-gray-800">Apt {mergedPartner.displayName || mergedPartner.apartmentNumber} keeps the data</div>
-                <div className="text-xs text-gray-400 mt-0.5">Apt {apartment.displayName || apartment.apartmentNumber} — stage &amp; drive link will be cleared</div>
+                <div className="font-medium text-sm text-gray-800">{ui.aptPrefix} {mergedPartner.displayName || mergedPartner.apartmentNumber} {ui.keepsData}</div>
+                <div className="text-xs text-gray-400 mt-0.5">{ui.aptPrefix} {apartment.displayName || apartment.apartmentNumber} — {ui.stageWillBeCleared}</div>
               </button>
               <button onClick={() => handleConfirmUnmerge('both')}
                 className="w-full text-left px-4 py-3 rounded-xl border-2 border-gray-200 hover:border-[#1e3a5f] transition-all">
-                <div className="font-medium text-sm text-gray-800">Both keep their current data</div>
-                <div className="text-xs text-gray-400 mt-0.5">Just removes the link — no data is cleared</div>
+                <div className="font-medium text-sm text-gray-800">{ui.bothKeepData}</div>
+                <div className="text-xs text-gray-400 mt-0.5">{ui.justRemovesLink}</div>
               </button>
             </div>
-            <button onClick={() => setShowUnmergeModal(false)} className="mt-3 w-full py-2 text-sm text-gray-500 hover:text-gray-700">Cancel</button>
+            <button onClick={() => setShowUnmergeModal(false)} className="mt-3 w-full py-2 text-sm text-gray-500 hover:text-gray-700">{ui.cancel}</button>
           </div>
         </>
       )}
@@ -355,10 +355,10 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           <div className="flex items-center gap-2 min-w-0">
             <Building2 size={16} className="text-[#4aa8d8] flex-shrink-0" />
             <span className="text-[#4aa8d8] font-semibold text-sm flex-shrink-0">{apartment.buildingId}</span>
-            {apartment.floor > 0 && <span className="text-white/50 text-xs flex-shrink-0">· Floor {apartment.floor}</span>}
+            {apartment.floor > 0 && <span className="text-white/50 text-xs flex-shrink-0">· {ui.floorPrefix} {apartment.floor}</span>}
             {mergedPartner && (
               <span className="text-white/60 text-xs flex-shrink-0">
-                · Linked with Apt {mergedPartner.displayName || mergedPartner.apartmentNumber}
+                · {ui.linkedToApt} {ui.aptPrefix} {mergedPartner.displayName || mergedPartner.apartmentNumber}
               </span>
             )}
           </div>
@@ -403,7 +403,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               <div className="flex items-start gap-2">
                 {/* Apt number — read-only small */}
                 <div className="flex-shrink-0">
-                  <label className="block text-[10px] font-medium text-gray-500 mb-1">Apt #</label>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.aptPrefix} #</label>
                   <div className="w-14 border border-gray-200 rounded-lg px-2 py-2 text-sm font-bold text-center text-gray-700 bg-gray-50">
                     {apartment.apartmentNumber}
                   </div>
@@ -411,21 +411,21 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
 
                 {/* Family name */}
                 <div className="flex-1 min-w-0">
-                  <label className="block text-[10px] font-medium text-gray-500 mb-1">Family Name</label>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.familyName}</label>
                   <input
                     value={familyName}
                     onChange={e => setFamilyName(e.target.value)}
                     onBlur={autoSave}
-                    placeholder="Family name…"
+                    placeholder={ui.familyNamePlaceholder}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                   />
                 </div>
 
                 {/* Classification toggle */}
                 <div className="flex-shrink-0">
-                  <label className="block text-[10px] font-medium text-gray-500 mb-1">Type</label>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.typeField}</label>
                   <div className="flex gap-1">
-                    <Tooltip text="Standard apartment">
+                    <Tooltip text={ui.standardApt}>
                       <button
                         onClick={() => setClassification('standard')}
                         className={`px-2.5 py-2 rounded-lg text-xs font-medium border transition-all ${
@@ -435,7 +435,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                         Std
                       </button>
                     </Tooltip>
-                    <Tooltip text="Has modifications (Shinui)">
+                    <Tooltip text={ui.hasModifications}>
                       <button
                         onClick={() => setClassification('shinui')}
                         className={`px-2 py-2 rounded-lg text-xs font-medium border transition-all flex items-center gap-0.5 ${
@@ -450,14 +450,14 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
 
                 {/* Current stage */}
                 <div className="flex-shrink-0 min-w-[120px]">
-                  <label className="block text-[10px] font-medium text-gray-500 mb-1">Current Stage</label>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.currentStage}</label>
                   <select
                     value={currentStageId}
                     onChange={e => setCurrentStageId(e.target.value)}
                     className="w-full border border-gray-200 rounded-lg px-2 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                     style={{ borderLeftColor: currentStage?.color, borderLeftWidth: currentStage ? '3px' : undefined }}
                   >
-                    <option value="">— Not Started —</option>
+                    <option value="">{ui.notStartedOption}</option>
                     {sortedStages.map(s => (
                       <option key={s.id} value={s.id}>{s.name}</option>
                     ))}
@@ -469,7 +469,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2">
-                    <label className="block text-xs font-medium text-gray-600">General Notes</label>
+                    <label className="block text-xs font-medium text-gray-600">{ui.generalNotes}</label>
                     {apartment && (() => {
                       const versions = getGeneralNoteVersions(apartment.id);
                       return versions.length > 0 ? (
@@ -477,7 +477,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                           type="button"
                           onClick={() => setGeneralNotesHistoryOpen(v => !v)}
                           className="flex items-center gap-0.5 text-xs text-gray-400 hover:text-[#1e3a5f] transition-colors"
-                          title="Note history"
+                          title={ui.noteHistory}
                         >
                           <Clock size={11} />
                           <span className="text-[10px]">{versions.length}</span>
@@ -485,13 +485,13 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                       ) : null;
                     })()}
                   </div>
-                  <Tooltip text="Attach files to office notes">
+                  <Tooltip text={ui.attachFiles}>
                     <button
                       type="button"
                       onClick={() => officeFileRef.current?.click()}
                       className="flex items-center gap-1 text-xs text-gray-400 hover:text-[#1e3a5f] transition-colors"
                     >
-                      <Paperclip size={11} /> Attach
+                      <Paperclip size={11} /> {ui.attachFiles}
                     </button>
                   </Tooltip>
                 </div>
@@ -500,7 +500,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   onChange={e => setGeneralNotes(e.target.value)}
                   onBlur={autoSave}
                   rows={3}
-                  placeholder="General notes about this apartment…"
+                  placeholder={ui.generalNotesPlaceholder}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 resize-none"
                 />
                 {/* General notes history panel */}
@@ -510,7 +510,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     <div className="mt-1 border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
                       <div className="px-3 py-1.5 border-b border-gray-200 flex items-center gap-1.5">
                         <Clock size={11} className="text-gray-400" />
-                        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Note History</span>
+                        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{ui.noteHistory}</span>
                       </div>
                       <div className="max-h-48 overflow-y-auto divide-y divide-gray-100">
                         {versions.map(v => (
@@ -527,7 +527,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                               className="flex items-center gap-1 text-[10px] text-[#1e3a5f] hover:underline flex-shrink-0"
                               title="Restore this version"
                             >
-                              <RotateCcw size={10} /> Restore
+                              <RotateCcw size={10} /> {ui.restore}
                             </button>
                           </div>
                         ))}
@@ -661,7 +661,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
-                    <BookOpen size={11} /> Engineering Plans
+                    <BookOpen size={11} /> {ui.engineeringPlans}
                   </label>
                   {driveLink && backendConfigured && (
                       <Tooltip text="Re-scan Drive folder for Plans PDF">
@@ -670,13 +670,13 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                             setFetchingPdf(true);
                             findPlansPdfViaBackend(driveLink).then(f => {
                               if (f) { setDetectedPdfId(f.id); setPlansPdfLink(`https://drive.google.com/file/d/${f.id}/view`); onToast('PDF found'); }
-                              else onToast('No PDF found in Drive folder', 'error');
+                              else onToast(ui.noPdfFound, 'error');
                             }).finally(() => setFetchingPdf(false));
                           }}
                           className="flex items-center gap-1 text-xs text-gray-400 hover:text-[#1e3a5f] transition-colors"
                         >
                           <RefreshCw size={11} className={fetchingPdf ? 'animate-spin' : ''} />
-                          {fetchingPdf ? 'Detecting…' : 'Refresh'}
+                          {fetchingPdf ? ui.detecting : ui.refreshButton}
                         </button>
                       </Tooltip>
                     )}
@@ -694,12 +694,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                         width="100%"
                         height={showPdfViewer ? '440' : '160'}
                         allow="autoplay"
-                        title="Engineering Plans"
+                        title={ui.engineeringPlans}
                         style={{ border: 'none', display: 'block', pointerEvents: showPdfViewer ? 'auto' : 'none' }}
                       />
                       {!showPdfViewer && (
                         <div className="absolute inset-0 flex items-end justify-center pb-2 bg-gradient-to-t from-black/20 to-transparent">
-                          <span className="text-white text-[10px] font-medium bg-black/40 px-2 py-0.5 rounded">Click to expand</span>
+                          <span className="text-white text-[10px] font-medium bg-black/40 px-2 py-0.5 rounded">{ui.clickToExpand}</span>
                         </div>
                       )}
                     </div>
@@ -707,21 +707,21 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                       <button onClick={() => setShowPdfViewer(v => !v)}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:border-[#1e3a5f] hover:text-[#1e3a5f] transition-all">
                         {showPdfViewer ? <EyeOff size={12} /> : <Eye size={12} />}
-                        {showPdfViewer ? 'Hide' : 'Full View'}
+                        {showPdfViewer ? 'Hide' : ui.fullView}
                       </button>
                       <a href={driveDownloadUrl(detectedPdfId)} target="_blank" rel="noopener noreferrer"
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:border-[#4aa8d8] hover:text-[#4aa8d8] transition-all">
-                        <Download size={12} /> Download
+                        <Download size={12} /> {ui.download}
                       </a>
                     </div>
                   </>
                 ) : fetchingPdf ? (
                   <div className="flex items-center gap-2 text-xs text-gray-400 py-3">
-                    <RefreshCw size={12} className="animate-spin" /> Looking for Plans PDF in Drive…
+                    <RefreshCw size={12} className="animate-spin" /> {ui.lookingForPdf}
                   </div>
                 ) : (
                   <div className="text-xs text-gray-400 italic py-1">
-                    {driveLink ? 'No Plans PDF found. Click Refresh to retry, or set Drive folder below.' : 'Set the Drive folder in Settings below to auto-detect Plans PDF.'}
+                    {driveLink ? `${ui.noPdfFound}. ${ui.refreshButton}` : ui.setPdfHint}
                   </div>
                 )}
               </div>
@@ -731,7 +731,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 onClick={handleSaveBasic}
                 className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors"
               >
-                <Save size={16} /> Save Changes
+                <Save size={16} /> {ui.saveChangesBtn}
               </button>
 
               {/* Settings collapsible */}
@@ -743,7 +743,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 >
                   {showSettings ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                   Settings
-                  <span className="ml-auto text-xs text-gray-400">Drive folder · Connected unit</span>
+                  <span className="ml-auto text-xs text-gray-400">{ui.driveFolder} · {ui.connectedUnit}</span>
                 </button>
 
                 {showSettings && (
@@ -752,7 +752,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
-                          <ExternalLink size={11} /> Google Drive Folder
+                          <ExternalLink size={11} /> {ui.driveFolder}
                         </label>
                         <Tooltip text={showHealthCheck ? 'Hide status' : 'Show Drive folder status'}>
                           <button
@@ -851,12 +851,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     {/* Connected unit */}
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1.5 flex items-center gap-1.5">
-                        <Link size={12} /> Connected Unit (buyer-merged apartments)
+                        <Link size={12} /> {ui.connectedUnit}
                       </label>
                       {mergedPartner && (
                         <div className="mb-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-700">
                           <Link size={12} />
-                          Linked to Apt <strong>{mergedPartner.displayName || mergedPartner.apartmentNumber}</strong>
+                          {ui.linkedToApt} <strong>{mergedPartner.displayName || mergedPartner.apartmentNumber}</strong>
                         </div>
                       )}
                       <div className="flex gap-2">
@@ -865,10 +865,10 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                           onChange={e => setMergedWithId(e.target.value)}
                           className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                         >
-                          <option value="">— No connection —</option>
+                          <option value="">{ui.noConnection}</option>
                           {sameBuildingApts.map(a => (
                             <option key={a.id} value={a.id}>
-                              Apt {a.displayName || a.apartmentNumber} (Floor {a.floor > 0 ? a.floor : 'B'})
+                              {ui.aptPrefix} {a.displayName || a.apartmentNumber} ({ui.floorPrefix} {a.floor > 0 ? a.floor : 'B'})
                             </option>
                           ))}
                         </select>
@@ -882,7 +882,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                           </button>
                         </Tooltip>
                       </div>
-                      <p className="text-xs text-gray-400 mt-1.5">Linking is mutual — both apartments show the connection.</p>
+                      <p className="text-xs text-gray-400 mt-1.5">{ui.linkMutualHint}</p>
                     </div>
                   </div>
                 )}
@@ -898,14 +898,14 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   onClick={() => { onClose(); onRequestAddTask(apartment); }}
                   className="w-full flex items-center justify-center gap-2 py-2 bg-[#1e3a5f]/5 border border-dashed border-[#1e3a5f]/20 rounded-lg text-sm text-[#1e3a5f] hover:bg-[#1e3a5f]/10 transition-colors font-medium"
                 >
-                  <Plus size={14} /> Add Task
+                  <Plus size={14} /> {ui.addTask}
                 </button>
               )}
 
               {aptTasks.length === 0 ? (
                 <div className="text-center py-10 text-gray-400">
                   <UserCheck size={28} className="mx-auto mb-2 opacity-30" />
-                  <p className="text-sm">No tasks assigned to this apartment.</p>
+                  <p className="text-sm">{ui.noTasksAssigned}</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -945,12 +945,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                               )}
                               {a.priority === 'urgent' && (
                                 <span className="text-[10px] px-1.5 py-0.5 rounded border font-medium text-red-600 bg-red-50 border-red-200">
-                                  🔴 Urgent
+                                  {ui.urgentPriority}
                                 </span>
                               )}
                               {a.priority === 'low' && (
                                 <span className="text-[10px] px-1.5 py-0.5 rounded border font-medium text-green-600 bg-green-50 border-green-200">
-                                  🟢 Low
+                                  {ui.lowPriority}
                                 </span>
                               )}
                             </div>
@@ -1026,24 +1026,24 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               {!apartment.driveLink ? (
                 <div className="flex flex-col items-center py-16 text-center px-4">
                   <Camera size={32} className="text-gray-300 mb-3" />
-                  <p className="text-sm font-medium text-gray-500">No Drive folder linked</p>
-                  <p className="text-xs text-gray-400 mt-1">Set the Drive folder in Details → Settings to load photos.</p>
+                  <p className="text-sm font-medium text-gray-500">{ui.noDriveLinked}</p>
+                  <p className="text-xs text-gray-400 mt-1">{ui.setDriveFolderHint}</p>
                 </div>
               ) : !backendConfigured ? (
                 <div className="flex flex-col items-center py-16 text-center px-4">
                   <Camera size={32} className="text-gray-300 mb-3" />
-                  <p className="text-sm font-medium text-gray-500">Drive backend not configured</p>
+                  <p className="text-sm font-medium text-gray-500">{ui.driveBackendNotConfigured}</p>
                   <p className="text-xs text-gray-400 mt-1">Set VITE_DRIVE_API_KEY to enable photo browsing.</p>
                 </div>
               ) : loadingPhotos ? (
                 <div className="flex items-center justify-center py-16 text-gray-400">
-                  <RefreshCw size={18} className="animate-spin mr-2" /> Loading photos from Drive…
+                  <RefreshCw size={18} className="animate-spin mr-2" /> {ui.loadingPhotos}
                 </div>
               ) : photosLoaded && drivePhotos.length === 0 ? (
                 <div className="flex flex-col items-center py-16 text-center px-4">
                   <Camera size={32} className="text-gray-300 mb-3" />
-                  <p className="text-sm font-medium text-gray-500">No photos yet</p>
-                  <p className="text-xs text-gray-400 mt-1">Photos uploaded by contractors will appear here.</p>
+                  <p className="text-sm font-medium text-gray-500">{ui.noPhotosYet}</p>
+                  <p className="text-xs text-gray-400 mt-1">{ui.photosDesc}</p>
                 </div>
               ) : drivePhotos.length > 0 ? (
                 (() => {
@@ -1144,6 +1144,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           items={lightbox.items}
           initialIndex={lightbox.index}
           onClose={() => setLightbox(null)}
+          imageUnavailable={ui.imageUnavailable}
+          openDownload={ui.openDownload}
         />
       )}
     </>
