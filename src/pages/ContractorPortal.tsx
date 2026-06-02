@@ -643,6 +643,17 @@ export function ContractorPortal() {
               <p className="text-gray-600 font-medium">{s.noAssignments}</p>
               <p className="text-gray-400 text-sm mt-1">{s.noAssignmentsHint}</p>
             </div>
+          ) : filteredAssignments.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <Clock size={32} className="text-gray-300 mb-3" />
+              <p className="text-gray-500 text-sm font-medium">No tasks for this period</p>
+              <button
+                onClick={() => setMapFilter('all')}
+                className="mt-3 text-xs text-[#1e3a5f] underline font-medium"
+              >
+                Show all tasks
+              </button>
+            </div>
           ) : (
             <div className="space-y-3 py-2">
               {filteredAssignments.map(a => {

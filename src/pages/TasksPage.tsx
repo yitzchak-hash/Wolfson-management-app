@@ -1,8 +1,9 @@
 import React, { useState, useRef } from 'react';
 import { useStore } from '../data/store';
 import {
-  Plus, Trash2, Save, Edit2, X, CheckCircle2, Clock, Paperclip, ExternalLink,
+  Plus, Trash2, Save, Edit2, X, CheckCircle2, Clock, Paperclip, ExternalLink, Layers,
 } from 'lucide-react';
+import { BulkAddTaskModal } from '../components/apartment/BulkAddTaskModal';
 import { ContractorAssignment, ContractorCategory, TaskAttachment } from '../types';
 import { Toast } from '../components/ui/Toast';
 import { Tooltip } from '../components/ui/Tooltip';
@@ -43,6 +44,7 @@ export function TasksPage() {
     taskDescription: string; dueDate: string; stageId: string; completedAt: string | null;
   }>({ taskDescription: '', dueDate: '', stageId: '', completedAt: null });
   const [showAdd, setShowAdd] = useState(false);
+  const [showBulkAdd, setShowBulkAdd] = useState(false);
   const [addForm, setAddForm] = useState({ contractorId: '', aptId: '', task: '', dueDate: '', stageId: '' });
   const [addAttachments, setAddAttachments] = useState<TaskAttachment[]>([]);
   const [addUploadProgress, setAddUploadProgress] = useState<number | null>(null);
@@ -207,6 +209,13 @@ export function TasksPage() {
             {filtered.length} task{filtered.length !== 1 ? 's' : ''} · {filtered.filter(a => a.completedAt).length} done
           </span>
 
+          <button
+            onClick={() => setShowBulkAdd(true)}
+            className="flex items-center gap-1.5 px-3 py-2 border border-[#1e3a5f] text-[#1e3a5f] rounded-lg text-sm font-medium hover:bg-[#1e3a5f]/5 transition-colors"
+          >
+            <Layers size={15} />
+            Bulk Add
+          </button>
           <button
             onClick={() => setShowAdd(v => !v)}
             className="flex items-center gap-1.5 px-3 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors"
@@ -522,6 +531,12 @@ export function TasksPage() {
       </div>
 
       {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
+      {showBulkAdd && (
+        <BulkAddTaskModal
+          onClose={() => setShowBulkAdd(false)}
+          onToast={onToast}
+        />
+      )}
     </div>
   );
 }
