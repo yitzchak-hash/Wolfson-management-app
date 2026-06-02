@@ -3,7 +3,7 @@ import {
   X, Plus, Paperclip, Layers, HardDrive, Database, AlertTriangle,
   Loader, ChevronLeft, CheckCircle2, Circle, FileText, ZoomIn,
 } from 'lucide-react';
-import { Apartment, ContractorCategory, TaskAttachment } from '../../types';
+import { Apartment, ContractorCategory, TaskAttachment, TaskPriority } from '../../types';
 import { useStore } from '../../data/store';
 import {
   isUploadBackendConfigured, extractFolderId,
@@ -38,6 +38,7 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
   const [stageId, setStageId] = useState('');
   const [selectedAptIds, setSelectedAptIds] = useState<Set<string>>(new Set());
   const [buildingTab, setBuildingTab] = useState<BuildingTab>('all');
+  const [priority, setPriority] = useState<TaskPriority | ''>('');
 
   // ── Attachments ───────────────────────────────────────────────────────────
   const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
@@ -243,6 +244,7 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
         completedAt: null,
         createdBy: currentUser?.id ?? '',
         createdByName: currentUser?.name ?? 'Office',
+        ...(priority ? { priority } : {}),
         ...(atts.length ? { attachments: atts } : {}),
       });
       if (stageId && stageId !== apt.currentStageId && currentUser) {
@@ -430,6 +432,20 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                           className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                         />
                       </div>
+                    </div>
+
+                    {/* Priority */}
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 block mb-1">Priority</label>
+                      <select
+                        value={priority}
+                        onChange={e => setPriority(e.target.value as TaskPriority | '')}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white"
+                      >
+                        <option value="">Normal (default)</option>
+                        <option value="urgent">🔴 Urgent</option>
+                        <option value="low">🟢 Low</option>
+                      </select>
                     </div>
 
                     {/* Attachments */}

@@ -44,7 +44,7 @@ function getFloorRows(buildingId: BuildingId, compact = false): FloorRowDef[] {
 
   const rows: FloorRowDef[] = [];
 
-  rows.push({ floorLabel: 'גג', type: 'roof', height: h.roof });
+  rows.push({ floorLabel: 'Roof', type: 'roof', height: h.roof });
   rows.push({ floorLabel: '16', type: 'wide', aptNums: [55, 56], height: h.wide });
   rows.push({ floorLabel: '15', type: 'wide', aptNums: [53, 54], height: h.wide });
 
@@ -54,7 +54,7 @@ function getFloorRows(buildingId: BuildingId, compact = false): FloorRowDef[] {
   }
 
   rows.push({ floorLabel: '1', type: 'lobby', height: h.lobby });
-  rows.push({ floorLabel: 'קרקע', type: 'ground', height: h.ground });
+  rows.push({ floorLabel: 'Ground', type: 'ground', height: h.ground });
 
   const basementDef = buildingId === 'A1'
     ? [

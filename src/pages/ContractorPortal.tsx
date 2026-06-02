@@ -811,6 +811,13 @@ export function ContractorPortal() {
                 <div>
                   <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{s.sectionTask}</h3>
                   <p className="text-gray-800 text-sm leading-relaxed">{a.taskDescription}</p>
+                  {a.priority && a.priority !== 'normal' && (
+                    <span className={`inline-flex items-center gap-1 mt-1.5 text-xs px-2 py-0.5 rounded border font-medium ${
+                      a.priority === 'urgent' ? 'text-red-600 bg-red-50 border-red-200' : 'text-green-600 bg-green-50 border-green-200'
+                    }`}>
+                      {a.priority === 'urgent' ? '🔴' : '🟢'} {a.priority === 'urgent' ? 'Urgent' : 'Low priority'}
+                    </span>
+                  )}
                 </div>
 
                 {/* Office notes */}

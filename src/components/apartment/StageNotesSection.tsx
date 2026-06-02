@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { ChevronDown, ChevronUp, Save, Calendar, User, MessageSquare, Paperclip, X, ExternalLink } from 'lucide-react';
-import { Stage, User as UserType } from '../../types';
+import { ChevronDown, ChevronUp, Save, Calendar, User, MessageSquare, Paperclip, X, ExternalLink, Clock, RotateCcw } from 'lucide-react';
+import { Stage, User as UserType, StageNoteAttachment } from '../../types';
 import { useStore } from '../../data/store';
 import { format } from 'date-fns';
 import {
@@ -17,6 +17,7 @@ interface StageNotesSectionProps {
 }
 
 interface PendingAttachment {
+  id: string;
   filename: string;
   mimeType: string;
   dataUrl: string;
@@ -26,15 +27,17 @@ interface PendingAttachment {
 
 export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }: StageNotesSectionProps) {
   const {
-    upsertStageNote, getStageNote,
+    upsertStageNote, getStageNote, getStageNoteVersions,
     apartments, contractors, contractorAssignments, contractorNotes,
     addContractorAssignment, updateContractorAssignment, deleteContractorAssignment,
   } = useStore();
 
   const [openStage, setOpenStage] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [pendingAttachments, setPendingAttachments] = useState<Record<string, PendingAttachment>>({});
+  // Multi-attachment support: stageId → array of pending attachments
+  const [pendingAttachments, setPendingAttachments] = useState<Record<string, PendingAttachment[]>>({});
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
+  const [historyOpen, setHistoryOpen] = useState<string | null>(null); // stageId with open history
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [fileInputTarget, setFileInputTarget] = useState<string | null>(null);
 
@@ -67,30 +70,31 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
 
   async function handleFileChosen(stageId: string, file: File) {
     const processed = await compressImage(file);
+    const attId = Math.random().toString(36).substr(2, 9);
 
     // Try Drive upload first
     if (isUploadBackendConfigured() && apt?.driveLink) {
       try {
         const mainFolderId = extractFolderId(apt.driveLink);
         if (mainFolderId) {
-          setUploadProgress(p => ({ ...p, [stageId]: 1 }));
+          setUploadProgress(p => ({ ...p, [attId]: 1 }));
           const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');
           const notesFolderId = await findOrCreateFolderViaBackend(photosFolderId, 'Stage Notes');
           const { fileId, webViewLink } = await uploadFileViaResumableSession(
             notesFolderId, processed,
-            pct => setUploadProgress(p => ({ ...p, [stageId]: pct })),
+            pct => setUploadProgress(p => ({ ...p, [attId]: pct })),
           );
           await shareFileToDrive(fileId);
-          setUploadProgress(p => { const n = { ...p }; delete n[stageId]; return n; });
+          setUploadProgress(p => { const n = { ...p }; delete n[attId]; return n; });
           setPendingAttachments(pa => ({
             ...pa,
-            [stageId]: { filename: processed.name, mimeType: processed.type, dataUrl: '', driveFileId: fileId, driveUrl: webViewLink },
+            [stageId]: [...(pa[stageId] ?? []), { id: attId, filename: processed.name, mimeType: processed.type, dataUrl: '', driveFileId: fileId, driveUrl: webViewLink }],
           }));
           return;
         }
       } catch (e) {
         console.warn('Drive upload failed for stage note, falling back to base64:', e);
-        setUploadProgress(p => { const n = { ...p }; delete n[stageId]; return n; });
+        setUploadProgress(p => { const n = { ...p }; delete n[attId]; return n; });
       }
     }
 
@@ -100,7 +104,7 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
       const dataUrl = e.target?.result as string ?? '';
       setPendingAttachments(pa => ({
         ...pa,
-        [stageId]: { filename: processed.name, mimeType: processed.type, dataUrl },
+        [stageId]: [...(pa[stageId] ?? []), { id: attId, filename: processed.name, mimeType: processed.type, dataUrl }],
       }));
     };
     reader.readAsDataURL(processed);
@@ -108,10 +112,36 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
 
   function handleSave(stageId: string) {
     const text = drafts[stageId] ?? (getStageNote(apartmentId, stageId)?.noteText ?? '');
-    const pending = pendingAttachments[stageId];
-    upsertStageNote(apartmentId, stageId, text, currentUser, pending ?? undefined);
+    const pending = pendingAttachments[stageId] ?? [];
+    const existingNote = getStageNote(apartmentId, stageId);
+
+    // Merge existing saved attachments with newly added ones
+    const existingAtts: StageNoteAttachment[] = existingNote?.attachments ?? [];
+    const allAtts: StageNoteAttachment[] = [
+      ...existingAtts,
+      ...pending.map(p => ({ id: p.id, filename: p.filename, mimeType: p.mimeType, dataUrl: p.dataUrl, driveFileId: p.driveFileId, driveUrl: p.driveUrl })),
+    ];
+
+    upsertStageNote(apartmentId, stageId, text, currentUser, undefined, allAtts.length > 0 ? allAtts : undefined);
     setPendingAttachments(pa => { const n = { ...pa }; delete n[stageId]; return n; });
     onSaved();
+  }
+
+  function handleRemoveAttachment(stageId: string, attId: string) {
+    const note = getStageNote(apartmentId, stageId);
+    if (!note) return;
+    const updated = (note.attachments ?? []).filter(a => a.id !== attId);
+    const text = drafts[stageId] ?? note.noteText;
+    upsertStageNote(apartmentId, stageId, text, currentUser, undefined, updated);
+  }
+
+  function handleRemovePending(stageId: string, attId: string) {
+    setPendingAttachments(pa => ({ ...pa, [stageId]: (pa[stageId] ?? []).filter(a => a.id !== attId) }));
+  }
+
+  function handleRestoreVersion(stageId: string, noteText: string) {
+    setDrafts(d => ({ ...d, [stageId]: noteText }));
+    setHistoryOpen(null);
   }
 
   function getDraft(stageId: string): string {
@@ -179,9 +209,12 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
         const stageDate = apt?.stageDates?.[stage.id];
         const assignment = getAssignment(stage.id);
         const assignedContractor = assignment ? contractors.find(c => c.id === assignment.contractorId) : null;
-        const pending = pendingAttachments[stage.id];
-        const progress = uploadProgress[stage.id];
-        const hasAttachment = note?.attachmentFilename;
+        const pendingList = pendingAttachments[stage.id] ?? [];
+        const anyUploading = Object.keys(uploadProgress).length > 0;
+        const savedAtts = note?.attachments ?? (note?.attachmentFilename ? [{ id: 'legacy', filename: note.attachmentFilename!, mimeType: note.attachmentMimeType!, dataUrl: note.attachmentDataUrl, driveFileId: note.attachmentDriveFileId, driveUrl: note.attachmentDriveUrl }] : []);
+        const hasAttachment = savedAtts.length > 0 || pendingList.length > 0;
+        const noteVersions = note ? getStageNoteVersions(note.id) : [];
+        const isHistoryOpen = historyOpen === stage.id;
 
         return (
           <div key={stage.id} className="border border-gray-200 rounded-lg overflow-hidden">
@@ -195,9 +228,9 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                 {hasNote && (
                   <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Note</span>
                 )}
-                {hasAttachment && (
+                {savedAtts.length > 0 && (
                   <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded flex items-center gap-0.5">
-                    <Paperclip size={9} />File
+                    <Paperclip size={9} />{savedAtts.length} file{savedAtts.length !== 1 ? 's' : ''}
                   </span>
                 )}
                 {stageDate && (
@@ -266,81 +299,83 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
                   />
 
-                  {/* Saved attachment preview */}
-                  {!pending && note?.attachmentFilename && (
-                    <div className="mt-1.5">
-                      {note.attachmentMimeType?.startsWith('image/') ? (
-                        <div className="relative inline-block">
-                          {note.attachmentDriveFileId ? (
-                            <a href={note.attachmentDriveUrl ?? '#'} target="_blank" rel="noopener noreferrer">
-                              <img
-                                src={driveThumbUrl(note.attachmentDriveFileId, 400)}
-                                alt={note.attachmentFilename}
-                                className="max-h-28 rounded-lg object-cover border border-gray-200 cursor-pointer hover:opacity-90"
-                              />
+                  {/* Saved attachments (multi) */}
+                  {savedAtts.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {savedAtts.map(att => (
+                        <div key={att.id} className="relative group">
+                          {att.mimeType?.startsWith('image/') ? (
+                            att.driveFileId ? (
+                              <a href={att.driveUrl ?? '#'} target="_blank" rel="noopener noreferrer">
+                                <img
+                                  src={driveThumbUrl(att.driveFileId, 300)}
+                                  alt={att.filename}
+                                  className="h-16 w-16 rounded-lg object-cover border border-gray-200 cursor-pointer hover:opacity-90"
+                                />
+                              </a>
+                            ) : att.dataUrl ? (
+                              <img src={att.dataUrl} alt={att.filename} className="h-16 w-16 rounded-lg object-cover border border-gray-200" />
+                            ) : null
+                          ) : (
+                            <a href={att.driveUrl ?? '#'} target="_blank" rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-2 py-1 bg-gray-100 rounded-lg text-xs text-gray-600 hover:bg-gray-200 transition-colors">
+                              <Paperclip size={10} />
+                              <span className="truncate max-w-[140px]">{att.filename}</span>
+                              <ExternalLink size={9} className="text-gray-400 flex-shrink-0" />
                             </a>
-                          ) : note.attachmentDataUrl ? (
-                            <img
-                              src={note.attachmentDataUrl}
-                              alt={note.attachmentFilename}
-                              className="max-h-28 rounded-lg object-cover border border-gray-200"
-                            />
-                          ) : null}
+                          )}
+                          {att.id !== 'legacy' && (
+                            <button
+                              onClick={() => handleRemoveAttachment(stage.id, att.id)}
+                              className="absolute -top-1 -right-1 w-4 h-4 hidden group-hover:flex items-center justify-center rounded-full bg-black/60 text-white"
+                            >
+                              <X size={9} />
+                            </button>
+                          )}
                         </div>
-                      ) : (
-                        <a
-                          href={note.attachmentDriveUrl ?? '#'}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-2 py-1 bg-gray-100 rounded-lg text-xs text-gray-600 hover:bg-gray-200 transition-colors"
-                        >
-                          <Paperclip size={10} />
-                          <span className="truncate max-w-[160px]">{note.attachmentFilename}</span>
-                          <ExternalLink size={9} className="text-gray-400 flex-shrink-0" />
-                        </a>
-                      )}
+                      ))}
                     </div>
                   )}
 
-                  {/* Pending attachment preview */}
-                  {pending && (
-                    <div className="mt-1.5">
-                      {pending.mimeType.startsWith('image/') && (pending.dataUrl || pending.driveFileId) ? (
-                        <div className="relative inline-block">
-                          <img
-                            src={pending.driveFileId ? driveThumbUrl(pending.driveFileId, 400) : pending.dataUrl}
-                            alt={pending.filename}
-                            className="max-h-28 rounded-lg object-cover border border-blue-200"
-                          />
-                          <button
-                            onClick={() => setPendingAttachments(pa => { const n = { ...pa }; delete n[stage.id]; return n; })}
-                            className="absolute top-1 right-1 w-5 h-5 flex items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70"
-                          >
-                            <X size={11} />
-                          </button>
+                  {/* Pending (new) attachments */}
+                  {pendingList.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {pendingList.map(p => (
+                        <div key={p.id} className="relative">
+                          {p.mimeType.startsWith('image/') && (p.dataUrl || p.driveFileId) ? (
+                            <>
+                              <img
+                                src={p.driveFileId ? driveThumbUrl(p.driveFileId, 300) : p.dataUrl}
+                                alt={p.filename}
+                                className="h-16 w-16 rounded-lg object-cover border border-blue-200"
+                              />
+                              <button onClick={() => handleRemovePending(stage.id, p.id)}
+                                className="absolute -top-1 -right-1 w-4 h-4 flex items-center justify-center rounded-full bg-black/60 text-white">
+                                <X size={9} />
+                              </button>
+                            </>
+                          ) : (
+                            <div className="flex items-center gap-1.5 px-2 py-1.5 bg-blue-50 rounded-lg border border-blue-100 text-xs text-blue-700">
+                              <Paperclip size={11} />
+                              <span className="flex-1 truncate max-w-[120px]">{p.filename}</span>
+                              <button onClick={() => handleRemovePending(stage.id, p.id)} className="text-blue-400 hover:text-blue-600">
+                                <X size={12} />
+                              </button>
+                            </div>
+                          )}
                         </div>
-                      ) : (
-                        <div className="flex items-center gap-2 px-2 py-1.5 bg-blue-50 rounded-lg border border-blue-100 text-xs text-blue-700">
-                          <Paperclip size={11} />
-                          <span className="flex-1 truncate">{pending.filename}</span>
-                          <button
-                            onClick={() => setPendingAttachments(pa => { const n = { ...pa }; delete n[stage.id]; return n; })}
-                            className="text-blue-400 hover:text-blue-600"
-                          >
-                            <X size={12} />
-                          </button>
-                        </div>
-                      )}
+                      ))}
                     </div>
                   )}
 
-                  {/* Upload progress bar */}
-                  {progress !== undefined && (
-                    <div className="mt-1.5 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-blue-400 transition-all duration-300 rounded-full"
-                        style={{ width: `${progress}%` }}
-                      />
+                  {/* Upload progress bars */}
+                  {anyUploading && (
+                    <div className="mt-1.5 space-y-1">
+                      {Object.entries(uploadProgress).map(([id, pct]) => (
+                        <div key={id} className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-blue-400 transition-all duration-300 rounded-full" style={{ width: `${pct}%` }} />
+                        </div>
+                      ))}
                     </div>
                   )}
 
@@ -351,6 +386,16 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                       </span>
                     ) : <span />}
                     <div className="flex items-center gap-1.5">
+                      {noteVersions.length > 0 && (
+                        <button
+                          onClick={() => setHistoryOpen(isHistoryOpen ? null : stage.id)}
+                          className={`flex items-center gap-1 px-2.5 py-1.5 border rounded-lg text-xs transition-colors ${isHistoryOpen ? 'bg-purple-50 border-purple-200 text-purple-600' : 'border-gray-200 text-gray-400 hover:bg-gray-50'}`}
+                          title={`${noteVersions.length} version${noteVersions.length !== 1 ? 's' : ''}`}
+                        >
+                          <Clock size={11} />
+                          {noteVersions.length}
+                        </button>
+                      )}
                       <button
                         onClick={() => {
                           setFileInputTarget(stage.id);
@@ -371,6 +416,31 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                     </div>
                   </div>
                 </div>
+
+                {/* Version history panel */}
+                {isHistoryOpen && noteVersions.length > 0 && (
+                  <div className="border-t border-purple-100 bg-purple-50/40 p-3 space-y-2">
+                    <p className="text-[10px] font-semibold text-purple-500 uppercase tracking-wider flex items-center gap-1">
+                      <Clock size={9} /> Edit History ({noteVersions.length})
+                    </p>
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                      {noteVersions.map(v => (
+                        <div key={v.id} className="bg-white border border-purple-100 rounded-lg p-2 text-xs">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-gray-500">{v.savedByName} · {format(new Date(v.savedAt), 'MMM d, HH:mm')}</span>
+                            <button
+                              onClick={() => handleRestoreVersion(stage.id, v.noteText)}
+                              className="flex items-center gap-1 text-purple-600 hover:text-purple-800 font-medium text-[10px]"
+                            >
+                              <RotateCcw size={9} /> Restore
+                            </button>
+                          </div>
+                          <p className="text-gray-600 leading-snug line-clamp-3">{v.noteText || <em className="text-gray-400">empty</em>}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Contractor notes linked to this stage's assignments */}
                 {(() => {

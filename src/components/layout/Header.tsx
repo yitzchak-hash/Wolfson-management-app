@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { LogOut, User, Sun, Moon, AlertTriangle, Loader2, CheckCircle2 } from 'lucide-react';
+import { LogOut, User, Sun, Moon, AlertTriangle, Loader2, CheckCircle2, Search } from 'lucide-react';
 import { useStore } from '../../data/store';
 import { Tooltip } from '../ui/Tooltip';
+import { GlobalSearch } from '../ui/GlobalSearch';
 import { subscribeCloudSync } from '../../data/firebase';
 import { isFirebaseConfigured } from '../../data/firebase';
 
@@ -44,9 +45,23 @@ function WolfsonLogo() {
 
 export function Header() {
   const { currentUser, logout, lightTheme, setLightTheme, firebaseSyncError } = useStore();
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setSearchOpen(v => !v);
+      }
+      if (e.key === 'Escape') setSearchOpen(false);
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
 
   return (
     <>
+    <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
     <header
       className="h-16 flex items-center justify-between px-5 shadow-lg flex-shrink-0 z-30 transition-colors duration-200"
       style={{ backgroundColor: lightTheme ? '#ffffff' : '#1e3a5f', borderBottom: lightTheme ? '1px solid #e5e7eb' : 'none' }}
@@ -59,6 +74,18 @@ export function Header() {
 
       <div className="flex items-center gap-2">
         <CloudSyncBadge light={lightTheme} />
+
+        {currentUser && (
+          <Tooltip text="Search (⌘K)">
+            <button
+              onClick={() => setSearchOpen(true)}
+              className="p-2 rounded-lg transition-colors"
+              style={{ color: lightTheme ? '#6b7280' : '#9ca3af' }}
+            >
+              <Search size={17} />
+            </button>
+          </Tooltip>
+        )}
 
         {/* Theme toggle */}
         <Tooltip text={lightTheme ? 'Switch to dark theme' : 'Switch to light theme'}>

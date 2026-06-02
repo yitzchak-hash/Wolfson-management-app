@@ -1,10 +1,12 @@
 import React from 'react';
 import { useStore } from '../data/store';
+import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
-import { Building2, AlertTriangle, CheckCircle2, Clock, FileText, Users } from 'lucide-react';
+import { Building2, AlertTriangle, CheckCircle2, Clock, FileText, ClipboardList, AlertCircle } from 'lucide-react';
 
 export function DashboardPage() {
-  const { apartments, stages, activityLogs, users, mainUiStrings: s } = useStore();
+  const { apartments, stages, activityLogs, contractorAssignments, mainUiStrings: s } = useStore();
+  const navigate = useNavigate();
 
   const sortedStages = [...stages].filter(s => s.active).sort((a, b) => a.order - b.order);
   const total = apartments.length;
@@ -12,6 +14,11 @@ export function DashboardPage() {
   const shinuiCount = apartments.filter(a => a.classification === 'shinui').length;
   const withNotes = apartments.filter(a => a.generalNotes.trim()).length;
   const recentLogs = activityLogs.slice(0, 10);
+
+  const today = new Date().toISOString().split('T')[0];
+  const overdueTasks = contractorAssignments.filter(a => !a.completedAt && a.dueDate && a.dueDate < today).length;
+  const pendingTasks = contractorAssignments.filter(a => !a.completedAt).length;
+  const completedToday = contractorAssignments.filter(a => a.completedAt && a.completedAt.startsWith(today)).length;
 
   const buildings: Array<'A1' | 'A2' | 'A3'> = ['A1', 'A2', 'A3'];
 
@@ -26,11 +33,39 @@ export function DashboardPage() {
       <h1 className="text-2xl font-bold text-gray-900 mb-6">{s.pageDashboard}</h1>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <SummaryCard icon={<Building2 size={20} />} label={s.totalUnits} value={total} color="#1e3a5f" />
         <SummaryCard icon={<Clock size={20} />} label={s.notStarted} value={notStarted} color="#6b7280" />
         <SummaryCard icon={<AlertTriangle size={20} />} label={s.changes} value={shinuiCount} color="#f59e0b" />
         <SummaryCard icon={<FileText size={20} />} label={s.withNotes} value={withNotes} color="#10b981" />
+      </div>
+
+      {/* Task summary cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <SummaryCard
+          icon={<AlertCircle size={20} />}
+          label="Overdue Tasks"
+          value={overdueTasks}
+          color="#ef4444"
+          onClick={() => navigate('/tasks')}
+          clickable
+        />
+        <SummaryCard
+          icon={<ClipboardList size={20} />}
+          label="Pending Tasks"
+          value={pendingTasks}
+          color="#4aa8d8"
+          onClick={() => navigate('/tasks')}
+          clickable
+        />
+        <SummaryCard
+          icon={<CheckCircle2 size={20} />}
+          label="Completed Today"
+          value={completedToday}
+          color="#10b981"
+          onClick={() => navigate('/tasks')}
+          clickable
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
@@ -154,9 +189,19 @@ export function DashboardPage() {
   );
 }
 
-function SummaryCard({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: number; color: string }) {
+function SummaryCard({ icon, label, value, color, onClick, clickable }: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  color: string;
+  onClick?: () => void;
+  clickable?: boolean;
+}) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-4">
+    <div
+      className={`bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-4 ${clickable ? 'cursor-pointer hover:border-gray-300 hover:shadow-sm transition-all' : ''}`}
+      onClick={onClick}
+    >
       <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: color + '15', color }}>
         {icon}
       </div>

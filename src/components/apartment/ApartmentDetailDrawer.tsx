@@ -249,6 +249,21 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       setShowUnmergeModal(true);
       return;
     }
+    if (mergedWithId) {
+      const partner = apartments.find(a => a.id === mergedWithId);
+      if (partner && partner.buildingId !== apartment!.buildingId) {
+        onToast('Cannot merge apartments from different buildings', 'error');
+        return;
+      }
+      if (partner && partner.mergedWith && partner.mergedWith !== apartment!.id) {
+        onToast('That apartment is already merged with another unit', 'error');
+        return;
+      }
+      if (apartment!.mergedWith && apartment!.mergedWith !== mergedWithId) {
+        onToast('This apartment is already merged with another unit — unmerge first', 'error');
+        return;
+      }
+    }
     mergeApartments(apartment!.id, mergedWithId || null, currentUser);
     const partner = apartments.find(a => a.id === mergedWithId);
     onToast(partner ? `Linked with Apt ${partner.displayName || partner.apartmentNumber}` : 'Merge link cleared');
@@ -873,6 +888,16 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                 <span className="text-[10px] px-1.5 py-0.5 rounded"
                                   style={{ backgroundColor: stage.color + '20', color: stage.color }}>
                                   {stage.name}
+                                </span>
+                              )}
+                              {a.priority === 'urgent' && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded border font-medium text-red-600 bg-red-50 border-red-200">
+                                  🔴 Urgent
+                                </span>
+                              )}
+                              {a.priority === 'low' && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded border font-medium text-green-600 bg-green-50 border-green-200">
+                                  🟢 Low
                                 </span>
                               )}
                             </div>

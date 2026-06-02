@@ -1,7 +1,46 @@
 import React, { useMemo } from 'react';
 import { useStore } from '../data/store';
-import { format } from 'date-fns';
+import { format, subWeeks, startOfWeek, endOfWeek } from 'date-fns';
 import { Building2, TrendingUp, CheckCircle2, Clock, Users, Wrench } from 'lucide-react';
+
+function VelocityChart({ title, data, color, bgCard, borderColor, textPrimary, textSub }: {
+  title: string;
+  data: { label: string; value: number }[];
+  color: string;
+  bgCard: string;
+  borderColor: string;
+  textPrimary: string;
+  textSub: string;
+}) {
+  const maxVal = Math.max(...data.map(d => d.value), 1);
+  return (
+    <div className="rounded-2xl border p-5 shadow-sm" style={{ backgroundColor: bgCard, borderColor }}>
+      <div className="flex items-center gap-2 mb-4">
+        <TrendingUp size={16} style={{ color }} />
+        <h2 className="font-semibold text-sm" style={{ color: textPrimary }}>{title}</h2>
+      </div>
+      <div className="flex items-end gap-1.5 h-28">
+        {data.map((d, i) => (
+          <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full justify-end">
+            <span className="text-[9px] font-medium" style={{ color: textSub }}>{d.value > 0 ? d.value : ''}</span>
+            <div
+              className="w-full rounded-t transition-all duration-500 min-h-[2px]"
+              style={{ height: `${Math.round((d.value / maxVal) * 100)}%`, backgroundColor: color + 'cc' }}
+              title={`${d.label}: ${d.value}`}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-1.5 mt-1.5">
+        {data.map((d, i) => (
+          <div key={i} className="flex-1 text-center">
+            <span className="text-[8px]" style={{ color: textSub }}>{d.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function ProgressBar({ value, max, color }: { value: number; max: number; color: string }) {
   const pct = max === 0 ? 0 : Math.round((value / max) * 100);
@@ -78,6 +117,32 @@ export function AnalyticsDashboard() {
     [...activityLogs].slice(0, 15),
     [activityLogs]
   );
+
+  const velocityData = useMemo(() => {
+    const now = new Date();
+    return Array.from({ length: 8 }, (_, i) => {
+      const weekDate = subWeeks(now, 7 - i);
+      const wStart = startOfWeek(weekDate).toISOString();
+      const wEnd = endOfWeek(weekDate).toISOString();
+      const label = format(weekDate, 'MMM d');
+
+      // Count stage date entries that fall in this week
+      let stageCompletions = 0;
+      apartments.forEach(a => {
+        if (!a.stageDates) return;
+        Object.values(a.stageDates).forEach(dateStr => {
+          if (dateStr >= wStart && dateStr <= wEnd) stageCompletions++;
+        });
+      });
+
+      // Count completed tasks in this week
+      const tasksCompleted = contractorAssignments.filter(a =>
+        a.completedAt && a.completedAt >= wStart && a.completedAt <= wEnd
+      ).length;
+
+      return { label, stageCompletions, tasksCompleted };
+    });
+  }, [apartments, contractorAssignments]);
 
   const bgPage = lightTheme ? '#f8fafc' : '#0f1b2d';
   const bgCard = lightTheme ? 'white' : '#1a2d45';
@@ -172,6 +237,28 @@ export function AnalyticsDashboard() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Velocity charts */}
+      <div className="grid md:grid-cols-2 gap-6 mb-6">
+        <VelocityChart
+          title="Stage Completions / Week"
+          data={velocityData.map(w => ({ label: w.label, value: w.stageCompletions }))}
+          color="#4aa8d8"
+          bgCard={bgCard}
+          borderColor={borderColor}
+          textPrimary={textPrimary}
+          textSub={textSub}
+        />
+        <VelocityChart
+          title="Tasks Completed / Week"
+          data={velocityData.map(w => ({ label: w.label, value: w.tasksCompleted }))}
+          color="#22c55e"
+          bgCard={bgCard}
+          borderColor={borderColor}
+          textPrimary={textPrimary}
+          textSub={textSub}
+        />
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">

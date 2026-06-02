@@ -148,7 +148,7 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast }: 
     addStage({
       id: 's' + Math.random().toString(36).substr(2, 6),
       name: newStageName.trim(), color: newStageColor,
-      order: maxOrder + 1, active: true, description: '',
+      order: maxOrder + 1, active: true,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     });
     setNewStageName('');

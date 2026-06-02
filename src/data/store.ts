@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Apartment, ActivityLog, Stage, StageNote, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS } from '../types';
+import { Apartment, ActivityLog, Stage, StageNote, StageNoteAttachment, StageNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS } from '../types';
 import {
   DEFAULT_BUILDINGS, DEFAULT_STAGES, DEFAULT_USERS, buildDefaultApartments, buildGroundFirstFloorSlots, DATA_VERSION,
 } from './initialData';
@@ -102,6 +102,7 @@ const defaultData = {
   stages: DEFAULT_STAGES,
   apartments: buildDefaultApartments(),
   stageNotes: [] as StageNote[],
+  stageNoteVersions: [] as StageNoteVersion[],
   activityLogs: [] as ActivityLog[],
   contractors: [] as Contractor[],
   contractorAssignments: [] as ContractorAssignment[],
@@ -117,6 +118,7 @@ interface AppState {
   stages: Stage[];
   apartments: Apartment[];
   stageNotes: StageNote[];
+  stageNoteVersions: StageNoteVersion[];
   activityLogs: ActivityLog[];
   firebaseListening: boolean;
   firebaseSyncError: string | null;
@@ -137,8 +139,9 @@ interface AppState {
   bulkUpdateApartments: (ids: string[], changes: Partial<Apartment>, user: User) => void;
   addApartment: (apt: Apartment) => void;
 
-  upsertStageNote: (apartmentId: string, stageId: string, noteText: string, user: User, attachment?: { filename?: string; mimeType?: string; dataUrl?: string; driveFileId?: string; driveUrl?: string } | null) => void;
+  upsertStageNote: (apartmentId: string, stageId: string, noteText: string, user: User, attachment?: { filename?: string; mimeType?: string; dataUrl?: string; driveFileId?: string; driveUrl?: string } | null, attachments?: StageNoteAttachment[]) => void;
   getStageNote: (apartmentId: string, stageId: string) => StageNote | undefined;
+  getStageNoteVersions: (noteId: string) => StageNoteVersion[];
 
   updateStage: (id: string, changes: Partial<Stage>) => void;
   addStage: (stage: Stage) => void;
@@ -213,6 +216,7 @@ export const useStore = create<AppState>((set, get) => ({
   stages: (stored?.stages as Stage[] | null) ?? defaultData.stages,
   apartments: migrateApartments((stored?.apartments as Apartment[] | null) ?? defaultData.apartments),
   stageNotes: (stored?.stageNotes as StageNote[] | null) ?? [],
+  stageNoteVersions: (stored?.stageNoteVersions as StageNoteVersion[] | null) ?? [],
   activityLogs: (stored?.activityLogs as ActivityLog[] | null) ?? [],
   contractors: (stored?.contractors as Contractor[] | null) ?? [],
   contractorAssignments: (stored?.contractorAssignments as ContractorAssignment[] | null) ?? [],
@@ -361,7 +365,7 @@ export const useStore = create<AppState>((set, get) => ({
     fsSet('apartments', apt.id, apt);
   },
 
-  upsertStageNote: (apartmentId, stageId, noteText, user, attachment) => {
+  upsertStageNote: (apartmentId, stageId, noteText, user, attachment, attachments) => {
     const now = new Date().toISOString();
     const existing = get().stageNotes.find(n => n.apartmentId === apartmentId && n.stageId === stageId);
     const prevText = existing?.noteText ?? '';
@@ -372,20 +376,51 @@ export const useStore = create<AppState>((set, get) => ({
         ? { attachmentFilename: attachment.filename, attachmentMimeType: attachment.mimeType, attachmentDataUrl: attachment.dataUrl, attachmentDriveFileId: attachment.driveFileId, attachmentDriveUrl: attachment.driveUrl }
         : {};
 
+    // Merge legacy single attachment into attachments array if needed
+    let finalAttachments: StageNoteAttachment[] | undefined = attachments;
+    if (!finalAttachments && existing?.attachments) {
+      finalAttachments = existing.attachments;
+    }
+
     let note: StageNote;
     if (existing) {
-      note = { ...existing, noteText, updatedAt: now, updatedBy: user.id, updatedByName: user.name, ...attachFields };
+      // Save current version before overwriting
+      const version: StageNoteVersion = {
+        id: generateId(),
+        noteId: existing.id,
+        noteText: existing.noteText,
+        attachments: existing.attachments,
+        savedAt: existing.updatedAt,
+        savedBy: existing.updatedBy,
+        savedByName: existing.updatedByName,
+      };
+      const MAX_VERSIONS = 20;
+      set(state => {
+        const prevVersions = state.stageNoteVersions.filter(v => v.noteId === existing.id);
+        const keep = prevVersions.length >= MAX_VERSIONS ? prevVersions.slice(-(MAX_VERSIONS - 1)) : prevVersions;
+        const otherVersions = state.stageNoteVersions.filter(v => v.noteId !== existing.id);
+        return { stageNoteVersions: [...otherVersions, ...keep, version] };
+      });
+      fsSet('stageNoteVersions', version.id, version);
+
+      note = { ...existing, noteText, updatedAt: now, updatedBy: user.id, updatedByName: user.name, ...attachFields, attachments: finalAttachments };
       set(state => ({
         stageNotes: state.stageNotes.map(n =>
           n.apartmentId === apartmentId && n.stageId === stageId ? note : n
         ),
       }));
     } else {
-      note = { id: generateId(), apartmentId, stageId, noteText, updatedAt: now, updatedBy: user.id, updatedByName: user.name, ...attachFields };
+      note = { id: generateId(), apartmentId, stageId, noteText, updatedAt: now, updatedBy: user.id, updatedByName: user.name, ...attachFields, attachments: finalAttachments };
       set(state => ({ stageNotes: [...state.stageNotes, note] }));
     }
     persist(get);
-    fsSet('stageNotes', note.id, note);
+    // Strip dataUrl from attachments before Firestore write
+    const noteForFs: StageNote = {
+      ...note,
+      attachmentDataUrl: undefined,
+      attachments: note.attachments?.map(a => ({ ...a, dataUrl: undefined })),
+    };
+    fsSet('stageNotes', note.id, noteForFs);
 
     const apt = get().apartments.find(a => a.id === apartmentId);
     const stage = get().stages.find(s => s.id === stageId);
@@ -407,6 +442,10 @@ export const useStore = create<AppState>((set, get) => ({
 
   getStageNote: (apartmentId, stageId) => {
     return get().stageNotes.find(n => n.apartmentId === apartmentId && n.stageId === stageId);
+  },
+
+  getStageNoteVersions: (noteId) => {
+    return get().stageNoteVersions.filter(v => v.noteId === noteId).sort((a, b) => b.savedAt.localeCompare(a.savedAt));
   },
 
   updateStage: (id, changes) => {
@@ -575,9 +614,26 @@ export const useStore = create<AppState>((set, get) => ({
     // Strip attachment dataUrls before Firestore (keep metadata only)
     const aForFs = { ...a, attachments: a.attachments?.map(att => ({ ...att, dataUrl: '' })) };
     fsSet('contractorAssignments', a.id, aForFs);
+    // Activity log
+    const apt = get().apartments.find(ap => ap.id === a.apartmentId);
+    if (apt) {
+      get().addActivityLog({
+        userId: a.createdBy,
+        userName: a.createdByName,
+        buildingId: a.buildingId,
+        apartmentId: a.apartmentId,
+        apartmentNumber: apt.displayName || apt.apartmentNumber || a.apartmentId,
+        actionType: 'task_created',
+        fieldChanged: 'task',
+        previousValue: '',
+        newValue: a.taskDescription,
+        stageId: a.stageId ?? '',
+      });
+    }
   },
 
   updateContractorAssignment: (id, changes) => {
+    const before = get().contractorAssignments.find(a => a.id === id);
     set(state => ({
       contractorAssignments: state.contractorAssignments.map(a => a.id === id ? { ...a, ...changes } : a),
     }));
@@ -587,10 +643,47 @@ export const useStore = create<AppState>((set, get) => ({
       const updForFs = { ...updated, attachments: updated.attachments?.map(att => ({ ...att, dataUrl: '' })) };
       fsSet('contractorAssignments', id, updForFs);
     }
+    // Log completion / undo-completion
+    if (before && updated && 'completedAt' in changes) {
+      const apt = get().apartments.find(ap => ap.id === updated.apartmentId);
+      const user = get().currentUser;
+      if (apt && user) {
+        const wasCompleted = !!before.completedAt;
+        const isNowCompleted = !!updated.completedAt;
+        if (!wasCompleted && isNowCompleted) {
+          get().addActivityLog({
+            userId: user.id,
+            userName: user.name,
+            buildingId: updated.buildingId,
+            apartmentId: updated.apartmentId,
+            apartmentNumber: apt.displayName || apt.apartmentNumber || updated.apartmentId,
+            actionType: 'task_completed',
+            fieldChanged: 'task',
+            previousValue: '',
+            newValue: updated.taskDescription,
+            stageId: updated.stageId ?? '',
+          });
+        } else if (wasCompleted && !isNowCompleted) {
+          get().addActivityLog({
+            userId: user.id,
+            userName: user.name,
+            buildingId: updated.buildingId,
+            apartmentId: updated.apartmentId,
+            apartmentNumber: apt.displayName || apt.apartmentNumber || updated.apartmentId,
+            actionType: 'task_uncompleted',
+            fieldChanged: 'task',
+            previousValue: before.taskDescription,
+            newValue: '',
+            stageId: updated.stageId ?? '',
+          });
+        }
+      }
+    }
   },
 
   deleteContractorAssignment: (id) => {
     const state = get();
+    const assignment = state.contractorAssignments.find(a => a.id === id);
     const noteIds = state.contractorNotes.filter(n => n.assignmentId === id).map(n => n.id);
     const photoIds = state.contractorPhotos.filter(p => p.assignmentId === id).map(p => p.id);
     set(s => ({
@@ -602,6 +695,25 @@ export const useStore = create<AppState>((set, get) => ({
     fsDelete('contractorAssignments', id);
     noteIds.forEach(nid => fsDelete('contractorNotes', nid));
     photoIds.forEach(pid => fsDelete('contractorPhotos', pid));
+    // Activity log
+    if (assignment) {
+      const apt = get().apartments.find(ap => ap.id === assignment.apartmentId);
+      const user = get().currentUser;
+      if (apt && user) {
+        get().addActivityLog({
+          userId: user.id,
+          userName: user.name,
+          buildingId: assignment.buildingId,
+          apartmentId: assignment.apartmentId,
+          apartmentNumber: apt.displayName || apt.apartmentNumber || assignment.apartmentId,
+          actionType: 'task_deleted',
+          fieldChanged: 'task',
+          previousValue: assignment.taskDescription,
+          newValue: '',
+          stageId: assignment.stageId ?? '',
+        });
+      }
+    }
   },
 
   addContractorNote: (fields) => {
@@ -746,6 +858,8 @@ export const useStore = create<AppState>((set, get) => ({
         })),
         stageNotes: state.stageNotes,
         contractorAssignments: state.contractorAssignments,
+        contractors: state.contractors,
+        contractorNotes: state.contractorNotes,
       };
       return {
         activityLogs: newLogs,
@@ -892,6 +1006,7 @@ export const useStore = create<AppState>((set, get) => ({
     const [
       fbApts, fbStageNotes, fbStages, fbUsers, fbLogs,
       fbContractors, fbAssignments, fbNotes, fbPhotos, fbOfficeFiles, fbSettings,
+      fbStageNoteVersions,
     ] = await Promise.all([
       fsGetAll('apartments'),
       fsGetAll('stageNotes'),
@@ -904,6 +1019,7 @@ export const useStore = create<AppState>((set, get) => ({
       fsGetAll('contractorPhotos'),
       fsGetAll('officeNoteFiles'),
       fsGetAll('settings'),
+      fsGetAll('stageNoteVersions'),
     ]);
 
     const hasFirebaseData = fbApts.length > 0 || fbContractors.length > 0 || fbAssignments.length > 0
@@ -958,6 +1074,7 @@ export const useStore = create<AppState>((set, get) => ({
         contractorNotes:       fbNotes.length > 0       ? (fbNotes as unknown as ContractorNote[]) : state.contractorNotes,
         contractorPhotos:      mergedPhotos.length > 0  ? mergedPhotos : state.contractorPhotos,
         officeNoteFiles:       mergedFiles.length > 0   ? mergedFiles  : state.officeNoteFiles,
+        stageNoteVersions:     fbStageNoteVersions.length > 0 ? (fbStageNoteVersions as unknown as StageNoteVersion[]) : state.stageNoteVersions,
         ...(appSettings.backupFrequency      ? { backupFrequency:      appSettings.backupFrequency as BackupFrequency }      : {}),
         ...(appSettings.backupDriveFolderLink !== undefined ? { backupDriveFolderLink: appSettings.backupDriveFolderLink as string } : {}),
         ...(appSettings.contractorUiStrings  ? { contractorUiStrings:  appSettings.contractorUiStrings as ContractorUiStrings } : {}),
@@ -1026,6 +1143,9 @@ export const useStore = create<AppState>((set, get) => ({
       }),
       fsListen('stageNotes', (docs) => {
         if (docs.length > 0) { set({ stageNotes: docs as unknown as StageNote[] }); persist(get); }
+      }),
+      fsListen('stageNoteVersions', (docs) => {
+        if (docs.length > 0) { set({ stageNoteVersions: docs as unknown as StageNoteVersion[] }); persist(get); }
       }),
       fsListen('activityLogs', (docs) => {
         if (docs.length > 0) {
@@ -1115,6 +1235,7 @@ function persist(get: () => AppState) {
     stages: state.stages,
     apartments: state.apartments,
     stageNotes: state.stageNotes,
+    stageNoteVersions: state.stageNoteVersions.slice(0, 200),
     activityLogs: state.activityLogs.slice(0, 200),
     contractors: state.contractors,
     contractorAssignments: state.contractorAssignments,

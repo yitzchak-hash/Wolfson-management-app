@@ -1,10 +1,10 @@
 import React, { useState, useRef } from 'react';
 import { useStore } from '../data/store';
 import {
-  Plus, Trash2, Save, Edit2, X, CheckCircle2, Clock, Paperclip, ExternalLink, Layers,
+  Plus, Trash2, Save, Edit2, X, CheckCircle2, Clock, Paperclip, ExternalLink, Layers, Filter,
 } from 'lucide-react';
 import { BulkAddTaskModal } from '../components/apartment/BulkAddTaskModal';
-import { ContractorAssignment, ContractorCategory, TaskAttachment } from '../types';
+import { ContractorAssignment, ContractorCategory, TaskAttachment, TaskPriority } from '../types';
 import { Toast } from '../components/ui/Toast';
 import { Tooltip } from '../components/ui/Tooltip';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
@@ -13,6 +13,12 @@ import {
   findOrCreateFolderViaBackend, uploadFileViaResumableSession,
   shareFileToDrive, driveThumbUrl,
 } from '../data/driveApi';
+
+const PRIORITY_CONFIG: Record<TaskPriority, { label: string; cls: string; dot: string }> = {
+  urgent: { label: 'Urgent', cls: 'text-red-600 bg-red-50 border-red-200', dot: 'bg-red-500' },
+  normal: { label: 'Normal', cls: 'text-gray-500 bg-gray-50 border-gray-200', dot: 'bg-gray-400' },
+  low:    { label: 'Low',    cls: 'text-green-600 bg-green-50 border-green-200', dot: 'bg-green-500' },
+};
 
 const CAT_COLORS: Record<ContractorCategory, string> = {
   drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981',
@@ -39,13 +45,20 @@ export function TasksPage() {
   } = useStore();
 
   const [filterContractorId, setFilterContractorId] = useState('');
+  const [filterBuilding, setFilterBuilding] = useState<'all' | 'A1' | 'A2' | 'A3'>('all');
+  const [filterStage, setFilterStage] = useState('');
+  const [filterPriority, setFilterPriority] = useState('');
+  const [filterOverdue, setFilterOverdue] = useState(false);
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editFields, setEditFields] = useState<{
-    taskDescription: string; dueDate: string; stageId: string; completedAt: string | null;
-  }>({ taskDescription: '', dueDate: '', stageId: '', completedAt: null });
+    taskDescription: string; dueDate: string; stageId: string; completedAt: string | null; priority: string;
+  }>({ taskDescription: '', dueDate: '', stageId: '', completedAt: null, priority: '' });
   const [showAdd, setShowAdd] = useState(false);
   const [showBulkAdd, setShowBulkAdd] = useState(false);
-  const [addForm, setAddForm] = useState({ contractorId: '', aptId: '', task: '', dueDate: '', stageId: '' });
+  const [addForm, setAddForm] = useState({ contractorId: '', aptId: '', task: '', dueDate: '', stageId: '', priority: '' });
   const [addAttachments, setAddAttachments] = useState<TaskAttachment[]>([]);
   const [addUploadProgress, setAddUploadProgress] = useState<number | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
@@ -121,12 +134,37 @@ export function TasksPage() {
     .filter(a => !a.isUnnamed && a.floor > 0)
     .sort((a, b) => a.buildingId.localeCompare(b.buildingId) || (Number(a.apartmentNumber) - Number(b.apartmentNumber)));
 
+  const today = new Date().toISOString().split('T')[0];
+  const hasAdvancedFilters = filterBuilding !== 'all' || filterStage || filterPriority || filterOverdue || filterDateFrom || filterDateTo;
+
+  function clearAdvancedFilters() {
+    setFilterBuilding('all');
+    setFilterStage('');
+    setFilterPriority('');
+    setFilterOverdue(false);
+    setFilterDateFrom('');
+    setFilterDateTo('');
+  }
+
   const filtered = contractorAssignments
-    .filter(a => !filterContractorId || a.contractorId === filterContractorId)
+    .filter(a => {
+      if (filterContractorId && a.contractorId !== filterContractorId) return false;
+      if (filterBuilding !== 'all' && a.buildingId !== filterBuilding) return false;
+      if (filterStage && a.stageId !== filterStage) return false;
+      if (filterPriority && (a.priority ?? 'normal') !== filterPriority) return false;
+      if (filterOverdue && (a.completedAt || !a.dueDate || a.dueDate >= today)) return false;
+      if (filterDateFrom && a.dueDate && a.dueDate < filterDateFrom) return false;
+      if (filterDateTo && a.dueDate && a.dueDate > filterDateTo) return false;
+      return true;
+    })
     .sort((a, b) => {
+      const priorityOrder: Record<string, number> = { urgent: 0, normal: 1, low: 2 };
       const aVal = a.completedAt ? 1 : 0;
       const bVal = b.completedAt ? 1 : 0;
       if (aVal !== bVal) return aVal - bVal;
+      const aPrio = priorityOrder[a.priority ?? 'normal'] ?? 1;
+      const bPrio = priorityOrder[b.priority ?? 'normal'] ?? 1;
+      if (aPrio !== bPrio) return aPrio - bPrio;
       return (a.dueDate ?? 'z').localeCompare(b.dueDate ?? 'z');
     });
 
@@ -137,6 +175,7 @@ export function TasksPage() {
       dueDate: a.dueDate ?? '',
       stageId: a.stageId ?? '',
       completedAt: a.completedAt,
+      priority: a.priority ?? 'normal',
     });
   }
 
@@ -146,6 +185,7 @@ export function TasksPage() {
       dueDate: editFields.dueDate || null,
       stageId: editFields.stageId || null,
       completedAt: editFields.completedAt,
+      priority: (editFields.priority as TaskPriority) || undefined,
     });
     setEditingId(null);
     onToast('Task updated');
@@ -166,11 +206,12 @@ export function TasksPage() {
       createdBy: currentUser?.id ?? '',
       createdByName: currentUser?.name ?? 'Office',
       attachments: addAttachments.length > 0 ? addAttachments : undefined,
+      priority: (addForm.priority as TaskPriority) || undefined,
     });
     if (addForm.stageId && addForm.stageId !== apt.currentStageId && currentUser) {
       updateApartment(apt.id, { currentStageId: addForm.stageId }, currentUser);
     }
-    setAddForm({ contractorId: '', aptId: '', task: '', dueDate: '', stageId: '' });
+    setAddForm({ contractorId: '', aptId: '', task: '', dueDate: '', stageId: '', priority: '' });
     setAddAttachments([]);
     setShowAdd(false);
     onToast('Task added');
@@ -205,6 +246,18 @@ export function TasksPage() {
             ))}
           </select>
 
+          <Tooltip text="More filters">
+            <button
+              onClick={() => setShowFilters(v => !v)}
+              className={`flex items-center gap-1.5 px-3 py-2 border rounded-lg text-sm font-medium transition-colors ${
+                hasAdvancedFilters ? 'border-[#1e3a5f] bg-[#1e3a5f]/5 text-[#1e3a5f]' : 'border-gray-200 text-gray-500 hover:border-gray-300'
+              }`}
+            >
+              <Filter size={14} />
+              {hasAdvancedFilters ? 'Filtered' : 'Filter'}
+            </button>
+          </Tooltip>
+
           <span className="text-xs text-gray-400 flex-1">
             {filtered.length} task{filtered.length !== 1 ? 's' : ''} · {filtered.filter(a => a.completedAt).length} done
           </span>
@@ -224,6 +277,71 @@ export function TasksPage() {
             {s.addTask}
           </button>
         </div>
+
+        {/* Advanced filters panel */}
+        {showFilters && (
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 flex flex-wrap gap-3 items-end">
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">Building</label>
+              <div className="flex gap-1">
+                {(['all', 'A1', 'A2', 'A3'] as const).map(b => (
+                  <button
+                    key={b}
+                    onClick={() => setFilterBuilding(b)}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                      filterBuilding === b ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'bg-white text-gray-600 border-gray-200'
+                    }`}
+                  >
+                    {b === 'all' ? 'All' : b}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">Stage</label>
+              <select
+                value={filterStage}
+                onChange={e => setFilterStage(e.target.value)}
+                className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none"
+              >
+                <option value="">All stages</option>
+                {sortedStages.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">Priority</label>
+              <select
+                value={filterPriority}
+                onChange={e => setFilterPriority(e.target.value)}
+                className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none"
+              >
+                <option value="">All priorities</option>
+                <option value="urgent">Urgent</option>
+                <option value="normal">Normal</option>
+                <option value="low">Low</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">Due from</label>
+              <input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)}
+                className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">Due to</label>
+              <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)}
+                className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none" />
+            </div>
+            <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+              <input type="checkbox" checked={filterOverdue} onChange={e => setFilterOverdue(e.target.checked)} className="rounded" />
+              Overdue only
+            </label>
+            {hasAdvancedFilters && (
+              <button onClick={clearAdvancedFilters} className="text-xs text-gray-400 hover:text-gray-600 underline">
+                Clear
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Add task form */}
         {showAdd && (
@@ -280,6 +398,16 @@ export function TasksPage() {
                 onChange={e => setAddForm(f => ({ ...f, dueDate: e.target.value }))}
                 className="border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white"
               />
+              <select
+                value={addForm.priority}
+                onChange={e => setAddForm(f => ({ ...f, priority: e.target.value }))}
+                className="border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white"
+              >
+                <option value="">Priority (optional)</option>
+                <option value="urgent">🔴 Urgent</option>
+                <option value="normal">⚪ Normal</option>
+                <option value="low">🟢 Low</option>
+              </select>
             </div>
             <textarea
               value={addForm.task}
@@ -408,6 +536,12 @@ export function TasksPage() {
                             {stage.name}
                           </span>
                         )}
+                        {a.priority && a.priority !== 'normal' && (
+                          <span className={`text-xs px-1.5 py-0.5 rounded border font-medium ${PRIORITY_CONFIG[a.priority].cls}`}>
+                            <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${PRIORITY_CONFIG[a.priority].dot}`} />
+                            {PRIORITY_CONFIG[a.priority].label}
+                          </span>
+                        )}
                       </div>
                       <p className={`text-sm ${a.completedAt ? 'line-through text-gray-400' : 'text-gray-600'}`}>
                         {a.taskDescription}
@@ -509,6 +643,16 @@ export function TasksPage() {
                           onChange={e => setEditFields(f => ({ ...f, dueDate: e.target.value }))}
                           className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white"
                         />
+                        <select
+                          value={editFields.priority}
+                          onChange={e => setEditFields(f => ({ ...f, priority: e.target.value }))}
+                          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white"
+                        >
+                          <option value="">Priority</option>
+                          <option value="urgent">🔴 Urgent</option>
+                          <option value="normal">⚪ Normal</option>
+                          <option value="low">🟢 Low</option>
+                        </select>
                       </div>
                       <div className="flex items-center gap-3">
                         <button

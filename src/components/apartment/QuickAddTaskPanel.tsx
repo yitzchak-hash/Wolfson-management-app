@@ -33,6 +33,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
   const [task, setTask] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [stageId, setStageId] = useState(apartment.currentStageId ?? '');
+  const [priority, setPriority] = useState('');
   const [showForm, setShowForm] = useState(true);
   const [hideCompleted, setHideCompleted] = useState(false);
   const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
@@ -134,6 +135,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
       createdBy: currentUser.id,
       createdByName: currentUser.name,
       ...(finalAttachments.length ? { attachments: finalAttachments } : {}),
+      ...(priority ? { priority: priority as import('../../types').TaskPriority } : {}),
     });
     if (stageId && stageId !== apartment.currentStageId) {
       updateApartment(apartment.id, { currentStageId: stageId }, currentUser);
@@ -141,6 +143,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
     setTask('');
     setContractorId('');
     setDueDate('');
+    setPriority('');
     setAttachments([]);
     setAttachmentFiles([]);
     setAttProgress({});
@@ -508,6 +511,16 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                       onChange={e => setDueDate(e.target.value)}
                       className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                     />
+                    <select
+                      value={priority}
+                      onChange={e => setPriority(e.target.value)}
+                      className="col-span-2 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                    >
+                      <option value="">Priority (optional)</option>
+                      <option value="urgent">🔴 Urgent</option>
+                      <option value="normal">⚪ Normal</option>
+                      <option value="low">🟢 Low</option>
+                    </select>
                   </div>
 
                   <button

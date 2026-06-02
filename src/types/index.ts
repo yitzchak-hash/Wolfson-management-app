@@ -23,9 +23,28 @@ export interface Stage {
   color: string;
   order: number;
   active: boolean;
-  description: string;
+  description?: string; // kept for data compat; no longer shown in UI
   createdAt: string;
   updatedAt: string;
+}
+
+export interface StageNoteAttachment {
+  id: string;
+  filename: string;
+  mimeType: string;
+  dataUrl?: string;
+  driveFileId?: string;
+  driveUrl?: string;
+}
+
+export interface StageNoteVersion {
+  id: string;
+  noteId: string;
+  noteText: string;
+  attachments?: StageNoteAttachment[];
+  savedAt: string;
+  savedBy: string;
+  savedByName: string;
 }
 
 export interface StageNote {
@@ -36,11 +55,14 @@ export interface StageNote {
   updatedAt: string;
   updatedBy: string;
   updatedByName: string;
+  // Legacy single-attachment fields (kept for backward compat read)
   attachmentFilename?: string;
   attachmentMimeType?: string;
   attachmentDataUrl?: string;
   attachmentDriveFileId?: string;
   attachmentDriveUrl?: string;
+  // Multi-attachment support
+  attachments?: StageNoteAttachment[];
 }
 
 export interface Apartment {
@@ -109,6 +131,8 @@ export interface TaskAttachment {
   driveUrl?: string;     // Google Drive web view link
 }
 
+export type TaskPriority = 'urgent' | 'normal' | 'low';
+
 export interface ContractorAssignment {
   id: string;
   contractorId: string;
@@ -122,6 +146,7 @@ export interface ContractorAssignment {
   createdBy: string;
   createdByName: string;
   attachments?: TaskAttachment[];
+  priority?: TaskPriority;     // 'urgent' | 'normal' | 'low'
 }
 
 export interface ContractorNote {
@@ -169,6 +194,8 @@ export interface BackupSnapshot {
   }[];
   stageNotes: StageNote[];
   contractorAssignments: ContractorAssignment[];
+  contractors?: Contractor[];
+  contractorNotes?: ContractorNote[];
 }
 
 export interface ContractorPhoto {
