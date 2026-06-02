@@ -230,6 +230,17 @@ export interface OfficeNoteFile {
 
 export type BackupFrequency = 'activity' | 'daily' | 'weekly' | 'monthly';
 
+export type DriveExportFrequency = 'off' | 'hourly' | 'every5h' | 'every12h' | 'daily' | 'weekly';
+
+export interface GeneralNoteVersion {
+  id: string;
+  apartmentId: string;
+  noteText: string;
+  savedAt: string;
+  savedBy: string;
+  savedByName: string;
+}
+
 export interface BackupLogEntry {
   id: string;
   filename: string;

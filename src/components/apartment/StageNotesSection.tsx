@@ -194,10 +194,11 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
         ref={fileInputRef}
         type="file"
         accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx"
+        multiple
         className="hidden"
         onChange={e => {
-          const file = e.target.files?.[0];
-          if (file && fileInputTarget) handleFileChosen(fileInputTarget, file);
+          const files = Array.from(e.target.files ?? []);
+          if (fileInputTarget) files.forEach(f => handleFileChosen(fileInputTarget, f));
           e.target.value = '';
         }}
       />

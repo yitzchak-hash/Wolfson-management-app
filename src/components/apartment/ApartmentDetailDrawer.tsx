@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen } from 'lucide-react';
+import { X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw } from 'lucide-react';
 import { Apartment, User } from '../../types';
 import { useStore } from '../../data/store';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
@@ -133,7 +133,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const { stages, activityLogs, apartments, updateApartment, mergeApartments, unmergeApartments,
     autoBackup, backupSnapshots, restoreFromSnapshot, mainUiStrings: ui,
     officeNoteFiles, addOfficeNoteFile, deleteOfficeNoteFile,
-    contractorAssignments, contractors, updateContractorAssignment } = useStore();
+    contractorAssignments, contractors, updateContractorAssignment,
+    getGeneralNoteVersions } = useStore();
   const backendConfigured = isUploadBackendConfigured();
   const officeFileRef = useRef<HTMLInputElement>(null);
 
@@ -141,6 +142,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [currentStageId, setCurrentStageId] = useState<string>('');
   const [classification, setClassification] = useState<'standard' | 'shinui'>('standard');
   const [generalNotes, setGeneralNotes] = useState('');
+  const [generalNotesHistoryOpen, setGeneralNotesHistoryOpen] = useState(false);
   const [driveLink, setDriveLink] = useState('');
   const [plansPdfLink, setPlansPdfLink] = useState('');
   const [mergedWithId, setMergedWithId] = useState<string>('');
@@ -466,8 +468,24 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               {/* General notes */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-medium text-gray-600">General Notes</label>
-                  <Tooltip text="Attach a file to office notes">
+                  <div className="flex items-center gap-2">
+                    <label className="block text-xs font-medium text-gray-600">General Notes</label>
+                    {apartment && (() => {
+                      const versions = getGeneralNoteVersions(apartment.id);
+                      return versions.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => setGeneralNotesHistoryOpen(v => !v)}
+                          className="flex items-center gap-0.5 text-xs text-gray-400 hover:text-[#1e3a5f] transition-colors"
+                          title="Note history"
+                        >
+                          <Clock size={11} />
+                          <span className="text-[10px]">{versions.length}</span>
+                        </button>
+                      ) : null;
+                    })()}
+                  </div>
+                  <Tooltip text="Attach files to office notes">
                     <button
                       type="button"
                       onClick={() => officeFileRef.current?.click()}
@@ -485,56 +503,91 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   placeholder="General notes about this apartment…"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 resize-none"
                 />
+                {/* General notes history panel */}
+                {generalNotesHistoryOpen && apartment && (() => {
+                  const versions = getGeneralNoteVersions(apartment.id);
+                  return versions.length > 0 ? (
+                    <div className="mt-1 border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
+                      <div className="px-3 py-1.5 border-b border-gray-200 flex items-center gap-1.5">
+                        <Clock size={11} className="text-gray-400" />
+                        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Note History</span>
+                      </div>
+                      <div className="max-h-48 overflow-y-auto divide-y divide-gray-100">
+                        {versions.map(v => (
+                          <div key={v.id} className="px-3 py-2 flex items-start gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[10px] text-gray-400 mb-0.5">
+                                {format(new Date(v.savedAt), 'MMM d, yyyy HH:mm')} · {v.savedByName}
+                              </div>
+                              <div className="text-xs text-gray-600 truncate">{v.noteText || <span className="italic text-gray-400">empty</span>}</div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => { setGeneralNotes(v.noteText); setGeneralNotesHistoryOpen(false); }}
+                              className="flex items-center gap-1 text-[10px] text-[#1e3a5f] hover:underline flex-shrink-0"
+                              title="Restore this version"
+                            >
+                              <RotateCcw size={10} /> Restore
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null;
+                })()}
                 <input
                   ref={officeFileRef}
                   type="file"
+                  multiple
                   className="hidden"
                   accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
                   onChange={async e => {
-                    const file = e.target.files?.[0];
-                    if (!file || !apartment) return;
+                    const files = Array.from(e.target.files ?? []);
+                    if (!files.length || !apartment) return;
                     if (officeFileRef.current) officeFileRef.current.value = '';
 
-                    const mainFolderId = apartment.driveLink ? extractFolderId(apartment.driveLink) : null;
-                    if (backendConfigured && mainFolderId) {
-                      try {
-                        const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');
-                        const notesFolderId = await findOrCreateFolderViaBackend(photosFolderId, 'Job Notes');
-                        setOfficeUploadPct(0);
-                        const { fileId, webViewLink } = await uploadFileViaResumableSession(notesFolderId, file, pct => setOfficeUploadPct(pct));
-                        setOfficeUploadPct(null);
-                        await shareFileToDrive(fileId);
-                        addOfficeNoteFile({
-                          apartmentId: apartment.id,
-                          dataUrl: '',
-                          filename: file.name,
-                          mimeType: file.type,
-                          uploadedBy: currentUser.id,
-                          uploadedByName: currentUser.name,
-                          driveFileId: fileId,
-                          driveUrl: webViewLink,
-                        });
-                        onToast('File attached');
-                        return;
-                      } catch {
-                        setOfficeUploadPct(null);
-                        // fall through to base64 fallback
+                    for (const file of files) {
+                      const mainFolderId = apartment.driveLink ? extractFolderId(apartment.driveLink) : null;
+                      if (backendConfigured && mainFolderId) {
+                        try {
+                          const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');
+                          const notesFolderId = await findOrCreateFolderViaBackend(photosFolderId, 'Job Notes');
+                          setOfficeUploadPct(0);
+                          const { fileId, webViewLink } = await uploadFileViaResumableSession(notesFolderId, file, pct => setOfficeUploadPct(pct));
+                          setOfficeUploadPct(null);
+                          await shareFileToDrive(fileId);
+                          addOfficeNoteFile({
+                            apartmentId: apartment.id,
+                            dataUrl: '',
+                            filename: file.name,
+                            mimeType: file.type,
+                            uploadedBy: currentUser.id,
+                            uploadedByName: currentUser.name,
+                            driveFileId: fileId,
+                            driveUrl: webViewLink,
+                          });
+                          continue;
+                        } catch {
+                          setOfficeUploadPct(null);
+                        }
                       }
-                    }
-                    const reader = new FileReader();
-                    reader.onload = ev => {
-                      addOfficeNoteFile({
-                        apartmentId: apartment.id,
-                        dataUrl: ev.target?.result as string,
-                        filename: file.name,
-                        mimeType: file.type,
-                        uploadedBy: currentUser.id,
-                        uploadedByName: currentUser.name,
+                      await new Promise<void>(resolve => {
+                        const reader = new FileReader();
+                        reader.onload = ev => {
+                          addOfficeNoteFile({
+                            apartmentId: apartment.id,
+                            dataUrl: ev.target?.result as string,
+                            filename: file.name,
+                            mimeType: file.type,
+                            uploadedBy: currentUser.id,
+                            uploadedByName: currentUser.name,
+                          });
+                          resolve();
+                        };
+                        reader.readAsDataURL(file);
                       });
-                      onToast('File attached');
-                      setOfficeUploadPct(null);
-                    };
-                    reader.readAsDataURL(file);
+                    }
+                    onToast(`${files.length} file${files.length !== 1 ? 's' : ''} attached`);
                   }}
                 />
                 {officeUploadPct !== null && (

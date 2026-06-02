@@ -223,10 +223,10 @@ export function TasksPage() {
         ref={addFileInputRef}
         type="file"
         accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx"
+        multiple
         className="hidden"
         onChange={e => {
-          const file = e.target.files?.[0];
-          if (file) handleAddFileChosen(file);
+          Array.from(e.target.files ?? []).forEach(f => handleAddFileChosen(f));
           e.target.value = '';
         }}
       />

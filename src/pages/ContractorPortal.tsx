@@ -291,7 +291,7 @@ export function ContractorPortal() {
   const [activeTab, setActiveTab] = useState<'tasks' | 'map'>('tasks');
   const [selectedAssignment, setSelectedAssignment] = useState<ContractorAssignment | null>(null);
   const [noteText, setNoteText] = useState('');
-  const [noteAttachment, setNoteAttachment] = useState<{ dataUrl: string; filename: string; mimeType: string; driveFileId?: string; driveUrl?: string } | null>(null);
+  const [noteAttachments, setNoteAttachments] = useState<{ dataUrl: string; filename: string; mimeType: string; driveFileId?: string; driveUrl?: string }[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ name: string; pct: number } | null>(null);
   const [completing, setCompleting] = useState(false);
@@ -461,47 +461,63 @@ export function ContractorPortal() {
   }
 
   async function handleNoteAttachmentPick(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
     if (noteAttachRef.current) noteAttachRef.current.value = '';
-    const isImg = detectFileType(file) === 'image';
-    const dataUrl = isImg ? await compressImage(file) : await readAsDataUrl(file);
 
-    // Try Drive upload if backend is configured and the apartment has a Drive folder
     const apt = selectedAssignment ? getApt(selectedAssignment.apartmentId) : null;
     const mainFolderId = apt?.driveLink ? extractFolderId(apt.driveLink) : null;
-    if (isUploadBackendConfigured() && mainFolderId) {
-      try {
-        const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');
-        const notesFolderId = await findOrCreateFolderViaBackend(photosFolderId, 'Contractor Notes');
-        const { fileId, webViewLink } = await uploadFileViaResumableSession(notesFolderId, file);
-        await shareFileToDrive(fileId);
-        setNoteAttachment({ dataUrl: isImg ? dataUrl : '', filename: file.name, mimeType: file.type, driveFileId: fileId, driveUrl: webViewLink });
-        return;
-      } catch { /* fall through to local */ }
+
+    for (const file of files) {
+      const isImg = detectFileType(file) === 'image';
+      const dataUrl = isImg ? await compressImage(file) : await readAsDataUrl(file);
+
+      if (isUploadBackendConfigured() && mainFolderId) {
+        try {
+          const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');
+          const notesFolderId = await findOrCreateFolderViaBackend(photosFolderId, 'Contractor Notes');
+          const { fileId, webViewLink } = await uploadFileViaResumableSession(notesFolderId, file);
+          await shareFileToDrive(fileId);
+          setNoteAttachments(prev => [...prev, { dataUrl: isImg ? dataUrl : '', filename: file.name, mimeType: file.type, driveFileId: fileId, driveUrl: webViewLink }]);
+          continue;
+        } catch { /* fall through to local */ }
+      }
+      setNoteAttachments(prev => [...prev, { dataUrl, filename: file.name, mimeType: file.type }]);
     }
-    setNoteAttachment({ dataUrl, filename: file.name, mimeType: file.type });
   }
 
   function handleSendNote() {
-    if (!selectedAssignment || !noteText.trim()) return;
+    if (!selectedAssignment || (!noteText.trim() && noteAttachments.length === 0)) return;
     const apt = getApt(selectedAssignment.apartmentId);
-    addContractorNote({
+    const text = noteText.trim();
+    const base = {
       assignmentId: selectedAssignment.id,
       apartmentId: selectedAssignment.apartmentId,
       contractorId,
-      text: noteText.trim(),
-      authorType: 'contractor',
+      authorType: 'contractor' as const,
       authorId: contractorId,
       authorName: contractor?.name ?? '',
-      ...(noteAttachment ? {
-        attachmentDataUrl: noteAttachment.driveFileId ? '' : noteAttachment.dataUrl,
-        attachmentFilename: noteAttachment.filename,
-        attachmentMimeType: noteAttachment.mimeType,
-        attachmentDriveFileId: noteAttachment.driveFileId,
-        attachmentDriveUrl: noteAttachment.driveUrl,
-      } : {}),
-    });
+    };
+
+    if (noteAttachments.length === 0) {
+      addContractorNote({ ...base, text });
+    } else {
+      noteAttachments.forEach((att, i) => {
+        addContractorNote({
+          ...base,
+          text: i === 0 ? (text || att.filename) : att.filename,
+          attachmentDataUrl: att.driveFileId ? '' : att.dataUrl,
+          attachmentFilename: att.filename,
+          attachmentMimeType: att.mimeType,
+          attachmentDriveFileId: att.driveFileId,
+          attachmentDriveUrl: att.driveUrl,
+        });
+      });
+      if (text && noteAttachments.length > 1) {
+        // text was already on the first note; additional notes carry filename as text
+      }
+    }
+
     addActivityLog({
       apartmentId: selectedAssignment.apartmentId,
       apartmentNumber: apt?.apartmentNumber ?? '',
@@ -511,11 +527,11 @@ export function ContractorPortal() {
       actionType: 'contractor_note',
       fieldChanged: 'note_added',
       previousValue: '',
-      newValue: noteText.trim().slice(0, 80),
+      newValue: text.slice(0, 80) || `${noteAttachments.length} file(s)`,
       stageId: selectedAssignment.stageId ?? '',
     });
     setNoteText('');
-    setNoteAttachment(null);
+    setNoteAttachments([]);
   }
 
   function handleComplete() {
@@ -1032,27 +1048,29 @@ export function ContractorPortal() {
                     </div>
                   )}
 
-                  {noteAttachment && (
-                    <div className="mb-2">
-                      {noteAttachment.mimeType.startsWith('image/') && noteAttachment.dataUrl ? (
-                        <div className="relative inline-block">
-                          <img
-                            src={noteAttachment.dataUrl}
-                            alt={noteAttachment.filename}
-                            className="max-h-28 rounded-xl object-cover border border-gray-200"
-                          />
-                          <button
-                            onClick={() => setNoteAttachment(null)}
-                            className="absolute top-1 right-1 w-5 h-5 flex items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70"
-                          ><X size={11} /></button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2 px-2 py-1.5 bg-blue-50 rounded-lg border border-blue-100 text-xs text-blue-700">
-                          <Paperclip size={11} />
-                          <span className="flex-1 truncate">{noteAttachment.filename}</span>
-                          <button onClick={() => setNoteAttachment(null)} className="text-blue-400 hover:text-blue-600"><X size={12} /></button>
-                        </div>
-                      )}
+                  {noteAttachments.length > 0 && (
+                    <div className="mb-2 flex flex-wrap gap-2">
+                      {noteAttachments.map((att, idx) => (
+                        att.mimeType.startsWith('image/') && att.dataUrl ? (
+                          <div key={idx} className="relative inline-block">
+                            <img
+                              src={att.dataUrl}
+                              alt={att.filename}
+                              className="max-h-28 rounded-xl object-cover border border-gray-200"
+                            />
+                            <button
+                              onClick={() => setNoteAttachments(prev => prev.filter((_, i) => i !== idx))}
+                              className="absolute top-1 right-1 w-5 h-5 flex items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70"
+                            ><X size={11} /></button>
+                          </div>
+                        ) : (
+                          <div key={idx} className="flex items-center gap-2 px-2 py-1.5 bg-blue-50 rounded-lg border border-blue-100 text-xs text-blue-700">
+                            <Paperclip size={11} />
+                            <span className="flex-1 truncate max-w-[140px]">{att.filename}</span>
+                            <button onClick={() => setNoteAttachments(prev => prev.filter((_, i) => i !== idx))} className="text-blue-400 hover:text-blue-600"><X size={12} /></button>
+                          </div>
+                        )
+                      ))}
                     </div>
                   )}
                   <div className="flex gap-2 items-end">
@@ -1065,7 +1083,7 @@ export function ContractorPortal() {
                     </button>
                     <input ref={noteAttachRef} type="file"
                       accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip"
-                      className="hidden" onChange={handleNoteAttachmentPick} />
+                      multiple className="hidden" onChange={handleNoteAttachmentPick} />
                     <input
                       value={noteText}
                       onChange={e => setNoteText(e.target.value)}

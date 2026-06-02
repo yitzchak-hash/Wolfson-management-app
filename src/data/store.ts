@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Apartment, ActivityLog, Stage, StageNote, StageNoteAttachment, StageNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS } from '../types';
+import { Apartment, ActivityLog, Stage, StageNote, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS } from '../types';
 import {
   DEFAULT_BUILDINGS, DEFAULT_STAGES, DEFAULT_USERS, buildDefaultApartments, buildGroundFirstFloorSlots, DATA_VERSION,
 } from './initialData';
@@ -103,6 +103,7 @@ const defaultData = {
   apartments: buildDefaultApartments(),
   stageNotes: [] as StageNote[],
   stageNoteVersions: [] as StageNoteVersion[],
+  generalNoteVersions: [] as GeneralNoteVersion[],
   activityLogs: [] as ActivityLog[],
   contractors: [] as Contractor[],
   contractorAssignments: [] as ContractorAssignment[],
@@ -119,6 +120,7 @@ interface AppState {
   apartments: Apartment[];
   stageNotes: StageNote[];
   stageNoteVersions: StageNoteVersion[];
+  generalNoteVersions: GeneralNoteVersion[];
   activityLogs: ActivityLog[];
   firebaseListening: boolean;
   firebaseSyncError: string | null;
@@ -142,6 +144,7 @@ interface AppState {
   upsertStageNote: (apartmentId: string, stageId: string, noteText: string, user: User, attachment?: { filename?: string; mimeType?: string; dataUrl?: string; driveFileId?: string; driveUrl?: string } | null, attachments?: StageNoteAttachment[]) => void;
   getStageNote: (apartmentId: string, stageId: string) => StageNote | undefined;
   getStageNoteVersions: (noteId: string) => StageNoteVersion[];
+  getGeneralNoteVersions: (aptId: string) => GeneralNoteVersion[];
 
   updateStage: (id: string, changes: Partial<Stage>) => void;
   addStage: (stage: Stage) => void;
@@ -181,11 +184,15 @@ interface AppState {
   backupSnapshots: BackupSnapshot[];
   backupLogs: BackupLogEntry[];
   backupDriveFolderLink: string;
+  driveExportFrequency: DriveExportFrequency;
+  lastDriveExportAt: string | null;
   setAutoBackup: (v: boolean) => void;
   setBackupFrequency: (f: BackupFrequency) => void;
   setBackupDriveFolder: (url: string) => void;
+  setDriveExportFrequency: (f: DriveExportFrequency) => void;
   addBackupLog: (entry: Omit<BackupLogEntry, 'id' | 'createdAt'>) => void;
   restoreFromSnapshot: (snapshotId: string) => void;
+  exportToDrive: () => Promise<{ ok: boolean; error?: string }>;
   getDataSummary: () => DataSummary;
 
   // Contractor UI language strings
@@ -217,6 +224,7 @@ export const useStore = create<AppState>((set, get) => ({
   apartments: migrateApartments((stored?.apartments as Apartment[] | null) ?? defaultData.apartments),
   stageNotes: (stored?.stageNotes as StageNote[] | null) ?? [],
   stageNoteVersions: (stored?.stageNoteVersions as StageNoteVersion[] | null) ?? [],
+  generalNoteVersions: (stored?.generalNoteVersions as GeneralNoteVersion[] | null) ?? [],
   activityLogs: (stored?.activityLogs as ActivityLog[] | null) ?? [],
   contractors: (stored?.contractors as Contractor[] | null) ?? [],
   contractorAssignments: (stored?.contractorAssignments as ContractorAssignment[] | null) ?? [],
@@ -234,6 +242,8 @@ export const useStore = create<AppState>((set, get) => ({
   backupSnapshots: (stored?.backupSnapshots as BackupSnapshot[] | null) ?? [],
   backupLogs: (stored?.backupLogs as BackupLogEntry[] | null) ?? [],
   backupDriveFolderLink: (stored?.backupDriveFolderLink as string | null) ?? '',
+  driveExportFrequency: (stored?.driveExportFrequency as DriveExportFrequency | null) ?? 'off',
+  lastDriveExportAt: (stored?.lastDriveExportAt as string | null) ?? null,
   contractorUiStrings: (stored?.contractorUiStrings as ContractorUiStrings | null) ?? DEFAULT_CONTRACTOR_UI_STRINGS,
   mainUiStrings: (stored?.mainUiStrings as MainUiStrings | null) ?? DEFAULT_MAIN_UI_STRINGS,
   lightTheme: localStorage.getItem(THEME_KEY) !== 'dark',
@@ -306,14 +316,39 @@ export const useStore = create<AppState>((set, get) => ({
       }
     }
 
-    set(state => ({
-      apartments: state.apartments.map(a => {
-        if (a.id === id) return updated;
-        const extra = extraUpdates.find(e => e.id === a.id);
-        return extra ?? a;
-      }),
-    }));
+    // Save a general note version if the text changed
+    let newGeneralNoteVersion: GeneralNoteVersion | null = null;
+    if (changes.generalNotes !== undefined && changes.generalNotes !== existing.generalNotes && existing.generalNotes.trim()) {
+      newGeneralNoteVersion = {
+        id: generateId(),
+        apartmentId: id,
+        noteText: existing.generalNotes,
+        savedAt: now,
+        savedBy: user.id,
+        savedByName: user.name,
+      };
+    }
+
+    set(state => {
+      let generalNoteVersions = state.generalNoteVersions;
+      if (newGeneralNoteVersion) {
+        const aptVersions = generalNoteVersions.filter(v => v.apartmentId === id);
+        const otherVersions = generalNoteVersions.filter(v => v.apartmentId !== id);
+        const keep = [newGeneralNoteVersion, ...aptVersions].slice(0, 20);
+        generalNoteVersions = [...otherVersions, ...keep];
+      }
+      return {
+        apartments: state.apartments.map(a => {
+          if (a.id === id) return updated;
+          const extra = extraUpdates.find(e => e.id === a.id);
+          return extra ?? a;
+        }),
+        generalNoteVersions,
+      };
+    });
     persist(get);
+
+    if (newGeneralNoteVersion) fsSet('generalNoteVersions', newGeneralNoteVersion.id, newGeneralNoteVersion);
 
     // Firebase sync
     fsSet('apartments', id, updated);
@@ -446,6 +481,10 @@ export const useStore = create<AppState>((set, get) => ({
 
   getStageNoteVersions: (noteId) => {
     return get().stageNoteVersions.filter(v => v.noteId === noteId).sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+  },
+
+  getGeneralNoteVersions: (aptId) => {
+    return get().generalNoteVersions.filter(v => v.apartmentId === aptId).sort((a, b) => b.savedAt.localeCompare(a.savedAt));
   },
 
   updateStage: (id, changes) => {
@@ -761,12 +800,22 @@ export const useStore = create<AppState>((set, get) => ({
       stages: state.stages,
       apartments: state.apartments,
       stageNotes: state.stageNotes,
+      stageNoteVersions: state.stageNoteVersions,
+      generalNoteVersions: state.generalNoteVersions,
       activityLogs: state.activityLogs,
       contractors: state.contractors,
       contractorAssignments: state.contractorAssignments,
       contractorNotes: state.contractorNotes,
       contractorPhotos: state.contractorPhotos,
       officeNoteFiles: state.officeNoteFiles,
+      settings: {
+        autoBackup: state.autoBackup,
+        backupFrequency: state.backupFrequency,
+        backupDriveFolderLink: state.backupDriveFolderLink,
+        driveExportFrequency: state.driveExportFrequency,
+        contractorUiStrings: state.contractorUiStrings,
+        mainUiStrings: state.mainUiStrings,
+      },
     };
     return JSON.stringify(snapshot, null, 2);
   },
@@ -777,18 +826,28 @@ export const useStore = create<AppState>((set, get) => ({
       if (!data.apartments || !data.stages) {
         return { ok: false, error: 'Invalid backup file — missing required fields.' };
       }
-      set({
-        users: data.users ?? get().users,
+      set(state => ({
+        users: data.users ?? state.users,
         stages: data.stages,
         apartments: data.apartments,
         stageNotes: data.stageNotes ?? [],
+        stageNoteVersions: data.stageNoteVersions ?? state.stageNoteVersions,
+        generalNoteVersions: data.generalNoteVersions ?? [],
         activityLogs: data.activityLogs ?? [],
         contractors: data.contractors ?? [],
         contractorAssignments: data.contractorAssignments ?? [],
         contractorNotes: data.contractorNotes ?? [],
         contractorPhotos: data.contractorPhotos ?? [],
         officeNoteFiles: data.officeNoteFiles ?? [],
-      });
+        ...(data.settings ? {
+          autoBackup: data.settings.autoBackup ?? state.autoBackup,
+          backupFrequency: data.settings.backupFrequency ?? state.backupFrequency,
+          backupDriveFolderLink: data.settings.backupDriveFolderLink ?? state.backupDriveFolderLink,
+          driveExportFrequency: data.settings.driveExportFrequency ?? state.driveExportFrequency,
+          contractorUiStrings: data.settings.contractorUiStrings ?? state.contractorUiStrings,
+          mainUiStrings: data.settings.mainUiStrings ?? state.mainUiStrings,
+        } : {}),
+      }));
       persist(get);
       const summary: DataSummary = {
         apartments: (data.apartments as Apartment[]).filter(a => !a.isUnnamed).length,
@@ -887,6 +946,48 @@ export const useStore = create<AppState>((set, get) => ({
     set({ backupDriveFolderLink: url });
     persist(get);
     fsSet('settings', 'app', { backupDriveFolderLink: url });
+  },
+
+  setDriveExportFrequency: (f) => {
+    set({ driveExportFrequency: f });
+    persist(get);
+    fsSet('settings', 'app', { driveExportFrequency: f });
+  },
+
+  exportToDrive: async () => {
+    const state = get();
+    const { backupDriveFolderLink } = state;
+    const key = (import.meta.env as Record<string, string>)['VITE_DRIVE_API_KEY'] ?? '';
+    if (!backupDriveFolderLink || !key) return { ok: false, error: 'Drive folder not configured' };
+    try {
+      const json = get().exportData();
+      const filename = `wolfson-backup-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.json`;
+      // Find or create Backups subfolder
+      const { extractFolderId } = await import('./driveApi');
+      const parentId = extractFolderId(backupDriveFolderLink);
+      if (!parentId) return { ok: false, error: 'Invalid Drive folder URL' };
+      const folderRes = await fetch('/api/folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': key },
+        body: JSON.stringify({ parentId, name: 'Backups' }),
+      });
+      if (!folderRes.ok) return { ok: false, error: 'Failed to access Drive folder' };
+      const { folderId } = await folderRes.json();
+      const data = btoa(unescape(encodeURIComponent(json)));
+      const uploadRes = await fetch('/api/drive-upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': key },
+        body: JSON.stringify({ folderId, filename, mimeType: 'application/json', data }),
+      });
+      if (!uploadRes.ok) return { ok: false, error: 'Upload failed' };
+      const now = new Date().toISOString();
+      set({ lastDriveExportAt: now });
+      persist(get);
+      get().addBackupLog({ filename, sizeKB: Math.round(json.length / 1024), driveUploaded: true, triggeredBy: 'scheduled' });
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: String(e) };
+    }
   },
 
   addBackupLog: (fields) => {
@@ -1006,7 +1107,7 @@ export const useStore = create<AppState>((set, get) => ({
     const [
       fbApts, fbStageNotes, fbStages, fbUsers, fbLogs,
       fbContractors, fbAssignments, fbNotes, fbPhotos, fbOfficeFiles, fbSettings,
-      fbStageNoteVersions,
+      fbStageNoteVersions, fbGeneralNoteVersions,
     ] = await Promise.all([
       fsGetAll('apartments'),
       fsGetAll('stageNotes'),
@@ -1020,6 +1121,7 @@ export const useStore = create<AppState>((set, get) => ({
       fsGetAll('officeNoteFiles'),
       fsGetAll('settings'),
       fsGetAll('stageNoteVersions'),
+      fsGetAll('generalNoteVersions'),
     ]);
 
     const hasFirebaseData = fbApts.length > 0 || fbContractors.length > 0 || fbAssignments.length > 0
@@ -1075,6 +1177,7 @@ export const useStore = create<AppState>((set, get) => ({
         contractorPhotos:      mergedPhotos.length > 0  ? mergedPhotos : state.contractorPhotos,
         officeNoteFiles:       mergedFiles.length > 0   ? mergedFiles  : state.officeNoteFiles,
         stageNoteVersions:     fbStageNoteVersions.length > 0 ? (fbStageNoteVersions as unknown as StageNoteVersion[]) : state.stageNoteVersions,
+        generalNoteVersions:   fbGeneralNoteVersions.length > 0 ? (fbGeneralNoteVersions as unknown as GeneralNoteVersion[]) : state.generalNoteVersions,
         ...(appSettings.backupFrequency      ? { backupFrequency:      appSettings.backupFrequency as BackupFrequency }      : {}),
         ...(appSettings.backupDriveFolderLink !== undefined ? { backupDriveFolderLink: appSettings.backupDriveFolderLink as string } : {}),
         ...(appSettings.contractorUiStrings  ? { contractorUiStrings:  appSettings.contractorUiStrings as ContractorUiStrings } : {}),
@@ -1147,6 +1250,9 @@ export const useStore = create<AppState>((set, get) => ({
       fsListen('stageNoteVersions', (docs) => {
         if (docs.length > 0) { set({ stageNoteVersions: docs as unknown as StageNoteVersion[] }); persist(get); }
       }),
+      fsListen('generalNoteVersions', (docs) => {
+        if (docs.length > 0) { set({ generalNoteVersions: docs as unknown as GeneralNoteVersion[] }); persist(get); }
+      }),
       fsListen('activityLogs', (docs) => {
         if (docs.length > 0) {
           const sorted = (docs as unknown as ActivityLog[])
@@ -1204,11 +1310,29 @@ export const useStore = create<AppState>((set, get) => ({
           ...(appS.contractorUiStrings  ? { contractorUiStrings:  appS.contractorUiStrings as ContractorUiStrings } : {}),
           ...(appS.autoBackup           !== undefined ? { autoBackup: appS.autoBackup as boolean } : {}),
           ...(appS.mainUiStrings        ? { mainUiStrings: appS.mainUiStrings as MainUiStrings } : {}),
+          ...(appS.driveExportFrequency ? { driveExportFrequency: appS.driveExportFrequency as DriveExportFrequency } : {}),
         }));
         persist(get);
       }),
     ];
     set({ firebaseSyncError: null });
+
+    // Drive auto-export scheduler — checks every 5 minutes, runs immediately on login
+    const DRIVE_THRESHOLDS: Record<string, number> = {
+      off: 0, hourly: 3_600_000, every5h: 18_000_000, every12h: 43_200_000, daily: 86_400_000, weekly: 604_800_000,
+    };
+    function checkDriveExport() {
+      const { driveExportFrequency, lastDriveExportAt, backupDriveFolderLink } = get();
+      if (driveExportFrequency === 'off' || !backupDriveFolderLink) return;
+      const threshold = DRIVE_THRESHOLDS[driveExportFrequency] ?? 0;
+      if (threshold === 0) return;
+      const last = lastDriveExportAt ? new Date(lastDriveExportAt).getTime() : 0;
+      if (Date.now() - last >= threshold) get().exportToDrive();
+    }
+    checkDriveExport();
+    const driveTimer = setInterval(checkDriveExport, 5 * 60 * 1000);
+    _firebaseUnsubscribers.push(() => clearInterval(driveTimer));
+
     } catch (e) {
       console.error('[wolfson] Firebase sync failed:', e);
       set({ firebaseListening: false, firebaseSyncError: 'Cloud sync is offline — changes are saved locally only. Check Firebase Console → Firestore → Rules.' });
@@ -1249,8 +1373,11 @@ function persist(get: () => AppState) {
     backupSnapshots: state.backupSnapshots.slice(0, 5),
     backupLogs: state.backupLogs.slice(0, 50),
     backupDriveFolderLink: state.backupDriveFolderLink,
+    driveExportFrequency: state.driveExportFrequency,
+    lastDriveExportAt: state.lastDriveExportAt,
     contractorUiStrings: state.contractorUiStrings,
     mainUiStrings: state.mainUiStrings,
+    generalNoteVersions: state.generalNoteVersions.slice(0, 200),
   };
 
   const ok = saveToStorage(STORAGE_KEY, payload);

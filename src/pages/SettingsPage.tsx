@@ -3,10 +3,10 @@ import { useStore } from '../data/store';
 import {
   Plus, Trash2, Save, ChevronUp, ChevronDown, Shield, Sun, Moon,
   Copy, Check, Download, Upload, HardDrive, X, HardDriveDownload, ToggleLeft, ToggleRight,
-  Languages, Clock, RotateCcw, Wifi, WifiOff, Loader, Database,
+  Languages, Clock, RotateCcw, Wifi, WifiOff, Loader, Database, RefreshCw, CloudUpload,
 } from 'lucide-react';
 import { isFirebaseConfigured, db, fsSet, fsGetAll } from '../data/firebase';
-import { Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency } from '../types';
+import { Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency } from '../types';
 import { Tooltip } from '../components/ui/Tooltip';
 import { Toast } from '../components/ui/Toast';
 import { format } from 'date-fns';
@@ -668,16 +668,19 @@ function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
 function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
   const {
     exportData, importData, getDataSummary,
-    autoBackup, setAutoBackup, backupSnapshots,
+    autoBackup, setAutoBackup, backupSnapshots, restoreFromSnapshot,
     backupDriveFolderLink, setBackupDriveFolder,
     backupFrequency, setBackupFrequency, backupLogs, addBackupLog,
+    driveExportFrequency, setDriveExportFrequency, lastDriveExportAt, exportToDrive,
   } = useStore();
   const importRef = useRef<HTMLInputElement>(null);
   const [exportModal, setExportModal] = useState<ReturnType<typeof getDataSummary> & { sizeKB: number; driveUploaded?: boolean } | null>(null);
   const [importModal, setImportModal] = useState<ReturnType<typeof getDataSummary> | null>(null);
   const [driveFolderDraft, setDriveFolderDraft] = useState(backupDriveFolderLink);
+  const [driveExporting, setDriveExporting] = useState(false);
+  const [restoreConfirmId, setRestoreConfirmId] = useState<string | null>(null);
 
-  const apiKey = import.meta.env.VITE_DRIVE_API_KEY ?? '';
+  const apiKey = (import.meta.env as Record<string, string>)['VITE_DRIVE_API_KEY'] ?? '';
 
   async function handleExport() {
     const json = exportData();
@@ -716,6 +719,14 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
     setExportModal({ ...getDataSummary(), sizeKB, driveUploaded });
   }
 
+  async function handleExportToDriveNow() {
+    setDriveExporting(true);
+    const result = await exportToDrive();
+    setDriveExporting(false);
+    if (result.ok) onToast('Exported to Google Drive ✓');
+    else onToast(result.error ?? 'Drive export failed', 'error');
+  }
+
   function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -734,6 +745,12 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
     if (importRef.current) importRef.current.value = '';
   }
 
+  function handleRestoreSnapshot(id: string) {
+    restoreFromSnapshot(id);
+    setRestoreConfirmId(null);
+    onToast('Snapshot restored');
+  }
+
   const SummaryRow = ({ label, value }: { label: string; value: number | string }) => (
     <div className="flex items-center justify-between text-sm">
       <span className="text-gray-600">{label}</span>
@@ -741,9 +758,13 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
     </div>
   );
 
+  const DRIVE_FREQ_LABELS: Record<DriveExportFrequency, string> = {
+    off: 'Off', hourly: 'Every Hour', every5h: 'Every 5h', every12h: 'Every 12h', daily: 'Daily', weekly: 'Weekly',
+  };
+
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5">
-      {/* Export summary modal */}
+    <div className="space-y-4">
+      {/* ── Export summary modal ── */}
       {exportModal && (
         <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
@@ -751,9 +772,7 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
               <h3 className="font-bold text-gray-900 flex items-center gap-2">
                 <Download size={16} className="text-[#1e3a5f]" /> Export Summary
               </h3>
-              <button onClick={() => setExportModal(null)} className="text-gray-400 hover:text-gray-600">
-                <X size={16} />
-              </button>
+              <button onClick={() => setExportModal(null)} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
             </div>
             <div className="space-y-2 mb-4">
               <SummaryRow label="Apartments" value={exportModal.apartments} />
@@ -774,9 +793,7 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
                 Also uploaded to Google Drive backup folder.
               </div>
             )}
-            <p className="text-xs text-gray-400 text-center">
-              Exported {format(new Date(), 'MMM d, yyyy · HH:mm')}
-            </p>
+            <p className="text-xs text-gray-400 text-center">Exported {format(new Date(), 'MMM d, yyyy · HH:mm')}</p>
             <button onClick={() => setExportModal(null)}
               className="mt-4 w-full py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors">
               Done
@@ -785,7 +802,7 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
         </div>
       )}
 
-      {/* Import summary modal */}
+      {/* ── Import summary modal ── */}
       {importModal && (
         <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
@@ -793,9 +810,7 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
               <h3 className="font-bold text-gray-900 flex items-center gap-2">
                 <Upload size={16} className="text-green-600" /> Import Successful
               </h3>
-              <button onClick={() => setImportModal(null)} className="text-gray-400 hover:text-gray-600">
-                <X size={16} />
-              </button>
+              <button onClick={() => setImportModal(null)} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
             </div>
             <div className="space-y-2 mb-4">
               <SummaryRow label="Apartments restored" value={importModal.apartments} />
@@ -819,133 +834,191 @@ function BackupRestoreSection({ onToast }: { onToast: (msg: string, type?: 'succ
         </div>
       )}
 
-      <div className="flex items-center gap-2 mb-4">
-        <HardDrive size={18} className="text-[#1e3a5f]" />
-        <h2 className="font-semibold text-gray-800">Backup &amp; Restore</h2>
-      </div>
+      {/* ══ Section 1: Auto Snapshots ══ */}
+      <div className="bg-white border border-gray-200 rounded-xl p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <Clock size={17} className="text-[#1e3a5f]" />
+          <h2 className="font-semibold text-gray-800">Auto Snapshots</h2>
+        </div>
 
-      {/* Auto-backup frequency */}
-      <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 mb-4">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-3">
           <div>
-            <p className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
-              <Clock size={14} className="text-[#1e3a5f]" />
-              Auto-backup
-            </p>
-            {autoBackup ? (() => {
-              const lastAuto = [...backupLogs].reverse().find(e => e.triggeredBy !== 'manual');
-              const lastAny  = [...backupLogs].reverse()[0];
-              const last     = lastAuto ?? lastAny;
-              return (
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {last
-                    ? <>Last backup: <span className="font-medium text-gray-700">{format(new Date(last.createdAt), 'MMM d · HH:mm')}</span>
-                      {last.driveUploaded && <span className="ml-1 text-[#4aa8d8]">· Drive ✓</span>}
-                    </>
-                    : 'No backups yet — will run on next activity.'}
-                  {backupSnapshots.length > 0 && <span className="ml-1 text-gray-400">({backupSnapshots.length} snapshot{backupSnapshots.length !== 1 ? 's' : ''} stored)</span>}
-                </p>
-              );
-            })() : (
-              <p className="text-xs text-gray-500 mt-0.5">Saves a snapshot for Activity History restore.</p>
-            )}
+            <p className="text-sm font-medium text-gray-700">Enable auto-snapshots</p>
+            <p className="text-xs text-gray-500 mt-0.5">Saves a restore point when data changes</p>
           </div>
-          <button
-            onClick={() => setAutoBackup(!autoBackup)}
-            className="flex-shrink-0 ml-3"
-          >
-            {autoBackup
-              ? <ToggleRight size={28} className="text-[#1e3a5f]" />
-              : <ToggleLeft size={28} className="text-gray-400" />
-            }
+          <button onClick={() => setAutoBackup(!autoBackup)} className="flex-shrink-0 ml-3">
+            {autoBackup ? <ToggleRight size={28} className="text-[#1e3a5f]" /> : <ToggleLeft size={28} className="text-gray-400" />}
           </button>
         </div>
+
         {autoBackup && (
-          <div className="flex gap-1 flex-wrap mt-2">
+          <div className="flex gap-1 flex-wrap mb-4">
             {(['activity', 'daily', 'weekly', 'monthly'] as BackupFrequency[]).map(f => (
-              <button
-                key={f}
-                onClick={() => setBackupFrequency(f)}
+              <button key={f} onClick={() => setBackupFrequency(f)}
                 className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors capitalize ${
                   (backupFrequency ?? 'activity') === f
                     ? 'bg-[#1e3a5f] text-white'
-                    : 'bg-white border border-gray-200 text-gray-600 hover:border-[#1e3a5f]/40'
-                }`}
-              >
+                    : 'bg-gray-50 border border-gray-200 text-gray-600 hover:border-[#1e3a5f]/40'
+                }`}>
                 {f === 'activity' ? 'Every Activity' : f.charAt(0).toUpperCase() + f.slice(1)}
               </button>
             ))}
           </div>
         )}
-      </div>
 
-      {/* Drive backup folder */}
-      <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
-        <p className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-1.5">
-          <HardDriveDownload size={14} className="text-[#4aa8d8]" />
-          Google Drive Backup Folder
-        </p>
-        <p className="text-xs text-gray-500 mb-2">When set, exports are also saved to a "Backups" subfolder here.</p>
-        <div className="flex gap-2">
-          <input
-            value={driveFolderDraft}
-            onChange={e => setDriveFolderDraft(e.target.value)}
-            placeholder="https://drive.google.com/drive/folders/…"
-            className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
-          />
-          <button
-            onClick={() => { setBackupDriveFolder(driveFolderDraft.trim()); onToast('Drive backup folder saved'); }}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-xs font-medium hover:bg-[#162d4a] transition-colors whitespace-nowrap"
-          >
-            <Save size={12} /> Save
-          </button>
-        </div>
-        {backupDriveFolderLink && (
-          <p className="mt-1.5 text-xs text-green-600 flex items-center gap-1">
-            <Check size={11} /> Folder configured — exports will upload automatically.
-          </p>
-        )}
-      </div>
-
-      <p className="text-sm text-gray-500 mb-4">
-        Export all data to a JSON file (apartments, stages, notes, contractors, photos).
-        Import to fully restore — including all media.
-      </p>
-      <div className="flex gap-3 flex-wrap mb-5">
-        <button onClick={handleExport}
-          className="flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors">
-          <Download size={16} /> Export Backup
-        </button>
-        <button onClick={() => importRef.current?.click()}
-          className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
-          <Upload size={16} /> Import Backup
-        </button>
-        <input ref={importRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
-      </div>
-
-      {/* Backup log */}
-      {backupLogs.length > 0 && (
+        {/* Snapshot history */}
         <div>
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Backup History</p>
-          <div className="space-y-1 max-h-48 overflow-y-auto">
-            {backupLogs.map(entry => (
-              <div key={entry.id} className="flex items-center justify-between text-xs px-3 py-2 bg-gray-50 rounded-lg border border-gray-100">
-                <div className="flex items-center gap-2 min-w-0">
-                  <HardDrive size={12} className={entry.driveUploaded ? 'text-[#4aa8d8]' : 'text-gray-400'} />
-                  <span className="text-gray-700 truncate font-mono">{entry.filename}</span>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            Snapshot History {backupSnapshots.length > 0 && <span className="normal-case font-normal text-gray-400">({backupSnapshots.length} stored)</span>}
+          </p>
+          {backupSnapshots.length === 0 ? (
+            <p className="text-xs text-gray-400 italic py-2">No snapshots yet — enable auto-snapshots to start saving restore points.</p>
+          ) : (
+            <div className="space-y-1 max-h-56 overflow-y-auto">
+              {backupSnapshots.slice(0, 20).map(snap => (
+                <div key={snap.id} className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg border border-gray-100 gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-gray-700 truncate">{snap.label}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">
+                      {format(new Date(snap.createdAt), 'MMM d, yyyy · HH:mm')}
+                      {' · '}{snap.apartmentStates.length} apts · {snap.contractorAssignments.length} tasks
+                    </p>
+                  </div>
+                  {restoreConfirmId === snap.id ? (
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button onClick={() => handleRestoreSnapshot(snap.id)}
+                        className="px-2 py-1 bg-red-500 text-white rounded text-[10px] font-medium hover:bg-red-600 transition-colors">
+                        Confirm
+                      </button>
+                      <button onClick={() => setRestoreConfirmId(null)}
+                        className="px-2 py-1 bg-gray-200 text-gray-600 rounded text-[10px] font-medium hover:bg-gray-300 transition-colors">
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setRestoreConfirmId(snap.id)}
+                      className="flex items-center gap-1 px-2 py-1 border border-gray-200 rounded text-[10px] font-medium text-gray-600 hover:border-[#1e3a5f]/50 hover:text-[#1e3a5f] transition-colors flex-shrink-0">
+                      <RotateCcw size={9} /> Restore
+                    </button>
+                  )}
                 </div>
-                <div className="flex items-center gap-3 flex-shrink-0 ml-2">
-                  <span className="text-gray-400">{entry.sizeKB} KB</span>
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                    entry.triggeredBy === 'manual' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'
-                  }`}>{entry.triggeredBy}</span>
-                  <span className="text-gray-400">{format(new Date(entry.createdAt), 'MMM d, HH:mm')}</span>
-                </div>
-              </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ══ Section 2: Google Drive Auto-Export ══ */}
+      <div className="bg-white border border-gray-200 rounded-xl p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <CloudUpload size={17} className="text-[#4aa8d8]" />
+          <h2 className="font-semibold text-gray-800">Google Drive Auto-Export</h2>
+        </div>
+
+        {/* Drive folder URL */}
+        <div className="mb-3">
+          <p className="text-xs font-medium text-gray-600 mb-1">Drive folder URL</p>
+          <div className="flex gap-2">
+            <input
+              value={driveFolderDraft}
+              onChange={e => setDriveFolderDraft(e.target.value)}
+              placeholder="https://drive.google.com/drive/folders/…"
+              className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+            />
+            <button
+              onClick={() => { setBackupDriveFolder(driveFolderDraft.trim()); onToast('Drive folder saved'); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-xs font-medium hover:bg-[#162d4a] transition-colors whitespace-nowrap">
+              <Save size={12} /> Save
+            </button>
+          </div>
+          {backupDriveFolderLink && (
+            <p className="mt-1 text-xs text-green-600 flex items-center gap-1"><Check size={11} /> Folder configured</p>
+          )}
+        </div>
+
+        {/* Auto-export frequency */}
+        <div className="mb-3">
+          <p className="text-xs font-medium text-gray-600 mb-1.5">Auto-export frequency</p>
+          <div className="flex gap-1 flex-wrap">
+            {(['off', 'hourly', 'every5h', 'every12h', 'daily', 'weekly'] as DriveExportFrequency[]).map(f => (
+              <button key={f} onClick={() => setDriveExportFrequency(f)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                  (driveExportFrequency ?? 'off') === f
+                    ? 'bg-[#4aa8d8] text-white'
+                    : 'bg-gray-50 border border-gray-200 text-gray-600 hover:border-[#4aa8d8]/50'
+                }`}>
+                {DRIVE_FREQ_LABELS[f]}
+              </button>
             ))}
           </div>
         </div>
-      )}
+
+        {/* Last export + Export Now */}
+        <div className="flex items-center justify-between gap-3 pt-3 border-t border-gray-100">
+          <p className="text-xs text-gray-500">
+            Last export:{' '}
+            {lastDriveExportAt
+              ? <span className="font-medium text-gray-700">{format(new Date(lastDriveExportAt), 'MMM d, yyyy · HH:mm')}</span>
+              : <span className="text-gray-400">Never</span>
+            }
+          </p>
+          <button
+            onClick={handleExportToDriveNow}
+            disabled={!backupDriveFolderLink || driveExporting}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#4aa8d8] text-white rounded-lg text-xs font-medium hover:bg-[#3a98c8] transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0">
+            {driveExporting ? <RefreshCw size={12} className="animate-spin" /> : <CloudUpload size={12} />}
+            {driveExporting ? 'Exporting…' : 'Export Now'}
+          </button>
+        </div>
+      </div>
+
+      {/* ══ Section 3: Manual Backup ══ */}
+      <div className="bg-white border border-gray-200 rounded-xl p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <HardDrive size={17} className="text-[#1e3a5f]" />
+          <h2 className="font-semibold text-gray-800">Manual Backup</h2>
+        </div>
+
+        <p className="text-xs text-gray-500 mb-4">
+          Export all data to a JSON file — apartments, stages, notes, contractors, photos, settings.
+          Import to fully restore.
+        </p>
+        <div className="flex gap-3 flex-wrap mb-4">
+          <button onClick={handleExport}
+            className="flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors">
+            <Download size={15} /> Export JSON
+          </button>
+          <button onClick={() => importRef.current?.click()}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
+            <Upload size={15} /> Import JSON
+          </button>
+          <input ref={importRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
+        </div>
+
+        {/* Backup log */}
+        {backupLogs.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Export Log</p>
+            <div className="space-y-1 max-h-44 overflow-y-auto">
+              {backupLogs.slice(0, 10).map(entry => (
+                <div key={entry.id} className="flex items-center justify-between text-xs px-3 py-2 bg-gray-50 rounded-lg border border-gray-100">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <HardDrive size={12} className={entry.driveUploaded ? 'text-[#4aa8d8]' : 'text-gray-400'} />
+                    <span className="text-gray-700 truncate font-mono">{entry.filename}</span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                    <span className="text-gray-400">{entry.sizeKB} KB</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                      entry.triggeredBy === 'manual' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'
+                    }`}>{entry.triggeredBy}</span>
+                    <span className="text-gray-400">{format(new Date(entry.createdAt), 'MMM d, HH:mm')}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
