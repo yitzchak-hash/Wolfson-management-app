@@ -161,7 +161,10 @@ export async function fsBatchSet(collectionName: string, items: Array<{ id: stri
   try {
     const batch = writeBatch(db);
     items.forEach(({ id, data }) => {
-      batch.set(doc(db!, collectionName, id), { ...data, _updatedAt: serverTimestamp() }, { merge: true });
+      const sanitized = Object.fromEntries(
+        Object.entries({ ...data, _updatedAt: serverTimestamp() }).map(([k, v]) => [k, v === undefined ? deleteField() : v])
+      );
+      batch.set(doc(db!, collectionName, id), sanitized, { merge: true });
     });
     await _trackWrite(batch.commit());
   } catch (e) {

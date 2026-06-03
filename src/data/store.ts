@@ -558,7 +558,7 @@ export const useStore = create<AppState>((set, get) => ({
 
     set(state => ({ apartments: state.apartments.map(a => updates.has(a.id) ? updates.get(a.id)! : a) }));
     persist(get);
-    updates.forEach((updated, id) => fsSet('apartments', id, updated));
+    fsBatchSet('apartments', Array.from(updates.entries()).map(([id, data]) => ({ id, data })));
   },
 
   unmergeApartments: (aptId, keepDataAptId, user) => {
@@ -594,7 +594,7 @@ export const useStore = create<AppState>((set, get) => ({
 
     set(state => ({ apartments: state.apartments.map(a => updates.has(a.id) ? updates.get(a.id)! : a) }));
     persist(get);
-    updates.forEach((updated, id) => fsSet('apartments', id, updated));
+    fsBatchSet('apartments', Array.from(updates.entries()).map(([id, data]) => ({ id, data })));
   },
 
   setGoogleClientId: (id) => {
