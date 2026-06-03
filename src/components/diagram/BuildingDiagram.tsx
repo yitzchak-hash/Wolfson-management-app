@@ -90,7 +90,7 @@ interface AptCellProps {
   showShinuiBadge: boolean;
   onClick: () => void;
   isDuplex?: boolean;
-  isBasement?: boolean;
+  rowFloorType?: 'basement' | 'ground' | 'lobby';
   isMerged?: boolean;
   mergedLabel?: string;
   isBulkSelected?: boolean;
@@ -106,14 +106,24 @@ interface AptCellProps {
 
 function AptCell({
   apt, stage, isHighlighted, isDimmed, showShinuiBadge, onClick,
-  isDuplex, isBasement, isMerged, mergedLabel, isBulkSelected, isContractorHighlighted,
+  isDuplex, rowFloorType, isMerged, mergedLabel, isBulkSelected, isContractorHighlighted,
   aptSubLabel, taskInfo, nextStageName, onAddTask, allTasksDone, compact, onNameUnnamed,
 }: AptCellProps) {
   const ui = useStore(state => state.mainUiStrings);
   const hasStage = !!stage;
+  const floorBg =
+    rowFloorType === 'basement' ? '#eef3f9' :
+    rowFloorType === 'ground'   ? '#fefce8' :
+    rowFloorType === 'lobby'    ? '#f0fdf4' :
+    '#ffffff';
+  const floorBorder =
+    rowFloorType === 'basement' ? '#c8d8ec' :
+    rowFloorType === 'ground'   ? '#fde68a' :
+    rowFloorType === 'lobby'    ? '#bbf7d0' :
+    '#e2e8f0';
   // Dimmed cells use a gray palette to make the filter visually obvious
-  const bgColor = isDimmed ? '#e5e7eb' : (hasStage ? stage!.color : isBasement ? '#eef3f9' : '#ffffff');
-  const borderColor = isDimmed ? '#d1d5db' : (isMerged ? '#3b82f6' : hasStage ? stage!.color : isBasement ? '#c8d8ec' : '#e2e8f0');
+  const bgColor = isDimmed ? '#e5e7eb' : (hasStage ? stage!.color : floorBg);
+  const borderColor = isDimmed ? '#d1d5db' : (isMerged ? '#3b82f6' : hasStage ? stage!.color : floorBorder);
   const borderWidth = isMerged && !isDimmed ? '2px' : '1.5px';
   const textColor = isDimmed ? '#9ca3af' : (hasStage ? getTextColor(stage!.color) : '#374151');
 
@@ -145,7 +155,7 @@ function AptCell({
         gap: compact ? undefined : '1px',
       }}
       onClick={apt ? onClick : undefined}
-      title={displayLabel ? `${isBasement ? ui.basement : ui.aptShort} ${displayLabel}` : ''}
+      title={displayLabel ? `${rowFloorType === 'basement' ? ui.basement : ui.aptShort} ${displayLabel}` : ''}
     >
       {displayLabel ? (
         <span
@@ -267,7 +277,7 @@ function FourCellRow({
   aptNums, getApt, getStage, isHighlighted, isDimmed, isMerged, getMergedLabel,
   isContractorHighlighted, isBulkSelected, getAptSubLabel, getTaskInfo, getNextStageName, getOnAddTask, getAllTasksDone,
   getOnNameUnnamed,
-  showShinuiBadge, onApartmentClick, isBasement = false, compact,
+  showShinuiBadge, onApartmentClick, rowFloorType, compact,
 }: {
   aptNums: number[];
   getApt: (n: number) => Apartment | undefined;
@@ -286,7 +296,7 @@ function FourCellRow({
   getOnNameUnnamed?: (a: Apartment | undefined) => (() => void) | undefined;
   showShinuiBadge: boolean;
   onApartmentClick: (a: Apartment) => void;
-  isBasement?: boolean;
+  rowFloorType?: 'basement' | 'ground' | 'lobby';
   compact?: boolean;
 }) {
   const gapClass = compact ? 'gap-0.5' : 'gap-1';
@@ -305,7 +315,7 @@ function FourCellRow({
               isDimmed={isDimmed(apt)}
               showShinuiBadge={showShinuiBadge}
               onClick={() => apt && onApartmentClick(apt)}
-              isBasement={isBasement}
+              rowFloorType={rowFloorType}
               isMerged={isMerged(apt)}
               mergedLabel={getMergedLabel(apt)}
               isBulkSelected={isBulkSelected(apt)}
@@ -336,7 +346,7 @@ function FourCellRow({
               isDimmed={isDimmed(apt)}
               showShinuiBadge={showShinuiBadge}
               onClick={() => apt && onApartmentClick(apt)}
-              isBasement={isBasement}
+              rowFloorType={rowFloorType}
               isMerged={isMerged(apt)}
               mergedLabel={getMergedLabel(apt)}
               isBulkSelected={isBulkSelected(apt)}
@@ -533,7 +543,12 @@ function BuildingColumn({
                     getOnNameUnnamed={getOnNameUnnamed}
                     showShinuiBadge={showShinuiBadge}
                     onApartmentClick={onApartmentClick}
-                    isBasement={row.type === 'basement'}
+                    rowFloorType={
+                      row.type === 'basement' ? 'basement' :
+                      row.type === 'ground'   ? 'ground' :
+                      row.type === 'lobby'    ? 'lobby' :
+                      undefined
+                    }
                     compact={compact}
                   />
                 ) : (row.type === 'wide' || row.type === 'duplex') ? (
