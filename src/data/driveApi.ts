@@ -264,25 +264,28 @@ async function listFolderViaBackend(folderId: string): Promise<DriveFile[]> {
 }
 
 export async function findPlansPdfViaBackend(driveLink: string): Promise<DriveFile | null> {
+  const pdfs = await findAllPlansPdfsViaBackend(driveLink);
+  return pdfs[0] ?? null;
+}
+
+export async function findAllPlansPdfsViaBackend(driveLink: string): Promise<DriveFile[]> {
   const folderId = extractFolderId(driveLink);
-  if (!folderId) return null;
+  if (!folderId) return [];
   try {
     const files = await listFolderViaBackend(folderId);
-    // Look for any subfolder that sounds like an engineering/plans folder
     const plansFolder = files.find(
       f => f.mimeType === 'application/vnd.google-apps.folder' &&
            /(plan|engineer|תכנ|תוכנ|הנד|drawing|blueprint|dwg)/i.test(f.name),
     );
     if (plansFolder) {
       const planFiles = await listFolderViaBackend(plansFolder.id);
-      const pdf = planFiles.find(f => f.mimeType === 'application/pdf');
-      if (pdf) return pdf;
+      const pdfs = planFiles.filter(f => f.mimeType === 'application/pdf');
+      if (pdfs.length > 0) return pdfs;
     }
-    // Fallback: look for any PDF directly in the main folder
-    const directPdf = files.find(f => f.mimeType === 'application/pdf');
-    return directPdf ?? null;
+    // Fallback: any PDFs directly in the main folder
+    return files.filter(f => f.mimeType === 'application/pdf');
   } catch {
-    return null;
+    return [];
   }
 }
 

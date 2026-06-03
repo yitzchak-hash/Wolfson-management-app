@@ -5,7 +5,7 @@ import { useStore } from '../../data/store';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import { StageNotesSection } from './StageNotesSection';
 import { ActivitySection } from './ActivitySection';
-import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, extractFolderId, driveThumbUrl, listAllPhotosViaBackend, DrivePhotoItem } from '../../data/driveApi';
+import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, findAllPlansPdfsViaBackend, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, extractFolderId, driveThumbUrl, listAllPhotosViaBackend, DrivePhotoItem, DriveFile } from '../../data/driveApi';
 import { Tooltip } from '../ui/Tooltip';
 
 interface Props {
@@ -158,7 +158,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [showHealthCheck, setShowHealthCheck] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [fetchingPdf, setFetchingPdf] = useState(false);
-  const [detectedPdfId, setDetectedPdfId] = useState<string | null>(null);
+  const [availablePdfs, setAvailablePdfs] = useState<DriveFile[]>([]);
+  const [selectedPdfIdx, setSelectedPdfIdx] = useState(0);
   const [stageChangeModal, setStageChangeModal] = useState<{ newStageId: string; newStageName: string } | null>(null);
   const [prevStageId, setPrevStageId] = useState<string>('');
 
@@ -180,17 +181,21 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       setPhotosLoaded(false);
       setLightbox(null);
       const existingFileId = apartment.plansPdfLink ? extractFileId(apartment.plansPdfLink) : null;
-      setDetectedPdfId(existingFileId);
+      setAvailablePdfs(existingFileId ? [{ id: existingFileId, name: '', mimeType: 'application/pdf' }] : []);
+      setSelectedPdfIdx(0);
       if (!existingFileId && apartment.driveLink && backendConfigured) {
         setFetchingPdf(true);
-        findPlansPdfViaBackend(apartment.driveLink).then(f => {
-          if (f) setDetectedPdfId(f.id);
+        findAllPlansPdfsViaBackend(apartment.driveLink).then(pdfs => {
+          setAvailablePdfs(pdfs);
+          setSelectedPdfIdx(0);
         }).finally(() => setFetchingPdf(false));
       }
     }
   }, [apartment?.id]);
 
   if (!apartment) return null;
+
+  const detectedPdfId = availablePdfs[selectedPdfIdx]?.id ?? null;
 
   const sortedStages = [...stages].filter(s => s.active).sort((a, b) => a.order - b.order);
   const currentStage = stages.find(s => s.id === currentStageId);
@@ -672,9 +677,16 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                         <button
                           onClick={() => {
                             setFetchingPdf(true);
-                            findPlansPdfViaBackend(driveLink).then(f => {
-                              if (f) { setDetectedPdfId(f.id); setPlansPdfLink(`https://drive.google.com/file/d/${f.id}/view`); onToast(ui.pdfFound); }
-                              else onToast(ui.noPdfFound, 'error');
+                            findAllPlansPdfsViaBackend(driveLink).then(pdfs => {
+                              if (pdfs.length > 0) {
+                                setAvailablePdfs(pdfs);
+                                setSelectedPdfIdx(0);
+                                setPlansPdfLink(`https://drive.google.com/file/d/${pdfs[0].id}/view`);
+                                onToast(ui.pdfFound);
+                              } else {
+                                setAvailablePdfs([]);
+                                onToast(ui.noPdfFound, 'error');
+                              }
                             }).finally(() => setFetchingPdf(false));
                           }}
                           className="flex items-center gap-1 text-xs text-gray-400 hover:text-[#1e3a5f] transition-colors"
@@ -688,6 +700,32 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
 
                 {detectedPdfId ? (
                   <>
+                    {/* File picker chips — only shown when multiple PDFs exist */}
+                    {availablePdfs.length > 1 && (
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        {availablePdfs.map((pdf, idx) => {
+                          const label = pdf.name ? pdf.name.replace(/\.pdf$/i, '') : `Plan ${idx + 1}`;
+                          const active = idx === selectedPdfIdx;
+                          return (
+                            <button
+                              key={pdf.id}
+                              onClick={() => {
+                                setSelectedPdfIdx(idx);
+                                setPlansPdfLink(`https://drive.google.com/file/d/${pdf.id}/view`);
+                              }}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all truncate max-w-[160px] ${
+                                active
+                                  ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]'
+                                  : 'bg-white text-gray-500 border-gray-200 hover:border-[#1e3a5f] hover:text-[#1e3a5f]'
+                              }`}
+                              title={pdf.name}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                     <div
                       className="rounded-xl overflow-hidden border border-gray-200 cursor-pointer relative mb-2"
                       style={{ height: showPdfViewer ? '440px' : '160px' }}
@@ -804,8 +842,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                 findOrCreateFolderViaBackend(folderId, 'Photos').catch(() => {});
                                 if (!detectedPdfId) {
                                   setFetchingPdf(true);
-                                  findPlansPdfViaBackend(trimmed)
-                                    .then(f => { if (f) setDetectedPdfId(f.id); })
+                                  findAllPlansPdfsViaBackend(trimmed)
+                                    .then(pdfs => { if (pdfs.length > 0) { setAvailablePdfs(pdfs); setSelectedPdfIdx(0); } })
                                     .finally(() => setFetchingPdf(false));
                                 }
                               }
@@ -832,8 +870,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                 if (folderId) {
                                   findOrCreateFolderViaBackend(folderId, 'Photos').catch(() => {});
                                   setFetchingPdf(true);
-                                  findPlansPdfViaBackend(trimmed)
-                                    .then(f => { if (f) setDetectedPdfId(f.id); })
+                                  findAllPlansPdfsViaBackend(trimmed)
+                                    .then(pdfs => { if (pdfs.length > 0) { setAvailablePdfs(pdfs); setSelectedPdfIdx(0); } })
                                     .finally(() => setFetchingPdf(false));
                                 }
                               }
