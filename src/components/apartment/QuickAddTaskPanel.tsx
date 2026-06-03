@@ -100,8 +100,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
     if (backendOn && mainFolderId && attachmentFiles.length > 0) {
       setUploading(true);
       try {
-        const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');
-        const notesFolderId = await findOrCreateFolderViaBackend(photosFolderId, 'Task Notes');
+        const tasksFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Tasks');
         finalAttachments = [];
         for (let i = 0; i < attachmentFiles.length; i++) {
           const file = attachmentFiles[i];
@@ -109,7 +108,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
           setAttProgress(p => ({ ...p, [att.id]: 0 }));
           try {
             const { fileId, webViewLink } = await uploadFileViaResumableSession(
-              notesFolderId, file, pct => setAttProgress(p => ({ ...p, [att.id]: pct })),
+              tasksFolderId, file, pct => setAttProgress(p => ({ ...p, [att.id]: pct })),
             );
             await shareFileToDrive(fileId);
             finalAttachments.push({ ...att, dataUrl: '', driveFileId: fileId, driveUrl: webViewLink });

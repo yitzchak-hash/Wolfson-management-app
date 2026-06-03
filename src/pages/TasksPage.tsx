@@ -65,6 +65,8 @@ export function TasksPage() {
   const [addUploadProgress, setAddUploadProgress] = useState<number | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const addFileInputRef = useRef<HTMLInputElement>(null);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
+  const [editUploadProgress, setEditUploadProgress] = useState<number | null>(null);
 
   async function compressImage(file: File): Promise<File> {
     if (!file.type.startsWith('image/')) return file;
@@ -99,10 +101,9 @@ export function TasksPage() {
         const mainFolderId = extractFolderId(apt.driveLink);
         if (mainFolderId) {
           setAddUploadProgress(1);
-          const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');
-          const taskNotesFolderId = await findOrCreateFolderViaBackend(photosFolderId, 'Task Notes');
+          const tasksFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Tasks');
           const { fileId, webViewLink } = await uploadFileViaResumableSession(
-            taskNotesFolderId, processed,
+            tasksFolderId, processed,
             pct => setAddUploadProgress(pct),
           );
           await shareFileToDrive(fileId);
@@ -123,6 +124,42 @@ export function TasksPage() {
     reader.onload = e => {
       const dataUrl = e.target?.result as string ?? '';
       setAddAttachments(prev => [...prev, { id, filename: processed.name, mimeType: processed.type, dataUrl }]);
+    };
+    reader.readAsDataURL(processed);
+  }
+
+  async function handleEditFileChosen(file: File) {
+    const processed = await compressImage(file);
+    const id = crypto.randomUUID();
+    const assignment = contractorAssignments.find(a => a.id === editingId);
+    const apt = apartments.find(a => a.id === assignment?.apartmentId);
+    if (isUploadBackendConfigured() && apt?.driveLink) {
+      try {
+        const mainFolderId = extractFolderId(apt.driveLink);
+        if (mainFolderId) {
+          setEditUploadProgress(1);
+          const tasksFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Tasks');
+          const { fileId, webViewLink } = await uploadFileViaResumableSession(
+            tasksFolderId, processed,
+            pct => setEditUploadProgress(pct),
+          );
+          await shareFileToDrive(fileId);
+          setEditUploadProgress(null);
+          setEditAttachments(prev => [...prev, {
+            id, filename: processed.name, mimeType: processed.type,
+            dataUrl: '', driveFileId: fileId, driveUrl: webViewLink,
+          }]);
+          return;
+        }
+      } catch (e) {
+        console.warn('Drive upload failed for edit attachment, falling back to base64:', e);
+        setEditUploadProgress(null);
+      }
+    }
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const dataUrl = ev.target?.result as string ?? '';
+      setEditAttachments(prev => [...prev, { id, filename: processed.name, mimeType: processed.type, dataUrl }]);
     };
     reader.readAsDataURL(processed);
   }
@@ -232,6 +269,17 @@ export function TasksPage() {
         className="hidden"
         onChange={e => {
           Array.from(e.target.files ?? []).forEach(f => handleAddFileChosen(f));
+          e.target.value = '';
+        }}
+      />
+      <input
+        ref={editFileInputRef}
+        type="file"
+        accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx"
+        multiple
+        className="hidden"
+        onChange={e => {
+          Array.from(e.target.files ?? []).forEach(f => handleEditFileChosen(f));
           e.target.value = '';
         }}
       />
@@ -693,7 +741,19 @@ export function TasksPage() {
                           ))}
                         </div>
                       )}
+                      {editUploadProgress !== null && (
+                        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-blue-400 transition-all duration-300 rounded-full" style={{ width: `${editUploadProgress}%` }} />
+                        </div>
+                      )}
                       <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => { editFileInputRef.current?.click(); }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-500 rounded-lg text-xs hover:bg-gray-50 transition-colors"
+                          title="Attach file"
+                        >
+                          <Paperclip size={13} />
+                        </button>
                         <button
                           onClick={() => saveEdit(a.id)}
                           className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-xs font-medium hover:bg-[#162d4a]"

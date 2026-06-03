@@ -7,7 +7,7 @@ import {
   Camera, CheckCircle2, Clock, Building2, CalendarDays, FileText,
   Plus, Send, AlertCircle, X, Play, File as FileIcon, MapPin,
   BookOpen, Download, Paperclip, MessageSquare, CloudUpload,
-  ChevronLeft, ChevronRight, Languages,
+  ChevronLeft, ChevronRight, Languages, History,
 } from 'lucide-react';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
 import {
@@ -277,7 +277,7 @@ export function ContractorPortal() {
   const { token } = useParams<{ token: string }>();
   const {
     contractors, contractorAssignments, contractorNotes, contractorPhotos,
-    apartments, stages,
+    apartments, stages, stageNotes,
     addContractorNote, addContractorPhoto, deleteContractorPhoto,
     updateContractorAssignment, addActivityLog,
     contractorUiStrings,
@@ -300,6 +300,7 @@ export function ContractorPortal() {
   const [mapFilter, setMapFilter] = useState<'yesterday' | 'today' | 'tomorrow' | 'week' | 'all'>('today');
   const [showPlansPdf, setShowPlansPdf] = useState(false);
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const noteAttachRef = useRef<HTMLInputElement>(null);
 
@@ -571,6 +572,7 @@ export function ContractorPortal() {
     const aptAssignments = assignments.filter(a => a.apartmentId === apt.id);
     if (aptAssignments.length === 0) return;
     setSelectedAssignment(aptAssignments.find(a => !a.completedAt) ?? aptAssignments[0]);
+    setShowHistory(false);
   }
 
   const selMedia = selectedAssignment ? getMedia(selectedAssignment.id) : [];
@@ -682,7 +684,7 @@ export function ContractorPortal() {
                 const dueBadge = getDueBadge(a.dueDate);
 
                 return (
-                  <button key={a.id} onClick={() => setSelectedAssignment(a)}
+                  <button key={a.id} onClick={() => { setSelectedAssignment(a); setShowHistory(false); }}
                     className="w-full text-left bg-white rounded-2xl shadow-sm border border-gray-100 p-4 transition-all active:scale-[0.99] hover:shadow-md">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
@@ -798,10 +800,20 @@ export function ContractorPortal() {
                       <span className="text-gray-400 text-sm">{a.buildingId}</span>
                     </div>
                     {stage && (
-                      <span className="text-xs px-2.5 py-1 rounded-full font-medium"
-                        style={{ backgroundColor: stage.color + '22', color: stage.color, border: `1px solid ${stage.color}33` }}>
-                        {getStageName(stage, s.isRtl)}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs px-2.5 py-1 rounded-full font-medium"
+                          style={{ backgroundColor: stage.color + '22', color: stage.color, border: `1px solid ${stage.color}33` }}>
+                          {getStageName(stage, s.isRtl)}
+                        </span>
+                        {apt?.stageDates && Object.keys(apt.stageDates).length > 0 && (
+                          <button
+                            onClick={() => setShowHistory(v => !v)}
+                            className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all ${showHistory ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'text-gray-400 border-gray-200 hover:border-gray-300'}`}
+                          >
+                            <History size={11} />
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                   <button onClick={() => { setSelectedAssignment(null); setShowCompleteConfirm(false); }} className="p-1.5 rounded-full hover:bg-gray-100">
@@ -835,6 +847,66 @@ export function ContractorPortal() {
                     </span>
                   )}
                 </div>
+
+                {/* Stage history panel */}
+                {showHistory && apt && (() => {
+                  const stageDates = apt.stageDates ?? {};
+                  const history = stages
+                    .filter(st => stageDates[st.id])
+                    .sort((a, b) => new Date(stageDates[b.id]!).getTime() - new Date(stageDates[a.id]!).getTime());
+                  if (!history.length) return null;
+                  return (
+                    <div className="border border-gray-100 rounded-2xl overflow-hidden">
+                      <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100">
+                        <span className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
+                          <History size={12} /> Stage History
+                        </span>
+                      </div>
+                      <div className="divide-y divide-gray-50">
+                        {history.map(st => {
+                          const note = stageNotes.find(n => n.apartmentId === a.apartmentId && n.stageId === st.id);
+                          const stagePhotos = contractorPhotos.filter(p => {
+                            const assignment = contractorAssignments.find(ca => ca.id === p.assignmentId);
+                            return assignment?.apartmentId === a.apartmentId && assignment?.stageId === st.id;
+                          });
+                          const isCurrent = apt.currentStageId === st.id;
+                          return (
+                            <div key={st.id} className="px-4 py-3 space-y-2">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-xs px-2 py-0.5 rounded-full font-medium"
+                                  style={{ backgroundColor: st.color + '22', color: st.color, border: `1px solid ${st.color}33` }}>
+                                  {getStageName(st, s.isRtl)}
+                                </span>
+                                {isCurrent && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#1e3a5f]/10 text-[#1e3a5f] font-semibold">Current</span>
+                                )}
+                                <span className="text-[10px] text-gray-400 ml-auto">
+                                  {format(new Date(stageDates[st.id]!), 'MMM d, yyyy')}
+                                </span>
+                              </div>
+                              {note?.noteText?.trim() && (
+                                <p className="text-xs text-gray-600 leading-relaxed bg-blue-50 rounded-lg px-2.5 py-2">{note.noteText}</p>
+                              )}
+                              {stagePhotos.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {stagePhotos.map(photo => {
+                                    const src = photo.storageUrl || (photo.driveFileId ? driveThumbUrl(photo.driveFileId, 200) : photo.dataUrl);
+                                    if (!src) return null;
+                                    return (
+                                      <a key={photo.id} href={photo.storageUrl || photo.driveUrl || photo.dataUrl} target="_blank" rel="noopener noreferrer">
+                                        <img src={src} alt="" className="h-14 w-14 rounded-xl object-cover border border-gray-200" />
+                                      </a>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Office notes */}
                 {apt?.generalNotes && (

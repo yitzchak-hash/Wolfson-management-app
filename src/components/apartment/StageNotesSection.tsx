@@ -28,7 +28,7 @@ interface PendingAttachment {
 export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }: StageNotesSectionProps) {
   const {
     upsertStageNote, getStageNote, getStageNoteVersions,
-    apartments, contractors, contractorAssignments, contractorNotes,
+    apartments, contractors, contractorAssignments, contractorNotes, contractorPhotos,
     addContractorAssignment, updateContractorAssignment, deleteContractorAssignment,
   } = useStore();
   const s = useStore(state => state.mainUiStrings);
@@ -506,6 +506,78 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                             )}
                           </div>
                         ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Tasks and photos for this stage */}
+                {(() => {
+                  const stageTasks = contractorAssignments.filter(
+                    a => a.apartmentId === apartmentId && a.stageId === stage.id
+                  );
+                  if (!stageTasks.length) return null;
+                  return (
+                    <div className="mt-2 pt-2 border-t border-gray-100">
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                        <Paperclip size={9} /> {s.tasksHeading} ({stageTasks.length})
+                      </p>
+                      <div className="space-y-2">
+                        {stageTasks.map(task => {
+                          const contractor = contractors.find(c => c.id === task.contractorId);
+                          const photos = contractorPhotos.filter(p => p.assignmentId === task.id);
+                          return (
+                            <div key={task.id} className="bg-gray-50 rounded-lg p-2 space-y-1.5 border border-gray-100">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${task.completedAt ? 'bg-green-100 text-green-700' : 'bg-orange-50 text-orange-600'}`}>
+                                  {task.completedAt ? '✓' : '⏳'}
+                                </span>
+                                {contractor && (
+                                  <span className="text-[10px] text-gray-500 font-medium">{contractor.name}</span>
+                                )}
+                                {task.dueDate && (
+                                  <span className="text-[10px] text-gray-400 ml-auto">{format(new Date(task.dueDate), 'MMM d')}</span>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-700 leading-snug">{task.taskDescription}</p>
+                              {task.attachments && task.attachments.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {task.attachments.map(att => (
+                                    <div key={att.id}>
+                                      {att.mimeType?.startsWith('image/') ? (
+                                        att.driveFileId ? (
+                                          <a href={att.driveUrl ?? '#'} target="_blank" rel="noopener noreferrer">
+                                            <img src={driveThumbUrl(att.driveFileId, 200)} alt={att.filename} className="h-12 w-12 rounded-lg object-cover border border-gray-200 hover:opacity-90" />
+                                          </a>
+                                        ) : att.dataUrl ? (
+                                          <img src={att.dataUrl} alt={att.filename} className="h-12 w-12 rounded-lg object-cover border border-gray-200" />
+                                        ) : null
+                                      ) : (
+                                        <a href={att.driveUrl ?? '#'} target="_blank" rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 rounded text-[10px] text-gray-600 hover:bg-gray-200">
+                                          <Paperclip size={9} />{att.filename}
+                                        </a>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {photos.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {photos.map(photo => {
+                                    const src = photo.storageUrl || (photo.driveFileId ? driveThumbUrl(photo.driveFileId, 200) : photo.dataUrl);
+                                    if (!src) return null;
+                                    return (
+                                      <a key={photo.id} href={photo.storageUrl || photo.driveUrl || photo.dataUrl} target="_blank" rel="noopener noreferrer">
+                                        <img src={src} alt="" className="h-12 w-12 rounded-lg object-cover border border-gray-200 hover:opacity-90" />
+                                      </a>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   );
