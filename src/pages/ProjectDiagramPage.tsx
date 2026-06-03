@@ -12,7 +12,7 @@ import { Toast } from '../components/ui/Toast';
 type ClassFilter = 'all' | 'standard' | 'shinui';
 
 export function ProjectDiagramPage() {
-  const { apartments, stages, currentUser, bulkUpdateApartments, contractorAssignments, contractors, mainUiStrings: s } = useStore();
+  const { apartments, stages, currentUser, bulkUpdateApartments, updateApartment, contractorAssignments, contractors, mainUiStrings: s } = useStore();
 
   const [selectedBuilding, setSelectedBuilding] = useState<BuildingId | 'all'>('all');
   const [activeStageIds, setActiveStageIds] = useState<string[]>([]);
@@ -22,6 +22,8 @@ export function ProjectDiagramPage() {
   const [selectedApt, setSelectedApt] = useState<Apartment | null>(null);
   const [addTaskApt, setAddTaskApt] = useState<Apartment | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [namingApt, setNamingApt] = useState<Apartment | null>(null);
+  const [namingInput, setNamingInput] = useState('');
 
   // Bulk update state
   const [bulkMode, setBulkMode] = useState(false);
@@ -107,6 +109,18 @@ export function ProjectDiagramPage() {
     setSelectedApt(null);
     setAddTaskApt(apt);
   }, []);
+
+  const handleNameUnnamed = useCallback((apt: Apartment) => {
+    setNamingApt(apt);
+    setNamingInput('');
+  }, []);
+
+  function handleSaveName() {
+    if (!namingApt || !currentUser || !namingInput.trim()) return;
+    updateApartment(namingApt.id, { displayName: namingInput.trim(), isUnnamed: false }, currentUser);
+    setNamingApt(null);
+    setNamingInput('');
+  }
 
   function handleBulkApply() {
     if (!currentUser || bulkSelected.size === 0) return;
@@ -320,6 +334,7 @@ export function ProjectDiagramPage() {
             nextStageLabels={nextStageLabels}
             onAddTask={bulkMode ? undefined : handleAddTask}
             aptCompletedData={aptCompletedData}
+            onNameUnnamed={bulkMode ? undefined : handleNameUnnamed}
           />
         </div>
 
@@ -407,6 +422,50 @@ export function ProjectDiagramPage() {
           <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />
         )}
       </div>
+
+      {/* Naming dialog for unnamed ground/lobby/basement slots */}
+      {namingApt && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          onClick={() => setNamingApt(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl p-6 w-80 flex flex-col gap-4"
+            onClick={e => e.stopPropagation()}
+          >
+            <div>
+              <h2 className="text-base font-bold text-gray-900">Name this space</h2>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {namingApt.buildingId} · Floor {namingApt.floor === 0 ? 'Ground' : namingApt.floor === 1 ? '1 (Lobby)' : namingApt.floor}
+              </p>
+            </div>
+            <input
+              autoFocus
+              type="text"
+              value={namingInput}
+              onChange={e => setNamingInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') setNamingApt(null); }}
+              placeholder="e.g. Parking 3, Storage B…"
+              className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 w-full"
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setNamingApt(null)}
+                className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                {s.cancel}
+              </button>
+              <button
+                onClick={handleSaveName}
+                disabled={!namingInput.trim()}
+                className="px-4 py-2 text-sm font-semibold bg-[#1e3a5f] text-white rounded-xl disabled:opacity-40 hover:bg-[#1e3a5f]/90 transition-colors"
+              >
+                {s.saveChanges}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
