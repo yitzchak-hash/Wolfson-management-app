@@ -1193,7 +1193,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                             )}
                           </div>
                           {/* Edit / Delete buttons */}
-                          <div className="flex items-center gap-0.5 flex-shrink-0 ml-1">
+                          <div className="flex items-center gap-1 flex-shrink-0 ml-1">
                             <button
                               onClick={() => {
                                 if (isEditing) { setDrawerEditingTaskId(null); setDrawerEditAttachments([]); }
@@ -1202,17 +1202,15 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                               className="p-1 rounded-md text-gray-400 hover:text-[#1e3a5f] hover:bg-gray-100 transition-colors"
                               title={isEditing ? ui.cancel : 'Edit task'}
                             >
-                              {isEditing ? <X size={13} /> : <Edit2 size={13} />}
+                              {isEditing ? <X size={14} /> : <Edit2 size={14} />}
                             </button>
-                            {!isEditing && (
-                              <button
-                                onClick={() => { if (window.confirm('Delete this task?')) deleteContractorAssignment(a.id); }}
-                                className="p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                                title="Delete task"
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            )}
+                            <button
+                              onClick={() => { if (window.confirm('Delete this task?')) deleteContractorAssignment(a.id); }}
+                              className="p-1 rounded-md text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                              title="Delete task"
+                            >
+                              <Trash2 size={14} />
+                            </button>
                           </div>
                         </div>
 

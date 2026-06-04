@@ -506,6 +506,8 @@ function BuildingColumn({
               >
                 {row.type === 'ground' ? (
                   <span style={{ fontSize: '7px', textAlign: 'center', lineHeight: 1.1 }}>{ui.groundCommercial}</span>
+                ) : row.type === 'lobby' ? (
+                  <span style={{ fontSize: '7px', textAlign: 'center', lineHeight: 1.1 }}>{ui.lobby}</span>
                 ) : (
                   <span style={{ fontSize: row.floorLabel.startsWith('-') ? '8px' : '9px' }}>
                     {row.floorLabel}
@@ -596,19 +598,21 @@ export function BuildingDiagram({
   onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, aptSubLabels,
   aptTaskData, nextStageLabels, onAddTask, aptCompletedData, compact, onNameUnnamed,
 }: BuildingDiagramProps) {
-  const buildingOrder: BuildingId[] = ['A3', 'A2', 'A1'];
+  const { isRtl } = useStore(state => state.mainUiStrings);
+  const buildingOrder: BuildingId[] = isRtl ? ['A3', 'A2', 'A1'] : ['A1', 'A2', 'A3'];
   const visibleBuildings = selectedBuilding === 'all' ? buildingOrder : [selectedBuilding];
   const single = selectedBuilding !== 'all';
 
   const aptsByBuilding = useMemo(() => {
+    const order: BuildingId[] = isRtl ? ['A3', 'A2', 'A1'] : ['A1', 'A2', 'A3'];
     const m = new Map<BuildingId, Apartment[]>();
-    buildingOrder.forEach(b => m.set(b, []));
+    order.forEach(b => m.set(b, []));
     apartments.forEach(a => {
       const existing = m.get(a.buildingId) ?? [];
       m.set(a.buildingId, [...existing, a]);
     });
     return m;
-  }, [apartments]);
+  }, [apartments, isRtl]);
 
   // Pre-compute combined "A/B" labels for merged apartment pairs
   const mergedLabels = useMemo(() => {
