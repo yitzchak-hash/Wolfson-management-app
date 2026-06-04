@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, X, Building2, ClipboardList, FileText, MessageSquare } from 'lucide-react';
+import Fuse from 'fuse.js';
 import { useStore } from '../../data/store';
 import { useNavigate } from 'react-router-dom';
 
@@ -33,72 +34,63 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
   }, [open]);
 
   useEffect(() => {
-    if (!query.trim()) { setResults([]); return; }
-    const q = query.toLowerCase();
+    if (query.trim().length < 2) { setResults([]); return; }
+
+    const OPTS = { threshold: 0.35, ignoreLocation: true, minMatchCharLength: 2 };
     const found: SearchResult[] = [];
 
     // Apartments
-    apartments.filter(a => !a.isUnnamed).forEach(a => {
-      const text = [a.displayName, a.apartmentNumber, a.generalNotes].join(' ').toLowerCase();
-      if (text.includes(q)) {
-        found.push({
-          id: `apt-${a.id}`, type: 'apartment',
-          title: `${a.buildingId} · Apt ${a.displayName || a.apartmentNumber}`,
-          subtitle: a.generalNotes.trim() ? a.generalNotes.slice(0, 80) : `Floor ${a.floor}`,
-          aptId: a.id,
-        });
-      }
+    const aptFuse = new Fuse(apartments.filter(a => !a.isUnnamed), {
+      keys: ['displayName', 'apartmentNumber', 'generalNotes'], ...OPTS,
+    });
+    aptFuse.search(query).slice(0, 5).forEach(({ item: a }) => {
+      found.push({
+        id: `apt-${a.id}`, type: 'apartment',
+        title: `${a.buildingId} · Apt ${a.displayName || a.apartmentNumber}`,
+        subtitle: a.generalNotes.trim() ? a.generalNotes.slice(0, 80) : `Floor ${a.floor}`,
+        aptId: a.id,
+      });
     });
 
     // Tasks
-    contractorAssignments.forEach(a => {
-      if (a.taskDescription.toLowerCase().includes(q)) {
-        const apt = apartments.find(ap => ap.id === a.apartmentId);
-        const contractor = contractors.find(c => c.id === a.contractorId);
-        found.push({
-          id: `task-${a.id}`, type: 'task',
-          title: a.taskDescription.slice(0, 60),
-          subtitle: `${a.buildingId} · Apt ${apt?.displayName || apt?.apartmentNumber} · ${contractor?.name ?? ''}`,
-          aptId: a.apartmentId,
-        });
-      }
+    const taskFuse = new Fuse(contractorAssignments, { keys: ['taskDescription'], ...OPTS });
+    taskFuse.search(query).slice(0, 5).forEach(({ item: a }) => {
+      const apt = apartments.find(ap => ap.id === a.apartmentId);
+      const contractor = contractors.find(c => c.id === a.contractorId);
+      found.push({
+        id: `task-${a.id}`, type: 'task',
+        title: a.taskDescription.slice(0, 60),
+        subtitle: `${a.buildingId} · Apt ${apt?.displayName || apt?.apartmentNumber} · ${contractor?.name ?? ''}`,
+        aptId: a.apartmentId,
+      });
     });
 
     // Stage notes
-    stageNotes.forEach(n => {
-      if (n.noteText.toLowerCase().includes(q)) {
-        const apt = apartments.find(a => a.id === n.apartmentId);
-        const stage = stages.find(s => s.id === n.stageId);
-        found.push({
-          id: `note-${n.id}`, type: 'note',
-          title: n.noteText.slice(0, 60),
-          subtitle: `${apt?.buildingId} · Apt ${apt?.displayName || apt?.apartmentNumber} · ${stage?.name ?? ''}`,
-          aptId: n.apartmentId,
-        });
-      }
+    const noteFuse = new Fuse(stageNotes, { keys: ['noteText'], ...OPTS });
+    noteFuse.search(query).slice(0, 5).forEach(({ item: n }) => {
+      const apt = apartments.find(a => a.id === n.apartmentId);
+      const stage = stages.find(st => st.id === n.stageId);
+      found.push({
+        id: `note-${n.id}`, type: 'note',
+        title: n.noteText.slice(0, 60),
+        subtitle: `${apt?.buildingId} · Apt ${apt?.displayName || apt?.apartmentNumber} · ${stage?.name ?? ''}`,
+        aptId: n.apartmentId,
+      });
     });
 
     // Contractor notes
-    contractorNotes.forEach(n => {
-      if (n.text.toLowerCase().includes(q)) {
-        const apt = apartments.find(a => a.id === n.apartmentId);
-        found.push({
-          id: `cnote-${n.id}`, type: 'contractor_note',
-          title: n.text.slice(0, 60),
-          subtitle: `${apt?.buildingId} · Apt ${apt?.displayName || apt?.apartmentNumber} · ${n.authorName}`,
-          aptId: n.apartmentId,
-        });
-      }
+    const cnoteFuse = new Fuse(contractorNotes, { keys: ['text'], ...OPTS });
+    cnoteFuse.search(query).slice(0, 5).forEach(({ item: n }) => {
+      const apt = apartments.find(a => a.id === n.apartmentId);
+      found.push({
+        id: `cnote-${n.id}`, type: 'contractor_note',
+        title: n.text.slice(0, 60),
+        subtitle: `${apt?.buildingId} · Apt ${apt?.displayName || apt?.apartmentNumber} · ${n.authorName}`,
+        aptId: n.apartmentId,
+      });
     });
 
-    // Cap per category
-    const groupCap = (type: SearchResult['type']) => found.filter(r => r.type === type).slice(0, 5);
-    setResults([
-      ...groupCap('apartment'),
-      ...groupCap('task'),
-      ...groupCap('note'),
-      ...groupCap('contractor_note'),
-    ]);
+    setResults(found);
   }, [query, apartments, contractorAssignments, stageNotes, contractorNotes, contractors, stages]);
 
   function handleSelect(result: SearchResult) {
