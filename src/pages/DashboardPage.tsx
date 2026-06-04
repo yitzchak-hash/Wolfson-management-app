@@ -1,19 +1,22 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useStore } from '../data/store';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
-import { Building2, AlertTriangle, CheckCircle2, Clock, FileText, ClipboardList, AlertCircle } from 'lucide-react';
+import { Building2, AlertTriangle, CheckCircle2, Clock, FileText, ClipboardList, AlertCircle, X, ChevronRight } from 'lucide-react';
 import { getStageName } from '../types';
 
+type ModalKind = 'changes' | 'notes' | 'overdue' | 'pending' | 'completedToday' | null;
+
 export function DashboardPage() {
-  const { apartments, stages, activityLogs, contractorAssignments, mainUiStrings: s } = useStore();
+  const { apartments, stages, activityLogs, contractorAssignments, mainUiStrings: s, setPendingOpenAptId } = useStore();
   const navigate = useNavigate();
+  const [modal, setModal] = useState<ModalKind>(null);
 
   const sortedStages = [...stages].filter(s => s.active).sort((a, b) => a.order - b.order);
   const total = apartments.length;
   const notStarted = apartments.filter(a => !a.currentStageId).length;
-  const shinuiCount = apartments.filter(a => a.classification === 'shinui').length;
-  const withNotes = apartments.filter(a => a.generalNotes.trim()).length;
+  const shinuiCount = apartments.filter(a => a.classification === 'shinui' && !a.isUnnamed).length;
+  const withNotes = apartments.filter(a => a.generalNotes.trim() && !a.isUnnamed).length;
   const recentLogs = activityLogs.slice(0, 10);
 
   const today = new Date().toISOString().split('T')[0];
@@ -29,6 +32,21 @@ export function DashboardPage() {
     return { total: apts.length, started, pct: apts.length > 0 ? Math.round(started / apts.length * 100) : 0 };
   }
 
+  function openApartment(aptId: string) {
+    setPendingOpenAptId(aptId);
+    setModal(null);
+    navigate('/project');
+  }
+
+  function getModalTitle() {
+    if (modal === 'changes') return s.changes;
+    if (modal === 'notes') return s.withNotes;
+    if (modal === 'overdue') return s.overdueTasks;
+    if (modal === 'pending') return s.pendingTasks;
+    if (modal === 'completedToday') return s.completedToday;
+    return '';
+  }
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">{s.pageDashboard}</h1>
@@ -37,8 +55,22 @@ export function DashboardPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <SummaryCard icon={<Building2 size={20} />} label={s.totalUnits} value={total} color="#1e3a5f" />
         <SummaryCard icon={<Clock size={20} />} label={s.notStarted} value={notStarted} color="#6b7280" />
-        <SummaryCard icon={<AlertTriangle size={20} />} label={s.changes} value={shinuiCount} color="#f59e0b" />
-        <SummaryCard icon={<FileText size={20} />} label={s.withNotes} value={withNotes} color="#10b981" />
+        <SummaryCard
+          icon={<AlertTriangle size={20} />}
+          label={s.changes}
+          value={shinuiCount}
+          color="#f59e0b"
+          onClick={() => setModal('changes')}
+          clickable
+        />
+        <SummaryCard
+          icon={<FileText size={20} />}
+          label={s.withNotes}
+          value={withNotes}
+          color="#10b981"
+          onClick={() => setModal('notes')}
+          clickable
+        />
       </div>
 
       {/* Task summary cards */}
@@ -48,7 +80,7 @@ export function DashboardPage() {
           label={s.overdueTasks}
           value={overdueTasks}
           color="#ef4444"
-          onClick={() => navigate('/tasks')}
+          onClick={() => setModal('overdue')}
           clickable
         />
         <SummaryCard
@@ -56,7 +88,7 @@ export function DashboardPage() {
           label={s.pendingTasks}
           value={pendingTasks}
           color="#4aa8d8"
-          onClick={() => navigate('/tasks')}
+          onClick={() => setModal('pending')}
           clickable
         />
         <SummaryCard
@@ -64,7 +96,7 @@ export function DashboardPage() {
           label={s.completedToday}
           value={completedToday}
           color="#10b981"
-          onClick={() => navigate('/tasks')}
+          onClick={() => setModal('completedToday')}
           clickable
         />
       </div>
@@ -186,6 +218,115 @@ export function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Modal */}
+      {modal && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-2 sm:p-4"
+          onClick={() => setModal(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
+              <h3 className="font-bold text-gray-900 text-base">{getModalTitle()}</h3>
+              <button
+                onClick={() => setModal(null)}
+                className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <X size={18} className="text-gray-500" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {/* Apartment modals: Changes and With Notes */}
+              {(modal === 'changes' || modal === 'notes') && (() => {
+                const list = modal === 'changes'
+                  ? apartments.filter(a => a.classification === 'shinui' && !a.isUnnamed)
+                  : apartments.filter(a => a.generalNotes.trim() && !a.isUnnamed);
+                if (list.length === 0) {
+                  return <div className="py-12 text-center text-gray-400 text-sm">No items</div>;
+                }
+                return (
+                  <div className="divide-y divide-gray-50">
+                    {list.map(apt => {
+                      const stage = stages.find(st => st.id === apt.currentStageId);
+                      return (
+                        <button
+                          key={apt.id}
+                          onClick={() => openApartment(apt.id)}
+                          className="w-full flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors text-left"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-[#1e3a5f]/10 flex items-center justify-center flex-shrink-0">
+                            <span className="text-xs font-bold text-[#1e3a5f]">{apt.buildingId}</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-800">
+                              {apt.displayName || `${s.aptPrefix} ${apt.apartmentNumber}`}
+                            </p>
+                            {stage && (
+                              <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
+                                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color }} />
+                                {getStageName(stage, s.isRtl)}
+                              </p>
+                            )}
+                            {modal === 'notes' && apt.generalNotes && (
+                              <p className="text-xs text-gray-400 truncate mt-0.5">{apt.generalNotes}</p>
+                            )}
+                          </div>
+                          <ChevronRight size={14} className="text-gray-400 flex-shrink-0" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+
+              {/* Task modals: Overdue, Pending, Completed Today */}
+              {(modal === 'overdue' || modal === 'pending' || modal === 'completedToday') && (() => {
+                const list = modal === 'overdue'
+                  ? contractorAssignments.filter(a => !a.completedAt && a.dueDate && a.dueDate < today)
+                  : modal === 'pending'
+                    ? contractorAssignments.filter(a => !a.completedAt)
+                    : contractorAssignments.filter(a => a.completedAt && a.completedAt.startsWith(today));
+                if (list.length === 0) {
+                  return <div className="py-12 text-center text-gray-400 text-sm">No items</div>;
+                }
+                return (
+                  <div className="divide-y divide-gray-50">
+                    {list.slice(0, 50).map(task => {
+                      const apt = apartments.find(a => a.id === task.apartmentId);
+                      return (
+                        <button
+                          key={task.id}
+                          onClick={() => {
+                            setModal(null);
+                            navigate('/tasks');
+                          }}
+                          className="w-full flex items-start gap-3 px-5 py-3 hover:bg-gray-50 transition-colors text-left"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <span className="text-xs font-bold text-gray-600">{apt?.buildingId ?? '?'}</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-800 leading-snug">{task.taskDescription}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              {apt ? (apt.displayName || `${s.aptPrefix} ${apt.apartmentNumber}`) : ''}
+                              {task.dueDate ? ` · ${format(new Date(task.dueDate), 'MMM d')}` : ''}
+                              {task.completedAt ? ` · ✓ ${format(new Date(task.completedAt), 'MMM d')}` : ''}
+                            </p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

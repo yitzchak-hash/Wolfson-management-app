@@ -186,9 +186,8 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
           try {
             const folderId = extractFolderId(apt.driveLink);
             if (folderId) {
-              const photosId = await findOrCreateFolderViaBackend(folderId, 'Photos');
-              const notesId = await findOrCreateFolderViaBackend(photosId, 'Task Notes');
-              finalAtts = await uploadFilesToFolder(notesId);
+              const tasksFolderId = await findOrCreateFolderViaBackend(folderId, 'Tasks');
+              finalAtts = await uploadFilesToFolder(tasksFolderId);
             }
           } catch { /* keep base64 */ }
         }
@@ -203,9 +202,8 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
         try {
           const folderId = extractFolderId(target.driveLink);
           if (folderId) {
-            const photosId = await findOrCreateFolderViaBackend(folderId, 'Photos');
-            const notesId = await findOrCreateFolderViaBackend(photosId, 'Task Notes');
-            driveAtts = await uploadFilesToFolder(notesId);
+            const tasksFolderId = await findOrCreateFolderViaBackend(folderId, 'Tasks');
+            driveAtts = await uploadFilesToFolder(tasksFolderId);
           }
         } catch { /* keep base64 */ }
       }
@@ -402,7 +400,16 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
 
                     {/* Description */}
                     <div>
-                      <label className="text-xs font-medium text-gray-500 block mb-1">{s.taskDescRequired}</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-medium text-gray-500">{s.taskDescRequired}</label>
+                        <button
+                          type="button"
+                          onClick={() => attachRef.current?.click()}
+                          className="flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium border border-dashed border-gray-300 text-gray-500 rounded-lg hover:border-[#1e3a5f]/40 hover:text-[#1e3a5f] transition-colors"
+                        >
+                          <Paperclip size={10} /> {s.attachBtn}
+                        </button>
+                      </div>
                       <textarea
                         value={task}
                         onChange={e => setTask(e.target.value)}
@@ -410,7 +417,50 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                         placeholder={s.describeWorkPlaceholder}
                         className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 resize-none"
                       />
+                      {attachments.length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                          {attachments.map(att => (
+                            <div
+                              key={att.id}
+                              className="relative flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg overflow-hidden cursor-pointer hover:border-[#1e3a5f]/30"
+                              style={{ maxWidth: '120px' }}
+                              onClick={() => att.mimeType.startsWith('image/') && setPreviewAtt(att)}
+                            >
+                              {att.mimeType.startsWith('image/') ? (
+                                <div className="relative w-8 h-8 flex-shrink-0 group">
+                                  <img src={att.dataUrl} alt={att.filename} className="w-8 h-8 object-cover" />
+                                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center transition-all">
+                                    <ZoomIn size={10} className="text-white opacity-0 group-hover:opacity-100" />
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="w-8 h-8 flex items-center justify-center bg-gray-100 flex-shrink-0">
+                                  <FileText size={12} className="text-gray-400" />
+                                </div>
+                              )}
+                              <span className="text-[10px] text-gray-500 truncate pr-1 relative z-10" style={{ maxWidth: '60px' }}>
+                                {att.filename}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); removeAttachment(att.id); }}
+                                className="absolute top-0.5 right-0.5 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center z-10"
+                              >
+                                <X size={8} color="white" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
+                    <input
+                      ref={attachRef}
+                      type="file"
+                      multiple
+                      accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx"
+                      className="hidden"
+                      onChange={handleFilePick}
+                    />
 
                     {/* Stage + Due date */}
                     <div className="grid grid-cols-2 gap-2">
@@ -450,62 +500,6 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                       </select>
                     </div>
 
-                    {/* Attachments */}
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <label className="text-xs font-medium text-gray-500">{s.attachmentsLabel}</label>
-                        <button
-                          type="button"
-                          onClick={() => attachRef.current?.click()}
-                          className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium border border-dashed border-gray-300 text-gray-500 rounded-lg hover:border-[#1e3a5f]/40 hover:text-[#1e3a5f] transition-colors"
-                        >
-                          <Paperclip size={11} /> {s.attachBtn}
-                        </button>
-                        <input
-                          ref={attachRef}
-                          type="file"
-                          multiple
-                          accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx"
-                          className="hidden"
-                          onChange={handleFilePick}
-                        />
-                      </div>
-                      {attachments.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5">
-                          {attachments.map(att => (
-                            <div
-                              key={att.id}
-                              className="relative flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg overflow-hidden cursor-pointer hover:border-[#1e3a5f]/30"
-                              style={{ maxWidth: '120px' }}
-                              onClick={() => att.mimeType.startsWith('image/') && setPreviewAtt(att)}
-                            >
-                              {att.mimeType.startsWith('image/') ? (
-                                <div className="relative w-8 h-8 flex-shrink-0 group">
-                                  <img src={att.dataUrl} alt={att.filename} className="w-8 h-8 object-cover" />
-                                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center transition-all">
-                                    <ZoomIn size={10} className="text-white opacity-0 group-hover:opacity-100" />
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="w-8 h-8 flex items-center justify-center bg-gray-100 flex-shrink-0">
-                                  <FileText size={12} className="text-gray-400" />
-                                </div>
-                              )}
-                              <span className="text-[10px] text-gray-500 truncate pr-1 relative z-10" style={{ maxWidth: '60px' }}>
-                                {att.filename}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={e => { e.stopPropagation(); removeAttachment(att.id); }}
-                                className="absolute top-0.5 right-0.5 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center z-10"
-                              >
-                                <X size={8} color="white" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
                   </div>
 
                   {/* Form footer */}
@@ -758,7 +752,7 @@ function AptRow({ apt, selected, onToggle }: { apt: Apartment; selected: boolean
     <button
       onClick={() => onToggle(apt.id)}
       className={`w-full flex items-center gap-3 px-4 py-2.5 border-b border-gray-50 transition-colors text-left ${
-        selected ? 'bg-[#1e3a5f]/5' : 'hover:bg-gray-50'
+        selected ? 'bg-[#1e3a5f]/10 border-l-2 border-l-[#1e3a5f]' : 'hover:bg-gray-50'
       }`}
     >
       <div className={`w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${

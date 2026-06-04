@@ -235,12 +235,6 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                     <Paperclip size={9} />{savedAtts.length} {savedAtts.length !== 1 ? s.filesLabel : s.fileLabel}
                   </span>
                 )}
-                {stageDate && (
-                  <span className="flex items-center gap-1 text-[10px] text-gray-400">
-                    <Calendar size={9} />
-                    {format(new Date(stageDate), 'MMM d, yyyy')}
-                  </span>
-                )}
                 {assignedContractor && (
                   <span className="flex items-center gap-1 text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
                     <User size={9} />
@@ -253,13 +247,55 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
 
             {isOpen && (
               <div className="p-3 space-y-3 bg-white">
-                {/* Stage date display */}
                 {stageDate && (
-                  <div className="flex items-center gap-1.5 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
-                    <Calendar size={12} className="text-[#4aa8d8]" />
-                    {s.stageReached} <strong>{format(new Date(stageDate), 'MMMM d, yyyy · HH:mm')}</strong>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); setHistoryOpen(isHistoryOpen ? null : stage.id); }}
+                      className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-[#4aa8d8] transition-colors"
+                      title="View stage history"
+                    >
+                      <Clock size={11} />
+                      {format(new Date(stageDate), 'MMM d, yyyy')}
+                    </button>
                   </div>
                 )}
+                {isHistoryOpen && stageDate && (() => {
+                  const stageTasks = contractorAssignments.filter(
+                    a => a.apartmentId === apartmentId && a.stageId === stage.id
+                  );
+                  return (
+                    <div className="rounded-lg border border-[#4aa8d8]/20 bg-[#4aa8d8]/5 p-3 space-y-2">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-[#4aa8d8]">
+                        <Clock size={11} />
+                        Stage reached: {format(new Date(stageDate), 'MMMM d, yyyy · HH:mm')}
+                      </div>
+                      {stageTasks.length > 0 && (
+                        <div className="space-y-1.5 pt-1 border-t border-[#4aa8d8]/15">
+                          {stageTasks.map(t => {
+                            const contractor = contractors.find(c => c.id === t.contractorId);
+                            return (
+                              <div key={t.id} className="flex items-start gap-2 text-xs">
+                                <span className={`mt-0.5 w-2.5 h-2.5 rounded-full flex-shrink-0 ${t.completedAt ? 'bg-green-400' : 'bg-gray-300'}`} />
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-gray-700 leading-snug ${t.completedAt ? 'line-through text-gray-400' : ''}`}>{t.taskDescription}</p>
+                                  <div className="flex items-center gap-2 mt-0.5 text-gray-400">
+                                    {contractor && <span>{contractor.name}</span>}
+                                    {t.completedAt && <span className="text-green-600">✓ {format(new Date(t.completedAt), 'MMM d')}</span>}
+                                    {t.dueDate && !t.completedAt && <span>{format(new Date(t.dueDate), 'MMM d')}</span>}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {stageTasks.length === 0 && (
+                        <p className="text-[11px] text-gray-400 pt-1 border-t border-[#4aa8d8]/15">No tasks for this stage</p>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* Contractor assignment */}
                 {activeContractors.length > 0 && (

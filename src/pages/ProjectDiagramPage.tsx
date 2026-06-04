@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Search, X, ToggleLeft, CheckSquare, Printer, ChevronDown } from 'lucide-react';
 import { Tooltip } from '../components/ui/Tooltip';
 import { useStore } from '../data/store';
@@ -12,7 +12,7 @@ import { Toast } from '../components/ui/Toast';
 type ClassFilter = 'all' | 'standard' | 'shinui';
 
 export function ProjectDiagramPage() {
-  const { apartments, stages, currentUser, bulkUpdateApartments, updateApartment, contractorAssignments, contractors, mainUiStrings: s } = useStore();
+  const { apartments, stages, currentUser, bulkUpdateApartments, updateApartment, contractorAssignments, contractors, mainUiStrings: s, pendingOpenAptId, setPendingOpenAptId } = useStore();
 
   const [selectedBuilding, setSelectedBuilding] = useState<BuildingId | 'all'>('all');
   const [activeStageIds, setActiveStageIds] = useState<string[]>([]);
@@ -24,6 +24,16 @@ export function ProjectDiagramPage() {
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [namingApt, setNamingApt] = useState<Apartment | null>(null);
   const [namingInput, setNamingInput] = useState('');
+
+  // Open a specific apartment drawer on mount when navigated from dashboard
+  useEffect(() => {
+    if (pendingOpenAptId) {
+      const apt = apartments.find(a => a.id === pendingOpenAptId);
+      if (apt) setSelectedApt(apt);
+      setPendingOpenAptId(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Bulk update state
   const [bulkMode, setBulkMode] = useState(false);

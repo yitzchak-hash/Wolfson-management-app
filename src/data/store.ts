@@ -213,6 +213,10 @@ interface AppState {
   startFirebaseSync: () => void;
   forcePushToFirestore: () => Promise<void>;
   applyFirebaseData: (data: Partial<AppState>) => void;
+
+  // Pending apartment open (used by DashboardPage → ProjectDiagramPage navigation)
+  pendingOpenAptId: string | null;
+  setPendingOpenAptId: (id: string | null) => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -246,7 +250,12 @@ export const useStore = create<AppState>((set, get) => ({
   lastDriveExportAt: (stored?.lastDriveExportAt as string | null) ?? null,
   contractorUiStrings: (stored?.contractorUiStrings as ContractorUiStrings | null) ?? DEFAULT_CONTRACTOR_UI_STRINGS,
   mainUiStrings: (stored?.mainUiStrings as MainUiStrings | null) ?? DEFAULT_MAIN_UI_STRINGS,
+  pendingOpenAptId: null,
   lightTheme: localStorage.getItem(THEME_KEY) !== 'dark',
+  setPendingOpenAptId: (id: string | null) => {
+    set({ pendingOpenAptId: id });
+  },
+
   setLightTheme: (v: boolean) => {
     set({ lightTheme: v });
     localStorage.setItem(THEME_KEY, v ? 'light' : 'dark');

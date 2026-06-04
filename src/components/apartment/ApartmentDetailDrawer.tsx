@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw } from 'lucide-react';
-import { Apartment, User, getStageName } from '../../types';
+import { X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2 } from 'lucide-react';
+import { Apartment, User, getStageName, TaskAttachment, TaskPriority } from '../../types';
 import { useStore } from '../../data/store';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import { StageNotesSection } from './StageNotesSection';
@@ -133,10 +133,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const { stages, activityLogs, apartments, updateApartment, mergeApartments, unmergeApartments,
     autoBackup, backupSnapshots, restoreFromSnapshot, mainUiStrings: ui,
     officeNoteFiles, addOfficeNoteFile, deleteOfficeNoteFile,
-    contractorAssignments, contractors, updateContractorAssignment,
+    contractorAssignments, contractors, updateContractorAssignment, deleteContractorAssignment,
     getGeneralNoteVersions } = useStore();
   const backendConfigured = isUploadBackendConfigured();
   const officeFileRef = useRef<HTMLInputElement>(null);
+  const taskEditFileRef = useRef<HTMLInputElement>(null);
 
   const [familyName, setFamilyName] = useState('');
   const [currentStageId, setCurrentStageId] = useState<string>('');
@@ -162,6 +163,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [selectedPdfIdx, setSelectedPdfIdx] = useState(0);
   const [stageChangeModal, setStageChangeModal] = useState<{ newStageId: string; newStageName: string } | null>(null);
   const [prevStageId, setPrevStageId] = useState<string>('');
+  const [drawerEditingTaskId, setDrawerEditingTaskId] = useState<string | null>(null);
+  const [drawerEditFields, setDrawerEditFields] = useState<{ taskDescription: string; dueDate: string; stageId: string; priority: string }>({ taskDescription: '', dueDate: '', stageId: '', priority: '' });
+  const [drawerEditAttachments, setDrawerEditAttachments] = useState<TaskAttachment[]>([]);
+  const [drawerEditProgress, setDrawerEditProgress] = useState<number | null>(null);
+  const [keepHistoryModal, setKeepHistoryModal] = useState(false);
 
   useEffect(() => {
     if (apartment) {
@@ -220,7 +226,86 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     return { text: format(parseISO(dueDate), 'MMM d'), cls: 'bg-gray-100 text-gray-500' };
   }
 
+  function startTaskEdit(task: (typeof aptTasks)[0]) {
+    setDrawerEditingTaskId(task.id);
+    setDrawerEditFields({
+      taskDescription: task.taskDescription,
+      dueDate: task.dueDate ?? '',
+      stageId: task.stageId ?? '',
+      priority: task.priority ?? '',
+    });
+    setDrawerEditAttachments(task.attachments ?? []);
+  }
+
+  function saveTaskEdit() {
+    if (!drawerEditingTaskId) return;
+    updateContractorAssignment(drawerEditingTaskId, {
+      taskDescription: drawerEditFields.taskDescription,
+      dueDate: drawerEditFields.dueDate || null,
+      stageId: drawerEditFields.stageId || null,
+      priority: (drawerEditFields.priority as TaskPriority) || undefined,
+      attachments: drawerEditAttachments.length > 0 ? drawerEditAttachments : undefined,
+    });
+    setDrawerEditingTaskId(null);
+    setDrawerEditAttachments([]);
+    onToast(ui.saveChanges);
+  }
+
+  async function handleTaskEditFileChosen(file: File) {
+    const isImage = file.type.startsWith('image/');
+    let processed = file;
+    if (isImage) {
+      processed = await new Promise<File>(resolve => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          const MAX = 1200;
+          const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+          canvas.toBlob(blob => resolve(blob ? new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }) : file), 'image/jpeg', 0.72);
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+        img.src = url;
+      });
+    }
+    const id = crypto.randomUUID();
+    if (backendConfigured && apartment?.driveLink) {
+      try {
+        const mainFolderId = extractFolderId(apartment.driveLink);
+        if (mainFolderId) {
+          setDrawerEditProgress(1);
+          const tasksFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Tasks');
+          const { fileId, webViewLink } = await uploadFileViaResumableSession(tasksFolderId, processed, pct => setDrawerEditProgress(pct));
+          await shareFileToDrive(fileId);
+          setDrawerEditProgress(null);
+          setDrawerEditAttachments(prev => [...prev, { id, filename: processed.name, mimeType: processed.type, dataUrl: '', driveFileId: fileId, driveUrl: webViewLink }]);
+          return;
+        }
+      } catch {
+        setDrawerEditProgress(null);
+      }
+    }
+    const reader = new FileReader();
+    reader.onload = ev => {
+      setDrawerEditAttachments(prev => [...prev, { id, filename: processed.name, mimeType: processed.type, dataUrl: ev.target?.result as string ?? '' }]);
+    };
+    reader.readAsDataURL(processed);
+  }
+
   function handleSaveBasic() {
+    if (!currentStageId && prevStageId) {
+      setKeepHistoryModal(true);
+      return;
+    }
+    doSaveBasic(false);
+  }
+
+  function doSaveBasic(clearHistory: boolean) {
+    setKeepHistoryModal(false);
     const stageChanged = currentStageId !== prevStageId;
     updateApartment(apartment!.id, {
       displayName: familyName || apartment!.apartmentNumber,
@@ -229,6 +314,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       generalNotes,
       driveLink: driveLink.trim() || undefined,
       plansPdfLink: plansPdfLink.trim() || undefined,
+      ...(clearHistory ? { stageDates: {} } : {}),
     }, currentUser);
     setPrevStageId(currentStageId);
     if (stageChanged && currentStageId && onRequestAddTask) {
@@ -319,6 +405,36 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 style={{ backgroundColor: '#1e3a5f' }}
               >
                 <ClipboardList size={14} /> {ui.assignTaskBtn}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Keep stage history modal (shown when resetting apartment to Not Started) */}
+      {keepHistoryModal && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-[60]" />
+          <div className="fixed z-[70] bg-white rounded-2xl shadow-2xl p-6" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 'min(380px, 90vw)' }}>
+            <div className="flex items-center gap-2 mb-2">
+              <Clock size={18} className="text-amber-500" />
+              <h3 className="font-bold text-gray-900 text-base">Reset to Not Started</h3>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              Keep the stage completion history (dates when each stage was reached)?
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => doSaveBasic(true)}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50"
+              >
+                No, clear history
+              </button>
+              <button
+                onClick={() => doSaveBasic(false)}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-1.5 bg-[#1e3a5f]"
+              >
+                Yes, keep history
               </button>
             </div>
           </div>
@@ -597,6 +713,17 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                       });
                     }
                     onToast(`${files.length} ${files.length === 1 ? ui.fileAttachedToast : ui.filesAttachedToast}`);
+                  }}
+                />
+                <input
+                  ref={taskEditFileRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx"
+                  onChange={e => {
+                    Array.from(e.target.files ?? []).forEach(f => handleTaskEditFileChosen(f));
+                    if (taskEditFileRef.current) taskEditFileRef.current.value = '';
                   }}
                 />
                 {officeUploadPct !== null && (
@@ -958,11 +1085,17 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     const stage = stages.find(s => s.id === a.stageId);
                     const badge = getTaskDueBadge(a.dueDate);
                     const CAT_COLORS: Record<string, string> = { drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981' };
+                    const isEditing = drawerEditingTaskId === a.id;
                     return (
-                      <div key={a.id} className={`rounded-xl border p-3 transition-all ${
-                        a.completedAt ? 'border-green-100 bg-green-50/40 opacity-75' : 'border-gray-200 bg-white'
+                      <div key={a.id} className={`rounded-xl border transition-all ${
+                        isEditing
+                          ? 'border-[#1e3a5f]/40 bg-[#f0f4fa]'
+                          : a.completedAt
+                            ? 'border-green-100 bg-green-50/40 opacity-75'
+                            : 'border-gray-200 bg-white'
                       }`}>
-                        <div className="flex items-start gap-2">
+                        {/* Card header row */}
+                        <div className="flex items-start gap-2 p-3">
                           <button
                             onClick={() => updateContractorAssignment(a.id, { completedAt: a.completedAt ? null : new Date().toISOString() })}
                             className="mt-0.5 flex-shrink-0"
@@ -998,65 +1131,181 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                 </span>
                               )}
                             </div>
-                            <p className={`text-xs leading-snug ${a.completedAt ? 'line-through text-gray-400' : 'text-gray-700'}`}>
-                              {a.taskDescription}
-                            </p>
-                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                              {a.dueDate && (
-                                <span className="flex items-center gap-0.5 text-[10px] text-gray-400">
-                                  <CalendarDays size={9} /> {format(parseISO(a.dueDate), 'MMM d')}
-                                </span>
-                              )}
-                              {badge && !a.completedAt && (
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${badge.cls}`}>
-                                  {badge.text}
-                                </span>
-                              )}
-                              {a.completedAt && (
-                                <span className="text-[10px] text-green-600">Done {format(new Date(a.completedAt), 'MMM d')}</span>
-                              )}
-                              {(a.attachments?.length ?? 0) > 0 && (
-                                <span className="flex items-center gap-0.5 text-[10px] text-gray-400">
-                                  <Paperclip size={9} /> {a.attachments!.length}
-                                </span>
-                              )}
+                            {!isEditing && (
+                              <>
+                                <p className={`text-xs leading-snug ${a.completedAt ? 'line-through text-gray-400' : 'text-gray-700'}`}>
+                                  {a.taskDescription}
+                                </p>
+                                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                  {a.dueDate && (
+                                    <span className="flex items-center gap-0.5 text-[10px] text-gray-400">
+                                      <CalendarDays size={9} /> {format(parseISO(a.dueDate), 'MMM d')}
+                                    </span>
+                                  )}
+                                  {badge && !a.completedAt && (
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${badge.cls}`}>
+                                      {badge.text}
+                                    </span>
+                                  )}
+                                  {a.completedAt && (
+                                    <span className="text-[10px] text-green-600">Done {format(new Date(a.completedAt), 'MMM d')}</span>
+                                  )}
+                                  {(a.attachments?.length ?? 0) > 0 && (
+                                    <span className="flex items-center gap-0.5 text-[10px] text-gray-400">
+                                      <Paperclip size={9} /> {a.attachments!.length}
+                                    </span>
+                                  )}
+                                </div>
+                                {(a.attachments?.length ?? 0) > 0 && (
+                                  <div className="mt-2 flex flex-wrap gap-1.5">
+                                    {a.attachments!.map((att, attIdx) => (
+                                      <div key={att.id} className="relative flex-shrink-0">
+                                        <div
+                                          className="w-10 h-10 rounded-lg border border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center cursor-pointer"
+                                          onClick={() => {
+                                            const items = a.attachments!.map(at => ({
+                                              fileId: at.driveFileId ?? '',
+                                              filename: at.filename,
+                                              mimeType: at.mimeType,
+                                              thumbSrc: at.driveFileId ? driveThumbUrl(at.driveFileId, 800) : at.dataUrl,
+                                              downloadHref: at.driveFileId ? `https://drive.google.com/uc?export=download&id=${at.driveFileId}` : at.dataUrl,
+                                            }));
+                                            setLightbox({ items, index: attIdx });
+                                          }}
+                                        >
+                                          {att.mimeType.startsWith('image/')
+                                            ? <DriveImg src={att.driveFileId ? driveThumbUrl(att.driveFileId, 200) : att.dataUrl} alt={att.filename} className="w-full h-full object-cover" />
+                                            : <FileText size={14} className="text-gray-400" />
+                                          }
+                                        </div>
+                                        <button
+                                          onClick={e => { e.stopPropagation(); updateContractorAssignment(a.id, { attachments: (a.attachments ?? []).filter(at => at.id !== att.id) }); }}
+                                          className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center z-10"
+                                          title="Remove attachment"
+                                        >
+                                          <X size={8} color="white" />
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                          {/* Edit / Delete buttons */}
+                          <div className="flex items-center gap-0.5 flex-shrink-0 ml-1">
+                            <button
+                              onClick={() => {
+                                if (isEditing) { setDrawerEditingTaskId(null); setDrawerEditAttachments([]); }
+                                else startTaskEdit(a);
+                              }}
+                              className="p-1 rounded-md text-gray-400 hover:text-[#1e3a5f] hover:bg-gray-100 transition-colors"
+                              title={isEditing ? ui.cancel : 'Edit task'}
+                            >
+                              {isEditing ? <X size={13} /> : <Edit2 size={13} />}
+                            </button>
+                            {!isEditing && (
+                              <button
+                                onClick={() => { if (window.confirm('Delete this task?')) deleteContractorAssignment(a.id); }}
+                                className="p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                title="Delete task"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Inline edit form */}
+                        {isEditing && (
+                          <div className="px-3 pb-3 pt-1 space-y-2.5 border-t border-[#1e3a5f]/10">
+                            <textarea
+                              value={drawerEditFields.taskDescription}
+                              onChange={e => setDrawerEditFields(f => ({ ...f, taskDescription: e.target.value }))}
+                              rows={2}
+                              autoFocus
+                              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 resize-none"
+                            />
+                            <div className="grid grid-cols-2 gap-2">
+                              <select
+                                value={drawerEditFields.stageId}
+                                onChange={e => setDrawerEditFields(f => ({ ...f, stageId: e.target.value }))}
+                                className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white"
+                              >
+                                <option value="">{ui.noneOption}</option>
+                                {sortedStages.map(st => <option key={st.id} value={st.id}>{getStageName(st, ui.isRtl)}</option>)}
+                              </select>
+                              <input
+                                type="date"
+                                value={drawerEditFields.dueDate}
+                                onChange={e => setDrawerEditFields(f => ({ ...f, dueDate: e.target.value }))}
+                                className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                              />
                             </div>
-                            {/* Attachment thumbnails */}
-                            {(a.attachments?.length ?? 0) > 0 && (
-                              <div className="mt-2 flex flex-wrap gap-1.5">
-                                {a.attachments!.map((att, attIdx) => (
+                            <select
+                              value={drawerEditFields.priority}
+                              onChange={e => setDrawerEditFields(f => ({ ...f, priority: e.target.value }))}
+                              className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white"
+                            >
+                              <option value="">{ui.normalDefault}</option>
+                              <option value="urgent">{ui.urgentPriority}</option>
+                              <option value="low">{ui.lowPriority}</option>
+                            </select>
+                            {drawerEditAttachments.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5">
+                                {drawerEditAttachments.map(att => (
                                   <div key={att.id} className="relative flex-shrink-0">
-                                    <div
-                                      className="w-10 h-10 rounded-lg border border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center cursor-pointer"
-                                      onClick={() => {
-                                        const items = a.attachments!.map(at => ({
-                                          fileId: at.driveFileId ?? '',
-                                          filename: at.filename,
-                                          mimeType: at.mimeType,
-                                          thumbSrc: at.driveFileId ? driveThumbUrl(at.driveFileId, 800) : at.dataUrl,
-                                          downloadHref: at.driveFileId ? `https://drive.google.com/uc?export=download&id=${at.driveFileId}` : at.dataUrl,
-                                        }));
-                                        setLightbox({ items, index: attIdx });
-                                      }}
-                                    >
+                                    <div className="w-9 h-9 rounded-lg border border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center">
                                       {att.mimeType.startsWith('image/')
                                         ? <DriveImg src={att.driveFileId ? driveThumbUrl(att.driveFileId, 200) : att.dataUrl} alt={att.filename} className="w-full h-full object-cover" />
-                                        : <FileText size={14} className="text-gray-400" />
+                                        : <FileText size={12} className="text-gray-400" />
                                       }
                                     </div>
                                     <button
-                                      onClick={e => { e.stopPropagation(); updateContractorAssignment(a.id, { attachments: (a.attachments ?? []).filter(at => at.id !== att.id) }); }}
-                                      className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center z-10"
-                                      title="Remove attachment"
+                                      type="button"
+                                      onClick={() => setDrawerEditAttachments(prev => prev.filter(x => x.id !== att.id))}
+                                      className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center"
                                     >
-                                      <X size={8} color="white" />
+                                      <X size={7} color="white" />
                                     </button>
                                   </div>
                                 ))}
                               </div>
                             )}
+                            {drawerEditProgress !== null && (
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                  <div className="h-full bg-[#4aa8d8] transition-all" style={{ width: `${Math.round(drawerEditProgress)}%` }} />
+                                </div>
+                                <span className="text-[10px] text-gray-500">{Math.round(drawerEditProgress)}%</span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => taskEditFileRef.current?.click()}
+                                className="p-1.5 rounded-lg text-gray-400 hover:text-[#1e3a5f] hover:bg-gray-100 border border-gray-200 transition-colors"
+                                title="Attach file"
+                              >
+                                <Paperclip size={13} />
+                              </button>
+                              <div className="flex-1" />
+                              <button
+                                onClick={() => { setDrawerEditingTaskId(null); setDrawerEditAttachments([]); }}
+                                className="px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
+                              >
+                                {ui.cancel}
+                              </button>
+                              <button
+                                onClick={saveTaskEdit}
+                                disabled={!drawerEditFields.taskDescription.trim()}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-xs font-semibold hover:bg-[#162d4a] disabled:opacity-40 transition-colors"
+                              >
+                                <Save size={11} /> {ui.save}
+                              </button>
+                            </div>
                           </div>
-                        </div>
+                        )}
                       </div>
                     );
                   })}
