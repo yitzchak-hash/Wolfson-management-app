@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo } from 'react';
 import {
   X, Plus, Paperclip, Layers, HardDrive, Database, AlertTriangle,
-  Loader, ChevronLeft, CheckCircle2, Circle, FileText, ZoomIn,
+  Loader, ChevronLeft, CheckCircle2, Circle, FileText, ZoomIn, Save,
 } from 'lucide-react';
 import { Apartment, ContractorCategory, TaskAttachment, TaskPriority } from '../../types';
 import { useStore } from '../../data/store';
@@ -514,8 +514,8 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                       disabled={!canSubmit}
                       className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#1e3a5f] text-white rounded-xl text-sm font-semibold hover:bg-[#162d4a] disabled:opacity-40 transition-colors"
                     >
-                      <Plus size={15} />
-                      {s.createTask}{selectedAptIds.size > 0 ? ` (${selectedAptIds.size})` : ''}
+                      <Save size={15} />
+                      {s.save}{selectedAptIds.size > 0 ? ` (${selectedAptIds.size})` : ''}
                     </button>
                   </div>
                 </div>

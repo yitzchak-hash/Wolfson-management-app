@@ -47,12 +47,12 @@ function getFloorRows(buildingId: BuildingId, compact = false): FloorRowDef[] {
   const rows: FloorRowDef[] = [];
 
   rows.push({ floorLabel: 'Roof', type: 'roof', height: h.roof });
-  rows.push({ floorLabel: '16', type: 'wide', aptNums: [55, 56], height: h.wide });
-  rows.push({ floorLabel: '15', type: 'wide', aptNums: [53, 54], height: h.wide });
+  rows.push({ floorLabel: '15', type: 'wide', aptNums: [55, 56], height: h.wide });
+  rows.push({ floorLabel: '14', type: 'wide', aptNums: [53, 54], height: h.wide });
 
   for (let fl = 14; fl >= 2; fl--) {
     const base = (fl - 2) * 4 + 1;
-    rows.push({ floorLabel: String(fl), type: 'normal', aptNums: [base, base + 1, base + 2, base + 3], height: h.normal });
+    rows.push({ floorLabel: String(fl - 1), type: 'normal', aptNums: [base, base + 1, base + 2, base + 3], height: h.normal });
   }
 
   const groundAptNums = buildingId === 'A1' ? [77, 78, 79, 80] : [73, 74, 75, 76];
