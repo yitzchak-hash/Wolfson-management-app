@@ -217,6 +217,11 @@ interface AppState {
   // Pending apartment open (used by DashboardPage → ProjectDiagramPage navigation)
   pendingOpenAptId: string | null;
   setPendingOpenAptId: (id: string | null) => void;
+
+  // Dashboard layout customization
+  dashboardWidgetOrder: string[];
+  dashboardHiddenWidgets: string[];
+  setDashboardLayout: (order: string[], hidden: string[]) => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -251,9 +256,15 @@ export const useStore = create<AppState>((set, get) => ({
   contractorUiStrings: (stored?.contractorUiStrings as ContractorUiStrings | null) ?? DEFAULT_CONTRACTOR_UI_STRINGS,
   mainUiStrings: (stored?.mainUiStrings as MainUiStrings | null) ?? DEFAULT_MAIN_UI_STRINGS,
   pendingOpenAptId: null,
+  dashboardWidgetOrder: (stored?.dashboardWidgetOrder as string[] | null) ?? ['apt-stats', 'task-stats', 'stage-progress', 'building-progress', 'activity'],
+  dashboardHiddenWidgets: (stored?.dashboardHiddenWidgets as string[] | null) ?? [],
   lightTheme: localStorage.getItem(THEME_KEY) !== 'dark',
   setPendingOpenAptId: (id: string | null) => {
     set({ pendingOpenAptId: id });
+  },
+  setDashboardLayout: (order: string[], hidden: string[]) => {
+    set({ dashboardWidgetOrder: order, dashboardHiddenWidgets: hidden });
+    persist(get);
   },
 
   setLightTheme: (v: boolean) => {

@@ -424,6 +424,9 @@ export interface MainUiStrings {
   progressByStage: string;
   progressByBuilding: string;
   recentActivity: string;
+  customizeDashboard: string;
+  widgetSummaryStats: string;
+  widgetTaskStats: string;
   // Apartment drawer tabs
   tabDetails: string;
   tabTasks: string;
@@ -925,6 +928,9 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   progressByStage: 'Progress by Stage',
   progressByBuilding: 'Progress by Building',
   recentActivity: 'Recent Activity',
+  customizeDashboard: 'Customize',
+  widgetSummaryStats: 'Summary Stats',
+  widgetTaskStats: 'Task Stats',
   tabDetails: 'Details',
   tabTasks: 'Tasks',
   tabNotes: 'Notes',
@@ -1422,6 +1428,9 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   progressByStage: 'התקדמות לפי שלב',
   progressByBuilding: 'התקדמות לפי בניין',
   recentActivity: 'פעילות אחרונה',
+  customizeDashboard: 'התאם',
+  widgetSummaryStats: 'נתוני סיכום',
+  widgetTaskStats: 'נתוני משימות',
   tabDetails: 'פרטים',
   tabTasks: 'משימות',
   tabNotes: 'הערות',
