@@ -134,7 +134,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     autoBackup, backupSnapshots, restoreFromSnapshot, mainUiStrings: ui,
     officeNoteFiles, addOfficeNoteFile, deleteOfficeNoteFile,
     contractorAssignments, contractors, updateContractorAssignment, deleteContractorAssignment,
-    getGeneralNoteVersions } = useStore();
+    getGeneralNoteVersions, currentProjectId } = useStore();
+  const isGeneralProject = currentProjectId === 'general';
   const backendConfigured = isUploadBackendConfigured();
   const officeFileRef = useRef<HTMLInputElement>(null);
   const taskEditFileRef = useRef<HTMLInputElement>(null);
@@ -146,6 +147,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [generalNotesHistoryOpen, setGeneralNotesHistoryOpen] = useState(false);
   const [driveLink, setDriveLink] = useState('');
   const [plansPdfLink, setPlansPdfLink] = useState('');
+  const [zohoLinkLocal, setZohoLinkLocal] = useState('');
+  const [addressLocal, setAddressLocal] = useState('');
   const [mergedWithId, setMergedWithId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'details' | 'tasks' | 'stages' | 'history' | 'photos'>('details');
   const [drivePhotos, setDrivePhotos] = useState<DrivePhotoItem[]>([]);
@@ -178,6 +181,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       setGeneralNotes(apartment.generalNotes);
       setDriveLink(apartment.driveLink ?? '');
       setPlansPdfLink(apartment.plansPdfLink ?? '');
+      setZohoLinkLocal(apartment.zohoLink ?? '');
+      setAddressLocal(apartment.address ?? '');
       setMergedWithId(apartment.mergedWith ?? '');
       setShowPdfViewer(false);
       setShowHealthCheck(false);
@@ -314,6 +319,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       generalNotes,
       driveLink: driveLink.trim() || undefined,
       plansPdfLink: plansPdfLink.trim() || undefined,
+      zohoLink: zohoLinkLocal.trim() || undefined,
+      address: addressLocal.trim() || undefined,
       ...(clearHistory ? { stageDates: {} } : {}),
     }, currentUser);
     setPrevStageId(currentStageId);
@@ -334,6 +341,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       generalNotes,
       driveLink: driveLink.trim() || undefined,
       plansPdfLink: plansPdfLink.trim() || undefined,
+      zohoLink: zohoLinkLocal.trim() || undefined,
+      address: addressLocal.trim() || undefined,
     }, currentUser);
     setPrevStageId(currentStageId);
   }
@@ -479,8 +488,13 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         <div className="flex items-center justify-between px-4 py-3 bg-[#1e3a5f] text-white flex-shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <Building2 size={16} className="text-[#4aa8d8] flex-shrink-0" />
-            <span className="text-[#4aa8d8] font-semibold text-sm flex-shrink-0">{apartment.buildingId}</span>
-            {apartment.floor > 0 && <span className="text-white/50 text-xs flex-shrink-0">· {ui.floorPrefix} {apartment.floor}</span>}
+            {isGeneralProject
+              ? <span className="text-[#4aa8d8] font-semibold text-sm flex-shrink-0">{ui.jobLabel}</span>
+              : <>
+                  <span className="text-[#4aa8d8] font-semibold text-sm flex-shrink-0">{apartment.buildingId}</span>
+                  {apartment.floor > 0 && <span className="text-white/50 text-xs flex-shrink-0">· {ui.floorPrefix} {apartment.floor}</span>}
+                </>
+            }
             {mergedPartner && (
               <span className="text-white/60 text-xs flex-shrink-0">
                 · {ui.linkedToApt} {ui.aptPrefix} {mergedPartner.displayName || mergedPartner.apartmentNumber}
@@ -589,6 +603,44 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   </select>
                 </div>
               </div>
+
+              {/* General Jobs: Zoho Link + Address */}
+              {isGeneralProject && (
+                <div className="grid grid-cols-1 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.addressLabel}</label>
+                    <input
+                      value={addressLocal}
+                      onChange={e => setAddressLocal(e.target.value)}
+                      onBlur={autoSave}
+                      placeholder={ui.addressLabel}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.zohoLinkLabel}</label>
+                    <div className="flex gap-2">
+                      <input
+                        value={zohoLinkLocal}
+                        onChange={e => setZohoLinkLocal(e.target.value)}
+                        onBlur={autoSave}
+                        placeholder="https://crm.zoho.com/..."
+                        className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                      />
+                      {zohoLinkLocal.trim() && (
+                        <a
+                          href={zohoLinkLocal.startsWith('http') ? zohoLinkLocal : `https://${zohoLinkLocal}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 px-3 py-2 rounded-lg border border-[#4aa8d8] text-[#4aa8d8] text-xs font-medium hover:bg-[#4aa8d8]/10 transition-all flex-shrink-0"
+                        >
+                          <ExternalLink size={12} /> {ui.openZohoBtn}
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* General notes */}
               <div>

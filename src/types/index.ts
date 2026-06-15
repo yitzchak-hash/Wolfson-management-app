@@ -7,6 +7,7 @@ export interface Project {
   name: string;
   shortName: string;
   logoPath: string;
+  type?: 'building' | 'general';
 }
 
 export interface User {
@@ -95,6 +96,8 @@ export interface Apartment {
   stageDates?: Record<string, string>; // stageId → ISO timestamp of when that stage was first set
   driveLink?: string; // Google Drive folder URL for this apartment's files
   plansPdfLink?: string; // Google Drive link to the Engineering Plans PDF
+  zohoLink?: string;   // General Jobs: Zoho CRM / work order link
+  address?: string;    // General Jobs: job site address
   createdAt: string;
   updatedAt: string;
   updatedBy: string;
@@ -918,6 +921,17 @@ export interface MainUiStrings {
   loginSubtitle: string;
   loginFooterBrand: string;
   switchProject: string;
+  // General Jobs
+  jobsNavLabel: string;
+  addJobBtn: string;
+  jobNameLabel: string;
+  addressLabel: string;
+  zohoLinkLabel: string;
+  noJobsYet: string;
+  generalJobsTitle: string;
+  deleteJobConfirm: string;
+  jobLabel: string;
+  openZohoBtn: string;
 }
 
 export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
@@ -1423,9 +1437,19 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   emptyNoteLabel: 'empty',
   unknownStage: 'Unknown stage',
   // Login extra
-  loginSubtitle: 'Internal project management system for AC installation tracking across all three buildings.',
-  loginFooterBrand: 'WOLFSON GROUP · PROJECT MANAGEMENT',
+  loginSubtitle: 'AC installation project management system.',
+  loginFooterBrand: 'TZVIAIR · PROJECT MANAGEMENT',
   switchProject: 'Select a project',
+  jobsNavLabel: 'Jobs',
+  addJobBtn: 'Add Job',
+  jobNameLabel: 'Job Name',
+  addressLabel: 'Address',
+  zohoLinkLabel: 'Zoho Link',
+  noJobsYet: 'No jobs yet. Click "Add Job" to get started.',
+  generalJobsTitle: 'General Jobs',
+  deleteJobConfirm: 'Delete this job?',
+  jobLabel: 'Job',
+  openZohoBtn: 'Open in Zoho',
 };
 
 export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
@@ -1931,7 +1955,17 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   emptyNoteLabel: 'ריק',
   unknownStage: 'שלב לא ידוע',
   // Login extra
-  loginSubtitle: 'מערכת ניהול פנימית למעקב אחר התקנות מיזוג בכל שלושת הבניינים.',
-  loginFooterBrand: 'קבוצת וולפסון · ניהול פרויקטים',
+  loginSubtitle: 'מערכת ניהול פרויקטים להתקנות מיזוג.',
+  loginFooterBrand: 'צביאייר · ניהול פרויקטים',
   switchProject: 'בחר פרויקט',
+  jobsNavLabel: 'עבודות',
+  addJobBtn: 'הוסף עבודה',
+  jobNameLabel: 'שם עבודה',
+  addressLabel: 'כתובת',
+  zohoLinkLabel: 'קישור Zoho',
+  noJobsYet: 'אין עבודות עדיין. לחץ על "הוסף עבודה" להתחיל.',
+  generalJobsTitle: 'עבודות כלליות',
+  deleteJobConfirm: 'למחוק עבודה זו?',
+  jobLabel: 'עבודה',
+  openZohoBtn: 'פתח ב-Zoho',
 };

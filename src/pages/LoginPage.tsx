@@ -66,16 +66,6 @@ export function LoginPage() {
           background: 'linear-gradient(to right, rgba(15,31,53,0.55) 0%, rgba(15,31,53,0.2) 60%, rgba(15,31,53,0.7) 100%)'
         }} />
         <div className="absolute bottom-0 left-0 right-0 p-10">
-          <div className="mb-3">
-            <div className="flex items-center gap-3 mb-4">
-              <img
-                src="/wolfson-building.png"
-                alt="W Residence by the Wolfson Group"
-                className="h-20 w-auto rounded-lg"
-                style={{ filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.4))' }}
-              />
-            </div>
-          </div>
           <p className="text-gray-300 text-sm leading-relaxed max-w-sm">
             {s.loginSubtitle}
           </p>
@@ -99,13 +89,6 @@ export function LoginPage() {
                 alt="TzviAir"
                 style={{ height: '64px', width: 'auto', display: 'block', filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.35))' }}
               />
-            </div>
-            <div className="flex items-center gap-2 justify-center mb-2">
-              <div className="flex-1 h-px bg-white/8" />
-              <div className="flex items-center gap-2 px-3">
-                <img src="/wolfson-building.png" alt="W Residence" className="h-8 w-auto rounded" />
-              </div>
-              <div className="flex-1 h-px bg-white/8" />
             </div>
             <p className="text-gray-500 text-xs tracking-wider mb-6">{s.loginFooterBrand}</p>
           </div>

@@ -102,11 +102,15 @@ function generateToken(): string {
 }
 
 function getDefaultBuildings(projectId: string): Building[] {
-  return projectId === 'netiv' ? NETIV_BUILDINGS : DEFAULT_BUILDINGS;
+  if (projectId === 'netiv') return NETIV_BUILDINGS;
+  if (projectId === 'general') return [];
+  return DEFAULT_BUILDINGS;
 }
 
 function getDefaultApartments(projectId: string): Apartment[] {
-  return projectId === 'netiv' ? buildNetivApartments() : buildDefaultApartments();
+  if (projectId === 'netiv') return buildNetivApartments();
+  if (projectId === 'general') return [];
+  return buildDefaultApartments();
 }
 
 const defaultData = {
@@ -155,6 +159,7 @@ interface AppState {
   updateApartment: (id: string, changes: Partial<Apartment>, user: User) => void;
   bulkUpdateApartments: (ids: string[], changes: Partial<Apartment>, user: User) => void;
   addApartment: (apt: Apartment) => void;
+  deleteApartment: (id: string) => void;
 
   upsertStageNote: (apartmentId: string, stageId: string, noteText: string, user: User, attachment?: { filename?: string; mimeType?: string; dataUrl?: string; driveFileId?: string; driveUrl?: string } | null, attachments?: StageNoteAttachment[]) => void;
   getStageNote: (apartmentId: string, stageId: string) => StageNote | undefined;
@@ -509,6 +514,12 @@ export const useStore = create<AppState>((set, get) => ({
     set(state => ({ apartments: [...state.apartments, apt] }));
     persist(get);
     fsSet(projectCollection(get().currentProjectId, 'apartments'), apt.id, apt);
+  },
+
+  deleteApartment: (id) => {
+    set(state => ({ apartments: state.apartments.filter(a => a.id !== id) }));
+    persist(get);
+    fsDelete(projectCollection(get().currentProjectId, 'apartments'), id);
   },
 
   upsertStageNote: (apartmentId, stageId, noteText, user, attachment, attachments) => {

@@ -137,8 +137,9 @@ export function buildGroundFirstFloorSlots(bid: BuildingId): Apartment[] {
 }
 
 export const DEFAULT_PROJECTS: Project[] = [
-  { id: 'wolfson', name: 'Wolfson Residence', shortName: 'Wolfson', logoPath: '/wolfson-building.png' },
-  { id: 'netiv',   name: 'Netiv Neve Shamir', shortName: 'Netiv',   logoPath: '/netiv-logo.png' },
+  { id: 'wolfson',  name: 'Wolfson Residence', shortName: 'Wolfson', logoPath: '/wolfson-building.png' },
+  { id: 'netiv',    name: 'Netiv Neve Shamir', shortName: 'Netiv',   logoPath: '/netiv-logo.png' },
+  { id: 'general',  name: 'General Jobs',      shortName: 'General', logoPath: '/general-logo.svg', type: 'general' },
 ];
 
 export const NETIV_BUILDINGS: Building[] = [

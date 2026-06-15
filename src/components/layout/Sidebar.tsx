@@ -1,13 +1,17 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Building2, LayoutDashboard, FileText, Settings, Activity, TrendingUp, ClipboardList } from 'lucide-react';
+import { Building2, LayoutDashboard, FileText, Settings, Activity, TrendingUp, ClipboardList, Briefcase } from 'lucide-react';
 import { useStore } from '../../data/store';
 
 export function Sidebar() {
-  const { lightTheme, mainUiStrings: s } = useStore();
+  const { lightTheme, mainUiStrings: s, currentProjectId } = useStore();
+
+  const isGeneral = currentProjectId === 'general';
 
   const navItems = [
-    { to: '/project',   icon: Building2,      label: s.navProject },
+    isGeneral
+      ? { to: '/jobs',      icon: Briefcase,       label: s.jobsNavLabel }
+      : { to: '/project',   icon: Building2,       label: s.navProject },
     { to: '/dashboard', icon: LayoutDashboard, label: s.navDashboard },
     { to: '/tasks',     icon: ClipboardList,   label: s.navTasks },
     { to: '/analytics', icon: TrendingUp,      label: s.navAnalytics },
