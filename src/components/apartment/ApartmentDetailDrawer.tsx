@@ -208,7 +208,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
 
   const detectedPdfId = availablePdfs[selectedPdfIdx]?.id ?? null;
 
-  const sortedStages = [...stages].filter(s => s.active).sort((a, b) => a.order - b.order);
+  const sortedStages = [...stages]
+    .filter(s => s.active && (isGeneralProject ? s.projectId === 'general' : !s.projectId))
+    .sort((a, b) => a.order - b.order);
   const currentStage = stages.find(s => s.id === currentStageId);
   const aptLogs = activityLogs.filter(l => l.apartmentId === apartment.id).slice(0, 20);
   const sameBuildingApts = apartments

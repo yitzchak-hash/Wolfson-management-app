@@ -33,6 +33,7 @@ export interface Stage {
   order: number;
   active: boolean;
   description?: string; // kept for data compat; no longer shown in UI
+  projectId?: string;   // if set, stage only appears in this project (e.g. 'general')
   createdAt: string;
   updatedAt: string;
 }

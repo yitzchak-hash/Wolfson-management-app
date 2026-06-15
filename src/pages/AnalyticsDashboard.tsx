@@ -80,7 +80,8 @@ function StatCard({ label, value, sub, icon: Icon, color }: {
 }
 
 export function AnalyticsDashboard() {
-  const { apartments, stages, buildings, activityLogs, contractors, contractorAssignments, lightTheme, mainUiStrings: s } = useStore();
+  const { apartments, stages: allStages, buildings, activityLogs, contractors, contractorAssignments, lightTheme, mainUiStrings: s, currentProjectId } = useStore();
+  const stages = allStages.filter(st => currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId);
 
   const sortedStages = useMemo(() => [...stages].filter(s => s.active).sort((a, b) => a.order - b.order), [stages]);
 

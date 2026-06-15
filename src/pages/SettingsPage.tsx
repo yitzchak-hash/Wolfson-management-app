@@ -25,7 +25,7 @@ const PRESET_COLORS = [
 const CAT_COLORS: Record<ContractorCategory, string> = { drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981' };
 
 export function SettingsPage() {
-  const { stages, users, updateStage, addStage, deleteStage, updateUser, addUser, lightTheme, setLightTheme, mainUiStrings: s } = useStore();
+  const { stages, users, updateStage, addStage, deleteStage, updateUser, addUser, lightTheme, setLightTheme, mainUiStrings: s, currentProjectId } = useStore();
   const [activeTab, setActiveTab] = useState<Tab>('stages');
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
@@ -60,7 +60,7 @@ export function SettingsPage() {
       </div>
 
       {activeTab === 'stages' && (
-        <StageSettings stages={sortedStages} updateStage={updateStage} addStage={addStage} deleteStage={deleteStage} onToast={showToast} />
+        <StageSettings stages={sortedStages} updateStage={updateStage} addStage={addStage} deleteStage={deleteStage} onToast={showToast} currentProjectId={currentProjectId} />
       )}
       {activeTab === 'users' && (
         <UserSettings users={users} updateUser={updateUser} addUser={addUser} onToast={showToast} />
@@ -117,11 +117,14 @@ function ColorPickerWithPresets({ value, onChange }: ColorPickerProps) {
 }
 
 // ─── Stage settings ───────────────────────────────────────────────────────────
-function StageSettings({ stages, updateStage, addStage, deleteStage, onToast }: {
+function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, currentProjectId }: {
   stages: Stage[]; updateStage: (id: string, c: Partial<Stage>) => void;
   addStage: (s: Stage) => void; deleteStage: (id: string) => void; onToast: (msg: string) => void;
+  currentProjectId: string;
 }) {
   const s = useStore(state => state.mainUiStrings);
+  const isGeneral = currentProjectId === 'general';
+  const projectStages = stages.filter(st => isGeneral ? st.projectId === 'general' : !st.projectId);
   const [edits, setEdits] = useState<Record<string, Partial<Stage>>>({});
   const [newStageName, setNewStageName] = useState('');
   const [newStageNameHe, setNewStageNameHe] = useState('');
@@ -140,22 +143,23 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast }: 
   }
 
   function moveStage(id: string, dir: -1 | 1) {
-    const idx = stages.findIndex(s => s.id === id);
+    const idx = projectStages.findIndex(s => s.id === id);
     const swapIdx = idx + dir;
-    if (swapIdx < 0 || swapIdx >= stages.length) return;
-    updateStage(stages[idx].id, { order: stages[swapIdx].order });
-    updateStage(stages[swapIdx].id, { order: stages[idx].order });
+    if (swapIdx < 0 || swapIdx >= projectStages.length) return;
+    updateStage(projectStages[idx].id, { order: projectStages[swapIdx].order });
+    updateStage(projectStages[swapIdx].id, { order: projectStages[idx].order });
   }
 
   function handleAddStage() {
     if (!newStageName.trim()) return;
-    const maxOrder = stages.reduce((m, s) => Math.max(m, s.order), 0);
+    const maxOrder = projectStages.reduce((m, s) => Math.max(m, s.order), 0);
     addStage({
       id: 's' + Math.random().toString(36).substr(2, 6),
       name: newStageName.trim(),
       nameHe: newStageNameHe.trim() || undefined,
       color: newStageColor,
       order: maxOrder + 1, active: true,
+      projectId: isGeneral ? 'general' : undefined,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     });
     setNewStageName('');
@@ -166,7 +170,7 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast }: 
   return (
     <div>
       <div className="space-y-2 mb-6">
-        {stages.map((stage, i) => {
+        {projectStages.map((stage, i) => {
           const edit = getEdit(stage.id);
           const name = edit.name ?? stage.name;
           const color = edit.color ?? stage.color;

@@ -10,7 +10,7 @@ export function GeneralJobsPage() {
     apartments,
     addApartment,
     deleteApartment,
-    stages,
+    stages: allStages,
     contractorAssignments,
     currentUser,
     mainUiStrings: s,
@@ -64,6 +64,7 @@ export function GeneralJobsPage() {
     deleteApartment(id);
   }
 
+  const stages = allStages.filter(st => st.projectId === 'general');
   const stageMap = new Map(stages.map(st => [st.id, st]));
 
   return (

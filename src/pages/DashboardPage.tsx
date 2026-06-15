@@ -14,11 +14,12 @@ const DEFAULT_WIDGET_ORDER = ['apt-stats', 'task-stats', 'stage-progress', 'buil
 
 export function DashboardPage() {
   const {
-    apartments, stages, activityLogs, contractorAssignments,
+    apartments, stages: allStages, activityLogs, contractorAssignments,
     mainUiStrings: s, setPendingOpenAptId,
     dashboardWidgetOrder, dashboardHiddenWidgets, setDashboardLayout,
-    buildings,
+    buildings, currentProjectId,
   } = useStore();
+  const stages = allStages.filter(st => currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId);
   const navigate = useNavigate();
   const [modal, setModal] = useState<ModalKind>(null);
   const [isCustomizing, setIsCustomizing] = useState(false);
