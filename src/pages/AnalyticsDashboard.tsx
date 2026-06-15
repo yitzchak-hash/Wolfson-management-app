@@ -85,7 +85,7 @@ export function AnalyticsDashboard() {
   const sortedStages = useMemo(() => [...stages].filter(s => s.active).sort((a, b) => a.order - b.order), [stages]);
 
   const stats = useMemo(() => {
-    const residentialApts = apartments.filter(a => !a.isUnnamed && a.floor > 0);
+    const residentialApts = apartments.filter(a => !a.isUnnamed && (a.floor > 0 || /^N\d/.test(a.buildingId)));
     const total = residentialApts.length;
     const started = residentialApts.filter(a => a.currentStageId).length;
     const byStage = new Map<string, number>();

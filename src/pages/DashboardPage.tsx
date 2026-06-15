@@ -26,8 +26,8 @@ export function DashboardPage() {
   const [localHidden, setLocalHidden] = useState<string[]>([]);
 
   const sortedStages = [...stages].filter(st => st.active).sort((a, b) => a.order - b.order);
-  const total = apartments.length;
-  const notStarted = apartments.filter(a => !a.currentStageId).length;
+  const total = apartments.filter(a => !a.isUnnamed).length;
+  const notStarted = apartments.filter(a => !a.isUnnamed && !a.currentStageId).length;
   const shinuiCount = apartments.filter(a => a.classification === 'shinui' && !a.isUnnamed).length;
   const withNotes = apartments.filter(a => a.generalNotes.trim() && !a.isUnnamed).length;
   const recentLogs = activityLogs.slice(0, 10);
@@ -38,7 +38,7 @@ export function DashboardPage() {
   const completedTodayCount = contractorAssignments.filter(a => a.completedAt && a.completedAt.startsWith(today)).length;
 
   function getBuildingProgress(bid: string) {
-    const apts = apartments.filter(a => a.buildingId === bid);
+    const apts = apartments.filter(a => a.buildingId === bid && !a.isUnnamed);
     const started = apts.filter(a => a.currentStageId).length;
     return { total: apts.length, started, pct: apts.length > 0 ? Math.round(started / apts.length * 100) : 0 };
   }
@@ -180,7 +180,7 @@ export function DashboardPage() {
             <h2 className="font-semibold text-gray-800 mb-4">{s.progressByStage}</h2>
             <div className="space-y-3">
               {sortedStages.map(stage => {
-                const count = apartments.filter(a => a.currentStageId === stage.id).length;
+                const count = apartments.filter(a => !a.isUnnamed && a.currentStageId === stage.id).length;
                 const pct = total > 0 ? Math.round(count / total * 100) : 0;
                 return (
                   <div key={stage.id}>
