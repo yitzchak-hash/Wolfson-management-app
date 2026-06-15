@@ -80,7 +80,7 @@ function StatCard({ label, value, sub, icon: Icon, color }: {
 }
 
 export function AnalyticsDashboard() {
-  const { apartments, stages, activityLogs, contractors, contractorAssignments, lightTheme, mainUiStrings: s } = useStore();
+  const { apartments, stages, buildings, activityLogs, contractors, contractorAssignments, lightTheme, mainUiStrings: s } = useStore();
 
   const sortedStages = useMemo(() => [...stages].filter(s => s.active).sort((a, b) => a.order - b.order), [stages]);
 
@@ -94,14 +94,14 @@ export function AnalyticsDashboard() {
       if (a.currentStageId) byStage.set(a.currentStageId, (byStage.get(a.currentStageId) ?? 0) + 1);
     });
 
-    const byBuilding = ['A1', 'A2', 'A3'].map(bid => {
-      const bApts = residentialApts.filter(a => a.buildingId === bid);
+    const byBuilding = buildings.map(b => {
+      const bApts = residentialApts.filter(a => a.buildingId === b.id);
       const bStarted = bApts.filter(a => a.currentStageId).length;
-      return { building: bid, total: bApts.length, started: bStarted };
+      return { building: b.id, total: bApts.length, started: bStarted };
     });
 
     return { total, started, byStage, byBuilding };
-  }, [apartments, sortedStages]);
+  }, [apartments, sortedStages, buildings]);
 
   const contractorStats = useMemo(() => {
     const total = contractorAssignments.length;

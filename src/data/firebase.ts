@@ -103,6 +103,13 @@ function _trackWrite<T>(promise: Promise<T>): Promise<T> {
   });
 }
 
+// Returns the Firestore collection name for a given project and base collection.
+// Wolfson uses the original bare names for full backward compatibility.
+// All other projects use a prefixed namespace.
+export function projectCollection(projectId: string, base: string): string {
+  return projectId === 'wolfson' ? base : `${projectId}_${base}`;
+}
+
 // Generic document write
 export async function fsSet(collectionName: string, docId: string, data: object) {
   if (!db) return;

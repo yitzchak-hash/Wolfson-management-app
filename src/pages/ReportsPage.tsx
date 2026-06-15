@@ -5,11 +5,11 @@ import { format } from 'date-fns';
 import { saveAs } from 'file-saver';
 import { getStageName as getStageNameBilingual } from '../types';
 
-type BuildingFilter = 'all' | 'A1' | 'A2' | 'A3';
+type BuildingFilter = string;
 type ClassFilter = 'all' | 'standard' | 'shinui';
 
 export function ReportsPage() {
-  const { apartments, stages, stageNotes, contractorAssignments, contractors, mainUiStrings: s } = useStore();
+  const { apartments, stages, buildings, stageNotes, contractorAssignments, contractors, mainUiStrings: s } = useStore();
 
   const ALL_COLUMNS = [
     { key: 'building',       label: s.colBuilding,        always: true },
@@ -284,7 +284,7 @@ export function ReportsPage() {
           <div>
             <label className="text-xs font-medium text-gray-500 mb-2 block">{s.buildingPrefix}</label>
             <div className="flex gap-1.5 flex-wrap">
-              {(['all', 'A1', 'A2', 'A3'] as const).map(b => (
+              {(['all', ...buildings.map(b => b.id)]).map(b => (
                 <button key={b} onClick={() => setBuildingFilter(b)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                     buildingFilter === b ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'

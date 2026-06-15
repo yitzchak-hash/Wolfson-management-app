@@ -6,14 +6,14 @@ import {
   Languages, Clock, RotateCcw, Wifi, WifiOff, Loader, Database, RefreshCw, CloudUpload, Search,
 } from 'lucide-react';
 import { isFirebaseConfigured, db, fsSet, fsGetAll } from '../data/firebase';
-import { Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency, getStageName } from '../types';
+import { Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency, getStageName, Apartment } from '../types';
 import { Tooltip } from '../components/ui/Tooltip';
 import { Toast } from '../components/ui/Toast';
 import { format } from 'date-fns';
 import { saveAs } from 'file-saver';
 import { extractFolderId, isUploadBackendConfigured } from '../data/driveApi';
 
-type Tab = 'stages' | 'users' | 'contractors' | 'app' | 'language';
+type Tab = 'stages' | 'users' | 'contractors' | 'app' | 'language' | 'buildings';
 
 const PRESET_COLORS = [
   '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16',
@@ -41,6 +41,7 @@ export function SettingsPage() {
     contractors: s.settingsContractors,
     app: s.settingsApp,
     language: s.settingsLanguage,
+    buildings: s.settingsBuildings,
   };
 
   return (
@@ -48,7 +49,7 @@ export function SettingsPage() {
       <h1 className="text-2xl font-bold text-gray-900 mb-6">{s.pageSettings}</h1>
 
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-6 flex-wrap">
-        {(['stages', 'users', 'contractors', 'app', 'language'] as Tab[]).map(tab => (
+        {(['stages', 'users', 'contractors', 'app', 'language', 'buildings'] as Tab[]).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
               activeTab === tab ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
@@ -72,6 +73,9 @@ export function SettingsPage() {
       )}
       {activeTab === 'language' && (
         <LanguageTab onToast={showToast} />
+      )}
+      {activeTab === 'buildings' && (
+        <BuildingsTab onToast={showToast} />
       )}
 
       {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
@@ -1806,6 +1810,136 @@ function LanguageTab({ onToast }: { onToast: (msg: string, type?: 'success' | 'e
         >
           <Save size={15} /> {s.saveLang}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Buildings Tab ────────────────────────────────────────────────────────────
+function BuildingsTab({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
+  const { buildings, apartments, addApartment, mainUiStrings: s } = useStore();
+  const [showAddApt, setShowAddApt] = useState(false);
+  const [addForm, setAddForm] = useState({ buildingId: '', floor: '', colPosition: '', displayName: '' });
+
+  function getFloors(buildingId: string) {
+    const bApts = apartments.filter(a => a.buildingId === buildingId);
+    const floorSet = new Set(bApts.map(a => a.floor));
+    return Array.from(floorSet).sort((a, b) => b - a);
+  }
+
+  function handleAddApartment() {
+    const { buildingId, floor, colPosition, displayName } = addForm;
+    if (!buildingId || floor === '') return;
+    const floorNum = parseFloat(floor);
+    const colNum = colPosition ? parseInt(colPosition) : 1;
+    if (isNaN(floorNum)) return;
+    const aptNum = Date.now(); // unique numeric ID suffix
+    const id = `${buildingId}-custom-${aptNum}`;
+    const now = new Date().toISOString();
+    addApartment({
+      id,
+      buildingId,
+      apartmentNumber: displayName || String(aptNum),
+      displayName: displayName || '',
+      floor: floorNum,
+      colPosition: colNum,
+      colSpan: 1,
+      isDuplexApt: false,
+      currentStageId: null,
+      classification: 'standard',
+      shinuiDetails: null,
+      generalNotes: '',
+      isUnnamed: !displayName,
+      createdAt: now,
+      updatedAt: now,
+      updatedBy: '',
+      updatedByName: '',
+    });
+    setAddForm({ buildingId: '', floor: '', colPosition: '', displayName: '' });
+    setShowAddApt(false);
+    onToast(s.addApartmentBtn + ' ✓');
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-gray-900">{s.settingsBuildings}</h2>
+        <button
+          onClick={() => setShowAddApt(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors"
+        >
+          <Plus size={15} /> {s.addApartmentBtn}
+        </button>
+      </div>
+
+      {showAddApt && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
+          <h3 className="font-medium text-gray-800">{s.addApartmentBtn}</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">{s.buildingPrefix}</label>
+              <select value={addForm.buildingId} onChange={e => setAddForm(f => ({ ...f, buildingId: e.target.value }))}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+                <option value="">—</option>
+                {buildings.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">{s.floorLabel}</label>
+              <input type="number" value={addForm.floor} onChange={e => setAddForm(f => ({ ...f, floor: e.target.value }))}
+                placeholder="e.g. 3" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">{s.columnLabel}</label>
+              <input type="number" min="1" max="8" value={addForm.colPosition} onChange={e => setAddForm(f => ({ ...f, colPosition: e.target.value }))}
+                placeholder="1" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">{s.displayNameLabel}</label>
+              <input type="text" value={addForm.displayName} onChange={e => setAddForm(f => ({ ...f, displayName: e.target.value }))}
+                placeholder="e.g. 37" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={handleAddApartment} disabled={!addForm.buildingId || addForm.floor === ''}
+              className="px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+              {s.addApartmentBtn}
+            </button>
+            <button onClick={() => setShowAddApt(false)} className="px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm hover:bg-gray-50 transition-colors">
+              {s.cancel}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-4">
+        {buildings.map(b => {
+          const floors = getFloors(b.id);
+          return (
+            <div key={b.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="px-5 py-3 bg-[#1e3a5f] text-white font-semibold">{b.name}</div>
+              <div className="divide-y divide-gray-100">
+                {floors.map(fl => {
+                  const flApts = apartments.filter(a => a.buildingId === b.id && a.floor === fl && !a.isUnnamed);
+                  const unnamedCount = apartments.filter(a => a.buildingId === b.id && a.floor === fl && a.isUnnamed).length;
+                  const flLabel = fl === 0 ? s.groundFloorLabel : fl === -1 ? s.lobby : String(fl);
+                  return (
+                    <div key={fl} className="px-5 py-2.5 flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-700">{s.floorLabel} {flLabel}</span>
+                      <span className="text-xs text-gray-400">
+                        {flApts.length} {s.apartmentsCount}
+                        {unnamedCount > 0 && ` + ${unnamedCount} unnamed`}
+                      </span>
+                    </div>
+                  );
+                })}
+                {floors.length === 0 && (
+                  <div className="px-5 py-3 text-sm text-gray-400 italic">No floors yet</div>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

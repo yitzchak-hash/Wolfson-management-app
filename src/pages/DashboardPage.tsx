@@ -17,6 +17,7 @@ export function DashboardPage() {
     apartments, stages, activityLogs, contractorAssignments,
     mainUiStrings: s, setPendingOpenAptId,
     dashboardWidgetOrder, dashboardHiddenWidgets, setDashboardLayout,
+    buildings,
   } = useStore();
   const navigate = useNavigate();
   const [modal, setModal] = useState<ModalKind>(null);
@@ -36,9 +37,7 @@ export function DashboardPage() {
   const pendingCount = contractorAssignments.filter(a => !a.completedAt).length;
   const completedTodayCount = contractorAssignments.filter(a => a.completedAt && a.completedAt.startsWith(today)).length;
 
-  const buildings: Array<'A1' | 'A2' | 'A3'> = ['A1', 'A2', 'A3'];
-
-  function getBuildingProgress(bid: 'A1' | 'A2' | 'A3') {
+  function getBuildingProgress(bid: string) {
     const apts = apartments.filter(a => a.buildingId === bid);
     const started = apts.filter(a => a.currentStageId).length;
     return { total: apts.length, started, pct: apts.length > 0 ? Math.round(started / apts.length * 100) : 0 };
@@ -219,12 +218,12 @@ export function DashboardPage() {
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <h2 className="font-semibold text-gray-800 mb-4">{s.progressByBuilding}</h2>
             <div className="space-y-5">
-              {buildings.map(bid => {
-                const { total: bTotal, started, pct } = getBuildingProgress(bid);
+              {buildings.map(b => {
+                const { total: bTotal, started, pct } = getBuildingProgress(b.id);
                 return (
-                  <div key={bid}>
+                  <div key={b.id}>
                     <div className="flex items-center justify-between mb-1.5">
-                      <span className="font-semibold text-[#1e3a5f]">{bid}</span>
+                      <span className="font-semibold text-[#1e3a5f]">{b.name}</span>
                       <span className="text-sm text-gray-600">{started}/{bTotal} {s.unitsStarted} <span className="text-gray-400">({pct}%)</span></span>
                     </div>
                     <div className="h-3 bg-gray-100 rounded-full overflow-hidden">

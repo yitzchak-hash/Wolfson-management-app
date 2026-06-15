@@ -1,4 +1,4 @@
-import { Apartment, Building, BuildingId, Stage, User } from '../types';
+import { Apartment, Building, BuildingId, Project, Stage, User } from '../types';
 
 export const DATA_VERSION = 3; // Bump this to force a reset when data model changes
 
@@ -134,6 +134,118 @@ export function buildGroundFirstFloorSlots(bid: BuildingId): Apartment[] {
   for (let col = 1; col <= 4; col++) slots.push(makeUnnamedSlot(bid, groundStart + col - 1, 0, col));
   for (let col = 1; col <= 4; col++) slots.push(makeUnnamedSlot(bid, firstStart  + col - 1, 1, col));
   return slots;
+}
+
+export const DEFAULT_PROJECTS: Project[] = [
+  { id: 'wolfson', name: 'Wolfson Residence', shortName: 'Wolfson', logoPath: '/wolfson-building.png' },
+  { id: 'netiv',   name: 'Netiv Neve Shamir', shortName: 'Netiv',   logoPath: '/netiv-logo.png' },
+];
+
+export const NETIV_BUILDINGS: Building[] = [
+  { id: 'N1', name: 'Building N1', displayOrder: 1 },
+  { id: 'N2', name: 'Building N2', displayOrder: 2 },
+];
+
+// Netiv layout (per building, identical for N1 and N2):
+//
+// Lobby (floor -1):  3 unnamed future slots in cols 1-3
+// Floor 0:  apt 1 (col 1), empty (col 2), duplex apts 2-5 (cols 3-6)
+// Floor 1:  apt 6 (col 1), apt 7 (col 2), duplex tops shown via isDuplexApt on same apts
+// Floors 2-7: 4 apts/floor in cols 1-4  (apts 8-31)
+// Floor 8:  3 apts (32-34) + 1 empty, cols 1-4
+// Floor 9:  2 apts (35-36) + 2 empty, cols 1-4
+//
+// Total: 36 apartments per building (apt 1-36)
+
+function makeNetivApt(bid: BuildingId, aptNum: number, floor: number, col: number, isDuplex = false, isUnnamed = false): Apartment {
+  return {
+    id: `${bid}-${aptNum}`,
+    buildingId: bid,
+    apartmentNumber: isUnnamed ? '' : String(aptNum),
+    displayName: isUnnamed ? '' : String(aptNum),
+    floor,
+    colPosition: col,
+    colSpan: 1,
+    isDuplexApt: isDuplex,
+    currentStageId: null,
+    classification: 'standard',
+    shinuiDetails: null,
+    generalNotes: '',
+    isUnnamed,
+    createdAt: '2024-01-01T00:00:00Z',
+    updatedAt: '2024-01-01T00:00:00Z',
+    updatedBy: '',
+    updatedByName: '',
+  };
+}
+
+function makeNetivEmpty(bid: BuildingId, slotId: string, floor: number, col: number): Apartment {
+  return {
+    id: `${bid}-${slotId}`,
+    buildingId: bid,
+    apartmentNumber: '',
+    displayName: '',
+    floor,
+    colPosition: col,
+    colSpan: 1,
+    isDuplexApt: false,
+    currentStageId: null,
+    classification: 'standard',
+    shinuiDetails: null,
+    generalNotes: '',
+    isUnnamed: true,
+    createdAt: '2024-01-01T00:00:00Z',
+    updatedAt: '2024-01-01T00:00:00Z',
+    updatedBy: '',
+    updatedByName: '',
+  };
+}
+
+export function buildNetivApartments(): Apartment[] {
+  const apts: Apartment[] = [];
+
+  for (const bid of ['N1', 'N2'] as BuildingId[]) {
+    // Lobby (floor -1): 3 unnamed future slots
+    for (let col = 1; col <= 3; col++) {
+      apts.push(makeNetivEmpty(bid, `lobby-${col}`, -1, col));
+    }
+
+    // Floor 0: apt 1 (col 1), empty col 2, duplex apts 2-5 (cols 3-6)
+    apts.push(makeNetivApt(bid, 1, 0, 1));
+    apts.push(makeNetivEmpty(bid, 'f0-col2', 0, 2));
+    apts.push(makeNetivApt(bid, 2, 0, 3, true));
+    apts.push(makeNetivApt(bid, 3, 0, 4, true));
+    apts.push(makeNetivApt(bid, 4, 0, 5, true));
+    apts.push(makeNetivApt(bid, 5, 0, 6, true));
+
+    // Floor 1: apt 6 (col 1), apt 7 (col 2)
+    // Duplex tops (apts 2-5) appear on floor 1 via isDuplexApt rendering in the diagram
+    apts.push(makeNetivApt(bid, 6, 1, 1));
+    apts.push(makeNetivApt(bid, 7, 1, 2));
+
+    // Floors 2-7: 4 apts per floor (apts 8-31)
+    let aptNum = 8;
+    for (let floor = 2; floor <= 7; floor++) {
+      for (let col = 1; col <= 4; col++) {
+        apts.push(makeNetivApt(bid, aptNum++, floor, col));
+      }
+    }
+
+    // Floor 8: 3 apts + 1 empty (apts 32-34)
+    for (let col = 1; col <= 3; col++) {
+      apts.push(makeNetivApt(bid, aptNum++, 8, col));
+    }
+    apts.push(makeNetivEmpty(bid, 'f8-col4', 8, 4));
+
+    // Floor 9: 2 apts + 2 empty (apts 35-36)
+    for (let col = 1; col <= 2; col++) {
+      apts.push(makeNetivApt(bid, aptNum++, 9, col));
+    }
+    apts.push(makeNetivEmpty(bid, 'f9-col3', 9, 3));
+    apts.push(makeNetivEmpty(bid, 'f9-col4', 9, 4));
+  }
+
+  return apts;
 }
 
 export function buildDefaultApartments(): Apartment[] {

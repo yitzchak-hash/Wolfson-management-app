@@ -12,7 +12,7 @@ import { Toast } from '../components/ui/Toast';
 type ClassFilter = 'all' | 'standard' | 'shinui';
 
 export function ProjectDiagramPage() {
-  const { apartments, stages, currentUser, bulkUpdateApartments, updateApartment, contractorAssignments, contractors, mainUiStrings: s, pendingOpenAptId, setPendingOpenAptId } = useStore();
+  const { apartments, stages, buildings, currentUser, bulkUpdateApartments, updateApartment, contractorAssignments, contractors, mainUiStrings: s, pendingOpenAptId, setPendingOpenAptId } = useStore();
 
   const [selectedBuilding, setSelectedBuilding] = useState<BuildingId | 'all'>('all');
   const [activeStageIds, setActiveStageIds] = useState<string[]>([]);
@@ -192,7 +192,7 @@ export function ProjectDiagramPage() {
           <div className="flex items-center gap-3 flex-wrap">
             {/* Building selector */}
             <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
-              {(['all', 'A3', 'A2', 'A1'] as const).map(b => (
+              {(['all', ...[...buildings].reverse().map(b => b.id)]).map(b => (
                 <button
                   key={b}
                   onClick={() => setSelectedBuilding(b)}

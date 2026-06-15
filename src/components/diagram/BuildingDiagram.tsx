@@ -593,26 +593,232 @@ function BuildingColumn({
   );
 }
 
+// Generic building column for non-Wolfson projects (uses floor/colPosition from apartment data)
+function NetivBuildingColumn({
+  buildingId, apartments, mergedLabels, stages, activeStageIds, classFilter, searchQuery,
+  onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, aptSubLabels,
+  aptTaskData, nextStageLabels, onAddTask, aptCompletedData, compact, onNameUnnamed,
+}: {
+  buildingId: BuildingId;
+  apartments: Apartment[];
+  mergedLabels: Map<string, string>;
+  stages: Stage[];
+  activeStageIds: string[];
+  classFilter: 'all' | 'standard' | 'shinui';
+  searchQuery: string;
+  onApartmentClick: (apt: Apartment) => void;
+  showShinuiBadge: boolean;
+  bulkSelected?: Set<string>;
+  highlightedApartmentIds?: Set<string>;
+  aptSubLabels?: Map<string, string>;
+  aptTaskData?: Map<string, string>;
+  nextStageLabels?: Map<string, string>;
+  onAddTask?: (apt: Apartment) => void;
+  aptCompletedData?: Map<string, boolean>;
+  compact?: boolean;
+  onNameUnnamed?: (apt: Apartment) => void;
+}) {
+  const ui = useStore(state => state.mainUiStrings);
+  const stageMap = useMemo(() => new Map(stages.map(s => [s.id, s])), [stages]);
+
+  // Position-based lookup: `${floor}-${col}` → Apartment (also maps duplex tops to floor+1)
+  const posMap = useMemo(() => {
+    const m = new Map<string, Apartment>();
+    apartments.forEach(a => {
+      if (a.colPosition) {
+        m.set(`${a.floor}-${a.colPosition}`, a);
+        if (a.isDuplexApt) m.set(`${a.floor + 1}-${a.colPosition}`, a);
+      }
+    });
+    return m;
+  }, [apartments]);
+
+  // All unique floors, sorted high → low
+  const floorNumbers = useMemo(() => {
+    const s = new Set<number>();
+    apartments.forEach(a => {
+      s.add(a.floor);
+      if (a.isDuplexApt) s.add(a.floor + 1);
+    });
+    return Array.from(s).sort((a, b) => b - a);
+  }, [apartments]);
+
+  // Max column index used on any floor
+  const maxCol = useMemo(() => Math.max(...apartments.map(a => a.colPosition ?? 4), 4), [apartments]);
+
+  function getAptAtPos(floor: number, col: number): Apartment | undefined {
+    return posMap.get(`${floor}-${col}`);
+  }
+
+  const getStage = (apt: Apartment | undefined): Stage | null =>
+    apt?.currentStageId ? stageMap.get(apt.currentStageId) ?? null : null;
+
+  function isHighlighted(apt: Apartment | undefined): boolean {
+    if (!apt) return false;
+    if (highlightedApartmentIds) return highlightedApartmentIds.has(apt.id);
+    if (searchQuery) return (apt.displayName || apt.apartmentNumber).toLowerCase().includes(searchQuery.toLowerCase());
+    if (activeStageIds.length === 0) return true;
+    if (!apt.currentStageId) return activeStageIds.includes('__none__');
+    return activeStageIds.includes(apt.currentStageId);
+  }
+
+  function isDimmedFn(apt: Apartment | undefined): boolean {
+    if (!apt) return false;
+    if (highlightedApartmentIds) return !highlightedApartmentIds.has(apt.id);
+    if (classFilter !== 'all' && apt.classification !== classFilter) return true;
+    if (searchQuery) return !(apt.displayName || apt.apartmentNumber).toLowerCase().includes(searchQuery.toLowerCase());
+    if (activeStageIds.length === 0) return false;
+    if (!apt.currentStageId) return !activeStageIds.includes('__none__');
+    return !activeStageIds.includes(apt.currentStageId);
+  }
+
+  function isMergedFn(apt: Apartment | undefined): boolean { return !!apt?.mergedWith; }
+  function getMergedLabelFn(apt: Apartment | undefined): string | undefined {
+    if (!apt?.mergedWith) return undefined;
+    return mergedLabels.get(apt.id);
+  }
+  function isContractorHighlighted(apt: Apartment | undefined): boolean {
+    return !!apt && !!highlightedApartmentIds?.has(apt.id);
+  }
+  function isBulkSel(apt: Apartment | undefined): boolean {
+    return !!apt && !!bulkSelected?.has(apt.id);
+  }
+  function getSubLabel(apt: Apartment | undefined): string | undefined { return apt ? aptSubLabels?.get(apt.id) : undefined; }
+  function getTaskInfoFn(apt: Apartment | undefined): string | undefined { return apt ? aptTaskData?.get(apt.id) : undefined; }
+  function getNextStageFn(apt: Apartment | undefined): string | undefined { return apt ? nextStageLabels?.get(apt.id) : undefined; }
+  function getOnAddTaskFn(apt: Apartment | undefined): (() => void) | undefined {
+    if (!apt || !onAddTask) return undefined;
+    return () => onAddTask(apt);
+  }
+  function getAllDoneFn(apt: Apartment | undefined): boolean | undefined { return apt ? aptCompletedData?.get(apt.id) : undefined; }
+  function getOnNameFn(apt: Apartment | undefined): (() => void) | undefined {
+    if (!apt || !onNameUnnamed || !apt.isUnnamed) return undefined;
+    return () => onNameUnnamed(apt);
+  }
+
+  const rowH = compact ? 36 : 64;
+  const roofH = compact ? 16 : 26;
+  const LABEL_W = compact ? 26 : 34;
+  const padClass = compact ? 'p-0.5 gap-0.5' : 'p-1 gap-1';
+  const gapCls = compact ? 'gap-0.5' : 'gap-1';
+
+  // For each floor, determine how many columns to render
+  function getColsForFloor(floor: number): number {
+    const floorApts = apartments.filter(a => a.floor === floor);
+    const duplexTopApts = apartments.filter(a => a.isDuplexApt && a.floor + 1 === floor);
+    const all = [...floorApts, ...duplexTopApts];
+    return Math.max(...all.map(a => a.colPosition ?? 4), 4);
+  }
+
+  function renderCells(floor: number, cols: number[]) {
+    return cols.map(col => {
+      const apt = getAptAtPos(floor, col);
+      const isDuplexTop = apt?.isDuplexApt && apt.floor !== floor;
+      const rowFloorType: 'basement' | 'ground' | 'lobby' | undefined =
+        floor < -0.5 ? 'basement' : floor === 0 ? 'ground' : floor === -1 ? 'lobby' : undefined;
+      return (
+        <AptCell key={col}
+          apt={apt}
+          stage={getStage(apt)}
+          isHighlighted={isHighlighted(apt)}
+          isDimmed={isDimmedFn(apt)}
+          showShinuiBadge={showShinuiBadge}
+          onClick={() => apt && onApartmentClick(apt)}
+          rowFloorType={rowFloorType}
+          isMerged={isMergedFn(apt)}
+          mergedLabel={getMergedLabelFn(apt)}
+          isBulkSelected={isBulkSel(apt)}
+          isContractorHighlighted={isContractorHighlighted(apt)}
+          aptSubLabel={getSubLabel(apt)}
+          taskInfo={getTaskInfoFn(apt)}
+          nextStageName={getNextStageFn(apt)}
+          onAddTask={getOnAddTaskFn(apt)}
+          allTasksDone={getAllDoneFn(apt)}
+          onNameUnnamed={getOnNameFn(apt)}
+          compact={compact}
+          isDuplex={isDuplexTop}
+        />
+      );
+    });
+  }
+
+  const totalCols = maxCol;
+  const leftCols = Math.ceil(totalCols / 2);
+  const rightCols = totalCols - leftCols;
+
+  return (
+    <div className="flex flex-col flex-1" style={{ minWidth: compact ? '140px' : '220px' }}>
+      <div className={`text-center font-bold text-white tracking-widest rounded-t-lg mb-0.5 ${compact ? 'py-1 text-xs' : 'py-2 text-sm'}`}
+        style={{ backgroundColor: '#1e3a5f' }}>
+        {buildingId}
+      </div>
+      <div className="flex flex-col rounded-b-lg overflow-hidden" style={{ border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
+        {/* Roof */}
+        <div className="flex items-stretch" style={{ height: `${roofH}px`, minHeight: `${roofH}px`, borderBottom: '1px solid #e9edf2' }}>
+          <div className="flex items-center justify-center flex-shrink-0" style={{ width: `${LABEL_W}px`, borderRight: '1px solid #e2e8f0', backgroundColor: '#dbeafe' }} />
+          <div className={`flex flex-1 items-stretch ${padClass}`}>
+            <div className="flex-1 rounded-md" style={{ backgroundColor: '#bfdbfe' }} />
+          </div>
+        </div>
+
+        {floorNumbers.map((floor, fi) => {
+          const numCols = getColsForFloor(floor);
+          const leftN = Math.ceil(numCols / 2);
+          const rightN = numCols - leftN;
+          const rowFloorType: 'basement' | 'ground' | 'lobby' | undefined =
+            floor < -0.5 ? 'basement' : floor === 0 ? 'ground' : floor === -1 ? 'lobby' : undefined;
+          const rowBg =
+            rowFloorType === 'ground'   ? '#fef9c3' :
+            rowFloorType === 'basement' ? '#e8f0fb' :
+            rowFloorType === 'lobby'    ? '#f0fdf4' : '#f1f5f9';
+
+          return (
+            <div key={floor} className="flex items-stretch"
+              style={{ height: `${rowH}px`, minHeight: `${rowH}px`, borderBottom: fi < floorNumbers.length - 1 ? '1px solid #e9edf2' : 'none' }}>
+              <div className="flex items-center justify-center flex-shrink-0 text-gray-500"
+                style={{ width: `${LABEL_W}px`, borderRight: '1px solid #e2e8f0', backgroundColor: rowBg, fontSize: '9px', fontWeight: 600 }}>
+                <span style={{ fontSize: floor === -1 ? '7px' : '9px', textAlign: 'center', lineHeight: 1.1 }}>
+                  {floor === -1 ? ui.lobby : floor === 0 ? ui.groundCommercial : String(floor)}
+                </span>
+              </div>
+              <div className={`flex flex-1 items-stretch ${padClass} min-w-0`}>
+                <div className={`flex flex-1 ${gapCls} min-w-0`}>
+                  {renderCells(floor, Array.from({ length: leftN }, (_, i) => i + 1))}
+                </div>
+                <Stairwell compact={compact} />
+                <div className={`flex flex-1 ${gapCls} min-w-0`}>
+                  {renderCells(floor, Array.from({ length: rightN }, (_, i) => leftN + i + 1))}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function BuildingDiagram({
   apartments, stages, activeStageIds, classFilter, searchQuery, selectedBuilding,
   onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, aptSubLabels,
   aptTaskData, nextStageLabels, onAddTask, aptCompletedData, compact, onNameUnnamed,
 }: BuildingDiagramProps) {
   const { isRtl } = useStore(state => state.mainUiStrings);
-  const buildingOrder: BuildingId[] = isRtl ? ['A3', 'A2', 'A1'] : ['A1', 'A2', 'A3'];
+  const buildings = useStore(state => state.buildings);
+  const buildingOrder: BuildingId[] = isRtl ? [...buildings].reverse().map(b => b.id) : buildings.map(b => b.id);
   const visibleBuildings = selectedBuilding === 'all' ? buildingOrder : [selectedBuilding];
   const single = selectedBuilding !== 'all';
 
   const aptsByBuilding = useMemo(() => {
-    const order: BuildingId[] = isRtl ? ['A3', 'A2', 'A1'] : ['A1', 'A2', 'A3'];
     const m = new Map<BuildingId, Apartment[]>();
-    order.forEach(b => m.set(b, []));
+    buildingOrder.forEach(b => m.set(b, []));
     apartments.forEach(a => {
       const existing = m.get(a.buildingId) ?? [];
       m.set(a.buildingId, [...existing, a]);
     });
     return m;
-  }, [apartments, isRtl]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apartments, isRtl, buildings]);
 
   // Pre-compute combined "A/B" labels for merged apartment pairs
   const mergedLabels = useMemo(() => {
@@ -639,29 +845,33 @@ export function BuildingDiagram({
       className={`flex ${gapClass} ${padClass} ${single && !compact ? 'justify-center' : 'w-full'}`}
       style={single && !compact ? { maxWidth: '560px', margin: '0 auto' } : {}}
     >
-      {visibleBuildings.map(bId => (
-        <BuildingColumn
-          key={bId}
-          buildingId={bId}
-          apartments={aptsByBuilding.get(bId) ?? []}
-          mergedLabels={mergedLabels}
-          stages={stages}
-          activeStageIds={activeStageIds}
-          classFilter={classFilter}
-          searchQuery={searchQuery}
-          onApartmentClick={onApartmentClick}
-          showShinuiBadge={showShinuiBadge}
-          bulkSelected={bulkSelected}
-          highlightedApartmentIds={highlightedApartmentIds}
-          aptSubLabels={aptSubLabels}
-          aptTaskData={aptTaskData}
-          nextStageLabels={nextStageLabels}
-          onAddTask={onAddTask}
-          aptCompletedData={aptCompletedData}
-          compact={compact}
-          onNameUnnamed={onNameUnnamed}
-        />
-      ))}
+      {visibleBuildings.map(bId => {
+        const isWolfsonBuilding = /^A\d/.test(bId);
+        const colProps = {
+          key: bId,
+          buildingId: bId,
+          apartments: aptsByBuilding.get(bId) ?? [],
+          mergedLabels,
+          stages,
+          activeStageIds,
+          classFilter,
+          searchQuery,
+          onApartmentClick,
+          showShinuiBadge,
+          bulkSelected,
+          highlightedApartmentIds,
+          aptSubLabels,
+          aptTaskData,
+          nextStageLabels,
+          onAddTask,
+          aptCompletedData,
+          compact,
+          onNameUnnamed,
+        };
+        return isWolfsonBuilding
+          ? <BuildingColumn {...colProps} />
+          : <NetivBuildingColumn {...colProps} />;
+      })}
     </div>
   );
 }

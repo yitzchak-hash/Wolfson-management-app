@@ -3,8 +3,7 @@ import { LogOut, User, Sun, Moon, AlertTriangle, Loader2, CheckCircle2, Search }
 import { useStore } from '../../data/store';
 import { Tooltip } from '../ui/Tooltip';
 import { GlobalSearch } from '../ui/GlobalSearch';
-import { subscribeCloudSync } from '../../data/firebase';
-import { isFirebaseConfigured } from '../../data/firebase';
+import { subscribeCloudSync, isFirebaseConfigured } from '../../data/firebase';
 
 function CloudSyncBadge({ light }: { light: boolean }) {
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -33,19 +32,10 @@ function TzviAirLogo() {
   );
 }
 
-function WolfsonLogo() {
-  return (
-    <img
-      src="/wolfson-building.png"
-      alt="W Residence by the Wolfson Group"
-      className="h-11 w-auto rounded flex-shrink-0"
-      style={{ objectFit: 'contain' }}
-    />
-  );
-}
 
 export function Header() {
-  const { currentUser, logout, lightTheme, setLightTheme, firebaseSyncError, mainUiStrings: s } = useStore();
+  const { currentUser, logout, lightTheme, setLightTheme, firebaseSyncError, mainUiStrings: s,
+          projects, currentProjectId, setCurrentProject } = useStore();
   const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {
@@ -67,10 +57,25 @@ export function Header() {
       className="h-16 flex items-center justify-between px-5 shadow-lg flex-shrink-0 z-30 transition-colors duration-200"
       style={{ backgroundColor: lightTheme ? '#ffffff' : '#1e3a5f', borderBottom: lightTheme ? '1px solid #e5e7eb' : 'none' }}
     >
-      <div className="flex items-center gap-5">
+      <div className="flex items-center gap-4">
         <TzviAirLogo />
         <div className="w-px h-10" style={{ backgroundColor: lightTheme ? '#e5e7eb' : 'rgba(255,255,255,0.2)' }} />
-        <WolfsonLogo />
+        <div className="flex items-center gap-2">
+          {projects.map(p => (
+            <Tooltip key={p.id} text={p.name}>
+              <button
+                onClick={() => setCurrentProject(p.id)}
+                className={`rounded-lg p-0.5 transition-all focus:outline-none ${
+                  currentProjectId === p.id
+                    ? 'ring-2 ring-[#4aa8d8] opacity-100'
+                    : 'opacity-40 hover:opacity-70'
+                }`}
+              >
+                <img src={p.logoPath} alt={p.name} className="h-9 w-auto rounded" style={{ objectFit: 'contain' }} />
+              </button>
+            </Tooltip>
+          ))}
+        </div>
       </div>
 
       <div className="flex items-center gap-2">

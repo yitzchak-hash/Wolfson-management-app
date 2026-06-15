@@ -1,13 +1,19 @@
 import { create } from 'zustand';
-import { Apartment, ActivityLog, Stage, StageNote, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS } from '../types';
+import { Apartment, ActivityLog, Project, Stage, StageNote, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS } from '../types';
 import {
-  DEFAULT_BUILDINGS, DEFAULT_STAGES, DEFAULT_USERS, buildDefaultApartments, buildGroundFirstFloorSlots, DATA_VERSION,
+  DEFAULT_BUILDINGS, DEFAULT_PROJECTS, DEFAULT_STAGES, DEFAULT_USERS, NETIV_BUILDINGS,
+  buildDefaultApartments, buildNetivApartments, buildGroundFirstFloorSlots, DATA_VERSION,
 } from './initialData';
-import { fsSet, fsDelete, fsBatchSet, fsGetAll, fsListen, isFirebaseConfigured, db } from './firebase';
+import { fsSet, fsDelete, fsBatchSet, fsGetAll, fsListen, isFirebaseConfigured, db, projectCollection } from './firebase';
 
-const STORAGE_KEY = 'wolfson_app_data';
+const WOLFSON_STORAGE_KEY = 'wolfson_app_data';
 const VERSION_KEY = 'wolfson_app_version';
 const THEME_KEY = 'wolfson_theme';
+const ACTIVE_PROJECT_KEY = 'active_project';
+
+function getProjectStorageKey(projectId: string): string {
+  return projectId === 'wolfson' ? WOLFSON_STORAGE_KEY : `${projectId}_app_data`;
+}
 
 // Holds unsubscribe functions for all active Firestore real-time listeners.
 // Stored outside the Zustand state (not serializable) so they survive re-renders.
@@ -43,7 +49,7 @@ function saveToStorage(key: string, value: unknown): boolean {
 function checkAndMigrateData() {
   const stored = localStorage.getItem(VERSION_KEY);
   if (stored !== String(DATA_VERSION)) {
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(WOLFSON_STORAGE_KEY);
     localStorage.setItem(VERSION_KEY, String(DATA_VERSION));
     return true; // was reset
   }
@@ -52,7 +58,8 @@ function checkAndMigrateData() {
 
 checkAndMigrateData();
 
-const stored = loadFromStorage(STORAGE_KEY, null) as Record<string, unknown> | null;
+const _activeProjectId = localStorage.getItem(ACTIVE_PROJECT_KEY) ?? 'wolfson';
+const stored = loadFromStorage(getProjectStorageKey(_activeProjectId), null) as Record<string, unknown> | null;
 
 function migrateApartments(apts: Apartment[]): Apartment[] {
   let changed = false;
@@ -94,13 +101,21 @@ function generateToken(): string {
   return Array.from({ length: 24 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 }
 
+function getDefaultBuildings(projectId: string): Building[] {
+  return projectId === 'netiv' ? NETIV_BUILDINGS : DEFAULT_BUILDINGS;
+}
+
+function getDefaultApartments(projectId: string): Apartment[] {
+  return projectId === 'netiv' ? buildNetivApartments() : buildDefaultApartments();
+}
+
 const defaultData = {
   dataVersion: DATA_VERSION,
   currentUser: null as User | null,
   users: DEFAULT_USERS,
-  buildings: DEFAULT_BUILDINGS,
+  buildings: getDefaultBuildings(_activeProjectId),
   stages: DEFAULT_STAGES,
-  apartments: buildDefaultApartments(),
+  apartments: getDefaultApartments(_activeProjectId),
   stageNotes: [] as StageNote[],
   stageNoteVersions: [] as StageNoteVersion[],
   generalNoteVersions: [] as GeneralNoteVersion[],
@@ -222,15 +237,22 @@ interface AppState {
   dashboardWidgetOrder: string[];
   dashboardHiddenWidgets: string[];
   setDashboardLayout: (order: string[], hidden: string[]) => void;
+
+  // Multi-project support
+  currentProjectId: string;
+  projects: Project[];
+  setCurrentProject: (id: string) => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
   dataVersion: DATA_VERSION,
   currentUser: stored?.currentUser as User | null ?? null,
   users: (stored?.users as User[] | null) ?? defaultData.users,
-  buildings: defaultData.buildings,
+  buildings: (stored?.buildings as Building[] | null) ?? defaultData.buildings,
   stages: (stored?.stages as Stage[] | null) ?? defaultData.stages,
-  apartments: migrateApartments((stored?.apartments as Apartment[] | null) ?? defaultData.apartments),
+  apartments: _activeProjectId === 'wolfson'
+    ? migrateApartments((stored?.apartments as Apartment[] | null) ?? defaultData.apartments)
+    : (stored?.apartments as Apartment[] | null) ?? defaultData.apartments,
   stageNotes: (stored?.stageNotes as StageNote[] | null) ?? [],
   stageNoteVersions: (stored?.stageNoteVersions as StageNoteVersion[] | null) ?? [],
   generalNoteVersions: (stored?.generalNoteVersions as GeneralNoteVersion[] | null) ?? [],
@@ -258,6 +280,8 @@ export const useStore = create<AppState>((set, get) => ({
   pendingOpenAptId: null,
   dashboardWidgetOrder: (stored?.dashboardWidgetOrder as string[] | null) ?? ['apt-stats', 'task-stats', 'stage-progress', 'building-progress', 'activity'],
   dashboardHiddenWidgets: (stored?.dashboardHiddenWidgets as string[] | null) ?? [],
+  currentProjectId: _activeProjectId,
+  projects: DEFAULT_PROJECTS,
   lightTheme: localStorage.getItem(THEME_KEY) !== 'dark',
   setPendingOpenAptId: (id: string | null) => {
     set({ pendingOpenAptId: id });
@@ -265,6 +289,72 @@ export const useStore = create<AppState>((set, get) => ({
   setDashboardLayout: (order: string[], hidden: string[]) => {
     set({ dashboardWidgetOrder: order, dashboardHiddenWidgets: hidden });
     persist(get);
+  },
+
+  setCurrentProject: (id: string) => {
+    const state = get();
+    if (id === state.currentProjectId) return;
+
+    // Save current project data first
+    persist(get);
+
+    // Extract global settings to carry over
+    const globalState = {
+      users: state.users,
+      stages: state.stages,
+      contractors: state.contractors,
+      autoBackup: state.autoBackup,
+      backupFrequency: state.backupFrequency,
+      backupDriveFolderLink: state.backupDriveFolderLink,
+      driveExportFrequency: state.driveExportFrequency,
+      contractorUiStrings: state.contractorUiStrings,
+      mainUiStrings: state.mainUiStrings,
+      lightTheme: state.lightTheme,
+      backupLogs: state.backupLogs,
+    };
+
+    // Load new project's saved data (or fresh defaults)
+    const newStored = loadFromStorage(getProjectStorageKey(id), null) as Record<string, unknown> | null;
+    const defaultBuildings = id === 'netiv' ? NETIV_BUILDINGS : DEFAULT_BUILDINGS;
+    const defaultApartments = id === 'netiv' ? buildNetivApartments() : buildDefaultApartments();
+
+    const newProjectData = {
+      buildings:             (newStored?.buildings as Building[] | null)             ?? defaultBuildings,
+      apartments:            (newStored?.apartments as Apartment[] | null)            ?? defaultApartments,
+      stageNotes:            (newStored?.stageNotes as StageNote[] | null)            ?? [],
+      stageNoteVersions:     (newStored?.stageNoteVersions as StageNoteVersion[] | null) ?? [],
+      generalNoteVersions:   (newStored?.generalNoteVersions as GeneralNoteVersion[] | null) ?? [],
+      activityLogs:          (newStored?.activityLogs as ActivityLog[] | null)        ?? [],
+      contractorAssignments: (newStored?.contractorAssignments as ContractorAssignment[] | null) ?? [],
+      contractorNotes:       (newStored?.contractorNotes as ContractorNote[] | null)  ?? [],
+      contractorPhotos:      (newStored?.contractorPhotos as ContractorPhoto[] | null) ?? [],
+      officeNoteFiles:       (newStored?.officeNoteFiles as OfficeNoteFile[] | null)  ?? [],
+      backupSnapshots:       (newStored?.backupSnapshots as BackupSnapshot[] | null)  ?? [],
+      dashboardWidgetOrder:  (newStored?.dashboardWidgetOrder as string[] | null)     ?? ['apt-stats', 'task-stats', 'stage-progress', 'building-progress', 'activity'],
+      dashboardHiddenWidgets:(newStored?.dashboardHiddenWidgets as string[] | null)   ?? [],
+    };
+
+    // Cancel existing Firebase listeners and switch project
+    _firebaseUnsubscribers.forEach(u => u());
+    _firebaseUnsubscribers = [];
+
+    localStorage.setItem(ACTIVE_PROJECT_KEY, id);
+
+    set({
+      currentProjectId: id,
+      firebaseListening: false,
+      pendingOpenAptId: null,
+      ...newProjectData,
+      ...globalState,  // global settings always win
+    });
+
+    // Persist new project state
+    persist(get);
+
+    // Restart Firebase sync for new project if configured
+    if (isFirebaseConfigured && !get().firebaseListening) {
+      get().startFirebaseSync();
+    }
   },
 
   setLightTheme: (v: boolean) => {
@@ -368,11 +458,12 @@ export const useStore = create<AppState>((set, get) => ({
     });
     persist(get);
 
-    if (newGeneralNoteVersion) fsSet('generalNoteVersions', newGeneralNoteVersion.id, newGeneralNoteVersion);
+    const _pid = get().currentProjectId;
+    if (newGeneralNoteVersion) fsSet(projectCollection(_pid, 'generalNoteVersions'), newGeneralNoteVersion.id, newGeneralNoteVersion);
 
     // Firebase sync
-    fsSet('apartments', id, updated);
-    extraUpdates.forEach(e => fsSet('apartments', e.id, e));
+    fsSet(projectCollection(_pid, 'apartments'), id, updated);
+    extraUpdates.forEach(e => fsSet(projectCollection(_pid, 'apartments'), e.id, e));
 
     // Log changes
     const loggable: Array<keyof Apartment> = ['currentStageId', 'classification', 'generalNotes', 'displayName'];
@@ -411,13 +502,13 @@ export const useStore = create<AppState>((set, get) => ({
     });
     set({ apartments: updated });
     persist(get);
-    updated.filter(a => ids.includes(a.id)).forEach(a => fsSet('apartments', a.id, a));
+    updated.filter(a => ids.includes(a.id)).forEach(a => fsSet(projectCollection(get().currentProjectId, 'apartments'), a.id, a));
   },
 
   addApartment: (apt) => {
     set(state => ({ apartments: [...state.apartments, apt] }));
     persist(get);
-    fsSet('apartments', apt.id, apt);
+    fsSet(projectCollection(get().currentProjectId, 'apartments'), apt.id, apt);
   },
 
   upsertStageNote: (apartmentId, stageId, noteText, user, attachment, attachments) => {
@@ -456,7 +547,7 @@ export const useStore = create<AppState>((set, get) => ({
         const otherVersions = state.stageNoteVersions.filter(v => v.noteId !== existing.id);
         return { stageNoteVersions: [...otherVersions, ...keep, version] };
       });
-      fsSet('stageNoteVersions', version.id, version);
+      fsSet(projectCollection(get().currentProjectId, 'stageNoteVersions'), version.id, version);
 
       note = { ...existing, noteText, updatedAt: now, updatedBy: user.id, updatedByName: user.name, ...attachFields, attachments: finalAttachments };
       set(state => ({
@@ -475,7 +566,7 @@ export const useStore = create<AppState>((set, get) => ({
       attachmentDataUrl: undefined,
       attachments: note.attachments?.map(a => ({ ...a, dataUrl: undefined })),
     };
-    fsSet('stageNotes', note.id, noteForFs);
+    fsSet(projectCollection(get().currentProjectId, 'stageNotes'), note.id, noteForFs);
 
     const apt = get().apartments.find(a => a.id === apartmentId);
     const stage = get().stages.find(s => s.id === stageId);
@@ -535,7 +626,7 @@ export const useStore = create<AppState>((set, get) => ({
     fsDelete('stages', id);
     get().apartments
       .filter(a => affectedAptIds.has(a.id))
-      .forEach(a => fsSet('apartments', a.id, a));
+      .forEach(a => fsSet(projectCollection(get().currentProjectId, 'apartments'), a.id, a));
   },
 
   mergeApartments: (aptId, partnerId, user) => {
@@ -578,7 +669,7 @@ export const useStore = create<AppState>((set, get) => ({
 
     set(state => ({ apartments: state.apartments.map(a => updates.has(a.id) ? updates.get(a.id)! : a) }));
     persist(get);
-    fsBatchSet('apartments', Array.from(updates.entries()).map(([id, data]) => ({ id, data })));
+    fsBatchSet(projectCollection(get().currentProjectId, 'apartments'), Array.from(updates.entries()).map(([id, data]) => ({ id, data })));
   },
 
   unmergeApartments: (aptId, keepDataAptId, user) => {
@@ -614,7 +705,7 @@ export const useStore = create<AppState>((set, get) => ({
 
     set(state => ({ apartments: state.apartments.map(a => updates.has(a.id) ? updates.get(a.id)! : a) }));
     persist(get);
-    fsBatchSet('apartments', Array.from(updates.entries()).map(([id, data]) => ({ id, data })));
+    fsBatchSet(projectCollection(get().currentProjectId, 'apartments'), Array.from(updates.entries()).map(([id, data]) => ({ id, data })));
   },
 
   setGoogleClientId: (id) => {
@@ -660,10 +751,11 @@ export const useStore = create<AppState>((set, get) => ({
       contractorPhotos: s.contractorPhotos.filter(p => p.contractorId !== id),
     }));
     persist(get);
+    const _pid2 = get().currentProjectId;
     fsDelete('contractors', id);
-    assignmentIds.forEach(aid => fsDelete('contractorAssignments', aid));
-    noteIds.forEach(nid => fsDelete('contractorNotes', nid));
-    photoIds.forEach(pid => fsDelete('contractorPhotos', pid));
+    assignmentIds.forEach(aid => fsDelete(projectCollection(_pid2, 'contractorAssignments'), aid));
+    noteIds.forEach(nid => fsDelete(projectCollection(_pid2, 'contractorNotes'), nid));
+    photoIds.forEach(pid => fsDelete(projectCollection(_pid2, 'contractorPhotos'), pid));
   },
 
   addContractorAssignment: (fields) => {
@@ -672,7 +764,7 @@ export const useStore = create<AppState>((set, get) => ({
     persist(get);
     // Strip attachment dataUrls before Firestore (keep metadata only)
     const aForFs = { ...a, attachments: a.attachments?.map(att => ({ ...att, dataUrl: '' })) };
-    fsSet('contractorAssignments', a.id, aForFs);
+    fsSet(projectCollection(get().currentProjectId, 'contractorAssignments'), a.id, aForFs);
     // Activity log
     const apt = get().apartments.find(ap => ap.id === a.apartmentId);
     if (apt) {
@@ -700,7 +792,7 @@ export const useStore = create<AppState>((set, get) => ({
     const updated = get().contractorAssignments.find(a => a.id === id);
     if (updated) {
       const updForFs = { ...updated, attachments: updated.attachments?.map(att => ({ ...att, dataUrl: '' })) };
-      fsSet('contractorAssignments', id, updForFs);
+      fsSet(projectCollection(get().currentProjectId, 'contractorAssignments'), id, updForFs);
     }
     // Log completion / undo-completion
     if (before && updated && 'completedAt' in changes) {
@@ -751,9 +843,10 @@ export const useStore = create<AppState>((set, get) => ({
       contractorPhotos: s.contractorPhotos.filter(p => p.assignmentId !== id),
     }));
     persist(get);
-    fsDelete('contractorAssignments', id);
-    noteIds.forEach(nid => fsDelete('contractorNotes', nid));
-    photoIds.forEach(pid => fsDelete('contractorPhotos', pid));
+    const _pid3 = get().currentProjectId;
+    fsDelete(projectCollection(_pid3, 'contractorAssignments'), id);
+    noteIds.forEach(nid => fsDelete(projectCollection(_pid3, 'contractorNotes'), nid));
+    photoIds.forEach(pid => fsDelete(projectCollection(_pid3, 'contractorPhotos'), pid));
     // Activity log
     if (assignment) {
       const apt = get().apartments.find(ap => ap.id === assignment.apartmentId);
@@ -779,7 +872,7 @@ export const useStore = create<AppState>((set, get) => ({
     const n: ContractorNote = { ...fields, id: generateId(), createdAt: new Date().toISOString() };
     set(state => ({ contractorNotes: [...state.contractorNotes, n] }));
     persist(get);
-    fsSet('contractorNotes', n.id, { ...n, attachmentDataUrl: undefined });
+    fsSet(projectCollection(get().currentProjectId, 'contractorNotes'), n.id, { ...n, attachmentDataUrl: undefined });
   },
 
   addContractorPhoto: (fields) => {
@@ -789,7 +882,7 @@ export const useStore = create<AppState>((set, get) => ({
     }));
     persist(get);
     // Store metadata only in Firestore — dataUrl stays local
-    fsSet('contractorPhotos', p.id, { ...p, dataUrl: '' });
+    fsSet(projectCollection(get().currentProjectId, 'contractorPhotos'), p.id, { ...p, dataUrl: '' });
     return p.id;
   },
 
@@ -799,7 +892,7 @@ export const useStore = create<AppState>((set, get) => ({
     }));
     persist(get);
     const updated = get().contractorPhotos.find(p => p.id === id);
-    if (updated) fsSet('contractorPhotos', id, { ...updated, dataUrl: '' });
+    if (updated) fsSet(projectCollection(get().currentProjectId, 'contractorPhotos'), id, { ...updated, dataUrl: '' });
   },
 
   deleteContractorPhoto: (id) => {
@@ -807,7 +900,7 @@ export const useStore = create<AppState>((set, get) => ({
       contractorPhotos: state.contractorPhotos.filter(p => p.id !== id),
     }));
     persist(get);
-    fsDelete('contractorPhotos', id);
+    fsDelete(projectCollection(get().currentProjectId, 'contractorPhotos'), id);
   },
 
   // ─── Backup / Restore ──────────────────────────────────────────────────────
@@ -947,7 +1040,7 @@ export const useStore = create<AppState>((set, get) => ({
       };
     });
     persist(get);
-    fsSet('activityLogs', entry.id, entry);
+    fsSet(projectCollection(get().currentProjectId, 'activityLogs'), entry.id, entry);
   },
 
   setAutoBackup: (v) => {
@@ -1033,13 +1126,13 @@ export const useStore = create<AppState>((set, get) => ({
     set(state => ({ officeNoteFiles: [...state.officeNoteFiles, f] }));
     persist(get);
     // dataUrl stays local; only metadata goes to Firestore
-    fsSet('officeNoteFiles', f.id, { ...f, dataUrl: '' });
+    fsSet(projectCollection(get().currentProjectId, 'officeNoteFiles'), f.id, { ...f, dataUrl: '' });
   },
 
   deleteOfficeNoteFile: (id) => {
     set(state => ({ officeNoteFiles: state.officeNoteFiles.filter(f => f.id !== id) }));
     persist(get);
-    fsDelete('officeNoteFiles', id);
+    fsDelete(projectCollection(get().currentProjectId, 'officeNoteFiles'), id);
   },
 
   restoreFromSnapshot: (snapshotId) => {
@@ -1076,29 +1169,31 @@ export const useStore = create<AppState>((set, get) => ({
   forcePushToFirestore: async () => {
     if (!db) return;
     const state = get();
+    const fpid = state.currentProjectId;
+    const pc = (base: string) => projectCollection(fpid, base);
     await Promise.all([
-      fsBatchSet('apartments', state.apartments.map(a => ({ id: a.id, data: a }))),
-      fsBatchSet('stages',     state.stages.map(s => ({ id: s.id, data: s }))),
-      fsBatchSet('users',      state.users.map(u => ({ id: u.id, data: u }))),
+      fsBatchSet(pc('apartments'), state.apartments.map(a => ({ id: a.id, data: a }))),
+      fsBatchSet('stages',        state.stages.map(s => ({ id: s.id, data: s }))),
+      fsBatchSet('users',         state.users.map(u => ({ id: u.id, data: u }))),
       state.stageNotes.length > 0
-        ? fsBatchSet('stageNotes', state.stageNotes.map(n => ({ id: n.id, data: n })))
+        ? fsBatchSet(pc('stageNotes'), state.stageNotes.map(n => ({ id: n.id, data: n })))
         : Promise.resolve(),
       state.contractors.length > 0
         ? fsBatchSet('contractors', state.contractors.map(c => ({ id: c.id, data: c })))
         : Promise.resolve(),
       state.contractorAssignments.length > 0
-        ? fsBatchSet('contractorAssignments', state.contractorAssignments.map(a => ({
+        ? fsBatchSet(pc('contractorAssignments'), state.contractorAssignments.map(a => ({
             id: a.id, data: { ...a, attachments: a.attachments?.map(att => ({ ...att, dataUrl: '' })) },
           })))
         : Promise.resolve(),
       state.contractorNotes.length > 0
-        ? fsBatchSet('contractorNotes', state.contractorNotes.map(n => ({ id: n.id, data: n })))
+        ? fsBatchSet(pc('contractorNotes'), state.contractorNotes.map(n => ({ id: n.id, data: n })))
         : Promise.resolve(),
       state.contractorPhotos.length > 0
-        ? fsBatchSet('contractorPhotos', state.contractorPhotos.map(p => ({ id: p.id, data: { ...p, dataUrl: '' } })))
+        ? fsBatchSet(pc('contractorPhotos'), state.contractorPhotos.map(p => ({ id: p.id, data: { ...p, dataUrl: '' } })))
         : Promise.resolve(),
       state.officeNoteFiles.length > 0
-        ? fsBatchSet('officeNoteFiles', state.officeNoteFiles.map(f => ({ id: f.id, data: { ...f, dataUrl: '' } })))
+        ? fsBatchSet(pc('officeNoteFiles'), state.officeNoteFiles.map(f => ({ id: f.id, data: { ...f, dataUrl: '' } })))
         : Promise.resolve(),
       fsSet('settings', 'app', {
         autoBackup: state.autoBackup, backupFrequency: state.backupFrequency,
@@ -1123,25 +1218,27 @@ export const useStore = create<AppState>((set, get) => ({
       return;
     }
 
-    // Load all collections from Firestore in parallel
+    // Load all collections from Firestore in parallel (project-scoped collection names)
+    const pid = get().currentProjectId;
+    const col = (base: string) => projectCollection(pid, base);
     const [
       fbApts, fbStageNotes, fbStages, fbUsers, fbLogs,
       fbContractors, fbAssignments, fbNotes, fbPhotos, fbOfficeFiles, fbSettings,
       fbStageNoteVersions, fbGeneralNoteVersions,
     ] = await Promise.all([
-      fsGetAll('apartments'),
-      fsGetAll('stageNotes'),
-      fsGetAll('stages'),
-      fsGetAll('users'),
-      fsGetAll('activityLogs'),
-      fsGetAll('contractors'),
-      fsGetAll('contractorAssignments'),
-      fsGetAll('contractorNotes'),
-      fsGetAll('contractorPhotos'),
-      fsGetAll('officeNoteFiles'),
-      fsGetAll('settings'),
-      fsGetAll('stageNoteVersions'),
-      fsGetAll('generalNoteVersions'),
+      fsGetAll(col('apartments')),
+      fsGetAll(col('stageNotes')),
+      fsGetAll(col('stages')),
+      fsGetAll(col('users')),
+      fsGetAll(col('activityLogs')),
+      fsGetAll(col('contractors')),
+      fsGetAll(col('contractorAssignments')),
+      fsGetAll(col('contractorNotes')),
+      fsGetAll(col('contractorPhotos')),
+      fsGetAll(col('officeNoteFiles')),
+      fsGetAll(col('settings')),
+      fsGetAll(col('stageNoteVersions')),
+      fsGetAll(col('generalNoteVersions')),
     ]);
 
     const hasFirebaseData = fbApts.length > 0 || fbContractors.length > 0 || fbAssignments.length > 0
@@ -1210,37 +1307,37 @@ export const useStore = create<AppState>((set, get) => ({
       const fbAptIds = new Set((fbApts as unknown as Apartment[]).map(a => a.id));
       const missingApts = get().apartments.filter(a => !fbAptIds.has(a.id));
       if (missingApts.length > 0) {
-        fsBatchSet('apartments', missingApts.map(a => ({ id: a.id, data: a })));
+        fsBatchSet(col('apartments'), missingApts.map(a => ({ id: a.id, data: a })));
       }
     } else {
       // First run — push everything from localStorage to Firestore
       const state = get();
       await Promise.all([
-        fsBatchSet('apartments',  state.apartments.map(a => ({ id: a.id, data: a }))),
-        fsBatchSet('stages',      state.stages.map(s => ({ id: s.id, data: s }))),
-        fsBatchSet('users',       state.users.map(u => ({ id: u.id, data: u }))),
+        fsBatchSet(col('apartments'),  state.apartments.map(a => ({ id: a.id, data: a }))),
+        fsBatchSet(col('stages'),      state.stages.map(s => ({ id: s.id, data: s }))),
+        fsBatchSet(col('users'),       state.users.map(u => ({ id: u.id, data: u }))),
         state.stageNotes.length > 0
-          ? fsBatchSet('stageNotes', state.stageNotes.map(n => ({ id: n.id, data: n })))
+          ? fsBatchSet(col('stageNotes'), state.stageNotes.map(n => ({ id: n.id, data: n })))
           : Promise.resolve(),
         state.contractors.length > 0
-          ? fsBatchSet('contractors', state.contractors.map(c => ({ id: c.id, data: c })))
+          ? fsBatchSet(col('contractors'), state.contractors.map(c => ({ id: c.id, data: c })))
           : Promise.resolve(),
         state.contractorAssignments.length > 0
-          ? fsBatchSet('contractorAssignments', state.contractorAssignments.map(a => ({
+          ? fsBatchSet(col('contractorAssignments'), state.contractorAssignments.map(a => ({
               id: a.id,
               data: { ...a, attachments: a.attachments?.map(att => ({ ...att, dataUrl: '' })) },
             })))
           : Promise.resolve(),
         state.contractorNotes.length > 0
-          ? fsBatchSet('contractorNotes', state.contractorNotes.map(n => ({ id: n.id, data: n })))
+          ? fsBatchSet(col('contractorNotes'), state.contractorNotes.map(n => ({ id: n.id, data: n })))
           : Promise.resolve(),
         state.contractorPhotos.length > 0
-          ? fsBatchSet('contractorPhotos', state.contractorPhotos.map(p => ({ id: p.id, data: { ...p, dataUrl: '' } })))
+          ? fsBatchSet(col('contractorPhotos'), state.contractorPhotos.map(p => ({ id: p.id, data: { ...p, dataUrl: '' } })))
           : Promise.resolve(),
         state.officeNoteFiles.length > 0
-          ? fsBatchSet('officeNoteFiles', state.officeNoteFiles.map(f => ({ id: f.id, data: { ...f, dataUrl: '' } })))
+          ? fsBatchSet(col('officeNoteFiles'), state.officeNoteFiles.map(f => ({ id: f.id, data: { ...f, dataUrl: '' } })))
           : Promise.resolve(),
-        fsSet('settings', 'app', {
+        fsSet(col('settings'), 'app', {
           autoBackup:            state.autoBackup,
           backupFrequency:       state.backupFrequency,
           backupDriveFolderLink: state.backupDriveFolderLink,
@@ -1253,7 +1350,7 @@ export const useStore = create<AppState>((set, get) => ({
     // ── Real-time listeners for all collections ──────────────────────────────
     // Store every unsubscribe fn so logout() can cancel them cleanly.
     _firebaseUnsubscribers = [
-      fsListen('apartments', (docs) => {
+      fsListen(col('apartments'), (docs) => {
         if (docs.length === 0) return;
         const fbMap = new Map((docs as unknown as Apartment[]).map(a => [a.id, a]));
         set(state => {
@@ -1264,26 +1361,26 @@ export const useStore = create<AppState>((set, get) => ({
         });
         persist(get);
       }),
-      fsListen('stageNotes', (docs) => {
+      fsListen(col('stageNotes'), (docs) => {
         if (docs.length > 0) { set({ stageNotes: docs as unknown as StageNote[] }); persist(get); }
       }),
-      fsListen('stageNoteVersions', (docs) => {
+      fsListen(col('stageNoteVersions'), (docs) => {
         if (docs.length > 0) { set({ stageNoteVersions: docs as unknown as StageNoteVersion[] }); persist(get); }
       }),
-      fsListen('generalNoteVersions', (docs) => {
+      fsListen(col('generalNoteVersions'), (docs) => {
         if (docs.length > 0) { set({ generalNoteVersions: docs as unknown as GeneralNoteVersion[] }); persist(get); }
       }),
-      fsListen('activityLogs', (docs) => {
+      fsListen(col('activityLogs'), (docs) => {
         if (docs.length > 0) {
           const sorted = (docs as unknown as ActivityLog[])
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 500);
           set({ activityLogs: sorted }); persist(get);
         }
       }),
-      fsListen('contractors', (docs) => {
+      fsListen(col('contractors'), (docs) => {
         if (docs.length > 0) { set({ contractors: docs as unknown as Contractor[] }); persist(get); }
       }),
-      fsListen('contractorAssignments', (docs) => {
+      fsListen(col('contractorAssignments'), (docs) => {
         const localA = get().contractorAssignments;
         const merged = (docs as unknown as ContractorAssignment[]).map(fbA => {
           const local = localA.find(a => a.id === fbA.id);
@@ -1297,10 +1394,10 @@ export const useStore = create<AppState>((set, get) => ({
         });
         set({ contractorAssignments: merged }); persist(get);
       }),
-      fsListen('contractorNotes', (docs) => {
+      fsListen(col('contractorNotes'), (docs) => {
         if (docs.length > 0) { set({ contractorNotes: docs as unknown as ContractorNote[] }); persist(get); }
       }),
-      fsListen('contractorPhotos', (docs) => {
+      fsListen(col('contractorPhotos'), (docs) => {
         const localP = get().contractorPhotos;
         const merged = (docs as unknown as ContractorPhoto[]).map(fbP => {
           const local = localP.find(p => p.id === fbP.id);
@@ -1308,7 +1405,7 @@ export const useStore = create<AppState>((set, get) => ({
         });
         set({ contractorPhotos: merged }); persist(get);
       }),
-      fsListen('officeNoteFiles', (docs) => {
+      fsListen(col('officeNoteFiles'), (docs) => {
         const localF = get().officeNoteFiles;
         const merged = (docs as unknown as OfficeNoteFile[]).map(fbF => {
           const local = localF.find(f => f.id === fbF.id);
@@ -1316,13 +1413,13 @@ export const useStore = create<AppState>((set, get) => ({
         });
         set({ officeNoteFiles: merged }); persist(get);
       }),
-      fsListen('stages', (docs) => {
+      fsListen(col('stages'), (docs) => {
         if (docs.length > 0) { set({ stages: docs as unknown as Stage[] }); persist(get); }
       }),
-      fsListen('users', (docs) => {
+      fsListen(col('users'), (docs) => {
         if (docs.length > 0) { set({ users: docs as unknown as User[] }); persist(get); }
       }),
-      fsListen('settings', (docs) => {
+      fsListen(col('settings'), (docs) => {
         const appS = (docs.find(d => (d as Record<string,unknown>).id === 'app') ?? {}) as Record<string, unknown>;
         set(state => ({
           ...(appS.backupFrequency      ? { backupFrequency:      appS.backupFrequency as BackupFrequency }      : {}),
@@ -1367,6 +1464,7 @@ export const useStore = create<AppState>((set, get) => ({
 
 function persist(get: () => AppState) {
   const state = get();
+  const storageKey = getProjectStorageKey(state.currentProjectId);
 
   // Strip base64 from photos already on Drive (driveUrl is the source of truth)
   const photosLean = state.contractorPhotos.map(p =>
@@ -1377,6 +1475,7 @@ function persist(get: () => AppState) {
     currentUser: state.currentUser,
     users: state.users,
     stages: state.stages,
+    buildings: state.buildings,
     apartments: state.apartments,
     stageNotes: state.stageNotes,
     stageNoteVersions: state.stageNoteVersions.slice(0, 200),
@@ -1398,12 +1497,14 @@ function persist(get: () => AppState) {
     contractorUiStrings: state.contractorUiStrings,
     mainUiStrings: state.mainUiStrings,
     generalNoteVersions: state.generalNoteVersions.slice(0, 200),
+    dashboardWidgetOrder: state.dashboardWidgetOrder,
+    dashboardHiddenWidgets: state.dashboardHiddenWidgets,
   };
 
-  const ok = saveToStorage(STORAGE_KEY, payload);
+  const ok = saveToStorage(storageKey, payload);
   if (!ok) {
     // Quota still exceeded — strip all binary data and try again
-    saveToStorage(STORAGE_KEY, {
+    saveToStorage(storageKey, {
       ...payload,
       contractorPhotos: state.contractorPhotos.map(p => ({ ...p, dataUrl: '' })),
       officeNoteFiles: state.officeNoteFiles.map(f => ({ ...f, dataUrl: '' })),

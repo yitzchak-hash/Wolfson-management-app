@@ -4,7 +4,7 @@ import { format } from 'date-fns';
 import { Activity } from 'lucide-react';
 
 export function ActivityLogPage() {
-  const { activityLogs, users, mainUiStrings: s } = useStore();
+  const { activityLogs, users, buildings, mainUiStrings: s } = useStore();
 
   const ACTION_TYPE_OPTIONS = [
     { value: 'all', label: s.allActions },
@@ -121,7 +121,7 @@ export function ActivityLogPage() {
         <div>
           <label className="text-xs font-medium text-gray-500 mb-1.5 block">{s.buildingPrefix}</label>
           <div className="flex gap-1">
-            {(['all', 'A1', 'A2', 'A3'] as const).map(b => (
+            {(['all', ...buildings.map(b => b.id)]).map(b => (
               <button
                 key={b}
                 onClick={() => setBuildingFilter(b)}

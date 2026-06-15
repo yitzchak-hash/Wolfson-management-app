@@ -1,6 +1,13 @@
 export type Classification = 'standard' | 'shinui';
 
-export type BuildingId = 'A1' | 'A2' | 'A3';
+export type BuildingId = string;
+
+export interface Project {
+  id: string;
+  name: string;
+  shortName: string;
+  logoPath: string;
+}
 
 export interface User {
   id: string;
@@ -445,6 +452,13 @@ export interface MainUiStrings {
   settingsContractors: string;
   settingsApp: string;
   settingsLanguage: string;
+  settingsBuildings: string;
+  addApartmentBtn: string;
+  addFloorBtn: string;
+  floorLabel: string;
+  columnLabel: string;
+  displayNameLabel: string;
+  apartmentsCount: string;
   // Misc
   noActivity: string;
   noTasks: string;
@@ -946,6 +960,13 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   settingsContractors: 'Contractors',
   settingsApp: 'App',
   settingsLanguage: 'Language',
+  settingsBuildings: 'Buildings',
+  addApartmentBtn: 'Add Apartment',
+  addFloorBtn: 'Add Floor',
+  floorLabel: 'Floor',
+  columnLabel: 'Column',
+  displayNameLabel: 'Display Name',
+  apartmentsCount: 'apartments',
   noActivity: 'No recent activity.',
   noTasks: 'No tasks yet. Add a task to get started.',
   addTask: 'Add Task',
@@ -1446,6 +1467,13 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   settingsContractors: 'קבלנים',
   settingsApp: 'אפליקציה',
   settingsLanguage: 'שפה',
+  settingsBuildings: 'בניינים',
+  addApartmentBtn: 'הוסף דירה',
+  addFloorBtn: 'הוסף קומה',
+  floorLabel: 'קומה',
+  columnLabel: 'עמודה',
+  displayNameLabel: 'שם תצוגה',
+  apartmentsCount: 'דירות',
   noActivity: 'אין פעילות אחרונה.',
   noTasks: 'אין משימות עדיין.',
   addTask: 'הוסף משימה',

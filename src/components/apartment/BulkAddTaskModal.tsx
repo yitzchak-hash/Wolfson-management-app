@@ -15,7 +15,7 @@ const CAT_COLORS: Record<ContractorCategory, string> = {
 };
 
 type ModalStage = 'form' | 'attachmentChoice' | 'missingDriveWarning' | 'selectTargetApt' | 'uploading';
-type BuildingTab = 'all' | 'A1' | 'A2' | 'A3';
+type BuildingTab = string;
 
 interface Props {
   onClose: () => void;
@@ -24,7 +24,7 @@ interface Props {
 
 export function BulkAddTaskModal({ onClose, onToast }: Props) {
   const {
-    apartments, stages, contractors,
+    apartments, stages, contractors, buildings,
     addContractorAssignment, updateApartment, currentUser,
   } = useStore();
   const s = useStore(state => state.mainUiStrings);
@@ -321,7 +321,7 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                 <div className="w-[55%] flex flex-col overflow-hidden">
                   {/* Building tabs */}
                   <div className="flex border-b border-gray-100 flex-shrink-0">
-                    {(['all', 'A1', 'A2', 'A3'] as BuildingTab[]).map(tab => (
+                    {(['all', ...buildings.map(b => b.id)] as BuildingTab[]).map(tab => (
                       <button
                         key={tab}
                         onClick={() => setBuildingTab(tab)}
@@ -356,13 +356,13 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                   {/* Apartment list */}
                   <div className="flex-1 overflow-y-auto">
                     {buildingTab === 'all' ? (
-                      ['A1', 'A2', 'A3'].map(bid => {
-                        const bApts = aptsByBuilding.get(bid) ?? [];
+                      buildings.map(bld => {
+                        const bApts = aptsByBuilding.get(bld.id) ?? [];
                         if (bApts.length === 0) return null;
                         return (
-                          <div key={bid}>
+                          <div key={bld.id}>
                             <div className="px-4 py-1.5 bg-gray-50/80 border-b border-gray-100">
-                              <span className="text-[10px] font-bold text-[#1e3a5f] uppercase tracking-wider">{s.buildingPrefix} {bid}</span>
+                              <span className="text-[10px] font-bold text-[#1e3a5f] uppercase tracking-wider">{bld.name}</span>
                             </div>
                             {bApts.map(apt => <AptRow key={apt.id} apt={apt} selected={selectedAptIds.has(apt.id)} onToggle={toggleApt} />)}
                           </div>

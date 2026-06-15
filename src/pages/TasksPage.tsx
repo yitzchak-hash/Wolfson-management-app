@@ -20,7 +20,7 @@ const CAT_COLORS: Record<ContractorCategory, string> = {
 
 export function TasksPage() {
   const {
-    contractors, contractorAssignments, apartments, stages,
+    contractors, contractorAssignments, apartments, stages, buildings,
     addContractorAssignment, updateContractorAssignment, deleteContractorAssignment,
     updateApartment, currentUser, mainUiStrings: s,
   } = useStore();
@@ -46,7 +46,7 @@ export function TasksPage() {
   }
 
   const [filterContractorId, setFilterContractorId] = useState('');
-  const [filterBuilding, setFilterBuilding] = useState<'all' | 'A1' | 'A2' | 'A3'>('all');
+  const [filterBuilding, setFilterBuilding] = useState<string>('all');
   const [filterStage, setFilterStage] = useState('');
   const [filterPriority, setFilterPriority] = useState('');
   const [filterOverdue, setFilterOverdue] = useState(false);
@@ -337,7 +337,7 @@ export function TasksPage() {
             <div>
               <label className="text-xs font-medium text-gray-500 mb-1 block">{s.buildingPrefix}</label>
               <div className="flex gap-1">
-                {(['all', 'A1', 'A2', 'A3'] as const).map(b => (
+                {(['all', ...buildings.map(b => b.id)]).map(b => (
                   <button
                     key={b}
                     onClick={() => setFilterBuilding(b)}
@@ -427,9 +427,9 @@ export function TasksPage() {
                 className="col-span-2 border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white"
               >
                 <option value="">{s.selectApartment}</option>
-                {['A1', 'A2', 'A3'].map(bid => (
-                  <optgroup key={bid} label={`${s.buildingPrefix} ${bid}`}>
-                    {resApts.filter(a => a.buildingId === bid).map(a => (
+                {buildings.map(bld => (
+                  <optgroup key={bld.id} label={bld.name}>
+                    {resApts.filter(a => a.buildingId === bld.id).map(a => (
                       <option key={a.id} value={a.id}>
                         {s.aptPrefix} {a.displayName || a.apartmentNumber} ({s.floorPrefix} {a.floor})
                       </option>
