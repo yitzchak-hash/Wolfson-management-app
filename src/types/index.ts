@@ -917,6 +917,7 @@ export interface MainUiStrings {
   // Login extra
   loginSubtitle: string;
   loginFooterBrand: string;
+  switchProject: string;
 }
 
 export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
@@ -1424,6 +1425,7 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   // Login extra
   loginSubtitle: 'Internal project management system for AC installation tracking across all three buildings.',
   loginFooterBrand: 'WOLFSON GROUP · PROJECT MANAGEMENT',
+  switchProject: 'Select a project',
 };
 
 export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
@@ -1931,4 +1933,5 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   // Login extra
   loginSubtitle: 'מערכת ניהול פנימית למעקב אחר התקנות מיזוג בכל שלושת הבניינים.',
   loginFooterBrand: 'קבוצת וולפסון · ניהול פרויקטים',
+  switchProject: 'בחר פרויקט',
 };
