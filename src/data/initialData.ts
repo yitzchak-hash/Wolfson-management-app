@@ -142,8 +142,8 @@ export const DEFAULT_PROJECTS: Project[] = [
 ];
 
 export const NETIV_BUILDINGS: Building[] = [
-  { id: 'N1', name: 'Building N1', displayOrder: 1 },
-  { id: 'N2', name: 'Building N2', displayOrder: 2 },
+  { id: 'B1', name: 'Building B1', displayOrder: 1 },
+  { id: 'B2', name: 'Building B2', displayOrder: 2 },
 ];
 
 // Netiv layout (per building, identical for N1 and N2):
@@ -204,7 +204,7 @@ function makeNetivEmpty(bid: BuildingId, slotId: string, floor: number, col: num
 export function buildNetivApartments(): Apartment[] {
   const apts: Apartment[] = [];
 
-  for (const bid of ['N1', 'N2'] as BuildingId[]) {
+  for (const bid of ['B1', 'B2'] as BuildingId[]) {
     // Lobby (floor -1): 3 unnamed future slots
     for (let col = 1; col <= 3; col++) {
       apts.push(makeNetivEmpty(bid, `lobby-${col}`, -1, col));
