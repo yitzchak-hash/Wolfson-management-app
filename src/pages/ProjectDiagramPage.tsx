@@ -15,8 +15,6 @@ type ClassFilter = 'all' | 'standard' | 'shinui';
 export function ProjectDiagramPage() {
   const { apartments, stages, buildings, currentUser, bulkUpdateApartments, updateApartment, contractorAssignments, contractors, mainUiStrings: s, pendingOpenAptId, setPendingOpenAptId, currentProjectId } = useStore();
 
-  if (currentProjectId === 'general') return <Navigate to="/jobs" replace />;
-
   const [selectedBuilding, setSelectedBuilding] = useState<BuildingId | 'all'>('all');
   const [activeStageIds, setActiveStageIds] = useState<string[]>([]);
   const [classFilter, setClassFilter] = useState<ClassFilter>('all');
@@ -82,6 +80,8 @@ export function ProjectDiagramPage() {
     });
     return m;
   }, [apartments, sortedStages]);
+
+  if (currentProjectId === 'general') return <Navigate to="/jobs" replace />;
 
   function toggleStage(id: string) {
     setActiveStageIds(prev =>

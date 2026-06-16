@@ -320,8 +320,8 @@ export const useStore = create<AppState>((set, get) => ({
 
     // Load new project's saved data (or fresh defaults)
     const newStored = loadFromStorage(getProjectStorageKey(id), null) as Record<string, unknown> | null;
-    const defaultBuildings = id === 'netiv' ? NETIV_BUILDINGS : DEFAULT_BUILDINGS;
-    const defaultApartments = id === 'netiv' ? buildNetivApartments() : buildDefaultApartments();
+    const defaultBuildings = id === 'netiv' ? NETIV_BUILDINGS : id === 'general' ? [] : DEFAULT_BUILDINGS;
+    const defaultApartments = id === 'netiv' ? buildNetivApartments() : id === 'general' ? [] : buildDefaultApartments();
 
     const newProjectData = {
       buildings:             (newStored?.buildings as Building[] | null)             ?? defaultBuildings,
