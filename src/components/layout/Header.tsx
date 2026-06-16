@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { LogOut, User, Sun, Moon, AlertTriangle, Loader2, CheckCircle2, Search } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../data/store';
 import { Tooltip } from '../ui/Tooltip';
 import { GlobalSearch } from '../ui/GlobalSearch';
@@ -36,7 +37,13 @@ function TzviAirLogo() {
 export function Header() {
   const { currentUser, logout, lightTheme, setLightTheme, firebaseSyncError, mainUiStrings: s,
           projects, currentProjectId, setCurrentProject } = useStore();
+  const navigate = useNavigate();
   const [searchOpen, setSearchOpen] = useState(false);
+
+  function handlePickProject(id: string) {
+    setCurrentProject(id);
+    navigate(id === 'general' ? '/jobs' : '/project');
+  }
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -64,7 +71,7 @@ export function Header() {
           {projects.map(p => (
             <Tooltip key={p.id} text={p.name}>
               <button
-                onClick={() => setCurrentProject(p.id)}
+                onClick={() => handlePickProject(p.id)}
                 className={`rounded-lg p-0.5 transition-all focus:outline-none ${
                   currentProjectId === p.id
                     ? 'ring-2 ring-[#4aa8d8] opacity-100'

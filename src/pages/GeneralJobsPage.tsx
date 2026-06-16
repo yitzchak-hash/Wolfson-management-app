@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Plus, Briefcase, MapPin, ExternalLink, Trash2, ClipboardList, FolderOpen } from 'lucide-react';
+import { Navigate } from 'react-router-dom';
 import { useStore } from '../data/store';
 import { Apartment } from '../types';
 import { ApartmentDetailDrawer } from '../components/apartment/ApartmentDetailDrawer';
@@ -26,7 +27,10 @@ export function GeneralJobsPage() {
     contractorAssignments,
     currentUser,
     mainUiStrings: s,
+    currentProjectId,
   } = useStore();
+
+  if (currentProjectId !== 'general') return <Navigate to="/project" replace />;
 
   const [selectedJob, setSelectedJob] = useState<Apartment | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);

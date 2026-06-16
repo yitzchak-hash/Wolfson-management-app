@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Search, X, ToggleLeft, CheckSquare, Printer, ChevronDown } from 'lucide-react';
+import { Navigate } from 'react-router-dom';
 import { Tooltip } from '../components/ui/Tooltip';
 import { useStore } from '../data/store';
 import { Apartment, BuildingId } from '../types';
@@ -12,7 +13,9 @@ import { Toast } from '../components/ui/Toast';
 type ClassFilter = 'all' | 'standard' | 'shinui';
 
 export function ProjectDiagramPage() {
-  const { apartments, stages, buildings, currentUser, bulkUpdateApartments, updateApartment, contractorAssignments, contractors, mainUiStrings: s, pendingOpenAptId, setPendingOpenAptId } = useStore();
+  const { apartments, stages, buildings, currentUser, bulkUpdateApartments, updateApartment, contractorAssignments, contractors, mainUiStrings: s, pendingOpenAptId, setPendingOpenAptId, currentProjectId } = useStore();
+
+  if (currentProjectId === 'general') return <Navigate to="/jobs" replace />;
 
   const [selectedBuilding, setSelectedBuilding] = useState<BuildingId | 'all'>('all');
   const [activeStageIds, setActiveStageIds] = useState<string[]>([]);
