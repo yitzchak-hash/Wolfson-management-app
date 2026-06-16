@@ -1,5 +1,12 @@
 import { create } from 'zustand';
 import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS } from '../types';
+
+// Always merge stored mainUiStrings ON TOP of the fresh preset so code-added keys
+// are never missing even when localStorage has an older saved version.
+function mergeFreshMainUi(ms: Partial<MainUiStrings> | null | undefined): MainUiStrings {
+  const safe = ms ?? {};
+  return { ...(safe.isRtl ? HEBREW_MAIN_UI_STRINGS : DEFAULT_MAIN_UI_STRINGS), ...safe };
+}
 import {
   DEFAULT_BUILDINGS, DEFAULT_PROJECTS, DEFAULT_STAGES, DEFAULT_USERS, NETIV_BUILDINGS,
   buildDefaultApartments, buildNetivApartments, buildGroundFirstFloorSlots, DATA_VERSION,
@@ -263,6 +270,8 @@ export const useStore = create<AppState>((set, get) => ({
   stages: (stored?.stages as Stage[] | null) ?? defaultData.stages,
   apartments: _activeProjectId === 'wolfson'
     ? migrateApartments((stored?.apartments as Apartment[] | null) ?? defaultData.apartments)
+    : _activeProjectId === 'general'
+    ? ((stored?.apartments as Apartment[] | null) ?? []).filter(a => a.buildingId === 'G')
     : (stored?.apartments as Apartment[] | null) ?? defaultData.apartments,
   stageNotes: (stored?.stageNotes as StageNote[] | null) ?? [],
   stageNoteVersions: (stored?.stageNoteVersions as StageNoteVersion[] | null) ?? [],
@@ -288,13 +297,7 @@ export const useStore = create<AppState>((set, get) => ({
   driveExportFrequency: (stored?.driveExportFrequency as DriveExportFrequency | null) ?? 'off',
   lastDriveExportAt: (stored?.lastDriveExportAt as string | null) ?? null,
   contractorUiStrings: (stored?.contractorUiStrings as ContractorUiStrings | null) ?? DEFAULT_CONTRACTOR_UI_STRINGS,
-  // Always merge stored strings ON TOP OF the fresh preset so new keys added in code
-  // are never undefined even if localStorage has an older saved version.
-  mainUiStrings: (() => {
-    const ms = stored?.mainUiStrings as Partial<MainUiStrings> | null ?? {};
-    const base = ms.isRtl ? HEBREW_MAIN_UI_STRINGS : DEFAULT_MAIN_UI_STRINGS;
-    return { ...base, ...ms };
-  })(),
+  mainUiStrings: mergeFreshMainUi(stored?.mainUiStrings as Partial<MainUiStrings> | null),
   pendingOpenAptId: null,
   dashboardWidgetOrder: (stored?.dashboardWidgetOrder as string[] | null) ?? ['apt-stats', 'task-stats', 'stage-progress', 'building-progress', 'activity'],
   dashboardHiddenWidgets: (stored?.dashboardHiddenWidgets as string[] | null) ?? [],
@@ -336,9 +339,11 @@ export const useStore = create<AppState>((set, get) => ({
     const defaultBuildings = id === 'netiv' ? NETIV_BUILDINGS : id === 'general' ? [] : DEFAULT_BUILDINGS;
     const defaultApartments = id === 'netiv' ? buildNetivApartments() : id === 'general' ? [] : buildDefaultApartments();
 
+    const rawApartments = (newStored?.apartments as Apartment[] | null) ?? defaultApartments;
     const newProjectData = {
       buildings:             (newStored?.buildings as Building[] | null)             ?? defaultBuildings,
-      apartments:            (newStored?.apartments as Apartment[] | null)            ?? defaultApartments,
+      // Strip any cross-project apartment contamination in General project
+      apartments:            id === 'general' ? rawApartments.filter(a => a.buildingId === 'G') : rawApartments,
       stageNotes:            (newStored?.stageNotes as StageNote[] | null)            ?? [],
       stageNoteVersions:     (newStored?.stageNoteVersions as StageNoteVersion[] | null) ?? [],
       generalNoteVersions:   (newStored?.generalNoteVersions as GeneralNoteVersion[] | null) ?? [],
@@ -1337,7 +1342,7 @@ export const useStore = create<AppState>((set, get) => ({
         ...(appSettings.backupDriveFolderLink !== undefined ? { backupDriveFolderLink: appSettings.backupDriveFolderLink as string } : {}),
         ...(appSettings.contractorUiStrings  ? { contractorUiStrings:  appSettings.contractorUiStrings as ContractorUiStrings } : {}),
         ...(appSettings.autoBackup           !== undefined ? { autoBackup: appSettings.autoBackup as boolean } : {}),
-        ...(appSettings.mainUiStrings        ? { mainUiStrings: appSettings.mainUiStrings as MainUiStrings } : {}),
+        ...(appSettings.mainUiStrings        ? { mainUiStrings: mergeFreshMainUi(appSettings.mainUiStrings as Partial<MainUiStrings>) } : {}),
       }));
       persist(get);
 
@@ -1464,7 +1469,7 @@ export const useStore = create<AppState>((set, get) => ({
           ...(appS.backupDriveFolderLink !== undefined ? { backupDriveFolderLink: appS.backupDriveFolderLink as string } : {}),
           ...(appS.contractorUiStrings  ? { contractorUiStrings:  appS.contractorUiStrings as ContractorUiStrings } : {}),
           ...(appS.autoBackup           !== undefined ? { autoBackup: appS.autoBackup as boolean } : {}),
-          ...(appS.mainUiStrings        ? { mainUiStrings: appS.mainUiStrings as MainUiStrings } : {}),
+          ...(appS.mainUiStrings        ? { mainUiStrings: mergeFreshMainUi(appS.mainUiStrings as Partial<MainUiStrings>) } : {}),
           ...(appS.driveExportFrequency ? { driveExportFrequency: appS.driveExportFrequency as DriveExportFrequency } : {}),
         }));
         persist(get);

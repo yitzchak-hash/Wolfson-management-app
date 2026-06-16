@@ -9,7 +9,15 @@ type BuildingFilter = string;
 type ClassFilter = 'all' | 'standard' | 'shinui';
 
 export function ReportsPage() {
-  const { apartments, stages, buildings, stageNotes, contractorAssignments, contractors, mainUiStrings: s } = useStore();
+  const { apartments: allApartments, stages: allStages, buildings, stageNotes, contractorAssignments, contractors, mainUiStrings: s, currentProjectId } = useStore();
+
+  // Scope data to the current project only
+  const apartments = currentProjectId === 'general'
+    ? allApartments.filter(a => a.buildingId === 'G' && !a.isUnnamed)
+    : allApartments;
+  const stages = currentProjectId === 'general'
+    ? allStages.filter(st => st.projectId === 'general')
+    : allStages.filter(st => !st.projectId);
 
   const ALL_COLUMNS = [
     { key: 'building',       label: s.colBuilding,        always: true },
