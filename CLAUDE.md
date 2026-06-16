@@ -1,8 +1,11 @@
 # Wolfson Management App — Developer Notes
 
 ## Project Overview
-Internal project-management system for TzviAir's HVAC installation across W Residence (buildings A1, A2, A3).
-Tracks apartment-level progress through installation stages, contractor assignments, and photo evidence.
+Internal project-management system for TzviAir's HVAC installation. Manages three projects:
+- **Wolfson** — W Residence, buildings A1/A2/A3, apartments numbered 1-56+ per building
+- **Netiv Neve Shamir** — buildings B1/B2, 36 apartments each
+- **General Jobs** — free-form canvas of draggable job tiles (no building diagram)
+
 The entire admin UI and contractor portal are fully bilingual (English/Hebrew with RTL).
 
 ## Tech Stack
@@ -48,17 +51,18 @@ src/
     firebase.ts           — Firestore helpers: fsSet, fsDelete, fsGetAll, fsListen, fsBatchSet
     driveApi.ts           — Google Drive upload helpers (backend-proxied, no OAuth)
   pages/
-    ProjectDiagramPage    — building diagram with filters + bulk edit
-    DashboardPage         — summary cards
+    ProjectDiagramPage    — building diagram with filters + bulk edit (building projects only)
+    GeneralJobsPage       — free-form canvas for General Jobs project (/jobs route)
+    DashboardPage         — summary cards (project-scoped)
     TasksPage             — contractor task management (dedicated page, /tasks route)
-    AnalyticsDashboard    — stage/building analytics
-    ReportsPage           — CSV export
+    AnalyticsDashboard    — stage/building analytics (project-scoped)
+    ReportsPage           — CSV export (project-scoped)
     ActivityLogPage       — global change log
     SettingsPage          — stages / users / contractors / app (theme, backup) / language
     ContractorPortal      — public /c/:token page (tasks + building map)
-    LoginPage
+    LoginPage             — two-step: code entry → project picker
   components/
-    layout/               — AppLayout, Header, Sidebar
+    layout/               — AppLayout, Header (project switcher), Sidebar
     apartment/            — ApartmentDetailDrawer (5 tabs: details/tasks/stages/history/photos),
                             StageNotesSection, ActivitySection, QuickAddTaskPanel, BulkAddTaskModal
     diagram/              — BuildingDiagram (supports compact, highlightedApartmentIds, aptSubLabels)
@@ -67,8 +71,62 @@ src/
     ui/                   — Toast, Tooltip, GlobalSearch (Cmd+K), shared primitives
 ```
 
+## Multi-Project Architecture
+
+### Three projects
+| Project | `id` | Buildings | Storage key | Firestore prefix |
+|---------|------|-----------|-------------|-----------------|
+| Wolfson | `'wolfson'` | A1, A2, A3 | `wolfson_app_data` | bare (e.g. `apartments`) |
+| Netiv Neve Shamir | `'netiv'` | B1, B2 | `netiv_app_data` | `netiv_` (e.g. `netiv_apartments`) |
+| General Jobs | `'general'` | none (`[]`) | `general_app_data` | `general_` |
+
+Active project persisted to `active_project` localStorage key.
+
+### Global vs per-project data
+**Global** (shared across all projects): `users`, `contractors`, `stages` (global ones, `projectId` undefined), `autoBackup`, `backupFrequency`, `backupDriveFolderLink`, `contractorUiStrings`, `mainUiStrings`, `lightTheme`
+
+**Per-project**: `apartments`, `buildings`, `stageNotes`, `stageNoteVersions`, `generalNoteVersions`, `activityLogs`, `contractorAssignments`, `contractorNotes`, `contractorPhotos`, `officeNoteFiles`, `dashboardWidgetOrder`, `dashboardHiddenWidgets`, `canvasElements`
+
+### Project switching (`setCurrentProject(id)`)
+1. Saves current project data to localStorage
+2. Cancels all Firestore listeners
+3. Loads new project data from `${id}_app_data` (or fresh defaults)
+4. Merges global settings on top
+5. Restarts `startFirebaseSync()` for the new project's collections
+6. `set({ currentProjectId: id, ...newProjectData, ...globalState })`
+
+**Critical isolation rules** (enforced at all load points — startup AND `setCurrentProject`):
+- General project `buildings` is always `[]` regardless of localStorage
+- General project `apartments` is always filtered to `buildingId === 'G'` to prevent cross-project contamination
+
+### Routing by project
+- Header project logo click → `handlePickProject(id)` which calls `setCurrentProject(id)` AND `navigate('/jobs')` for General or `navigate('/project')` for building projects
+- `ProjectDiagramPage`: renders `<Navigate to="/jobs" replace />` if `currentProjectId === 'general'`
+- `GeneralJobsPage`: renders `<Navigate to="/project" replace />` if `currentProjectId !== 'general'`
+- Sidebar shows Briefcase icon → `/jobs` for General; Building2 icon → `/project` for building projects
+
+### Login flow
+Two-step: user enters their code → on success, project picker shows all three project logos → clicking a logo calls `setCurrentProject(id)` and navigates to the correct page.
+
+### Project-specific stages
+`Stage.projectId?: string` — `undefined` means global (shown in Wolfson + Netiv), `'general'` means General Jobs only. Settings → Stages shows only the current project's stages. `sortedStages` in every component must filter: `st.projectId === 'general' ? ... : !st.projectId`.
+
+### Dashboard / Analytics / Reports project scoping
+All three pages scope their local `apartments` variable:
+```ts
+const apartments = currentProjectId === 'general'
+  ? allApartments.filter(a => a.buildingId === 'G' && !a.isUnnamed)
+  : allApartments;
+```
+And stages:
+```ts
+const stages = allStages.filter(st => currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId);
+```
+
 ## Data Model Key Points
-- **Building IDs**: `A1`, `A2`, `A3`
+
+### Apartments (building projects)
+- **Building IDs**: `A1`, `A2`, `A3` (Wolfson); `B1`, `B2` (Netiv)
 - **Apartment numbering per building**: 1-52 (floors 2-14, 4/floor), 53-54 (floor 15, 2 wide), 55-56 (floor 16, 2 wide), basement slots 57+ (unnamed by default)
 - **A1 is missing apartment 37** (blank placeholder with `isUnnamed: true`)
 - **No duplex apartments** — `isDuplexApt` field retained for data compat but always `false`
@@ -76,9 +134,40 @@ src/
 - **mergedWith**: optional field on Apartment for buyer-merged units (bilateral link, managed via `mergeApartments()` action)
 - **Merged apartment sync**: `currentStageId`, `classification`, `driveLink`, and `plansPdfLink` auto-sync to the partner on every `updateApartment` call
 - **unmergeApartments(aptId, keepDataAptId, user)**: unlinking action; `keepDataAptId` is `aptId | partnerId | 'both'`; the loser gets `currentStageId=null`, `driveLink=undefined`, `plansPdfLink=undefined`
-- **Critical**: When `fsSet` writes a field as `undefined`, the `deleteField()` sanitizer in `firebase.ts` ensures it is actually removed from Firestore. This is essential for `mergedWith` — without it, the stale value persists and the apartment stays linked even after unlinking.
 - **driveLink**: Google Drive folder URL for the apartment; stored on Apartment, editable in drawer
 - **plansPdfLink**: Google Drive file URL for the Engineering Plans PDF; shown as embedded iframe viewer + download in both admin drawer and contractor portal
+
+### General Jobs (Apartment records with `buildingId === 'G'`)
+General Jobs reuse the `Apartment` model with these extra fields:
+- `zohoLink?: string` — Zoho CRM link shown on tile
+- `address?: string` — job site address shown on tile
+- `canvasX?: number`, `canvasY?: number` — free-canvas position (saved on drag)
+- `tileColor?: string` — custom background color hex (e.g. `'#dbeafe'`)
+- `isUnnamed: false` always for real jobs; `apartmentNumber: ''`
+- Created with `buildingId: 'G'`, `floor: 0`, IDs prefixed `G-`
+- **`deleteApartment(id)`** action exists in store for removing jobs
+
+### CanvasElement (General Jobs canvas extras)
+```ts
+interface CanvasElement {
+  id: string;     // prefixed 'CE-'
+  type: 'note' | 'box';
+  x: number; y: number;
+  w: number; h: number;
+  text: string;
+  color: string;  // hex or rgba
+}
+```
+Stored in `canvasElements: CanvasElement[]` per-project. Actions: `addCanvasElement`, `updateCanvasElement`, `deleteCanvasElement`. Persisted to localStorage only (not Firestore). Notes are fixed-size sticky notes; boxes are resizable section containers with a draggable bottom-right resize handle.
+
+### ApartmentDetailDrawer in General context
+When `currentProjectId === 'general'`:
+- Hides apartment number, classification toggle, Engineering Plans, Settings collapsible
+- Shows Address, Zoho Link, Drive Folder fields with open-link buttons
+- Label reads "Job" instead of building ID
+- Stage picker filtered to `projectId === 'general'` stages only
+
+### Other Apartment fields
 - **DATA_VERSION** in `initialData.ts` — bumping forces a localStorage reset (dev only; production data would need a migration)
 - **TaskAttachment**: `{ id, filename, mimeType, dataUrl }` — files attached to a task when creating it; `dataUrl` stripped before Firestore writes (stays in localStorage only)
 - **Task priority**: `'urgent' | 'normal' | 'low'` on `ContractorAssignment` — shown as colored badges, urgent sorts first
@@ -94,6 +183,16 @@ The store exposes `mainUiStrings` which reflects whichever preset is active. Com
 ```
 const s = useStore(state => state.mainUiStrings);
 ```
+
+### CRITICAL — `mergeFreshMainUi()` must be used everywhere mainUiStrings is loaded
+`mainUiStrings` is persisted to localStorage and Firestore. When new keys are added to the code, old stored objects don't have them. **Always** load via:
+```ts
+function mergeFreshMainUi(ms: Partial<MainUiStrings> | null | undefined): MainUiStrings {
+  const safe = ms ?? {};
+  return { ...(safe.isRtl ? HEBREW_MAIN_UI_STRINGS : DEFAULT_MAIN_UI_STRINGS), ...safe };
+}
+```
+This function is defined in `store.ts` and used in all three load points: startup initialization, Firebase initial sync, and the live `settings` Firestore listener. **Never** do `mainUiStrings: stored.mainUiStrings as MainUiStrings` — it will cause blank labels for any key added after the user's localStorage was last written.
 
 ### ContractorUiStrings
 Contractor portal strings live in a separate `ContractorUiStrings` interface. These are user-editable via Settings → Language and stored in Firestore `settings/app`. Admin UI strings are preset-only.
@@ -112,6 +211,21 @@ Module-level constants cannot access the translation store. Any constant that ou
 
 ### RTL
 `settings.isRtl` controls text direction. `dir="rtl"` is applied to the root layout when true.
+
+## General Jobs Page (`/jobs`)
+- Only rendered when `currentProjectId === 'general'`
+- Free-form canvas with dotted-grid background (22px grid)
+- **Job tiles**: `TILE_W=215, TILE_H=132` — show job name, stage dot, stage badge, address, Zoho/Drive links, pending task count
+- **Drag**: pointer events with `setPointerCapture`; short press = open drawer, move >4px = drag; delta-based multi-tile drag
+- **Lasso select**: pointerdown on canvas background draws a selection rect; tiles/elements overlapping it get selected
+- **Ctrl/Cmd+click**: toggles individual tiles in/out of selection
+- **Right-click context menu**: Duplicate, Change Color, Delete (operates on all selected if multiple selected)
+- **Color picker**: 9 tile colors, 8 note colors, 6 box colors shown as a swatch grid
+- **Note button**: creates a `CanvasElement` type='note' (sticky note, 165×150, editable text, 8 color options)
+- **Box button**: creates a `CanvasElement` type='box' (section box, 320×220, resizable via bottom-right handle, editable title)
+- **Double-click** any note/box to edit text inline via `<textarea>`
+- **Delete key**: removes selected tiles/elements; **Escape**: clears selection
+- **Add Job modal**: collects name, address, Zoho link, Drive link (all optional)
 
 ## Contractor Portal
 - Public URL: `/c/:token` — no auth required, token-based access
@@ -171,6 +285,7 @@ Module-level constants cannot access the translation store. Any constant that ou
 - `getTaskDueBadge()` helper defined inside component (mirrors `getDueBadge()` logic)
 - **Photos tab**: loads Drive folder contents via backend API when `driveLink` is set; lightbox viewer
 - **Unmerge flow**: `unmergeTarget` state captures partner apartment at modal-open time (prevents modal disappearing due to Firebase re-renders). `handleConfirmUnmerge` calls `unmergeApartments` which sets `mergedWith: undefined` on both apartments — the `fsSet` sanitizer ensures this actually removes the field from Firestore.
+- **General Jobs mode** (`isGeneralProject`): hides apt#, classification, Engineering Plans, Settings collapsible; shows address/zoho/drive fields; stage picker filtered to General stages only
 
 ## GlobalSearch
 - Triggered by Cmd+K (Mac) or Ctrl+K (Windows/Linux)
@@ -180,7 +295,7 @@ Module-level constants cannot access the translation store. Any constant that ou
 - Strings via `s.searchPlaceholder`, `s.searchTypeApartment`, `s.searchNoResults`, `s.searchStartTyping`
 
 ## Settings Page Tabs
-- **Stages** — add/edit/reorder/delete stages with color picker, `nameHe` Hebrew name field, description
+- **Stages** — add/edit/reorder/delete stages with color picker, `nameHe` Hebrew name field, description; filtered to current project (General sees only `projectId==='general'` stages, building projects see global stages)
 - **Users** — manage admin users (name, code, role)
 - **Contractors** — manage contractors, copy portal link, see token, category (drywall/AC/general)
 - **App** — theme toggle, backup frequency, backup history log, Drive backup folder, export/import, Firebase test panel, Force Push to Firestore
@@ -221,7 +336,9 @@ All collections are synced to Firestore in real time:
 - `officeNoteFiles` (metadata only — `dataUrl` stripped)
 - `settings/app` document: `autoBackup`, `backupFrequency`, `backupDriveFolderLink`, `contractorUiStrings`
 
-`startFirebaseSync()` (called on login):
+Wolfson uses bare collection names (`apartments`). Other projects use prefixed names (`netiv_apartments`, `general_apartments`). Helper: `projectCollection(projectId, base)` in `firebase.ts`.
+
+`startFirebaseSync()` (called on login and on project switch):
 1. Loads all 11 collections in parallel
 2. If data exists → merges binary fields from localStorage and sets state; seeds any missing apartments to Firestore
 3. If empty → pushes entire localStorage snapshot as first-run seed
