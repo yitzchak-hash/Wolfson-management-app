@@ -80,8 +80,12 @@ function StatCard({ label, value, sub, icon: Icon, color }: {
 }
 
 export function AnalyticsDashboard() {
-  const { apartments, stages: allStages, buildings, activityLogs, contractors, contractorAssignments, lightTheme, mainUiStrings: s, currentProjectId } = useStore();
+  const { apartments: allApartments, stages: allStages, buildings, activityLogs, contractors, contractorAssignments, lightTheme, mainUiStrings: s, currentProjectId } = useStore();
   const stages = allStages.filter(st => currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId);
+  // Scope apartments to current project only
+  const apartments = currentProjectId === 'general'
+    ? allApartments.filter(a => a.buildingId === 'G' && !a.isUnnamed)
+    : allApartments;
 
   const sortedStages = useMemo(() => [...stages].filter(s => s.active).sort((a, b) => a.order - b.order), [stages]);
 

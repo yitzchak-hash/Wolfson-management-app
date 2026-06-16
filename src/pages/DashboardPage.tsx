@@ -14,12 +14,16 @@ const DEFAULT_WIDGET_ORDER = ['apt-stats', 'task-stats', 'stage-progress', 'buil
 
 export function DashboardPage() {
   const {
-    apartments, stages: allStages, activityLogs, contractorAssignments,
+    apartments: allApartments, stages: allStages, activityLogs, contractorAssignments,
     mainUiStrings: s, setPendingOpenAptId,
     dashboardWidgetOrder, dashboardHiddenWidgets, setDashboardLayout,
     buildings, currentProjectId,
   } = useStore();
   const stages = allStages.filter(st => currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId);
+  // Scope apartments to current project only (guard against stale localStorage)
+  const apartments = currentProjectId === 'general'
+    ? allApartments.filter(a => a.buildingId === 'G' && !a.isUnnamed)
+    : allApartments;
   const navigate = useNavigate();
   const [modal, setModal] = useState<ModalKind>(null);
   const [isCustomizing, setIsCustomizing] = useState(false);

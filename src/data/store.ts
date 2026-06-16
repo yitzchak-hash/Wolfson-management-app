@@ -266,7 +266,9 @@ export const useStore = create<AppState>((set, get) => ({
   dataVersion: DATA_VERSION,
   currentUser: stored?.currentUser as User | null ?? null,
   users: (stored?.users as User[] | null) ?? defaultData.users,
-  buildings: (stored?.buildings as Building[] | null) ?? defaultData.buildings,
+  buildings: _activeProjectId === 'general'
+    ? []
+    : (stored?.buildings as Building[] | null) ?? defaultData.buildings,
   stages: (stored?.stages as Stage[] | null) ?? defaultData.stages,
   apartments: _activeProjectId === 'wolfson'
     ? migrateApartments((stored?.apartments as Apartment[] | null) ?? defaultData.apartments)
@@ -341,8 +343,7 @@ export const useStore = create<AppState>((set, get) => ({
 
     const rawApartments = (newStored?.apartments as Apartment[] | null) ?? defaultApartments;
     const newProjectData = {
-      buildings:             (newStored?.buildings as Building[] | null)             ?? defaultBuildings,
-      // Strip any cross-project apartment contamination in General project
+      buildings:             id === 'general' ? [] : (newStored?.buildings as Building[] | null) ?? defaultBuildings,
       apartments:            id === 'general' ? rawApartments.filter(a => a.buildingId === 'G') : rawApartments,
       stageNotes:            (newStored?.stageNotes as StageNote[] | null)            ?? [],
       stageNoteVersions:     (newStored?.stageNoteVersions as StageNoteVersion[] | null) ?? [],
