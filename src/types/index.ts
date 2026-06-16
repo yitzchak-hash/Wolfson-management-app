@@ -101,10 +101,23 @@ export interface Apartment {
   address?: string;    // General Jobs: job site address
   canvasX?: number;    // General Jobs: free-canvas X position (px)
   canvasY?: number;    // General Jobs: free-canvas Y position (px)
+  tileColor?: string;  // General Jobs: custom background color for the tile
   createdAt: string;
   updatedAt: string;
   updatedBy: string;
   updatedByName: string;
+}
+
+// Free-form canvas elements in the General Jobs canvas (sticky notes, section boxes)
+export interface CanvasElement {
+  id: string;
+  type: 'note' | 'box';
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  text: string;
+  color: string;
 }
 
 export interface ActivityLog {

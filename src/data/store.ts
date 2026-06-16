@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Apartment, ActivityLog, Project, Stage, StageNote, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS } from '../types';
+import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS } from '../types';
 import {
   DEFAULT_BUILDINGS, DEFAULT_PROJECTS, DEFAULT_STAGES, DEFAULT_USERS, NETIV_BUILDINGS,
   buildDefaultApartments, buildNetivApartments, buildGroundFirstFloorSlots, DATA_VERSION,
@@ -247,6 +247,12 @@ interface AppState {
   currentProjectId: string;
   projects: Project[];
   setCurrentProject: (id: string) => void;
+
+  // General Jobs canvas elements (sticky notes, section boxes)
+  canvasElements: CanvasElement[];
+  addCanvasElement: (el: CanvasElement) => void;
+  updateCanvasElement: (id: string, changes: Partial<CanvasElement>) => void;
+  deleteCanvasElement: (id: string) => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -267,6 +273,7 @@ export const useStore = create<AppState>((set, get) => ({
   contractorNotes: (stored?.contractorNotes as ContractorNote[] | null) ?? [],
   contractorPhotos: (stored?.contractorPhotos as ContractorPhoto[] | null) ?? [],
   officeNoteFiles: (stored?.officeNoteFiles as OfficeNoteFile[] | null) ?? [],
+  canvasElements: (stored?.canvasElements as CanvasElement[] | null) ?? [],
   firebaseListening: false,
   firebaseSyncError: null,
   googleClientId: (stored?.googleClientId as string | null) ?? '',
@@ -281,7 +288,13 @@ export const useStore = create<AppState>((set, get) => ({
   driveExportFrequency: (stored?.driveExportFrequency as DriveExportFrequency | null) ?? 'off',
   lastDriveExportAt: (stored?.lastDriveExportAt as string | null) ?? null,
   contractorUiStrings: (stored?.contractorUiStrings as ContractorUiStrings | null) ?? DEFAULT_CONTRACTOR_UI_STRINGS,
-  mainUiStrings: (stored?.mainUiStrings as MainUiStrings | null) ?? DEFAULT_MAIN_UI_STRINGS,
+  // Always merge stored strings ON TOP OF the fresh preset so new keys added in code
+  // are never undefined even if localStorage has an older saved version.
+  mainUiStrings: (() => {
+    const ms = stored?.mainUiStrings as Partial<MainUiStrings> | null ?? {};
+    const base = ms.isRtl ? HEBREW_MAIN_UI_STRINGS : DEFAULT_MAIN_UI_STRINGS;
+    return { ...base, ...ms };
+  })(),
   pendingOpenAptId: null,
   dashboardWidgetOrder: (stored?.dashboardWidgetOrder as string[] | null) ?? ['apt-stats', 'task-stats', 'stage-progress', 'building-progress', 'activity'],
   dashboardHiddenWidgets: (stored?.dashboardHiddenWidgets as string[] | null) ?? [],
@@ -337,6 +350,7 @@ export const useStore = create<AppState>((set, get) => ({
       backupSnapshots:       (newStored?.backupSnapshots as BackupSnapshot[] | null)  ?? [],
       dashboardWidgetOrder:  (newStored?.dashboardWidgetOrder as string[] | null)     ?? ['apt-stats', 'task-stats', 'stage-progress', 'building-progress', 'activity'],
       dashboardHiddenWidgets:(newStored?.dashboardHiddenWidgets as string[] | null)   ?? [],
+      canvasElements:        (newStored?.canvasElements as CanvasElement[] | null)    ?? [],
     };
 
     // Cancel existing Firebase listeners and switch project
@@ -520,6 +534,19 @@ export const useStore = create<AppState>((set, get) => ({
     set(state => ({ apartments: state.apartments.filter(a => a.id !== id) }));
     persist(get);
     fsDelete(projectCollection(get().currentProjectId, 'apartments'), id);
+  },
+
+  addCanvasElement: (el) => {
+    set(state => ({ canvasElements: [...state.canvasElements, el] }));
+    persist(get);
+  },
+  updateCanvasElement: (id, changes) => {
+    set(state => ({ canvasElements: state.canvasElements.map(el => el.id === id ? { ...el, ...changes } : el) }));
+    persist(get);
+  },
+  deleteCanvasElement: (id) => {
+    set(state => ({ canvasElements: state.canvasElements.filter(el => el.id !== id) }));
+    persist(get);
   },
 
   upsertStageNote: (apartmentId, stageId, noteText, user, attachment, attachments) => {
@@ -1510,6 +1537,7 @@ function persist(get: () => AppState) {
     generalNoteVersions: state.generalNoteVersions.slice(0, 200),
     dashboardWidgetOrder: state.dashboardWidgetOrder,
     dashboardHiddenWidgets: state.dashboardHiddenWidgets,
+    canvasElements: state.canvasElements,
   };
 
   const ok = saveToStorage(storageKey, payload);
