@@ -99,6 +99,8 @@ export interface Apartment {
   plansPdfLink?: string; // Google Drive link to the Engineering Plans PDF
   zohoLink?: string;   // General Jobs: Zoho CRM / work order link
   address?: string;    // General Jobs: job site address
+  canvasX?: number;    // General Jobs: free-canvas X position (px)
+  canvasY?: number;    // General Jobs: free-canvas Y position (px)
   createdAt: string;
   updatedAt: string;
   updatedBy: string;

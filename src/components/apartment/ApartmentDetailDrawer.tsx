@@ -543,16 +543,18 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               {/* Top row: Apt# | Family Name | Classification | Stage */}
               <div className="flex items-start gap-2">
                 {/* Apt number — read-only small */}
+                {!isGeneralProject && (
                 <div className="flex-shrink-0">
                   <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.aptPrefix} #</label>
                   <div className="w-14 border border-gray-200 rounded-lg px-2 py-2 text-sm font-bold text-center text-gray-700 bg-gray-50">
                     {apartment.apartmentNumber}
                   </div>
                 </div>
+                )}
 
-                {/* Family name */}
+                {/* Family name / Job name */}
                 <div className="flex-1 min-w-0">
-                  <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.familyName}</label>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1">{isGeneralProject ? ui.jobNameLabel : ui.familyName}</label>
                   <input
                     value={familyName}
                     onChange={e => setFamilyName(e.target.value)}
@@ -563,6 +565,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 </div>
 
                 {/* Classification toggle */}
+                {!isGeneralProject && (
                 <div className="flex-shrink-0">
                   <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.typeField}</label>
                   <div className="flex gap-1">
@@ -588,6 +591,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     </Tooltip>
                   </div>
                 </div>
+                )}
 
                 {/* Current stage */}
                 <div className="flex-shrink-0 min-w-[120px]">
@@ -637,6 +641,28 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                           className="flex items-center gap-1 px-3 py-2 rounded-lg border border-[#4aa8d8] text-[#4aa8d8] text-xs font-medium hover:bg-[#4aa8d8]/10 transition-all flex-shrink-0"
                         >
                           <ExternalLink size={12} /> {ui.openZohoBtn}
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.driveFolder}</label>
+                    <div className="flex gap-2">
+                      <input
+                        value={driveLink}
+                        onChange={e => setDriveLink(e.target.value)}
+                        onBlur={autoSave}
+                        placeholder="https://drive.google.com/..."
+                        className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                      />
+                      {driveLink.trim() && (
+                        <a
+                          href={driveLink.startsWith('http') ? driveLink : `https://${driveLink}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 px-3 py-2 rounded-lg border border-[#4aa8d8] text-[#4aa8d8] text-xs font-medium hover:bg-[#4aa8d8]/10 transition-all flex-shrink-0"
+                        >
+                          <FolderOpen size={12} /> {ui.openFolderTooltip}
                         </a>
                       )}
                     </div>
@@ -848,6 +874,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               </div>
 
               {/* Engineering Plans PDF */}
+              {!isGeneralProject && (
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
@@ -948,6 +975,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   </div>
                 )}
               </div>
+              )}
 
               {/* Save button */}
               <button
@@ -958,6 +986,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               </button>
 
               {/* Settings collapsible */}
+              {!isGeneralProject && (
               <div className="border-t border-gray-100 pt-3">
                 <button
                   onClick={() => setShowSettings(v => !v)}
@@ -1112,6 +1141,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   </div>
                 )}
               </div>
+              )}
             </div>
           )}
 
