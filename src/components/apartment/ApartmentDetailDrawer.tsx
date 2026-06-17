@@ -199,6 +199,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         findAllPlansPdfsViaBackend(apartment.driveLink).then(pdfs => {
           setAvailablePdfs(pdfs);
           setSelectedPdfIdx(0);
+          if (pdfs.length > 0 && currentUser) {
+            const link = `https://drive.google.com/file/d/${pdfs[0].id}/view`;
+            setPlansPdfLink(link);
+            updateApartment(apartment.id, { plansPdfLink: link }, currentUser);
+          }
         }).finally(() => setFetchingPdf(false));
       }
     }
@@ -902,7 +907,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                               if (pdfs.length > 0) {
                                 setAvailablePdfs(pdfs);
                                 setSelectedPdfIdx(0);
-                                setPlansPdfLink(`https://drive.google.com/file/d/${pdfs[0].id}/view`);
+                                const link = `https://drive.google.com/file/d/${pdfs[0].id}/view`;
+                                setPlansPdfLink(link);
+                                updateApartment(apartment!.id, { plansPdfLink: link }, currentUser);
                                 onToast(ui.pdfFound);
                               } else {
                                 setAvailablePdfs([]);
@@ -1068,7 +1075,15 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                 if (!detectedPdfId) {
                                   setFetchingPdf(true);
                                   findAllPlansPdfsViaBackend(trimmed)
-                                    .then(pdfs => { if (pdfs.length > 0) { setAvailablePdfs(pdfs); setSelectedPdfIdx(0); } })
+                                    .then(pdfs => {
+                                      if (pdfs.length > 0) {
+                                        setAvailablePdfs(pdfs);
+                                        setSelectedPdfIdx(0);
+                                        const link = `https://drive.google.com/file/d/${pdfs[0].id}/view`;
+                                        setPlansPdfLink(link);
+                                        updateApartment(apartment!.id, { plansPdfLink: link }, currentUser);
+                                      }
+                                    })
                                     .finally(() => setFetchingPdf(false));
                                 }
                               }

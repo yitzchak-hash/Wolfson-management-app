@@ -10,6 +10,7 @@ import {
   ChevronLeft, ChevronRight, Languages, History,
 } from 'lucide-react';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
+import { TaskCalendar, CalendarEvent } from '../components/tasks/TaskCalendar';
 import {
   extractFileId, drivePreviewUrl, driveDownloadUrl, driveThumbUrl,
   extractFolderId, isUploadBackendConfigured, findOrCreateFolderViaBackend,
@@ -288,7 +289,7 @@ export function ContractorPortal() {
            : langOverride === 'he' ? HEBREW_CONTRACTOR_UI_STRINGS
            : contractorUiStrings;
 
-  const [activeTab, setActiveTab] = useState<'tasks' | 'map'>('tasks');
+  const [activeTab, setActiveTab] = useState<'tasks' | 'map' | 'calendar'>('tasks');
   const [selectedAssignment, setSelectedAssignment] = useState<ContractorAssignment | null>(null);
   const [noteText, setNoteText] = useState('');
   const [noteAttachments, setNoteAttachments] = useState<{ dataUrl: string; filename: string; mimeType: string; driveFileId?: string; driveUrl?: string }[]>([]);
@@ -626,6 +627,12 @@ export function ContractorPortal() {
           }`}>
           <FileText size={15} /> {s.myTasks}
         </button>
+        <button onClick={() => setActiveTab('calendar')}
+          className={`flex-1 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
+            activeTab === 'calendar' ? 'text-[#1e3a5f] border-b-2 border-[#1e3a5f]' : 'text-gray-500'
+          }`}>
+          <CalendarDays size={15} /> {s.calendarTab}
+        </button>
         <button onClick={() => setActiveTab('map')}
           className={`flex-1 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
             activeTab === 'map' ? 'text-[#1e3a5f] border-b-2 border-[#1e3a5f]' : 'text-gray-500'
@@ -736,6 +743,36 @@ export function ContractorPortal() {
           )}
         </main>
       )}
+
+      {/* Calendar tab */}
+      {activeTab === 'calendar' && (() => {
+        const calEvents: CalendarEvent[] = assignments
+          .filter(a => !!a.dueDate)
+          .map(a => {
+            const apt = getApt(a.apartmentId);
+            return {
+              id: a.id,
+              date: a.dueDate!,
+              title: a.taskDescription,
+              subtitle: apt ? (apt.displayName || apt.apartmentNumber || a.buildingId) : a.buildingId,
+              color: catColor,
+              completed: !!a.completedAt,
+              onClick: () => setSelectedAssignment(a),
+            };
+          });
+        const wdLabels = s.isRtl
+          ? ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳']
+          : undefined;
+        return (
+          <div className="flex-1 overflow-auto px-3 py-4">
+            <TaskCalendar
+              events={calEvents}
+              weekdayLabels={wdLabels}
+              todayLabel={s.filterToday}
+            />
+          </div>
+        );
+      })()}
 
       {/* Building Map tab */}
       {activeTab === 'map' && (

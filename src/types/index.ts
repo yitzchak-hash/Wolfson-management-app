@@ -326,6 +326,7 @@ export interface ContractorUiStrings {
   taskPlural: string;
   doneLabel: string;
   duePrefix: string;
+  calendarTab: string;
 }
 
 export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
@@ -373,6 +374,7 @@ export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   taskPlural: 'tasks',
   doneLabel: 'done',
   duePrefix: 'Due',
+  calendarTab: 'Calendar',
 };
 
 export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
@@ -420,6 +422,7 @@ export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   taskPlural: 'משימות',
   doneLabel: 'הושלם',
   duePrefix: 'תאריך יעד',
+  calendarTab: 'לוח שנה',
 };
 
 // ─── Main Admin UI Strings ────────────────────────────────────────────────────
