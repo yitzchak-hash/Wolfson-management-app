@@ -7,6 +7,7 @@ import { Navigate } from 'react-router-dom';
 import { useStore } from '../data/store';
 import { Apartment, CanvasElement } from '../types';
 import { ApartmentDetailDrawer } from '../components/apartment/ApartmentDetailDrawer';
+import { QuickAddTaskPanel } from '../components/apartment/QuickAddTaskPanel';
 import { Toast } from '../components/ui/Toast';
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
@@ -107,6 +108,7 @@ export function GeneralJobsPage() {
 
   // ── All hooks must come before any early return ──────────────────
   const [selectedJob, setSelectedJob] = useState<Apartment | null>(null);
+  const [addTaskJob, setAddTaskJob] = useState<Apartment | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [jobName, setJobName] = useState('');
   const [jobAddress, setJobAddress] = useState('');
@@ -893,6 +895,16 @@ export function GeneralJobsPage() {
         <ApartmentDetailDrawer
           apartment={selectedJob}
           onClose={() => setSelectedJob(null)}
+          currentUser={currentUser}
+          onToast={msg => setToast(msg)}
+          onRequestAddTask={(apt) => { setSelectedJob(null); setAddTaskJob(apt); }}
+        />
+      )}
+
+      {addTaskJob && currentUser && (
+        <QuickAddTaskPanel
+          apartment={addTaskJob}
+          onClose={() => setAddTaskJob(null)}
           currentUser={currentUser}
           onToast={msg => setToast(msg)}
         />

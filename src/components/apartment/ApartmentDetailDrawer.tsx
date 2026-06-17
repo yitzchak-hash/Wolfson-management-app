@@ -209,7 +209,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const detectedPdfId = availablePdfs[selectedPdfIdx]?.id ?? null;
 
   const sortedStages = [...stages]
-    .filter(s => s.active && (isGeneralProject ? s.projectId === 'general' : !s.projectId))
+    .filter(s => s.active && (!s.projectId || (isGeneralProject && s.projectId === 'general')))
     .sort((a, b) => a.order - b.order);
   const currentStage = stages.find(s => s.id === currentStageId);
   const aptLogs = activityLogs.filter(l => l.apartmentId === apartment.id).slice(0, 20);
@@ -874,7 +874,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               </div>
 
               {/* Engineering Plans PDF */}
-              {!isGeneralProject && (
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
@@ -975,7 +974,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   </div>
                 )}
               </div>
-              )}
 
               {/* Save button */}
               <button
