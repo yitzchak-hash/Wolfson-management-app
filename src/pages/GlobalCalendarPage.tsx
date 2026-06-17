@@ -1,8 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarDays } from 'lucide-react';
 import { useStore, loadAllProjectsTaskData } from '../data/store';
 import { TaskCalendar, CalendarEvent } from '../components/tasks/TaskCalendar';
+import { ContractorAssignment, Apartment } from '../types';
+import { fsListen, isFirebaseConfigured, projectCollection } from '../data/firebase';
+import { DEFAULT_PROJECTS } from '../data/initialData';
 
 const CAT_COLORS: Record<string, string> = { drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981' };
 
@@ -18,14 +21,50 @@ export function GlobalCalendarPage() {
   const [filterContractorId, setFilterContractorId] = useState('');
   const [showCompleted, setShowCompleted] = useState(true);
 
-  // Read all workspaces from localStorage, then overlay the active project with
-  // the freshest in-memory store data.
+  // Live Firestore data for non-active projects (keyed by projectId)
+  const [bgAssignments, setBgAssignments] = useState<Record<string, ContractorAssignment[]>>({});
+  const [bgApartments, setBgApartments] = useState<Record<string, Apartment[]>>({});
+
+  // Attach/detach background Firestore listeners whenever the active project changes.
+  // The active project is handled by the main startFirebaseSync; only non-active ones need listeners here.
+  useEffect(() => {
+    if (!isFirebaseConfigured) return;
+
+    const unsubs: Array<() => void> = [];
+
+    for (const proj of DEFAULT_PROJECTS) {
+      if (proj.id === currentProjectId) continue;
+      const pid = proj.id;
+
+      unsubs.push(
+        fsListen(projectCollection(pid, 'contractorAssignments'), (docs) => {
+          setBgAssignments(prev => ({ ...prev, [pid]: docs as unknown as ContractorAssignment[] }));
+        }),
+        fsListen(projectCollection(pid, 'apartments'), (docs) => {
+          setBgApartments(prev => ({ ...prev, [pid]: docs as unknown as Apartment[] }));
+        }),
+      );
+    }
+
+    return () => unsubs.forEach(u => u());
+  }, [currentProjectId]);
+
+  // Combine data sources: localStorage baseline → Firestore live (non-active) → in-memory store (active).
   const allData = useMemo(() => {
     const data = loadAllProjectsTaskData();
-    return data.map(d => d.projectId === currentProjectId
-      ? { ...d, assignments: contractorAssignments, apartments }
-      : d);
-  }, [currentProjectId, contractorAssignments, apartments]);
+    return data.map(d => {
+      if (d.projectId === currentProjectId) {
+        return { ...d, assignments: contractorAssignments, apartments };
+      }
+      const liveAssign = bgAssignments[d.projectId];
+      const liveApts   = bgApartments[d.projectId];
+      return {
+        ...d,
+        assignments: liveAssign && liveAssign.length > 0 ? liveAssign : d.assignments,
+        apartments:  liveApts   && liveApts.length   > 0 ? liveApts   : d.apartments,
+      };
+    });
+  }, [currentProjectId, contractorAssignments, apartments, bgAssignments, bgApartments]);
 
   const projectName = (id: string) => projects.find(p => p.id === id)?.shortName ?? id;
 
