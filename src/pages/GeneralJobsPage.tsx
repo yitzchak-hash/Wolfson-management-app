@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Plus, Briefcase, MapPin, ExternalLink, Trash2, ClipboardList, FolderOpen,
-  Copy, StickyNote, Square, Palette, Pencil, X,
+  Copy, StickyNote, Square, Palette, Pencil, X, AlertTriangle,
 } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 import { useStore } from '../data/store';
@@ -115,6 +115,7 @@ export function GeneralJobsPage() {
   const [jobZoho, setJobZoho] = useState('');
   const [jobDrive, setJobDrive] = useState('');
   const [toast, setToast] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ ids: string[]; taskCount: number } | null>(null);
 
   const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set());
   const [selectedElIds, setSelectedElIds] = useState<Set<string>>(new Set());
@@ -161,13 +162,19 @@ export function GeneralJobsPage() {
 
   // ── Delete / duplicate ────────────────────────────────────────────
   function handleDeleteJobs(ids: string[]) {
-    if (!window.confirm(s.deleteJobConfirm)) return;
-    ids.forEach(id => {
+    const taskCount = contractorAssignments.filter(a => ids.includes(a.apartmentId)).length;
+    setDeleteConfirm({ ids, taskCount });
+    setCtxMenu(null);
+  }
+
+  function confirmDeleteJobs() {
+    if (!deleteConfirm) return;
+    deleteConfirm.ids.forEach(id => {
       if (selectedJob?.id === id) setSelectedJob(null);
       deleteApartment(id);
     });
     setSelectedJobIds(new Set());
-    setCtxMenu(null);
+    setDeleteConfirm(null);
   }
 
   function handleDeleteEls(ids: string[]) {
@@ -911,6 +918,44 @@ export function GeneralJobsPage() {
       )}
 
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+
+      {/* Delete confirmation modal */}
+      {deleteConfirm && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setDeleteConfirm(null)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm pointer-events-auto p-6 flex flex-col items-center text-center">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-4">
+                <AlertTriangle size={22} className="text-red-500" />
+              </div>
+              <h2 className="text-lg font-bold text-gray-900 mb-2">
+                {deleteConfirm.ids.length === 1 ? s.deleteJobConfirm : `Delete ${deleteConfirm.ids.length} jobs?`}
+              </h2>
+              {deleteConfirm.taskCount > 0 && (
+                <p className="text-sm text-gray-600 mb-1">
+                  <span className="font-semibold text-red-600">{deleteConfirm.taskCount} task{deleteConfirm.taskCount !== 1 ? 's' : ''}</span>{' '}
+                  and all associated notes will also be permanently deleted.
+                </p>
+              )}
+              <p className="text-xs text-gray-400 mb-6">This cannot be undone.</p>
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={() => setDeleteConfirm(null)}
+                  className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  {s.cancel}
+                </button>
+                <button
+                  onClick={confirmDeleteJobs}
+                  className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

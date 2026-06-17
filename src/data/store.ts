@@ -556,9 +556,31 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   deleteApartment: (id) => {
-    set(state => ({ apartments: state.apartments.filter(a => a.id !== id) }));
+    const state = get();
+    const pid = state.currentProjectId;
+
+    // Collect all linked records to cascade-delete
+    const linkedAssignments = state.contractorAssignments.filter(a => a.apartmentId === id);
+    const linkedIds = new Set(linkedAssignments.map(a => a.id));
+    const linkedNotes  = state.contractorNotes.filter(n => linkedIds.has(n.assignmentId));
+    const linkedPhotos = state.contractorPhotos.filter(p => linkedIds.has(p.assignmentId));
+    const linkedStageNotes = state.stageNotes.filter(n => n.apartmentId === id);
+
+    set(st => ({
+      apartments:            st.apartments.filter(a => a.id !== id),
+      contractorAssignments: st.contractorAssignments.filter(a => a.apartmentId !== id),
+      contractorNotes:       st.contractorNotes.filter(n => !linkedIds.has(n.assignmentId)),
+      contractorPhotos:      st.contractorPhotos.filter(p => !linkedIds.has(p.assignmentId)),
+      stageNotes:            st.stageNotes.filter(n => n.apartmentId !== id),
+    }));
     persist(get);
-    fsDelete(projectCollection(get().currentProjectId, 'apartments'), id);
+
+    // Firestore cascade
+    fsDelete(projectCollection(pid, 'apartments'), id);
+    linkedAssignments.forEach(a => fsDelete(projectCollection(pid, 'contractorAssignments'), a.id));
+    linkedNotes.forEach(n  => fsDelete(projectCollection(pid, 'contractorNotes'), n.id));
+    linkedPhotos.forEach(p => fsDelete(projectCollection(pid, 'contractorPhotos'), p.id));
+    linkedStageNotes.forEach(n => fsDelete(projectCollection(pid, 'stageNotes'), n.id));
   },
 
   addCanvasElement: (el) => {

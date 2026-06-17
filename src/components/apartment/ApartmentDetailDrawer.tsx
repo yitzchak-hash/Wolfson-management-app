@@ -134,7 +134,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     autoBackup, backupSnapshots, restoreFromSnapshot, mainUiStrings: ui,
     officeNoteFiles, addOfficeNoteFile, deleteOfficeNoteFile,
     contractorAssignments, contractors, updateContractorAssignment, deleteContractorAssignment,
-    getGeneralNoteVersions, currentProjectId } = useStore();
+    deleteApartment, getGeneralNoteVersions, currentProjectId } = useStore();
   const isGeneralProject = currentProjectId === 'general';
   const backendConfigured = isUploadBackendConfigured();
   const officeFileRef = useRef<HTMLInputElement>(null);
@@ -157,6 +157,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [lightbox, setLightbox] = useState<{ items: { fileId: string; filename: string; mimeType: string; thumbSrc: string; downloadHref: string }[]; index: number } | null>(null);
   const [officeUploadPct, setOfficeUploadPct] = useState<number | null>(null);
   const [showUnmergeModal, setShowUnmergeModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [unmergeTarget, setUnmergeTarget] = useState<Apartment | null>(null);
   const [showPdfViewer, setShowPdfViewer] = useState(false);
   const [showHealthCheck, setShowHealthCheck] = useState(false);
@@ -487,6 +488,52 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           </div>
         </>
       )}
+
+      {/* Delete confirmation modal */}
+      {showDeleteConfirm && (() => {
+        const aptTaskCount = contractorAssignments.filter(a => a.apartmentId === apartment.id).length;
+        const label = apartment.displayName || apartment.apartmentNumber || apartment.id;
+        return (
+          <>
+            <div className="fixed inset-0 bg-black/50 z-[60]" onClick={() => setShowDeleteConfirm(false)} />
+            <div className="fixed z-[70] bg-white rounded-2xl shadow-2xl p-6 text-center"
+              style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 'min(360px, 90vw)' }}>
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-3">
+                <AlertTriangle size={22} className="text-red-500" />
+              </div>
+              <h3 className="font-bold text-gray-900 text-base mb-1">
+                {isGeneralProject ? ui.deleteJobConfirm : `${ui.deleteApartmentLabel}?`}
+              </h3>
+              <p className="text-sm font-medium text-gray-700 mb-2">"{label}"</p>
+              {aptTaskCount > 0 && (
+                <p className="text-sm text-gray-600 mb-1">
+                  <span className="font-semibold text-red-600">{aptTaskCount} task{aptTaskCount !== 1 ? 's' : ''}</span>{' '}
+                  and all associated notes will also be permanently deleted.
+                </p>
+              )}
+              <p className="text-xs text-gray-400 mb-5">This cannot be undone.</p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  {ui.cancel}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    onClose();
+                    deleteApartment(apartment.id);
+                  }}
+                  className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </>
+        );
+      })()}
 
       <div className="drawer-overlay fixed inset-0 bg-black/30 z-40" onClick={onClose} />
 
@@ -1172,6 +1219,17 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 )}
               </div>
               )}
+
+              {/* Danger zone — delete this apartment/job */}
+              <div className="pt-2 mt-2 border-t border-red-100">
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-red-200 text-sm font-medium text-red-500 hover:bg-red-50 transition-colors"
+                >
+                  <Trash2 size={14} />
+                  {isGeneralProject ? ui.deleteJobConfirm.replace('?', '') : ui.deleteApartmentLabel}
+                </button>
+              </div>
             </div>
           )}
 

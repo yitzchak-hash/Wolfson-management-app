@@ -955,6 +955,8 @@ export interface MainUiStrings {
   noJobsYet: string;
   generalJobsTitle: string;
   deleteJobConfirm: string;
+  deleteWithTasksWarning: string;
+  deleteApartmentLabel: string;
   jobLabel: string;
   openZohoBtn: string;
 }
@@ -1479,6 +1481,8 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   noJobsYet: 'No jobs yet. Click "Add Job" to get started.',
   generalJobsTitle: 'General Jobs',
   deleteJobConfirm: 'Delete this job?',
+  deleteWithTasksWarning: 'This will also permanently delete all tasks and notes assigned to it. This cannot be undone.',
+  deleteApartmentLabel: 'Delete Apartment',
   jobLabel: 'Job',
   openZohoBtn: 'Open in Zoho',
 };
@@ -2003,6 +2007,8 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   noJobsYet: 'אין עבודות עדיין. לחץ על "הוסף עבודה" להתחיל.',
   generalJobsTitle: 'עבודות כלליות',
   deleteJobConfirm: 'למחוק עבודה זו?',
+  deleteWithTasksWarning: 'פעולה זו תמחק לצמיתות את כל המשימות וההערות המשויכות אליה. לא ניתן לבטל פעולה זו.',
+  deleteApartmentLabel: 'מחק דירה',
   jobLabel: 'עבודה',
   openZohoBtn: 'פתח ב-Zoho',
 };
