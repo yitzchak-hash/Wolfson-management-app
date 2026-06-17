@@ -22,6 +22,25 @@ function getProjectStorageKey(projectId: string): string {
   return projectId === 'wolfson' ? WOLFSON_STORAGE_KEY : `${projectId}_app_data`;
 }
 
+// Reads every project's tasks + apartments straight from localStorage so the
+// global calendar can show all workspaces at once. localStorage is kept current
+// by persist() on every mutation, so this is a reliable cross-project snapshot.
+export interface ProjectTaskData {
+  projectId: string;
+  assignments: ContractorAssignment[];
+  apartments: Apartment[];
+}
+export function loadAllProjectsTaskData(): ProjectTaskData[] {
+  return DEFAULT_PROJECTS.map(p => {
+    const data = loadFromStorage(getProjectStorageKey(p.id), null) as Record<string, unknown> | null;
+    return {
+      projectId: p.id,
+      assignments: (data?.contractorAssignments as ContractorAssignment[] | null) ?? [],
+      apartments: (data?.apartments as Apartment[] | null) ?? [],
+    };
+  });
+}
+
 // Holds unsubscribe functions for all active Firestore real-time listeners.
 // Stored outside the Zustand state (not serializable) so they survive re-renders.
 let _firebaseUnsubscribers: Array<() => void> = [];

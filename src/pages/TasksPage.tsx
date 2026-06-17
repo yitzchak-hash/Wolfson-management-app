@@ -2,8 +2,10 @@ import React, { useState, useRef } from 'react';
 import { useStore } from '../data/store';
 import {
   Plus, Trash2, Save, Edit2, X, CheckCircle2, Clock, Paperclip, ExternalLink, Layers, Filter,
+  List, CalendarDays,
 } from 'lucide-react';
 import { BulkAddTaskModal } from '../components/apartment/BulkAddTaskModal';
+import { TaskCalendar, CalendarEvent } from '../components/tasks/TaskCalendar';
 import { ContractorAssignment, ContractorCategory, TaskAttachment, TaskPriority, getStageName } from '../types';
 import { Toast } from '../components/ui/Toast';
 import { Tooltip } from '../components/ui/Tooltip';
@@ -45,6 +47,7 @@ export function TasksPage() {
     return { text: format(parseISO(dueDate), 'MMM d'), cls: 'bg-gray-100 text-gray-500 border-gray-200' };
   }
 
+  const [view, setView] = useState<'list' | 'calendar'>('list');
   const [filterContractorId, setFilterContractorId] = useState('');
   const [filterBuilding, setFilterBuilding] = useState<string>('all');
   const [filterStage, setFilterStage] = useState('');
@@ -259,6 +262,22 @@ export function TasksPage() {
     onToast(s.taskAdded);
   }
 
+  const calendarEvents: CalendarEvent[] = filtered
+    .filter(a => a.dueDate)
+    .map(a => {
+      const apt = apartments.find(ap => ap.id === a.apartmentId);
+      const contractor = contractors.find(c => c.id === a.contractorId);
+      return {
+        id: a.id,
+        date: a.dueDate!,
+        title: a.taskDescription,
+        subtitle: `${a.buildingId} · ${s.aptPrefix} ${apt?.displayName || apt?.apartmentNumber || '?'}`,
+        color: contractor ? CAT_COLORS[contractor.category] : '#6b7280',
+        completed: !!a.completedAt,
+        onClick: () => { setView('list'); startEdit(a); },
+      };
+    });
+
   return (
     <div className="p-6 max-w-3xl mx-auto">
       <input
@@ -314,6 +333,30 @@ export function TasksPage() {
           <span className="text-xs text-gray-400 flex-1">
             {filtered.length} task{filtered.length !== 1 ? 's' : ''} · {filtered.filter(a => a.completedAt).length} done
           </span>
+
+          {/* List / Calendar view toggle */}
+          <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden">
+            <Tooltip text={s.listView}>
+              <button
+                onClick={() => setView('list')}
+                className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors ${
+                  view === 'list' ? 'bg-[#1e3a5f] text-white' : 'text-gray-500 hover:bg-gray-50'
+                }`}
+              >
+                <List size={15} />
+              </button>
+            </Tooltip>
+            <Tooltip text={s.calendarView}>
+              <button
+                onClick={() => setView('calendar')}
+                className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors ${
+                  view === 'calendar' ? 'bg-[#1e3a5f] text-white' : 'text-gray-500 hover:bg-gray-50'
+                }`}
+              >
+                <CalendarDays size={15} />
+              </button>
+            </Tooltip>
+          </div>
 
           <button
             onClick={() => setShowBulkAdd(true)}
@@ -535,8 +578,16 @@ export function TasksPage() {
           </div>
         )}
 
+        {/* Calendar view */}
+        {view === 'calendar' && (
+          <TaskCalendar
+            events={calendarEvents}
+            todayLabel={s.today}
+          />
+        )}
+
         {/* Task list */}
-        {filtered.length === 0 ? (
+        {view === 'list' && (filtered.length === 0 ? (
           <div className="text-center py-12 text-gray-400">
             <Clock size={32} className="mx-auto mb-3 opacity-30" />
             <p className="text-sm">{s.noTasks}</p>
@@ -770,7 +821,7 @@ export function TasksPage() {
               );
             })}
           </div>
-        )}
+        ))}
       </div>
 
       {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}

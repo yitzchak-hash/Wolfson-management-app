@@ -12,6 +12,7 @@ import { AnalyticsDashboard } from './pages/AnalyticsDashboard';
 import { ContractorPortal } from './pages/ContractorPortal';
 import { TasksPage } from './pages/TasksPage';
 import { GeneralJobsPage } from './pages/GeneralJobsPage';
+import { GlobalCalendarPage } from './pages/GlobalCalendarPage';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { currentUser } = useStore();
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="project" element={<ProjectDiagramPage />} />
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="tasks" element={<TasksPage />} />
+          <Route path="calendar" element={<GlobalCalendarPage />} />
           <Route path="jobs" element={<GeneralJobsPage />} />
           <Route path="analytics" element={<AnalyticsDashboard />} />
           <Route path="reports" element={<ReportsPage />} />

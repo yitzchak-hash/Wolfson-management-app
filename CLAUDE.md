@@ -54,7 +54,8 @@ src/
     ProjectDiagramPage    — building diagram with filters + bulk edit (building projects only)
     GeneralJobsPage       — free-form canvas for General Jobs project (/jobs route)
     DashboardPage         — summary cards (project-scoped)
-    TasksPage             — contractor task management (dedicated page, /tasks route)
+    TasksPage             — contractor task management (dedicated page, /tasks route); list + month calendar toggle (project-scoped)
+    GlobalCalendarPage    — /calendar route; month calendar of ALL workspaces' tasks combined, with project/contractor filters
     AnalyticsDashboard    — stage/building analytics (project-scoped)
     ReportsPage           — CSV export (project-scoped)
     ActivityLogPage       — global change log
@@ -62,10 +63,11 @@ src/
     ContractorPortal      — public /c/:token page (tasks + building map)
     LoginPage             — two-step: code entry → project picker
   components/
-    layout/               — AppLayout, Header (project switcher), Sidebar
+    layout/               — AppLayout, Header (project switcher + global calendar icon), Sidebar
     apartment/            — ApartmentDetailDrawer (5 tabs: details/tasks/stages/history/photos),
                             StageNotesSection, ActivitySection, QuickAddTaskPanel, BulkAddTaskModal
     diagram/              — BuildingDiagram (supports compact, highlightedApartmentIds, aptSubLabels)
+    tasks/                — TaskCalendar (shared month-grid calendar; used by TasksPage + GlobalCalendarPage)
     dashboard/            — summary cards
     reports/              — table/export
     ui/                   — Toast, Tooltip, GlobalSearch (Cmd+K), shared primitives
@@ -235,9 +237,11 @@ Module-level constants cannot access the translation store. Any constant that ou
 - Two tabs: **My Tasks** (assignment cards with countdown badges) and **Building Map**
 - Building map highlights assigned apartments with gold glow; filter buttons: All / Overdue / Today / Tomorrow / This Week
 - Each highlighted cell shows a tiny schedule label (Today / Tomorrow / Overdue / date) at cell bottom
-- Contractor can upload photos, videos, and files; office notes visible read-only
+- Contractor can upload photos, videos, and files; per-task office notes (`ContractorNote` with `authorType === 'office'`) visible read-only
+- **Apartment-level `generalNotes` are NEVER shown to the contractor** — only the task description and per-task notes. (The old "From Office" block that rendered `apt.generalNotes` was removed.)
+- **Apartment `address`** (when set) is shown under the apartment title in the task detail sheet
 - **Completed button is disabled until at least one file exists**
-- Engineering Plans PDF shown in task detail sheet when `apartment.plansPdfLink` is set
+- Engineering Plans PDF shown in task detail sheet when `apartment.plansPdfLink` is set (the admin picks which PDF via the drawer's plan chips — see ApartmentDetailDrawer)
 - **Upload priority**: Firebase Storage (primary) → Google Drive backend (fallback) → local base64 (last resort)
 - Images compressed client-side (max 1200px, 72% JPEG blob) before upload to Firebase Storage
 - `ContractorPhoto.fileType`: `'image' | 'video' | 'file'` (default `'image'` for backward compat)
@@ -278,6 +282,18 @@ Module-level constants cannot access the translation store. Any constant that ou
 - Task creation supports file attachments (`TaskAttachment[]`) via Paperclip button in `QuickAddTaskPanel`
 - Task edit form shows existing attachments via `editAttachments` state with hover-reveal × remove buttons
 - **Bulk task creation**: `BulkAddTaskModal` lets you create the same task for many apartments at once with per-apartment Drive folder routing
+- **List / Calendar toggle** (`view` state): the calendar option renders `TaskCalendar` (shared month-grid component) with the page's filtered tasks plotted on their due dates, colored by contractor category. Clicking an event switches back to list view and opens that task's inline editor. The Tasks page is project-scoped, so this is the per-workspace month view.
+
+## Global Calendar (`/calendar`)
+- `GlobalCalendarPage` — a month calendar of **all workspaces' tasks combined**. Opened via the calendar icon in the Header (right of the project switcher, after a divider).
+- Cross-project data comes from `loadAllProjectsTaskData()` in `store.ts`, which reads each project's `${id}_app_data` localStorage (kept current by `persist()`); the active project's entry is overlaid with the freshest in-memory store data.
+- Filters: project (All + each), contractor, show/hide completed. Clicking an event calls `setCurrentProject(projectId)` (if needed) then navigates to `/tasks`.
+- **Limitation**: non-active projects show whatever was last cached locally on this device (only the active project syncs live with Firestore).
+
+## TaskCalendar component (`src/components/tasks/TaskCalendar.tsx`)
+- Shared month-grid calendar. Props: `events: CalendarEvent[]`, optional `weekdayLabels`, `todayLabel`.
+- `CalendarEvent`: `{ id, date (yyyy-MM-dd), title, subtitle?, color, completed, onClick? }`.
+- Renders day cells with colored event chips (accent = `color`); completed events are struck-through/dimmed. Month nav + "Today" button. Cells scroll internally when a day has many events.
 
 ## ApartmentDetailDrawer
 - 5 tabs: **details** / **tasks** / **stages** / **history** / **photos**
@@ -285,7 +301,9 @@ Module-level constants cannot access the translation store. Any constant that ou
 - `getTaskDueBadge()` helper defined inside component (mirrors `getDueBadge()` logic)
 - **Photos tab**: loads Drive folder contents via backend API when `driveLink` is set; lightbox viewer
 - **Unmerge flow**: `unmergeTarget` state captures partner apartment at modal-open time (prevents modal disappearing due to Firebase re-renders). `handleConfirmUnmerge` calls `unmergeApartments` which sets `mergedWith: undefined` on both apartments — the `fsSet` sanitizer ensures this actually removes the field from Firestore.
-- **General Jobs mode** (`isGeneralProject`): hides apt#, classification, Engineering Plans, Settings collapsible; shows address/zoho/drive fields; stage picker filtered to General stages only
+- **Address field**: shown in ALL drawers (building projects get a dedicated Address input under the top row, above general notes; General Jobs shows it in its address/zoho/drive block). Saved via `autoSave` on blur; surfaced to contractors in the portal.
+- **Engineering Plans plan chips**: when a Drive folder has multiple PDFs, the chips let the admin pick one. Clicking a chip now **persists `plansPdfLink` immediately** (`updateApartment(...)`), so the chosen plan is the one shown to the contractor — no separate Save needed.
+- **General Jobs mode** (`isGeneralProject`): hides apt#, classification, Settings collapsible; shows address/zoho/drive fields; stage picker now includes global stages plus General-specific stages; Engineering Plans + task assignment work the same as building projects
 
 ## GlobalSearch
 - Triggered by Cmd+K (Mac) or Ctrl+K (Windows/Linux)

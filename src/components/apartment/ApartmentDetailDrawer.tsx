@@ -610,6 +610,20 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 </div>
               </div>
 
+              {/* Address (building projects) — shown under the top row, above notes */}
+              {!isGeneralProject && (
+                <div>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.addressLabel}</label>
+                  <input
+                    value={addressLocal}
+                    onChange={e => setAddressLocal(e.target.value)}
+                    onBlur={autoSave}
+                    placeholder={ui.addressLabel}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                  />
+                </div>
+              )}
+
               {/* General Jobs: Zoho Link + Address */}
               {isGeneralProject && (
                 <div className="grid grid-cols-1 gap-3">
@@ -918,7 +932,10 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                               key={pdf.id}
                               onClick={() => {
                                 setSelectedPdfIdx(idx);
-                                setPlansPdfLink(`https://drive.google.com/file/d/${pdf.id}/view`);
+                                const link = `https://drive.google.com/file/d/${pdf.id}/view`;
+                                setPlansPdfLink(link);
+                                // Persist immediately so the selected plan shows in the contractor portal
+                                updateApartment(apartment!.id, { plansPdfLink: link }, currentUser);
                               }}
                               className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all truncate max-w-[160px] ${
                                 active

@@ -538,6 +538,12 @@ export interface MainUiStrings {
   // Tasks Page
   newTask: string;
   bulkAdd: string;
+  listView: string;
+  calendarView: string;
+  navCalendar: string;
+  globalCalendarTitle: string;
+  allProjects: string;
+  openInProject: string;
   allStages: string;
   allPriorities: string;
   overdueOnly: string;
@@ -1057,6 +1063,12 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   // Tasks Page
   newTask: 'New Task',
   bulkAdd: 'Bulk Add',
+  listView: 'List view',
+  calendarView: 'Calendar view',
+  navCalendar: 'Calendar',
+  globalCalendarTitle: 'All Workspaces Calendar',
+  allProjects: 'All Projects',
+  openInProject: 'Open in',
   allStages: 'All stages',
   allPriorities: 'All priorities',
   overdueOnly: 'Overdue only',
@@ -1575,6 +1587,12 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   // Tasks Page
   newTask: 'משימה חדשה',
   bulkAdd: 'הוספה מרובה',
+  listView: 'תצוגת רשימה',
+  calendarView: 'תצוגת לוח שנה',
+  navCalendar: 'לוח שנה',
+  globalCalendarTitle: 'לוח שנה — כל סביבות העבודה',
+  allProjects: 'כל הפרויקטים',
+  openInProject: 'פתח ב',
   allStages: 'כל השלבים',
   allPriorities: 'כל העדיפויות',
   overdueOnly: 'באיחור בלבד',

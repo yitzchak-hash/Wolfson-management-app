@@ -820,6 +820,12 @@ export function ContractorPortal() {
                     <X size={20} className="text-gray-500" />
                   </button>
                 </div>
+                {apt?.address?.trim() && (
+                  <div className="flex items-start gap-1.5 text-xs text-gray-600 mt-2">
+                    <MapPin size={13} className="text-[#4aa8d8] flex-shrink-0 mt-0.5" />
+                    <span className="leading-snug">{apt.address}</span>
+                  </div>
+                )}
                 {a.dueDate && (
                   <div className={`flex items-center gap-1.5 text-xs font-medium mt-2 ${isOverdue ? 'text-red-500' : 'text-gray-500'}`}>
                     <CalendarDays size={13} />
@@ -907,17 +913,6 @@ export function ContractorPortal() {
                     </div>
                   );
                 })()}
-
-                {/* Office notes */}
-                {apt?.generalNotes && (
-                  <div className="px-3 py-2.5 rounded-xl bg-blue-50 border border-blue-100">
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <MessageSquare size={12} className="text-blue-500" />
-                      <span className="text-xs font-semibold text-blue-700">{s.fromOffice}</span>
-                    </div>
-                    <p className="text-sm text-blue-800 leading-relaxed whitespace-pre-line">{apt.generalNotes}</p>
-                  </div>
-                )}
 
                 {/* Engineering Plans PDF */}
                 {plansPdfFileId && (

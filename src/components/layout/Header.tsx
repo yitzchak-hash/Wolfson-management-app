@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { LogOut, User, Sun, Moon, AlertTriangle, Loader2, CheckCircle2, Search } from 'lucide-react';
+import { LogOut, User, Sun, Moon, AlertTriangle, Loader2, CheckCircle2, Search, CalendarDays } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../data/store';
 import { Tooltip } from '../ui/Tooltip';
@@ -82,6 +82,20 @@ export function Header() {
               </button>
             </Tooltip>
           ))}
+          {currentUser && (
+            <>
+              <div className="w-px h-8 mx-1" style={{ backgroundColor: lightTheme ? '#e5e7eb' : 'rgba(255,255,255,0.2)' }} />
+              <Tooltip text={s.globalCalendarTitle}>
+                <button
+                  onClick={() => navigate('/calendar')}
+                  className="p-2 rounded-lg transition-colors"
+                  style={{ color: lightTheme ? '#6b7280' : '#9ca3af' }}
+                >
+                  <CalendarDays size={20} />
+                </button>
+              </Tooltip>
+            </>
+          )}
         </div>
       </div>
 
