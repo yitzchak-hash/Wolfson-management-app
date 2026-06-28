@@ -147,16 +147,18 @@ export const NETIV_BUILDINGS: Building[] = [
   { id: 'B2', name: 'Building B2', displayOrder: 2 },
 ];
 
-// Netiv layout (per building, identical for N1 and N2):
+// Netiv layout (per building, identical for B1 and B2):
 //
 // Lobby (floor -1):  3 unnamed future slots in cols 1-3
-// Floor 0:  apt 1 (col 1), empty (col 2), duplex apts 2-5 (cols 3-6)
-// Floor 1:  apt 6 (col 1), apt 7 (col 2), duplex tops shown via isDuplexApt on same apts
-// Floors 2-7: 4 apts/floor in cols 1-4  (apts 8-31)
-// Floor 8:  3 apts (32-34) + 1 empty, cols 1-4
-// Floor 9:  2 apts (35-36) + 2 empty, cols 1-4
+// Floor 0 (Ground):  apt 1 (col 1), empty (col 2)
+// Floor 1:  apt 6 (col 1), apt 7 (col 2), duplex apts 2-5 BASE (cols 3-6)
+// Floor 2:  duplex apts 2-5 TOP (auto-rendered via isDuplexApt at floor+1), cols 1-2 empty
+// Floors 3-8: 4 apts/floor in cols 1-4  (apts 8-31)
+// Floor 9:  3 apts (32-34) + 1 empty, cols 1-4
+// Floor 10: 2 apts (35-36) + 2 empty, cols 1-4
 //
 // Total: 36 apartments per building (apt 1-36)
+// NOTE: the duplexes physically occupy floors 1-2 (base on 1, top on 2).
 
 function makeNetivApt(bid: BuildingId, aptNum: number, floor: number, col: number, isDuplex = false, isUnnamed = false): Apartment {
   return {
@@ -211,42 +213,79 @@ export function buildNetivApartments(): Apartment[] {
       apts.push(makeNetivEmpty(bid, `lobby-${col}`, -1, col));
     }
 
-    // Floor 0: apt 1 (col 1), empty col 2, duplex apts 2-5 (cols 3-6)
+    // Floor 0 (Ground): apt 1 (col 1), empty col 2
     apts.push(makeNetivApt(bid, 1, 0, 1));
     apts.push(makeNetivEmpty(bid, 'f0-col2', 0, 2));
-    apts.push(makeNetivApt(bid, 2, 0, 3, true));
-    apts.push(makeNetivApt(bid, 3, 0, 4, true));
-    apts.push(makeNetivApt(bid, 4, 0, 5, true));
-    apts.push(makeNetivApt(bid, 5, 0, 6, true));
 
-    // Floor 1: apt 6 (col 1), apt 7 (col 2)
-    // Duplex tops (apts 2-5) appear on floor 1 via isDuplexApt rendering in the diagram
+    // Floor 1: apt 6 (col 1), apt 7 (col 2), duplex apts 2-5 BASE (cols 3-6)
+    // Duplex tops (apts 2-5) appear on floor 2 via isDuplexApt rendering in the diagram
     apts.push(makeNetivApt(bid, 6, 1, 1));
     apts.push(makeNetivApt(bid, 7, 1, 2));
+    apts.push(makeNetivApt(bid, 2, 1, 3, true));
+    apts.push(makeNetivApt(bid, 3, 1, 4, true));
+    apts.push(makeNetivApt(bid, 4, 1, 5, true));
+    apts.push(makeNetivApt(bid, 5, 1, 6, true));
 
-    // Floors 2-7: 4 apts per floor (apts 8-31)
+    // Floors 3-8: 4 apts per floor (apts 8-31)
     let aptNum = 8;
-    for (let floor = 2; floor <= 7; floor++) {
+    for (let floor = 3; floor <= 8; floor++) {
       for (let col = 1; col <= 4; col++) {
         apts.push(makeNetivApt(bid, aptNum++, floor, col));
       }
     }
 
-    // Floor 8: 3 apts + 1 empty (apts 32-34)
+    // Floor 9: 3 apts + 1 empty (apts 32-34)
     for (let col = 1; col <= 3; col++) {
-      apts.push(makeNetivApt(bid, aptNum++, 8, col));
-    }
-    apts.push(makeNetivEmpty(bid, 'f8-col4', 8, 4));
-
-    // Floor 9: 2 apts + 2 empty (apts 35-36)
-    for (let col = 1; col <= 2; col++) {
       apts.push(makeNetivApt(bid, aptNum++, 9, col));
     }
-    apts.push(makeNetivEmpty(bid, 'f9-col3', 9, 3));
     apts.push(makeNetivEmpty(bid, 'f9-col4', 9, 4));
+
+    // Floor 10: 2 apts + 2 empty (apts 35-36)
+    for (let col = 1; col <= 2; col++) {
+      apts.push(makeNetivApt(bid, aptNum++, 10, col));
+    }
+    apts.push(makeNetivEmpty(bid, 'f10-col3', 10, 3));
+    apts.push(makeNetivEmpty(bid, 'f10-col4', 10, 4));
   }
 
   return apts;
+}
+
+// Returns the correct floor / column / duplex flag for a Netiv apartment number,
+// or null if the number is outside the known 1-36 range. Single source of truth
+// used by both the seed builder (above) and the migration below.
+export function netivLayoutForApt(aptNum: number): { floor: number; col: number; isDuplex: boolean } | null {
+  if (aptNum === 1) return { floor: 0, col: 1, isDuplex: false };
+  if (aptNum >= 2 && aptNum <= 5) return { floor: 1, col: aptNum + 1, isDuplex: true }; // bases cols 3-6, tops auto on floor 2
+  if (aptNum === 6) return { floor: 1, col: 1, isDuplex: false };
+  if (aptNum === 7) return { floor: 1, col: 2, isDuplex: false };
+  if (aptNum >= 8 && aptNum <= 31) return { floor: 3 + Math.floor((aptNum - 8) / 4), col: ((aptNum - 8) % 4) + 1, isDuplex: false };
+  if (aptNum >= 32 && aptNum <= 34) return { floor: 9, col: aptNum - 31, isDuplex: false }; // cols 1-3
+  if (aptNum >= 35 && aptNum <= 36) return { floor: 10, col: aptNum - 34, isDuplex: false }; // cols 1-2
+  return null;
+}
+
+// Idempotent: corrects floor / colPosition / isDuplexApt for existing Netiv (B1/B2)
+// apartments so the duplexes (2-5) sit on floors 1-2 and the regular stack starts at
+// floor 3. Existing records persisted before this change keep their old floors, so this
+// recomputes them from the apartment number. Returns the (possibly) corrected array plus
+// the list of records that actually changed (for Firestore push).
+export function migrateNetivApartments(apts: Apartment[]): { apts: Apartment[]; changed: Apartment[] } {
+  const changed: Apartment[] = [];
+  const result = apts.map(a => {
+    if ((a.buildingId !== 'B1' && a.buildingId !== 'B2') || a.isUnnamed) return a;
+    const n = Number(a.apartmentNumber);
+    if (!n) return a;
+    const layout = netivLayoutForApt(n);
+    if (!layout) return a;
+    if (a.floor === layout.floor && a.colPosition === layout.col && (a.isDuplexApt ?? false) === layout.isDuplex) {
+      return a;
+    }
+    const updated = { ...a, floor: layout.floor, colPosition: layout.col, isDuplexApt: layout.isDuplex };
+    changed.push(updated);
+    return updated;
+  });
+  return { apts: result, changed };
 }
 
 export function buildDefaultApartments(): Apartment[] {

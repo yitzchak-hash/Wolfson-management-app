@@ -9,7 +9,7 @@ function mergeFreshMainUi(ms: Partial<MainUiStrings> | null | undefined): MainUi
 }
 import {
   DEFAULT_BUILDINGS, DEFAULT_PROJECTS, DEFAULT_STAGES, DEFAULT_USERS, NETIV_BUILDINGS,
-  buildDefaultApartments, buildNetivApartments, buildGroundFirstFloorSlots, DATA_VERSION,
+  buildDefaultApartments, buildNetivApartments, buildGroundFirstFloorSlots, migrateNetivApartments, DATA_VERSION,
 } from './initialData';
 import { fsSet, fsDelete, fsBatchSet, fsGetAll, fsListen, isFirebaseConfigured, db, projectCollection } from './firebase';
 
@@ -293,6 +293,8 @@ export const useStore = create<AppState>((set, get) => ({
     ? migrateApartments((stored?.apartments as Apartment[] | null) ?? defaultData.apartments)
     : _activeProjectId === 'general'
     ? ((stored?.apartments as Apartment[] | null) ?? []).filter(a => a.buildingId === 'G')
+    : _activeProjectId === 'netiv'
+    ? migrateNetivApartments((stored?.apartments as Apartment[] | null) ?? defaultData.apartments).apts
     : (stored?.apartments as Apartment[] | null) ?? defaultData.apartments,
   stageNotes: (stored?.stageNotes as StageNote[] | null) ?? [],
   stageNoteVersions: (stored?.stageNoteVersions as StageNoteVersion[] | null) ?? [],
@@ -363,7 +365,11 @@ export const useStore = create<AppState>((set, get) => ({
     const rawApartments = (newStored?.apartments as Apartment[] | null) ?? defaultApartments;
     const newProjectData = {
       buildings:             id === 'general' ? [] : (newStored?.buildings as Building[] | null) ?? defaultBuildings,
-      apartments:            id === 'general' ? rawApartments.filter(a => a.buildingId === 'G') : rawApartments,
+      apartments:            id === 'general'
+        ? rawApartments.filter(a => a.buildingId === 'G')
+        : id === 'netiv'
+        ? migrateNetivApartments(rawApartments).apts
+        : rawApartments,
       stageNotes:            (newStored?.stageNotes as StageNote[] | null)            ?? [],
       stageNoteVersions:     (newStored?.stageNoteVersions as StageNoteVersion[] | null) ?? [],
       generalNoteVersions:   (newStored?.generalNoteVersions as GeneralNoteVersion[] | null) ?? [],
@@ -1387,6 +1393,17 @@ export const useStore = create<AppState>((set, get) => ({
         ...(appSettings.mainUiStrings        ? { mainUiStrings: mergeFreshMainUi(appSettings.mainUiStrings as Partial<MainUiStrings>) } : {}),
       }));
       persist(get);
+
+      // Netiv duplex floor correction: recompute floors from apt number and push any
+      // changed records to Firestore so the fix wins against the "Firebase wins" listener.
+      if (pid === 'netiv') {
+        const { apts: migratedNetiv, changed: netivChanged } = migrateNetivApartments(get().apartments);
+        if (netivChanged.length > 0) {
+          set({ apartments: migratedNetiv });
+          persist(get);
+          fsBatchSet(col('apartments'), netivChanged.map(a => ({ id: a.id, data: a })));
+        }
+      }
 
       // Seed any apartments that are missing from Firestore (in case the first-run seed was partial)
       const fbAptIds = new Set((fbApts as unknown as Apartment[]).map(a => a.id));
