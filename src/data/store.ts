@@ -292,6 +292,10 @@ interface AppState {
   dashboardHiddenWidgets: string[];
   setDashboardLayout: (order: string[], hidden: string[]) => void;
 
+  // Contractor status spreadsheet (per project)
+  contractorSheetLink: string;
+  setContractorSheetLink: (url: string) => void;
+
   // Multi-project support
   currentProjectId: string;
   projects: Project[];
@@ -350,6 +354,7 @@ export const useStore = create<AppState>((set, get) => ({
   pendingOpenAptId: null,
   dashboardWidgetOrder: (stored?.dashboardWidgetOrder as string[] | null) ?? ['apt-stats', 'task-stats', 'stage-progress', 'building-progress', 'activity'],
   dashboardHiddenWidgets: (stored?.dashboardHiddenWidgets as string[] | null) ?? [],
+  contractorSheetLink: (stored?.contractorSheetLink as string | null) ?? '',
   currentProjectId: _activeProjectId,
   projects: DEFAULT_PROJECTS,
   lightTheme: localStorage.getItem(THEME_KEY) !== 'dark',
@@ -408,6 +413,7 @@ export const useStore = create<AppState>((set, get) => ({
       dashboardWidgetOrder:  (newStored?.dashboardWidgetOrder as string[] | null)     ?? ['apt-stats', 'task-stats', 'stage-progress', 'building-progress', 'activity'],
       dashboardHiddenWidgets:(newStored?.dashboardHiddenWidgets as string[] | null)   ?? [],
       canvasElements:        (newStored?.canvasElements as CanvasElement[] | null)    ?? [],
+      contractorSheetLink:   (newStored?.contractorSheetLink as string | null)       ?? '',
     };
 
     // Cancel existing Firebase listeners and switch project
@@ -431,6 +437,11 @@ export const useStore = create<AppState>((set, get) => ({
     if (isFirebaseConfigured && !get().firebaseListening) {
       get().startFirebaseSync();
     }
+  },
+
+  setContractorSheetLink: (url: string) => {
+    set({ contractorSheetLink: url });
+    persist(get);
   },
 
   setLightTheme: (v: boolean) => {
@@ -1664,6 +1675,7 @@ function persist(get: () => AppState) {
     dashboardWidgetOrder: state.dashboardWidgetOrder,
     dashboardHiddenWidgets: state.dashboardHiddenWidgets,
     canvasElements: state.canvasElements,
+    contractorSheetLink: state.contractorSheetLink,
   };
 
   const ok = saveToStorage(storageKey, payload);

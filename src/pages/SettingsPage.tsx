@@ -3,7 +3,7 @@ import { useStore } from '../data/store';
 import {
   Plus, Trash2, Save, ChevronUp, ChevronDown, Shield, Sun, Moon,
   Copy, Check, Download, Upload, HardDrive, X, HardDriveDownload, ToggleLeft, ToggleRight,
-  Languages, Clock, RotateCcw, Wifi, WifiOff, Loader, Database, RefreshCw, CloudUpload, Search, BookOpen,
+  Languages, Clock, RotateCcw, Wifi, WifiOff, Loader, Database, RefreshCw, CloudUpload, Search, BookOpen, ExternalLink,
 } from 'lucide-react';
 import { isFirebaseConfigured, db, fsSet, fsGetAll } from '../data/firebase';
 import { Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency, getStageName, Apartment, isCountableApartment } from '../types';
@@ -12,6 +12,7 @@ import { Toast } from '../components/ui/Toast';
 import { format } from 'date-fns';
 import { saveAs } from 'file-saver';
 import { extractFolderId, isUploadBackendConfigured, getFolderNameViaBackend, familyNameFromFolderName } from '../data/driveApi';
+import { fetchContractorSheet } from '../data/sheetApi';
 
 type Tab = 'stages' | 'users' | 'contractors' | 'app' | 'language' | 'buildings';
 
@@ -647,6 +648,77 @@ interface NameProposal {
   kind: 'fill' | 'replace';
 }
 
+// ─── Contractor status spreadsheet (per project) ──────────────────────────────
+// The contractor owns and updates this sheet; the app only ever reads it.
+function ContractorSheetSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
+  const { contractorSheetLink, setContractorSheetLink, projects, currentProjectId } = useStore();
+  const [value, setValue] = useState(contractorSheetLink);
+  const [testing, setTesting] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const projectName = projects.find(p => p.id === currentProjectId)?.name ?? currentProjectId;
+
+  async function test() {
+    setTesting(true);
+    setResult(null);
+    const r = await fetchContractorSheet(value.trim());
+    setResult(r.ok
+      ? { ok: true, msg: `Connected — “${r.title}” · ${r.rows.length} rows · tab “${r.tab}”` }
+      : { ok: false, msg: r.error });
+    setTesting(false);
+  }
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5">
+      <div className="flex items-center gap-2 mb-2">
+        <Database size={18} className="text-[#1e3a5f]" />
+        <h2 className="font-semibold text-gray-800">Contractor Status Sheet — {projectName}</h2>
+      </div>
+      <p className="text-sm text-gray-500 mb-1">
+        The shared Google Sheet the contractor keeps up to date. Each apartment drawer reads it live
+        to show per-category progress. Set one link per workspace; the app only ever reads it.
+      </p>
+      <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+        <strong>Access:</strong> sharing the sheet with your Workspace organisation is not enough —
+        the app signs in as its own service account. Open the sheet → Share → paste the service
+        account email (the <code>client_email</code> in <code>GOOGLE_SERVICE_ACCOUNT_JSON</code>) →
+        Viewer. Then press Test.
+      </p>
+
+      <div className="flex gap-2">
+        <input
+          value={value}
+          onChange={e => { setValue(e.target.value); setResult(null); }}
+          onBlur={() => { if (value.trim() !== contractorSheetLink) setContractorSheetLink(value.trim()); }}
+          placeholder="https://docs.google.com/spreadsheets/d/…"
+          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+        />
+        {value.trim() && (
+          <a href={value} target="_blank" rel="noopener noreferrer"
+            className="flex items-center px-2.5 py-2 rounded-lg border border-gray-200 text-gray-500 hover:text-[#4aa8d8] hover:border-[#4aa8d8] transition-all">
+            <ExternalLink size={14} />
+          </a>
+        )}
+        <button
+          onClick={() => { setContractorSheetLink(value.trim()); test(); }}
+          disabled={!value.trim() || testing}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#1e3a5f] text-white text-sm font-medium disabled:opacity-50 hover:bg-[#16304f] transition-colors"
+        >
+          {testing ? <Loader size={14} className="animate-spin" /> : <Wifi size={14} />} Test
+        </button>
+      </div>
+
+      {result && (
+        <div className={`mt-3 flex items-start gap-2 text-xs rounded-lg px-3 py-2 border ${
+          result.ok ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'
+        }`}>
+          {result.ok ? <Check size={13} className="flex-shrink-0 mt-0.5" /> : <WifiOff size={13} className="flex-shrink-0 mt-0.5" />}
+          <span>{result.msg}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── One-time bulk action: set named-but-unstaged apartments to "Ready To Start" ──
 // Applies ONLY to apartments that (a) have no stage yet, (b) carry a real family
 // name — an apartment number on its own does not qualify — and (c) have an
@@ -950,6 +1022,8 @@ function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
           </button>
         </div>
       </div>
+
+      <ContractorSheetSettings onToast={onToast} />
 
       <DriveNameBackfill onToast={onToast} />
 

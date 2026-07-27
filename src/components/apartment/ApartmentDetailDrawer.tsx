@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2 } from 'lucide-react';
+import { X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3 } from 'lucide-react';
 import { Apartment, User, getStageName, TaskAttachment, TaskPriority } from '../../types';
 import { useStore } from '../../data/store';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
@@ -7,6 +7,7 @@ import { StageNotesSection } from './StageNotesSection';
 import { ActivitySection } from './ActivitySection';
 import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, findAllPlansPdfsViaBackend, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, extractFolderId, driveThumbUrl, listAllPhotosViaBackend, getFolderNameViaBackend, familyNameFromFolderName, DrivePhotoItem, DriveFile } from '../../data/driveApi';
 import { Tooltip } from '../ui/Tooltip';
+import { ContractorStatusPanel } from './ContractorStatusPanel';
 
 interface Props {
   apartment: Apartment | null;
@@ -158,6 +159,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [officeUploadPct, setOfficeUploadPct] = useState<number | null>(null);
   const [showUnmergeModal, setShowUnmergeModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showContractorStatus, setShowContractorStatus] = useState(false);
   const [unmergeTarget, setUnmergeTarget] = useState<Apartment | null>(null);
   const [showPdfViewer, setShowPdfViewer] = useState(false);
   const [showHealthCheck, setShowHealthCheck] = useState(false);
@@ -580,6 +582,10 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         );
       })()}
 
+      {showContractorStatus && (
+        <ContractorStatusPanel apartment={apartment} onClose={() => setShowContractorStatus(false)} />
+      )}
+
       <div className="drawer-overlay fixed inset-0 bg-black/30 z-40" onClick={onClose} />
 
       <div className="drawer-panel fixed right-0 top-0 h-full w-full max-w-lg bg-white shadow-2xl z-50 flex flex-col">
@@ -637,6 +643,17 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         <div className="flex-1 overflow-y-auto scrollbar-thin p-4">
           {activeTab === 'details' && (
             <div className="space-y-4">
+              {/* Live contractor progress, read from the shared sheet */}
+              {!isGeneralProject && (
+                <button
+                  onClick={() => setShowContractorStatus(true)}
+                  className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-[#4aa8d8]/40 bg-[#4aa8d8]/5 text-sm font-medium text-[#1e3a5f] hover:bg-[#4aa8d8]/10 transition-colors"
+                >
+                  <BarChart3 size={14} className="text-[#4aa8d8]" />
+                  {ui.contractorStatusTitle}
+                </button>
+              )}
+
               {/* Top row: Apt# | Family Name | Classification | Stage */}
               <div className="flex items-start gap-2">
                 {/* Apt number — read-only small */}

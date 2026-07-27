@@ -958,6 +958,15 @@ export interface MainUiStrings {
   printDiagramTooltip: string;
   clearFiltersTooltip: string;
   buildingDiagramLabel: string;
+  contractorStatusTitle: string;
+  liveLabel: string;
+  loadingLabel: string;
+  sheetUnavailable: string;
+  contractorSheetLabel: string;
+  noSheetConfigured: string;
+  noSheetConfiguredHint: string;
+  aptNotInSheet: string;
+  openSheet: string;
   // Activity inline template parts
   activityChangedStage: string;
   activityAddedNote: string;
@@ -1485,6 +1494,15 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   printDiagramTooltip: 'Print building diagram',
   clearFiltersTooltip: 'Clear all active filters',
   buildingDiagramLabel: 'Building Diagram',
+  contractorStatusTitle: 'Contractor Status',
+  liveLabel: 'LIVE',
+  loadingLabel: 'Loading…',
+  sheetUnavailable: 'Sheet unavailable',
+  contractorSheetLabel: 'Contractor sheet',
+  noSheetConfigured: 'No contractor sheet linked',
+  noSheetConfiguredHint: 'Add the sheet link under Settings → App for this workspace.',
+  aptNotInSheet: "This apartment isn't in the sheet",
+  openSheet: 'Open sheet',
   // Activity inline template parts
   activityChangedStage: 'changed stage of',
   activityAddedNote: 'added note on',
@@ -2011,6 +2029,15 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   printDiagramTooltip: 'הדפס תרשים בניין',
   clearFiltersTooltip: 'נקה את כל הפילטרים',
   buildingDiagramLabel: 'תרשים בניין',
+  contractorStatusTitle: 'סטטוס קבלן',
+  liveLabel: 'חי',
+  loadingLabel: 'טוען…',
+  sheetUnavailable: 'הגיליון אינו זמין',
+  contractorSheetLabel: 'גיליון קבלן',
+  noSheetConfigured: 'לא מקושר גיליון קבלן',
+  noSheetConfiguredHint: 'הוסף את קישור הגיליון תחת הגדרות ← אפליקציה עבור סביבת עבודה זו.',
+  aptNotInSheet: 'דירה זו אינה בגיליון',
+  openSheet: 'פתח גיליון',
   // Activity inline template parts
   activityChangedStage: 'שינה שלב של',
   activityAddedNote: 'הוסיף הערה על',
