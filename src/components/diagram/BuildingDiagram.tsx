@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Link2 } from 'lucide-react';
 import { Apartment, BuildingId, Stage } from '../../types';
 import { useStore } from '../../data/store';
@@ -118,13 +118,16 @@ interface AptCellProps {
   mergeLink?: 'connector' | 'badge' | null;
   /** Extra layout styles — used to make a duplex span two floor rows. */
   extraStyle?: React.CSSProperties;
+  /** True when this cell is hovered OR its merged partner is. */
+  isHoverGroup?: boolean;
+  onHover?: (id: string | null) => void;
 }
 
 function AptCell({
   apt, stage, isHighlighted, isDimmed, showShinuiBadge, onClick,
   isDuplex, rowFloorType, isMerged, mergedLabel, isBulkSelected, isContractorHighlighted,
   aptSubLabel, taskInfo, nextStageName, onAddTask, allTasksDone, compact, onNameUnnamed,
-  mergeLink, extraStyle,
+  mergeLink, extraStyle, isHoverGroup, onHover,
 }: AptCellProps) {
   const ui = useStore(state => state.mainUiStrings);
   const hasStage = !!stage;
@@ -157,6 +160,7 @@ function AptCell({
   const scale = isHighlighted && !isDimmed ? 'scale-[1.04] z-10' : '';
 
   const boxShadow = isDimmed ? 'none'
+    : isHoverGroup ? `0 0 0 2px #2563eb, 0 3px 12px ${borderColor}99`
     : isContractorHighlighted ? `0 0 0 2px #f59e0b, 0 2px 10px ${borderColor}88`
     : hasStage ? `0 1px 3px ${borderColor}55`
     : '0 1px 2px rgba(0,0,0,0.06)';
@@ -171,8 +175,11 @@ function AptCell({
     // between two linked apartments. It also carries the duplex two-row span.
     <div className="relative flex" style={{ flex: 1, minWidth: 0, ...extraStyle }}>
     <div
-      className={`relative flex flex-col items-center justify-center cursor-pointer select-none rounded-md overflow-hidden transition-all duration-100 hover:brightness-105 hover:shadow-md ${scale}`}
+      className={`relative flex flex-col items-center justify-center cursor-pointer select-none rounded-md overflow-hidden transition-all duration-100 ${scale}`}
+      onMouseEnter={() => apt && onHover?.(apt.id)}
+      onMouseLeave={() => onHover?.(null)}
       style={{
+        filter: isHoverGroup && !isDimmed ? 'brightness(1.07)' : undefined,
         backgroundColor: bgColor,
         color: textColor,
         flex: 1,
@@ -199,7 +206,7 @@ function AptCell({
           {nameLabel && numberLabel && (
             <span
               className="w-full text-center leading-none block truncate px-0.5"
-              style={{ fontSize: compact ? '8.5px' : '10.5px', opacity: isDimmed ? 0.55 : 0.95, fontWeight: 600 }}
+              style={{ fontSize: compact ? '9.5px' : '12px', opacity: isDimmed ? 0.55 : 0.97, fontWeight: 600 }}
             >
               {nameLabel}
             </span>
@@ -342,6 +349,7 @@ function Stairwell({ compact }: { compact?: boolean }) {
 
 function FourCellRow({
   aptNums, getApt, getStage, isHighlighted, isDimmed, isMerged, getMergedLabel, getMergeLink,
+  hoverGroup, onHoverApt,
   isContractorHighlighted, isBulkSelected, getAptSubLabel, getTaskInfo, getNextStageName, getOnAddTask, getAllTasksDone,
   getOnNameUnnamed,
   showShinuiBadge, onApartmentClick, rowFloorType, compact,
@@ -354,6 +362,8 @@ function FourCellRow({
   isMerged: (a: Apartment | undefined) => boolean;
   getMergedLabel: (a: Apartment | undefined) => string | undefined;
   getMergeLink?: (a: Apartment | undefined, neighbour: Apartment | undefined) => 'connector' | null;
+  hoverGroup?: Set<string> | null;
+  onHoverApt?: (id: string | null) => void;
   isContractorHighlighted: (a: Apartment | undefined) => boolean;
   isBulkSelected: (a: Apartment | undefined) => boolean;
   getAptSubLabel: (a: Apartment | undefined) => string | undefined;
@@ -378,6 +388,8 @@ function FourCellRow({
             <AptCell
               key={ci}
               mergeLink={ci === 0 ? getMergeLink?.(apt, getApt(aptNums[1])) ?? null : null}
+              isHoverGroup={!!apt && !!hoverGroup?.has(apt.id)}
+              onHover={onHoverApt}
               apt={apt}
               stage={getStage(apt)}
               isHighlighted={isHighlighted(apt)}
@@ -410,6 +422,8 @@ function FourCellRow({
             <AptCell
               key={ci}
               mergeLink={ci === 2 ? getMergeLink?.(apt, getApt(aptNums[3])) ?? null : null}
+              isHoverGroup={!!apt && !!hoverGroup?.has(apt.id)}
+              onHover={onHoverApt}
               apt={apt}
               stage={getStage(apt)}
               isHighlighted={isHighlighted(apt)}
@@ -440,6 +454,7 @@ function BuildingColumn({
   buildingId, apartments, mergedLabels, stages, activeStageIds, classFilter, searchQuery,
   onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, aptSubLabels,
   aptTaskData, nextStageLabels, onAddTask, aptCompletedData, compact, onNameUnnamed,
+  hoverGroup, onHoverApt,
 }: {
   buildingId: BuildingId;
   apartments: Apartment[];
@@ -459,6 +474,8 @@ function BuildingColumn({
   aptCompletedData?: Map<string, boolean>;
   compact?: boolean;
   onNameUnnamed?: (apt: Apartment) => void;
+  hoverGroup?: Set<string> | null;
+  onHoverApt?: (id: string | null) => void;
 }) {
   const ui = useStore(state => state.mainUiStrings);
   const stageMap = useMemo(() => new Map(stages.map(s => [s.id, s])), [stages]);
@@ -613,6 +630,8 @@ function BuildingColumn({
                     isMerged={isMerged}
                     getMergedLabel={getMergedLabel}
                     getMergeLink={getMergeLink}
+                    hoverGroup={hoverGroup}
+                    onHoverApt={onHoverApt}
                     isContractorHighlighted={isContractorHighlighted}
                     isBulkSelected={isBulkSelected}
                     getAptSubLabel={getAptSubLabel}
@@ -646,6 +665,8 @@ function BuildingColumn({
                             showShinuiBadge={showShinuiBadge}
                             onClick={() => { if (apt) onApartmentClick(apt); }}
                             isDuplex={row.type === 'duplex'}
+                            isHoverGroup={!!apt && !!hoverGroup?.has(apt.id)}
+                            onHover={onHoverApt}
                             isMerged={isMerged(apt)}
                             mergedLabel={getMergedLabel(apt)}
                             isBulkSelected={isBulkSelected(apt)}
@@ -676,6 +697,7 @@ function NetivBuildingColumn({
   buildingId, apartments, mergedLabels, stages, activeStageIds, classFilter, searchQuery,
   onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, aptSubLabels,
   aptTaskData, nextStageLabels, onAddTask, aptCompletedData, compact, onNameUnnamed,
+  hoverGroup, onHoverApt,
 }: {
   buildingId: BuildingId;
   apartments: Apartment[];
@@ -695,6 +717,8 @@ function NetivBuildingColumn({
   aptCompletedData?: Map<string, boolean>;
   compact?: boolean;
   onNameUnnamed?: (apt: Apartment) => void;
+  hoverGroup?: Set<string> | null;
+  onHoverApt?: (id: string | null) => void;
 }) {
   const ui = useStore(state => state.mainUiStrings);
   const stageMap = useMemo(() => new Map(stages.map(s => [s.id, s])), [stages]);
@@ -821,6 +845,8 @@ function NetivBuildingColumn({
       return (
         <AptCell key={col}
           mergeLink={getMergeLinkFn(apt)}
+          isHoverGroup={!!apt && !!hoverGroup?.has(apt.id)}
+          onHover={onHoverApt}
           extraStyle={spanStyle}
           apt={apt}
           stage={getStage(apt)}
@@ -943,6 +969,16 @@ export function BuildingDiagram({
     return m;
   }, [apartments]);
 
+  // Hovering either half of a linked pair highlights both.
+  const [hoverAptId, setHoverAptId] = useState<string | null>(null);
+  const hoverGroup = useMemo(() => {
+    if (!hoverAptId) return null;
+    const group = new Set<string>([hoverAptId]);
+    const apt = apartments.find(a => a.id === hoverAptId);
+    if (apt?.mergedWith) group.add(apt.mergedWith);
+    return group;
+  }, [hoverAptId, apartments]);
+
   const gapClass = compact ? 'gap-3' : 'gap-5';
   const padClass = compact ? 'p-3' : 'p-5';
 
@@ -973,6 +1009,8 @@ export function BuildingDiagram({
           aptCompletedData,
           compact,
           onNameUnnamed,
+          hoverGroup,
+          onHoverApt: setHoverAptId,
         };
         return isWolfsonBuilding
           ? <BuildingColumn {...colProps} />

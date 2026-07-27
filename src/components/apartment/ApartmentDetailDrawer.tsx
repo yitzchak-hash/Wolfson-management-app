@@ -633,8 +633,21 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 {!isGeneralProject && (
                 <div className="flex-shrink-0">
                   <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.aptPrefix} #</label>
-                  <div className="w-14 border border-gray-200 rounded-lg px-2 py-2 text-sm font-bold text-center text-gray-700 bg-gray-50">
-                    {apartment.apartmentNumber}
+                  {/* Linked pair shows both numbers with a slash, plus a link badge */}
+                  <div className={`flex items-center justify-center gap-1 border rounded-lg px-2 py-2 text-sm font-bold text-center ${
+                    mergedPartner
+                      ? 'border-blue-300 bg-blue-50 text-blue-700 min-w-[4.5rem]'
+                      : 'w-14 border-gray-200 bg-gray-50 text-gray-700'
+                  }`}>
+                    {mergedPartner && <Link size={12} className="flex-shrink-0 text-blue-500" />}
+                    <span>
+                      {mergedPartner
+                        ? [apartment.apartmentNumber, mergedPartner.apartmentNumber]
+                            .filter(Boolean)
+                            .sort((a, b) => (Number(a) || 0) - (Number(b) || 0))
+                            .join('/')
+                        : apartment.apartmentNumber}
+                    </span>
                   </div>
                 </div>
                 )}
