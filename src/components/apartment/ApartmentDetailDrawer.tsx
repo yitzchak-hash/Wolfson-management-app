@@ -317,12 +317,15 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     doSaveBasic(false);
   }
 
-  function doSaveBasic(clearHistory: boolean) {
+  // `explicitStageId` is needed when called straight from the stage <select>'s
+  // onChange — React hasn't flushed setCurrentStageId yet at that point.
+  function doSaveBasic(clearHistory: boolean, explicitStageId?: string) {
     setKeepHistoryModal(false);
-    const stageChanged = currentStageId !== prevStageId;
+    const stageId = explicitStageId !== undefined ? explicitStageId : currentStageId;
+    const stageChanged = stageId !== prevStageId;
     updateApartment(apartment!.id, {
       displayName: familyName || apartment!.apartmentNumber,
-      currentStageId: currentStageId || null,
+      currentStageId: stageId || null,
       classification,
       generalNotes,
       driveLink: driveLink.trim() || undefined,
@@ -331,12 +334,31 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       address: addressLocal.trim() || undefined,
       ...(clearHistory ? { stageDates: {} } : {}),
     }, currentUser);
-    setPrevStageId(currentStageId);
-    if (stageChanged && currentStageId && onRequestAddTask) {
-      const newStageName = stages.find(s => s.id === currentStageId)?.name ?? '';
-      setStageChangeModal({ newStageId: currentStageId, newStageName });
+    setPrevStageId(stageId);
+    if (stageChanged && stageId && onRequestAddTask) {
+      const newStageName = stages.find(s => s.id === stageId)?.name ?? '';
+      setStageChangeModal({ newStageId: stageId, newStageName });
     } else {
       onToast(ui.apartmentSaved);
+    }
+  }
+
+  // Stage picker saves the moment it changes. Clearing the stage still has to ask
+  // whether to keep the stage-date history, so that modal now fires on change.
+  function handleStageChange(newStageId: string) {
+    setCurrentStageId(newStageId);
+    if (!newStageId && prevStageId) {
+      setKeepHistoryModal(true);
+      return;
+    }
+    doSaveBasic(false, newStageId);
+  }
+
+  // Classification is a single targeted write — no other field is touched.
+  function handleClassificationChange(v: 'standard' | 'shinui') {
+    setClassification(v);
+    if (v !== apartment!.classification) {
+      updateApartment(apartment!.id, { classification: v }, currentUser);
     }
   }
 
@@ -636,7 +658,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   <div className="flex gap-1">
                     <Tooltip text={ui.standardApt}>
                       <button
-                        onClick={() => setClassification('standard')}
+                        onClick={() => handleClassificationChange('standard')}
                         className={`px-2.5 py-2 rounded-lg text-xs font-medium border transition-all ${
                           classification === 'standard' ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
                         }`}
@@ -646,7 +668,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     </Tooltip>
                     <Tooltip text={ui.hasModifications}>
                       <button
-                        onClick={() => setClassification('shinui')}
+                        onClick={() => handleClassificationChange('shinui')}
                         className={`px-2 py-2 rounded-lg text-xs font-medium border transition-all flex items-center gap-0.5 ${
                           classification === 'shinui' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
                         }`}
@@ -663,7 +685,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.currentStage}</label>
                   <select
                     value={currentStageId}
-                    onChange={e => setCurrentStageId(e.target.value)}
+                    onChange={e => handleStageChange(e.target.value)}
                     className="w-full border border-gray-200 rounded-lg px-2 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                     style={{ borderLeftColor: currentStage?.color, borderLeftWidth: currentStage ? '3px' : undefined }}
                   >
@@ -1059,13 +1081,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 )}
               </div>
 
-              {/* Save button */}
-              <button
-                onClick={handleSaveBasic}
-                className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors"
-              >
-                <Save size={16} /> {ui.saveChangesBtn}
-              </button>
+              {/* No Save button — every field on this tab saves on its own:
+                  text fields on blur, stage + classification the moment they change. */}
 
               {/* Settings collapsible */}
               {!isGeneralProject && (

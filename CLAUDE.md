@@ -297,6 +297,7 @@ Module-level constants cannot access the translation store. Any constant that ou
 
 ## ApartmentDetailDrawer
 - 5 tabs: **details** / **tasks** / **stages** / **history** / **photos**
+- **No Save button on the details tab — everything saves itself.** Text fields (family name, address, Zoho, Drive link, general notes) save on `blur` via `autoSave()`. The stage picker saves on `change` via `handleStageChange()`, and the classification toggle via `handleClassificationChange()` (a targeted `{ classification }` write). The two decision modals are therefore triggered by the *change* itself, not by a save click: clearing the stage to "Not started" raises the keep-vs-clear stage-history modal, and setting a new stage raises the "assign a task?" modal. `doSaveBasic(clearHistory, explicitStageId?)` takes an explicit stage id because React has not flushed `setCurrentStageId` yet when called from the `<select>`'s `onChange`.
 - **Tasks tab**: shows all `ContractorAssignment` records for that apartment; pending badge on tab button; mark complete inline; attachment thumbnails; Add Task / Bulk Add Task buttons open `QuickAddTaskPanel` / `BulkAddTaskModal`
 - `getTaskDueBadge()` helper defined inside component (mirrors `getDueBadge()` logic)
 - **Photos tab**: loads Drive folder contents via backend API when `driveLink` is set; lightbox viewer
