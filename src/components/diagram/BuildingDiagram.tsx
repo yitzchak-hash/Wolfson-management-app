@@ -271,22 +271,22 @@ function AptCell({
       {/* Changes badge */}
       {showShinuiBadge && apt?.classification === 'shinui' && (
         <div
-          className="absolute top-0.5 left-0.5 w-3 h-3 rounded-full flex items-center justify-center"
+          className="absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center"
           title={ui.shinuiTooltip}
           style={{ backgroundColor: '#f59e0b', border: '1px solid rgba(255,255,255,0.9)' }}
         >
-          <span style={{ fontSize: '6px', color: 'white', fontWeight: 'bold', lineHeight: 1 }}>C</span>
+          <span style={{ fontSize: '7.5px', color: 'white', fontWeight: 'bold', lineHeight: 1 }}>C</span>
         </div>
       )}
 
       {/* Add-task "+" button */}
       {!compact && onAddTask && apt && (
         <button
-          className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full flex items-center justify-center transition-all hover:scale-110 active:scale-95"
+          className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full flex items-center justify-center transition-all hover:scale-110 active:scale-95"
           style={{
-            backgroundColor: 'rgba(255,255,255,0.35)',
+            backgroundColor: 'rgba(255,255,255,0.42)',
             color: textColor,
-            fontSize: '12px',
+            fontSize: '15px',
             lineHeight: 1,
             fontWeight: 'bold',
           }}
