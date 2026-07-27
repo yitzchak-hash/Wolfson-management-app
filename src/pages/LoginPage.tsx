@@ -8,9 +8,11 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const [shake, setShake] = useState(false);
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
-  const { login, mainUiStrings: s, projects, setCurrentProject } = useStore();
+  const { login, mainUiStrings: s, projects, setCurrentProject, authReady, loadUsersForLogin } = useStore();
   const navigate = useNavigate();
 
+  // Load the real user list before any code can be checked (see store.loadUsersForLogin)
+  useEffect(() => { loadUsersForLogin(); }, []);
   useEffect(() => { inputRefs.current[0]?.focus(); }, []);
 
   function handleDigit(idx: number, val: string) {
@@ -22,21 +24,22 @@ export function LoginPage() {
     if (val && idx < 5) inputRefs.current[idx + 1]?.focus();
     if (idx === 5 && val) {
       const code = [...newDigits.slice(0, 5), val].join('');
-      if (code.length === 6) attemptLogin(code);
+      if (code.length === 6 && authReady) attemptLogin(code);
     }
   }
 
   function handleKeyDown(idx: number, e: React.KeyboardEvent) {
     if (e.key === 'Backspace' && !digits[idx] && idx > 0) inputRefs.current[idx - 1]?.focus();
-    if (e.key === 'Enter') { const c = digits.join(''); if (c.length === 6) attemptLogin(c); }
+    if (e.key === 'Enter') { const c = digits.join(''); if (c.length === 6 && authReady) attemptLogin(c); }
   }
 
   function handlePaste(e: React.ClipboardEvent) {
     const text = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
-    if (text.length === 6) { setDigits(text.split('')); setTimeout(() => attemptLogin(text), 50); }
+    if (text.length === 6 && authReady) { setDigits(text.split('')); setTimeout(() => attemptLogin(text), 50); }
   }
 
   function attemptLogin(code: string) {
+    if (!authReady) return;
     const user = login(code);
     if (user) {
       setStep('project');
@@ -107,7 +110,8 @@ export function LoginPage() {
                       onKeyDown={e => handleKeyDown(i, e)}
                       maxLength={1}
                       inputMode="numeric"
-                      className="text-center text-xl font-bold text-white bg-white/8 border-2 border-white/15 rounded-xl focus:outline-none focus:border-[#4aa8d8] transition-all"
+                      disabled={!authReady}
+                      className="text-center text-xl font-bold text-white bg-white/8 border-2 border-white/15 rounded-xl focus:outline-none focus:border-[#4aa8d8] transition-all disabled:opacity-40"
                       style={{ width: '44px', height: '50px', backgroundColor: 'rgba(255,255,255,0.07)' }}
                     />
                   ))}
@@ -115,10 +119,11 @@ export function LoginPage() {
                 {error && <div className="text-red-400 text-sm text-center mb-4 font-medium">{error}</div>}
                 <button
                   onClick={() => { const c = digits.join(''); if (c.length === 6) attemptLogin(c); else setError(s.pleaseEnterDigits); }}
-                  className="w-full py-3 font-semibold rounded-xl text-sm tracking-wide text-white transition-all hover:opacity-90 active:scale-98"
+                  disabled={!authReady}
+                  className="w-full py-3 font-semibold rounded-xl text-sm tracking-wide text-white transition-all hover:opacity-90 active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ background: 'linear-gradient(135deg, #4aa8d8, #1e6fa5)' }}
                 >
-                  {s.enterProject}
+                  {authReady ? s.enterProject : '…'}
                 </button>
               </div>
             </>

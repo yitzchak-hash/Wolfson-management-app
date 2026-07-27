@@ -196,6 +196,9 @@ interface AppState {
 
   login: (code: string) => User | null;
   logout: () => void;
+  /** True once the authoritative user list is known and codes may be checked. */
+  authReady: boolean;
+  loadUsersForLogin: () => Promise<void>;
 
   updateApartment: (id: string, changes: Partial<Apartment>, user: User) => void;
   bulkUpdateApartments: (ids: string[], changes: Partial<Apartment>, user: User) => void;
@@ -325,6 +328,7 @@ export const useStore = create<AppState>((set, get) => ({
   canvasElements: (stored?.canvasElements as CanvasElement[] | null) ?? [],
   firebaseListening: false,
   firebaseSyncError: null,
+  authReady: !isFirebaseConfigured,
   googleClientId: (stored?.googleClientId as string | null) ?? '',
   googleAccessToken: null,
   googleTokenExpiry: null,
@@ -429,7 +433,29 @@ export const useStore = create<AppState>((set, get) => ({
     localStorage.setItem(THEME_KEY, v ? 'light' : 'dark');
   },
 
+  // Fetches the authoritative user list before any code is accepted.
+  //
+  // SECURITY: the seed users in initialData ship inside the public JS bundle. On a
+  // browser with no localStorage the store falls back to that seed, and because
+  // Firebase sync only started *after* login, a seed code used to authenticate
+  // against the live app. The real list must therefore be loaded up front, and
+  // once it exists the seed must never be accepted.
+  loadUsersForLogin: async () => {
+    if (!isFirebaseConfigured) { set({ authReady: true }); return; }
+    try {
+      const cloudUsers = (await fsGetAll('users')) as unknown as User[];
+      if (cloudUsers.length > 0) set({ users: cloudUsers });
+      // An empty cloud list means a genuine first run; the seed then bootstraps it.
+      set({ authReady: true });
+    } catch {
+      // Never open the door because the network failed.
+      set({ authReady: false });
+    }
+  },
+
   login: (code: string) => {
+    // Refuse to check codes until the real user list is known.
+    if (isFirebaseConfigured && !get().authReady) return null;
     const user = get().users.find(u => u.code === code && u.active);
     if (user) {
       set({ currentUser: user });
