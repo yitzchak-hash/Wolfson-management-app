@@ -11,7 +11,7 @@ import { Tooltip } from '../components/ui/Tooltip';
 import { Toast } from '../components/ui/Toast';
 import { format } from 'date-fns';
 import { saveAs } from 'file-saver';
-import { extractFolderId, isUploadBackendConfigured } from '../data/driveApi';
+import { extractFolderId, isUploadBackendConfigured, getFolderNameViaBackend, familyNameFromFolderName } from '../data/driveApi';
 
 type Tab = 'stages' | 'users' | 'contractors' | 'app' | 'language' | 'buildings';
 
@@ -635,6 +635,176 @@ function FirebaseStatusSection() {
   );
 }
 
+// ─── One-time backfill: pull family names from existing Drive folder links ────
+// Reads each apartment's Drive folder title and derives the family name (everything
+// before the first " -"). Writes ONLY displayName — no other field is touched.
+// Always previews first; nothing is saved until the user confirms.
+interface NameProposal {
+  aptId: string;
+  label: string;       // apartment number / building for display
+  currentName: string;
+  newName: string;
+  kind: 'fill' | 'replace';
+}
+
+function DriveNameBackfill({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
+  const { apartments, updateApartment, currentUser, currentProjectId, mainUiStrings: s } = useStore();
+  const [scanning, setScanning] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const [proposals, setProposals] = useState<NameProposal[] | null>(null);
+  const [skipped, setSkipped] = useState(0);
+  const backendOn = isUploadBackendConfigured();
+
+  // Only real apartments in the current project that actually have a Drive folder
+  const candidates = apartments.filter(a => !a.isUnnamed && !!a.driveLink && !!extractFolderId(a.driveLink));
+
+  async function handleScan() {
+    if (!currentUser) return;
+    setScanning(true);
+    setProposals(null);
+    setProgress({ done: 0, total: candidates.length });
+
+    const found: NameProposal[] = [];
+    let noChange = 0;
+    const CHUNK = 5; // keep Drive API load gentle
+
+    for (let i = 0; i < candidates.length; i += CHUNK) {
+      const batch = candidates.slice(i, i + CHUNK);
+      const results = await Promise.all(batch.map(async apt => {
+        const folderId = extractFolderId(apt.driveLink!)!;
+        const folderName = await getFolderNameViaBackend(folderId);
+        return { apt, folderName };
+      }));
+
+      for (const { apt, folderName } of results) {
+        if (!folderName) { noChange++; continue; }
+        const derived = familyNameFromFolderName(folderName);
+        const current = apt.displayName ?? '';
+        if (!derived || derived === current) { noChange++; continue; }
+        // "fill" = the apartment has no real name yet (blank or just its number)
+        const isPlaceholder = !current.trim() || current.trim() === apt.apartmentNumber;
+        found.push({
+          aptId: apt.id,
+          label: `${apt.buildingId} · ${apt.apartmentNumber || apt.id}`,
+          currentName: current,
+          newName: derived,
+          kind: isPlaceholder ? 'fill' : 'replace',
+        });
+      }
+      setProgress({ done: Math.min(i + CHUNK, candidates.length), total: candidates.length });
+    }
+
+    setSkipped(noChange);
+    setProposals(found);
+    setScanning(false);
+  }
+
+  function apply(list: NameProposal[]) {
+    if (!currentUser) return;
+    // Only displayName is written — every other apartment field is left untouched.
+    list.forEach(p => updateApartment(p.aptId, { displayName: p.newName }, currentUser));
+    onToast(`${list.length} ${list.length === 1 ? 'name' : 'names'} updated`);
+    setProposals(null);
+  }
+
+  const fills = proposals?.filter(p => p.kind === 'fill') ?? [];
+  const replaces = proposals?.filter(p => p.kind === 'replace') ?? [];
+
+  if (currentProjectId === 'general') return null;
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5">
+      <div className="flex items-center gap-2 mb-2">
+        <HardDrive size={18} className="text-[#1e3a5f]" />
+        <h2 className="font-semibold text-gray-800">Pull Family Names from Drive</h2>
+      </div>
+      <p className="text-sm text-gray-500 mb-4">
+        Reads each apartment's Google Drive folder title and fills in the family name
+        (everything before the first “ -”). Only the family name is changed — stages,
+        notes, tasks and links are left exactly as they are. You'll see a preview before
+        anything is saved.
+      </p>
+
+      {!backendOn ? (
+        <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          {s.driveApiKeyHint}
+        </p>
+      ) : (
+        <>
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              onClick={handleScan}
+              disabled={scanning || candidates.length === 0}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#1e3a5f] text-white text-sm font-medium disabled:opacity-50 hover:bg-[#16304f] transition-colors"
+            >
+              {scanning ? <Loader size={15} className="animate-spin" /> : <Search size={15} />}
+              {scanning ? `Scanning ${progress.done}/${progress.total}…` : 'Preview Names'}
+            </button>
+            <span className="text-xs text-gray-400">
+              {candidates.length} apartment{candidates.length !== 1 ? 's' : ''} with a Drive folder
+            </span>
+          </div>
+
+          {proposals && (
+            <div className="mt-4 border-t border-gray-100 pt-4">
+              {proposals.length === 0 ? (
+                <p className="text-sm text-gray-500">
+                  Nothing to change — all {skipped} folder{skipped !== 1 ? 's' : ''} already match their apartment names.
+                </p>
+              ) : (
+                <>
+                  <div className="flex items-center gap-3 mb-3 flex-wrap text-xs">
+                    <span className="px-2 py-1 rounded-full bg-green-50 text-green-700 border border-green-200 font-medium">
+                      {fills.length} to fill in
+                    </span>
+                    {replaces.length > 0 && (
+                      <span className="px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-medium">
+                        {replaces.length} would replace an existing name
+                      </span>
+                    )}
+                    <span className="text-gray-400">{skipped} unchanged</span>
+                  </div>
+
+                  <div className="max-h-72 overflow-y-auto rounded-lg border border-gray-200 divide-y divide-gray-100">
+                    {[...fills, ...replaces].map(p => (
+                      <div key={p.aptId}
+                        className={`flex items-center gap-2 px-3 py-2 text-sm ${p.kind === 'replace' ? 'bg-amber-50/60' : ''}`}>
+                        <span className="text-xs text-gray-400 w-24 flex-shrink-0 truncate">{p.label}</span>
+                        <span className="text-gray-400 line-through truncate flex-1 min-w-0">{p.currentName || '—'}</span>
+                        <span className="text-gray-300">→</span>
+                        <span className="font-medium text-gray-800 truncate flex-1 min-w-0">{p.newName}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-3 mt-4 flex-wrap">
+                    <button onClick={() => setProposals(null)}
+                      className="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-colors">
+                      {s.cancel}
+                    </button>
+                    {fills.length > 0 && (
+                      <button onClick={() => apply(fills)}
+                        className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-semibold transition-colors">
+                        Fill in {fills.length} blank name{fills.length !== 1 ? 's' : ''}
+                      </button>
+                    )}
+                    {replaces.length > 0 && (
+                      <button onClick={() => apply([...fills, ...replaces])}
+                        className="px-4 py-2 rounded-lg bg-[#1e3a5f] hover:bg-[#16304f] text-white text-sm font-semibold transition-colors">
+                        Apply all {proposals.length}
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── App settings ─────────────────────────────────────────────────────────────
 function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
   lightTheme: boolean; setLightTheme: (v: boolean) => void; onToast: (msg: string, type?: 'success' | 'error') => void;
@@ -669,6 +839,8 @@ function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
           </button>
         </div>
       </div>
+
+      <DriveNameBackfill onToast={onToast} />
 
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <div className="flex items-center gap-2 mb-4">
