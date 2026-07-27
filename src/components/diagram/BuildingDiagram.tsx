@@ -23,6 +23,17 @@ interface BuildingDiagramProps {
   onNameUnnamed?: (apt: Apartment) => void; // opens naming dialog for unnamed slots
 }
 
+// Darkens a hex colour. Used to outline stage-coloured cells so two neighbours
+// sharing the same stage still read as two distinct apartments.
+function darken(hex: string, amount = 0.26): string {
+  const h = hex.replace('#', '');
+  const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+  const num = parseInt(full, 16);
+  if (full.length !== 6 || Number.isNaN(num)) return hex;
+  const ch = (shift: number) => Math.max(0, Math.round(((num >> shift) & 255) * (1 - amount)));
+  return `#${((1 << 24) | (ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).slice(1)}`;
+}
+
 function getTextColor(bgHex: string): string {
   const hex = bgHex.replace('#', '');
   const r = parseInt(hex.slice(0, 2), 16);
@@ -102,12 +113,17 @@ interface AptCellProps {
   allTasksDone?: boolean;
   compact?: boolean;
   onNameUnnamed?: () => void;
+  /** 'connector' draws a link chip in the gap toward the partner on the right. */
+  mergeLink?: 'connector' | 'badge' | null;
+  /** Extra layout styles — used to make a duplex span two floor rows. */
+  extraStyle?: React.CSSProperties;
 }
 
 function AptCell({
   apt, stage, isHighlighted, isDimmed, showShinuiBadge, onClick,
   isDuplex, rowFloorType, isMerged, mergedLabel, isBulkSelected, isContractorHighlighted,
   aptSubLabel, taskInfo, nextStageName, onAddTask, allTasksDone, compact, onNameUnnamed,
+  mergeLink, extraStyle,
 }: AptCellProps) {
   const ui = useStore(state => state.mainUiStrings);
   const hasStage = !!stage;
@@ -123,7 +139,9 @@ function AptCell({
     '#e2e8f0';
   // Dimmed cells use a gray palette to make the filter visually obvious
   const bgColor = isDimmed ? '#e5e7eb' : (hasStage ? stage!.color : floorBg);
-  const borderColor = isDimmed ? '#d1d5db' : (isMerged ? '#3b82f6' : hasStage ? stage!.color : floorBorder);
+  // Stage-coloured cells get a darker outline of their own colour so adjacent
+  // apartments at the same stage don't blur into one block.
+  const borderColor = isDimmed ? '#d1d5db' : (isMerged ? '#3b82f6' : hasStage ? darken(stage!.color) : floorBorder);
   const borderWidth = isMerged && !isDimmed ? '2px' : '1.5px';
   const textColor = isDimmed ? '#9ca3af' : (hasStage ? getTextColor(stage!.color) : '#374151');
 
@@ -148,6 +166,9 @@ function AptCell({
   const hasPendingTask = !!taskInfo && !allTasksDone;
 
   return (
+    // Outer wrapper is not clipped, so the merge connector can sit in the gap
+    // between two linked apartments. It also carries the duplex two-row span.
+    <div className="relative flex" style={{ flex: 1, minWidth: 0, ...extraStyle }}>
     <div
       className={`relative flex flex-col items-center justify-center cursor-pointer select-none rounded-md overflow-hidden transition-all duration-100 hover:brightness-105 hover:shadow-md ${scale}`}
       style={{
@@ -278,6 +299,29 @@ function AptCell({
         </div>
       )}
     </div>
+
+    {/* Merge connector — a chain link sitting in the gap toward the partner */}
+    {mergeLink === 'connector' && !isDimmed && (
+      <div
+        className="absolute flex items-center justify-center pointer-events-none"
+        title={ui.linkedToApt}
+        style={{
+          right: compact ? '-5px' : '-7px',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          width: compact ? '10px' : '14px',
+          height: compact ? '10px' : '14px',
+          borderRadius: '9999px',
+          backgroundColor: '#3b82f6',
+          border: '1.5px solid #ffffff',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+          zIndex: 20,
+        }}
+      >
+        <span style={{ fontSize: compact ? '6px' : '8px', color: '#fff', lineHeight: 1, fontWeight: 700 }}>⛓</span>
+      </div>
+    )}
+    </div>
   );
 }
 
@@ -293,7 +337,7 @@ function Stairwell({ compact }: { compact?: boolean }) {
 }
 
 function FourCellRow({
-  aptNums, getApt, getStage, isHighlighted, isDimmed, isMerged, getMergedLabel,
+  aptNums, getApt, getStage, isHighlighted, isDimmed, isMerged, getMergedLabel, getMergeLink,
   isContractorHighlighted, isBulkSelected, getAptSubLabel, getTaskInfo, getNextStageName, getOnAddTask, getAllTasksDone,
   getOnNameUnnamed,
   showShinuiBadge, onApartmentClick, rowFloorType, compact,
@@ -305,6 +349,7 @@ function FourCellRow({
   isDimmed: (a: Apartment | undefined) => boolean;
   isMerged: (a: Apartment | undefined) => boolean;
   getMergedLabel: (a: Apartment | undefined) => string | undefined;
+  getMergeLink?: (a: Apartment | undefined, neighbour: Apartment | undefined) => 'connector' | null;
   isContractorHighlighted: (a: Apartment | undefined) => boolean;
   isBulkSelected: (a: Apartment | undefined) => boolean;
   getAptSubLabel: (a: Apartment | undefined) => string | undefined;
@@ -328,6 +373,7 @@ function FourCellRow({
           return (
             <AptCell
               key={ci}
+              mergeLink={ci === 0 ? getMergeLink?.(apt, getApt(aptNums[1])) ?? null : null}
               apt={apt}
               stage={getStage(apt)}
               isHighlighted={isHighlighted(apt)}
@@ -359,6 +405,7 @@ function FourCellRow({
           return (
             <AptCell
               key={ci}
+              mergeLink={ci === 2 ? getMergeLink?.(apt, getApt(aptNums[3])) ?? null : null}
               apt={apt}
               stage={getStage(apt)}
               isHighlighted={isHighlighted(apt)}
@@ -424,6 +471,13 @@ function BuildingColumn({
   const getApt = (num: number) => aptMap.get(String(num));
   const getStage = (apt: Apartment | undefined): Stage | null =>
     apt?.currentStageId ? stageMap.get(apt.currentStageId) ?? null : null;
+
+  // Draw the link chip only when the merged partner is this cell's right neighbour,
+  // so exactly one connector appears per pair.
+  function getMergeLink(apt: Apartment | undefined, neighbour: Apartment | undefined): 'connector' | null {
+    if (!apt?.mergedWith || !neighbour) return null;
+    return apt.mergedWith === neighbour.id ? 'connector' : null;
+  }
 
   function isHighlighted(apt: Apartment | undefined): boolean {
     if (!apt) return false;
@@ -554,6 +608,7 @@ function BuildingColumn({
                     isDimmed={isDimmed}
                     isMerged={isMerged}
                     getMergedLabel={getMergedLabel}
+                    getMergeLink={getMergeLink}
                     isContractorHighlighted={isContractorHighlighted}
                     isBulkSelected={isBulkSelected}
                     getAptSubLabel={getAptSubLabel}
@@ -729,14 +784,40 @@ function NetivBuildingColumn({
     return Math.max(...all.map(a => a.colPosition ?? 4), 4);
   }
 
+  // A merged pair sitting side by side gets one connector, drawn by the left cell.
+  function getMergeLinkFn(apt: Apartment | undefined): 'connector' | null {
+    if (!apt?.mergedWith) return null;
+    const partner = apartments.find(a => a.id === apt.mergedWith);
+    if (!partner) return null;
+    const sameRow = partner.floor === apt.floor;
+    const partnerIsRightNeighbour = sameRow && (partner.colPosition ?? 0) === (apt.colPosition ?? 0) + 1;
+    return partnerIsRightNeighbour ? 'connector' : null;
+  }
+
   function renderCells(floor: number, cols: number[]) {
     return cols.map(col => {
       const apt = getAptAtPos(floor, col);
-      const isDuplexTop = apt?.isDuplexApt && apt.floor !== floor;
+      const isDuplexTop = !!apt?.isDuplexApt && apt.floor !== floor;
+      const isDuplexBase = !!apt?.isDuplexApt && apt.floor === floor;
+
+      // A duplex renders as ONE tall cell anchored on its base floor that reaches up
+      // over the floor above. The upper floor therefore only reserves the space.
+      if (isDuplexTop) {
+        return <div key={col} className="flex-1 min-w-0" aria-hidden="true" />;
+      }
+      // Reach up one full row, then subtract the row padding at top and bottom
+      // (p-0.5 = 2px compact, p-1 = 4px otherwise) so the cell lands flush.
+      const rowPad = compact ? 2 : 4;
+      const spanStyle: React.CSSProperties | undefined = isDuplexBase
+        ? { alignSelf: 'flex-start', marginTop: `-${rowH}px`, height: `${rowH * 2 - rowPad * 2}px`, zIndex: 3 }
+        : undefined;
+
       const rowFloorType: 'basement' | 'ground' | 'lobby' | undefined =
         floor < -0.5 ? 'basement' : floor === 0 ? 'ground' : floor === -1 ? 'lobby' : undefined;
       return (
         <AptCell key={col}
+          mergeLink={getMergeLinkFn(apt)}
+          extraStyle={spanStyle}
           apt={apt}
           stage={getStage(apt)}
           isHighlighted={isHighlighted(apt)}
@@ -755,7 +836,7 @@ function NetivBuildingColumn({
           allTasksDone={getAllDoneFn(apt)}
           onNameUnnamed={getOnNameFn(apt)}
           compact={compact}
-          isDuplex={isDuplexTop}
+          isDuplex={false}
         />
       );
     });
