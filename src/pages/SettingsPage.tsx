@@ -3,10 +3,10 @@ import { useStore } from '../data/store';
 import {
   Plus, Trash2, Save, ChevronUp, ChevronDown, Shield, Sun, Moon,
   Copy, Check, Download, Upload, HardDrive, X, HardDriveDownload, ToggleLeft, ToggleRight,
-  Languages, Clock, RotateCcw, Wifi, WifiOff, Loader, Database, RefreshCw, CloudUpload, Search,
+  Languages, Clock, RotateCcw, Wifi, WifiOff, Loader, Database, RefreshCw, CloudUpload, Search, BookOpen,
 } from 'lucide-react';
 import { isFirebaseConfigured, db, fsSet, fsGetAll } from '../data/firebase';
-import { Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency, getStageName, Apartment } from '../types';
+import { Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency, getStageName, Apartment, isCountableApartment } from '../types';
 import { Tooltip } from '../components/ui/Tooltip';
 import { Toast } from '../components/ui/Toast';
 import { format } from 'date-fns';
@@ -647,6 +647,117 @@ interface NameProposal {
   kind: 'fill' | 'replace';
 }
 
+// ─── One-time bulk action: set named-but-unstaged apartments to "Ready To Start" ──
+// Applies ONLY to apartments that (a) have no stage yet, (b) carry a real family
+// name — an apartment number on its own does not qualify — and (c) have an
+// Engineering Plans PDF recognised. Preview-first; nothing is written until the
+// user confirms.
+const READY_TO_START_RE = /^\s*ready\s*to\s*start\s*$/i;
+
+function BulkReadyToStart({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
+  const { apartments, stages, updateApartment, currentUser, currentProjectId, mainUiStrings: s } = useStore();
+  const [preview, setPreview] = useState(false);
+
+  const projectStages = stages.filter(st =>
+    currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId);
+  const readyStage = projectStages.find(st =>
+    st.active && (READY_TO_START_RE.test(st.name) || (st.nameHe && st.nameHe.trim() === 'מוכן להתחלה')));
+
+  // A real family name — not blank, and not merely the apartment number
+  function hasRealName(a: typeof apartments[0]): boolean {
+    const name = a.displayName?.trim() ?? '';
+    return !!name && name !== (a.apartmentNumber?.trim() ?? '');
+  }
+
+  const targets = apartments.filter(a =>
+    isCountableApartment(a)
+    && !a.currentStageId                 // no stage yet
+    && hasRealName(a)                    // has a real family name
+    && !!a.plansPdfLink?.trim());        // plans recognised
+
+  function apply() {
+    if (!currentUser || !readyStage) return;
+    targets.forEach(a => updateApartment(a.id, { currentStageId: readyStage.id }, currentUser));
+    onToast(`${targets.length} ${targets.length === 1 ? 'apartment' : 'apartments'} → ${readyStage.name}`);
+    setPreview(false);
+  }
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5">
+      <div className="flex items-center gap-2 mb-2">
+        <RefreshCw size={18} className="text-[#1e3a5f]" />
+        <h2 className="font-semibold text-gray-800">Set Named Apartments to “Ready To Start”</h2>
+      </div>
+      <p className="text-sm text-gray-500 mb-4">
+        Moves an apartment to the existing “Ready To Start” stage only when all three are
+        true: it has <strong>no stage yet</strong>, it has a <strong>real family name</strong>
+        (a bare apartment number doesn’t qualify), and its <strong>Engineering Plans PDF is
+        recognised</strong>. Anything already staged is skipped, and nothing else on the
+        apartment is touched.
+      </p>
+
+      {!readyStage ? (
+        <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          No active stage named “Ready To Start” exists in this workspace. Create it under
+          Settings → Stages first.
+        </p>
+      ) : targets.length === 0 ? (
+        <p className="text-sm text-gray-500">
+          Nothing to change — no apartment currently has a name and recognised plans while
+          still having no stage.
+        </p>
+      ) : !preview ? (
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            onClick={() => setPreview(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#1e3a5f] text-white text-sm font-medium hover:bg-[#16304f] transition-colors"
+          >
+            <Search size={15} /> Preview {targets.length}
+          </button>
+          <span className="text-xs text-gray-400">
+            {targets.length} named apartment{targets.length !== 1 ? 's' : ''} with plans and no stage
+          </span>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center gap-2 mb-3 text-xs">
+            <span className="px-2 py-1 rounded-full bg-green-50 text-green-700 border border-green-200 font-medium">
+              {targets.length} will move to {readyStage.name}
+            </span>
+          </div>
+          <div className="max-h-72 overflow-y-auto rounded-lg border border-gray-200 divide-y divide-gray-100">
+            {targets.map(a => (
+              <div key={a.id} className="flex items-center gap-2 px-3 py-2 text-sm">
+                <span className="text-xs text-gray-400 w-24 flex-shrink-0 truncate">
+                  {a.buildingId} · {a.apartmentNumber || a.id}
+                </span>
+                <span className="font-medium text-gray-800 truncate flex-1 min-w-0">{a.displayName}</span>
+                <span title="Plans recognised" className="text-[10px] text-gray-400 flex items-center gap-0.5 flex-shrink-0">
+                  <BookOpen size={10} /> plans
+                </span>
+                <span className="text-gray-300">→</span>
+                <span className="text-xs font-medium flex-shrink-0" style={{ color: readyStage.color }}>
+                  {readyStage.name}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-3 mt-4 flex-wrap">
+            <button onClick={() => setPreview(false)}
+              className="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-colors">
+              {s.cancel}
+            </button>
+            <button onClick={apply}
+              className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-semibold transition-colors">
+              Apply to {targets.length}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function DriveNameBackfill({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
   const { apartments, updateApartment, currentUser, currentProjectId, mainUiStrings: s } = useStore();
   const [scanning, setScanning] = useState(false);
@@ -841,6 +952,8 @@ function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
       </div>
 
       <DriveNameBackfill onToast={onToast} />
+
+      <BulkReadyToStart onToast={onToast} />
 
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <div className="flex items-center gap-2 mb-4">
