@@ -1309,7 +1309,11 @@ export const useStore = create<AppState>((set, get) => ({
       return;
     }
 
-    // Load all collections from Firestore in parallel (project-scoped collection names)
+    // Load all collections from Firestore in parallel.
+    // Per-project collections use the project-scoped name via col(); the GLOBAL
+    // collections (stages / users / contractors / settings) always use the bare
+    // name, because every mutation action writes them bare. Reading them through
+    // col() made adds in Netiv/General silently disappear on the next load.
     const pid = get().currentProjectId;
     const col = (base: string) => projectCollection(pid, base);
     const [
@@ -1319,21 +1323,23 @@ export const useStore = create<AppState>((set, get) => ({
     ] = await Promise.all([
       fsGetAll(col('apartments')),
       fsGetAll(col('stageNotes')),
-      fsGetAll(col('stages')),
-      fsGetAll(col('users')),
+      fsGetAll('stages'),
+      fsGetAll('users'),
       fsGetAll(col('activityLogs')),
-      fsGetAll(col('contractors')),
+      fsGetAll('contractors'),
       fsGetAll(col('contractorAssignments')),
       fsGetAll(col('contractorNotes')),
       fsGetAll(col('contractorPhotos')),
       fsGetAll(col('officeNoteFiles')),
-      fsGetAll(col('settings')),
+      fsGetAll('settings'),
       fsGetAll(col('stageNoteVersions')),
       fsGetAll(col('generalNoteVersions')),
     ]);
 
-    const hasFirebaseData = fbApts.length > 0 || fbContractors.length > 0 || fbAssignments.length > 0
-      || fbStages.length > 0 || fbUsers.length > 0;
+    // Only PROJECT-scoped signals decide whether this project has already been seeded.
+    // The global collections (stages/users/contractors) are shared, so they are
+    // non-empty as soon as any project has synced and would mask a brand-new project.
+    const hasFirebaseData = fbApts.length > 0 || fbAssignments.length > 0 || fbStageNotes.length > 0;
 
     if (hasFirebaseData) {
       const localPhotos = get().contractorPhotos;
@@ -1416,13 +1422,13 @@ export const useStore = create<AppState>((set, get) => ({
       const state = get();
       await Promise.all([
         fsBatchSet(col('apartments'),  state.apartments.map(a => ({ id: a.id, data: a }))),
-        fsBatchSet(col('stages'),      state.stages.map(s => ({ id: s.id, data: s }))),
-        fsBatchSet(col('users'),       state.users.map(u => ({ id: u.id, data: u }))),
+        fsBatchSet('stages',           state.stages.map(s => ({ id: s.id, data: s }))),
+        fsBatchSet('users',            state.users.map(u => ({ id: u.id, data: u }))),
         state.stageNotes.length > 0
           ? fsBatchSet(col('stageNotes'), state.stageNotes.map(n => ({ id: n.id, data: n })))
           : Promise.resolve(),
         state.contractors.length > 0
-          ? fsBatchSet(col('contractors'), state.contractors.map(c => ({ id: c.id, data: c })))
+          ? fsBatchSet('contractors', state.contractors.map(c => ({ id: c.id, data: c })))
           : Promise.resolve(),
         state.contractorAssignments.length > 0
           ? fsBatchSet(col('contractorAssignments'), state.contractorAssignments.map(a => ({
@@ -1439,7 +1445,7 @@ export const useStore = create<AppState>((set, get) => ({
         state.officeNoteFiles.length > 0
           ? fsBatchSet(col('officeNoteFiles'), state.officeNoteFiles.map(f => ({ id: f.id, data: { ...f, dataUrl: '' } })))
           : Promise.resolve(),
-        fsSet(col('settings'), 'app', {
+        fsSet('settings', 'app', {
           autoBackup:            state.autoBackup,
           backupFrequency:       state.backupFrequency,
           backupDriveFolderLink: state.backupDriveFolderLink,
@@ -1479,7 +1485,7 @@ export const useStore = create<AppState>((set, get) => ({
           set({ activityLogs: sorted }); persist(get);
         }
       }),
-      fsListen(col('contractors'), (docs) => {
+      fsListen('contractors', (docs) => {
         if (docs.length > 0) { set({ contractors: docs as unknown as Contractor[] }); persist(get); }
       }),
       fsListen(col('contractorAssignments'), (docs) => {
@@ -1515,13 +1521,13 @@ export const useStore = create<AppState>((set, get) => ({
         });
         set({ officeNoteFiles: merged }); persist(get);
       }),
-      fsListen(col('stages'), (docs) => {
+      fsListen('stages', (docs) => {
         if (docs.length > 0) { set({ stages: docs as unknown as Stage[] }); persist(get); }
       }),
-      fsListen(col('users'), (docs) => {
+      fsListen('users', (docs) => {
         if (docs.length > 0) { set({ users: docs as unknown as User[] }); persist(get); }
       }),
-      fsListen(col('settings'), (docs) => {
+      fsListen('settings', (docs) => {
         const appS = (docs.find(d => (d as Record<string,unknown>).id === 'app') ?? {}) as Record<string, unknown>;
         set(state => ({
           ...(appS.backupFrequency      ? { backupFrequency:      appS.backupFrequency as BackupFrequency }      : {}),

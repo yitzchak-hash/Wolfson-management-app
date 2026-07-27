@@ -5,7 +5,7 @@ import { useStore } from '../../data/store';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import { StageNotesSection } from './StageNotesSection';
 import { ActivitySection } from './ActivitySection';
-import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, findAllPlansPdfsViaBackend, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, extractFolderId, driveThumbUrl, listAllPhotosViaBackend, DrivePhotoItem, DriveFile } from '../../data/driveApi';
+import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, findAllPlansPdfsViaBackend, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, extractFolderId, driveThumbUrl, listAllPhotosViaBackend, getFolderNameViaBackend, familyNameFromFolderName, DrivePhotoItem, DriveFile } from '../../data/driveApi';
 import { Tooltip } from '../ui/Tooltip';
 
 interface Props {
@@ -353,6 +353,19 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       address: addressLocal.trim() || undefined,
     }, currentUser);
     setPrevStageId(currentStageId);
+  }
+
+  // Drive folders are named "Artzi, Avital - 1234 - …" — pull everything before the
+  // first " -" into the family name whenever a new folder link is saved.
+  async function autoFillFamilyNameFromFolder(folderId: string) {
+    if (isGeneralProject) return;
+    const folderName = await getFolderNameViaBackend(folderId);
+    if (!folderName) return;
+    const derived = familyNameFromFolderName(folderName);
+    if (!derived || derived === familyName) return;
+    setFamilyName(derived);
+    updateApartment(apartment!.id, { displayName: derived }, currentUser);
+    onToast(`${ui.familyName}: ${derived}`);
   }
 
   function handleSaveMerge() {
@@ -1119,6 +1132,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                               const folderId = extractFolderId(trimmed);
                               if (folderId) {
                                 findOrCreateFolderViaBackend(folderId, 'Photos').catch(() => {});
+                                autoFillFamilyNameFromFolder(folderId);
                                 if (!detectedPdfId) {
                                   setFetchingPdf(true);
                                   findAllPlansPdfsViaBackend(trimmed)
@@ -1156,6 +1170,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                 const folderId = extractFolderId(trimmed);
                                 if (folderId) {
                                   findOrCreateFolderViaBackend(folderId, 'Photos').catch(() => {});
+                                  autoFillFamilyNameFromFolder(folderId);
                                   setFetchingPdf(true);
                                   findAllPlansPdfsViaBackend(trimmed)
                                     .then(pdfs => { if (pdfs.length > 0) { setAvailablePdfs(pdfs); setSelectedPdfIdx(0); } })

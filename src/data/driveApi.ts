@@ -263,6 +263,33 @@ async function listFolderViaBackend(folderId: string): Promise<DriveFile[]> {
   return (data.files ?? []) as DriveFile[];
 }
 
+/**
+ * Derives the family name from a Drive folder title.
+ * Folders are named like "Artzi, Avital - 1234 - notes", so the family name is
+ * everything before the first " -". Falls back to the whole title when there is
+ * no " -" separator.
+ */
+export function familyNameFromFolderName(folderName: string): string {
+  const idx = folderName.indexOf(' -');
+  return (idx === -1 ? folderName : folderName.slice(0, idx)).trim();
+}
+
+/** Reads a Drive folder's own title. Returns null if it can't be fetched. */
+export async function getFolderNameViaBackend(folderId: string): Promise<string | null> {
+  try {
+    const resp = await fetch('/api/drive-files', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': DRIVE_API_KEY },
+      body: JSON.stringify({ folderId, metaOnly: true }),
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    return (data.folder?.name as string | undefined) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function findPlansPdfViaBackend(driveLink: string): Promise<DriveFile | null> {
   const pdfs = await findAllPlansPdfsViaBackend(driveLink);
   return pdfs[0] ?? null;

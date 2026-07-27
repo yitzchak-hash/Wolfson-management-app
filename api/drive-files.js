@@ -24,11 +24,23 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const { folderId } = req.body;
+  const { folderId, metaOnly } = req.body;
   if (!folderId) return res.status(400).json({ error: 'Missing folderId' });
 
   try {
     const drive = getDrive();
+
+    // metaOnly: return just the folder's own metadata (used to derive the family
+    // name from the folder title) without listing its children.
+    if (metaOnly) {
+      const meta = await drive.files.get({
+        fileId: folderId,
+        fields: 'id,name,mimeType',
+        supportsAllDrives: true,
+      });
+      return res.json({ folder: meta.data, files: [] });
+    }
+
     const resp = await drive.files.list({
       q: `'${folderId}' in parents and trashed = false`,
       fields: 'files(id,name,mimeType)',
