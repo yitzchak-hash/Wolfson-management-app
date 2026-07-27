@@ -165,8 +165,7 @@ export async function checkFolderHealth(
            /photo/i.test(f.name),
     );
     const plansFolder = files.find(
-      f => f.mimeType === 'application/vnd.google-apps.folder' &&
-           /(plan|engineer)/i.test(f.name),
+      f => f.mimeType === 'application/vnd.google-apps.folder' && isEngineeredPlansFolder(f.name),
     );
     health.plansFolderFound = !!plansFolder;
     if (plansFolder) {
@@ -295,22 +294,35 @@ export async function findPlansPdfViaBackend(driveLink: string): Promise<DriveFi
   return pdfs[0] ?? null;
 }
 
+const FOLDER_MIME = 'application/vnd.google-apps.folder';
+
+/**
+ * Matches ONLY the dedicated engineered-plans folder.
+ *
+ * This deliberately requires the full phrase. Matching loose fragments like
+ * "plan" / "drawing" / "dwg" pulled PDFs out of unrelated subfolders, so the
+ * contractor could be shown the wrong document.
+ */
+export function isEngineeredPlansFolder(name: string): boolean {
+  const n = name.trim().toLowerCase().replace(/[_\-–—]+/g, ' ').replace(/\s+/g, ' ');
+  // "Engineered Plans", "Engineering Plan", "01 Engineered Plans Final", …
+  if (/\bengineer(ed|ing)?\s+plans?\b/.test(n)) return true;
+  // Hebrew equivalent — full phrase only, never a fragment
+  if (n.includes('תוכניות הנדסיות') || n.includes('תכניות הנדסיות')) return true;
+  return false;
+}
+
 export async function findAllPlansPdfsViaBackend(driveLink: string): Promise<DriveFile[]> {
   const folderId = extractFolderId(driveLink);
   if (!folderId) return [];
   try {
     const files = await listFolderViaBackend(folderId);
-    const plansFolder = files.find(
-      f => f.mimeType === 'application/vnd.google-apps.folder' &&
-           /(plan|engineer|תכנ|תוכנ|הנד|drawing|blueprint|dwg)/i.test(f.name),
-    );
-    if (plansFolder) {
-      const planFiles = await listFolderViaBackend(plansFolder.id);
-      const pdfs = planFiles.filter(f => f.mimeType === 'application/pdf');
-      if (pdfs.length > 0) return pdfs;
-    }
-    // Fallback: any PDFs directly in the main folder
-    return files.filter(f => f.mimeType === 'application/pdf');
+    const plansFolder = files.find(f => f.mimeType === FOLDER_MIME && isEngineeredPlansFolder(f.name));
+    // No Engineered Plans folder → report nothing. Never guess from loose PDFs
+    // lying in the main folder, and never scan other subfolders.
+    if (!plansFolder) return [];
+    const planFiles = await listFolderViaBackend(plansFolder.id);
+    return planFiles.filter(f => f.mimeType === 'application/pdf');
   } catch {
     return [];
   }
@@ -329,9 +341,7 @@ export async function checkFolderHealthViaBackend(
     health.photosFolderFound = files.some(
       f => f.mimeType === 'application/vnd.google-apps.folder' && /photo/i.test(f.name),
     );
-    const plansFolder = files.find(
-      f => f.mimeType === 'application/vnd.google-apps.folder' && /(plan|engineer)/i.test(f.name),
-    );
+    const plansFolder = files.find(f => f.mimeType === FOLDER_MIME && isEngineeredPlansFolder(f.name));
     health.plansFolderFound = !!plansFolder;
     if (plansFolder) {
       const planFiles = await listFolderViaBackend(plansFolder.id);

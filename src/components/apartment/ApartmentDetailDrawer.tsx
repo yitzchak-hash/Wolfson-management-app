@@ -1007,7 +1007,14 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                 updateApartment(apartment!.id, { plansPdfLink: link }, currentUser);
                                 onToast(ui.pdfFound);
                               } else {
+                                // Explicit re-scan found no Engineered Plans folder — drop any
+                                // previously detected plan so a wrong one can't reach the contractor.
                                 setAvailablePdfs([]);
+                                setSelectedPdfIdx(0);
+                                setPlansPdfLink('');
+                                if (apartment!.plansPdfLink) {
+                                  updateApartment(apartment!.id, { plansPdfLink: undefined }, currentUser);
+                                }
                                 onToast(ui.noPdfFound, 'error');
                               }
                             }).finally(() => setFetchingPdf(false));
