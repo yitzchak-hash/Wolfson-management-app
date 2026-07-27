@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { Link2 } from 'lucide-react';
 import { Apartment, BuildingId, Stage } from '../../types';
 import { useStore } from '../../data/store';
 
@@ -198,7 +199,7 @@ function AptCell({
           {nameLabel && numberLabel && (
             <span
               className="w-full text-center leading-none block truncate px-0.5"
-              style={{ fontSize: compact ? '7px' : '8.5px', opacity: isDimmed ? 0.5 : 0.85, fontWeight: 600 }}
+              style={{ fontSize: compact ? '8.5px' : '10.5px', opacity: isDimmed ? 0.55 : 0.95, fontWeight: 600 }}
             >
               {nameLabel}
             </span>
@@ -300,27 +301,30 @@ function AptCell({
       )}
     </div>
 
-    {/* Merge connector — a chain link sitting in the gap toward the partner */}
-    {mergeLink === 'connector' && !isDimmed && (
-      <div
-        className="absolute flex items-center justify-center pointer-events-none"
-        title={ui.linkedToApt}
-        style={{
-          right: compact ? '-5px' : '-7px',
-          top: '50%',
-          transform: 'translateY(-50%)',
-          width: compact ? '10px' : '14px',
-          height: compact ? '10px' : '14px',
-          borderRadius: '9999px',
-          backgroundColor: '#3b82f6',
-          border: '1.5px solid #ffffff',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
-          zIndex: 20,
-        }}
-      >
-        <span style={{ fontSize: compact ? '6px' : '8px', color: '#fff', lineHeight: 1, fontWeight: 700 }}>⛓</span>
-      </div>
-    )}
+    {/* Merge connector — a blue link badge centred in the gap toward the partner */}
+    {mergeLink === 'connector' && !isDimmed && (() => {
+      const size = compact ? 15 : 21;
+      return (
+        <div
+          className="absolute flex items-center justify-center pointer-events-none"
+          title={ui.linkedToApt}
+          style={{
+            right: `-${size / 2}px`,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            width: `${size}px`,
+            height: `${size}px`,
+            borderRadius: '9999px',
+            backgroundColor: '#2563eb',
+            border: '2px solid #ffffff',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
+            zIndex: 20,
+          }}
+        >
+          <Link2 size={compact ? 8 : 12} color="#ffffff" strokeWidth={2.75} />
+        </div>
+      );
+    })()}
     </div>
   );
 }
@@ -363,7 +367,7 @@ function FourCellRow({
   rowFloorType?: 'basement' | 'ground' | 'lobby';
   compact?: boolean;
 }) {
-  const gapClass = compact ? 'gap-0.5' : 'gap-1';
+  const gapClass = compact ? 'gap-1' : 'gap-2';
 
   return (
     <>
@@ -774,7 +778,7 @@ function NetivBuildingColumn({
   const roofH = compact ? 16 : 26;
   const LABEL_W = compact ? 26 : 34;
   const padClass = compact ? 'p-0.5 gap-0.5' : 'p-1 gap-1';
-  const gapCls = compact ? 'gap-0.5' : 'gap-1';
+  const gapCls = compact ? 'gap-1' : 'gap-2';
 
   // For each floor, determine how many columns to render
   function getColsForFloor(floor: number): number {
