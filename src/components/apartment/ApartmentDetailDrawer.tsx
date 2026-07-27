@@ -219,9 +219,19 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     .sort((a, b) => a.order - b.order);
   const currentStage = stages.find(s => s.id === currentStageId);
   const aptLogs = activityLogs.filter(l => l.apartmentId === apartment.id).slice(0, 20);
-  const sameBuildingApts = apartments
-    .filter(a => a.buildingId === apartment.buildingId && a.id !== apartment.id && !a.isUnnamed)
-    .sort((a, b) => (Number(a.apartmentNumber) || 0) - (Number(b.apartmentNumber) || 0));
+  // Connect-unit picker: one entry per apartment NUMBER in this building.
+  // Duplicate records (same number, different id) would otherwise flood the list.
+  const sameBuildingApts = Array.from(
+    apartments
+      .filter(a =>
+        a.buildingId === apartment.buildingId
+        && a.id !== apartment.id
+        && !a.isUnnamed
+        && !!a.apartmentNumber?.trim())
+      .reduce((m, a) => m.has(a.apartmentNumber.trim()) ? m : m.set(a.apartmentNumber.trim(), a),
+              new Map<string, typeof apartments[0]>())
+      .values(),
+  ).sort((a, b) => (Number(a.apartmentNumber) || 0) - (Number(b.apartmentNumber) || 0));
   const mergedPartner = apartments.find(a => a.id === apartment.mergedWith);
 
   const aptTasks = contractorAssignments
@@ -1249,7 +1259,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                           <option value="">{ui.noConnection}</option>
                           {sameBuildingApts.map(a => (
                             <option key={a.id} value={a.id}>
-                              {ui.aptPrefix} {a.displayName || a.apartmentNumber} ({ui.floorPrefix} {a.floor > 0 ? a.floor : 'B'})
+                              {ui.aptPrefix} {a.apartmentNumber} ({ui.floorPrefix} {a.floor > 0 ? a.floor : 'B'})
                             </option>
                           ))}
                         </select>

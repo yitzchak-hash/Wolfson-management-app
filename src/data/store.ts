@@ -136,10 +136,15 @@ function generateToken(): string {
  * makes orphaned records from any past rename simply disappear from state.
  */
 function scopeApartmentsToProject(projectId: string, apts: Apartment[], buildings: Building[]): Apartment[] {
-  if (projectId === 'general') return apts.filter(a => a.buildingId === 'G');
   const ids = new Set(buildings.map(b => b.id));
-  if (ids.size === 0) return apts;
-  return apts.filter(a => ids.has(a.buildingId));
+  const scoped = projectId === 'general'
+    ? apts.filter(a => a.buildingId === 'G')
+    : ids.size === 0 ? apts : apts.filter(a => ids.has(a.buildingId));
+  // Collapse repeated ids — a duplicate record would otherwise be counted twice
+  // and show up repeatedly in pickers like the connected-unit dropdown.
+  const byId = new Map<string, Apartment>();
+  for (const a of scoped) byId.set(a.id, a);
+  return byId.size === scoped.length ? scoped : Array.from(byId.values());
 }
 
 function getDefaultBuildings(projectId: string): Building[] {
