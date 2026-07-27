@@ -1747,7 +1747,7 @@ const MAIN_UI_FIELD_LABELS: { key: keyof Omit<MainUiStrings, 'isRtl'>; label: st
   { key: 'enterBulkModeTooltip', label: 'Tooltip: Enter bulk mode', group: 'Diagram Tooltips' },
   { key: 'printDiagramTooltip', label: 'Tooltip: Print diagram', group: 'Diagram Tooltips' },
   { key: 'clearFiltersTooltip', label: 'Tooltip: Clear filters', group: 'Diagram Tooltips' },
-  { key: 'printHeader', label: 'Print: diagram header title', group: 'Diagram Tooltips' },
+  { key: 'buildingDiagramLabel', label: 'Print: diagram header title', group: 'Diagram Tooltips' },
   // Activity inline parts group
   { key: 'activityChangedStage', label: 'Activity: changed stage of', group: 'Activity Inline' },
   { key: 'activityAddedNote', label: 'Activity: added note on', group: 'Activity Inline' },

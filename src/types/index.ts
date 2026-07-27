@@ -942,7 +942,7 @@ export interface MainUiStrings {
   enterBulkModeTooltip: string;
   printDiagramTooltip: string;
   clearFiltersTooltip: string;
-  printHeader: string;
+  buildingDiagramLabel: string;
   // Activity inline template parts
   activityChangedStage: string;
   activityAddedNote: string;
@@ -1469,7 +1469,7 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   enterBulkModeTooltip: 'Select multiple apartments to update their stage at once',
   printDiagramTooltip: 'Print building diagram',
   clearFiltersTooltip: 'Clear all active filters',
-  printHeader: 'W Residence — Building Diagram',
+  buildingDiagramLabel: 'Building Diagram',
   // Activity inline template parts
   activityChangedStage: 'changed stage of',
   activityAddedNote: 'added note on',
@@ -1995,7 +1995,7 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   enterBulkModeTooltip: 'בחר מספר דירות לעדכון שלב בבת אחת',
   printDiagramTooltip: 'הדפס תרשים בניין',
   clearFiltersTooltip: 'נקה את כל הפילטרים',
-  printHeader: 'ו רזידנס — תרשים בניין',
+  buildingDiagramLabel: 'תרשים בניין',
   // Activity inline template parts
   activityChangedStage: 'שינה שלב של',
   activityAddedNote: 'הוסיף הערה על',

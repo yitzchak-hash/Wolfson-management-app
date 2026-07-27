@@ -13,7 +13,7 @@ import { Toast } from '../components/ui/Toast';
 type ClassFilter = 'all' | 'standard' | 'shinui';
 
 export function ProjectDiagramPage() {
-  const { apartments, stages, buildings, currentUser, bulkUpdateApartments, updateApartment, contractorAssignments, contractors, mainUiStrings: s, pendingOpenAptId, setPendingOpenAptId, currentProjectId } = useStore();
+  const { apartments, stages, buildings, currentUser, bulkUpdateApartments, updateApartment, contractorAssignments, contractors, mainUiStrings: s, pendingOpenAptId, setPendingOpenAptId, currentProjectId, projects } = useStore();
 
   const [selectedBuilding, setSelectedBuilding] = useState<BuildingId | 'all'>('all');
   const [activeStageIds, setActiveStageIds] = useState<string[]>([]);
@@ -43,6 +43,9 @@ export function ProjectDiagramPage() {
   const [bulkDropdownOpen, setBulkDropdownOpen] = useState(false);
 
   const sortedStages = [...stages].filter(s => s.active).sort((a, b) => a.order - b.order);
+
+  // Print header shows the project actually being viewed, not a hardcoded name
+  const printProject = projects.find(p => p.id === currentProjectId);
 
   // Map aptId → "ContractorName · N" task summary for display in cell
   const aptTaskData = useMemo(() => {
@@ -170,8 +173,17 @@ export function ProjectDiagramPage() {
       <div className="hidden print:block print:mb-4">
         <div className="flex items-center gap-4 mb-3">
           <img src="/tzviair-logo.png" alt="TzviAir" style={{ height: '40px' }} />
+          {printProject?.logoPath && (
+            <img
+              src={printProject.logoPath}
+              alt={printProject.name}
+              style={{ height: '40px', width: 'auto', objectFit: 'contain' }}
+            />
+          )}
           <div>
-            <h1 className="text-lg font-bold text-gray-900">{s.printHeader}</h1>
+            <h1 className="text-lg font-bold text-gray-900">
+              {printProject ? `${printProject.name} — ${s.buildingDiagramLabel}` : s.buildingDiagramLabel}
+            </h1>
             <p className="text-xs text-gray-500">Printed {new Date().toLocaleDateString()}</p>
           </div>
         </div>
