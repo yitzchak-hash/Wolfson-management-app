@@ -127,6 +127,21 @@ function generateToken(): string {
   return Array.from({ length: 24 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 }
 
+/**
+ * Keeps only apartments that belong to the given project.
+ *
+ * Renaming a project's buildings (Netiv's N1/N2 -> B1/B2) left the old records
+ * behind in Firestore and localStorage, so every count was reading two full
+ * copies of the project. Scoping by the project's own building ids at load time
+ * makes orphaned records from any past rename simply disappear from state.
+ */
+function scopeApartmentsToProject(projectId: string, apts: Apartment[], buildings: Building[]): Apartment[] {
+  if (projectId === 'general') return apts.filter(a => a.buildingId === 'G');
+  const ids = new Set(buildings.map(b => b.id));
+  if (ids.size === 0) return apts;
+  return apts.filter(a => ids.has(a.buildingId));
+}
+
 function getDefaultBuildings(projectId: string): Building[] {
   if (projectId === 'netiv') return NETIV_BUILDINGS;
   if (projectId === 'general') return [];
@@ -289,13 +304,15 @@ export const useStore = create<AppState>((set, get) => ({
     ? []
     : (stored?.buildings as Building[] | null) ?? defaultData.buildings,
   stages: (stored?.stages as Stage[] | null) ?? defaultData.stages,
-  apartments: _activeProjectId === 'wolfson'
-    ? migrateApartments((stored?.apartments as Apartment[] | null) ?? defaultData.apartments)
-    : _activeProjectId === 'general'
-    ? ((stored?.apartments as Apartment[] | null) ?? []).filter(a => a.buildingId === 'G')
-    : _activeProjectId === 'netiv'
-    ? migrateNetivApartments((stored?.apartments as Apartment[] | null) ?? defaultData.apartments).apts
-    : (stored?.apartments as Apartment[] | null) ?? defaultData.apartments,
+  apartments: scopeApartmentsToProject(
+    _activeProjectId,
+    _activeProjectId === 'wolfson'
+      ? migrateApartments((stored?.apartments as Apartment[] | null) ?? defaultData.apartments)
+      : _activeProjectId === 'netiv'
+      ? migrateNetivApartments((stored?.apartments as Apartment[] | null) ?? defaultData.apartments).apts
+      : (stored?.apartments as Apartment[] | null) ?? defaultData.apartments,
+    _activeProjectId === 'general' ? [] : (stored?.buildings as Building[] | null) ?? defaultData.buildings,
+  ),
   stageNotes: (stored?.stageNotes as StageNote[] | null) ?? [],
   stageNoteVersions: (stored?.stageNoteVersions as StageNoteVersion[] | null) ?? [],
   generalNoteVersions: (stored?.generalNoteVersions as GeneralNoteVersion[] | null) ?? [],
@@ -365,11 +382,11 @@ export const useStore = create<AppState>((set, get) => ({
     const rawApartments = (newStored?.apartments as Apartment[] | null) ?? defaultApartments;
     const newProjectData = {
       buildings:             id === 'general' ? [] : (newStored?.buildings as Building[] | null) ?? defaultBuildings,
-      apartments:            id === 'general'
-        ? rawApartments.filter(a => a.buildingId === 'G')
-        : id === 'netiv'
-        ? migrateNetivApartments(rawApartments).apts
-        : rawApartments,
+      apartments:            scopeApartmentsToProject(
+        id,
+        id === 'netiv' ? migrateNetivApartments(rawApartments).apts : rawApartments,
+        id === 'general' ? [] : (newStored?.buildings as Building[] | null) ?? defaultBuildings,
+      ),
       stageNotes:            (newStored?.stageNotes as StageNote[] | null)            ?? [],
       stageNoteVersions:     (newStored?.stageNoteVersions as StageNoteVersion[] | null) ?? [],
       generalNoteVersions:   (newStored?.generalNoteVersions as GeneralNoteVersion[] | null) ?? [],
@@ -1384,7 +1401,7 @@ export const useStore = create<AppState>((set, get) => ({
       }
 
       set(state => ({
-        apartments:            mergeById(state.apartments, fbApts as unknown as Apartment[]),
+        apartments:            scopeApartmentsToProject(pid, mergeById(state.apartments, fbApts as unknown as Apartment[]), state.buildings),
         stageNotes:            fbStageNotes.length > 0  ? (fbStageNotes as unknown as StageNote[]) : state.stageNotes,
         stages:                fbStages.length > 0      ? (fbStages as unknown as Stage[])     : state.stages,
         users:                 fbUsers.length > 0       ? (fbUsers as unknown as User[])       : state.users,
@@ -1472,7 +1489,8 @@ export const useStore = create<AppState>((set, get) => ({
           const updated = state.apartments.map(a => (fbMap.get(a.id) as Apartment | undefined) ?? a);
           const localIds = new Set(state.apartments.map(a => a.id));
           (docs as unknown as Apartment[]).forEach(r => { if (!localIds.has(r.id)) updated.push(r as Apartment); });
-          return { apartments: updated };
+          // Orphans from a past building rename must not stream back in
+          return { apartments: scopeApartmentsToProject(pid, updated, state.buildings) };
         });
         persist(get);
       }),

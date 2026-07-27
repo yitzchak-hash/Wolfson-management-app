@@ -3,7 +3,7 @@ import { Search, X, ToggleLeft, CheckSquare, Printer, ChevronDown } from 'lucide
 import { Navigate } from 'react-router-dom';
 import { Tooltip } from '../components/ui/Tooltip';
 import { useStore } from '../data/store';
-import { Apartment, BuildingId } from '../types';
+import { Apartment, BuildingId, isCountableApartment } from '../types';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
 import { StageLegend } from '../components/diagram/StageLegend';
 import { ApartmentDetailDrawer } from '../components/apartment/ApartmentDetailDrawer';
@@ -164,8 +164,10 @@ export function ProjectDiagramPage() {
     stage: s,
     count: apartments.filter(a => a.currentStageId === s.id).length,
   }));
-  const noStage = apartments.filter(a => !a.currentStageId).length;
-  const total = apartments.length;
+  // Only real units count — blank placeholder slots are not apartments
+  const countable = apartments.filter(isCountableApartment);
+  const noStage = countable.filter(a => !a.currentStageId).length;
+  const total = countable.length;
 
   return (
     <>

@@ -6,7 +6,7 @@ import {
   Building2, AlertTriangle, CheckCircle2, Clock, FileText, ClipboardList,
   AlertCircle, X, ChevronRight, Settings2, ChevronUp, ChevronDown, EyeOff, Eye,
 } from 'lucide-react';
-import { getStageName } from '../types';
+import { getStageName, isCountableApartment } from '../types';
 
 type ModalKind = 'changes' | 'notes' | 'overdue' | 'pending' | 'completedToday' | null;
 
@@ -22,7 +22,7 @@ export function DashboardPage() {
   const stages = allStages.filter(st => currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId);
   // Scope apartments to current project only (guard against stale localStorage)
   const apartments = currentProjectId === 'general'
-    ? allApartments.filter(a => a.buildingId === 'G' && !a.isUnnamed)
+    ? allApartments.filter(a => a.buildingId === 'G' && isCountableApartment(a))
     : allApartments;
   const navigate = useNavigate();
   const [modal, setModal] = useState<ModalKind>(null);
@@ -31,10 +31,10 @@ export function DashboardPage() {
   const [localHidden, setLocalHidden] = useState<string[]>([]);
 
   const sortedStages = [...stages].filter(st => st.active).sort((a, b) => a.order - b.order);
-  const total = apartments.filter(a => !a.isUnnamed).length;
-  const notStarted = apartments.filter(a => !a.isUnnamed && !a.currentStageId).length;
-  const shinuiCount = apartments.filter(a => a.classification === 'shinui' && !a.isUnnamed).length;
-  const withNotes = apartments.filter(a => a.generalNotes.trim() && !a.isUnnamed).length;
+  const total = apartments.filter(isCountableApartment).length;
+  const notStarted = apartments.filter(a => isCountableApartment(a) && !a.currentStageId).length;
+  const shinuiCount = apartments.filter(a => a.classification === 'shinui' && isCountableApartment(a)).length;
+  const withNotes = apartments.filter(a => a.generalNotes.trim() && isCountableApartment(a)).length;
   const recentLogs = activityLogs.slice(0, 10);
 
   const today = new Date().toISOString().split('T')[0];
@@ -43,7 +43,7 @@ export function DashboardPage() {
   const completedTodayCount = contractorAssignments.filter(a => a.completedAt && a.completedAt.startsWith(today)).length;
 
   function getBuildingProgress(bid: string) {
-    const apts = apartments.filter(a => a.buildingId === bid && !a.isUnnamed);
+    const apts = apartments.filter(a => a.buildingId === bid && isCountableApartment(a));
     const started = apts.filter(a => a.currentStageId).length;
     return { total: apts.length, started, pct: apts.length > 0 ? Math.round(started / apts.length * 100) : 0 };
   }
@@ -185,7 +185,7 @@ export function DashboardPage() {
             <h2 className="font-semibold text-gray-800 mb-4">{s.progressByStage}</h2>
             <div className="space-y-3">
               {sortedStages.map(stage => {
-                const count = apartments.filter(a => !a.isUnnamed && a.currentStageId === stage.id).length;
+                const count = apartments.filter(a => isCountableApartment(a) && a.currentStageId === stage.id).length;
                 const pct = total > 0 ? Math.round(count / total * 100) : 0;
                 return (
                   <div key={stage.id}>
@@ -399,8 +399,8 @@ export function DashboardPage() {
             <div className="flex-1 overflow-y-auto">
               {(modal === 'changes' || modal === 'notes') && (() => {
                 const list = modal === 'changes'
-                  ? apartments.filter(a => a.classification === 'shinui' && !a.isUnnamed)
-                  : apartments.filter(a => a.generalNotes.trim() && !a.isUnnamed);
+                  ? apartments.filter(a => a.classification === 'shinui' && isCountableApartment(a))
+                  : apartments.filter(a => a.generalNotes.trim() && isCountableApartment(a));
                 if (list.length === 0) {
                   return <div className="py-12 text-center text-gray-400 text-sm">No items</div>;
                 }

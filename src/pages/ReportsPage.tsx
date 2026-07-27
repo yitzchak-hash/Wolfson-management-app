@@ -3,7 +3,7 @@ import { Download, Printer, Filter, SlidersHorizontal, Search, X, ClipboardList 
 import { useStore } from '../data/store';
 import { format } from 'date-fns';
 import { saveAs } from 'file-saver';
-import { getStageName as getStageNameBilingual, aptLabel } from '../types';
+import { getStageName as getStageNameBilingual, aptLabel, isCountableApartment } from '../types';
 
 type BuildingFilter = string;
 type ClassFilter = 'all' | 'standard' | 'shinui';
@@ -13,7 +13,7 @@ export function ReportsPage() {
 
   // Scope data to the current project only
   const apartments = currentProjectId === 'general'
-    ? allApartments.filter(a => a.buildingId === 'G' && !a.isUnnamed)
+    ? allApartments.filter(a => a.buildingId === 'G' && isCountableApartment(a))
     : allApartments;
   const stages = currentProjectId === 'general'
     ? allStages.filter(st => st.projectId === 'general')

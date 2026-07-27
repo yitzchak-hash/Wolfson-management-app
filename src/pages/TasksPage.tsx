@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { BulkAddTaskModal } from '../components/apartment/BulkAddTaskModal';
 import { TaskCalendar, CalendarEvent } from '../components/tasks/TaskCalendar';
-import { ContractorAssignment, ContractorCategory, TaskAttachment, TaskPriority, getStageName, aptLabel } from '../types';
+import { ContractorAssignment, ContractorCategory, TaskAttachment, TaskPriority, getStageName, aptLabel, isCountableApartment } from '../types';
 import { Toast } from '../components/ui/Toast';
 import { Tooltip } from '../components/ui/Tooltip';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
@@ -173,7 +173,7 @@ export function TasksPage() {
 
   const sortedStages = [...stages].filter(s => s.active).sort((a, b) => a.order - b.order);
   const resApts = apartments
-    .filter(a => !a.isUnnamed && a.floor > 0)
+    .filter(a => isCountableApartment(a) && a.floor > 0)
     .sort((a, b) => a.buildingId.localeCompare(b.buildingId) || (Number(a.apartmentNumber) - Number(b.apartmentNumber)));
 
   const today = new Date().toISOString().split('T')[0];

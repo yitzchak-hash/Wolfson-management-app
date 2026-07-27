@@ -43,6 +43,21 @@ export function getStageName(stage: Stage, isRtl: boolean): string {
 }
 
 /**
+ * Does this apartment count as a real unit?
+ *
+ * Only units that actually show something on the board count — one with a
+ * number or a name. Blank placeholder slots (basement/lobby/ground spaces that
+ * nobody has named yet) are scaffolding, not units, and must never inflate a
+ * total. Naming a slot clears `isUnnamed`, so it starts counting from then on.
+ */
+export function isCountableApartment(
+  apt: { apartmentNumber?: string; displayName?: string; isUnnamed?: boolean } | null | undefined,
+): boolean {
+  if (!apt || apt.isUnnamed) return false;
+  return !!(apt.apartmentNumber?.trim() || apt.displayName?.trim());
+}
+
+/**
  * Human label for an apartment that ALWAYS keeps the apartment number visible.
  * A family name never replaces the number — it is appended to it:
  *   { apartmentNumber: '37', displayName: 'Artzi' } → "37 — Artzi"

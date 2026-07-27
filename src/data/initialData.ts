@@ -270,8 +270,21 @@ export function netivLayoutForApt(aptNum: number): { floor: number; col: number;
 // floor 3. Existing records persisted before this change keep their old floors, so this
 // recomputes them from the apartment number. Returns the (possibly) corrected array plus
 // the list of records that actually changed (for Firestore push).
+// The blank placeholder slots a Netiv building is supposed to have. Anything else
+// unnamed is left over from an older layout (the duplex renumber moved floors 8/9
+// to 9/10) and must be dropped, or a stale slot can sit on top of a real
+// apartment's grid position and hide it.
+const NETIV_SLOT_IDS = new Set(['lobby-1', 'lobby-2', 'lobby-3', 'f0-col2', 'f9-col4', 'f10-col3', 'f10-col4']);
+
 export function migrateNetivApartments(apts: Apartment[]): { apts: Apartment[]; changed: Apartment[] } {
   const changed: Apartment[] = [];
+  apts = apts.filter(a => {
+    if ((a.buildingId !== 'B1' && a.buildingId !== 'B2') || !a.isUnnamed) return true;
+    const slotId = a.id.replace(/^B[12]-/, '');
+    // Keep numbered placeholders (they are real units awaiting a name); drop only
+    // stale named-slot scaffolding from a previous layout.
+    return /^\d+$/.test(slotId) || NETIV_SLOT_IDS.has(slotId);
+  });
   const result = apts.map(a => {
     if ((a.buildingId !== 'B1' && a.buildingId !== 'B2') || a.isUnnamed) return a;
     const n = Number(a.apartmentNumber);

@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { useStore } from '../data/store';
+import { isCountableApartment } from '../types';
 import { format, subWeeks, startOfWeek, endOfWeek } from 'date-fns';
 import { Building2, TrendingUp, CheckCircle2, Clock, Users, Wrench } from 'lucide-react';
 
@@ -84,13 +85,13 @@ export function AnalyticsDashboard() {
   const stages = allStages.filter(st => currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId);
   // Scope apartments to current project only
   const apartments = currentProjectId === 'general'
-    ? allApartments.filter(a => a.buildingId === 'G' && !a.isUnnamed)
+    ? allApartments.filter(a => a.buildingId === 'G' && isCountableApartment(a))
     : allApartments;
 
   const sortedStages = useMemo(() => [...stages].filter(s => s.active).sort((a, b) => a.order - b.order), [stages]);
 
   const stats = useMemo(() => {
-    const residentialApts = apartments.filter(a => !a.isUnnamed && (a.floor > 0 || !/^A\d/.test(a.buildingId)));
+    const residentialApts = apartments.filter(a => isCountableApartment(a) && (a.floor > 0 || !/^A\d/.test(a.buildingId)));
     const total = residentialApts.length;
     const started = residentialApts.filter(a => a.currentStageId).length;
     const byStage = new Map<string, number>();
