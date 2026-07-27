@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useStore } from '../data/store';
-import { ContractorAssignment, ContractorPhoto, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, getStageName } from '../types';
+import { ContractorAssignment, ContractorPhoto, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, getStageName, aptLabel } from '../types';
 import { format, isPast, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import {
   Camera, CheckCircle2, Clock, Building2, CalendarDays, FileText,
@@ -697,7 +697,7 @@ export function ContractorPortal() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
                           <span className="font-bold text-[#1e3a5f] text-base">
-                            Apt {apt?.displayName || apt?.apartmentNumber || '?'}
+                            Apt {aptLabel(apt)}
                           </span>
                           <span className="text-xs text-gray-400 font-medium">{a.buildingId}</span>
                           {stage && (
@@ -754,7 +754,7 @@ export function ContractorPortal() {
               id: a.id,
               date: a.dueDate!,
               title: a.taskDescription,
-              subtitle: apt ? (apt.displayName || apt.apartmentNumber || a.buildingId) : a.buildingId,
+              subtitle: apt ? aptLabel(apt) : a.buildingId,
               color: catColor,
               completed: !!a.completedAt,
               onClick: () => setSelectedAssignment(a),
@@ -832,7 +832,7 @@ export function ContractorPortal() {
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <Building2 size={16} className="text-[#4aa8d8]" />
                       <span className="font-bold text-[#1e3a5f] text-lg">
-                        Apt {apt?.displayName || apt?.apartmentNumber || '?'}
+                        Apt {aptLabel(apt)}
                       </span>
                       <span className="text-gray-400 text-sm">{a.buildingId}</span>
                     </div>

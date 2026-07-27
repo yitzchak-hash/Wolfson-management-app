@@ -3,7 +3,7 @@ import { Download, Printer, Filter, SlidersHorizontal, Search, X, ClipboardList 
 import { useStore } from '../data/store';
 import { format } from 'date-fns';
 import { saveAs } from 'file-saver';
-import { getStageName as getStageNameBilingual } from '../types';
+import { getStageName as getStageNameBilingual, aptLabel } from '../types';
 
 type BuildingFilter = string;
 type ClassFilter = 'all' | 'standard' | 'shinui';
@@ -123,7 +123,7 @@ export function ReportsPage() {
   function buildRow(apt: typeof apartments[0]): Record<string, string> {
     const row: Record<string, string> = {};
     if (enabledCols.has('building')) row[s.colBuilding] = apt.buildingId;
-    if (enabledCols.has('apartment')) row[s.colApartment] = apt.displayName || apt.apartmentNumber || '(unnamed)';
+    if (enabledCols.has('apartment')) row[s.colApartment] = aptLabel(apt) || '(unnamed)';
     if (enabledCols.has('floor')) row[s.colFloor] = apt.floor === 0 ? s.groundFloorLabel : String(apt.floor);
     if (enabledCols.has('stage')) row[s.colCurrentStage] = getStageName(apt.currentStageId);
     if (enabledCols.has('classification')) row[s.colClassification] = apt.classification === 'shinui' ? s.changes : s.standard;
@@ -427,7 +427,7 @@ export function ReportsPage() {
                       )}
                       {enabledCols.has('apartment') && (
                         <td className="px-4 py-2.5 font-medium text-gray-800">
-                          {apt.displayName || apt.apartmentNumber || <span className="text-gray-400 italic">{s.unnamed}</span>}
+                          {aptLabel(apt) !== '?' ? aptLabel(apt) : <span className="text-gray-400 italic">{s.unnamed}</span>}
                         </td>
                       )}
                       {enabledCols.has('floor') && (

@@ -42,6 +42,23 @@ export function getStageName(stage: Stage, isRtl: boolean): string {
   return (isRtl && stage.nameHe) ? stage.nameHe : stage.name;
 }
 
+/**
+ * Human label for an apartment that ALWAYS keeps the apartment number visible.
+ * A family name never replaces the number — it is appended to it:
+ *   { apartmentNumber: '37', displayName: 'Artzi' } → "37 — Artzi"
+ *   { apartmentNumber: '37', displayName: '37'    } → "37"
+ */
+export function aptLabel(
+  apt: { apartmentNumber?: string; displayName?: string } | null | undefined,
+): string {
+  if (!apt) return '?';
+  const num = apt.apartmentNumber?.trim() ?? '';
+  const name = apt.displayName?.trim() ?? '';
+  if (!name || name === num) return num || '?';
+  if (!num) return name;
+  return `${num} — ${name}`;
+}
+
 export interface StageNoteAttachment {
   id: string;
   filename: string;

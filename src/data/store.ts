@@ -457,7 +457,9 @@ export const useStore = create<AppState>((set, get) => ({
 
     // Sync shared fields to merged partner when they change
     let extraUpdates: Apartment[] = [];
-    const syncedFields = ['currentStageId', 'classification', 'driveLink', 'plansPdfLink'] as const;
+    // displayName is synced too: a linked pair is one physical home, so it carries
+    // one family name. Each cell still shows its own apartment number.
+    const syncedFields = ['currentStageId', 'classification', 'driveLink', 'plansPdfLink', 'displayName'] as const;
     const changesHaveSync = syncedFields.some(f => f in changes);
     if (changesHaveSync && updated.mergedWith) {
       const partner = get().apartments.find(a => a.id === updated.mergedWith);
@@ -467,6 +469,11 @@ export const useStore = create<AppState>((set, get) => ({
         if ('classification' in changes) partnerPatch.classification = updated.classification;
         if ('driveLink' in changes) partnerPatch.driveLink = updated.driveLink;
         if ('plansPdfLink' in changes) partnerPatch.plansPdfLink = updated.plansPdfLink;
+        // Never copy a name that is just the source apartment's own number
+        if ('displayName' in changes && updated.displayName?.trim()
+            && updated.displayName.trim() !== updated.apartmentNumber?.trim()) {
+          partnerPatch.displayName = updated.displayName;
+        }
         const needsUpdate = Object.keys(partnerPatch).some(k =>
           JSON.stringify(partner[k as keyof Apartment]) !== JSON.stringify(partnerPatch[k as keyof Apartment])
         );

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { CalendarDays } from 'lucide-react';
 import { useStore, loadAllProjectsTaskData } from '../data/store';
 import { TaskCalendar, CalendarEvent } from '../components/tasks/TaskCalendar';
-import { ContractorAssignment, Apartment } from '../types';
+import { ContractorAssignment, Apartment, aptLabel } from '../types';
 import { fsListen, isFirebaseConfigured, projectCollection } from '../data/firebase';
 import { DEFAULT_PROJECTS } from '../data/initialData';
 
@@ -82,7 +82,7 @@ export function GlobalCalendarPage() {
           id: `${d.projectId}:${a.id}`,
           date: a.dueDate,
           title: a.taskDescription,
-          subtitle: `${projectName(d.projectId)} · ${apt?.displayName || apt?.apartmentNumber || a.buildingId}`,
+          subtitle: `${projectName(d.projectId)} · ${apt ? aptLabel(apt) : a.buildingId}`,
           color: contractor ? (CAT_COLORS[contractor.category] ?? '#6b7280') : '#6b7280',
           completed: !!a.completedAt,
           onClick: () => {

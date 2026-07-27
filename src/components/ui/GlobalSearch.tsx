@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Search, X, Building2, ClipboardList, FileText, MessageSquare } from 'lucide-react';
 import Fuse from 'fuse.js';
 import { useStore } from '../../data/store';
+import { aptLabel } from '../../types';
 import { useNavigate } from 'react-router-dom';
 
 interface SearchResult {
@@ -46,7 +47,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
     aptFuse.search(query).slice(0, 5).forEach(({ item: a }) => {
       found.push({
         id: `apt-${a.id}`, type: 'apartment',
-        title: `${a.buildingId} · Apt ${a.displayName || a.apartmentNumber}`,
+        title: `${a.buildingId} · Apt ${aptLabel(a)}`,
         subtitle: a.generalNotes.trim() ? a.generalNotes.slice(0, 80) : `Floor ${a.floor}`,
         aptId: a.id,
       });
@@ -60,7 +61,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
       found.push({
         id: `task-${a.id}`, type: 'task',
         title: a.taskDescription.slice(0, 60),
-        subtitle: `${a.buildingId} · Apt ${apt?.displayName || apt?.apartmentNumber} · ${contractor?.name ?? ''}`,
+        subtitle: `${a.buildingId} · Apt ${aptLabel(apt)} · ${contractor?.name ?? ''}`,
         aptId: a.apartmentId,
       });
     });
@@ -73,7 +74,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
       found.push({
         id: `note-${n.id}`, type: 'note',
         title: n.noteText.slice(0, 60),
-        subtitle: `${apt?.buildingId} · Apt ${apt?.displayName || apt?.apartmentNumber} · ${stage?.name ?? ''}`,
+        subtitle: `${apt?.buildingId} · Apt ${aptLabel(apt)} · ${stage?.name ?? ''}`,
         aptId: n.apartmentId,
       });
     });
@@ -85,7 +86,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
       found.push({
         id: `cnote-${n.id}`, type: 'contractor_note',
         title: n.text.slice(0, 60),
-        subtitle: `${apt?.buildingId} · Apt ${apt?.displayName || apt?.apartmentNumber} · ${n.authorName}`,
+        subtitle: `${apt?.buildingId} · Apt ${aptLabel(apt)} · ${n.authorName}`,
         aptId: n.apartmentId,
       });
     });

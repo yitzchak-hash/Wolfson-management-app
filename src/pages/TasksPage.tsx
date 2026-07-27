@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { BulkAddTaskModal } from '../components/apartment/BulkAddTaskModal';
 import { TaskCalendar, CalendarEvent } from '../components/tasks/TaskCalendar';
-import { ContractorAssignment, ContractorCategory, TaskAttachment, TaskPriority, getStageName } from '../types';
+import { ContractorAssignment, ContractorCategory, TaskAttachment, TaskPriority, getStageName, aptLabel } from '../types';
 import { Toast } from '../components/ui/Toast';
 import { Tooltip } from '../components/ui/Tooltip';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
@@ -271,7 +271,7 @@ export function TasksPage() {
         id: a.id,
         date: a.dueDate!,
         title: a.taskDescription,
-        subtitle: `${a.buildingId} · ${s.aptPrefix} ${apt?.displayName || apt?.apartmentNumber || '?'}`,
+        subtitle: `${a.buildingId} · ${s.aptPrefix} ${aptLabel(apt)}`,
         color: contractor ? CAT_COLORS[contractor.category] : '#6b7280',
         completed: !!a.completedAt,
         onClick: () => { setView('list'); startEdit(a); },
@@ -474,7 +474,7 @@ export function TasksPage() {
                   <optgroup key={bld.id} label={bld.name}>
                     {resApts.filter(a => a.buildingId === bld.id).map(a => (
                       <option key={a.id} value={a.id}>
-                        {s.aptPrefix} {a.displayName || a.apartmentNumber} ({s.floorPrefix} {a.floor})
+                        {s.aptPrefix} {aptLabel(a)} ({s.floorPrefix} {a.floor})
                       </option>
                     ))}
                   </optgroup>
@@ -630,7 +630,7 @@ export function TasksPage() {
                           </span>
                         )}
                         <span className="font-medium text-gray-800 text-sm">
-                          {a.buildingId} · {s.aptPrefix} {apt?.displayName || apt?.apartmentNumber}
+                          {a.buildingId} · {s.aptPrefix} {aptLabel(apt)}
                         </span>
                         {stage && (
                           <span

@@ -127,7 +127,13 @@ function AptCell({
   const borderWidth = isMerged && !isDimmed ? '2px' : '1.5px';
   const textColor = isDimmed ? '#9ca3af' : (hasStage ? getTextColor(stage!.color) : '#374151');
 
-  const displayLabel = mergedLabel || (apt ? (apt.displayName || (apt.isUnnamed ? '' : apt.apartmentNumber)) : '');
+  // The apartment number is always the primary label — a family name never replaces
+  // it, it renders on its own line underneath.
+  const numberLabel = mergedLabel || (apt && !apt.isUnnamed ? apt.apartmentNumber : '');
+  const rawName = apt?.displayName?.trim() ?? '';
+  // Only a *real* name counts — displayName defaults to the apartment number.
+  const nameLabel = rawName && rawName !== apt?.apartmentNumber?.trim() ? rawName : '';
+  const displayLabel = numberLabel || nameLabel;
 
   const scale = isHighlighted && !isDimmed ? 'scale-[1.04] z-10' : '';
 
@@ -155,15 +161,28 @@ function AptCell({
         gap: compact ? undefined : '1px',
       }}
       onClick={apt ? onClick : undefined}
-      title={displayLabel ? `${rowFloorType === 'basement' ? ui.basement : ui.aptShort} ${displayLabel}` : ''}
+      title={displayLabel
+        ? `${rowFloorType === 'basement' ? ui.basement : ui.aptShort} ${displayLabel}${nameLabel && numberLabel ? ` — ${nameLabel}` : ''}`
+        : ''}
     >
       {displayLabel ? (
-        <span
-          className="font-bold leading-tight text-center w-full block"
-          style={{ fontSize: numFontSize, padding: '0 1px' }}
-        >
-          {displayLabel}
-        </span>
+        <>
+          <span
+            className="font-bold leading-tight text-center w-full block truncate"
+            style={{ fontSize: numFontSize, padding: '0 1px' }}
+          >
+            {displayLabel}
+          </span>
+          {/* Family name — always shown *in addition to* the apartment number */}
+          {nameLabel && numberLabel && (
+            <span
+              className="w-full text-center leading-none block truncate px-0.5"
+              style={{ fontSize: compact ? '7px' : '8.5px', opacity: isDimmed ? 0.5 : 0.85, fontWeight: 600 }}
+            >
+              {nameLabel}
+            </span>
+          )}
+        </>
       ) : apt?.isUnnamed && onNameUnnamed ? (
         <button
           className="w-5 h-5 rounded-full flex items-center justify-center transition-all hover:scale-110 active:scale-95 hover:bg-white/60"
@@ -820,17 +839,19 @@ export function BuildingDiagram({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apartments, isRtl, buildings]);
 
-  // Pre-compute combined "A/B" labels for merged apartment pairs
+  // Pre-compute combined "37/38" number labels for merged apartment pairs.
+  // Only apartment NUMBERS are combined — the shared family name is rendered once,
+  // separately, so a linked pair never shows the same name twice.
   const mergedLabels = useMemo(() => {
     const m = new Map<string, string>();
     apartments.forEach(apt => {
       if (!apt.mergedWith) return;
       const partner = apartments.find(a => a.id === apt.mergedWith);
       if (!partner) return;
-      const numA = Number(apt.displayName || apt.apartmentNumber) || 0;
-      const numB = Number(partner.displayName || partner.apartmentNumber) || 0;
-      const labelA = apt.displayName || apt.apartmentNumber;
-      const labelB = partner.displayName || partner.apartmentNumber;
+      const numA = Number(apt.apartmentNumber) || 0;
+      const numB = Number(partner.apartmentNumber) || 0;
+      const labelA = apt.apartmentNumber;
+      const labelB = partner.apartmentNumber;
       const label = numA <= numB ? `${labelA}/${labelB}` : `${labelB}/${labelA}`;
       m.set(apt.id, label);
     });
