@@ -958,6 +958,10 @@ export interface MainUiStrings {
   printDiagramTooltip: string;
   clearFiltersTooltip: string;
   buildingDiagramLabel: string;
+  markDone: string;
+  markProgress: string;
+  markIssue: string;
+  markNone: string;
   contractorStatusTitle: string;
   liveLabel: string;
   loadingLabel: string;
@@ -1494,6 +1498,10 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   printDiagramTooltip: 'Print building diagram',
   clearFiltersTooltip: 'Clear all active filters',
   buildingDiagramLabel: 'Building Diagram',
+  markDone: 'Done',
+  markProgress: 'In progress',
+  markIssue: 'Issue',
+  markNone: 'Not started',
   contractorStatusTitle: 'Contractor Status',
   liveLabel: 'LIVE',
   loadingLabel: 'Loading…',
@@ -2029,6 +2037,10 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   printDiagramTooltip: 'הדפס תרשים בניין',
   clearFiltersTooltip: 'נקה את כל הפילטרים',
   buildingDiagramLabel: 'תרשים בניין',
+  markDone: 'הושלם',
+  markProgress: 'בתהליך',
+  markIssue: 'בעיה',
+  markNone: 'לא התחיל',
   contractorStatusTitle: 'סטטוס קבלן',
   liveLabel: 'חי',
   loadingLabel: 'טוען…',

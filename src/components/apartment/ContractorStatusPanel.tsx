@@ -3,8 +3,9 @@ import { X, RefreshCw, AlertCircle, ExternalLink } from 'lucide-react';
 import { useStore } from '../../data/store';
 import { Apartment, aptLabel } from '../../types';
 import {
-  fetchContractorSheet, parseSheet, percentColor,
-  SheetApartmentStatus, isSheetBackendConfigured,
+  fetchContractorSheet, parseSheet, percentColor, parseWolfsonSheet,
+  isWolfsonLayout, STATE_COLORS, SheetApartmentStatus, WolfsonCategoryStatus,
+  isSheetBackendConfigured,
 } from '../../data/sheetApi';
 
 /**
@@ -21,6 +22,9 @@ export function ContractorStatusPanel({ apartment, onClose }: {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<SheetApartmentStatus | null>(null);
+  // Wolfson's contractor marks completion with GREEN CELLS instead of percentages,
+  // so that workbook is read through a different parser and rendered as states.
+  const [marks, setMarks] = useState<WolfsonCategoryStatus[] | null>(null);
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
   const [sheetTitle, setSheetTitle] = useState('');
 
@@ -40,12 +44,20 @@ export function ContractorStatusPanel({ apartment, onClose }: {
     if (!res.ok) {
       setError(res.error);
       setStatus(null);
+      setMarks(null);
     } else {
       setSheetTitle(res.title);
       setFetchedAt(res.fetchedAt);
-      const all = parseSheet(res.rows, blockIndex);
-      const num = apartment.apartmentNumber?.trim();
-      setStatus(all.find(a => a.apartmentNumber === num) ?? null);
+      const num = apartment.apartmentNumber?.trim() ?? '';
+      if (isWolfsonLayout(res.rows)) {
+        const found = parseWolfsonSheet(res.rows, blockIndex, num);
+        setMarks(found.length ? found : null);
+        setStatus(null);
+      } else {
+        const all = parseSheet(res.rows, blockIndex);
+        setStatus(all.find(a => a.apartmentNumber === num) ?? null);
+        setMarks(null);
+      }
     }
     setLoading(false);
   }, [contractorSheetLink, blockIndex, apartment.apartmentNumber]);
@@ -111,7 +123,7 @@ export function ContractorStatusPanel({ apartment, onClose }: {
                 </a>
               )}
             </div>
-          ) : loading && !status ? (
+          ) : loading && !status && !marks ? (
             <div className="space-y-3.5 py-1">
               {[0, 1, 2, 3, 4].map(i => (
                 <div key={i}>
@@ -120,7 +132,7 @@ export function ContractorStatusPanel({ apartment, onClose }: {
                 </div>
               ))}
             </div>
-          ) : !status ? (
+          ) : !status && !marks ? (
             <div className="flex flex-col items-center text-center py-8 px-2">
               <AlertCircle size={26} className="text-gray-300 mb-2.5" />
               <p className="text-sm text-gray-500 font-medium mb-1">{ui.aptNotInSheet}</p>
@@ -128,7 +140,31 @@ export function ContractorStatusPanel({ apartment, onClose }: {
                 {ui.aptPrefix} {apartment.apartmentNumber || '—'} · {apartment.buildingId}
               </p>
             </div>
-          ) : (
+          ) : marks ? (
+            <div>
+              {marks.map(cat => {
+                const c = STATE_COLORS[cat.state];
+                const label = cat.state === 'done' ? ui.markDone
+                  : cat.state === 'progress' ? ui.markProgress
+                  : cat.state === 'issue' ? ui.markIssue : ui.markNone;
+                return (
+                  <div key={cat.name} className="mb-3">
+                    <div className="flex justify-between items-baseline mb-1 gap-2">
+                      <span className="text-[11.5px] font-semibold text-gray-700 truncate">{cat.name}</span>
+                      <span className="text-[11px] font-bold flex-shrink-0" style={{ color: c }}>{label}</span>
+                    </div>
+                    <div className="h-[9px] rounded-full overflow-hidden bg-gray-100">
+                      <div className="h-full rounded-full transition-all"
+                        style={{ width: cat.state === 'done' ? '100%' : cat.state === 'none' ? '0%' : '50%', backgroundColor: c }} />
+                    </div>
+                    {cat.note && (
+                      <p className="text-[10px] text-gray-400 mt-0.5 truncate" dir="rtl" title={cat.note}>{cat.note}</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : status ? (
             <div>
               {status.categories.map(cat => {
                 const c = percentColor(cat.percent);
@@ -154,7 +190,7 @@ export function ContractorStatusPanel({ apartment, onClose }: {
                 </p>
               )}
             </div>
-          )}
+          ) : null}
         </div>
       </div>
     </>
