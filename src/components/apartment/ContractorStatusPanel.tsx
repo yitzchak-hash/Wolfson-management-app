@@ -16,7 +16,8 @@ export function ContractorStatusPanel({ apartment, onClose }: {
   apartment: Apartment;
   onClose: () => void;
 }) {
-  const { contractorSheetLink, buildings, mainUiStrings: ui } = useStore();
+  const { contractorSheetLinks, currentProjectId, buildings, mainUiStrings: ui } = useStore();
+  const contractorSheetLink = contractorSheetLinks[currentProjectId] ?? '';
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<SheetApartmentStatus | null>(null);

@@ -3,7 +3,7 @@ import { useStore } from '../data/store';
 import {
   Plus, Trash2, Save, ChevronUp, ChevronDown, Shield, Sun, Moon,
   Copy, Check, Download, Upload, HardDrive, X, HardDriveDownload, ToggleLeft, ToggleRight,
-  Languages, Clock, RotateCcw, Wifi, WifiOff, Loader, Database, RefreshCw, CloudUpload, Search, BookOpen, ExternalLink,
+  Languages, Clock, RotateCcw, Wifi, WifiOff, Loader, Database, RefreshCw, CloudUpload, Search, BookOpen, ExternalLink, AlertTriangle,
 } from 'lucide-react';
 import { isFirebaseConfigured, db, fsSet, fsGetAll } from '../data/firebase';
 import { Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency, getStageName, Apartment, isCountableApartment } from '../types';
@@ -651,8 +651,12 @@ interface NameProposal {
 // ─── Contractor status spreadsheet (per project) ──────────────────────────────
 // The contractor owns and updates this sheet; the app only ever reads it.
 function ContractorSheetSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
-  const { contractorSheetLink, setContractorSheetLink, projects, currentProjectId } = useStore();
+  const { contractorSheetLinks, setContractorSheetLink, projects, currentProjectId } = useStore();
+  const contractorSheetLink = contractorSheetLinks[currentProjectId] ?? '';
   const [value, setValue] = useState(contractorSheetLink);
+  const [saved, setSaved] = useState(false);
+  const dirty = value.trim() !== contractorSheetLink;
+  const s = useStore(st => st.mainUiStrings);
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const projectName = projects.find(p => p.id === currentProjectId)?.name ?? currentProjectId;
@@ -666,6 +670,8 @@ function ContractorSheetSettings({ onToast }: { onToast: (msg: string, type?: 's
       : { ok: false, msg: r.error });
     setTesting(false);
   }
+
+  if (currentProjectId === 'general') return null;
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-5">
@@ -687,8 +693,8 @@ function ContractorSheetSettings({ onToast }: { onToast: (msg: string, type?: 's
       <div className="flex gap-2">
         <input
           value={value}
-          onChange={e => { setValue(e.target.value); setResult(null); }}
-          onBlur={() => { if (value.trim() !== contractorSheetLink) setContractorSheetLink(value.trim()); }}
+          onChange={e => { setValue(e.target.value); setResult(null); setSaved(false); }}
+
           placeholder="https://docs.google.com/spreadsheets/d/…"
           className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
         />
@@ -699,13 +705,31 @@ function ContractorSheetSettings({ onToast }: { onToast: (msg: string, type?: 's
           </a>
         )}
         <button
-          onClick={() => { setContractorSheetLink(value.trim()); test(); }}
+          onClick={() => { setContractorSheetLink(value.trim()); setSaved(true); }}
+          disabled={!dirty}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#1e3a5f] text-white text-sm font-medium disabled:opacity-40 hover:bg-[#16304f] transition-colors"
+        >
+          <Save size={14} /> {s.save}
+        </button>
+        <button
+          onClick={test}
           disabled={!value.trim() || testing}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#1e3a5f] text-white text-sm font-medium disabled:opacity-50 hover:bg-[#16304f] transition-colors"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 text-gray-600 text-sm font-medium disabled:opacity-40 hover:border-[#1e3a5f] hover:text-[#1e3a5f] transition-colors"
         >
           {testing ? <Loader size={14} className="animate-spin" /> : <Wifi size={14} />} Test
         </button>
       </div>
+
+      {dirty && (
+        <p className="mt-2 text-xs text-amber-600 flex items-center gap-1.5">
+          <AlertTriangle size={12} /> Unsaved changes — press Save.
+        </p>
+      )}
+      {saved && !dirty && (
+        <p className="mt-2 text-xs text-green-600 flex items-center gap-1.5">
+          <Check size={12} /> Saved for {projectName} and synced.
+        </p>
+      )}
 
       {result && (
         <div className={`mt-3 flex items-start gap-2 text-xs rounded-lg px-3 py-2 border ${

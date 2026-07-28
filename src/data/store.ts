@@ -292,8 +292,8 @@ interface AppState {
   dashboardHiddenWidgets: string[];
   setDashboardLayout: (order: string[], hidden: string[]) => void;
 
-  // Contractor status spreadsheet (per project)
-  contractorSheetLink: string;
+  // Contractor status spreadsheet — one link per project, synced via settings/app
+  contractorSheetLinks: Record<string, string>;
   setContractorSheetLink: (url: string) => void;
 
   // Multi-project support
@@ -354,7 +354,7 @@ export const useStore = create<AppState>((set, get) => ({
   pendingOpenAptId: null,
   dashboardWidgetOrder: (stored?.dashboardWidgetOrder as string[] | null) ?? ['apt-stats', 'task-stats', 'stage-progress', 'building-progress', 'activity'],
   dashboardHiddenWidgets: (stored?.dashboardHiddenWidgets as string[] | null) ?? [],
-  contractorSheetLink: (stored?.contractorSheetLink as string | null) ?? '',
+  contractorSheetLinks: (stored?.contractorSheetLinks as Record<string, string> | null) ?? {},
   currentProjectId: _activeProjectId,
   projects: DEFAULT_PROJECTS,
   lightTheme: localStorage.getItem(THEME_KEY) !== 'dark',
@@ -413,7 +413,6 @@ export const useStore = create<AppState>((set, get) => ({
       dashboardWidgetOrder:  (newStored?.dashboardWidgetOrder as string[] | null)     ?? ['apt-stats', 'task-stats', 'stage-progress', 'building-progress', 'activity'],
       dashboardHiddenWidgets:(newStored?.dashboardHiddenWidgets as string[] | null)   ?? [],
       canvasElements:        (newStored?.canvasElements as CanvasElement[] | null)    ?? [],
-      contractorSheetLink:   (newStored?.contractorSheetLink as string | null)       ?? '',
     };
 
     // Cancel existing Firebase listeners and switch project
@@ -440,8 +439,12 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   setContractorSheetLink: (url: string) => {
-    set({ contractorSheetLink: url });
+    const pid = get().currentProjectId;
+    const next = { ...get().contractorSheetLinks, [pid]: url };
+    set({ contractorSheetLinks: next });
     persist(get);
+    // settings/app is the shared global doc, so the link follows the user to any device
+    fsSet('settings', 'app', { contractorSheetLinks: next });
   },
 
   setLightTheme: (v: boolean) => {
@@ -1463,6 +1466,7 @@ export const useStore = create<AppState>((set, get) => ({
         ...(appSettings.contractorUiStrings  ? { contractorUiStrings:  appSettings.contractorUiStrings as ContractorUiStrings } : {}),
         ...(appSettings.autoBackup           !== undefined ? { autoBackup: appSettings.autoBackup as boolean } : {}),
         ...(appSettings.mainUiStrings        ? { mainUiStrings: mergeFreshMainUi(appSettings.mainUiStrings as Partial<MainUiStrings>) } : {}),
+        ...(appSettings.contractorSheetLinks ? { contractorSheetLinks: appSettings.contractorSheetLinks as Record<string, string> } : {}),
       }));
       persist(get);
 
@@ -1602,6 +1606,7 @@ export const useStore = create<AppState>((set, get) => ({
           ...(appS.contractorUiStrings  ? { contractorUiStrings:  appS.contractorUiStrings as ContractorUiStrings } : {}),
           ...(appS.autoBackup           !== undefined ? { autoBackup: appS.autoBackup as boolean } : {}),
           ...(appS.mainUiStrings        ? { mainUiStrings: mergeFreshMainUi(appS.mainUiStrings as Partial<MainUiStrings>) } : {}),
+          ...(appS.contractorSheetLinks ? { contractorSheetLinks: appS.contractorSheetLinks as Record<string, string> } : {}),
           ...(appS.driveExportFrequency ? { driveExportFrequency: appS.driveExportFrequency as DriveExportFrequency } : {}),
         }));
         persist(get);
@@ -1675,7 +1680,7 @@ function persist(get: () => AppState) {
     dashboardWidgetOrder: state.dashboardWidgetOrder,
     dashboardHiddenWidgets: state.dashboardHiddenWidgets,
     canvasElements: state.canvasElements,
-    contractorSheetLink: state.contractorSheetLink,
+    contractorSheetLinks: state.contractorSheetLinks,
   };
 
   const ok = saveToStorage(storageKey, payload);
