@@ -4,7 +4,7 @@ import { useStore } from '../../data/store';
 import { Apartment, aptLabel } from '../../types';
 import {
   fetchContractorSheet, parseSheet, percentColor, parseWolfsonSheet,
-  isWolfsonLayout, STATE_COLORS, SheetApartmentStatus, WolfsonCategoryStatus,
+  isWolfsonLayout, STATE_COLORS, countBlocks, SheetApartmentStatus, WolfsonCategoryStatus,
   isSheetBackendConfigured,
 } from '../../data/sheetApi';
 
@@ -27,6 +27,9 @@ export function ContractorStatusPanel({ apartment, onClose }: {
   const [marks, setMarks] = useState<WolfsonCategoryStatus[] | null>(null);
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
   const [sheetTitle, setSheetTitle] = useState('');
+  // When a lookup comes back empty we surface what the file actually contained,
+  // so a mismatch is diagnosable instead of just "not found".
+  const [diag, setDiag] = useState<string | null>(null);
 
   // Which side-by-side block in the sheet is this building? Buildings are ordered
   // by displayOrder, matching the sheet's left-to-right building blocks.
@@ -49,14 +52,20 @@ export function ContractorStatusPanel({ apartment, onClose }: {
       setSheetTitle(res.title);
       setFetchedAt(res.fetchedAt);
       const num = apartment.apartmentNumber?.trim() ?? '';
-      if (isWolfsonLayout(res.rows)) {
+      const wolfson = isWolfsonLayout(res.rows);
+      if (wolfson) {
         const found = parseWolfsonSheet(res.rows, blockIndex, num);
         setMarks(found.length ? found : null);
         setStatus(null);
+        setDiag(found.length ? null
+          : `${res.kind} · tab "${res.tab}" · ${res.rows.length} rows · colour layout · no section matched block ${blockIndex + 1}`);
       } else {
         const all = parseSheet(res.rows, blockIndex);
-        setStatus(all.find(a => a.apartmentNumber === num) ?? null);
+        const hit = all.find(a => a.apartmentNumber === num) ?? null;
+        setStatus(hit);
         setMarks(null);
+        setDiag(hit ? null
+          : `${res.kind} · tab "${res.tab}" · ${res.rows.length} rows · block ${blockIndex + 1} of ${countBlocks(res.rows)} · found: ${all.slice(0, 12).map(a => a.apartmentNumber).join(', ') || 'none'}`);
       }
     }
     setLoading(false);
@@ -139,6 +148,11 @@ export function ContractorStatusPanel({ apartment, onClose }: {
               <p className="text-xs text-gray-400">
                 {ui.aptPrefix} {apartment.apartmentNumber || '—'} · {apartment.buildingId}
               </p>
+              {diag && (
+                <p className="text-[10px] text-gray-400 mt-3 pt-2 border-t border-gray-100 leading-relaxed break-words max-w-full" dir="ltr">
+                  {diag}
+                </p>
+              )}
             </div>
           ) : marks ? (
             <div>
