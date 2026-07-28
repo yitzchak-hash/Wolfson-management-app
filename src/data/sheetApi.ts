@@ -334,7 +334,15 @@ export function parseWolfsonSheet(
   return out;
 }
 
-/** True when the workbook looks like the Wolfson layout rather than the Netiv one. */
+/**
+ * True when the workbook looks like the Wolfson layout rather than the Netiv one.
+ * Falls back to "Wolfson" when the Netiv "דירה" header is absent anywhere near the
+ * top, so an unrecognised colour-coded sheet still renders states rather than
+ * silently reporting the apartment as missing.
+ */
 export function isWolfsonLayout(rows: SheetCell[][]): boolean {
-  return rows.slice(0, 60).some(r => isSectionHeader(r ?? []));
+  if (rows.slice(0, 80).some(r => isSectionHeader(r ?? []))) return true;
+  const hasNetivHeader = rows.slice(0, 12)
+    .some(r => (r ?? []).some(c => String(c?.v ?? '').trim() === HEADER_APARTMENT));
+  return !hasNetivHeader;
 }

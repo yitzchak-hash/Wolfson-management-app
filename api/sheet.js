@@ -85,7 +85,11 @@ async function readXlsx(auth, fileId, wantedTab, gid) {
   if (!ws) throw new Error('Workbook has no sheets');
 
   const rows = [];
-  const lastCol = ws.actualColumnCount || ws.columnCount || 0;
+  // NB: actualColumnCount is the COUNT of populated columns, not the last column
+  // index. These trackers are very sparse (apartments sit in scattered columns
+  // with wide gaps), so using it truncated every row and dropped whole building
+  // blocks. columnCount is the real extent.
+  const lastCol = Math.max(ws.columnCount || 0, ws.actualColumnCount || 0);
   ws.eachRow({ includeEmpty: true }, row => {
     const out = [];
     for (let c = 1; c <= lastCol; c++) {

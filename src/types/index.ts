@@ -958,6 +958,7 @@ export interface MainUiStrings {
   printDiagramTooltip: string;
   clearFiltersTooltip: string;
   buildingDiagramLabel: string;
+  linkedPairSeparateHint: string;
   markDone: string;
   markProgress: string;
   markIssue: string;
@@ -1498,6 +1499,7 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   printDiagramTooltip: 'Print building diagram',
   clearFiltersTooltip: 'Clear all active filters',
   buildingDiagramLabel: 'Building Diagram',
+  linkedPairSeparateHint: 'Connected units — each tracked separately by the contractor',
   markDone: 'Done',
   markProgress: 'In progress',
   markIssue: 'Issue',
@@ -2037,6 +2039,7 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   printDiagramTooltip: 'הדפס תרשים בניין',
   clearFiltersTooltip: 'נקה את כל הפילטרים',
   buildingDiagramLabel: 'תרשים בניין',
+  linkedPairSeparateHint: 'יחידות מקושרות — כל אחת נמדדת בנפרד אצל הקבלן',
   markDone: 'הושלם',
   markProgress: 'בתהליך',
   markIssue: 'בעיה',
