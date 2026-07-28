@@ -63,7 +63,7 @@ function cellText(value) {
   return String(value);
 }
 
-async function readXlsx(auth, fileId, wantedTab) {
+async function readXlsx(auth, fileId, wantedTab, gid) {
   const drive = google.drive({ version: 'v3', auth });
   const resp = await drive.files.get(
     { fileId, alt: 'media', supportsAllDrives: true },
@@ -73,7 +73,15 @@ async function readXlsx(auth, fileId, wantedTab) {
   await wb.xlsx.load(Buffer.from(resp.data));
 
   const tabs = wb.worksheets.map(ws => ws.name);
-  const ws = (wantedTab && wb.getWorksheet(wantedTab)) || wb.worksheets[0];
+  // A gid from a Drive URL does not map onto xlsx sheet ids, so when no tab is
+  // named we take the worksheet with the most content rather than blindly the
+  // first — an uploaded workbook often opens on a small summary tab.
+  let ws = wantedTab ? wb.getWorksheet(wantedTab) : null;
+  if (!ws && gid) ws = wb.worksheets.find(w => String(w.id) === String(gid)) ?? null;
+  if (!ws) {
+    ws = wb.worksheets.reduce((best, w) =>
+      (w.actualRowCount ?? 0) > (best?.actualRowCount ?? -1) ? w : best, null);
+  }
   if (!ws) throw new Error('Workbook has no sheets');
 
   const rows = [];
@@ -90,14 +98,17 @@ async function readXlsx(auth, fileId, wantedTab) {
   return { tabs, tab: ws.name, rows, hasColors: true };
 }
 
-async function readNativeSheet(auth, fileId, wantedTab) {
+async function readNativeSheet(auth, fileId, wantedTab, gid) {
   const sheets = google.sheets({ version: 'v4', auth });
   const meta = await sheets.spreadsheets.get({
     spreadsheetId: fileId,
-    fields: 'properties.title,sheets.properties.title',
+    fields: 'properties.title,sheets.properties(title,sheetId)',
   });
-  const tabs = (meta.data.sheets ?? []).map(s => s.properties.title);
-  const tab = wantedTab && tabs.includes(wantedTab) ? wantedTab : tabs[0];
+  const props = (meta.data.sheets ?? []).map(s => s.properties);
+  const tabs = props.map(p => p.title);
+  // gid in a Sheets URL is exactly the sheetId, so honour it when present
+  const byGid = gid ? props.find(p => String(p.sheetId) === String(gid))?.title : null;
+  const tab = (wantedTab && tabs.includes(wantedTab) && wantedTab) || byGid || tabs[0];
   if (!tab) throw new Error('Spreadsheet has no tabs');
 
   // One call returns both the values and each cell's effective background,
@@ -137,7 +148,7 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const { sheetUrl, sheetId: rawId, tab } = req.body || {};
+  const { sheetUrl, sheetId: rawId, tab, gid } = req.body || {};
   const fileId = rawId || extractId(sheetUrl);
   if (!fileId) return res.status(400).json({ error: 'Missing or unrecognised sheet URL' });
 
@@ -152,8 +163,8 @@ export default async function handler(req, res) {
 
     const isNative = meta.data.mimeType === 'application/vnd.google-apps.spreadsheet';
     const result = isNative
-      ? await readNativeSheet(auth, fileId, tab)
-      : await readXlsx(auth, fileId, tab);
+      ? await readNativeSheet(auth, fileId, tab, gid)
+      : await readXlsx(auth, fileId, tab, gid);
 
     res.json({
       title: result.title || meta.data.name || '',

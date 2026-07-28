@@ -605,7 +605,27 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 · {ui.linkedToApt} {ui.aptPrefix} {mergedPartner.displayName || mergedPartner.apartmentNumber}
               </span>
             )}
-          </div>
+
+            {/* Live contractor progress — opens the sheet-backed panel */}
+            {!isGeneralProject && (
+              <Tooltip text={ui.contractorStatusTitle}>
+                <button
+                  onClick={() => setShowContractorStatus(true)}
+                  className="flex items-center gap-1.5 rounded-full px-2 py-0.5 flex-shrink-0 transition-colors hover:brightness-125"
+                  style={{
+                    backgroundColor: 'rgba(74,168,216,0.18)',
+                    border: '1px solid rgba(74,168,216,0.45)',
+                    color: '#cfe9f8',
+                    fontSize: '10px',
+                    fontWeight: 700,
+                  }}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
+                  <span className="truncate">{ui.contractorStatusTitle}</span>
+                </button>
+              </Tooltip>
+            )}
+                    </div>
           <Tooltip text={ui.cancel} side="left">
             <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0">
               <X size={20} />
@@ -643,17 +663,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         <div className="flex-1 overflow-y-auto scrollbar-thin p-4">
           {activeTab === 'details' && (
             <div className="space-y-4">
-              {/* Live contractor progress, read from the shared sheet */}
-              {!isGeneralProject && (
-                <button
-                  onClick={() => setShowContractorStatus(true)}
-                  className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-[#4aa8d8]/40 bg-[#4aa8d8]/5 text-sm font-medium text-[#1e3a5f] hover:bg-[#4aa8d8]/10 transition-colors"
-                >
-                  <BarChart3 size={14} className="text-[#4aa8d8]" />
-                  {ui.contractorStatusTitle}
-                </button>
-              )}
-
               {/* Top row: Apt# | Family Name | Classification | Stage */}
               <div className="flex items-start gap-2">
                 {/* Apt number — read-only small */}

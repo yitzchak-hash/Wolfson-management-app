@@ -46,6 +46,12 @@ export function isSheetBackendConfigured(): boolean {
   return !!DRIVE_API_KEY;
 }
 
+/** The tab a Sheets URL points at, e.g. "…#gid=1630010640". */
+export function gidFromUrl(url: string): string | null {
+  const m = String(url ?? '').match(/[#&?]gid=(\d+)/);
+  return m ? m[1] : null;
+}
+
 export async function fetchContractorSheet(sheetUrl: string, tab?: string): Promise<SheetFetchResult> {
   if (!sheetUrl?.trim()) return { ok: false, error: 'No sheet link set for this workspace.' };
   if (!DRIVE_API_KEY) return { ok: false, error: 'VITE_DRIVE_API_KEY is not configured.' };
@@ -53,7 +59,7 @@ export async function fetchContractorSheet(sheetUrl: string, tab?: string): Prom
     const resp = await fetch('/api/sheet', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': DRIVE_API_KEY },
-      body: JSON.stringify({ sheetUrl: sheetUrl.trim(), tab }),
+      body: JSON.stringify({ sheetUrl: sheetUrl.trim(), tab, gid: gidFromUrl(sheetUrl) }),
     });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) return { ok: false, error: data.error ?? `Sheet request failed (${resp.status})` };
