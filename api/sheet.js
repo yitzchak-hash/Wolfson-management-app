@@ -63,27 +63,8 @@ function cellText(value) {
   return String(value);
 }
 
-async function readXlsx(auth, fileId, wantedTab, gid) {
-  const drive = google.drive({ version: 'v3', auth });
-  const resp = await drive.files.get(
-    { fileId, alt: 'media', supportsAllDrives: true },
-    { responseType: 'arraybuffer' },
-  );
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(Buffer.from(resp.data));
-
-  const tabs = wb.worksheets.map(ws => ws.name);
-  // A gid from a Drive URL does not map onto xlsx sheet ids, so when no tab is
-  // named we take the worksheet with the most content rather than blindly the
-  // first — an uploaded workbook often opens on a small summary tab.
-  let ws = wantedTab ? wb.getWorksheet(wantedTab) : null;
-  if (!ws && gid) ws = wb.worksheets.find(w => String(w.id) === String(gid)) ?? null;
-  if (!ws) {
-    ws = wb.worksheets.reduce((best, w) =>
-      (w.actualRowCount ?? 0) > (best?.actualRowCount ?? -1) ? w : best, null);
-  }
-  if (!ws) throw new Error('Workbook has no sheets');
-
+/** One worksheet → rows of {v,bg}, with trailing empty rows trimmed. */
+function sheetToRows(ws) {
   const rows = [];
   // NB: actualColumnCount is the COUNT of populated columns, not the last column
   // index. These trackers are very sparse (apartments sit in scattered columns
@@ -98,8 +79,37 @@ async function readXlsx(auth, fileId, wantedTab, gid) {
     }
     rows.push(out);
   });
+  // Drop trailing blank rows so the payload stays small
+  let end = rows.length;
+  while (end > 0 && rows[end - 1].every(c => !c.v && !c.bg)) end--;
+  return rows.slice(0, end);
+}
 
-  return { tabs, tab: ws.name, rows, hasColors: true };
+async function readXlsx(auth, fileId, wantedTab, gid) {
+  const drive = google.drive({ version: 'v3', auth });
+  const resp = await drive.files.get(
+    { fileId, alt: 'media', supportsAllDrives: true },
+    { responseType: 'arraybuffer' },
+  );
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(Buffer.from(resp.data));
+
+  const tabs = wb.worksheets.map(ws => ws.name);
+  // This workbook keeps ONE TRADE PER TAB, so every sheet is returned and the
+  // client merges them into a single per-apartment category list.
+  const sheets = wb.worksheets.map(ws => ({ name: ws.name, rows: sheetToRows(ws) }));
+
+  // Still resolve a "primary" tab for the status line / diagnostics
+  let ws = wantedTab ? wb.getWorksheet(wantedTab) : null;
+  if (!ws && gid) ws = wb.worksheets.find(w => String(w.id) === String(gid)) ?? null;
+  if (!ws) {
+    ws = wb.worksheets.reduce((best, w) =>
+      (w.actualRowCount ?? 0) > (best?.actualRowCount ?? -1) ? w : best, null);
+  }
+  if (!ws) throw new Error('Workbook has no sheets');
+
+  const primary = sheets.find(s => s.name === ws.name) ?? sheets[0];
+  return { tabs, tab: ws.name, rows: primary.rows, sheets, hasColors: true };
 }
 
 async function readNativeSheet(auth, fileId, wantedTab, gid) {
@@ -138,7 +148,7 @@ async function readNativeSheet(auth, fileId, wantedTab, gid) {
     return { v: c.formattedValue ?? '', bg };
   }));
 
-  return { tabs, tab, rows, hasColors: true, title: meta.data.properties?.title ?? '' };
+  return { tabs, tab, rows, sheets: [{ name: tab, rows }], hasColors: true, title: meta.data.properties?.title ?? '' };
 }
 
 export default async function handler(req, res) {
@@ -176,6 +186,7 @@ export default async function handler(req, res) {
       tabs: result.tabs,
       tab: result.tab,
       rows: result.rows,
+      sheets: result.sheets ?? [{ name: result.tab, rows: result.rows }],
       fetchedAt: new Date().toISOString(),
     });
   } catch (err) {

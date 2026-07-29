@@ -30,6 +30,8 @@ export interface SheetApartmentStatus {
 
 export interface SheetCell { v: string; bg: string | null }
 
+export interface SheetTab { name: string; rows: SheetCell[][] }
+
 export interface SheetFetchOk {
   ok: true;
   title: string;
@@ -37,6 +39,8 @@ export interface SheetFetchOk {
   tab: string;
   tabs: string[];
   rows: SheetCell[][];
+  /** Every worksheet. The Wolfson workbook keeps one trade per tab. */
+  sheets: SheetTab[];
   fetchedAt: string;
 }
 export interface SheetFetchErr { ok: false; error: string }
@@ -70,6 +74,7 @@ export async function fetchContractorSheet(sheetUrl: string, tab?: string): Prom
       tab: data.tab ?? '',
       tabs: data.tabs ?? [],
       rows: (data.rows ?? []) as SheetCell[][],
+      sheets: (data.sheets ?? [{ name: data.tab ?? '', rows: data.rows ?? [] }]) as SheetTab[],
       fetchedAt: data.fetchedAt ?? new Date().toISOString(),
     };
   } catch (e) {
@@ -364,4 +369,33 @@ export function isWolfsonLayout(rows: SheetCell[][]): boolean {
   const hasNetivHeader = rows.slice(0, 12)
     .some(r => (r ?? []).some(c => String(c?.v ?? '').trim() === HEADER_APARTMENT));
   return !hasNetivHeader;
+}
+
+
+/**
+ * Merges every worksheet into one category list for an apartment.
+ *
+ * The Wolfson workbook keeps ONE TRADE PER TAB — "מיזוג אוויר", "חשמל", "טיח"
+ * and so on — each holding the same A1/A2/A3 block layout. Reading a single tab
+ * therefore showed only one trade. Each tab contributes the categories its own
+ * section header declares; tabs with no recognisable section (summaries, legends)
+ * are skipped. Falls back to the tab's own name when a section carries no title.
+ */
+export function parseWolfsonAllTabs(
+  sheets: SheetTab[],
+  buildingId: string,
+  apartmentNumber: string,
+): WolfsonCategoryStatus[] {
+  const out: WolfsonCategoryStatus[] = [];
+  const seen = new Set<string>();
+  for (const sheet of sheets ?? []) {
+    if (!sheet?.rows?.length) continue;
+    for (const cat of parseWolfsonSheet(sheet.rows, buildingId, apartmentNumber)) {
+      const name = cat.name?.trim() || sheet.name;
+      if (seen.has(name)) continue;
+      seen.add(name);
+      out.push({ ...cat, name });
+    }
+  }
+  return out;
 }

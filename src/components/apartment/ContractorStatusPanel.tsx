@@ -4,7 +4,7 @@ import { useStore } from '../../data/store';
 import { Apartment, aptLabel } from '../../types';
 import {
   fetchContractorSheet, parseSheet, percentColor, parseWolfsonSheet,
-  isWolfsonLayout, STATE_COLORS, countBlocks,
+  isWolfsonLayout, STATE_COLORS, countBlocks, parseWolfsonAllTabs,
   SheetApartmentStatus, WolfsonCategoryStatus, isSheetBackendConfigured,
 } from '../../data/sheetApi';
 
@@ -36,6 +36,7 @@ export function ContractorStatusPanel({ apartment, onClose }: {
   const [units, setUnits] = useState<UnitResult[] | null>(null);
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
   const [sheetTitle, setSheetTitle] = useState('');
+  const [tabCount, setTabCount] = useState(0);
 
   const partner = apartment.mergedWith
     ? apartments.find(a => a.id === apartment.mergedWith) ?? null
@@ -65,6 +66,7 @@ export function ContractorStatusPanel({ apartment, onClose }: {
     }
     setSheetTitle(res.title);
     setFetchedAt(res.fetchedAt);
+    setTabCount(res.sheets?.length ?? 0);
 
     // A single fetch serves every unit in the pair
     const wolfson = isWolfsonLayout(res.rows);
@@ -72,11 +74,12 @@ export function ContractorStatusPanel({ apartment, onClose }: {
       const num = apt.apartmentNumber?.trim() ?? '';
       const bi = blockOf(apt);
       if (wolfson) {
-        const found = parseWolfsonSheet(res.rows, apt.buildingId, num);
+        // One trade per tab — merge them all into a single category list
+        const found = parseWolfsonAllTabs(res.sheets, apt.buildingId, num);
         return {
           apt, status: null, marks: found.length ? found : null,
           diag: found.length ? null
-            : `${res.kind} · tab "${res.tab}" · ${res.rows.length} rows · colour layout · no ${apt.buildingId} block found`,
+            : `${res.kind} · ${res.sheets.length} tabs · colour layout · no ${apt.buildingId} block found`,
         };
       }
       const all = parseSheet(res.rows, bi);
@@ -184,7 +187,7 @@ export function ContractorStatusPanel({ apartment, onClose }: {
           <span className="truncate">
             {loading ? ui.loadingLabel
               : error ? ui.sheetUnavailable
-              : fetchedAt ? `${sheetTitle || ui.contractorSheetLabel} · ${new Date(fetchedAt).toLocaleTimeString()}`
+              : fetchedAt ? `${sheetTitle || ui.contractorSheetLabel}${tabCount > 1 ? ` · ${tabCount} tabs` : ''} · ${new Date(fetchedAt).toLocaleTimeString()}`
               : ''}
           </span>
           <button onClick={load} disabled={loading || notConfigured}
