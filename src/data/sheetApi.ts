@@ -285,12 +285,29 @@ function isSectionHeader(row: SheetCell[]): boolean {
 }
 
 /**
+ * Which block of a section belongs to this building, read from the section
+ * header's own "A1"/"A2"/"A3" labels in left-to-right order.
+ *
+ * Deliberately NOT derived from the buildings' displayOrder: Wolfson orders them
+ * A3, A2, A1 for the on-screen diagram, which mapped A1 onto the THIRD block and
+ * therefore matched nothing.
+ */
+function blockIndexForBuilding(row: SheetCell[], buildingId: string): number {
+  const labels: string[] = [];
+  for (const c of row) {
+    const v = String(c?.v ?? '').trim();
+    if (/^A\d$/.test(v) && !labels.includes(v)) labels.push(v);
+  }
+  return labels.indexOf(buildingId.trim().toUpperCase());
+}
+
+/**
  * Reads one apartment's per-category state out of a Wolfson-style workbook.
  * `buildingIndex` is 0 for A1, 1 for A2, 2 for A3.
  */
 export function parseWolfsonSheet(
   rows: SheetCell[][],
-  buildingIndex: number,
+  buildingId: string,
   apartmentNumber: string,
 ): WolfsonCategoryStatus[] {
   const target = apartmentNumber.trim();
@@ -298,6 +315,7 @@ export function parseWolfsonSheet(
 
   const out: WolfsonCategoryStatus[] = [];
   let currentName: string | null = null;
+  let buildingIndex = -1;
   let found = false;
 
   const flush = () => { if (currentName && !found) out.push({ name: currentName, state: 'none' }); };
@@ -308,10 +326,11 @@ export function parseWolfsonSheet(
     if (isSectionHeader(row)) {
       flush();
       currentName = String(row[0].v).trim();
+      buildingIndex = blockIndexForBuilding(row, buildingId);
       found = false;
       continue;
     }
-    if (!currentName || found) continue;
+    if (!currentName || found || buildingIndex < 0) continue;
 
     // Floor-label rows carry text in the first cell; apartment rows never do.
     if (String(row[0]?.v ?? '').trim()) continue;

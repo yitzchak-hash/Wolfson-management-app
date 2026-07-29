@@ -72,11 +72,11 @@ export function ContractorStatusPanel({ apartment, onClose }: {
       const num = apt.apartmentNumber?.trim() ?? '';
       const bi = blockOf(apt);
       if (wolfson) {
-        const found = parseWolfsonSheet(res.rows, bi, num);
+        const found = parseWolfsonSheet(res.rows, apt.buildingId, num);
         return {
           apt, status: null, marks: found.length ? found : null,
           diag: found.length ? null
-            : `${res.kind} · tab "${res.tab}" · ${res.rows.length} rows · colour layout · no section matched block ${bi + 1}`,
+            : `${res.kind} · tab "${res.tab}" · ${res.rows.length} rows · colour layout · no ${apt.buildingId} block found`,
         };
       }
       const all = parseSheet(res.rows, bi);
