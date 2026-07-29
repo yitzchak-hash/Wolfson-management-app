@@ -30,7 +30,9 @@ export interface SheetApartmentStatus {
 
 export interface SheetCell { v: string; bg: string | null }
 
-export interface SheetTab { name: string; rows: SheetCell[][] }
+/** A null cell means empty AND unfilled; the slot is kept for column alignment. */
+export type SheetRow = (SheetCell | null)[];
+export interface SheetTab { name: string; rows: SheetRow[] }
 
 export interface SheetFetchOk {
   ok: true;
@@ -38,7 +40,7 @@ export interface SheetFetchOk {
   kind: 'google-sheet' | 'xlsx';
   tab: string;
   tabs: string[];
-  rows: SheetCell[][];
+  rows: SheetRow[];
   /** Every worksheet. The Wolfson workbook keeps one trade per tab. */
   sheets: SheetTab[];
   fetchedAt: string;
@@ -73,7 +75,7 @@ export async function fetchContractorSheet(sheetUrl: string, tab?: string): Prom
       kind: data.kind ?? 'google-sheet',
       tab: data.tab ?? '',
       tabs: data.tabs ?? [],
-      rows: (data.rows ?? []) as SheetCell[][],
+      rows: (data.rows ?? []) as SheetRow[],
       sheets: (data.sheets ?? [{ name: data.tab ?? '', rows: data.rows ?? [] }]) as SheetTab[],
       fetchedAt: data.fetchedAt ?? new Date().toISOString(),
     };
@@ -121,7 +123,7 @@ interface Block { labelCol: number; categories: { name: string; col: number }[] 
  * Finds each building block by locating the "דירה" header cells on the header row,
  * then treating every following column up to the next block as a category.
  */
-function findBlocks(rows: SheetCell[][], headerRowIdx: number): Block[] {
+function findBlocks(rows: SheetRow[], headerRowIdx: number): Block[] {
   const header = (rows[headerRowIdx] ?? []).map(c => String(c?.v ?? '').trim());
   const labelCols: number[] = [];
   header.forEach((c, i) => { if (c === HEADER_APARTMENT) labelCols.push(i); });
@@ -139,7 +141,7 @@ function findBlocks(rows: SheetCell[][], headerRowIdx: number): Block[] {
 }
 
 /** Locates the row carrying the category headers (the one containing "דירה"). */
-function findHeaderRow(rows: SheetCell[][]): number {
+function findHeaderRow(rows: SheetRow[]): number {
   for (let i = 0; i < Math.min(rows.length, 10); i++) {
     if ((rows[i] ?? []).some(c => String(c?.v ?? '').trim() === HEADER_APARTMENT)) return i;
   }
@@ -154,7 +156,7 @@ function findHeaderRow(rows: SheetCell[][]): number {
  * same apartment number, so their values are merged and the higher of the two wins
  * for any category present on both.
  */
-export function parseSheet(rows: SheetCell[][], blockIndex: number): SheetApartmentStatus[] {
+export function parseSheet(rows: SheetRow[], blockIndex: number): SheetApartmentStatus[] {
   if (!rows.length) return [];
   const headerRowIdx = findHeaderRow(rows);
   const blocks = findBlocks(rows, headerRowIdx);
@@ -193,7 +195,7 @@ export function parseSheet(rows: SheetCell[][], blockIndex: number): SheetApartm
 }
 
 /** Number of building blocks the sheet contains. */
-export function countBlocks(rows: SheetCell[][]): number {
+export function countBlocks(rows: SheetRow[]): number {
   if (!rows.length) return 0;
   return findBlocks(rows, findHeaderRow(rows)).length;
 }
@@ -298,7 +300,7 @@ function aptNumbersInCell(text: string): string[] {
 interface BuildingSpans { rowIdx: number; spans: { id: string; min: number; max: number }[] }
 
 /** Locates the row carrying the "A1"/"A2"/"A3" banners and each banner's span. */
-function findBuildingRow(rows: SheetCell[][]): BuildingSpans | null {
+function findBuildingRow(rows: SheetRow[]): BuildingSpans | null {
   for (let r = 0; r < Math.min(rows.length, 12); r++) {
     const row = rows[r] ?? [];
     const byId = new Map<string, { min: number; max: number }>();
@@ -331,7 +333,7 @@ function columnRange(info: BuildingSpans, buildingId: string): [number, number] 
 }
 
 /** True when this row is a floor label rather than a row of apartments. */
-function isFloorRow(row: SheetCell[]): boolean {
+function isFloorRow(row: SheetRow): boolean {
   return !!String(row?.[0]?.v ?? '').trim();
 }
 
@@ -343,7 +345,7 @@ function isFloorRow(row: SheetCell[]): boolean {
  * than each apartment, and a green floor genuinely means every unit on it is done.
  */
 export function parseWolfsonTab(
-  rows: SheetCell[][],
+  rows: SheetRow[],
   buildingId: string,
   apartmentNumber: string,
 ): { state: CellState; note?: string } | null {
@@ -397,7 +399,7 @@ export function parseWolfsonTab(
 const NON_TRADE_TABS = new Set(['דירות לא מכורות', 'מאסטר']);
 
 /** True when the workbook uses the Wolfson floor-plan layout. */
-export function isWolfsonLayout(rows: SheetCell[][]): boolean {
+export function isWolfsonLayout(rows: SheetRow[]): boolean {
   if (findBuildingRow(rows)) return true;
   const hasNetivHeader = rows.slice(0, 12)
     .some(r => (r ?? []).some(c => String(c?.v ?? '').trim() === HEADER_APARTMENT));

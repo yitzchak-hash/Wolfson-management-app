@@ -63,7 +63,14 @@ function cellText(value) {
   return String(value);
 }
 
-/** One worksheet → rows of {v,bg}, with trailing empty rows trimmed. */
+/**
+ * One worksheet → rows of {v,bg}, trailing empty rows trimmed.
+ *
+ * Cells that carry neither a value nor a fill are emitted as null rather than
+ * {v:'',bg:null}. Column positions still matter (buildings are column ranges),
+ * so the slots are kept — they just cost 4 bytes instead of ~21. On the real
+ * workbook that is the difference between a 1.4 MB and a ~0.2 MB response.
+ */
 function sheetToRows(ws) {
   const rows = [];
   // NB: actualColumnCount is the COUNT of populated columns, not the last column
@@ -78,17 +85,34 @@ function sheetToRows(ws) {
       // Apartments are drawn as MERGED rectangles; the fill lives on the master
       // cell, so a slave would otherwise read as unfilled.
       const styled = cell.master ?? cell;
-      out.push({ v: cellText(cell.value), bg: fillToHex(styled.fill) ?? fillToHex(cell.fill) });
+      const v = cellText(cell.value);
+      const bg = fillToHex(styled.fill) ?? fillToHex(cell.fill);
+      out.push(v || bg ? { v, bg } : null);
     }
     rows.push(out);
   });
   // Drop trailing blank rows so the payload stays small
   let end = rows.length;
-  while (end > 0 && rows[end - 1].every(c => !c.v && !c.bg)) end--;
+  while (end > 0 && rows[end - 1].every(c => !c)) end--;
   return rows.slice(0, end);
 }
 
-async function readXlsx(auth, fileId, wantedTab, gid) {
+/**
+ * Parsed workbooks, keyed by file id + the file's own modifiedTime.
+ *
+ * Downloading and parsing this workbook costs ~3 s, and the panel re-reads on
+ * every open. Keying on modifiedTime means an edit by the contractor changes the
+ * key and invalidates the entry automatically — the cache can never serve stale
+ * data, it only avoids re-parsing a file that has not changed.
+ */
+const parseCache = new Map();
+const CACHE_MAX = 4;
+
+async function readXlsx(auth, fileId, wantedTab, gid, modifiedTime) {
+  const cacheKey = `${fileId}@${modifiedTime ?? ''}`;
+  const cached = modifiedTime ? parseCache.get(cacheKey) : null;
+  if (cached) return { ...cached, cached: true };
+
   const drive = google.drive({ version: 'v3', auth });
   const resp = await drive.files.get(
     { fileId, alt: 'media', supportsAllDrives: true },
@@ -112,7 +136,12 @@ async function readXlsx(auth, fileId, wantedTab, gid) {
   if (!ws) throw new Error('Workbook has no sheets');
 
   const primary = sheets.find(s => s.name === ws.name) ?? sheets[0];
-  return { tabs, tab: ws.name, rows: primary.rows, sheets, hasColors: true };
+  const result = { tabs, tab: ws.name, rows: primary.rows, sheets, hasColors: true };
+  if (modifiedTime) {
+    if (parseCache.size >= CACHE_MAX) parseCache.delete(parseCache.keys().next().value);
+    parseCache.set(cacheKey, result);
+  }
+  return result;
 }
 
 async function readNativeSheet(auth, fileId, wantedTab, gid) {
@@ -174,14 +203,14 @@ export default async function handler(req, res) {
     const drive = google.drive({ version: 'v3', auth });
     const meta = await drive.files.get({
       fileId,
-      fields: 'name,mimeType',
+      fields: 'name,mimeType,modifiedTime',
       supportsAllDrives: true,
     });
 
     const isNative = meta.data.mimeType === 'application/vnd.google-apps.spreadsheet';
     const result = isNative
       ? await readNativeSheet(auth, fileId, tab, gid)
-      : await readXlsx(auth, fileId, tab, gid);
+      : await readXlsx(auth, fileId, tab, gid, meta.data.modifiedTime);
 
     res.json({
       title: result.title || meta.data.name || '',
@@ -189,6 +218,7 @@ export default async function handler(req, res) {
       tabs: result.tabs,
       tab: result.tab,
       rows: result.rows,
+      modifiedTime: meta.data.modifiedTime ?? null,
       sheets: result.sheets ?? [{ name: result.tab, rows: result.rows }],
       fetchedAt: new Date().toISOString(),
     });
