@@ -559,8 +559,11 @@ function BuildingColumn({
 
   return (
     <div className="flex flex-col flex-1" style={{ minWidth: compact ? '110px' : '180px' }}>
+      {/* Pinned while its own column is in view, so you always know which
+          building you are looking at. z-30 clears the cells (merge chip is z-20).
+          The 2px gap is padding rather than margin so nothing scrolls through it. */}
       <div
-        className={`text-center font-bold text-white tracking-widest rounded-t-lg mb-0.5 ${compact ? 'py-1 text-xs' : 'py-2 text-sm'}`}
+        className={`sticky top-0 z-30 print:static text-center font-bold text-white tracking-widest rounded-t-lg ${compact ? 'py-1 pb-1.5 text-xs' : 'py-2 pb-2.5 text-sm'}`}
         style={{ backgroundColor: '#1e3a5f' }}
       >
         {buildingId}
@@ -878,7 +881,8 @@ function NetivBuildingColumn({
 
   return (
     <div className="flex flex-col flex-1" style={{ minWidth: compact ? '140px' : '220px' }}>
-      <div className={`text-center font-bold text-white tracking-widest rounded-t-lg mb-0.5 ${compact ? 'py-1 text-xs' : 'py-2 text-sm'}`}
+      {/* See BuildingColumn — same pinning behaviour */}
+      <div className={`sticky top-0 z-30 print:static text-center font-bold text-white tracking-widest rounded-t-lg ${compact ? 'py-1 pb-1.5 text-xs' : 'py-2 pb-2.5 text-sm'}`}
         style={{ backgroundColor: '#1e3a5f' }}>
         {buildingId}
       </div>
