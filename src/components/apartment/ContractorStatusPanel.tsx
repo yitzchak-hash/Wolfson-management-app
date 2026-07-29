@@ -3,7 +3,7 @@ import { X, RefreshCw, AlertCircle, ExternalLink, Link2 } from 'lucide-react';
 import { useStore } from '../../data/store';
 import { Apartment, aptLabel } from '../../types';
 import {
-  fetchContractorSheet, parseSheet, percentColor, parseWolfsonSheet,
+  fetchContractorSheet, parseSheet, percentColor,
   isWolfsonLayout, STATE_COLORS, countBlocks, parseWolfsonAllTabs,
   SheetApartmentStatus, WolfsonCategoryStatus, isSheetBackendConfigured,
 } from '../../data/sheetApi';

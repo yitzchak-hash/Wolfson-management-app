@@ -217,27 +217,35 @@ export function percentColor(p: number | null): string {
   return `rgb(${STOPS[STOPS.length - 1][1].join(',')})`;
 }
 
-// ─── Wolfson-style sheet (colour coded) ───────────────────────────────────────
+// ─── Wolfson-style workbook (floor-plan diagram, colour coded) ───────────────
 //
-// A completely different shape from the Netiv sheet. It is a stack of category
-// SECTIONS ("שלד + מחיצות", "חשמל", "מיזוג אוויר", …), each repeating the same
-// A1 / A2 / A3 building layout. There are no percentages at all — an apartment
-// is done when its cell is filled GREEN.
+// Nothing like the Netiv sheet. Each TAB is one trade ("חשמל", "טיח", "ריצוף",
+// …) and every tab holds the same floor-plan diagram repeated for A1, A2 and A3
+// side by side. There are no percentages: an apartment is DONE when its cell is
+// filled green and IN PROGRESS when filled yellow.
 //
-// Two structural facts make this parseable without brittle column arithmetic:
-//   * A row whose FIRST cell is non-empty is a floor label or a section title;
-//     apartment rows always start with an empty first cell. That removes the
-//     ambiguity between floor "14" and apartment "14".
-//   * Within an apartment row the same numbers repeat once per building in
-//     order, so the Nth occurrence of a number belongs to the Nth building.
-//     This survives the ±1 column drift present between the three blocks.
+// Real structure, verified against the workbook:
+//
+//   row 1        legend swatch in column 1 (skip)
+//   row 3/4      building banners — "A1" spanning cols 3-9, "A2" 18-24, "A3" 34-40
+//   row 11       floor label, e.g. "17 - 06/07/2026", in column 1 (and 7 for the
+//                second wing); coloured when that whole floor is done for the trade
+//   rows 12-14   the apartments on that floor, each a MERGED rectangle
+//                (apt 56 covers cols 2-5, apt 55 covers cols 7-12)
+//
+// Two consequences drive the implementation:
+//   * Apartment cells are merged, so a number repeats across its whole span.
+//     Counting occurrences to identify the building is therefore wrong; the
+//     building must come from COLUMN RANGES derived from the A1/A2/A3 banners.
+//   * A row is a floor label when column 1 carries TEXT. Apartment rows never do.
+//     That resolves the collision between floor "14" and apartment "14".
 
 export type CellState = 'done' | 'progress' | 'issue' | 'none';
 
 export interface WolfsonCategoryStatus {
   name: string;
   state: CellState;
-  /** Any text the contractor typed in the cell beyond the apartment number. */
+  /** Anything the contractor typed in the cell beyond the apartment number. */
   note?: string;
 }
 
@@ -247,7 +255,11 @@ function hexToRgb(hex: string): [number, number, number] | null {
   return [parseInt(m.slice(0, 2), 16), parseInt(m.slice(2, 4), 16), parseInt(m.slice(4, 6), 16)];
 }
 
-/** Classifies a fill colour into a progress state. Green = done. */
+/**
+ * Classifies a fill colour. The workbook uses 00B050 and 00FF00 for done,
+ * FFFF00 for in progress, and greys on the "unsold" tab which carry no progress
+ * meaning and must read as nothing.
+ */
 export function classifyFill(bg: string | null): CellState {
   if (!bg) return 'none';
   const rgb = hexToRgb(bg);
@@ -273,113 +285,130 @@ export const STATE_COLORS: Record<CellState, string> = {
   done: '#16a34a', progress: '#f59e0b', issue: '#dc2626', none: '#9ca3af',
 };
 
-/** Every apartment number a cell refers to — handles merged cells like "19+18". */
+/** Every apartment number a cell refers to — handles merged labels like "19+18". */
 function aptNumbersInCell(text: string): string[] {
   const s = text.trim();
   if (!s) return [];
-  const lead = s.match(/^(\d+)\s*\+\s*(\d+)/);
-  if (lead) return [lead[1], lead[2]];
+  const pair = s.match(/^(\d+)\s*\+\s*(\d+)/);
+  if (pair) return [pair[1], pair[2]];
   const one = s.match(/^(\d+)/);
   return one ? [one[1]] : [];
 }
 
-function isSectionHeader(row: SheetCell[]): boolean {
-  const first = String(row[0]?.v ?? '').trim();
-  if (!first) return false;
-  return row.some(c => /^A\d$/.test(String(c?.v ?? '').trim()));
-}
+interface BuildingSpans { rowIdx: number; spans: { id: string; min: number; max: number }[] }
 
-/**
- * Which block of a section belongs to this building, read from the section
- * header's own "A1"/"A2"/"A3" labels in left-to-right order.
- *
- * Deliberately NOT derived from the buildings' displayOrder: Wolfson orders them
- * A3, A2, A1 for the on-screen diagram, which mapped A1 onto the THIRD block and
- * therefore matched nothing.
- */
-function blockIndexForBuilding(row: SheetCell[], buildingId: string): number {
-  const labels: string[] = [];
-  for (const c of row) {
-    const v = String(c?.v ?? '').trim();
-    if (/^A\d$/.test(v) && !labels.includes(v)) labels.push(v);
+/** Locates the row carrying the "A1"/"A2"/"A3" banners and each banner's span. */
+function findBuildingRow(rows: SheetCell[][]): BuildingSpans | null {
+  for (let r = 0; r < Math.min(rows.length, 12); r++) {
+    const row = rows[r] ?? [];
+    const byId = new Map<string, { min: number; max: number }>();
+    row.forEach((c, i) => {
+      const v = String(c?.v ?? '').trim().toUpperCase();
+      if (!/^A\d$/.test(v)) return;
+      const cur = byId.get(v);
+      if (!cur) byId.set(v, { min: i, max: i });
+      else cur.max = i;
+    });
+    if (byId.size >= 2) {
+      const spans = [...byId.entries()]
+        .map(([id, s]) => ({ id, ...s }))
+        .sort((a, b) => a.min - b.min);
+      return { rowIdx: r, spans };
+    }
   }
-  return labels.indexOf(buildingId.trim().toUpperCase());
+  return null;
+}
+
+/** Column range [start, end) owned by a building, split midway between banners. */
+function columnRange(info: BuildingSpans, buildingId: string): [number, number] | null {
+  const idx = info.spans.findIndex(s => s.id === buildingId.trim().toUpperCase());
+  if (idx < 0) return null;
+  const prev = info.spans[idx - 1];
+  const next = info.spans[idx + 1];
+  const start = prev ? Math.ceil((prev.max + info.spans[idx].min) / 2) : 0;
+  const end = next ? Math.ceil((info.spans[idx].max + next.min) / 2) : Number.MAX_SAFE_INTEGER;
+  return [start, end];
+}
+
+/** True when this row is a floor label rather than a row of apartments. */
+function isFloorRow(row: SheetCell[]): boolean {
+  return !!String(row?.[0]?.v ?? '').trim();
 }
 
 /**
- * Reads one apartment's per-category state out of a Wolfson-style workbook.
- * `buildingIndex` is 0 for A1, 1 for A2, 2 for A3.
+ * Reads one trade tab and returns the state of a single apartment.
+ *
+ * When the apartment's own cell carries no fill, the enclosing floor label is
+ * used instead — the structural tabs ("שלד + מחיצות") colour the floor rather
+ * than each apartment, and a green floor genuinely means every unit on it is done.
  */
-export function parseWolfsonSheet(
+export function parseWolfsonTab(
   rows: SheetCell[][],
   buildingId: string,
   apartmentNumber: string,
-): WolfsonCategoryStatus[] {
+): { state: CellState; note?: string } | null {
   const target = apartmentNumber.trim();
-  if (!target || !rows.length) return [];
+  if (!target || !rows?.length) return null;
+  const info = findBuildingRow(rows);
+  if (!info) return null;
+  const range = columnRange(info, buildingId);
+  if (!range) return null;
+  const [start, end] = range;
 
-  const out: WolfsonCategoryStatus[] = [];
-  let currentName: string | null = null;
-  let buildingIndex = -1;
-  let found = false;
+  // Nearest floor-label cell at or left of a column, so a split-wing floor
+  // (labels in both column 1 and column 7) attributes to the right wing.
+  let floorMarks: { col: number; bg: string | null }[] = [];
 
-  const flush = () => { if (currentName && !found) out.push({ name: currentName, state: 'none' }); };
+  for (let r = info.rowIdx + 1; r < rows.length; r++) {
+    const row = rows[r] ?? [];
+    if (!row.length) continue;
 
-  for (const row of rows) {
-    if (!row?.length) continue;
-
-    if (isSectionHeader(row)) {
-      flush();
-      currentName = String(row[0].v).trim();
-      buildingIndex = blockIndexForBuilding(row, buildingId);
-      found = false;
+    if (isFloorRow(row)) {
+      floorMarks = [];
+      for (let c = start; c < Math.min(end, row.length); c++) {
+        if (String(row[c]?.v ?? '').trim()) floorMarks.push({ col: c, bg: row[c]?.bg ?? null });
+      }
       continue;
     }
-    if (!currentName || found || buildingIndex < 0) continue;
 
-    // Floor-label rows carry text in the first cell; apartment rows never do.
-    if (String(row[0]?.v ?? '').trim()) continue;
-
-    // Nth occurrence of the number across the row === Nth building
-    let seen = 0;
-    for (const cell of row) {
+    for (let c = start; c < Math.min(end, row.length); c++) {
+      const cell = row[c];
       const text = String(cell?.v ?? '');
       if (!aptNumbersInCell(text).includes(target)) continue;
-      if (seen === buildingIndex) {
-        const note = text.trim().replace(/^\d+(\s*\+\s*\d+)?\s*/, '').trim();
-        out.push({ name: currentName, state: classifyFill(cell?.bg ?? null), note: note || undefined });
-        found = true;
-        break;
+
+      const note = text.trim().replace(/^\d+(\s*\+\s*\d+)?\s*/, '').replace(/\s+/g, ' ').trim();
+      let bg = cell?.bg ?? null;
+      if (!bg) {
+        // Fall back to the floor this apartment sits on
+        const wing = [...floorMarks].reverse().find(f => f.col <= c) ?? floorMarks[0];
+        bg = wing?.bg ?? null;
       }
-      seen++;
+      return { state: classifyFill(bg), note: note || undefined };
     }
   }
-  flush();
-  return out;
+  return null;
 }
 
 /**
- * True when the workbook looks like the Wolfson layout rather than the Netiv one.
- * Falls back to "Wolfson" when the Netiv "דירה" header is absent anywhere near the
- * top, so an unrecognised colour-coded sheet still renders states rather than
- * silently reporting the apartment as missing.
+ * Tabs that are not trades and must not appear as progress rows:
+ * "דירות לא מכורות" records sold/unsold with greys, and "מאסטר" is a summary
+ * sheet holding only the legend.
  */
+const NON_TRADE_TABS = new Set(['דירות לא מכורות', 'מאסטר']);
+
+/** True when the workbook uses the Wolfson floor-plan layout. */
 export function isWolfsonLayout(rows: SheetCell[][]): boolean {
-  if (rows.slice(0, 80).some(r => isSectionHeader(r ?? []))) return true;
+  if (findBuildingRow(rows)) return true;
   const hasNetivHeader = rows.slice(0, 12)
     .some(r => (r ?? []).some(c => String(c?.v ?? '').trim() === HEADER_APARTMENT));
   return !hasNetivHeader;
 }
 
-
 /**
- * Merges every worksheet into one category list for an apartment.
- *
- * The Wolfson workbook keeps ONE TRADE PER TAB — "מיזוג אוויר", "חשמל", "טיח"
- * and so on — each holding the same A1/A2/A3 block layout. Reading a single tab
- * therefore showed only one trade. Each tab contributes the categories its own
- * section header declares; tabs with no recognisable section (summaries, legends)
- * are skipped. Falls back to the tab's own name when a section carries no title.
+ * One row per trade for an apartment, merged across every tab in the workbook.
+ * The category name is the TAB name, which is where this workbook records the
+ * trade. Tabs that are not trades, or that do not contain the building, are
+ * skipped rather than shown as empty rows.
  */
 export function parseWolfsonAllTabs(
   sheets: SheetTab[],
@@ -387,15 +416,12 @@ export function parseWolfsonAllTabs(
   apartmentNumber: string,
 ): WolfsonCategoryStatus[] {
   const out: WolfsonCategoryStatus[] = [];
-  const seen = new Set<string>();
   for (const sheet of sheets ?? []) {
-    if (!sheet?.rows?.length) continue;
-    for (const cat of parseWolfsonSheet(sheet.rows, buildingId, apartmentNumber)) {
-      const name = cat.name?.trim() || sheet.name;
-      if (seen.has(name)) continue;
-      seen.add(name);
-      out.push({ ...cat, name });
-    }
+    const name = (sheet?.name ?? '').trim();
+    if (!name || NON_TRADE_TABS.has(name)) continue;
+    const hit = parseWolfsonTab(sheet.rows, buildingId, apartmentNumber);
+    if (!hit) continue;
+    out.push({ name, state: hit.state, note: hit.note });
   }
   return out;
 }

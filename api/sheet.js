@@ -75,7 +75,10 @@ function sheetToRows(ws) {
     const out = [];
     for (let c = 1; c <= lastCol; c++) {
       const cell = row.getCell(c);
-      out.push({ v: cellText(cell.value), bg: fillToHex(cell.fill) });
+      // Apartments are drawn as MERGED rectangles; the fill lives on the master
+      // cell, so a slave would otherwise read as unfilled.
+      const styled = cell.master ?? cell;
+      out.push({ v: cellText(cell.value), bg: fillToHex(styled.fill) ?? fillToHex(cell.fill) });
     }
     rows.push(out);
   });
