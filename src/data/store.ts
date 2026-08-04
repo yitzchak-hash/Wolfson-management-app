@@ -295,6 +295,10 @@ interface AppState {
   dashboardHiddenWidgets: string[];
   setDashboardLayout: (order: string[], hidden: string[]) => void;
 
+  /** Board appearance & behaviour, one entry per project. Synced via settings/app. */
+  boardSettings: Record<string, { themeId?: string; snapToGrid?: boolean; showControls?: boolean }>;
+  setBoardSetting: (key: 'themeId' | 'snapToGrid' | 'showControls', value: string | boolean) => void;
+
   // Contractor status spreadsheet — one link per project, synced via settings/app
   contractorSheetLinks: Record<string, string>;
   setContractorSheetLink: (url: string) => void;
@@ -357,6 +361,7 @@ export const useStore = create<AppState>((set, get) => ({
   pendingOpenAptId: null,
   dashboardWidgetOrder: (stored?.dashboardWidgetOrder as string[] | null) ?? ['apt-stats', 'task-stats', 'stage-progress', 'building-progress', 'activity'],
   dashboardHiddenWidgets: (stored?.dashboardHiddenWidgets as string[] | null) ?? [],
+  boardSettings: (stored?.boardSettings as Record<string, { themeId?: string; snapToGrid?: boolean; showControls?: boolean }> | null) ?? {},
   contractorSheetLinks: (stored?.contractorSheetLinks as Record<string, string> | null) ?? {},
   currentProjectId: _activeProjectId,
   projects: DEFAULT_PROJECTS,
@@ -439,6 +444,14 @@ export const useStore = create<AppState>((set, get) => ({
     if (isFirebaseConfigured && !get().firebaseListening) {
       get().startFirebaseSync();
     }
+  },
+
+  setBoardSetting: (key, value) => {
+    const pid = get().currentProjectId;
+    const next = { ...get().boardSettings, [pid]: { ...(get().boardSettings[pid] ?? {}), [key]: value } };
+    set({ boardSettings: next });
+    persist(get);
+    fsSet('settings', 'app', { boardSettings: next });
   },
 
   setContractorSheetLink: (url: string) => {
@@ -1115,6 +1128,7 @@ export const useStore = create<AppState>((set, get) => ({
         mainUiStrings: state.mainUiStrings,
       canvasElements: state.canvasElements,
       contractorSheetLinks: state.contractorSheetLinks,
+      boardSettings: state.boardSettings,
       },
     };
     return JSON.stringify(snapshot, null, 2);
@@ -1144,6 +1158,7 @@ export const useStore = create<AppState>((set, get) => ({
         // state rather than [] so an OLDER backup cannot wipe them either.
         canvasElements: data.canvasElements ?? state.canvasElements,
         contractorSheetLinks: data.contractorSheetLinks ?? state.contractorSheetLinks,
+        boardSettings: data.boardSettings ?? state.boardSettings,
         ...(data.settings ? {
           autoBackup: data.settings.autoBackup ?? state.autoBackup,
           backupFrequency: data.settings.backupFrequency ?? state.backupFrequency,
@@ -1504,6 +1519,7 @@ export const useStore = create<AppState>((set, get) => ({
         ...(appSettings.autoBackup           !== undefined ? { autoBackup: appSettings.autoBackup as boolean } : {}),
         ...(appSettings.mainUiStrings        ? { mainUiStrings: mergeFreshMainUi(appSettings.mainUiStrings as Partial<MainUiStrings>) } : {}),
         ...(appSettings.contractorSheetLinks ? { contractorSheetLinks: appSettings.contractorSheetLinks as Record<string, string> } : {}),
+        ...(appSettings.boardSettings ? { boardSettings: appSettings.boardSettings as Record<string, { themeId?: string; snapToGrid?: boolean; showControls?: boolean }> } : {}),
       }));
       persist(get);
 
@@ -1659,6 +1675,7 @@ export const useStore = create<AppState>((set, get) => ({
           ...(appS.autoBackup           !== undefined ? { autoBackup: appS.autoBackup as boolean } : {}),
           ...(appS.mainUiStrings        ? { mainUiStrings: mergeFreshMainUi(appS.mainUiStrings as Partial<MainUiStrings>) } : {}),
           ...(appS.contractorSheetLinks ? { contractorSheetLinks: appS.contractorSheetLinks as Record<string, string> } : {}),
+          ...(appS.boardSettings ? { boardSettings: appS.boardSettings as Record<string, { themeId?: string; snapToGrid?: boolean; showControls?: boolean }> } : {}),
           ...(appS.driveExportFrequency ? { driveExportFrequency: appS.driveExportFrequency as DriveExportFrequency } : {}),
         }));
         persist(get);
@@ -1775,6 +1792,7 @@ function persistNow(get: () => AppState) {
     dashboardHiddenWidgets: state.dashboardHiddenWidgets,
     canvasElements: state.canvasElements,
     contractorSheetLinks: state.contractorSheetLinks,
+    boardSettings: state.boardSettings,
   };
 
   const ok = saveToStorage(storageKey, payload);

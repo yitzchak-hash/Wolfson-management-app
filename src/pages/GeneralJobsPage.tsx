@@ -10,6 +10,8 @@ import { ApartmentDetailDrawer } from '../components/apartment/ApartmentDetailDr
 import { QuickAddTaskPanel } from '../components/apartment/QuickAddTaskPanel';
 import { Toast } from '../components/ui/Toast';
 import { DriveIcon, ZohoIcon, PlanIcon } from '../components/ui/BrandIcons';
+import { BoardToolbar, BoardControlsPanel, BoardTool } from '../components/board/BoardToolbar';
+import { BOARD_THEMES, getBoardTheme } from '../data/boardThemes';
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
 /** "3h ago" / "yesterday" / "6 Aug" — short, because tile space is scarce. */
@@ -147,6 +149,12 @@ export function GeneralJobsPage() {
   const [editingEl, setEditingEl] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
 
+  const boardSettings = useStore(st => st.boardSettings);
+  const setBoardSetting = useStore(st => st.setBoardSetting);
+  const projectBoard = boardSettings[currentProjectId] ?? {};
+  const theme = getBoardTheme(projectBoard.themeId);
+  const showControls = projectBoard.showControls ?? false;
+
   const canvasRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
 
@@ -161,6 +169,8 @@ export function GeneralJobsPage() {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [spaceHeld, setSpaceHeld] = useState(false);
+  const [tool, setTool] = useState<BoardTool>('select');
+  const [boardSettingsOpen, setBoardSettingsOpen] = useState(false);
   const panRef = useRef<{ px: number; py: number; ox: number; oy: number } | null>(null);
 
   /** Discrete steps: text renders far better and "am I at 100%?" is answerable. */
@@ -666,6 +676,47 @@ export function GeneralJobsPage() {
         onPointerUp={onViewportPointerUp}
         onPointerCancel={onViewportPointerUp}
       >
+        <BoardToolbar
+          active={tool}
+          onPick={setTool}
+          onFit={zoomToFit}
+          controlsOpen={showControls}
+          onToggleControls={() => setBoardSetting('showControls', !showControls)}
+          onToggleSettings={() => setBoardSettingsOpen(v => !v)}
+        />
+        {showControls && <BoardControlsPanel />}
+
+        {boardSettingsOpen && (
+          <div className="absolute right-[86px] z-40 w-[236px] bg-white border border-gray-200 rounded-xl shadow-lg p-3"
+            style={{ top: showControls ? 236 : 12 }}>
+            <div className="text-[10px] font-extrabold text-gray-700 mb-2 tracking-wide">BOARD SETTINGS</div>
+
+            <div className="text-[9.5px] font-bold text-gray-500 mb-1">Theme</div>
+            <div className="grid grid-cols-2 gap-1 mb-3 max-h-[200px] overflow-y-auto">
+              {BOARD_THEMES.map(th => (
+                <button key={th.id}
+                  onClick={() => setBoardSetting('themeId', th.id)}
+                  className="text-left rounded-lg border p-1.5 transition-all"
+                  style={{
+                    borderColor: theme.id === th.id ? '#1e3a5f' : '#e2e8f0',
+                    boxShadow: theme.id === th.id ? '0 0 0 2px rgba(30,58,95,.18)' : undefined,
+                  }}
+                >
+                  <span className="block h-6 rounded mb-1" style={th.surface} />
+                  <span className="text-[8.5px] font-bold text-gray-600 leading-none">{th.name}</span>
+                </button>
+              ))}
+            </div>
+
+            <label className="flex items-center gap-2 text-[10px] text-gray-600 font-semibold">
+              <input type="checkbox" className="rounded"
+                checked={projectBoard.snapToGrid ?? false}
+                onChange={e => setBoardSetting('snapToGrid', e.target.checked)} />
+              Snap to grid
+            </label>
+          </div>
+        )}
+
         {/* Zoom readout + fit, bottom-left so it never covers the toolbar */}
         <div className="absolute bottom-3 left-3 z-30 flex items-center gap-1 bg-white/95 border border-gray-200 rounded-lg shadow-sm px-1.5 py-1">
           <button onClick={() => zoomAt(
@@ -705,9 +756,8 @@ export function GeneralJobsPage() {
             className="relative"
             style={{
               width: maxX, height: maxY, minWidth: '100%', minHeight: '100%',
-              backgroundImage: 'radial-gradient(circle, #d1d5db 1px, transparent 1px)',
-              backgroundSize: '22px 22px',
-              userSelect: 'none',
+              ...theme.surface,
+                            userSelect: 'none',
             }}
             onPointerDown={onCanvasPointerDown}
             onPointerMove={onCanvasPointerMove}
