@@ -9,8 +9,25 @@ import { Apartment, CanvasElement } from '../types';
 import { ApartmentDetailDrawer } from '../components/apartment/ApartmentDetailDrawer';
 import { QuickAddTaskPanel } from '../components/apartment/QuickAddTaskPanel';
 import { Toast } from '../components/ui/Toast';
+import { DriveIcon, ZohoIcon, PlanIcon } from '../components/ui/BrandIcons';
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
+/** "3h ago" / "yesterday" / "6 Aug" — short, because tile space is scarce. */
+function relativeTime(iso?: string): string {
+  if (!iso) return '';
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '';
+  const mins = Math.floor((Date.now() - then) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
 const TILE_W = 215;
 const TILE_H = 132;
 const GAP = 22;
@@ -686,8 +703,12 @@ export function GeneralJobsPage() {
                   style={{
                     left: pos.x, top: pos.y, width: TILE_W, height: TILE_H,
                     touchAction: 'none',
+                    // The stage colour is a THICK BORDER, never a fill. Flooding the
+                    // tile made the name, address and buttons unreadable at some
+                    // stages; the border carries the same information and leaves the
+                    // content legible at every one.
                     backgroundColor: job.tileColor ?? '#ffffff',
-                    borderColor: isSelected ? '#4aa8d8' : tilePalette.border,
+                    border: `4px solid ${isSelected ? '#4aa8d8' : (stage?.color ?? tilePalette.border)}`,
                     outline: isSelected && !isDragging ? '2px solid rgba(74,168,216,0.4)' : undefined,
                     outlineOffset: '1px',
                     zIndex: isDragging ? 20 : isSelected ? 10 : 5,
@@ -711,7 +732,8 @@ export function GeneralJobsPage() {
                   </div>
 
                   {stage && (
-                    <span className="inline-block text-[10px] font-medium px-2 py-0.5 rounded-full text-white mb-1.5" style={{ backgroundColor: stage.color }}>
+                    <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mb-1.5"
+                      style={{ backgroundColor: `${stage.color}22`, color: stage.color }}>
                       {stage.name}
                     </span>
                   )}
@@ -723,34 +745,51 @@ export function GeneralJobsPage() {
                     </div>
                   )}
 
-                  {/* Link + task row */}
-                  <div className="absolute bottom-2.5 left-3 right-3 flex items-center gap-3">
-                    {job.zohoLink && (
-                      <a data-no-drag
-                        href={job.zohoLink.startsWith('http') ? job.zohoLink : `https://${job.zohoLink}`}
-                        target="_blank" rel="noopener noreferrer"
-                        onClick={e => e.stopPropagation()}
-                        className="text-[11px] text-[#4aa8d8] hover:underline flex items-center gap-1"
-                      >
-                        <ExternalLink size={10} /> Zoho
-                      </a>
-                    )}
+                  {/* Buttons appear only when the data exists. Tooltips are short by design. */}
+                  <div className="absolute bottom-2.5 left-3 right-3 flex items-center gap-1.5">
                     {job.driveLink && (
-                      <a data-no-drag
+                      <a data-no-drag title={s.openFolderTooltip}
                         href={job.driveLink.startsWith('http') ? job.driveLink : `https://${job.driveLink}`}
                         target="_blank" rel="noopener noreferrer"
                         onClick={e => e.stopPropagation()}
-                        className="text-[11px] text-[#4aa8d8] hover:underline flex items-center gap-1"
+                        className="w-6 h-6 rounded-md bg-gray-50 border border-gray-200 flex items-center justify-center hover:border-gray-300 transition-colors"
                       >
-                        <FolderOpen size={10} /> Drive
+                        <DriveIcon size={13} />
+                      </a>
+                    )}
+                    {job.zohoLink && (
+                      <a data-no-drag title="Zoho"
+                        href={job.zohoLink.startsWith('http') ? job.zohoLink : `https://${job.zohoLink}`}
+                        target="_blank" rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        className="w-6 h-6 rounded-md bg-gray-50 border border-gray-200 flex items-center justify-center hover:border-gray-300 transition-colors"
+                      >
+                        <ZohoIcon size={13} />
+                      </a>
+                    )}
+                    {job.plansPdfLink && (
+                      <a data-no-drag title={s.engineeringPlans}
+                        href={job.plansPdfLink}
+                        target="_blank" rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        className="w-6 h-6 rounded-md bg-gray-50 border border-gray-200 flex items-center justify-center hover:border-gray-300 transition-colors text-gray-600"
+                      >
+                        <PlanIcon size={13} />
                       </a>
                     )}
                     {pendingTasks > 0 && (
-                      <span className="ml-auto flex items-center gap-1 text-[11px] text-amber-600 font-medium">
+                      <span className="ml-auto flex items-center gap-1 text-[11px] text-amber-600 font-bold">
                         <ClipboardList size={11} /> {pendingTasks}
                       </span>
                     )}
                   </div>
+
+                  {/* Last edited — content changes only, never board tidying */}
+                  {(job.contentUpdatedAt ?? job.updatedAt) && (
+                    <span className="absolute top-2 left-3 text-[9px] text-gray-400 pointer-events-none">
+                      {relativeTime(job.contentUpdatedAt ?? job.updatedAt)}
+                    </span>
+                  )}
                 </div>
               );
             })}
