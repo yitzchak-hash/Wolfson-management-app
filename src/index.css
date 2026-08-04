@@ -54,16 +54,20 @@
 .drawer-overlay {
   animation: fadeIn 0.2s ease;
 }
+/* The panel is a CENTRED modal, so it carries translate(-50%,-50%) inline.
+   The old slideIn keyframes animated `transform` outright and would have fought
+   that centring, throwing the modal off-screen. Animate scale+opacity around the
+   existing centre instead. */
 .drawer-panel {
-  animation: slideIn 0.25s ease;
+  animation: modalIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 @keyframes fadeIn {
   from { opacity: 0 }
   to { opacity: 1 }
 }
-@keyframes slideIn {
-  from { transform: translateX(100%) }
-  to { transform: translateX(0) }
+@keyframes modalIn {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.96) }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1) }
 }
 
 .toast {

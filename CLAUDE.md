@@ -162,7 +162,15 @@ interface CanvasElement {
 ```
 Stored in `canvasElements: CanvasElement[]` per-project. Actions: `addCanvasElement`, `updateCanvasElement`, `deleteCanvasElement`. Persisted to localStorage only (not Firestore). Notes are fixed-size sticky notes; boxes are resizable section containers with a draggable bottom-right resize handle.
 
-### ApartmentDetailDrawer in General context
+### ApartmentDetailDrawer — now a CENTRED MODAL
+- No longer a right-hand drawer. It is centred at `min(1020px, 94vw) × min(860px, 90vh)`, roughly twice
+  the usable width, and no longer squeezes the board or diagram behind it. Applies to every project.
+- The `.drawer-panel` animation had to change with it: the old `slideIn` keyframes animated `transform`
+  outright, which would have fought the inline `translate(-50%,-50%)` centring and thrown the modal
+  off-screen. It now animates scale+opacity *around* that centre (`modalIn`).
+- The class names `drawer-panel` / `drawer-overlay` are kept so existing CSS hooks still resolve.
+
+## ApartmentDetailDrawer in General context
 When `currentProjectId === 'general'`:
 - Hides apartment number, classification toggle, Engineering Plans, Settings collapsible
 - Shows Address, Zoho Link, Drive Folder fields with open-link buttons

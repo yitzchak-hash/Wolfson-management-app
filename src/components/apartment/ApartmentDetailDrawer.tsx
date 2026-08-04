@@ -590,9 +590,21 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         <ContractorStatusPanel apartment={apartment} onClose={() => setShowContractorStatus(false)} />
       )}
 
-      <div className="drawer-overlay fixed inset-0 bg-black/30 z-40" onClick={onClose} />
+      {/* Centred modal, not a side drawer. Roughly twice the usable width and it
+          no longer squeezes the board or diagram behind it. Applies to every
+          project — Job Board, Wolfson, Netiv and anything added later. */}
+      <div className="drawer-overlay fixed inset-0 bg-black/50 z-40" onClick={onClose} />
 
-      <div className="drawer-panel fixed right-0 top-0 h-full w-full max-w-lg bg-white shadow-2xl z-50 flex flex-col">
+      <div
+        className="drawer-panel fixed bg-white shadow-2xl z-50 flex flex-col rounded-2xl overflow-hidden"
+        style={{
+          left: '50%',
+          top: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: 'min(1020px, 94vw)',
+          height: 'min(860px, 90vh)',
+        }}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 bg-[#1e3a5f] text-white flex-shrink-0">
           <div className="flex items-center gap-2 min-w-0">
