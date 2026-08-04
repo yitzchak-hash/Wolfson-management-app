@@ -65,6 +65,48 @@ so you can see at a glance what's hidden.
 Much bigger now, and jobs appear as proper cards instead of thin coloured lines. A day with one job shows
 it full size.
 
+## A few more things on the board
+
+- **Right-click a job** for a menu. If you've copied a Drive link, a Zoho link, an apartment number or a
+  name, the menu offers to paste it straight into the right box — you never have to pick which box.
+- **Right-click empty space** with a Drive link copied and it offers to make a new job from it. The family
+  name comes from the folder name automatically.
+- **Ghosts.** Right-click a job and choose *Create ghost* to show the same job in a second place on the
+  board — for example under "This week" as well as under "Brooklyn". It's not a copy: it's the same job,
+  so changing one changes both. Removing a ghost just removes that extra appearance.
+- **Notes, boxes, headings, a countdown, a stopwatch, little pictures and a voice memo** — all on the
+  toolbar. There's a pen and a highlighter too, if you want to draw on the board.
+- **Stages view.** The Board/Stages switch at the top shows the same jobs sorted into columns by stage.
+  Drag a card to another column and the stage changes. Your board arrangement isn't touched.
+- **Save the board's arrangement** from board settings, and put it back later. It shows you a little
+  picture of each saved arrangement before you restore it. It only moves things — it can never undo an
+  edit or bring back a deleted job.
+- **Save the board as a picture or a PDF** from the toolbar. You get the whole board, not just the part
+  on screen.
+
+## Inside a job
+
+- **Photos from the site** that nobody has looked at yet appear at the top of the Photos tab. Click one to
+  mark it seen. No pop-ups, no emails — it just waits there.
+- **Check Drive folder** tells you if anything's missing from that job's folder, like the Photos folder or
+  the plan itself.
+- **Pins on the plan.** Open the engineering plan, click *Pin*, then click the spot on the drawing and
+  type what needs doing. The contractor sees the same pins on their phone. The plan file itself is never
+  changed — if you download it you get the clean plan. The little printer button gives you a numbered
+  punch list to take to site.
+- **When you assign a task**, each contractor's name now shows how much they already have open, and in red
+  if any of it is late.
+
+## Small things you might notice
+
+- The top of the screen shows **one quiet line saying what just changed and who changed it**, and a card
+  that someone just edited glows for a few seconds. Handy when two of you are working at once.
+- Finishing a job by dragging it into **Done** gets a little tick animation.
+- On a **phone**, the menu moves to the bottom of the screen where your thumb reaches.
+- The **TV can be switched between English and Hebrew** with the EN / עב buttons, and there's a size
+  slider if the board is hard to read from across the room. It sizes itself automatically to whatever
+  screen it's plugged into, so you shouldn't normally need it.
+
 ---
 
 If anything looks wrong or you can't find something, tell Yitzchak and we'll sort it out.
