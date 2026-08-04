@@ -13,6 +13,7 @@ import { DriveIcon, ZohoIcon, PlanIcon, TvIcon } from '../components/ui/BrandIco
 import { BoardToolbar, BoardControlsPanel, BoardTool } from '../components/board/BoardToolbar';
 import { BOARD_THEMES, getBoardTheme } from '../data/boardThemes';
 import { MiniMap } from '../components/board/MiniMap';
+import { useTouchGestures } from '../hooks/useTouchGestures';
 import {
   PinnedTitleLayer, StrokeLayer, CountdownNode, StopwatchNode, ClipArtNode, NODE_DEFAULT_SIZE,
 } from '../components/board/BoardNodes';
@@ -595,6 +596,28 @@ export function GeneralJobsPage() {
     vp.addEventListener('wheel', onWheel, { passive: false });
     return () => vp.removeEventListener('wheel', onWheel);
   }, [zoomAt]);
+
+  /**
+   * Pinch to zoom and two-finger pan, for tablets and the Samsung interactive
+   * display. Without this every scroll attempt on a touchscreen drags a tile,
+   * because the pointer handlers fire on touch as well as mouse.
+   */
+  useTouchGestures(viewportRef.current, {
+    onPinch: (delta, cx, cy) => {
+      const r = viewportRef.current?.getBoundingClientRect();
+      if (!r) return;
+      setZoom(prev => {
+        const next = Math.min(3, Math.max(0.25, prev * delta));
+        const px = cx - r.left, py = cy - r.top;
+        setPan(pp => ({
+          x: px - (px - pp.x) * (next / prev),
+          y: py - (py - pp.y) * (next / prev),
+        }));
+        return next;
+      });
+    },
+    onPan: (dx, dy) => setPan(p => ({ x: p.x + dx, y: p.y + dy })),
+  });
 
   /** Space-held drag pans, the shortcut every canvas app has. */
   useEffect(() => {
