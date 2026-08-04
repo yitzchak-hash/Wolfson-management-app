@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { useStore } from '../data/store';
 import {
   Plus, Trash2, Save, ChevronUp, ChevronDown, Shield, Sun, Moon,
@@ -13,6 +13,8 @@ import { format } from 'date-fns';
 import { saveAs } from 'file-saver';
 import { extractFolderId, isUploadBackendConfigured, getFolderNameViaBackend, familyNameFromFolderName } from '../data/driveApi';
 import { fetchContractorSheet } from '../data/sheetApi';
+import { ProjectBuilder } from '../components/settings/ProjectBuilder';
+import { ProjectLayout, layoutToApartments } from '../data/projectLayout';
 
 type Tab = 'stages' | 'users' | 'contractors' | 'app' | 'language' | 'buildings' | 'sheet';
 
@@ -107,7 +109,7 @@ export function SettingsPage({ scope = 'project' }: { scope?: SettingsScope }) {
         <LanguageTab onToast={showToast} />
       )}
       {activeTab === 'buildings' && (
-        <BuildingsTab onToast={showToast} />
+        <BuildingsBuilderTab onToast={showToast} />
       )}
 
       {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
@@ -726,6 +728,80 @@ function TvPresentationSettings({ onToast }: { onToast: (msg: string, type?: 'su
         <strong className="text-gray-700">Hiding things:</strong> every job and note has a TV icon on the
         board. Everything shows by default; switch one off to keep it off the wall.
       </div>
+    </div>
+  );
+}
+
+// ─── Buildings tab: the visual project builder ────────────────────────────────
+function BuildingsBuilderTab({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
+  const { apartments, buildings, currentProjectId, currentUser, bulkUpdateApartments, addApartment } = useStore();
+
+  /** Current apartment records -> an editable layout. */
+  const initial: ProjectLayout = useMemo(() => {
+    const byBuilding = new Map<string, Apartment[]>();
+    for (const a of apartments) {
+      if (a.buildingId === 'G') continue;
+      if (!byBuilding.has(a.buildingId)) byBuilding.set(a.buildingId, []);
+      byBuilding.get(a.buildingId)!.push(a);
+    }
+    return {
+      buildings: [...byBuilding.entries()].map(([id, apts], i) => {
+        const floors = [...new Set(apts.map(a => a.floor))].sort((x, y) => y - x);
+        return {
+          id,
+          name: buildings.find(b => b.id === id)?.name ?? id,
+          displayOrder: buildings.find(b => b.id === id)?.displayOrder ?? i + 1,
+          floors: floors.map(f => ({
+            label: f === 0 ? 'Ground' : String(f),
+            slots: apts
+              .filter(a => a.floor === f)
+              .sort((x, y) => (x.colPosition ?? 0) - (y.colPosition ?? 0))
+              .map(a => ({
+                kind: 'apartment' as const,
+                number: a.apartmentNumber || undefined,
+                pinned: !!a.apartmentNumber,
+                ...(a.isDuplexApt ? { duplex: true } : {}),
+              })),
+          })),
+        };
+      }),
+    };
+  }, [apartments, buildings]);
+
+  if (currentProjectId === 'general') {
+    return (
+      <div className="bg-white border border-gray-200 rounded-xl p-5 text-sm text-gray-500">
+        The Job Board has no buildings — jobs live free on the canvas.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+        <strong>Nothing is destroyed by saving.</strong> Apartments are matched by building and number, so
+        stages, tasks, photos, notes and Drive links stay attached. Take a backup first if you are making
+        a large change.
+      </div>
+      <ProjectBuilder
+        initial={initial}
+        onToast={onToast}
+        onSave={layout => {
+          if (!currentUser) return;
+          const next = layoutToApartments(layout, apartments);
+          const existingIds = new Set(apartments.map(a => a.id));
+          for (const a of next) {
+            if (existingIds.has(a.id)) {
+              bulkUpdateApartments([a.id], {
+                floor: a.floor, colPosition: a.colPosition,
+                apartmentNumber: a.apartmentNumber, isDuplexApt: a.isDuplexApt,
+              }, currentUser);
+            } else {
+              addApartment(a);
+            }
+          }
+        }}
+      />
     </div>
   );
 }
