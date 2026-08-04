@@ -154,6 +154,11 @@ export interface Apartment {
    * Rendered more transparent than the real node.
    */
   ghosts?: { x: number; y: number }[];
+  /**
+   * Whether this appears on the TV wallboard. UNDEFINED MEANS VISIBLE —
+   * everything shows by default and Esther switches off only what is private.
+   */
+  showOnTv?: boolean;
   stageDates?: Record<string, string>; // stageId → ISO timestamp of when that stage was first set
   driveLink?: string; // Google Drive folder URL for this apartment's files
   plansPdfLink?: string; // Google Drive link to the Engineering Plans PDF
@@ -183,6 +188,8 @@ export interface CanvasElement {
    * other element, and entirely independent of stages.
    */
   binKind?: 'done' | 'ready' | 'archive' | 'trash';
+  /** See Apartment.showOnTv — undefined means visible. */
+  showOnTv?: boolean;
   /**
    * Pinned elements keep their board X (so they pan and zoom sideways with the
    * content they label) but hold a FIXED screen Y, so they stay put vertically

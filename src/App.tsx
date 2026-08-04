@@ -14,6 +14,7 @@ import { TasksPage } from './pages/TasksPage';
 import { GeneralJobsPage } from './pages/GeneralJobsPage';
 import { GlobalCalendarPage } from './pages/GlobalCalendarPage';
 import { ProjectCalendarPage } from './pages/ProjectCalendarPage';
+import { TvPresentationPage } from './pages/TvPresentationPage';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { currentUser } = useStore();
@@ -28,6 +29,8 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         {/* Public contractor portal — no auth */}
         <Route path="/c/:token" element={<ContractorPortal />} />
+        {/* Wall display. Public link, ALWAYS read-only — it can never edit. */}
+        <Route path="/tv" element={<TvPresentationPage />} />
         <Route
           path="/"
           element={
