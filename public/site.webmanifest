@@ -1,0 +1,12 @@
+{
+  "name": "TzviAir Job Management Platform",
+  "short_name": "TzviAir",
+  "description": "HVAC installation project management",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1e3a5f",
+  "theme_color": "#1e3a5f",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

@@ -217,7 +217,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const detectedPdfId = availablePdfs[selectedPdfIdx]?.id ?? null;
 
   const sortedStages = [...stages]
-    .filter(s => s.active && (!s.projectId || (isGeneralProject && s.projectId === 'general')))
+    // EXCLUSIVE per project. The old filter was
+    //   (!s.projectId || (isGeneral && s.projectId === 'general'))
+    // which in General showed General's stages PLUS the shared ones — the
+    // reported stage mixing. Every other page already filters exclusively.
+    .filter(s => s.active && (isGeneralProject ? s.projectId === 'general' : !s.projectId))
     .sort((a, b) => a.order - b.order);
   const currentStage = stages.find(s => s.id === currentStageId);
   const aptLogs = activityLogs.filter(l => l.apartmentId === apartment.id).slice(0, 20);

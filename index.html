@@ -3,8 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- SVG-only favicons are ignored by several crawlers and by iOS, which is
+         why a generic icon showed up. These give every platform something. -->
+    <link rel="alternate icon" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="theme-color" content="#1e3a5f" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Wolfson Project – TzviAir</title>
+    <meta name="description" content="TzviAir Job Management Platform — HVAC installation project management." />
+    <title>TzviAir Job Management Platform</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
