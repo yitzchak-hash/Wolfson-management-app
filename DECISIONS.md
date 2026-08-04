@@ -241,12 +241,14 @@ app. Its own link, opened on the TV, then fullscreen.
 
 ### TV settings (app settings → TV Presentation)
 Presentation link · start view · rotate views + interval · **theme** · **language default (he/en)** ·
-display size for 4K at distance · refresh fallback · which projects appear · show completed ·
-**read-only lock (recommended)** · auto-return home when idle · screen schedule · burn-in protection ·
+display scale (see note) · refresh fallback · which projects appear · show completed ·
+**always read-only — not a setting** · auto-return home when idle · screen schedule · burn-in protection ·
 show clock / attention strip.
 
-> **Read-only lock matters most.** It is an editable board on a shared touchscreen — without a lock a
-> stray palm can move a job or drop it in a bin, silently. Read-only by default, PIN to unlock.
+> **The TV link is ALWAYS read-only. No PIN, no unlock, no exception.** It can view, switch project,
+> open a job and open a plan in Drive — it can never change anything. Every edit happens from a PC on the
+> normal app link. This removes the whole class of "a stray palm moved a job and nobody knows who".
+> Simpler than a PIN and strictly safer.
 
 ### Presentation themes (4)
 Daylight (default, exactly the app) · Contrast (heavier, for a big room) · Midnight · Studio.
@@ -258,3 +260,30 @@ Daylight (default, exactly the app) · Contrast (heavier, for a big room) · Mid
 1. **Default** *(current app look — remains the default)* · 2. Light blueprint · 3. Dark blueprint ·
 4. Cork board *(more realistic: denser grain, wooden frame, pins)* · 5. Whiteboard · 6. Dark studio ·
 7. Site plan · 8. Engineering pad · 9. Chalkboard · 10. Kraft workshop · 11. Steel shop
+
+
+### Display scale — what it means
+Not a resolution setting. A 4K TV has four times the pixels of a 1080p one, so if the page rendered
+"normally" everything would come out physically tiny on the 4K panel. Rather than asking which TV it is,
+there is a single **bigger / smaller slider**: slide it until the board reads comfortably from where
+people actually stand in the office. That covers any panel, any size, any viewing distance, with no
+resolution guesswork.
+
+---
+
+## 11. Board themes 12 and 13
+
+Two additions that fill real gaps rather than restyling something we already have.
+
+### 12 · Linen pinboard
+The calm, corporate cousin of cork. Cool grey office felt with a fine woven texture and a soft inner
+shadow, crisp white cards with a thin coloured top edge, real pins with small shadows, and a restrained
+sans-serif title. Cork is warm, rustic and busy; this is quiet and tidy — the right surface for a board a
+client might see, and much easier to read for long stretches than cork's brown grain.
+
+### 13 · Manila files
+The filing-cabinet look. Warm manila surface, and each job rendered as a **file folder** — a tab across
+the top-left carrying the stage colour, the body slightly lighter, a faint fold crease down the card, and
+a typewriter-style label face. The folder tab is a naturally better home for the stage colour than a
+border, so this theme reads its status faster than any other in the set. Distinct from Kraft workshop,
+which is packing paper and masking tape rather than office filing.
