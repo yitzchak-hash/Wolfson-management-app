@@ -3,7 +3,7 @@ import { useStore } from '../data/store';
 import {
   Plus, Trash2, Save, ChevronUp, ChevronDown, Shield, Sun, Moon,
   Copy, Check, Download, Upload, HardDrive, X, HardDriveDownload, ToggleLeft, ToggleRight,
-  Languages, Clock, RotateCcw, Wifi, WifiOff, Loader, Database, RefreshCw, CloudUpload, Search, BookOpen, ExternalLink, AlertTriangle,
+  Languages, Clock, RotateCcw, Wifi, WifiOff, Loader, Database, RefreshCw, CloudUpload, Search, BookOpen, ExternalLink, AlertTriangle, Tv,
 } from 'lucide-react';
 import { isFirebaseConfigured, db, fsSet, fsGetAll } from '../data/firebase';
 import { Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency, getStageName, Apartment, isCountableApartment } from '../types';
@@ -679,6 +679,57 @@ interface NameProposal {
   kind: 'fill' | 'replace';
 }
 
+// ─── TV presentation (app-wide) ───────────────────────────────────────────────
+function TvPresentationSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
+  const [copied, setCopied] = useState(false);
+  const url = `${window.location.origin}/tv`;
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5">
+      <div className="flex items-center gap-2 mb-2">
+        <Tv size={18} className="text-[#1e3a5f]" />
+        <h2 className="font-semibold text-gray-800">TV Presentation</h2>
+      </div>
+      <p className="text-sm text-gray-500 mb-3">
+        Open this link on the office TV and press full screen. It shows the live board, lets you switch
+        between projects, and opens a job with its plan and latest photos.
+      </p>
+
+      <div className="flex gap-2 mb-3">
+        <input readOnly value={url}
+          onFocus={e => e.currentTarget.select()}
+          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 font-mono" />
+        <button
+          onClick={() => { navigator.clipboard?.writeText(url); setCopied(true); onToast('Link copied'); setTimeout(() => setCopied(false), 2000); }}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#1e3a5f] text-white text-sm font-medium hover:bg-[#16304f]">
+          {copied ? <Check size={14} /> : <Copy size={14} />} Copy
+        </button>
+        <a href={url} target="_blank" rel="noopener noreferrer"
+          className="flex items-center px-2.5 py-2 rounded-lg border border-gray-200 text-gray-500 hover:text-[#4aa8d8] hover:border-[#4aa8d8]">
+          <ExternalLink size={14} />
+        </a>
+      </div>
+
+      <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-3 flex items-start gap-2">
+        <Shield size={13} className="flex-shrink-0 mt-0.5" />
+        <span>
+          <strong>Always read-only.</strong> The TV can look, switch project and open a job — it can never
+          change anything. All edits happen from a PC on the normal link, so nothing on the wall panel can
+          be moved by accident.
+        </span>
+      </div>
+
+      <div className="text-xs text-gray-500 leading-relaxed">
+        <strong className="text-gray-700">Size:</strong> adjusts itself to the screen automatically —
+        a 4K panel is scaled up so it stays readable across the room. Add <code className="bg-gray-100 px-1 rounded">?scale=2</code>
+        to the link to override it.<br />
+        <strong className="text-gray-700">Hiding things:</strong> every job and note has a TV icon on the
+        board. Everything shows by default; switch one off to keep it off the wall.
+      </div>
+    </div>
+  );
+}
+
 // ─── Contractor status spreadsheet (per project) ──────────────────────────────
 // The contractor owns and updates this sheet; the app only ever reads it.
 function ContractorSheetSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
@@ -1077,6 +1128,8 @@ function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
           </button>
         </div>
       </div>
+
+      <TvPresentationSettings onToast={onToast} />
 
       <DriveNameBackfill onToast={onToast} />
 

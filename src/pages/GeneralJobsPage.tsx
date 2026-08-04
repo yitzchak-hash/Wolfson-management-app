@@ -9,7 +9,7 @@ import { Apartment, CanvasElement } from '../types';
 import { ApartmentDetailDrawer } from '../components/apartment/ApartmentDetailDrawer';
 import { QuickAddTaskPanel } from '../components/apartment/QuickAddTaskPanel';
 import { Toast } from '../components/ui/Toast';
-import { DriveIcon, ZohoIcon, PlanIcon } from '../components/ui/BrandIcons';
+import { DriveIcon, ZohoIcon, PlanIcon, TvIcon } from '../components/ui/BrandIcons';
 import { BoardToolbar, BoardControlsPanel, BoardTool } from '../components/board/BoardToolbar';
 import { BOARD_THEMES, getBoardTheme } from '../data/boardThemes';
 
@@ -912,6 +912,25 @@ export function GeneralJobsPage() {
                     zIndex: isDragging ? 20 : isSelected ? 10 : 5,
                   }}
                 >
+                  {/* Wallboard visibility. Everything shows by default; this only
+                      ever switches something OFF. Slash through the TV when hidden,
+                      so the state reads without hovering. */}
+                  <button
+                    data-no-drag
+                    onClick={e => {
+                      e.stopPropagation();
+                      if (currentUser) updateApartment(job.id, { showOnTv: job.showOnTv === false }, currentUser);
+                    }}
+                    title={job.showOnTv === false ? 'Hidden from TV' : 'Showing on TV'}
+                    className="absolute top-2 right-9 p-1 rounded-md transition-all"
+                    style={{
+                      color: job.showOnTv === false ? '#dc2626' : '#94a3b8',
+                      backgroundColor: job.showOnTv === false ? '#fee2e2' : 'transparent',
+                    }}
+                  >
+                    <TvIcon size={13} hidden={job.showOnTv === false} />
+                  </button>
+
                   {/* Hover delete */}
                   <button
                     data-no-drag
