@@ -289,3 +289,68 @@ the top-left carrying the stage colour, the body slightly lighter, a faint fold 
 a typewriter-style label face. The folder tab is a naturally better home for the stage colour than a
 border, so this theme reads its status faster than any other in the set. Distinct from Kraft workshop,
 which is packing paper and masking tape rather than office filing.
+
+---
+
+## 12. Build status
+
+Everything below was built on `claude/tzviair-platform`. **Main is untouched.**
+
+### Done
+
+| Area | What landed |
+|---|---|
+| Naming & branding | App name, tab title, login, print header, PWA manifest, TzviAir favicon |
+| Navigation | Option A — workspace colour rail + header chip, Project Settings as a sidebar tab, app settings in the top bar, Job Board as home, global calendar button beside search |
+| Per-project separation | Every stage belongs to one project; the drawer's stage-mixing bug fixed; Dashboard / Analytics / Reports / Tasks / Activity all project-scoped |
+| Project builder | Visual grid, drag apartments, inline building names, editable floors, numbering rules, AI import round-trip with a preview before anything is written |
+| Job tiles | Stage colour as a thick border, real Drive / Zoho / plan icons, short tooltips, last-edited that ignores position-only moves, photo backgrounds |
+| Bins | Real nodes — movable, resizable, drop targets, independent of stages, Trash never purged, window on top of the board with Restore |
+| Toolbar | Floating, draggable, text labels under every icon |
+| Board settings | Theme picker, snap to grid, Show controls panel above the toolbar, layout history |
+| Canvas | Ctrl+wheel zoom, pan, lasso, multi-select, pinned titles exactly as specified, pinch/stylus for the Samsung display |
+| Right-click paste | Clipboard-driven; one specific action, never a generic Paste; create-job-from-link with the name pulled from the Drive folder |
+| Ghosts | Same record drawn twice, dashed and translucent, draggable, removable without touching the job |
+| Node store | Countdown, stopwatch, clip art (8 pieces + picker), voice memo, pen and highlighter, thumbs-up on right-click |
+| Stage board | Board / Stages toggle; dragging across columns changes the stage; newest-modified on top |
+| Job modal | Replaced the drawer everywhere, centred and large |
+| Calendar | Full-bleed, jobs render as full nodes, one job fills its day, weeks grow to fit |
+| TV | Live listeners, always read-only, project switching, company dashboard, room-sized job view, EN/עב toggle with the default in TV settings, themed board, verified automatic display scaling with a slider |
+| Board themes | All 13 |
+| Export | Whole board to PNG or Print/PDF, redrawn as SVG so text stays sharp |
+| Layout history | Positions only, snapshot preview before restoring |
+| Live changes | Pulse on a tile that just changed, plus a quiet activity ticker in the header |
+| Business ideas | Drive link → job (A), folder health inside the job (B), contractor load at assign time (F), photo review queue (G), punch-list pins on the plan (H) |
+| Mobile | Bottom navigation on phones, rail on desktop — the light touch; the full mobile mode remains its own branch as agreed |
+| Backups | Audited and fixed — see below |
+
+### Deliberately skipped, per §7
+Comments/@mentions, read-only share link, multiple boards, connector arrows, presentation mode as a board
+feature, stickers beyond thumbs-up, Zoho round-trip, equipment counts, long-lead countdown, warranty
+clock, handover packet, weather badge.
+
+### Backup verification
+An audit of all 22 data-bearing keys against persist, export and import found two real faults:
+
+1. `canvasElements`, `contractorSheetLinks`, `boardSettings` and `boardLayouts` were exported **inside**
+   the `settings` object while the importer read them from the top level — a backup carried them out and
+   a restore never put them back.
+2. `buildings`, `dashboardWidgetOrder` and `dashboardHiddenWidgets` were absent from export and import
+   entirely, so a project built in the builder came back without its buildings.
+
+Both fixed, then verified twice: a static audit of every key, and a live export → import round trip
+driven by the real `exportData` / `importData` code.
+
+### Still open — needs a decision from you
+
+**Netiv floor realignment.** The mockup was delivered; applying it is held on four questions, because
+getting any of them wrong would move real apartments to the wrong floors:
+
+1. Which sheet building block maps to **B1** and which to **B2**?
+2. Apartments **32–36** appear in the sheet but not in the current layout — new units, or renumbered ones?
+3. What is **דירה ספריה** (library apartment) — a real unit that should be counted, or a shared space?
+4. **דירה 7 שני** — a second apartment 7, or a typo for another number?
+
+Answer those four and the realignment goes in as a single reviewable change.
+
+**Merge to main.** Held for your approval, as agreed at the start.
