@@ -51,9 +51,11 @@ export function getStageName(stage: Stage, isRtl: boolean): string {
  * total. Naming a slot clears `isUnnamed`, so it starts counting from then on.
  */
 export function isCountableApartment(
-  apt: { apartmentNumber?: string; displayName?: string; isUnnamed?: boolean } | null | undefined,
+  apt: { apartmentNumber?: string; displayName?: string; isUnnamed?: boolean; boardBin?: string } | null | undefined,
 ): boolean {
   if (!apt || apt.isUnnamed) return false;
+  // A job sitting in a bin is not a live unit
+  if (apt.boardBin) return false;
   return !!(apt.apartmentNumber?.trim() || apt.displayName?.trim());
 }
 
@@ -126,6 +128,19 @@ export interface Apartment {
   generalNotes: string;
   isUnnamed: boolean;
   mergedWith?: string; // id of partner apartment when buyer physically connected two units
+
+  /**
+   * Which board bin this job sits in, if any. Absent = on the main board.
+   * Bins are ORGANISATIONAL and entirely independent of `currentStageId` —
+   * a job can be at stage "Piping" and sit in Done. Nothing is ever purged.
+   */
+  boardBin?: 'done' | 'ready' | 'archive' | 'trash';
+  binnedAt?: string;   // when it entered the bin — used for date filtering
+  /**
+   * Last change to the job's CONTENT. Deliberately not bumped by canvasX/canvasY,
+   * so tidying the board does not make every tile read "edited just now".
+   */
+  contentUpdatedAt?: string;
   stageDates?: Record<string, string>; // stageId → ISO timestamp of when that stage was first set
   driveLink?: string; // Google Drive folder URL for this apartment's files
   plansPdfLink?: string; // Google Drive link to the Engineering Plans PDF

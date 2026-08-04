@@ -329,6 +329,18 @@ Module-level constants cannot access the translation store. Any constant that ou
 - **Never authenticate against the seed when Firebase is configured.** On a browser with no localStorage the store falls back to `DEFAULT_USERS`, and because `startFirebaseSync()` only ran *after* a successful login, a seed code (`111111`, …) could log in to the live app. Fixed by `loadUsersForLogin()` + the `authReady` flag: `LoginPage` calls it on mount, the code inputs stay disabled until it resolves, and `login()` returns `null` outright while `isFirebaseConfigured && !authReady`. A failed fetch leaves `authReady` false — it must never fail open.
 - Any change to the login flow must preserve this ordering: **real user list first, code check second.**
 
+## Board bins & soft delete
+- `Apartment.boardBin?: 'done'|'ready'|'archive'|'trash'` + `binnedAt`. Absent = on the main board.
+- **Bins are organisational and fully independent of `currentStageId`** — a job can be at stage "Piping"
+  and sit in Done. The two systems never interact.
+- `moveToBin(id, bin|null)` only sets a field. **Nothing is ever destroyed or purged**, including Trash.
+  `deleteApartment` remains the permanent cascading delete and is reachable only from the Trash window.
+- `isCountableApartment()` returns false for a binned job, so board counts and dashboards exclude them
+  while the record stays intact.
+- `Apartment.contentUpdatedAt` is the "last edited" shown on tiles. `updateApartment` bumps it only when
+  a non-canvas field changed (`canvasX/canvasY/tileColor/boardBin/binnedAt` are excluded), so tidying the
+  board does not make every tile read "edited just now".
+
 ## localStorage Persistence
 - **`persist(get)` is DEBOUNCED (250ms trailing).** It serialises the whole project, and is called from
   60+ mutations including some that once fired per pointermove. Any pending write is **flushed

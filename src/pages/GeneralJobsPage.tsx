@@ -139,7 +139,9 @@ export function GeneralJobsPage() {
 
   const stages = allStages.filter(st => st.projectId === 'general');
   const stageMap = new Map(stages.map(st => [st.id, st]));
-  const jobs = apartments.filter(a => !a.isUnnamed && a.buildingId === 'G');
+  // Jobs in a bin (Done / Ready / Archive / Trash) live in their own window,
+  // not on the main board. Nothing is deleted — they are only moved.
+  const jobs = apartments.filter(a => !a.isUnnamed && a.buildingId === 'G' && !a.boardBin);
 
   // ── Position helpers ──────────────────────────────────────────────
   function jobPos(job: Apartment, index: number): { x: number; y: number } {

@@ -208,7 +208,10 @@ interface AppState {
   updateApartment: (id: string, changes: Partial<Apartment>, user: User) => void;
   bulkUpdateApartments: (ids: string[], changes: Partial<Apartment>, user: User) => void;
   addApartment: (apt: Apartment) => void;
+  /** PERMANENT, cascading. Only reachable from the Trash window. */
   deleteApartment: (id: string) => void;
+  /** Move a job into a board bin (or back to the board with null). Never destroys anything. */
+  moveToBin: (id: string, bin: Apartment['boardBin'] | null) => void;
 
   upsertStageNote: (apartmentId: string, stageId: string, noteText: string, user: User, attachment?: { filename?: string; mimeType?: string; dataUrl?: string; driveFileId?: string; driveUrl?: string } | null, attachments?: StageNoteAttachment[]) => void;
   getStageNote: (apartmentId: string, stageId: string) => StageNote | undefined;
@@ -517,6 +520,12 @@ export const useStore = create<AppState>((set, get) => ({
       updatedByName: user.name,
     };
 
+    // Board position is not "content" — tidying the board must not make every
+    // tile read "edited just now".
+    const CANVAS_ONLY = new Set(['canvasX', 'canvasY', 'tileColor', 'boardBin', 'binnedAt']);
+    const touchedContent = Object.keys(changes).some(k => !CANVAS_ONLY.has(k));
+    if (touchedContent) updated.contentUpdatedAt = now;
+
     // Sync shared fields to merged partner when they change
     let extraUpdates: Apartment[] = [];
     // displayName is synced too: a linked pair is one physical home, so it carries
@@ -628,6 +637,18 @@ export const useStore = create<AppState>((set, get) => ({
     set(state => ({ apartments: [...state.apartments, apt] }));
     persist(get);
     fsSet(projectCollection(get().currentProjectId, 'apartments'), apt.id, apt);
+  },
+
+  moveToBin: (id, bin) => {
+    const pid = get().currentProjectId;
+    set(state => ({
+      apartments: state.apartments.map(a => a.id === id
+        ? { ...a, boardBin: bin ?? undefined, binnedAt: bin ? new Date().toISOString() : undefined }
+        : a),
+    }));
+    persist(get);
+    const updated = get().apartments.find(a => a.id === id);
+    if (updated) fsSet(projectCollection(pid, 'apartments'), id, updated);
   },
 
   deleteApartment: (id) => {
