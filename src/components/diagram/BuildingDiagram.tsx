@@ -993,8 +993,10 @@ export function BuildingDiagram({
     >
       {visibleBuildings.map(bId => {
         const isWolfsonBuilding = /^A\d/.test(bId);
+        // `key` is deliberately NOT in here: React 19 warns when a key is
+        // spread into JSX, and a spread key is silently ignored by the
+        // reconciler. It is passed directly on the elements below instead.
         const colProps = {
-          key: bId,
           buildingId: bId,
           apartments: aptsByBuilding.get(bId) ?? [],
           mergedLabels,
@@ -1017,8 +1019,8 @@ export function BuildingDiagram({
           onHoverApt: setHoverAptId,
         };
         return isWolfsonBuilding
-          ? <BuildingColumn {...colProps} />
-          : <NetivBuildingColumn {...colProps} />;
+          ? <BuildingColumn key={bId} {...colProps} />
+          : <NetivBuildingColumn key={bId} {...colProps} />;
       })}
     </div>
   );
