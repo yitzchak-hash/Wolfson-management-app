@@ -8,6 +8,13 @@ export interface Project {
   shortName: string;
   logoPath: string;
   type?: 'building' | 'general';
+  /** Workspace identity colour — the left rail, the header chip, sidebar accents. */
+  color: string;
+}
+
+/** The colour for a project id, with a safe fallback. */
+export function projectColor(projects: Project[], id: string): string {
+  return projects.find(p => p.id === id)?.color ?? '#1e3a5f';
 }
 
 export interface User {
@@ -973,6 +980,11 @@ export interface MainUiStrings {
   printDiagramTooltip: string;
   clearFiltersTooltip: string;
   buildingDiagramLabel: string;
+  appSettingsHint: string;
+  projectSettingsHint: string;
+  navProjectSettings: string;
+  appSettingsTitle: string;
+  projectSettingsTitle: string;
   linkedPairSeparateHint: string;
   markDone: string;
   markProgress: string;
@@ -1514,6 +1526,11 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   printDiagramTooltip: 'Print building diagram',
   clearFiltersTooltip: 'Clear all active filters',
   buildingDiagramLabel: 'Building Diagram',
+  appSettingsHint: 'Shared across every workspace.',
+  projectSettingsHint: 'These settings apply to this workspace only.',
+  navProjectSettings: 'Project',
+  appSettingsTitle: 'App Settings',
+  projectSettingsTitle: 'Project Settings',
   linkedPairSeparateHint: 'Connected units — each tracked separately by the contractor',
   markDone: 'Done',
   markProgress: 'In progress',
@@ -2054,6 +2071,11 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   printDiagramTooltip: 'הדפס תרשים בניין',
   clearFiltersTooltip: 'נקה את כל הפילטרים',
   buildingDiagramLabel: 'תרשים בניין',
+  appSettingsHint: 'משותף לכל סביבות העבודה.',
+  projectSettingsHint: 'הגדרות אלו חלות על סביבת עבודה זו בלבד.',
+  navProjectSettings: 'פרויקט',
+  appSettingsTitle: 'הגדרות אפליקציה',
+  projectSettingsTitle: 'הגדרות פרויקט',
   linkedPairSeparateHint: 'יחידות מקושרות — כל אחת נמדדת בנפרד אצל הקבלן',
   markDone: 'הושלם',
   markProgress: 'בתהליך',

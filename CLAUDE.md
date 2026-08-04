@@ -317,6 +317,22 @@ Module-level constants cannot access the translation store. Any constant that ou
 - All data in Zustand state — no backend call needed
 - Strings via `s.searchPlaceholder`, `s.searchTypeApartment`, `s.searchNoResults`, `s.searchStartTyping`
 
+## Navigation & settings split (v2)
+- **Home is the Job Board** — `/` redirects to `/jobs`, not `/project`.
+- **Workspace identity colour**: `Project.color` (Wolfson `#b8860b`, Netiv `#0d9488`, Job Board `#7c3aed`).
+  Rendered as a 4px rail down the left of the sidebar, the active sidebar item's fill, and the header
+  chip. `projectColor(projects, id)` in `types/index.ts` is the accessor.
+- **Two settings pages, one component.** `SettingsPage` takes `scope: 'project' | 'app'`:
+  - `/settings` → **project** scope (sidebar gear): stages, buildings, contractor status sheet.
+    A separate copy per workspace.
+  - `/app-settings` → **app** scope (header gear): users, contractors, app (theme/backup/Firebase),
+    language. Shared by everything, never changes with the workspace.
+  - The contractor sheet card moved OUT of app settings into project settings — each workspace has its
+    own contractor and its own sheet.
+- **Calendars**: `/calendar` is the all-workspace one, reached from a labelled button beside search in the
+  header. `/project-calendar` (`ProjectCalendarPage`) is scoped to the current workspace and lives in the
+  sidebar under Dashboard.
+
 ## Settings Page Tabs
 - **Stages** — add/edit/reorder/delete stages with color picker, `nameHe` Hebrew name field, description; filtered to current project (General sees only `projectId==='general'` stages, building projects see global stages)
 - **Users** — manage admin users (name, code, role)

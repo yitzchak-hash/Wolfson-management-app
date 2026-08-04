@@ -14,7 +14,24 @@ import { saveAs } from 'file-saver';
 import { extractFolderId, isUploadBackendConfigured, getFolderNameViaBackend, familyNameFromFolderName } from '../data/driveApi';
 import { fetchContractorSheet } from '../data/sheetApi';
 
-type Tab = 'stages' | 'users' | 'contractors' | 'app' | 'language' | 'buildings';
+type Tab = 'stages' | 'users' | 'contractors' | 'app' | 'language' | 'buildings' | 'sheet';
+
+/**
+ * Settings are split in two, and the split is deliberate:
+ *
+ *  - 'project' — a separate copy per workspace. Changing Wolfson's stages can
+ *    never touch Netiv's. Reached from the sidebar.
+ *  - 'app'     — one set shared by everything: users, contractors, language,
+ *    theme, backup. Never changes when you switch workspace. Reached from the
+ *    gear in the header.
+ *
+ * The contractor status sheet lives in PROJECT settings because each workspace
+ * has its own contractor and its own sheet.
+ */
+export type SettingsScope = 'project' | 'app';
+
+const PROJECT_TABS: Tab[] = ['stages', 'buildings', 'sheet'];
+const APP_TABS: Tab[] = ['users', 'contractors', 'app', 'language'];
 
 const PRESET_COLORS = [
   '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16',
@@ -25,9 +42,10 @@ const PRESET_COLORS = [
 
 const CAT_COLORS: Record<ContractorCategory, string> = { drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981' };
 
-export function SettingsPage() {
-  const { stages, users, updateStage, addStage, deleteStage, updateUser, addUser, lightTheme, setLightTheme, mainUiStrings: s, currentProjectId } = useStore();
-  const [activeTab, setActiveTab] = useState<Tab>('stages');
+export function SettingsPage({ scope = 'project' }: { scope?: SettingsScope }) {
+  const { stages, users, updateStage, addStage, deleteStage, updateUser, addUser, lightTheme, setLightTheme, mainUiStrings: s, currentProjectId, projects } = useStore();
+  const tabs = scope === 'app' ? APP_TABS : PROJECT_TABS;
+  const [activeTab, setActiveTab] = useState<Tab>(tabs[0]);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
   function showToast(msg: string, type: 'success' | 'error' = 'success') {
@@ -43,14 +61,24 @@ export function SettingsPage() {
     app: s.settingsApp,
     language: s.settingsLanguage,
     buildings: s.settingsBuildings,
+    sheet: s.contractorSheetLabel,
   };
+
+  const projectName = projects.find(p => p.id === currentProjectId)?.name ?? currentProjectId;
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">{s.pageSettings}</h1>
+      <h1 className="text-2xl font-bold text-gray-900 mb-1">
+        {scope === 'app' ? s.appSettingsTitle : s.projectSettingsTitle}
+      </h1>
+      <p className="text-sm text-gray-500 mb-6">
+        {scope === 'app'
+          ? s.appSettingsHint
+          : `${projectName} — ${s.projectSettingsHint}`}
+      </p>
 
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-6 flex-wrap">
-        {(['stages', 'users', 'contractors', 'app', 'language', 'buildings'] as Tab[]).map(tab => (
+        {tabs.map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
               activeTab === tab ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
@@ -71,6 +99,9 @@ export function SettingsPage() {
       )}
       {activeTab === 'app' && (
         <AppSettingsTab lightTheme={lightTheme} setLightTheme={setLightTheme} onToast={showToast} />
+      )}
+      {activeTab === 'sheet' && (
+        <ContractorSheetSettings onToast={showToast} />
       )}
       {activeTab === 'language' && (
         <LanguageTab onToast={showToast} />
@@ -1046,8 +1077,6 @@ function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
           </button>
         </div>
       </div>
-
-      <ContractorSheetSettings onToast={onToast} />
 
       <DriveNameBackfill onToast={onToast} />
 

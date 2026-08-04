@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { LogOut, User, Sun, Moon, AlertTriangle, Loader2, CheckCircle2, Search, CalendarDays } from 'lucide-react';
+import { LogOut, User, Sun, Moon, AlertTriangle, Loader2, CheckCircle2, Search, CalendarDays, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../data/store';
 import { Tooltip } from '../ui/Tooltip';
@@ -72,13 +72,19 @@ export function Header() {
             <Tooltip key={p.id} text={p.name}>
               <button
                 onClick={() => handlePickProject(p.id)}
-                className={`rounded-lg p-0.5 transition-all focus:outline-none ${
-                  currentProjectId === p.id
-                    ? 'ring-2 ring-[#4aa8d8] opacity-100'
-                    : 'opacity-40 hover:opacity-70'
-                }`}
+                className="rounded-lg p-0.5 transition-all focus:outline-none flex items-center gap-1.5 pr-2"
+                style={currentProjectId === p.id
+                  ? { boxShadow: `0 0 0 2px ${p.color}`, opacity: 1,
+                      backgroundColor: lightTheme ? `${p.color}14` : 'rgba(255,255,255,0.08)' }
+                  : { opacity: 0.4 }}
               >
                 <img src={p.logoPath} alt={p.name} className="h-9 w-auto rounded" style={{ objectFit: 'contain' }} />
+                {currentProjectId === p.id && (
+                  <span className="text-[11px] font-bold whitespace-nowrap"
+                    style={{ color: lightTheme ? p.color : '#ffffff' }}>
+                    {p.shortName}
+                  </span>
+                )}
               </button>
             </Tooltip>
           ))}
@@ -88,10 +94,14 @@ export function Header() {
               <Tooltip text={s.globalCalendarTitle}>
                 <button
                   onClick={() => navigate('/calendar')}
-                  className="p-2 rounded-lg transition-colors"
-                  style={{ color: lightTheme ? '#6b7280' : '#9ca3af' }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors text-xs font-bold"
+                  style={{
+                    color: lightTheme ? '#1e3a5f' : '#ffffff',
+                    backgroundColor: lightTheme ? 'rgba(74,168,216,0.14)' : 'rgba(74,168,216,0.24)',
+                    border: '1px solid rgba(74,168,216,0.45)',
+                  }}
                 >
-                  <CalendarDays size={20} />
+                  <CalendarDays size={17} /> {s.navCalendar}
                 </button>
               </Tooltip>
             </>
@@ -101,6 +111,18 @@ export function Header() {
 
       <div className="flex items-center gap-2">
         <CloudSyncBadge light={lightTheme} />
+
+        {currentUser && (
+          <Tooltip text={s.appSettingsTitle}>
+            <button
+              onClick={() => navigate('/app-settings')}
+              className="p-2 rounded-lg transition-colors"
+              style={{ color: lightTheme ? '#6b7280' : '#9ca3af' }}
+            >
+              <Settings size={18} />
+            </button>
+          </Tooltip>
+        )}
 
         {currentUser && (
           <Tooltip text={s.searchTooltip}>

@@ -13,6 +13,7 @@ import { ContractorPortal } from './pages/ContractorPortal';
 import { TasksPage } from './pages/TasksPage';
 import { GeneralJobsPage } from './pages/GeneralJobsPage';
 import { GlobalCalendarPage } from './pages/GlobalCalendarPage';
+import { ProjectCalendarPage } from './pages/ProjectCalendarPage';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { currentUser } = useStore();
@@ -35,16 +36,20 @@ export default function App() {
             </RequireAuth>
           }
         >
-          <Route index element={<Navigate to="/project" replace />} />
+          {/* Home is the Job Board — the app's front door, not a project tile */}
+          <Route index element={<Navigate to="/jobs" replace />} />
           <Route path="project" element={<ProjectDiagramPage />} />
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="tasks" element={<TasksPage />} />
           <Route path="calendar" element={<GlobalCalendarPage />} />
+          {/* Per-project calendar (sidebar); /calendar stays the all-workspace one */}
+          <Route path="project-calendar" element={<ProjectCalendarPage />} />
           <Route path="jobs" element={<GeneralJobsPage />} />
           <Route path="analytics" element={<AnalyticsDashboard />} />
           <Route path="reports" element={<ReportsPage />} />
           <Route path="activity" element={<ActivityLogPage />} />
-          <Route path="settings" element={<SettingsPage />} />
+          <Route path="settings" element={<SettingsPage scope="project" />} />
+          <Route path="app-settings" element={<SettingsPage scope="app" />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
