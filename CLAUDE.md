@@ -330,6 +330,16 @@ Module-level constants cannot access the translation store. Any constant that ou
 - Any change to the login flow must preserve this ordering: **real user list first, code check second.**
 
 ## localStorage Persistence
+- **`persist(get)` is DEBOUNCED (250ms trailing).** It serialises the whole project, and is called from
+  60+ mutations including some that once fired per pointermove. Any pending write is **flushed
+  synchronously** on `pagehide`, `beforeunload` and `visibilitychange→hidden`, so closing the tab mid-edit
+  cannot lose the last change. `persistNow()` is the undebounced worker; `flushPersist()` is exported.
+- **`canvasElements` IS synced to Firestore** (`projectCollection(pid,'canvasElements')`) — added, updated,
+  deleted, loaded, listened to, seeded on first run, and included in `forcePushToFirestore`. It was
+  localStorage-only, which meant board notes and boxes existed on one device only.
+- **Backup export/import covers `canvasElements` and `contractorSheetLinks`.** Both were missing, so a
+  restore silently dropped board notes/boxes and the contractor sheet links. Import falls back to current
+  state (not `[]`) for these, so restoring an OLDER backup cannot wipe them either.
 - `persist(get)` in store: tiered save — first attempt keeps photos with Drive URL lean (`dataUrl: ''`); if quota still exceeded, strips ALL binary data and truncates logs
 - `saveToStorage()` catches `QuotaExceededError` / `NS_ERROR_DOM_QUOTA_REACHED` and returns `false` so the fallback tier runs
 - `activityLogs` capped at 200 in normal save, 50 in fallback; `backupSnapshots` capped at 5 / 0

@@ -70,6 +70,9 @@ interface ResizeState {
   startH: number;
   startPX: number;
   startPY: number;
+  /** Live delta held locally; committed to the store once on pointerup. */
+  dw: number;
+  dh: number;
 }
 
 interface LassoState { sx: number; sy: number; ex: number; ey: number }
@@ -154,8 +157,11 @@ export function GeneralJobsPage() {
       return { x: st.x + drag.dx, y: st.y + drag.dy, w: el.w, h: el.h };
     }
     if (resize?.id === el.id) {
-      const newW = Math.max(120, el.w + (resize.startPX - resize.startPX)); // updated live in handler
-      return { x: el.x, y: el.y, w: newW, h: el.h };
+      return {
+        x: el.x, y: el.y,
+        w: Math.max(120, resize.startW + resize.dw),
+        h: Math.max(80, resize.startH + resize.dh),
+      };
     }
     return { x: el.x, y: el.y, w: el.w, h: el.h };
   }
@@ -395,21 +401,24 @@ export function GeneralJobsPage() {
   // ── Box resize ────────────────────────────────────────────────────
   function onResizePointerDown(e: React.PointerEvent, el: CanvasElement) {
     e.stopPropagation(); e.preventDefault();
-    setResize({ id: el.id, startW: el.w, startH: el.h, startPX: e.clientX, startPY: e.clientY });
+    setResize({ id: el.id, startW: el.w, startH: el.h, startPX: e.clientX, startPY: e.clientY, dw: 0, dh: 0 });
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
 
   function onResizePointerMove(e: React.PointerEvent) {
     if (!resize) return;
-    const dw = e.clientX - resize.startPX;
-    const dh = e.clientY - resize.startPY;
-    updateCanvasElement(resize.id, {
-      w: Math.max(120, resize.startW + dw),
-      h: Math.max(80, resize.startH + dh),
-    });
+    // Local only. Writing to the store here serialised the entire project to
+    // localStorage on every pointer frame; the commit happens on pointerup.
+    setResize({ ...resize, dw: e.clientX - resize.startPX, dh: e.clientY - resize.startPY });
   }
 
   function onResizePointerUp() {
+    if (resize && (resize.dw !== 0 || resize.dh !== 0)) {
+      updateCanvasElement(resize.id, {
+        w: Math.max(120, resize.startW + resize.dw),
+        h: Math.max(80, resize.startH + resize.dh),
+      });
+    }
     setResize(null);
   }
 

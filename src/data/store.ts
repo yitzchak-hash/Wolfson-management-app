@@ -660,14 +660,18 @@ export const useStore = create<AppState>((set, get) => ({
 
   addCanvasElement: (el) => {
     set(state => ({ canvasElements: [...state.canvasElements, el] }));
+    fsSet(projectCollection(get().currentProjectId, 'canvasElements'), el.id, el);
     persist(get);
   },
   updateCanvasElement: (id, changes) => {
     set(state => ({ canvasElements: state.canvasElements.map(el => el.id === id ? { ...el, ...changes } : el) }));
     persist(get);
+    const updatedEl = get().canvasElements.find(el => el.id === id);
+    if (updatedEl) fsSet(projectCollection(get().currentProjectId, 'canvasElements'), id, updatedEl);
   },
   deleteCanvasElement: (id) => {
     set(state => ({ canvasElements: state.canvasElements.filter(el => el.id !== id) }));
+    fsDelete(projectCollection(get().currentProjectId, 'canvasElements'), id);
     persist(get);
   },
 
@@ -1088,6 +1092,8 @@ export const useStore = create<AppState>((set, get) => ({
         driveExportFrequency: state.driveExportFrequency,
         contractorUiStrings: state.contractorUiStrings,
         mainUiStrings: state.mainUiStrings,
+      canvasElements: state.canvasElements,
+      contractorSheetLinks: state.contractorSheetLinks,
       },
     };
     return JSON.stringify(snapshot, null, 2);
@@ -1112,6 +1118,11 @@ export const useStore = create<AppState>((set, get) => ({
         contractorNotes: data.contractorNotes ?? [],
         contractorPhotos: data.contractorPhotos ?? [],
         officeNoteFiles: data.officeNoteFiles ?? [],
+        // Board notes/boxes and the sheet links were absent from restore, so a
+        // backup taken today would silently lose them. Fall back to current
+        // state rather than [] so an OLDER backup cannot wipe them either.
+        canvasElements: data.canvasElements ?? state.canvasElements,
+        contractorSheetLinks: data.contractorSheetLinks ?? state.contractorSheetLinks,
         ...(data.settings ? {
           autoBackup: data.settings.autoBackup ?? state.autoBackup,
           backupFrequency: data.settings.backupFrequency ?? state.backupFrequency,
@@ -1355,6 +1366,9 @@ export const useStore = create<AppState>((set, get) => ({
       state.officeNoteFiles.length > 0
         ? fsBatchSet(pc('officeNoteFiles'), state.officeNoteFiles.map(f => ({ id: f.id, data: { ...f, dataUrl: '' } })))
         : Promise.resolve(),
+      state.canvasElements.length > 0
+        ? fsBatchSet(pc('canvasElements'), state.canvasElements.map(e => ({ id: e.id, data: e })))
+        : Promise.resolve(),
       fsSet('settings', 'app', {
         autoBackup: state.autoBackup, backupFrequency: state.backupFrequency,
         backupDriveFolderLink: state.backupDriveFolderLink,
@@ -1388,7 +1402,7 @@ export const useStore = create<AppState>((set, get) => ({
     const [
       fbApts, fbStageNotes, fbStages, fbUsers, fbLogs,
       fbContractors, fbAssignments, fbNotes, fbPhotos, fbOfficeFiles, fbSettings,
-      fbStageNoteVersions, fbGeneralNoteVersions,
+      fbStageNoteVersions, fbGeneralNoteVersions, fbCanvasElements,
     ] = await Promise.all([
       fsGetAll(col('apartments')),
       fsGetAll(col('stageNotes')),
@@ -1403,6 +1417,7 @@ export const useStore = create<AppState>((set, get) => ({
       fsGetAll('settings'),
       fsGetAll(col('stageNoteVersions')),
       fsGetAll(col('generalNoteVersions')),
+      fsGetAll(col('canvasElements')),
     ]);
 
     // Only PROJECT-scoped signals decide whether this project has already been seeded.
@@ -1461,6 +1476,7 @@ export const useStore = create<AppState>((set, get) => ({
         officeNoteFiles:       mergedFiles.length > 0   ? mergedFiles  : state.officeNoteFiles,
         stageNoteVersions:     fbStageNoteVersions.length > 0 ? (fbStageNoteVersions as unknown as StageNoteVersion[]) : state.stageNoteVersions,
         generalNoteVersions:   fbGeneralNoteVersions.length > 0 ? (fbGeneralNoteVersions as unknown as GeneralNoteVersion[]) : state.generalNoteVersions,
+        canvasElements:        fbCanvasElements.length > 0 ? (fbCanvasElements as unknown as CanvasElement[]) : state.canvasElements,
         ...(appSettings.backupFrequency      ? { backupFrequency:      appSettings.backupFrequency as BackupFrequency }      : {}),
         ...(appSettings.backupDriveFolderLink !== undefined ? { backupDriveFolderLink: appSettings.backupDriveFolderLink as string } : {}),
         ...(appSettings.contractorUiStrings  ? { contractorUiStrings:  appSettings.contractorUiStrings as ContractorUiStrings } : {}),
@@ -1486,6 +1502,14 @@ export const useStore = create<AppState>((set, get) => ({
       const missingApts = get().apartments.filter(a => !fbAptIds.has(a.id));
       if (missingApts.length > 0) {
         fsBatchSet(col('apartments'), missingApts.map(a => ({ id: a.id, data: a })));
+      }
+
+      // Board notes and boxes were localStorage-only until now, so a device that
+      // already has them must push them up rather than silently lose them.
+      const fbElIds = new Set((fbCanvasElements as unknown as CanvasElement[]).map(e => e.id));
+      const missingEls = get().canvasElements.filter(e => !fbElIds.has(e.id));
+      if (missingEls.length > 0) {
+        fsBatchSet(col('canvasElements'), missingEls.map(e => ({ id: e.id, data: e })));
       }
     } else {
       // First run — push everything from localStorage to Firestore
@@ -1514,6 +1538,9 @@ export const useStore = create<AppState>((set, get) => ({
           : Promise.resolve(),
         state.officeNoteFiles.length > 0
           ? fsBatchSet(col('officeNoteFiles'), state.officeNoteFiles.map(f => ({ id: f.id, data: { ...f, dataUrl: '' } })))
+          : Promise.resolve(),
+        state.canvasElements.length > 0
+          ? fsBatchSet(col('canvasElements'), state.canvasElements.map(e => ({ id: e.id, data: e })))
           : Promise.resolve(),
         fsSet('settings', 'app', {
           autoBackup:            state.autoBackup,
@@ -1592,6 +1619,10 @@ export const useStore = create<AppState>((set, get) => ({
         });
         set({ officeNoteFiles: merged }); persist(get);
       }),
+      fsListen(col('canvasElements'), (docs) => {
+        set({ canvasElements: docs as unknown as CanvasElement[] });
+        persist(get);
+      }),
       fsListen('stages', (docs) => {
         if (docs.length > 0) { set({ stages: docs as unknown as Stage[] }); persist(get); }
       }),
@@ -1642,7 +1673,49 @@ export const useStore = create<AppState>((set, get) => ({
   },
 }));
 
+/**
+ * Debounced localStorage write.
+ *
+ * persistNow() serialises the WHOLE project — every apartment, all photo
+ * metadata, notes and activity logs. It is called from 60+ mutations, including
+ * some that fire per pointermove (box resize), which made dragging serialise the
+ * entire app on every animation frame.
+ *
+ * Writes are therefore coalesced onto a trailing timer. To make that safe, any
+ * pending write is FLUSHED SYNCHRONOUSLY when the page is hidden or unloaded, so
+ * closing the tab mid-edit can never lose the last change.
+ */
+let _persistTimer: ReturnType<typeof setTimeout> | null = null;
+let _persistGet: (() => AppState) | null = null;
+let _flushBound = false;
+
+export function flushPersist() {
+  if (_persistTimer !== null) {
+    clearTimeout(_persistTimer);
+    _persistTimer = null;
+  }
+  if (_persistGet) persistNow(_persistGet);
+}
+
 function persist(get: () => AppState) {
+  _persistGet = get;
+  if (!_flushBound && typeof window !== 'undefined') {
+    _flushBound = true;
+    // pagehide covers mobile Safari, where beforeunload is unreliable
+    window.addEventListener('pagehide', flushPersist);
+    window.addEventListener('beforeunload', flushPersist);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flushPersist();
+    });
+  }
+  if (_persistTimer !== null) clearTimeout(_persistTimer);
+  _persistTimer = setTimeout(() => {
+    _persistTimer = null;
+    if (_persistGet) persistNow(_persistGet);
+  }, 250);
+}
+
+function persistNow(get: () => AppState) {
   const state = get();
   const storageKey = getProjectStorageKey(state.currentProjectId);
 

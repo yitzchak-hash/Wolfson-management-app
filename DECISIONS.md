@@ -265,8 +265,10 @@ Daylight (default, exactly the app) · Contrast (heavier, for a big room) · Mid
 ### Display scale — what it means
 Not a resolution setting. A 4K TV has four times the pixels of a 1080p one, so if the page rendered
 "normally" everything would come out physically tiny on the 4K panel. Rather than asking which TV it is,
-there is a single **bigger / smaller slider**: slide it until the board reads comfortably from where
-people actually stand in the office. That covers any panel, any size, any viewing distance, with no
+the **default is automatic**: the TV measures its own viewport and picks a scale so the board reads
+correctly at a distance, with no configuration. A **bigger / smaller slider** is available to override it
+if the automatic guess is not to taste. *Must be verified against real viewport sizes, not assumed.*
+Slide it until the board reads comfortably from where people actually stand in the office. That covers any panel, any size, any viewing distance, with no
 resolution guesswork.
 
 ---
