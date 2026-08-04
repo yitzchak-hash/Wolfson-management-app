@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   Plus, Briefcase, MapPin, ExternalLink, Trash2, ClipboardList, FolderOpen,
   Copy, StickyNote, Square, Palette, Pencil, X, AlertTriangle,
@@ -148,6 +148,52 @@ export function GeneralJobsPage() {
   const [editText, setEditText] = useState('');
 
   const canvasRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Board view transform.
+   *
+   * The world div is scaled and translated; the viewport is a fixed frame with
+   * native scrolling disabled. Mixing native scroll with transform pan is the
+   * classic source of jitter and misplaced clicks, so there is exactly one
+   * system here.
+   */
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [spaceHeld, setSpaceHeld] = useState(false);
+  const panRef = useRef<{ px: number; py: number; ox: number; oy: number } | null>(null);
+
+  /** Discrete steps: text renders far better and "am I at 100%?" is answerable. */
+  const ZOOM_STEPS = [0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.25, 1.5, 2, 3];
+
+  /**
+   * Screen point -> WORLD point. Every pointer handler must go through this:
+   * getBoundingClientRect() returns the SCALED rect once zoom is applied, so
+   * using raw deltas makes tiles move at the wrong speed at any zoom but 100%.
+   */
+  const toWorld = useCallback((clientX: number, clientY: number) => {
+    const r = viewportRef.current?.getBoundingClientRect();
+    if (!r) return { x: clientX, y: clientY };
+    return { x: (clientX - r.left - pan.x) / zoom, y: (clientY - r.top - pan.y) / zoom };
+  }, [pan.x, pan.y, zoom]);
+
+  /** Zoom anchored at a screen point, so the board grows toward the cursor. */
+  const zoomAt = useCallback((clientX: number, clientY: number, dir: 1 | -1) => {
+    const r = viewportRef.current?.getBoundingClientRect();
+    if (!r) return;
+    setZoom(prevZoom => {
+      const i = ZOOM_STEPS.findIndex(z => Math.abs(z - prevZoom) < 0.001);
+      const next = ZOOM_STEPS[Math.min(ZOOM_STEPS.length - 1, Math.max(0,
+        (i === -1 ? ZOOM_STEPS.indexOf(1) : i) + dir))];
+      if (next === prevZoom) return prevZoom;
+      const cx = clientX - r.left, cy = clientY - r.top;
+      setPan(prevPan => ({
+        x: cx - (cx - prevPan.x) * (next / prevZoom),
+        y: cy - (cy - prevPan.y) * (next / prevZoom),
+      }));
+      return next;
+    });
+  }, []);
   const deleteRef = useRef<() => void>(() => {});
   const editInputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -308,9 +354,9 @@ export function GeneralJobsPage() {
     e.stopPropagation();
     setCtxMenu(null); setColorPicker(null);
 
-    const rect = canvasRef.current!.getBoundingClientRect();
-    const grabX = e.clientX - rect.left;
-    const grabY = e.clientY - rect.top;
+    const w0 = toWorld(e.clientX, e.clientY);
+    const grabX = w0.x;
+    const grabY = w0.y;
 
     if (e.ctrlKey || e.metaKey) {
       setSelectedJobIds(prev => { const n = new Set(prev); n.has(job.id) ? n.delete(job.id) : n.add(job.id); return n; });
@@ -337,9 +383,9 @@ export function GeneralJobsPage() {
 
   function onJobPointerMove(e: React.PointerEvent) {
     if (!drag || drag.kind !== 'job') return;
-    const rect = canvasRef.current!.getBoundingClientRect();
-    const dx = e.clientX - rect.left - drag.grabX;
-    const dy = e.clientY - rect.top - drag.grabY;
+    const w0 = toWorld(e.clientX, e.clientY);
+    const dx = w0.x - drag.grabX;
+    const dy = w0.y - drag.grabY;
     setDrag({ ...drag, dx, dy, moved: drag.moved || Math.abs(dx) > 4 || Math.abs(dy) > 4 });
   }
 
@@ -370,9 +416,9 @@ export function GeneralJobsPage() {
     e.stopPropagation();
     setCtxMenu(null); setColorPicker(null);
 
-    const rect = canvasRef.current!.getBoundingClientRect();
-    const grabX = e.clientX - rect.left;
-    const grabY = e.clientY - rect.top;
+    const w0 = toWorld(e.clientX, e.clientY);
+    const grabX = w0.x;
+    const grabY = w0.y;
 
     if (e.ctrlKey || e.metaKey) {
       setSelectedElIds(prev => { const n = new Set(prev); n.has(el.id) ? n.delete(el.id) : n.add(el.id); return n; });
@@ -393,9 +439,9 @@ export function GeneralJobsPage() {
 
   function onElPointerMove(e: React.PointerEvent) {
     if (!drag || drag.kind !== 'element') return;
-    const rect = canvasRef.current!.getBoundingClientRect();
-    const dx = e.clientX - rect.left - drag.grabX;
-    const dy = e.clientY - rect.top - drag.grabY;
+    const w0 = toWorld(e.clientX, e.clientY);
+    const dx = w0.x - drag.grabX;
+    const dy = w0.y - drag.grabY;
     setDrag({ ...drag, dx, dy, moved: drag.moved || Math.abs(dx) > 4 || Math.abs(dy) > 4 });
   }
 
@@ -447,16 +493,15 @@ export function GeneralJobsPage() {
     if ((e.target as Element) !== canvasRef.current) return;
     setCtxMenu(null); setColorPicker(null);
     setSelectedJobIds(new Set()); setSelectedElIds(new Set());
-    const rect = canvasRef.current!.getBoundingClientRect();
-    const x = e.clientX - rect.left, y = e.clientY - rect.top;
+    const { x, y } = toWorld(e.clientX, e.clientY);
     setLasso({ sx: x, sy: y, ex: x, ey: y });
     canvasRef.current!.setPointerCapture(e.pointerId);
   }
 
   function onCanvasPointerMove(e: React.PointerEvent) {
     if (!lasso) return;
-    const rect = canvasRef.current!.getBoundingClientRect();
-    setLasso(l => l ? { ...l, ex: e.clientX - rect.left, ey: e.clientY - rect.top } : null);
+    const w = toWorld(e.clientX, e.clientY);
+    setLasso(l => l ? { ...l, ex: w.x, ey: w.y } : null);
   }
 
   function onCanvasPointerUp() {
@@ -478,6 +523,71 @@ export function GeneralJobsPage() {
       setSelectedElIds(newEls);
     }
     setLasso(null);
+  }
+
+  /**
+   * Ctrl/Cmd + wheel zooms the BOARD, not the browser.
+   *
+   * Registered manually with { passive: false }: React's onWheel prop is passive
+   * in several browsers, where preventDefault() silently does nothing and the
+   * page zooms anyway. Plain wheel scrolls the board; shift+wheel scrolls
+   * sideways — Figma/Miro muscle memory, and it leaves ctrl+click free for the
+   * multi-select that already exists.
+   */
+  useEffect(() => {
+    const vp = viewportRef.current;
+    if (!vp) return;
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1 : -1);
+      } else {
+        e.preventDefault();
+        setPan(p => e.shiftKey
+          ? { x: p.x - e.deltaY - e.deltaX, y: p.y }
+          : { x: p.x - e.deltaX, y: p.y - e.deltaY });
+      }
+    };
+    vp.addEventListener('wheel', onWheel, { passive: false });
+    return () => vp.removeEventListener('wheel', onWheel);
+  }, [zoomAt]);
+
+  /** Space-held drag pans, the shortcut every canvas app has. */
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !(e.target as HTMLElement)?.closest('input,textarea')) {
+        e.preventDefault(); setSpaceHeld(true);
+      }
+    };
+    const up = (e: KeyboardEvent) => { if (e.code === 'Space') setSpaceHeld(false); };
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
+  }, []);
+
+  function onViewportPointerDown(e: React.PointerEvent) {
+    // Middle mouse, or space held — pan. Left-drag keeps its existing meaning.
+    if (e.button === 1 || (spaceHeld && e.button === 0)) {
+      e.preventDefault();
+      panRef.current = { px: e.clientX, py: e.clientY, ox: pan.x, oy: pan.y };
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    }
+  }
+  function onViewportPointerMove(e: React.PointerEvent) {
+    const st = panRef.current;
+    if (!st) return;
+    setPan({ x: st.ox + (e.clientX - st.px), y: st.oy + (e.clientY - st.py) });
+  }
+  function onViewportPointerUp() { panRef.current = null; }
+
+  function zoomToFit() {
+    const vp = viewportRef.current;
+    if (!vp) return;
+    const r = vp.getBoundingClientRect();
+    const s = Math.min(r.width / (maxX + 40), r.height / (maxY + 40), 1);
+    const step = [...ZOOM_STEPS].reverse().find(z => z <= s) ?? ZOOM_STEPS[0];
+    setZoom(step);
+    setPan({ x: (r.width - maxX * step) / 2, y: 20 });
   }
 
   // ── Start text edit for element ───────────────────────────────────
@@ -543,8 +653,46 @@ export function GeneralJobsPage() {
         </div>
       </div>
 
-      {/* ── Canvas ── */}
-      <div className="flex-1 overflow-auto min-h-0">
+      {/* ── Canvas viewport ──
+          Fixed frame, native scrolling OFF. The world inside is translated and
+          scaled; pan and zoom are the only movement system, which keeps hit
+          testing correct at every zoom level. */}
+      <div
+        ref={viewportRef}
+        className="flex-1 min-h-0 relative overflow-hidden"
+        style={{ cursor: spaceHeld ? 'grab' : undefined, touchAction: 'none' }}
+        onPointerDown={onViewportPointerDown}
+        onPointerMove={onViewportPointerMove}
+        onPointerUp={onViewportPointerUp}
+        onPointerCancel={onViewportPointerUp}
+      >
+        {/* Zoom readout + fit, bottom-left so it never covers the toolbar */}
+        <div className="absolute bottom-3 left-3 z-30 flex items-center gap-1 bg-white/95 border border-gray-200 rounded-lg shadow-sm px-1.5 py-1">
+          <button onClick={() => zoomAt(
+              (viewportRef.current?.getBoundingClientRect().left ?? 0) + (viewportRef.current?.clientWidth ?? 0) / 2,
+              (viewportRef.current?.getBoundingClientRect().top ?? 0) + (viewportRef.current?.clientHeight ?? 0) / 2, -1)}
+            className="w-6 h-6 rounded text-gray-500 hover:bg-gray-100 text-sm font-bold" title="Zoom out">−</button>
+          <span className="text-[11px] font-bold text-gray-600 tabular-nums w-11 text-center">
+            {Math.round(zoom * 100)}%
+          </span>
+          <button onClick={() => zoomAt(
+              (viewportRef.current?.getBoundingClientRect().left ?? 0) + (viewportRef.current?.clientWidth ?? 0) / 2,
+              (viewportRef.current?.getBoundingClientRect().top ?? 0) + (viewportRef.current?.clientHeight ?? 0) / 2, 1)}
+            className="w-6 h-6 rounded text-gray-500 hover:bg-gray-100 text-sm font-bold" title="Zoom in">+</button>
+          <div className="w-px h-4 bg-gray-200 mx-0.5" />
+          <button onClick={zoomToFit}
+            className="px-2 h-6 rounded text-[11px] font-bold text-gray-500 hover:bg-gray-100" title="Zoom to fit">Fit</button>
+          <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
+            className="px-2 h-6 rounded text-[11px] font-bold text-gray-500 hover:bg-gray-100" title="Reset to 100%">100%</button>
+        </div>
+
+        <div
+          className="absolute top-0 left-0"
+          style={{
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            transformOrigin: '0 0',
+          }}
+        >
         {jobs.length === 0 && canvasElements.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-gray-400 select-none">
             <Briefcase size={56} className="mb-4 opacity-25" />
@@ -795,6 +943,7 @@ export function GeneralJobsPage() {
             })}
           </div>
         )}
+        </div>
       </div>
 
       {/* ── Right-click context menu ── */}

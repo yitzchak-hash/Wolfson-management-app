@@ -222,6 +222,23 @@ Module-level constants cannot access the translation store. Any constant that ou
 ### RTL
 `settings.isRtl` controls text direction. `dir="rtl"` is applied to the root layout when true.
 
+## Job Board canvas — zoom & pan (v2)
+- **Transform viewport, not native scroll.** A fixed frame (`viewportRef`) with `overflow-hidden`; the
+  world div inside carries `translate(pan) scale(zoom)` with `transformOrigin: 0 0`. Mixing native
+  scrolling with transform panning is the classic source of jitter and misplaced hit-testing — there is
+  exactly one movement system here.
+- **`toWorld(clientX, clientY)` is mandatory.** `getBoundingClientRect()` returns the SCALED rect once
+  zoom is applied, so any handler using raw `clientX - rect.left` moves tiles at the wrong speed at any
+  zoom but 100%. All six pointer handlers were converted; **zero** raw-coordinate sites remain.
+- **Wheel is registered manually with `{ passive: false }`.** React's `onWheel` prop is passive in several
+  browsers, where `preventDefault()` silently does nothing and the *browser* zooms instead of the board.
+- Bindings: `Ctrl/⌘+wheel` zooms (cursor-anchored), plain wheel pans, `shift+wheel` pans sideways,
+  **space-held or middle-mouse drag** pans. Ctrl+drag was deliberately NOT used for panning because
+  `Ctrl+click` on a tile is already add-to-selection.
+- Zoom is **discrete** (25/33/50/67/75/100/125/150/200/300%) — text renders far better and text editing
+  behaves. Verified: a world point maps to the same world point at every zoom, and zooming keeps the
+  point under the cursor fixed.
+
 ## General Jobs Page (`/jobs`)
 - Only rendered when `currentProjectId === 'general'`
 - Free-form canvas with dotted-grid background (22px grid)
