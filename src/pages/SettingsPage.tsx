@@ -1171,6 +1171,80 @@ function DriveNameBackfill({ onToast }: { onToast: (msg: string, type?: 'success
 }
 
 // ─── App settings ─────────────────────────────────────────────────────────────
+/**
+ * TV presentation settings.
+ *
+ * Deliberately short. The wallboard is READ-ONLY by design, not by a setting,
+ * so there is no unlock, no PIN and no edit mode to configure — only the link
+ * itself and the two things that vary from one room to the next.
+ */
+function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
+  const { boardSettings, setTvSetting } = useStore();
+  const tv = boardSettings.__tv ?? {};
+  const lang = tv.tvLang ?? 'en';
+  const boost = tv.tvScale ?? 1;
+  const link = `${window.location.origin}/tv`;
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5">
+      <h2 className="font-semibold text-gray-800 mb-1 flex items-center gap-2">
+        <Tv size={18} className="text-[#4aa8d8]" /> TV Presentation
+      </h2>
+      <p className="text-xs text-gray-500 mb-4">
+        The wall display is always read-only — it can look, switch project and open a plan in Drive,
+        but it can never change anything. Every edit happens from a PC on the normal link.
+      </p>
+
+      <label className="block text-xs font-semibold text-gray-600 mb-1">Presentation link</label>
+      <div className="flex gap-2 mb-4">
+        <input readOnly value={link}
+          className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm bg-gray-50 text-gray-600" />
+        <button
+          onClick={() => { navigator.clipboard?.writeText(link); onToast('Link copied'); }}
+          className="px-4 py-2 rounded-xl text-sm font-semibold text-white"
+          style={{ background: 'linear-gradient(135deg, #1e3a5f, #2d5a8e)' }}>
+          Copy
+        </button>
+      </div>
+
+      <label className="block text-xs font-semibold text-gray-600 mb-1">Default language on the TV</label>
+      <div className="flex gap-2 mb-4">
+        {(['en', 'he'] as const).map(l => (
+          <button key={l}
+            onClick={() => { setTvSetting('tvLang', l); onToast(l === 'he' ? 'TV opens in Hebrew' : 'TV opens in English'); }}
+            className="px-4 py-2 rounded-xl text-sm font-semibold border-2 transition-all"
+            style={lang === l
+              ? { borderColor: '#1e3a5f', backgroundColor: 'rgba(30,58,95,.05)', color: '#1e3a5f' }
+              : { borderColor: '#e5e7eb', color: '#6b7280' }}>
+            {l === 'en' ? 'English' : 'עברית'}
+          </button>
+        ))}
+      </div>
+      <p className="text-[11px] text-gray-400 -mt-3 mb-4">
+        The TV has its own EN / עב toggle as well; this only decides how it opens.
+      </p>
+
+      <label className="block text-xs font-semibold text-gray-600 mb-1">
+        Default display size · {Math.round(boost * 100)}%
+      </label>
+      <p className="text-[11px] text-gray-400 mb-2 leading-snug">
+        The TV measures its own screen and picks a readable size on its own — this is only a nudge on
+        top of that, so one setting works whatever panel it is plugged into. Leave it at 100% unless the
+        board is hard to read from where people actually stand.
+      </p>
+      <div className="flex items-center gap-3">
+        <span className="text-[11px] text-gray-400">Smaller</span>
+        <input type="range" min={0.6} max={2} step={0.05} value={boost}
+          onChange={e => setTvSetting('tvScale', Number(e.target.value))}
+          className="flex-1" />
+        <span className="text-[11px] text-gray-400">Bigger</span>
+        <button onClick={() => setTvSetting('tvScale', 1)}
+          className="text-[11px] font-bold text-[#1e3a5f] whitespace-nowrap">Automatic</button>
+      </div>
+    </div>
+  );
+}
+
 function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
   lightTheme: boolean; setLightTheme: (v: boolean) => void; onToast: (msg: string, type?: 'success' | 'error') => void;
 }) {
@@ -1178,6 +1252,7 @@ function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
 
   return (
     <div className="space-y-5">
+      <TvSettings onToast={onToast} />
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <h2 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
           {lightTheme ? <Sun size={18} className="text-amber-500" /> : <Moon size={18} className="text-blue-500" />}

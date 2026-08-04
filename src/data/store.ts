@@ -302,6 +302,8 @@ interface AppState {
   /** Board appearance & behaviour, one entry per project. Synced via settings/app. */
   boardSettings: Record<string, BoardSetting>;
   setBoardSetting: <K extends BoardSettingKey>(key: K, value: BoardSetting[K]) => void;
+  /** TV wallboard defaults. Stored under the reserved `__tv` key, not a project. */
+  setTvSetting: <K extends BoardSettingKey>(key: K, value: BoardSetting[K]) => void;
 
   // Contractor status spreadsheet — one link per project, synced via settings/app
   contractorSheetLinks: Record<string, string>;
@@ -453,6 +455,13 @@ export const useStore = create<AppState>((set, get) => ({
   setBoardSetting: (key, value) => {
     const pid = get().currentProjectId;
     const next = { ...get().boardSettings, [pid]: { ...(get().boardSettings[pid] ?? {}), [key]: value } };
+    set({ boardSettings: next });
+    persist(get);
+    fsSet('settings', 'app', { boardSettings: next });
+  },
+
+  setTvSetting: (key, value) => {
+    const next = { ...get().boardSettings, __tv: { ...(get().boardSettings.__tv ?? {}), [key]: value } };
     set({ boardSettings: next });
     persist(get);
     fsSet('settings', 'app', { boardSettings: next });

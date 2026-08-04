@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useStore, loadAllProjectsTaskData } from '../data/store';
-import { Apartment, isCountableApartment, projectColor } from '../types';
+import { Apartment, CanvasElement, isCountableApartment, BIN_META, getStageName } from '../types';
 import { DriveIcon, ZohoIcon, PlanIcon } from '../components/ui/BrandIcons';
+import { getBoardTheme } from '../data/boardThemes';
+import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
+import { CountdownNode, StopwatchNode, ClipArtNode, StrokeLayer } from '../components/board/BoardNodes';
 
 /**
  * The office wall display.
@@ -19,10 +22,53 @@ import { DriveIcon, ZohoIcon, PlanIcon } from '../components/ui/BrandIcons';
  */
 export function TvPresentationPage() {
   const [params, setParams] = useSearchParams();
-  const { projects, apartments, stages, contractorAssignments, contractorPhotos, boardSettings } = useStore();
+  const {
+    projects, apartments, stages, contractorAssignments, contractorPhotos, canvasElements,
+    boardSettings, currentProjectId, setCurrentProject, startFirebaseSync, firebaseListening,
+  } = useStore();
 
-  const view = params.get('view') ?? 'general';
-  const setView = (v: string) => { const p = new URLSearchParams(params); p.set('view', v); setParams(p, { replace: true }); };
+  /**
+   * The TV subscribes to the same real-time listeners as the app.
+   *
+   * It sits outside AppLayout, which is what normally starts them, so without
+   * this the panel would show whatever happened to be in that browser's
+   * localStorage — which on a fresh TV browser is nothing at all.
+   */
+  useEffect(() => {
+    if (!firebaseListening) startFirebaseSync();
+  }, [firebaseListening, startFirebaseSync]);
+
+  const view = params.get('view') ?? currentProjectId;
+  const setView = (v: string) => {
+    const p = new URLSearchParams(params);
+    p.set('view', v);
+    setParams(p, { replace: true });
+  };
+
+  /**
+   * Switching the visible project has to switch the loaded workspace too — each
+   * project's records live in their own collections. This writes only to the
+   * TV's own browser; it changes nothing anyone else sees, so the panel stays
+   * strictly read-only in the sense that matters.
+   */
+  useEffect(() => {
+    if (view !== 'dashboard' && view !== currentProjectId && projects.some(p => p.id === view)) {
+      setCurrentProject(view);
+    }
+  }, [view, currentProjectId, projects, setCurrentProject]);
+
+  // ── Language ──
+  // Default comes from TV settings; the toggle on the panel overrides it for
+  // this screen only and rides in the URL, so a bookmark keeps the choice.
+  const tvSettings = boardSettings.__tv ?? {};
+  const lang = (params.get('lang') as 'en' | 'he' | null) ?? tvSettings.tvLang ?? 'en';
+  const isRtl = lang === 'he';
+  const setLang = (l: 'en' | 'he') => {
+    const p = new URLSearchParams(params);
+    p.set('lang', l);
+    setParams(p, { replace: true });
+  };
+  const t = (en: string, he: string) => (isRtl ? he : en);
 
   const [openJob, setOpenJob] = useState<Apartment | null>(null);
   const [now, setNow] = useState(new Date());
@@ -38,7 +84,6 @@ export function TvPresentationPage() {
    */
   const DESIGN_W = 1600;
   const [autoScale, setAutoScale] = useState(1);
-  const manualScale = Number(params.get('scale'));
 
   useEffect(() => {
     const measure = () => {
@@ -51,18 +96,50 @@ export function TvPresentationPage() {
     return () => window.removeEventListener('resize', measure);
   }, []);
 
-  const scale = Number.isFinite(manualScale) && manualScale > 0 ? manualScale : autoScale;
+  /**
+   * The slider is a MULTIPLIER on the automatic scale, not a replacement for it.
+   *
+   * That is what makes one setting work on every panel: nudging it to 1.2 means
+   * "a fifth bigger than this screen's natural size", which reads the same way
+   * on a 1080p office TV and a 4K one. A raw pixel number would have to be
+   * re-tuned for each screen.
+   */
+  const boostParam = Number(params.get('scale'));
+  const boost = Number.isFinite(boostParam) && boostParam > 0
+    ? boostParam
+    : (tvSettings.tvScale ?? 1);
+  const scale = autoScale * boost;
+  const setBoost = (b: number) => {
+    const p = new URLSearchParams(params);
+    p.set('scale', String(Number(b.toFixed(2))));
+    setParams(p, { replace: true });
+  };
+  const [showScale, setShowScale] = useState(false);
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(t);
   }, []);
 
+  /**
+   * What appears on the wall.
+   *
+   * Everything is visible by default; only what Esther has explicitly switched
+   * off is filtered out here. Binned jobs are off the board by definition.
+   */
   const jobs = useMemo(
     () => apartments.filter(a =>
-      a.buildingId === 'G' && !a.isUnnamed && !a.boardBin && a.showOnTv !== false),
-    [apartments],
+      (view === 'general' ? a.buildingId === 'G' : a.buildingId !== 'G')
+      && !a.isUnnamed && !a.boardBin && a.showOnTv !== false),
+    [apartments, view],
   );
+
+  const tvElements = useMemo(
+    () => canvasElements.filter(el => el.showOnTv !== false),
+    [canvasElements],
+  );
+
+  const theme = getBoardTheme(boardSettings[currentProjectId]?.themeId);
 
   const stageOf = (a: Apartment) => stages.find(s => s.id === a.currentStageId) ?? null;
   const pending = (a: Apartment) =>
@@ -95,17 +172,61 @@ export function TvPresentationPage() {
         style={view === 'dashboard'
           ? { backgroundColor: '#fff', color: '#1e3a5f' }
           : { backgroundColor: 'rgba(255,255,255,.12)', color: '#cbd5e1' }}>
-        Dashboard
+        {t('Dashboard', 'לוח בקרה')}
       </button>
       <span className="flex-1" />
       {overdue > 0 && (
         <span className="px-3 py-1 rounded-full font-bold"
           style={{ backgroundColor: 'rgba(239,68,68,.22)', color: '#fca5a5' }}>
-          {overdue} overdue
+          {overdue} {t('overdue', 'באיחור')}
         </span>
       )}
+
+      {/* Language — the default lives in TV settings, this switches the panel. */}
+      <div className="flex items-center rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,.12)' }}>
+        {(['en', 'he'] as const).map(l => (
+          <button key={l} onClick={() => setLang(l)}
+            className="px-2.5 py-1 font-bold transition-colors"
+            style={lang === l ? { backgroundColor: '#fff', color: '#1e3a5f' } : { color: '#cbd5e1' }}>
+            {l === 'en' ? 'EN' : 'עב'}
+          </button>
+        ))}
+      </div>
+
+      {/* Display size. Automatic by default; this nudges it for the room. */}
+      <div className="relative">
+        <button onClick={() => setShowScale(v => !v)}
+          title={t('Display size', 'גודל תצוגה')}
+          className="px-2.5 py-1 rounded-full font-bold"
+          style={{ backgroundColor: 'rgba(255,255,255,.12)', color: '#cbd5e1' }}>
+          {Math.round(boost * 100)}%
+        </button>
+        {showScale && (
+          <div className="absolute right-0 mt-2 z-50 bg-white text-gray-700 rounded-xl shadow-2xl p-3"
+            style={{ width: 230, fontSize: 12 }}>
+            <div className="font-extrabold mb-1">{t('Display size', 'גודל תצוגה')}</div>
+            <div className="text-gray-400 mb-2 leading-snug" style={{ fontSize: 10.5 }}>
+              {t('Automatic by default. Slide until the board reads comfortably from where people stand.',
+                 'אוטומטי כברירת מחדל. הזיזו עד שהלוח נקרא בנוחות מהמקום שבו עומדים.')}
+            </div>
+            <input
+              type="range" min={0.6} max={2} step={0.05} value={boost}
+              onChange={e => setBoost(Number(e.target.value))}
+              className="w-full"
+            />
+            <div className="flex items-center justify-between mt-1" style={{ fontSize: 10.5 }}>
+              <span className="text-gray-400">{t('Smaller', 'קטן')}</span>
+              <button onClick={() => setBoost(1)} className="font-bold text-[#1e3a5f]">
+                {t('Automatic', 'אוטומטי')}
+              </button>
+              <span className="text-gray-400">{t('Bigger', 'גדול')}</span>
+            </div>
+          </div>
+        )}
+      </div>
+
       <span className="font-bold tabular-nums">
-        {now.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })} · {now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+        {now.toLocaleDateString(isRtl ? 'he-IL' : undefined, { weekday: 'short', day: 'numeric', month: 'short' })} · {now.toLocaleTimeString(isRtl ? 'he-IL' : undefined, { hour: '2-digit', minute: '2-digit' })}
       </span>
     </div>
   );
@@ -117,30 +238,30 @@ export function TvPresentationPage() {
       .filter(p => contractorAssignments.some(a => a.id === p.assignmentId && a.apartmentId === openJob.id))
       .slice(0, 4);
     return (
-      <div ref={frameRef} className="h-screen w-screen flex flex-col bg-slate-100 overflow-hidden">
+      <div ref={frameRef} dir={isRtl ? 'rtl' : 'ltr'} className="h-screen w-screen flex flex-col bg-slate-100 overflow-hidden">
         {bar}
         <div className="flex-1 grid gap-3 p-3 min-h-0"
           style={{ gridTemplateColumns: '1.05fr 1fr', gridTemplateRows: '1.15fr 1fr', fontSize: 15 * Math.min(scale, 1.6) }}>
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col">
             <div className="px-3 py-2 font-extrabold border-b border-gray-200 flex items-center gap-2">
-              <PlanIcon size={16} /> Engineering plan
+              <PlanIcon size={16} /> {t('Engineering plan', 'תוכנית הנדסית')}
               {openJob.plansPdfLink && (
                 <a href={openJob.plansPdfLink} target="_blank" rel="noopener noreferrer"
-                  className="ml-auto text-[#4aa8d8] font-bold">open in Drive ↗</a>
+                  className="ml-auto text-[#4aa8d8] font-bold">{t('open in Drive', 'פתח בדרייב')} ↗</a>
               )}
             </div>
             {openJob.plansPdfLink ? (
               <iframe title="plan" src={openJob.plansPdfLink.replace('/view', '/preview')} className="flex-1 w-full border-0" />
             ) : (
-              <div className="flex-1 flex items-center justify-center text-gray-400">No plan linked</div>
+              <div className="flex-1 flex items-center justify-center text-gray-400">{t('No plan linked', 'לא צורפה תוכנית')}</div>
             )}
           </div>
 
           <div className="bg-white rounded-xl border border-gray-200 p-3 flex flex-col">
-            <div className="font-extrabold mb-2">Latest site photos</div>
+            <div className="font-extrabold mb-2">{t('Latest site photos', 'תמונות אחרונות מהאתר')}</div>
             <div className="flex-1 grid grid-cols-2 grid-rows-2 gap-2">
               {photos.length === 0 && (
-                <div className="col-span-2 row-span-2 flex items-center justify-center text-gray-400">No photos yet</div>
+                <div className="col-span-2 row-span-2 flex items-center justify-center text-gray-400">{t('No photos yet', 'אין עדיין תמונות')}</div>
               )}
               {photos.map(p => (
                 <div key={p.id} className="rounded-lg bg-slate-200 overflow-hidden">
@@ -154,7 +275,7 @@ export function TvPresentationPage() {
 
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <div className="font-black leading-tight" style={{ fontSize: '1.9em' }}>
-              {openJob.displayName || 'Job'}
+              {openJob.displayName || t('Job', 'עבודה')}
             </div>
             {openJob.address && <div className="text-gray-500 mt-1">{openJob.address}</div>}
             <div className="flex gap-2 mt-3">
@@ -164,14 +285,14 @@ export function TvPresentationPage() {
               )}
               {pending(openJob) > 0 && (
                 <span className="font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-700">
-                  {pending(openJob)} open
+                  {pending(openJob)} {t('open', 'פתוחות')}
                 </span>
               )}
             </div>
           </div>
 
           <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col justify-center gap-2">
-            <div className="font-extrabold mb-1">Links</div>
+            <div className="font-extrabold mb-1">{t('Links', 'קישורים')}</div>
             <div className="flex gap-3">
               {openJob.driveLink && <a href={openJob.driveLink} target="_blank" rel="noopener noreferrer"
                 className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200"><DriveIcon size={18} /> Drive</a>}
@@ -182,7 +303,7 @@ export function TvPresentationPage() {
         </div>
         <button onClick={() => setOpenJob(null)}
           className="absolute left-4 bottom-4 px-4 py-2 rounded-full bg-[#1e3a5f] text-white font-bold shadow-lg">
-          ← Back to board
+          ← {t('Back to board', 'חזרה ללוח')}
         </button>
       </div>
     );
@@ -197,21 +318,21 @@ export function TvPresentationPage() {
       return { p, units: apts.length, pct: apts.length ? Math.round(staged / apts.length * 100) : 0 };
     });
     return (
-      <div ref={frameRef} className="h-screen w-screen flex flex-col bg-slate-100 overflow-hidden">
+      <div ref={frameRef} dir={isRtl ? 'rtl' : 'ltr'} className="h-screen w-screen flex flex-col bg-slate-100 overflow-hidden">
         {bar}
         <div className="flex-1 grid grid-cols-4 gap-3 p-4 min-h-0" style={{ fontSize: 15 * Math.min(scale, 1.6) }}>
           {totals.map(({ p, units }) => (
             <div key={p.id} className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col justify-center">
               <div className="font-black leading-none" style={{ fontSize: '2.8em', color: p.color }}>{units}</div>
-              <div className="text-gray-500 mt-1">{p.shortName} units</div>
+              <div className="text-gray-500 mt-1">{p.shortName} · {t('units', 'יחידות')}</div>
             </div>
           ))}
           <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col justify-center">
             <div className="font-black leading-none text-red-500" style={{ fontSize: '2.8em' }}>{overdue}</div>
-            <div className="text-gray-500 mt-1">Overdue tasks</div>
+            <div className="text-gray-500 mt-1">{t('Overdue tasks', 'משימות באיחור')}</div>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-4 col-span-4">
-            <div className="font-extrabold mb-2">Progress by project</div>
+            <div className="font-extrabold mb-2">{t('Progress by project', 'התקדמות לפי פרויקט')}</div>
             {totals.map(({ p, pct }) => (
               <div key={p.id} className="flex items-center gap-3 mb-2">
                 <span className="w-28 text-gray-500">{p.shortName}</span>
@@ -227,16 +348,83 @@ export function TvPresentationPage() {
     );
   }
 
+  // ── A building project: its diagram, scaled to the wall ──
+  if (view !== 'general' && projects.some(p => p.id === view)) {
+    return (
+      <div ref={frameRef} dir={isRtl ? 'rtl' : 'ltr'} className="h-screen w-screen flex flex-col overflow-hidden bg-white">
+        {bar}
+        <div className="flex-1 overflow-auto p-3">
+          <div style={{ transform: `scale(${scale})`, transformOrigin: isRtl ? 'top right' : 'top left', width: `${100 / scale}%` }}>
+            <BuildingDiagram
+              apartments={jobs}
+              stages={stages}
+              activeStageIds={[]}
+              classFilter="all"
+              searchQuery=""
+              selectedBuilding="all"
+              onApartmentClick={setOpenJob}
+              showShinuiBadge
+              compact
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ── The board itself ──
   return (
-    <div ref={frameRef} className="h-screen w-screen flex flex-col overflow-hidden bg-white">
+    <div ref={frameRef} dir={isRtl ? 'rtl' : 'ltr'} className="h-screen w-screen flex flex-col overflow-hidden bg-white">
       {bar}
-      <div className="flex-1 relative overflow-hidden"
-        style={{
-          backgroundImage: 'radial-gradient(circle, rgba(120,140,170,.30) 1px, transparent 1px)',
-          backgroundSize: `${22 * scale}px ${22 * scale}px`,
-        }}>
-        <div className="absolute top-0 left-0" style={{ transform: `scale(${scale})`, transformOrigin: '0 0' }}>
+      {/* The board surface is the project's own theme, so the wall matches what
+          the office sees on their screens rather than being a second design. */}
+      <div className="flex-1 relative overflow-hidden" style={theme.surface}>
+        <div className="absolute top-0 left-0" dir="ltr"
+          style={{ transform: `scale(${scale})`, transformOrigin: isRtl ? '100% 0' : '0 0' }}>
+          {/* Notes, boxes, titles, timers and drawings — the same board, minus
+              anything switched off for the wall. */}
+          <StrokeLayer elements={tvElements} />
+          {tvElements.map(el => {
+            if (el.type === 'stroke') return null;
+            const isBin = el.type === 'bin' && !!el.binKind;
+            const binJobs = isBin
+              ? apartments.filter(a => a.boardBin === el.binKind && !a.isUnnamed).length
+              : 0;
+            return (
+              <div key={el.id} className="absolute rounded-xl overflow-hidden"
+                style={{
+                  left: el.x, top: el.y, width: el.w, height: el.h,
+                  zIndex: el.type === 'box' ? 1 : 3,
+                  ...(isBin
+                    ? { backgroundColor: 'rgba(255,255,255,.82)', border: `2px dashed ${el.color}` }
+                    : el.type === 'clipart'
+                    ? {}
+                    : { backgroundColor: el.color, border: '1px solid rgba(0,0,0,.08)' }),
+                }}>
+                {isBin ? (
+                  <div className="w-full h-full flex flex-col justify-center px-3">
+                    <span className="font-extrabold text-[12.5px]" style={{ color: el.color }}>
+                      {BIN_META[el.binKind!].label}
+                    </span>
+                    <span className="text-[11px] text-gray-500">{binJobs}</span>
+                  </div>
+                ) : el.type === 'countdown' ? <CountdownNode el={el} />
+                  : el.type === 'stopwatch' ? <StopwatchNode el={el} />
+                  : el.type === 'clipart' ? <ClipArtNode el={el} />
+                  : el.type === 'title' ? (
+                    <div className="w-full h-full flex items-center px-2 font-black leading-none"
+                      style={{ fontSize: el.fontSize ?? 22, color: el.color || '#0f172a' }}>
+                      {el.text || ''}
+                    </div>
+                  ) : (
+                    <div className={`${el.type === 'box' ? 'font-semibold text-sm pt-2 px-3' : 'text-sm pt-3 px-3'} text-gray-700 leading-snug whitespace-pre-wrap break-words`}>
+                      {el.text}
+                    </div>
+                  )}
+              </div>
+            );
+          })}
+
           {jobs.map((job, i) => {
             const st = stageOf(job);
             const x = job.canvasX ?? 24 + (i % 6) * 240;
@@ -244,12 +432,12 @@ export function TvPresentationPage() {
             return (
               <button key={job.id} onClick={() => setOpenJob(job)}
                 className="absolute text-left rounded-xl bg-white p-2.5"
-                style={{ left: x, top: y, width: 215, height: 132, border: `4px solid ${st?.color ?? '#cbd5e1'}` }}>
-                <div className="font-bold text-sm text-gray-900 leading-tight">{job.displayName || 'Job'}</div>
+                style={{ left: x, top: y, width: 215, height: 132, zIndex: 5, border: `4px solid ${st?.color ?? '#cbd5e1'}` }}>
+                <div className="font-bold text-sm text-gray-900 leading-tight">{job.displayName || t('Job', 'עבודה')}</div>
                 {job.address && <div className="text-[11px] text-gray-500 truncate mt-0.5">{job.address}</div>}
                 {st && (
                   <span className="inline-block mt-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full"
-                    style={{ backgroundColor: `${st.color}22`, color: st.color }}>{st.name}</span>
+                    style={{ backgroundColor: `${st.color}22`, color: st.color }}>{getStageName(st, isRtl)}</span>
                 )}
                 <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center gap-1.5">
                   {job.driveLink && <span className="w-5 h-5 rounded bg-gray-50 border border-gray-200 flex items-center justify-center"><DriveIcon size={11} /></span>}
