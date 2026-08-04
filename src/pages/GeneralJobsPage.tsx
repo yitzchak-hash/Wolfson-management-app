@@ -12,6 +12,10 @@ import { Toast } from '../components/ui/Toast';
 import { DriveIcon, ZohoIcon, PlanIcon, TvIcon } from '../components/ui/BrandIcons';
 import { BoardToolbar, BoardControlsPanel, BoardTool } from '../components/board/BoardToolbar';
 import { BOARD_THEMES, getBoardTheme } from '../data/boardThemes';
+import { MiniMap } from '../components/board/MiniMap';
+import {
+  PinnedTitleLayer, StrokeLayer, CountdownNode, StopwatchNode, ClipArtNode, NODE_DEFAULT_SIZE,
+} from '../components/board/BoardNodes';
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
 /** "3h ago" / "yesterday" / "6 Aug" — short, because tile space is scarce. */
@@ -171,6 +175,36 @@ export function GeneralJobsPage() {
   const [spaceHeld, setSpaceHeld] = useState(false);
   const [tool, setTool] = useState<BoardTool>('select');
   const [boardSettingsOpen, setBoardSettingsOpen] = useState(false);
+
+  /** Toolbar picks that CREATE something drop a node in the middle of the view. */
+  function handleToolPick(next: BoardTool) {
+    const creators: Record<string, CanvasElement['type']> = {
+      note: 'note', box: 'box', title: 'title',
+      countdown: 'countdown', stopwatch: 'stopwatch', clipart: 'clipart',
+    };
+    const kind = creators[next];
+    if (!kind) { setTool(next); return; }
+
+    const vp = viewportRef.current;
+    const cx = vp ? (vp.clientWidth / 2 - pan.x) / zoom : 200;
+    const cy = vp ? (vp.clientHeight / 2 - pan.y) / zoom : 200;
+    const size = NODE_DEFAULT_SIZE[kind] ?? { w: 180, h: 120 };
+
+    addCanvasElement({
+      id: 'CE-' + Math.random().toString(36).slice(2, 9),
+      type: kind,
+      x: Math.round(cx - size.w / 2),
+      y: Math.round(cy - size.h / 2),
+      w: size.w, h: size.h,
+      text: kind === 'title' ? 'Title' : '',
+      color: kind === 'clipart' ? '#dc2626' : 'rgba(250, 204, 21, 0.45)',
+      ...(kind === 'title' ? { pinned: true, pinTop: 12, fontSize: 22 } : {}),
+      ...(kind === 'countdown' ? { targetAt: new Date(Date.now() + 86_400_000).toISOString() } : {}),
+      ...(kind === 'stopwatch' ? { elapsedMs: 0 } : {}),
+      ...(kind === 'clipart' ? { art: 'pin' as const } : {}),
+    });
+    setTool('select');
+  }
   const panRef = useRef<{ px: number; py: number; ox: number; oy: number } | null>(null);
 
   /** Discrete steps: text renders far better and "am I at 100%?" is answerable. */
@@ -678,7 +712,7 @@ export function GeneralJobsPage() {
       >
         <BoardToolbar
           active={tool}
-          onPick={setTool}
+          onPick={handleToolPick}
           onFit={zoomToFit}
           controlsOpen={showControls}
           onToggleControls={() => setBoardSetting('showControls', !showControls)}
@@ -716,6 +750,31 @@ export function GeneralJobsPage() {
             </label>
           </div>
         )}
+
+        {/* View-space overlays: pinned titles hold a fixed screen Y, so they must
+            live OUTSIDE the transformed world layer or lasso hit-testing (which
+            works in world space) would select a title that is visually elsewhere. */}
+        <PinnedTitleLayer elements={canvasElements} zoom={zoom} panX={pan.x} onEdit={startEdit} />
+
+        <MiniMap
+          jobs={jobs}
+          elements={canvasElements}
+          stages={stages}
+          worldW={maxX}
+          worldH={maxY}
+          zoom={zoom}
+          pan={pan}
+          viewportW={viewportRef.current?.clientWidth ?? 0}
+          viewportH={viewportRef.current?.clientHeight ?? 0}
+          onJump={(wx, wy) => {
+            const vp = viewportRef.current;
+            if (!vp) return;
+            setPan({
+              x: vp.clientWidth / 2 - wx * zoom,
+              y: vp.clientHeight / 2 - wy * zoom,
+            });
+          }}
+        />
 
         {/* Zoom readout + fit, bottom-left so it never covers the toolbar */}
         <div className="absolute bottom-3 left-3 z-30 flex items-center gap-1 bg-white/95 border border-gray-200 rounded-lg shadow-sm px-1.5 py-1">
@@ -777,6 +836,7 @@ export function GeneralJobsPage() {
             )}
 
             {/* ── Canvas elements (notes & boxes) ── */}
+            <StrokeLayer elements={canvasElements} />
             {canvasElements.map(el => {
               const pos = elPos(el);
               const isSelected = selectedElIds.has(el.id);

@@ -222,6 +222,29 @@ Module-level constants cannot access the translation store. Any constant that ou
 ### RTL
 `settings.isRtl` controls text direction. `dir="rtl"` is applied to the root layout when true.
 
+## Board node types (v2)
+`CanvasElement.type` is now `note | box | title | countdown | stopwatch | clipart | stroke`.
+Default sizes differ per type (`NODE_DEFAULT_SIZE`) — not everything is the same size.
+
+### Pinned titles — the coordinate rule
+A pinned title keeps its **board X** (so it pans and zooms sideways with the column it labels) but holds
+a **fixed screen Y**, and still **scales with zoom**. Getting small when zoomed far out is the intended
+behaviour, per the owner's explicit ruling.
+- Because its hit box is in VIEW space while tiles are in WORLD space, it renders in its own
+  always-on-top layer (`PinnedTitleLayer`) **outside** the transformed world div. Put it inside and lasso
+  selection — which works in world space — would select a title that is visually somewhere else.
+- Sliding off-screen horizontally when panning far is accepted, also per explicit ruling.
+
+### Strokes
+Freehand drawing stores **one record per stroke** as a world-space polyline, never one per point — that
+would flood both the store and Firestore. Rendered inside the world layer so it pans and zooms with
+everything else.
+
+### MiniMap
+Bottom-right, and only shown once the board exceeds the viewport. Draws the world shrunk to fit with a
+rectangle for the visible area; click or drag to jump. Deliberately built AFTER zoom/pan, since it needs
+a viewport rect to draw — building it first would have meant building it twice.
+
 ## Job Board canvas — zoom & pan (v2)
 - **Transform viewport, not native scroll.** A fixed frame (`viewportRef`) with `overflow-hidden`; the
   world div inside carries `translate(pan) scale(zoom)` with `transformOrigin: 0 0`. Mixing native

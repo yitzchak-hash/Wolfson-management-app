@@ -176,7 +176,19 @@ export interface Apartment {
 // Free-form canvas elements in the General Jobs canvas (sticky notes, section boxes)
 export interface CanvasElement {
   id: string;
-  type: 'note' | 'box';
+  type: 'note' | 'box' | 'title' | 'countdown' | 'stopwatch' | 'clipart' | 'stroke';
+  /** countdown: target ISO time · stopwatch: started ISO time (absent = paused) */
+  targetAt?: string;
+  startedAt?: string;
+  /** stopwatch accumulated ms while paused */
+  elapsedMs?: number;
+  /** clipart: which piece */
+  art?: 'pin' | 'tape' | 'clip' | 'marker' | 'sticky-stack' | 'document' | 'arrow' | 'star';
+  /** stroke: freehand path in world coordinates, "x,y x,y …" */
+  points?: string;
+  strokeWidth?: number;
+  /** Sizes vary by node type — not everything is the same size. */
+  fontSize?: number;
   x: number;
   y: number;
   w: number;
