@@ -85,3 +85,36 @@
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   @page { margin: 1cm; size: A3 landscape; }
 }
+
+/* ── Completion burst ──
+   Plays once when a job is dropped into Done. Deliberately about a second:
+   long enough to register, short enough that nobody waits for it. */
+.board-celebrate-ring {
+  position: absolute;
+  left: 0; top: 0;
+  width: 18px; height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 9999px;
+  border: 3px solid #16a34a;
+  animation: boardCelebrateRing 1s ease-out forwards;
+}
+.board-celebrate-tick {
+  position: absolute;
+  left: 0; top: 0;
+  transform: translate(-50%, -50%);
+  font-size: 30px;
+  font-weight: 900;
+  color: #16a34a;
+  animation: boardCelebrateTick 1s ease-out forwards;
+}
+@keyframes boardCelebrateRing {
+  0%   { transform: scale(0.4); opacity: 0.95; }
+  70%  { transform: scale(6);   opacity: 0.35; }
+  100% { transform: scale(8);   opacity: 0; }
+}
+@keyframes boardCelebrateTick {
+  0%   { transform: translate(-50%, -50%) scale(0.2); opacity: 0; }
+  35%  { transform: translate(-50%, -50%) scale(1.15); opacity: 1; }
+  75%  { transform: translate(-50%, -50%) scale(1);    opacity: 1; }
+  100% { transform: translate(-50%, -80%) scale(1);    opacity: 0; }
+}

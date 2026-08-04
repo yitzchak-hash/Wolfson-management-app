@@ -48,6 +48,21 @@ export interface BoardSetting {
 
 export type BoardSettingKey = keyof BoardSetting;
 
+/**
+ * A saved arrangement of the board.
+ *
+ * Positions only — never the jobs themselves. Restoring moves things back to
+ * where they were and cannot resurrect a deleted job or undo an edit, which is
+ * exactly the guarantee that makes it safe to press.
+ */
+export interface BoardLayout {
+  id: string;
+  at: string;
+  label: string;
+  jobs: { id: string; x: number; y: number }[];
+  els: { id: string; x: number; y: number; w: number; h: number }[];
+}
+
 export interface User {
   id: string;
   name: string;

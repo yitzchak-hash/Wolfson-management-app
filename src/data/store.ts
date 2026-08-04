@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BoardSetting, BoardSettingKey } from '../types';
+import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BoardSetting, BoardSettingKey, BoardLayout } from '../types';
 
 // Always merge stored mainUiStrings ON TOP of the fresh preset so code-added keys
 // are never missing even when localStorage has an older saved version.
@@ -305,6 +305,12 @@ interface AppState {
   /** TV wallboard defaults. Stored under the reserved `__tv` key, not a project. */
   setTvSetting: <K extends BoardSettingKey>(key: K, value: BoardSetting[K]) => void;
 
+  /** Saved board arrangements, per project. Positions only — never content. */
+  boardLayouts: Record<string, BoardLayout[]>;
+  saveBoardLayout: (label: string) => void;
+  restoreBoardLayout: (layoutId: string) => void;
+  deleteBoardLayout: (layoutId: string) => void;
+
   // Contractor status spreadsheet — one link per project, synced via settings/app
   contractorSheetLinks: Record<string, string>;
   setContractorSheetLink: (url: string) => void;
@@ -458,6 +464,56 @@ export const useStore = create<AppState>((set, get) => ({
     set({ boardSettings: next });
     persist(get);
     fsSet('settings', 'app', { boardSettings: next });
+  },
+
+  boardLayouts: (stored?.boardLayouts as Record<string, BoardLayout[]> | null) ?? {},
+
+  saveBoardLayout: (label) => {
+    const st = get();
+    const pid = st.currentProjectId;
+    const layout: BoardLayout = {
+      id: 'BL-' + Date.now().toString(36),
+      at: new Date().toISOString(),
+      label,
+      jobs: st.apartments
+        .filter(a => a.buildingId === 'G' && typeof a.canvasX === 'number' && typeof a.canvasY === 'number')
+        .map(a => ({ id: a.id, x: a.canvasX!, y: a.canvasY! })),
+      els: st.canvasElements.map(e => ({ id: e.id, x: e.x, y: e.y, w: e.w, h: e.h })),
+    };
+    // Capped, because these are convenience snapshots and not a backup.
+    const next = { ...st.boardLayouts, [pid]: [layout, ...(st.boardLayouts[pid] ?? [])].slice(0, 10) };
+    set({ boardLayouts: next });
+    persist(get);
+  },
+
+  restoreBoardLayout: (layoutId) => {
+    const st = get();
+    const pid = st.currentProjectId;
+    const layout = (st.boardLayouts[pid] ?? []).find(l => l.id === layoutId);
+    if (!layout) return;
+    const jobPos = new Map(layout.jobs.map(j => [j.id, j]));
+    const elPos = new Map(layout.els.map(e => [e.id, e]));
+    // Only positions are written back. A job that did not exist when the
+    // snapshot was taken keeps its current place rather than jumping to 0,0.
+    const apartments = st.apartments.map(a => {
+      const p = jobPos.get(a.id);
+      return p ? { ...a, canvasX: p.x, canvasY: p.y } : a;
+    });
+    const canvasElements = st.canvasElements.map(e => {
+      const p = elPos.get(e.id);
+      return p ? { ...e, x: p.x, y: p.y, w: p.w, h: p.h } : e;
+    });
+    set({ apartments, canvasElements });
+    persist(get);
+    apartments.forEach(a => { if (jobPos.has(a.id)) fsSet(projectCollection(pid, 'apartments'), a.id, a); });
+    canvasElements.forEach(e => { if (elPos.has(e.id)) fsSet(projectCollection(pid, 'canvasElements'), e.id, e); });
+  },
+
+  deleteBoardLayout: (layoutId) => {
+    const st = get();
+    const pid = st.currentProjectId;
+    set({ boardLayouts: { ...st.boardLayouts, [pid]: (st.boardLayouts[pid] ?? []).filter(l => l.id !== layoutId) } });
+    persist(get);
   },
 
   setTvSetting: (key, value) => {
@@ -1175,6 +1231,7 @@ export const useStore = create<AppState>((set, get) => ({
       canvasElements: state.canvasElements,
       contractorSheetLinks: state.contractorSheetLinks,
       boardSettings: state.boardSettings,
+      boardLayouts: state.boardLayouts,
       },
     };
     return JSON.stringify(snapshot, null, 2);
@@ -1205,6 +1262,7 @@ export const useStore = create<AppState>((set, get) => ({
         canvasElements: data.canvasElements ?? state.canvasElements,
         contractorSheetLinks: data.contractorSheetLinks ?? state.contractorSheetLinks,
         boardSettings: data.boardSettings ?? state.boardSettings,
+        boardLayouts: data.boardLayouts ?? state.boardLayouts,
         ...(data.settings ? {
           autoBackup: data.settings.autoBackup ?? state.autoBackup,
           backupFrequency: data.settings.backupFrequency ?? state.backupFrequency,
@@ -1839,6 +1897,7 @@ function persistNow(get: () => AppState) {
     canvasElements: state.canvasElements,
     contractorSheetLinks: state.contractorSheetLinks,
     boardSettings: state.boardSettings,
+    boardLayouts: state.boardLayouts,
   };
 
   const ok = saveToStorage(storageKey, payload);

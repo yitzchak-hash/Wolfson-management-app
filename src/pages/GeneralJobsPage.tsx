@@ -3,6 +3,7 @@ import {
   Plus, Briefcase, MapPin, ExternalLink, Trash2, ClipboardList, FolderOpen,
   Copy, StickyNote, Square, Palette, Pencil, X, AlertTriangle,
   Ghost, ThumbsUp, ClipboardPaste, LayoutGrid, Columns3, Archive, CheckCircle2, PlayCircle,
+  Image as ImageIcon, ImageOff, History,
 } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 import { useStore } from '../data/store';
@@ -18,6 +19,7 @@ import { BinWindow } from '../components/board/BinWindow';
 import { StageBoard } from '../components/board/StageBoard';
 import { useTouchGestures } from '../hooks/useTouchGestures';
 import { detectPasteIntent, fieldForIntent, canCreateFromIntent, PasteIntent } from '../data/pasteIntent';
+import { exportBoardPng, exportBoardPdf } from '../data/boardExport';
 import {
   getFolderNameViaBackend, familyNameFromFolderName, extractFolderId,
   isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaBackend,
@@ -163,6 +165,11 @@ export function GeneralJobsPage() {
     removeGhost,
     moveToBin,
     backupDriveFolderLink,
+    contractorPhotos,
+    boardLayouts,
+    saveBoardLayout,
+    restoreBoardLayout,
+    deleteBoardLayout,
   } = useStore();
 
   // ── All hooks must come before any early return ──────────────────
@@ -197,6 +204,10 @@ export function GeneralJobsPage() {
   const [createFromLink, setCreateFromLink] = useState<
     { intent: PasteIntent; x: number; y: number } | null>(null);
   const [artPicker, setArtPicker] = useState(false);
+  const [exportMenu, setExportMenu] = useState(false);
+  const [layoutPanel, setLayoutPanel] = useState(false);
+  /** A finished job briefly celebrates, at the point on the board it landed. */
+  const [celebrate, setCelebrate] = useState<{ x: number; y: number; key: number } | null>(null);
   /** Live freehand stroke, world coordinates, committed once on pointerup. */
   const [drawing, setDrawing] = useState<{ pts: { x: number; y: number }[]; marker: boolean } | null>(null);
   const [recordingEl, setRecordingEl] = useState<string | null>(null);
@@ -356,9 +367,6 @@ export function GeneralJobsPage() {
     return () => clearTimeout(t);
   }, [canvasElements, currentProjectId, addCanvasElement]);
 
-  // ── Redirect guard (after all hooks) ─────────────────────────────
-  if (currentProjectId !== 'general') return <Navigate to="/project" replace />;
-
   const stages = allStages.filter(st => st.projectId === 'general');
   const stageMap = new Map(stages.map(st => [st.id, st]));
   // Jobs in a bin (Done / Ready / Archive / Trash) live in their own window,
@@ -452,7 +460,7 @@ export function GeneralJobsPage() {
       const bin = binAt(w0.x, w0.y);
       if (bin?.binKind) {
         // Binning a ghost bins the JOB — there is only one record.
-        moveToBin(job.id, bin.binKind);
+        fileInBin([job.id], bin.binKind, bin);
       } else {
         moveGhost(ghostDrag.jobId, ghostDrag.index,
           Math.max(0, Math.round(ghostDrag.startX + ghostDrag.dx)),
@@ -463,6 +471,41 @@ export function GeneralJobsPage() {
     }
     setGhostDrag(null);
     setHoverBin(null);
+  }
+
+  /**
+   * A small, short celebration when work is finished.
+   *
+   * Fires on the Done bin only, and lasts about a second — long enough to feel
+   * like something happened, short enough that nobody has to wait for it.
+   */
+  function celebrateAt(el: CanvasElement) {
+    const p = elPos(el);
+    setCelebrate({ x: p.x + p.w / 2, y: p.y + p.h / 2, key: Date.now() });
+    setTimeout(() => setCelebrate(null), 1100);
+  }
+
+  /** Files a job into a bin, with the Done celebration when that is the bin. */
+  function fileInBin(ids: string[], kind: BinKind, at?: CanvasElement) {
+    ids.forEach(id => moveToBin(id, kind));
+    if (kind === 'done' && at) celebrateAt(at);
+    setToast(`Moved to ${BIN_META[kind].label}`);
+  }
+
+  // ── Tile photo background ─────────────────────────────────────────
+  /** The newest photo the contractor uploaded for this job, if there is one. */
+  function latestPhotoUrl(jobId: string): string | null {
+    const jobAssignments = new Set(contractorAssignments.filter(a => a.apartmentId === jobId).map(a => a.id));
+    const p = contractorPhotos
+      .filter(x => jobAssignments.has(x.assignmentId) && (x.storageUrl || x.driveUrl))
+      .sort((a, b) => (b.uploadedAt ?? '').localeCompare(a.uploadedAt ?? ''))[0];
+    return p ? (p.storageUrl || p.driveUrl || null) : null;
+  }
+
+  function setTilePhoto(ids: string[], url: string | undefined) {
+    if (!currentUser) return;
+    ids.forEach(id => updateApartment(id, { tilePhotoUrl: url }, currentUser));
+    setCtxMenu(null);
   }
 
   // ── Thumbs up ─────────────────────────────────────────────────────
@@ -606,15 +649,12 @@ export function GeneralJobsPage() {
     recorderRef.current?.rec.stop();
   }
 
-  // ── Export board image ────────────────────────────────────────────
-  /**
-   * Prints the board. The browser's own print-to-PDF is used rather than a
-   * canvas rasteriser, because it keeps text sharp at any board size and needs
-   * no extra dependency.
-   */
-  function exportBoardImage() {
-    window.print();
+  // ── Export board ──────────────────────────────────────────────────
+  function exportInput() {
+    return { jobs, elements: canvasElements, stages, title: s.generalJobsTitle, tileW: TILE_W, tileH: TILE_H, defaultPos };
   }
+
+  function exportBoardImage() { setExportMenu(true); }
 
   // ── Delete / duplicate ────────────────────────────────────────────
   function handleDeleteJobs(ids: string[]) {
@@ -791,8 +831,7 @@ export function GeneralJobsPage() {
       const w0 = toWorld(e.clientX, e.clientY);
       const bin = binAt(w0.x, w0.y);
       if (bin?.binKind) {
-        drag.ids.forEach(id => moveToBin(id, bin.binKind!));
-        setToast(`Moved to ${BIN_META[bin.binKind].label}`);
+        fileInBin(drag.ids, bin.binKind, bin);
         setSelectedJobIds(new Set());
       } else if (currentUser) {
         drag.ids.forEach(id => {
@@ -1082,6 +1121,12 @@ export function GeneralJobsPage() {
 
   const totalSelected = selectedJobIds.size + selectedElIds.size;
 
+  // ── Redirect guard ──
+  // Deliberately AFTER every hook, including the ones inside the wheel, keyboard
+  // and touch effects below. Returning earlier changed the hook count between
+  // renders whenever the workspace switched while this page was mounted.
+  if (currentProjectId !== 'general') return <Navigate to="/project" replace />;
+
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-gray-50">
       {/* ── Header ── */}
@@ -1183,12 +1228,85 @@ export function GeneralJobsPage() {
               ))}
             </div>
 
-            <label className="flex items-center gap-2 text-[10px] text-gray-600 font-semibold">
+            <label className="flex items-center gap-2 text-[10px] text-gray-600 font-semibold mb-2">
               <input type="checkbox" className="rounded"
                 checked={projectBoard.snapToGrid ?? false}
                 onChange={e => setBoardSetting('snapToGrid', e.target.checked)} />
               Snap to grid
             </label>
+            <button
+              onClick={() => { setLayoutPanel(true); setBoardSettingsOpen(false); }}
+              className="w-full flex items-center gap-1.5 py-1.5 rounded-lg text-[10px] font-bold text-gray-600 border border-gray-200 hover:bg-gray-50 justify-center">
+              <History size={12} /> Layout history
+            </button>
+          </div>
+        )}
+
+        {/* Board layout history.
+            Positions only, and a preview of every snapshot before anything is
+            restored — so pressing Restore can never be a surprise, and can
+            never bring back or remove a job. */}
+        {layoutPanel && (
+          <div className="absolute right-[86px] z-40 w-[252px] bg-white border border-gray-200 rounded-xl shadow-lg p-3"
+            style={{ top: showControls ? 236 : 12, maxHeight: '70%', overflowY: 'auto' }}>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[10px] font-extrabold text-gray-700 tracking-wide">LAYOUT HISTORY</span>
+              <button onClick={() => setLayoutPanel(false)} className="ml-auto text-gray-300 hover:text-gray-500">
+                <X size={13} />
+              </button>
+            </div>
+            <button
+              onClick={() => { saveBoardLayout(new Date().toLocaleString()); setToast('Layout saved'); }}
+              className="w-full mb-2 py-1.5 rounded-lg text-[11px] font-bold text-white"
+              style={{ background: 'linear-gradient(135deg, #1e3a5f, #2d5a8e)' }}>
+              Save this arrangement
+            </button>
+            <p className="text-[9.5px] text-gray-400 leading-snug mb-2">
+              Snapshots record where things sit — never the jobs themselves. Restoring moves things back
+              and cannot undo an edit or bring back a deleted job.
+            </p>
+            {(boardLayouts[currentProjectId] ?? []).length === 0 && (
+              <div className="text-[10.5px] text-gray-400 py-3 text-center">Nothing saved yet.</div>
+            )}
+            {(boardLayouts[currentProjectId] ?? []).map(L => {
+              // Snapshot preview: the saved positions, shrunk to fit.
+              const W = 218, H = 74;
+              const mx = Math.max(1, ...L.jobs.map(j => j.x + TILE_W), ...L.els.map(e => e.x + e.w));
+              const my = Math.max(1, ...L.jobs.map(j => j.y + TILE_H), ...L.els.map(e => e.y + e.h));
+              const k = Math.min(W / mx, H / my);
+              return (
+                <div key={L.id} className="mb-2 rounded-lg border border-gray-200 overflow-hidden">
+                  <div className="relative bg-gray-50" style={{ width: '100%', height: H }}>
+                    {L.els.map(e => (
+                      <span key={e.id} className="absolute rounded-[1px]"
+                        style={{ left: e.x * k, top: e.y * k, width: Math.max(2, e.w * k), height: Math.max(2, e.h * k), backgroundColor: 'rgba(148,163,184,.35)' }} />
+                    ))}
+                    {L.jobs.map(j => {
+                      const st = apartments.find(a => a.id === j.id)?.currentStageId;
+                      return (
+                        <span key={j.id} className="absolute rounded-[1px]"
+                          style={{
+                            left: j.x * k, top: j.y * k,
+                            width: Math.max(3, TILE_W * k), height: Math.max(2, TILE_H * k),
+                            backgroundColor: stageMap.get(st ?? '')?.color ?? '#cbd5e1',
+                          }} />
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-center gap-1.5 px-2 py-1.5">
+                    <span className="text-[9.5px] text-gray-500 truncate flex-1" title={L.label}>{L.label}</span>
+                    <button
+                      onClick={() => { restoreBoardLayout(L.id); setToast('Layout restored'); }}
+                      className="text-[10px] font-bold text-[#1e3a5f] hover:underline">Restore</button>
+                    <button
+                      onClick={() => deleteBoardLayout(L.id)}
+                      className="text-gray-300 hover:text-red-500" title="Forget this snapshot">
+                      <X size={11} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -1270,6 +1388,16 @@ export function GeneralJobsPage() {
               setCtxMenu({ x: e.clientX, y: e.clientY, kind: 'canvas', ids: [], worldX: w.x, worldY: w.y });
             }}
           >
+            {/* Completion burst — drawn in world space so it lands on the bin
+                the job was dropped into, and gone in about a second. */}
+            {celebrate && (
+              <div key={celebrate.key} className="absolute pointer-events-none z-40"
+                style={{ left: celebrate.x, top: celebrate.y }}>
+                <span className="board-celebrate-ring" />
+                <span className="board-celebrate-tick">✓</span>
+              </div>
+            )}
+
             {/* Lasso box */}
             {lasso && (Math.abs(lasso.ex - lasso.sx) > 4 || Math.abs(lasso.ey - lasso.sy) > 4) && (
               <div
@@ -1565,6 +1693,14 @@ export function GeneralJobsPage() {
                     // stages; the border carries the same information and leaves the
                     // content legible at every one.
                     backgroundColor: job.tileColor ?? '#ffffff',
+                    // A photo behind the tile, when one is set. Text keeps a
+                    // white scrim over it so the name stays readable whatever
+                    // the picture is.
+                    ...(job.tilePhotoUrl ? {
+                      backgroundImage: `linear-gradient(rgba(255,255,255,.78), rgba(255,255,255,.88)), url(${JSON.stringify(job.tilePhotoUrl)})`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                    } : {}),
                     border: `4px solid ${isSelected ? '#4aa8d8' : (stage?.color ?? tilePalette.border)}`,
                     outline: isSelected && !isDragging ? '2px solid rgba(74,168,216,0.4)' : undefined,
                     outlineOffset: '1px',
@@ -1660,6 +1796,18 @@ export function GeneralJobsPage() {
                     )}
                   </div>
 
+                  {/* Thumbs-up reaction — click the badge to take one back. */}
+                  {(job.thumbsUp ?? 0) > 0 && (
+                    <button
+                      data-no-drag
+                      onClick={e => { e.stopPropagation(); bumpThumbs('job', [job.id], -1); }}
+                      title="Remove a thumbs up"
+                      className="absolute -top-2 -left-2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-white border border-gray-200 shadow-sm text-[10px] font-bold text-emerald-600"
+                    >
+                      <ThumbsUp size={10} /> {job.thumbsUp}
+                    </button>
+                  )}
+
                   {/* Last edited — content changes only, never board tidying */}
                   {(job.contentUpdatedAt ?? job.updatedAt) && (
                     <span className="absolute top-2 left-3 text-[9px] text-gray-400 pointer-events-none">
@@ -1704,6 +1852,22 @@ export function GeneralJobsPage() {
                   <Palette size={14} className="text-gray-400" /> Change Color
                 </button>
 
+                {/* Photo background — the latest site photo, or none. */}
+                {ctxMenu.ids.length === 1 && (
+                  apartments.find(a => a.id === ctxMenu.ids[0])?.tilePhotoUrl ? (
+                    <button onClick={() => setTilePhoto(ctxMenu.ids, undefined)}
+                      className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
+                      <ImageOff size={14} className="text-gray-400" /> Remove photo background
+                    </button>
+                  ) : latestPhotoUrl(ctxMenu.ids[0]) ? (
+                    <button onClick={() => setTilePhoto(ctxMenu.ids, latestPhotoUrl(ctxMenu.ids[0])!)}
+                      className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5"
+                      title="Use the newest photo from the site">
+                      <ImageIcon size={14} className="text-gray-400" /> Photo background
+                    </button>
+                  ) : null
+                )}
+
                 <div className="h-px bg-gray-100 my-1" />
                 <button
                   disabled={clip.kind === 'none' || ctxMenu.ids.length !== 1}
@@ -1718,7 +1882,11 @@ export function GeneralJobsPage() {
                 <div className="px-4 pt-1 pb-0.5 text-[10px] font-bold text-gray-400 tracking-wide">MOVE TO</div>
                 {BIN_KINDS.map(k => (
                   <button key={k}
-                    onClick={() => { ctxMenu.ids.forEach(id => moveToBin(id, k)); setSelectedJobIds(new Set()); setCtxMenu(null); setToast(`Moved to ${BIN_META[k].label}`); }}
+                    onClick={() => {
+                      fileInBin(ctxMenu.ids, k, binNodes.find(b => b.binKind === k));
+                      setSelectedJobIds(new Set());
+                      setCtxMenu(null);
+                    }}
                     className="w-full px-4 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
                     <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: BIN_META[k].color }} />
                     {BIN_META[k].label}
@@ -1881,6 +2049,39 @@ export function GeneralJobsPage() {
               <button onClick={() => { createJobFromLink(createFromLink.intent, createFromLink.x, createFromLink.y); setCtxMenu(null); }}
                 className="flex-1 py-2 rounded-xl text-sm font-semibold text-white"
                 style={{ background: 'linear-gradient(135deg, #1e3a5f, #2d5a8e)' }}>Create job</button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Export chooser ── */}
+      {exportMenu && (
+        <>
+          <div className="fixed inset-0 bg-black/30 z-50" onClick={() => setExportMenu(false)} />
+          <div className="fixed z-50 bg-white rounded-2xl shadow-2xl p-5"
+            style={{ left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: 'min(360px, 92vw)' }}>
+            <h3 className="text-base font-bold text-gray-900 mb-1">Export the board</h3>
+            <p className="text-xs text-gray-500 mb-4">
+              The whole board is exported, not only the part on screen.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  setExportMenu(false);
+                  try {
+                    await exportBoardPng(exportInput(), `job-board-${new Date().toISOString().slice(0, 10)}.png`);
+                    setToast('Board image saved');
+                  } catch { setToast('Could not export the board'); }
+                }}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white"
+                style={{ background: 'linear-gradient(135deg, #1e3a5f, #2d5a8e)' }}>
+                PNG image
+              </button>
+              <button
+                onClick={() => { setExportMenu(false); exportBoardPdf(exportInput()); }}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">
+                Print / PDF
+              </button>
             </div>
           </div>
         </>
