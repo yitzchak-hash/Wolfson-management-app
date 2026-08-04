@@ -20,7 +20,7 @@ export function Tooltip({ text, children, side = 'top' }: TooltipProps) {
       {children}
       <span
         role="tooltip"
-        className={`${POS[side]} pointer-events-none absolute z-[200] opacity-0 group-hover/tip:opacity-100 transition-opacity duration-150`}
+        className={`${POS[side]} hidden md:block pointer-events-none absolute z-[200] opacity-0 group-hover/tip:opacity-100 transition-opacity duration-150`}
       >
         <span className="block bg-gray-900 text-white text-[11px] font-medium rounded-lg px-2.5 py-1.5 shadow-xl whitespace-nowrap leading-tight">
           {text}

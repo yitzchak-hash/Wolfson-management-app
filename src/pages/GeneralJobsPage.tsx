@@ -17,6 +17,8 @@ import { BOARD_THEMES, getBoardTheme } from '../data/boardThemes';
 import { MiniMap } from '../components/board/MiniMap';
 import { BinWindow } from '../components/board/BinWindow';
 import { StageBoard } from '../components/board/StageBoard';
+import { WidgetStore } from '../components/board/WidgetStore';
+import { renderWidget, WidgetDef } from '../data/widgets';
 import { useTouchGestures } from '../hooks/useTouchGestures';
 import { detectPasteIntent, fieldForIntent, canCreateFromIntent, PasteIntent } from '../data/pasteIntent';
 import { exportBoardPng, exportBoardPdf } from '../data/boardExport';
@@ -166,6 +168,8 @@ export function GeneralJobsPage() {
     moveToBin,
     backupDriveFolderLink,
     contractorPhotos,
+    contractors,
+    activityLogs,
     boardLayouts,
     saveBoardLayout,
     restoreBoardLayout,
@@ -205,6 +209,7 @@ export function GeneralJobsPage() {
     { intent: PasteIntent; x: number; y: number } | null>(null);
   const [artPicker, setArtPicker] = useState(false);
   const [exportMenu, setExportMenu] = useState(false);
+  const [storeOpen, setStoreOpen] = useState(false);
   const [layoutPanel, setLayoutPanel] = useState(false);
   /** A finished job briefly celebrates, at the point on the board it landed. */
   const [celebrate, setCelebrate] = useState<{ x: number; y: number; key: number } | null>(null);
@@ -248,6 +253,12 @@ export function GeneralJobsPage() {
   const [tool, setTool] = useState<BoardTool>('select');
   const [boardSettingsOpen, setBoardSettingsOpen] = useState(false);
 
+  /**
+   * Set below the redirect guard, where `freeSpot` can see the jobs and
+   * elements. A ref rather than a dependency so `dropNode` stays stable.
+   */
+  const freeSpotRef = useRef<(w: number, h: number) => { x: number; y: number }>(() => ({ x: 40, y: 40 }));
+
   /** Centre of the current view, in world coordinates — where new nodes land. */
   const viewCentre = useCallback(() => {
     const vp = viewportRef.current;
@@ -263,17 +274,17 @@ export function GeneralJobsPage() {
     at?: { x: number; y: number },
     extra?: Partial<CanvasElement>,
   ) => {
-    const vp = viewportRef.current;
-    const c = at ?? {
-      x: vp ? (vp.clientWidth / 2 - pan.x) / zoom : 200,
-      y: vp ? (vp.clientHeight / 2 - pan.y) / zoom : 200,
-    };
     const size = NODE_DEFAULT_SIZE[kind] ?? { w: 180, h: 120 };
+    // An explicit point (right-click "add here") is honoured as the centre;
+    // otherwise find somewhere free rather than stacking on the last one.
+    const c = at
+      ? { x: at.x - size.w / 2, y: at.y - size.h / 2 }
+      : freeSpotRef.current(size.w, size.h);
     addCanvasElement({
       id: 'CE-' + Math.random().toString(36).slice(2, 9),
       type: kind,
-      x: Math.round(c.x - size.w / 2),
-      y: Math.round(c.y - size.h / 2),
+      x: Math.round(c.x),
+      y: Math.round(c.y),
       w: size.w, h: size.h,
       text: kind === 'title' ? 'Title' : '',
       color: kind === 'clipart' ? '#dc2626' : 'rgba(250, 204, 21, 0.45)',
@@ -283,13 +294,63 @@ export function GeneralJobsPage() {
       ...(kind === 'clipart' ? { art: 'pin' as const } : {}),
       ...extra,
     });
-  }, [addCanvasElement, pan.x, pan.y, zoom]);
+  }, [addCanvasElement]);
 
   /**
    * Toolbar picks split three ways: some create a node immediately, some arm a
    * gesture (pen, highlighter) and stay selected until you switch away, and a
    * couple open a chooser first.
    */
+  /**
+   * A free spot near the middle of the view.
+   *
+   * Dropping everything at the exact centre buried each new node under the last
+   * one — place four widgets in a row and you have a pile, not a board. This
+   * spirals outward from the centre until it finds a gap nothing occupies.
+   */
+  function freeSpot(w: number, h: number): { x: number; y: number } {
+    const vp = viewportRef.current;
+    const cx = (vp ? (vp.clientWidth / 2 - pan.x) / zoom : 200) - w / 2;
+    const cy = (vp ? (vp.clientHeight / 2 - pan.y) / zoom : 200) - h / 2;
+    const taken = [
+      ...canvasElements.filter(e => e.type !== 'stroke').map(e => ({ x: e.x, y: e.y, w: e.w, h: e.h })),
+      ...jobs.map((j, i) => ({ ...jobPos(j, i), w: TILE_W, h: TILE_H })),
+    ];
+    const clear = (x: number, y: number) => !taken.some(t =>
+      x < t.x + t.w + 8 && x + w + 8 > t.x && y < t.y + t.h + 8 && y + h + 8 > t.y);
+
+    if (clear(cx, cy)) return { x: Math.max(0, cx), y: Math.max(0, cy) };
+    const STEP = 28;
+    for (let ring = 1; ring <= 30; ring++) {
+      for (const [dx, dy] of [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]]) {
+        const x = cx + dx * ring * STEP, y = cy + dy * ring * STEP;
+        if (x >= 0 && y >= 0 && clear(x, y)) return { x, y };
+      }
+    }
+    // Everything nearby is occupied — cascade rather than land dead centre.
+    return { x: Math.max(0, cx + 26), y: Math.max(0, cy + 26) };
+  }
+
+  freeSpotRef.current = freeSpot;
+
+  /** Drops a widget from the store, seeded with its own default state. */
+  function placeWidget(def: WidgetDef) {
+    const at = freeSpot(def.w, def.h);
+    addCanvasElement({
+      id: 'CE-' + Math.random().toString(36).slice(2, 9),
+      type: 'widget',
+      widget: def.id,
+      x: Math.round(at.x),
+      y: Math.round(at.y),
+      w: def.w, h: def.h,
+      text: '',
+      color: '#ffffff',
+      data: def.data ? JSON.parse(JSON.stringify(def.data)) : {},
+    });
+    setStoreOpen(false);
+    setToast(`${def.name} added`);
+  }
+
   function handleToolPick(next: BoardTool) {
     if (next === 'clipart') { setArtPicker(true); setTool('select'); return; }
     if (next === 'job') { setShowAddModal(true); setTool('select'); return; }
@@ -1074,6 +1135,32 @@ export function GeneralJobsPage() {
     onPan: (dx, dy) => setPan(p => ({ x: p.x + dx, y: p.y + dy })),
   });
 
+  /**
+   * On a phone, open zoomed to fit.
+   *
+   * At 100% a 390px screen shows a tile and a half, which is not a board — it
+   * is a keyhole. Only fires once, and only when the screen is genuinely small,
+   * so it never overrides a zoom someone chose on a desktop.
+   */
+  const didAutoFit = useRef(false);
+  useEffect(() => {
+    // Polls rather than depending on render state: on the first pass after mount
+    // the viewport often still measures 0 wide, and a dependency array that
+    // never changes again would mean it simply never happened.
+    let tries = 0;
+    const t = setInterval(() => {
+      if (didAutoFit.current || ++tries > 20) { clearInterval(t); return; }
+      const vp = viewportRef.current;
+      if (!vp || vp.clientWidth === 0) return;
+      clearInterval(t);
+      if (vp.clientWidth > 700) return;   // desktop keeps whatever zoom it had
+      didAutoFit.current = true;
+      fitRef.current();
+    }, 150);
+    return () => clearInterval(t);
+  }, []);
+  const fitRef = useRef<() => void>(() => {});
+
   /** Space-held drag pans, the shortcut every canvas app has. */
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -1102,15 +1189,51 @@ export function GeneralJobsPage() {
   }
   function onViewportPointerUp() { panRef.current = null; }
 
+  /**
+   * Fit what is actually on the board.
+   *
+   * Deliberately measured from the CONTENT bounds, not the canvas size: the
+   * canvas carries a 700×500 minimum so an empty board still has a surface, and
+   * fitting to that padded everything down to a third of readable size.
+   *
+   * The floor stops it going smaller than legible. Past that point a phone is
+   * better off showing part of the board properly than all of it as confetti.
+   */
   function zoomToFit() {
     const vp = viewportRef.current;
     if (!vp) return;
     const r = vp.getBoundingClientRect();
-    const s = Math.min(r.width / (maxX + 40), r.height / (maxY + 40), 1);
+    const b = contentBounds();
+    if (!b) return;
+    const raw = Math.min(r.width / (b.w + 48), r.height / (b.h + 48), 1);
+    const MIN = r.width < 700 ? 0.5 : 0.25;
+    const s = Math.max(raw, MIN);
     const step = [...ZOOM_STEPS].reverse().find(z => z <= s) ?? ZOOM_STEPS[0];
     setZoom(step);
-    setPan({ x: (r.width - maxX * step) / 2, y: 20 });
+    setPan({
+      x: Math.min(24, (r.width - b.w * step) / 2) - b.x * step,
+      y: 16 - b.y * step,
+    });
   }
+
+  /** Bounding box of everything on the board, or null when it is empty. */
+  function contentBounds(): { x: number; y: number; w: number; h: number } | null {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    jobs.forEach((j, i) => {
+      const p = jobPos(j, i);
+      x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y);
+      x1 = Math.max(x1, p.x + TILE_W); y1 = Math.max(y1, p.y + TILE_H);
+    });
+    canvasElements.forEach(el => {
+      if (el.type === 'stroke') return;
+      x0 = Math.min(x0, el.x); y0 = Math.min(y0, el.y);
+      x1 = Math.max(x1, el.x + el.w); y1 = Math.max(y1, el.y + el.h);
+    });
+    if (!Number.isFinite(x0)) return null;
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  }
+
+  fitRef.current = zoomToFit;
 
   // ── Start text edit for element ───────────────────────────────────
   function startEdit(el: CanvasElement) {
@@ -1140,10 +1263,12 @@ export function GeneralJobsPage() {
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-gray-50">
       {/* ── Header ── */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 bg-white flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <Briefcase size={20} className="text-[#1e3a5f]" />
-          <h1 className="text-xl font-bold text-gray-900">{s.generalJobsTitle}</h1>
+      <div className="flex items-center justify-between px-2 md:px-5 py-2 md:py-3 border-b border-gray-200 bg-white flex-shrink-0 gap-2">
+        <div className="flex items-center gap-2 md:gap-3 min-w-0">
+          <Briefcase size={20} className="text-[#1e3a5f] flex-shrink-0" />
+          {/* The title is the least informative thing here on a phone — the
+              sidebar already says where you are — so it steps aside first. */}
+          <h1 className="hidden sm:block text-xl font-bold text-gray-900 truncate">{s.generalJobsTitle}</h1>
           {jobs.length > 0 && (
             <span className="text-xs font-medium bg-gray-200 text-gray-600 rounded-full px-2 py-0.5">{jobs.length}</span>
           )}
@@ -1167,22 +1292,22 @@ export function GeneralJobsPage() {
                 key={id}
                 onClick={() => setBoardSetting('viewMode', id)}
                 title={id === 'stages' ? 'Group by stage — drag a card to change its stage' : 'Free board'}
-                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors"
+                className="flex items-center gap-1.5 px-2.5 md:px-3 py-2 text-sm font-medium transition-colors"
                 style={viewMode === id
                   ? { backgroundColor: '#1e3a5f', color: '#fff' }
                   : { color: '#64748b' }}
               >
-                <Icon size={15} /> {label}
+                <Icon size={15} /> <span className="hidden sm:inline">{label}</span>
               </button>
             ))}
           </div>
           <div className="w-px h-6 bg-gray-200" />
           <button
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95 shadow-sm"
+            className="flex items-center gap-2 px-3 md:px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95 shadow-sm flex-shrink-0"
             style={{ background: 'linear-gradient(135deg, #1e3a5f, #2d5a8e)' }}
           >
-            <Plus size={16} /> {s.addJobBtn}
+            <Plus size={16} /> <span className="hidden sm:inline">{s.addJobBtn}</span>
           </button>
         </div>
       </div>
@@ -1210,6 +1335,9 @@ export function GeneralJobsPage() {
           active={tool}
           onPick={handleToolPick}
           onFit={zoomToFit}
+          onOpenStore={() => setStoreOpen(true)}
+          onToggleMap={() => setBoardSetting('showMinimap', !(projectBoard.showMinimap ?? false))}
+          mapOn={projectBoard.showMinimap ?? false}
           controlsOpen={showControls}
           onToggleControls={() => setBoardSetting('showControls', !showControls)}
           onToggleSettings={() => setBoardSettingsOpen(v => !v)}
@@ -1326,6 +1454,7 @@ export function GeneralJobsPage() {
         <PinnedTitleLayer elements={canvasElements} zoom={zoom} panX={pan.x} onEdit={startEdit} />
 
         <MiniMap
+          force={projectBoard.showMinimap}
           jobs={jobs}
           elements={canvasElements}
           stages={stages}
@@ -1447,6 +1576,7 @@ export function GeneralJobsPage() {
               const isBin = el.type === 'bin' && !!el.binKind;
               const binHot = hoverBin === el.id;
               const plain = el.type === 'clipart';
+              const isWidget = el.type === 'widget';
 
               // Each node type carries its own surface. A bin is a dashed drop
               // zone, clip art has no chrome at all, and the rest keep the card
@@ -1459,6 +1589,8 @@ export function GeneralJobsPage() {
                   }
                 : plain
                 ? { background: 'none', border: 'none' }
+                : isWidget
+                ? { backgroundColor: '#ffffff', border: '1px solid #e2e8f0' }
                 : {
                     backgroundColor: el.type === 'box' ? el.color : (el.color || '#ffffff'),
                     border: `1px solid ${el.type === 'box' ? el.color.replace('0.45', '0.8') : 'rgba(0,0,0,0.1)'}`,
@@ -1566,6 +1698,14 @@ export function GeneralJobsPage() {
                       onRecord={() => startRecording(el.id)}
                       onStop={stopRecording}
                     />
+                  ) : isWidget ? (
+                    renderWidget(el, {
+                      jobs: apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed),
+                      stages, assignments: contractorAssignments, contractors,
+                      photos: contractorPhotos, logs: activityLogs,
+                      update: patch => updateCanvasElement(el.id, patch),
+                      openJob: id => { const j = jobs.find(x => x.id === id); if (j) setSelectedJob(j); },
+                    })
                   ) : el.type === 'clipart' ? (
                     <ClipArtNode el={el} />
                   ) : el.type === 'title' ? (
@@ -1614,8 +1754,8 @@ export function GeneralJobsPage() {
                     </button>
                   )}
 
-                  {/* Resize handle — boxes and bins are both resizable. */}
-                  {(el.type === 'box' || isBin) && (
+                  {/* Resize handle — boxes, bins and widgets are all resizable. */}
+                  {(el.type === 'box' || isBin || isWidget) && (
                     <div
                       data-el-action
                       onPointerDown={e => onResizePointerDown(e, el)}
@@ -2098,6 +2238,9 @@ export function GeneralJobsPage() {
           </div>
         </>
       )}
+
+      {/* ── Widget store ── */}
+      {storeOpen && <WidgetStore onPick={placeWidget} onClose={() => setStoreOpen(false)} />}
 
       {/* ── Bin window ── */}
       {openBin && <BinWindow bin={openBin} onClose={() => setOpenBin(null)} />}

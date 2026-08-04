@@ -9,6 +9,7 @@ import { isFirebaseConfigured, db, fsSet, fsGetAll } from '../data/firebase';
 import { Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency, getStageName, Apartment, isCountableApartment } from '../types';
 import { Tooltip } from '../components/ui/Tooltip';
 import { Toast } from '../components/ui/Toast';
+import { BoardRegionPicker } from '../components/board/BoardRegionPicker';
 import { format } from 'date-fns';
 import { saveAs } from 'file-saver';
 import { extractFolderId, isUploadBackendConfigured, getFolderNameViaBackend, familyNameFromFolderName } from '../data/driveApi';
@@ -16,7 +17,7 @@ import { fetchContractorSheet } from '../data/sheetApi';
 import { ProjectBuilder } from '../components/settings/ProjectBuilder';
 import { ProjectLayout, layoutToApartments } from '../data/projectLayout';
 
-type Tab = 'stages' | 'users' | 'contractors' | 'app' | 'language' | 'buildings' | 'sheet';
+type Tab = 'stages' | 'users' | 'contractors' | 'app' | 'language' | 'buildings' | 'sheet' | 'tv';
 
 /**
  * Settings are split in two, and the split is deliberate:
@@ -33,7 +34,7 @@ type Tab = 'stages' | 'users' | 'contractors' | 'app' | 'language' | 'buildings'
 export type SettingsScope = 'project' | 'app';
 
 const PROJECT_TABS: Tab[] = ['stages', 'buildings', 'sheet'];
-const APP_TABS: Tab[] = ['users', 'contractors', 'app', 'language'];
+const APP_TABS: Tab[] = ['users', 'contractors', 'tv', 'app', 'language'];
 
 const PRESET_COLORS = [
   '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16',
@@ -64,6 +65,7 @@ export function SettingsPage({ scope = 'project' }: { scope?: SettingsScope }) {
     language: s.settingsLanguage,
     buildings: s.settingsBuildings,
     sheet: s.contractorSheetLabel,
+    tv: 'TV',
   };
 
   const projectName = projects.find(p => p.id === currentProjectId)?.name ?? currentProjectId;
@@ -98,6 +100,9 @@ export function SettingsPage({ scope = 'project' }: { scope?: SettingsScope }) {
       )}
       {activeTab === 'contractors' && (
         <ContractorsTab onToast={showToast} />
+      )}
+      {activeTab === 'tv' && (
+        <TvSettings onToast={showToast} />
       )}
       {activeTab === 'app' && (
         <AppSettingsTab lightTheme={lightTheme} setLightTheme={setLightTheme} onToast={showToast} />
@@ -1179,8 +1184,9 @@ function DriveNameBackfill({ onToast }: { onToast: (msg: string, type?: 'success
  * itself and the two things that vary from one room to the next.
  */
 function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
-  const { boardSettings, setTvSetting } = useStore();
+  const { boardSettings, setTvSetting, apartments, canvasElements, stages } = useStore();
   const tv = boardSettings.__tv ?? {};
+  const boardJobs = apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed && !a.boardBin);
   const lang = tv.tvLang ?? 'en';
   const boost = tv.tvScale ?? 1;
   const link = `${window.location.origin}/tv`;
@@ -1205,6 +1211,22 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
           style={{ background: 'linear-gradient(135deg, #1e3a5f, #2d5a8e)' }}>
           Copy
         </button>
+      </div>
+
+      {/* Aim the TV at part of the board. */}
+      <label className="block text-xs font-semibold text-gray-600 mb-1">What the TV shows</label>
+      <p className="text-[11px] text-gray-400 mb-2 leading-snug">
+        The board keeps growing, and the corner worth showing is rarely the top-left one. Drag the box
+        over the map below to choose what appears on the wall; drag its corner to take in more or less.
+      </p>
+      <div className="mb-5">
+        <BoardRegionPicker
+          jobs={boardJobs}
+          elements={canvasElements}
+          stages={stages}
+          value={tv.tvView}
+          onChange={r => { setTvSetting('tvView', r); onToast(r ? 'TV view updated' : 'TV shows the whole board'); }}
+        />
       </div>
 
       <label className="block text-xs font-semibold text-gray-600 mb-1">Default language on the TV</label>
@@ -1252,7 +1274,6 @@ function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
 
   return (
     <div className="space-y-5">
-      <TvSettings onToast={onToast} />
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <h2 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
           {lightTheme ? <Sun size={18} className="text-amber-500" /> : <Moon size={18} className="text-blue-500" />}

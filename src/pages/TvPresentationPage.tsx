@@ -6,6 +6,7 @@ import { DriveIcon, ZohoIcon, PlanIcon } from '../components/ui/BrandIcons';
 import { getBoardTheme } from '../data/boardThemes';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
 import { CountdownNode, StopwatchNode, ClipArtNode, StrokeLayer } from '../components/board/BoardNodes';
+import { renderWidget } from '../data/widgets';
 
 /**
  * The office wall display.
@@ -372,6 +373,22 @@ export function TvPresentationPage() {
     );
   }
 
+  /**
+   * Which slice of the board is on the wall.
+   *
+   * When a region is set in TV settings, it is fitted to the screen — the same
+   * numbers the picker's rectangle produced, so what you dragged is what shows.
+   * Without one it falls back to the automatic whole-board scale, and the
+   * manual boost still applies on top either way.
+   */
+  const tvRegion = tvSettings.tvView;
+  const frameW = frameRef.current?.clientWidth ?? window.innerWidth;
+  const frameH = (frameRef.current?.clientHeight ?? window.innerHeight) - 56;
+  const boardScale = tvRegion && tvRegion.w > 0 && tvRegion.h > 0
+    ? Math.min(frameW / tvRegion.w, frameH / tvRegion.h) * boost
+    : scale;
+  const boardOrigin = tvRegion ? { x: tvRegion.x, y: tvRegion.y } : { x: 0, y: 0 };
+
   // ── The board itself ──
   return (
     <div ref={frameRef} dir={isRtl ? 'rtl' : 'ltr'} className="h-screen w-screen flex flex-col overflow-hidden bg-white">
@@ -380,7 +397,10 @@ export function TvPresentationPage() {
           the office sees on their screens rather than being a second design. */}
       <div className="flex-1 relative overflow-hidden" style={theme.surface}>
         <div className="absolute top-0 left-0" dir="ltr"
-          style={{ transform: `scale(${scale})`, transformOrigin: isRtl ? '100% 0' : '0 0' }}>
+          style={{
+            transform: `scale(${boardScale}) translate(${-boardOrigin.x}px, ${-boardOrigin.y}px)`,
+            transformOrigin: '0 0',
+          }}>
           {/* Notes, boxes, titles, timers and drawings — the same board, minus
               anything switched off for the wall. */}
           <StrokeLayer elements={tvElements} />
@@ -397,6 +417,8 @@ export function TvPresentationPage() {
                   zIndex: el.type === 'box' ? 1 : 3,
                   ...(isBin
                     ? { backgroundColor: 'rgba(255,255,255,.82)', border: `2px dashed ${el.color}` }
+                    : el.type === 'widget'
+                    ? { backgroundColor: '#ffffff', border: '1px solid #e2e8f0' }
                     : el.type === 'clipart'
                     ? {}
                     : { backgroundColor: el.color, border: '1px solid rgba(0,0,0,.08)' }),
@@ -408,7 +430,13 @@ export function TvPresentationPage() {
                     </span>
                     <span className="text-[11px] text-gray-500">{binJobs}</span>
                   </div>
-                ) : el.type === 'countdown' ? <CountdownNode el={el} />
+                ) : el.type === 'widget' ? renderWidget(el, {
+                    jobs: apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed),
+                    stages, assignments: contractorAssignments, contractors: [],
+                    photos: contractorPhotos, logs: [],
+                    update: () => {}, openJob: () => {}, readOnly: true,
+                  })
+                  : el.type === 'countdown' ? <CountdownNode el={el} />
                   : el.type === 'stopwatch' ? <StopwatchNode el={el} />
                   : el.type === 'clipart' ? <ClipArtNode el={el} />
                   : el.type === 'title' ? (

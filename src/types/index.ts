@@ -41,9 +41,18 @@ export interface BoardSetting {
   showControls?: boolean;
   /** 'canvas' = the free board, 'stages' = the same jobs in stage columns. */
   viewMode?: 'canvas' | 'stages';
+  /** Board overview: true = pinned on, false = off, absent = show when useful. */
+  showMinimap?: boolean;
   /** TV wallboard: default language and manual display-scale override. */
   tvLang?: 'en' | 'he';
   tvScale?: number;
+  /**
+   * Which part of the board the TV shows, in board coordinates.
+   *
+   * A board grows past what any screen can hold, and the interesting corner is
+   * rarely the top-left one. Absent means "the whole board, fitted".
+   */
+  tvView?: { x: number; y: number; w: number; h: number };
 }
 
 export type BoardSettingKey = keyof BoardSetting;
@@ -229,7 +238,7 @@ export interface Apartment {
 // Free-form canvas elements in the General Jobs canvas (sticky notes, section boxes)
 export interface CanvasElement {
   id: string;
-  type: 'note' | 'box' | 'title' | 'countdown' | 'stopwatch' | 'clipart' | 'stroke' | 'bin' | 'voice';
+  type: 'note' | 'box' | 'title' | 'countdown' | 'stopwatch' | 'clipart' | 'stroke' | 'bin' | 'voice' | 'widget';
   /** countdown: target ISO time · stopwatch: started ISO time (absent = paused) */
   targetAt?: string;
   startedAt?: string;
@@ -259,6 +268,13 @@ export interface CanvasElement {
   audioSeconds?: number;
   /** Thumbs-up count — see Apartment.thumbsUp. */
   thumbsUp?: number;
+  /**
+   * Widgets: which kind this is (see `src/data/widgets.tsx`) and its own state.
+   * Keeping the state in one free-form bag is what lets a new widget be added
+   * without touching the type, the store, the sync or the backup.
+   */
+  widget?: string;
+  data?: Record<string, unknown>;
   /** See Apartment.showOnTv — undefined means visible. */
   showOnTv?: boolean;
   /**
@@ -1109,6 +1125,7 @@ export interface MainUiStrings {
   appSettingsHint: string;
   projectSettingsHint: string;
   navProjectSettings: string;
+  moreLabel: string;
   appSettingsTitle: string;
   projectSettingsTitle: string;
   linkedPairSeparateHint: string;
@@ -1655,6 +1672,7 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   appSettingsHint: 'Shared across every workspace.',
   projectSettingsHint: 'These settings apply to this workspace only.',
   navProjectSettings: 'Project',
+  moreLabel: 'More',
   appSettingsTitle: 'App Settings',
   projectSettingsTitle: 'Project Settings',
   linkedPairSeparateHint: 'Connected units — each tracked separately by the contractor',
@@ -2200,6 +2218,7 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   appSettingsHint: 'משותף לכל סביבות העבודה.',
   projectSettingsHint: 'הגדרות אלו חלות על סביבת עבודה זו בלבד.',
   navProjectSettings: 'פרויקט',
+  moreLabel: 'עוד',
   appSettingsTitle: 'הגדרות אפליקציה',
   projectSettingsTitle: 'הגדרות פרויקט',
   linkedPairSeparateHint: 'יחידות מקושרות — כל אחת נמדדת בנפרד אצל הקבלן',

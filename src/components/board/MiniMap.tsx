@@ -13,7 +13,7 @@ import { Apartment, CanvasElement, Stage } from '../../types';
  */
 export function MiniMap({
   jobs, elements, stages, worldW, worldH, zoom, pan, viewportW, viewportH, onJump,
-  tileW = 215, tileH = 132,
+  tileW = 215, tileH = 132, force,
 }: {
   jobs: Apartment[];
   elements: CanvasElement[];
@@ -27,6 +27,8 @@ export function MiniMap({
   onJump: (worldX: number, worldY: number) => void;
   tileW?: number;
   tileH?: number;
+  /** true = always show, false = never, undefined = only when it is useful. */
+  force?: boolean;
 }) {
   const W = 148, H = 104;
   const scale = useMemo(
@@ -34,9 +36,12 @@ export function MiniMap({
     [worldW, worldH],
   );
 
-  // Only worth showing once the board exceeds what fits on screen.
+  // By default it appears only once the board exceeds the screen — but that made
+  // it look missing on a board that happens to fit, so the toolbar can pin it on
+  // or off outright.
   const needed = worldW * zoom > viewportW * 1.15 || worldH * zoom > viewportH * 1.15;
-  if (!needed) return null;
+  if (force === false) return null;
+  if (!force && !needed) return null;
 
   const stageColor = (id?: string | null) => stages.find(s => s.id === id)?.color ?? '#cbd5e1';
 

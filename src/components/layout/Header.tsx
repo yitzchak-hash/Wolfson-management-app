@@ -28,8 +28,8 @@ function TzviAirLogo() {
     <img
       src="/tzviair-logo.png"
       alt="TzviAir"
-      className="flex-shrink-0"
-      style={{ height: '40px', width: 'auto', display: 'block', filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.18))' }}
+      className="flex-shrink-0 h-7 md:h-10 max-w-[110px] md:max-w-none object-contain"
+      style={{ width: 'auto', display: 'block', filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.18))' }}
     />
   );
 }
@@ -62,13 +62,16 @@ export function Header() {
     <>
     <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
     <header
-      className="h-16 flex items-center justify-between px-5 shadow-lg flex-shrink-0 z-30 transition-colors duration-200"
+      className="h-14 md:h-16 flex items-center justify-between px-2 md:px-5 shadow-lg flex-shrink-0 z-30 transition-colors duration-200 gap-2"
       style={{ backgroundColor: lightTheme ? '#ffffff' : '#1e3a5f', borderBottom: lightTheme ? '1px solid #e5e7eb' : 'none' }}
     >
-      <div className="flex items-center gap-4">
+      {/* Everything left of the actions has to survive a 390px phone, so the
+          logo shrinks, the divider goes, and the project chips lose their
+          labels — the coloured ring already says which one is active. */}
+      <div className="flex items-center gap-2 md:gap-4 min-w-0">
         <TzviAirLogo />
-        <div className="w-px h-10" style={{ backgroundColor: lightTheme ? '#e5e7eb' : 'rgba(255,255,255,0.2)' }} />
-        <div className="flex items-center gap-2">
+        <div className="hidden md:block w-px h-10" style={{ backgroundColor: lightTheme ? '#e5e7eb' : 'rgba(255,255,255,0.2)' }} />
+        <div className="flex items-center gap-1 md:gap-2 min-w-0">
           {projects.map(p => (
             <Tooltip key={p.id} text={p.name}>
               <button
@@ -79,9 +82,9 @@ export function Header() {
                       backgroundColor: lightTheme ? `${p.color}14` : 'rgba(255,255,255,0.08)' }
                   : { opacity: 0.4 }}
               >
-                <img src={p.logoPath} alt={p.name} className="h-9 w-auto rounded" style={{ objectFit: 'contain' }} />
+                <img src={p.logoPath} alt={p.name} className="h-7 md:h-9 w-auto rounded" style={{ objectFit: 'contain' }} />
                 {currentProjectId === p.id && (
-                  <span className="text-[11px] font-bold whitespace-nowrap"
+                  <span className="hidden md:inline text-[11px] font-bold whitespace-nowrap"
                     style={{ color: lightTheme ? p.color : '#ffffff' }}>
                     {p.shortName}
                   </span>
@@ -91,18 +94,18 @@ export function Header() {
           ))}
           {currentUser && (
             <>
-              <div className="w-px h-8 mx-1" style={{ backgroundColor: lightTheme ? '#e5e7eb' : 'rgba(255,255,255,0.2)' }} />
+              <div className="hidden md:block w-px h-8 mx-1" style={{ backgroundColor: lightTheme ? '#e5e7eb' : 'rgba(255,255,255,0.2)' }} />
               <Tooltip text={s.globalCalendarTitle}>
                 <button
                   onClick={() => navigate('/calendar')}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors text-xs font-bold"
+                  className="flex items-center gap-1.5 px-2 md:px-3 py-1.5 rounded-lg transition-colors text-xs font-bold flex-shrink-0"
                   style={{
                     color: lightTheme ? '#1e3a5f' : '#ffffff',
                     backgroundColor: lightTheme ? 'rgba(74,168,216,0.14)' : 'rgba(74,168,216,0.24)',
                     border: '1px solid rgba(74,168,216,0.45)',
                   }}
                 >
-                  <CalendarDays size={17} /> {s.navCalendar}
+                  <CalendarDays size={17} /> <span className="hidden md:inline">{s.navCalendar}</span>
                 </button>
               </Tooltip>
             </>
@@ -110,7 +113,7 @@ export function Header() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-0.5 md:gap-2 flex-shrink-0">
         {/* What just changed, and who did it — see ActivityTicker. */}
         {currentUser && <ActivityTicker light={lightTheme} />}
         <CloudSyncBadge light={lightTheme} />
@@ -143,7 +146,7 @@ export function Header() {
         <Tooltip text={lightTheme ? s.switchToDark : s.switchToLight}>
           <button
             onClick={() => setLightTheme(!lightTheme)}
-            className="p-2 rounded-lg transition-colors"
+            className="hidden sm:block p-2 rounded-lg transition-colors"
             style={{ color: lightTheme ? '#6b7280' : '#9ca3af' }}
           >
             {lightTheme ? <Moon size={17} /> : <Sun size={17} />}
@@ -152,11 +155,11 @@ export function Header() {
 
         {currentUser && (
           <>
-            <div className="text-right ml-1">
+            <div className="hidden lg:block text-right ml-1">
               <div className="text-sm font-medium" style={{ color: lightTheme ? '#1e3a5f' : 'white' }}>{currentUser.name}</div>
               <div className="text-xs" style={{ color: lightTheme ? '#6b7280' : '#9ca3af' }}>{currentUser.role}</div>
             </div>
-            <div className="w-8 h-8 rounded-full flex items-center justify-center border"
+            <div className="hidden sm:flex w-8 h-8 rounded-full items-center justify-center border"
               style={{ backgroundColor: 'rgba(74,168,216,0.2)', borderColor: 'rgba(74,168,216,0.4)' }}>
               <User size={16} className="text-[#4aa8d8]" />
             </div>

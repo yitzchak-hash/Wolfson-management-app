@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Header } from './Header';
-import { Sidebar } from './Sidebar';
+import { Sidebar, MobileNav } from './Sidebar';
 import { useStore } from '../../data/store';
 import { isFirebaseConfigured } from '../../data/firebase';
 
@@ -17,9 +17,17 @@ export function AppLayout() {
   }, []);
 
   return (
-    <div className="flex flex-col h-screen bg-gray-100" dir={mainUiStrings.isRtl ? 'rtl' : 'ltr'}>
+    // 100dvh, not 100vh. On a mobile browser 100vh is the viewport with the URL
+    // bar HIDDEN — 899px on an 844px screen — so the page ran past the fold and
+    // anything anchored to the bottom was unreachable. dvh tracks what is
+    // actually visible; the vh line stays as a fallback for old browsers.
+    <div
+      className="flex flex-col bg-gray-100 overflow-x-hidden"
+      style={{ height: '100vh', maxHeight: '100dvh', minHeight: '100dvh' }}
+      dir={mainUiStrings.isRtl ? 'rtl' : 'ltr'}
+    >
       <Header />
-      <div className="flex flex-1 overflow-hidden pb-[62px] md:pb-0">
+      <div className="flex flex-1 min-h-0 overflow-hidden">
         <Sidebar />
         {/* A flex COLUMN, not a plain block.
             Pages whose root is `flex-1 flex flex-col min-h-0` — the board, the
@@ -34,6 +42,8 @@ export function AppLayout() {
           <Outlet />
         </main>
       </div>
+      {/* In the flow of the column, so it can never sit below the fold. */}
+      <MobileNav />
     </div>
   );
 }

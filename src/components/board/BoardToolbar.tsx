@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import {
   MousePointer2, Hand, Plus, StickyNote, Square, Type, Pen, Highlighter,
   Palette, Maximize, Settings, Timer, Clock, Keyboard, GripVertical, Mic, Image,
+  Map, LayoutGrid, X,
 } from 'lucide-react';
 
 export type BoardTool =
@@ -46,6 +47,7 @@ const TOOLS: ToolDef[][] = [
 
 export function BoardToolbar({
   active, onPick, onFit, onToggleSettings, onToggleControls, controlsOpen,
+  onOpenStore, onToggleMap, mapOn,
 }: {
   active: BoardTool;
   onPick: (t: BoardTool) => void;
@@ -53,10 +55,19 @@ export function BoardToolbar({
   onToggleSettings: () => void;
   onToggleControls: () => void;
   controlsOpen: boolean;
+  onOpenStore: () => void;
+  onToggleMap: () => void;
+  mapOn: boolean;
 }) {
   // Offset from the default right-edge dock, so the toolbar can be moved anywhere
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const dragRef = useRef<{ px: number; py: number; ox: number; oy: number } | null>(null);
+  /**
+   * On a phone the full rail covered a sixth of the board and ran off the
+   * bottom, so it collapses to a single button and opens as a sheet. Desktop is
+   * unchanged — the rail is the right shape when there is room for it.
+   */
+  const [phoneOpen, setPhoneOpen] = useState(false);
 
   function onGripDown(e: React.PointerEvent) {
     e.preventDefault();
@@ -70,12 +81,8 @@ export function BoardToolbar({
   }
   function onGripUp() { dragRef.current = null; }
 
-  return (
-    <div
-      className="absolute z-40 select-none"
-      style={{ right: 12 - offset.x, top: 12 + offset.y }}
-    >
-      <div className="w-[62px] bg-white border border-gray-200 rounded-xl shadow-lg p-1.5 flex flex-col items-center gap-0.5">
+  const buttons = (
+    <>
         {/* Drag grip */}
         <div
           onPointerDown={onGripDown}
@@ -110,6 +117,15 @@ export function BoardToolbar({
 
         <div className="w-7 h-px bg-gray-200 my-1" />
 
+        <button onClick={onOpenStore} title="Widget store"
+          className="w-full flex flex-col items-center gap-0.5 py-1.5 rounded-lg text-gray-500 hover:bg-gray-50">
+          <LayoutGrid size={17} /><span className="text-[8.5px] font-bold leading-none">Store</span>
+        </button>
+        <button onClick={onToggleMap} title="Board overview"
+          className="w-full flex flex-col items-center gap-0.5 py-1.5 rounded-lg transition-colors"
+          style={mapOn ? { backgroundColor: '#1e3a5f', color: '#fff' } : { color: '#64748b' }}>
+          <Map size={17} /><span className="text-[8.5px] font-bold leading-none">Map</span>
+        </button>
         <button onClick={onFit} title="Zoom to fit"
           className="w-full flex flex-col items-center gap-0.5 py-1.5 rounded-lg text-gray-500 hover:bg-gray-50">
           <Maximize size={17} /><span className="text-[8.5px] font-bold leading-none">Fit</span>
@@ -123,8 +139,50 @@ export function BoardToolbar({
           className="w-full flex flex-col items-center gap-0.5 py-1.5 rounded-lg text-gray-500 hover:bg-gray-50">
           <Settings size={17} /><span className="text-[8.5px] font-bold leading-none">Setup</span>
         </button>
+    </>
+  );
+
+  return (
+    <>
+      {/* Desktop: the floating rail, draggable anywhere. */}
+      <div
+        className="hidden md:block absolute z-40 select-none"
+        style={{ right: 12 - offset.x, top: 12 + offset.y }}
+      >
+        {/* Capped and scrollable: the rail grew past the bottom of a laptop
+            screen once Store and Map joined it, hiding Setup entirely. */}
+        <div
+          className="w-[62px] bg-white border border-gray-200 rounded-xl shadow-lg p-1.5 flex flex-col items-center gap-0.5 overflow-y-auto board-toolbar-scroll"
+          style={{ maxHeight: 'calc(100vh - 190px)' }}
+        >
+          {buttons}
+        </div>
       </div>
-    </div>
+
+      {/* Phone: one button, and a sheet. */}
+      <button
+        onClick={() => setPhoneOpen(true)}
+        title="Board tools"
+        className="md:hidden absolute z-40 right-3 top-3 w-11 h-11 rounded-full bg-white border border-gray-200 shadow-lg flex items-center justify-center text-[#1e3a5f]"
+      >
+        <LayoutGrid size={20} />
+      </button>
+      {phoneOpen && (
+        <div className="md:hidden fixed inset-0 z-[60]" onClick={() => setPhoneOpen(false)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div onClick={e => e.stopPropagation()}
+            className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl p-3 pb-6 max-h-[72vh] overflow-y-auto">
+            <div className="flex items-center mb-2">
+              <span className="text-[11px] font-extrabold text-gray-700 tracking-wide">BOARD TOOLS</span>
+              <button onClick={() => setPhoneOpen(false)} className="ml-auto p-1 text-gray-400"><X size={16} /></button>
+            </div>
+            <div className="grid grid-cols-5 gap-1.5 [&>button]:!w-auto" onClick={() => setPhoneOpen(false)}>
+              {buttons}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

@@ -134,3 +134,8 @@
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: none; }
 }
+
+/* The board toolbar scrolls when it outgrows the screen, but a visible
+   scrollbar inside a 62px rail is more noise than signal. */
+.board-toolbar-scroll { scrollbar-width: none; }
+.board-toolbar-scroll::-webkit-scrollbar { width: 0; height: 0; }
