@@ -3,6 +3,7 @@ import { LogOut, User, Sun, Moon, AlertTriangle, Loader2, CheckCircle2, Search, 
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../data/store';
 import { Tooltip } from '../ui/Tooltip';
+import { ActivityTicker } from '../ui/ActivityTicker';
 import { GlobalSearch } from '../ui/GlobalSearch';
 import { subscribeCloudSync, isFirebaseConfigured } from '../../data/firebase';
 
@@ -110,6 +111,8 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-2">
+        {/* What just changed, and who did it — see ActivityTicker. */}
+        {currentUser && <ActivityTicker light={lightTheme} />}
         <CloudSyncBadge light={lightTheme} />
 
         {currentUser && (

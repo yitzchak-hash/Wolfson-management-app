@@ -208,6 +208,16 @@ export function GeneralJobsPage() {
   const [layoutPanel, setLayoutPanel] = useState(false);
   /** A finished job briefly celebrates, at the point on the board it landed. */
   const [celebrate, setCelebrate] = useState<{ x: number; y: number; key: number } | null>(null);
+  /**
+   * Drives the live-change pulse. A tile whose content changed in the last few
+   * seconds glows, so an edit arriving from someone else's machine is visible
+   * rather than silently appearing. Ticks every 5s, which is cheap and enough.
+   */
+  const [pulseNow, setPulseNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setPulseNow(Date.now()), 5000);
+    return () => clearInterval(t);
+  }, []);
   /** Live freehand stroke, world coordinates, committed once on pointerup. */
   const [drawing, setDrawing] = useState<{ pts: { x: number; y: number }[]; marker: boolean } | null>(null);
   const [recordingEl, setRecordingEl] = useState<string | null>(null);
@@ -1673,6 +1683,8 @@ export function GeneralJobsPage() {
               const isDragging = drag?.kind === 'job' && drag.ids.includes(job.id) && drag.moved;
               const isSelected = selectedJobIds.has(job.id);
               const tilePalette = TILE_PALETTE.find(p => p.bg === job.tileColor) ?? TILE_PALETTE[0];
+              const changedAt = job.contentUpdatedAt ?? job.updatedAt;
+              const justChanged = !!changedAt && pulseNow - new Date(changedAt).getTime() < 25_000;
 
               return (
                 <div
@@ -1684,7 +1696,7 @@ export function GeneralJobsPage() {
                   className={`absolute rounded-xl border p-3 group select-none ${
                     isDragging ? 'shadow-2xl cursor-grabbing z-20' :
                     isSelected ? 'shadow-md cursor-grab z-10' : 'shadow-sm hover:shadow-md cursor-grab z-5'
-                  }`}
+                  } ${justChanged && !isDragging ? 'live-change-pulse' : ''}`}
                   style={{
                     left: pos.x, top: pos.y, width: TILE_W, height: TILE_H,
                     touchAction: 'none',
