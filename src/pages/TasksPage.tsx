@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useStore } from '../data/store';
+import { contractorLoad } from '../data/contractorLoad';
 import {
   Plus, Trash2, Save, Edit2, X, CheckCircle2, Clock, Paperclip, ExternalLink, Layers, Filter,
   List, CalendarDays,
@@ -455,9 +456,14 @@ export function TasksPage() {
                 <option value="">{s.selectContractor}</option>
                 {(['drywall', 'ac', 'general'] as ContractorCategory[]).map(cat => (
                   <optgroup key={cat} label={CAT_LABELS[cat]}>
-                    {contractors.filter(c => c.category === cat && c.active).map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
+                    {contractors.filter(c => c.category === cat && c.active).map(c => {
+                      const l = contractorLoad(contractorAssignments, c.id);
+                      return (
+                        <option key={c.id} value={c.id}>
+                          {c.name}{l.open ? ` · ${l.open}${l.overdue ? ` (${l.overdue} late)` : ''}` : ''}
+                        </option>
+                      );
+                    })}
                   </optgroup>
                 ))}
               </select>

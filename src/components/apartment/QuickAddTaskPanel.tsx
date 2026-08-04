@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { X, Plus, CheckCircle2, Clock, CalendarDays, ArrowRight, User2, Paperclip, FileText, X as XIcon, AlertTriangle, Pencil, Save, ZoomIn } from 'lucide-react';
 import { Apartment, User, ContractorCategory, TaskAttachment, getStageName } from '../../types';
 import { useStore } from '../../data/store';
+import { contractorLoad, loadTooltip, loadColor } from '../../data/contractorLoad';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import { findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, isUploadBackendConfigured, extractFolderId } from '../../data/driveApi';
 
@@ -383,6 +384,9 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                     </div>
                   )}
 
+                  {/* The number after each name is how much that contractor
+                      already has open — visible at the moment it matters, and
+                      nowhere else. */}
                   <select
                     value={contractorId}
                     onChange={e => setContractorId(e.target.value)}
@@ -394,11 +398,27 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                       if (!items.length) return null;
                       return (
                         <optgroup key={cat} label={catLabel(cat)}>
-                          {items.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          {items.map(c => {
+                            const l = contractorLoad(contractorAssignments, c.id);
+                            return (
+                              <option key={c.id} value={c.id}>
+                                {c.name}{l.open ? ` · ${l.open}${l.overdue ? ` (${l.overdue} late)` : ''}` : ''}
+                              </option>
+                            );
+                          })}
                         </optgroup>
                       );
                     })}
                   </select>
+                  {contractorId && (() => {
+                    const l = contractorLoad(contractorAssignments, contractorId);
+                    return (
+                      <div className="flex items-center gap-1.5 -mt-1" title={loadTooltip(l)}>
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: loadColor(l) }} />
+                        <span className="text-[11px]" style={{ color: loadColor(l) }}>{loadTooltip(l)}</span>
+                      </div>
+                    );
+                  })()}
 
                   <textarea
                     value={task}

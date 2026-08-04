@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { Apartment, ContractorCategory, TaskAttachment, TaskPriority } from '../../types';
 import { useStore } from '../../data/store';
+import { contractorLoad } from '../../data/contractorLoad';
 import {
   isUploadBackendConfigured, extractFolderId,
   findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive,
@@ -25,7 +26,7 @@ interface Props {
 export function BulkAddTaskModal({ onClose, onToast }: Props) {
   const {
     apartments, stages, contractors, buildings,
-    addContractorAssignment, updateApartment, currentUser,
+    addContractorAssignment, updateApartment, currentUser, contractorAssignments,
   } = useStore();
   const s = useStore(state => state.mainUiStrings);
 
@@ -391,7 +392,14 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                           if (!items.length) return null;
                           return (
                             <optgroup key={cat} label={CAT_LABELS[cat]}>
-                              {items.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                              {items.map(c => {
+                                const l = contractorLoad(contractorAssignments, c.id);
+                                return (
+                                  <option key={c.id} value={c.id}>
+                                    {c.name}{l.open ? ` · ${l.open}${l.overdue ? ` (${l.overdue} late)` : ''}` : ''}
+                                  </option>
+                                );
+                              })}
                             </optgroup>
                           );
                         })}

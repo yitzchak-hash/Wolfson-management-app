@@ -379,6 +379,13 @@ export interface ContractorPhoto {
   storagePath?: string;    // Firebase Storage path (needed for deletion)
   driveFileId?: string;    // Google Drive file ID (legacy/fallback)
   driveUrl?: string;       // Google Drive web view link (legacy/fallback)
+  /**
+   * When the office looked at this upload. Absent means it is still waiting in
+   * the job's review queue. Deliberately NOT a notification — the queue lives
+   * inside the job, where the rest of that job's context already is.
+   */
+  reviewedAt?: string;
+  reviewedBy?: string;
 }
 
 export interface OfficeNoteFile {

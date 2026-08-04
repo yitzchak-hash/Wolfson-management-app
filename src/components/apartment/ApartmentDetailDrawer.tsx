@@ -5,7 +5,7 @@ import { useStore } from '../../data/store';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import { StageNotesSection } from './StageNotesSection';
 import { ActivitySection } from './ActivitySection';
-import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, findAllPlansPdfsViaBackend, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, extractFolderId, driveThumbUrl, listAllPhotosViaBackend, getFolderNameViaBackend, familyNameFromFolderName, DrivePhotoItem, DriveFile } from '../../data/driveApi';
+import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, findAllPlansPdfsViaBackend, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, extractFolderId, driveThumbUrl, listAllPhotosViaBackend, getFolderNameViaBackend, familyNameFromFolderName, DrivePhotoItem, DriveFile, FolderHealth, checkFolderHealthViaBackend } from '../../data/driveApi';
 import { Tooltip } from '../ui/Tooltip';
 import { ContractorStatusPanel } from './ContractorStatusPanel';
 
@@ -135,7 +135,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     autoBackup, backupSnapshots, restoreFromSnapshot, mainUiStrings: ui,
     officeNoteFiles, addOfficeNoteFile, deleteOfficeNoteFile,
     contractorAssignments, contractors, updateContractorAssignment, deleteContractorAssignment,
-    deleteApartment, getGeneralNoteVersions, currentProjectId } = useStore();
+    deleteApartment, getGeneralNoteVersions, currentProjectId,
+    contractorPhotos, updateContractorPhoto } = useStore();
   const isGeneralProject = currentProjectId === 'general';
   const backendConfigured = isUploadBackendConfigured();
   const officeFileRef = useRef<HTMLInputElement>(null);
@@ -158,6 +159,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [lightbox, setLightbox] = useState<{ items: { fileId: string; filename: string; mimeType: string; thumbSrc: string; downloadHref: string }[]; index: number } | null>(null);
   const [officeUploadPct, setOfficeUploadPct] = useState<number | null>(null);
   const [showUnmergeModal, setShowUnmergeModal] = useState(false);
+  /** Drive folder health, checked once when the Photos tab is opened. */
+  const [folderHealth, setFolderHealth] = useState<FolderHealth | null>(null);
+  const [checkingHealth, setCheckingHealth] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showContractorStatus, setShowContractorStatus] = useState(false);
   const [unmergeTarget, setUnmergeTarget] = useState<Apartment | null>(null);
@@ -1590,6 +1594,99 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
 
           {activeTab === 'photos' && (
             <div>
+              {/* Photo review queue.
+                  Uploads from the site that nobody has looked at yet. It lives
+                  in the job rather than in a notification, so reviewing a photo
+                  happens next to the plan, the notes and the tasks it relates
+                  to. Marking one reviewed only records that someone looked. */}
+              {(() => {
+                const jobAssignments = new Set(
+                  contractorAssignments.filter(a => a.apartmentId === apartment.id).map(a => a.id));
+                const queue = contractorPhotos
+                  .filter(p => jobAssignments.has(p.assignmentId) && !p.reviewedAt)
+                  .sort((a, b) => (b.uploadedAt ?? '').localeCompare(a.uploadedAt ?? ''));
+                if (queue.length === 0) return null;
+                return (
+                  <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Camera size={14} className="text-amber-600" />
+                      <span className="text-xs font-bold text-amber-800">
+                        {queue.length} new from the site
+                      </span>
+                      <button
+                        onClick={() => queue.forEach(p => updateContractorPhoto(p.id, {
+                          reviewedAt: new Date().toISOString(), reviewedBy: currentUser.name,
+                        }))}
+                        className="ml-auto text-[11px] font-bold text-amber-700 hover:text-amber-900"
+                      >
+                        Mark all reviewed
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {queue.slice(0, 8).map(p => {
+                        const src = p.storageUrl || (p.driveFileId ? driveThumbUrl(p.driveFileId, 300) : p.dataUrl);
+                        const who = contractors.find(c => c.id === p.contractorId)?.name;
+                        return (
+                          <button
+                            key={p.id}
+                            title={`${who ?? 'Contractor'} · ${p.filename} — click to mark reviewed`}
+                            onClick={() => updateContractorPhoto(p.id, {
+                              reviewedAt: new Date().toISOString(), reviewedBy: currentUser.name,
+                            })}
+                            className="aspect-square rounded-lg overflow-hidden bg-white border border-amber-200 relative"
+                          >
+                            {src
+                              ? <img src={src} alt={p.filename} className="w-full h-full object-cover" />
+                              : <div className="w-full h-full flex items-center justify-center"><FileText size={14} className="text-gray-300" /></div>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Drive folder health — inside the job only, never on a tile. */}
+              {apartment.driveLink && backendConfigured && (
+                <div className="mb-3 flex items-center gap-2 text-[11px]">
+                  {folderHealth === null ? (
+                    <button
+                      onClick={async () => {
+                        setCheckingHealth(true);
+                        setFolderHealth(await checkFolderHealthViaBackend(apartment.driveLink, apartment.plansPdfLink)
+                          .catch(() => ({ mainFolderLinked: true, plansPdfLinked: !!apartment.plansPdfLink, mainFolderAccessible: false })));
+                        setCheckingHealth(false);
+                      }}
+                      disabled={checkingHealth}
+                      className="text-gray-400 hover:text-gray-600 font-semibold"
+                    >
+                      {checkingHealth ? 'Checking folder…' : 'Check Drive folder'}
+                    </button>
+                  ) : (() => {
+                    const issues: string[] = [];
+                    if (!folderHealth.mainFolderAccessible) issues.push('folder not reachable');
+                    else {
+                      if (!folderHealth.photosFolderFound) issues.push('no Photos folder');
+                      if (!folderHealth.plansFolderFound) issues.push('no Engineered Plans folder');
+                      else if (!folderHealth.plansPdfFound) issues.push('no plan PDF inside it');
+                    }
+                    const ok = issues.length === 0;
+                    return (
+                      <span
+                        title={ok ? 'Folder looks complete' : issues.join(' · ')}
+                        className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full font-bold"
+                        style={ok
+                          ? { backgroundColor: '#dcfce7', color: '#166534' }
+                          : { backgroundColor: '#fef3c7', color: '#92400e' }}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: ok ? '#16a34a' : '#d97706' }} />
+                        {ok ? 'Drive folder complete' : issues.join(' · ')}
+                      </span>
+                    );
+                  })()}
+                </div>
+              )}
+
               {!apartment.driveLink ? (
                 <div className="flex flex-col items-center py-16 text-center px-4">
                   <Camera size={32} className="text-gray-300 mb-3" />
