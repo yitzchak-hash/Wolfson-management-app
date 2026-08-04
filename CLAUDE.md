@@ -479,3 +479,91 @@ All collections are synced to Firestore in real time:
 **No custom Firestore cache**: Uses plain `getFirestore(app)` — no `persistentLocalCache` / `persistentMultipleTabManager`. The app's own localStorage (`persist()`) handles offline caching; Firestore's built-in IndexedDB cache was causing `onSnapshot` to misbehave on mobile browsers (listeners receiving stale cached data instead of server updates).
 
 **Setup**: copy `.env.example` to `.env.local` and fill in `VITE_FIREBASE_*` vars (or set in Vercel dashboard)
+
+---
+
+# v2 — TzviAir Job Management Platform (branch `claude/tzviair-platform`)
+
+Full decision record in `DECISIONS.md`. Plain-language summary for the office in `UPDATE-FOR-ESTHER.md`.
+
+## Board architecture (`src/pages/GeneralJobsPage.tsx`)
+
+### One movement system
+The viewport is a fixed frame with native scrolling **off**; the world inside is `translate(pan) scale(zoom)`.
+Mixing native scroll with transform pan is the classic source of jitter and misplaced clicks, so there is
+exactly one system. **Every pointer handler must convert through `toWorld(clientX, clientY)`** —
+`getBoundingClientRect()` returns the SCALED rect once zoom is applied, so raw deltas move tiles at the
+wrong speed at any zoom but 100%.
+
+### Hook order
+`GeneralJobsPage`'s redirect guard sits **after every hook**, including the ones inside the wheel,
+keyboard and touch effects. Returning earlier changes the hook count between renders whenever the
+workspace switches while the page is mounted. Do not move it back up.
+
+### Bins are CanvasElements
+The four bins (`done` / `ready` / `archive` / `trash`) are ordinary `CanvasElement` records carrying a
+`binKind`, so they move, resize and sync like any other node. They are seeded once with **fixed ids**
+(`CE-bin-done`, …) so a later Firestore load overwrites rather than duplicates. They are excluded from
+deletion in both the context menu and the Delete key — they are fixtures, not content.
+**Bins are completely independent of stages**: a job can be at stage "Piping" and sit in Done.
+Nothing in Trash is ever purged.
+
+### Ghosts
+`Apartment.ghosts: {x,y}[]` — extra board positions for the **same record**, not copies. Editing through
+a ghost edits the job; dropping a ghost on a bin bins the job; removing a ghost removes only that
+appearance. Store actions: `addGhost`, `moveGhost`, `removeGhost`.
+
+### Drawing
+Pen and highlighter are **modes**. While either is armed, a press on a tile starts a stroke rather than a
+drag (`startStrokeAt`), and the canvas takes pointer capture so the stroke keeps receiving moves.
+**One `CanvasElement` per stroke**, never one per point.
+
+### Right-click paste
+`src/data/pasteIntent.ts` classifies the clipboard; the menu offers exactly one matching action and never
+a generic Paste. On a node it fills the field, asking first if that field already holds something. On empty
+board a Drive or Zoho link offers to create a job, with the family name pulled from the Drive folder title.
+
+### Board settings & layouts
+`boardSettings: Record<projectId, BoardSetting>` in `settings/app`. The reserved key **`__tv`** holds the
+wallboard defaults (`tvLang`, `tvScale`) — write it with `setTvSetting`, not `setBoardSetting`.
+`boardLayouts: Record<projectId, BoardLayout[]>` stores **positions only**, capped at 10 per project;
+restoring can never undo an edit or resurrect a deleted job.
+
+## TV wallboard (`src/pages/TvPresentationPage.tsx`)
+- **Always read-only. Not a setting, not a PIN.** Every edit happens from a PC on the normal link.
+- It lives outside `AppLayout`, so it **must call `startFirebaseSync()` itself** — otherwise it shows
+  only that browser's localStorage, which on a fresh TV browser is nothing.
+- Switching project calls `setCurrentProject`, which is required because each project's records live in
+  their own collections. That write is local to the TV's browser.
+- **Display scale is `autoScale × boost`**, where `autoScale = max(1, viewportWidth / 1600)` and `boost`
+  is the slider (default 1). The multiplier is what makes one setting work on every panel: a tile spans
+  the same fraction of the screen on 1080p, 1440p and 4K. Verified in a harness — do not replace this
+  with a fixed pixel number.
+- Building projects render `BuildingDiagram`; only General renders the free canvas.
+
+## Punch-list pins (`src/components/apartment/PlanPinOverlay.tsx`)
+`PlanPin` stores **percentage** coordinates against the apartment. The PDF in Drive is never modified —
+office and contractor draw the same overlay from the same data. The overlay is `pointer-events: none`
+unless placing is armed, or the PDF could not be scrolled. The portal passes `readOnly`. There is no
+flattened-PDF export (a browser cannot read a cross-origin PDF's pixels); there is a printable numbered
+punch list instead.
+
+## Backups — the rule that keeps being broken
+Every data-bearing state key must appear in **all three** of:
+1. the `payload` in `persistNow`
+2. the `snapshot` in `exportData` — **at the top level**, next to `apartments`, NOT inside `settings`
+3. the `set()` in `importData`, read as `data.<key> ?? state.<key>`
+
+Two faults were found and fixed by auditing this: four board keys were exported inside `settings` while
+the importer read them from the top level, and `buildings` / `dashboardWidgetOrder` /
+`dashboardHiddenWidgets` were absent from export and import entirely. **When you add a state key, add it
+to all three places and re-run the audit.**
+
+## New store actions
+`moveToBin` · `addGhost` / `moveGhost` / `removeGhost` · `setBoardSetting` / `setTvSetting` ·
+`saveBoardLayout` / `restoreBoardLayout` / `deleteBoardLayout` · `addPlanPin` / `updatePlanPin` /
+`deletePlanPin` · `loadUsersForLogin`
+
+## New per-project Firestore collection
+`planPins` — namespaced through `projectCollection(pid, 'planPins')` like every other per-project
+collection. `stages`, `users`, `contractors` and `settings/app` remain **bare in every project**.
