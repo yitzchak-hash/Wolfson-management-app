@@ -1693,7 +1693,7 @@ export function GeneralJobsPage() {
                   onPointerMove={onJobPointerMove}
                   onPointerUp={e => onJobPointerUp(e, job)}
                   onContextMenu={e => onJobContextMenu(e, job)}
-                  className={`absolute rounded-xl border p-3 group select-none ${
+                  className={`absolute rounded-xl border px-3 pb-3 pt-[22px] group select-none ${
                     isDragging ? 'shadow-2xl cursor-grabbing z-20' :
                     isSelected ? 'shadow-md cursor-grab z-10' : 'shadow-sm hover:shadow-md cursor-grab z-5'
                   } ${justChanged && !isDragging ? 'live-change-pulse' : ''}`}
@@ -1729,7 +1729,7 @@ export function GeneralJobsPage() {
                       if (currentUser) updateApartment(job.id, { showOnTv: job.showOnTv === false }, currentUser);
                     }}
                     title={job.showOnTv === false ? 'Hidden from TV' : 'Showing on TV'}
-                    className="absolute top-2 right-9 p-1 rounded-md transition-all"
+                    className="absolute top-1 right-9 p-1 rounded-md transition-all"
                     style={{
                       color: job.showOnTv === false ? '#dc2626' : '#94a3b8',
                       backgroundColor: job.showOnTv === false ? '#fee2e2' : 'transparent',
@@ -1742,7 +1742,7 @@ export function GeneralJobsPage() {
                   <button
                     data-no-drag
                     onClick={() => handleDeleteJobs([job.id])}
-                    className="absolute top-2 right-2 p-1.5 rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50/80 transition-all opacity-0 group-hover:opacity-100"
+                    className="absolute top-1 right-1.5 p-1.5 rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50/80 transition-all opacity-0 group-hover:opacity-100"
                   >
                     <Trash2 size={13} />
                   </button>
@@ -1822,7 +1822,7 @@ export function GeneralJobsPage() {
 
                   {/* Last edited — content changes only, never board tidying */}
                   {(job.contentUpdatedAt ?? job.updatedAt) && (
-                    <span className="absolute top-2 left-3 text-[9px] text-gray-400 pointer-events-none">
+                    <span className="absolute top-1.5 left-3 text-[9px] text-gray-400 pointer-events-none">
                       {relativeTime(job.contentUpdatedAt ?? job.updatedAt)}
                     </span>
                   )}
