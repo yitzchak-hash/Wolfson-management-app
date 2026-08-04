@@ -2,10 +2,11 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import {
   Plus, Briefcase, MapPin, ExternalLink, Trash2, ClipboardList, FolderOpen,
   Copy, StickyNote, Square, Palette, Pencil, X, AlertTriangle,
+  Ghost, ThumbsUp, ClipboardPaste, LayoutGrid, Columns3, Archive, CheckCircle2, PlayCircle,
 } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 import { useStore } from '../data/store';
-import { Apartment, CanvasElement } from '../types';
+import { Apartment, CanvasElement, BinKind, BIN_KINDS, BIN_META } from '../types';
 import { ApartmentDetailDrawer } from '../components/apartment/ApartmentDetailDrawer';
 import { QuickAddTaskPanel } from '../components/apartment/QuickAddTaskPanel';
 import { Toast } from '../components/ui/Toast';
@@ -13,9 +14,17 @@ import { DriveIcon, ZohoIcon, PlanIcon, TvIcon } from '../components/ui/BrandIco
 import { BoardToolbar, BoardControlsPanel, BoardTool } from '../components/board/BoardToolbar';
 import { BOARD_THEMES, getBoardTheme } from '../data/boardThemes';
 import { MiniMap } from '../components/board/MiniMap';
+import { BinWindow } from '../components/board/BinWindow';
+import { StageBoard } from '../components/board/StageBoard';
 import { useTouchGestures } from '../hooks/useTouchGestures';
+import { detectPasteIntent, fieldForIntent, canCreateFromIntent, PasteIntent } from '../data/pasteIntent';
+import {
+  getFolderNameViaBackend, familyNameFromFolderName, extractFolderId,
+  isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaBackend,
+} from '../data/driveApi';
 import {
   PinnedTitleLayer, StrokeLayer, CountdownNode, StopwatchNode, ClipArtNode, NODE_DEFAULT_SIZE,
+  VoiceMemoNode, ART_KINDS,
 } from '../components/board/BoardNodes';
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
@@ -104,8 +113,26 @@ interface LassoState { sx: number; sy: number; ex: number; ey: number }
 interface CtxMenu {
   x: number;
   y: number;
-  kind: 'job' | 'element';
+  kind: 'job' | 'element' | 'ghost' | 'canvas';
   ids: string[];
+  /** ghost only: which appearance of the job was clicked */
+  ghostIndex?: number;
+  /** canvas only: where on the board the click landed, for "create job here" */
+  worldX?: number;
+  worldY?: number;
+}
+
+/** A ghost being dragged: the job it belongs to plus which appearance it is. */
+interface GhostDrag {
+  jobId: string;
+  index: number;
+  startX: number;
+  startY: number;
+  grabX: number;
+  grabY: number;
+  dx: number;
+  dy: number;
+  moved: boolean;
 }
 
 interface ColorPickerState {
@@ -131,6 +158,11 @@ export function GeneralJobsPage() {
     currentUser,
     mainUiStrings: s,
     currentProjectId,
+    addGhost,
+    moveGhost,
+    removeGhost,
+    moveToBin,
+    backupDriveFolderLink,
   } = useStore();
 
   // ── All hooks must come before any early return ──────────────────
@@ -154,11 +186,29 @@ export function GeneralJobsPage() {
   const [editingEl, setEditingEl] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
 
+  const [ghostDrag, setGhostDrag] = useState<GhostDrag | null>(null);
+  const [openBin, setOpenBin] = useState<BinKind | null>(null);
+  /** Which bin the pointer is currently over mid-drag, so it can light up. */
+  const [hoverBin, setHoverBin] = useState<string | null>(null);
+  /** Clipboard contents, read when the context menu opens. */
+  const [clip, setClip] = useState<PasteIntent>({ kind: 'none', value: '', label: 'Paste' });
+  const [pasteConfirm, setPasteConfirm] = useState<
+    { jobId: string; intent: PasteIntent; existing: string } | null>(null);
+  const [createFromLink, setCreateFromLink] = useState<
+    { intent: PasteIntent; x: number; y: number } | null>(null);
+  const [artPicker, setArtPicker] = useState(false);
+  /** Live freehand stroke, world coordinates, committed once on pointerup. */
+  const [drawing, setDrawing] = useState<{ pts: { x: number; y: number }[]; marker: boolean } | null>(null);
+  const [recordingEl, setRecordingEl] = useState<string | null>(null);
+  const [savingAudio, setSavingAudio] = useState(false);
+  const recorderRef = useRef<{ rec: MediaRecorder; chunks: Blob[]; started: number } | null>(null);
+
   const boardSettings = useStore(st => st.boardSettings);
   const setBoardSetting = useStore(st => st.setBoardSetting);
   const projectBoard = boardSettings[currentProjectId] ?? {};
   const theme = getBoardTheme(projectBoard.themeId);
   const showControls = projectBoard.showControls ?? false;
+  const viewMode = projectBoard.viewMode ?? 'canvas';
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -177,25 +227,32 @@ export function GeneralJobsPage() {
   const [tool, setTool] = useState<BoardTool>('select');
   const [boardSettingsOpen, setBoardSettingsOpen] = useState(false);
 
-  /** Toolbar picks that CREATE something drop a node in the middle of the view. */
-  function handleToolPick(next: BoardTool) {
-    const creators: Record<string, CanvasElement['type']> = {
-      note: 'note', box: 'box', title: 'title',
-      countdown: 'countdown', stopwatch: 'stopwatch', clipart: 'clipart',
-    };
-    const kind = creators[next];
-    if (!kind) { setTool(next); return; }
-
+  /** Centre of the current view, in world coordinates — where new nodes land. */
+  const viewCentre = useCallback(() => {
     const vp = viewportRef.current;
-    const cx = vp ? (vp.clientWidth / 2 - pan.x) / zoom : 200;
-    const cy = vp ? (vp.clientHeight / 2 - pan.y) / zoom : 200;
-    const size = NODE_DEFAULT_SIZE[kind] ?? { w: 180, h: 120 };
+    return {
+      x: vp ? (vp.clientWidth / 2 - pan.x) / zoom : 200,
+      y: vp ? (vp.clientHeight / 2 - pan.y) / zoom : 200,
+    };
+  }, [pan.x, pan.y, zoom]);
 
+  /** Drops a node of the given type, centred either on the view or a point. */
+  const dropNode = useCallback((
+    kind: CanvasElement['type'],
+    at?: { x: number; y: number },
+    extra?: Partial<CanvasElement>,
+  ) => {
+    const vp = viewportRef.current;
+    const c = at ?? {
+      x: vp ? (vp.clientWidth / 2 - pan.x) / zoom : 200,
+      y: vp ? (vp.clientHeight / 2 - pan.y) / zoom : 200,
+    };
+    const size = NODE_DEFAULT_SIZE[kind] ?? { w: 180, h: 120 };
     addCanvasElement({
       id: 'CE-' + Math.random().toString(36).slice(2, 9),
       type: kind,
-      x: Math.round(cx - size.w / 2),
-      y: Math.round(cy - size.h / 2),
+      x: Math.round(c.x - size.w / 2),
+      y: Math.round(c.y - size.h / 2),
       w: size.w, h: size.h,
       text: kind === 'title' ? 'Title' : '',
       color: kind === 'clipart' ? '#dc2626' : 'rgba(250, 204, 21, 0.45)',
@@ -203,7 +260,29 @@ export function GeneralJobsPage() {
       ...(kind === 'countdown' ? { targetAt: new Date(Date.now() + 86_400_000).toISOString() } : {}),
       ...(kind === 'stopwatch' ? { elapsedMs: 0 } : {}),
       ...(kind === 'clipart' ? { art: 'pin' as const } : {}),
+      ...extra,
     });
+  }, [addCanvasElement, pan.x, pan.y, zoom]);
+
+  /**
+   * Toolbar picks split three ways: some create a node immediately, some arm a
+   * gesture (pen, highlighter) and stay selected until you switch away, and a
+   * couple open a chooser first.
+   */
+  function handleToolPick(next: BoardTool) {
+    if (next === 'clipart') { setArtPicker(true); setTool('select'); return; }
+    if (next === 'job') { setShowAddModal(true); setTool('select'); return; }
+    if (next === 'export') { exportBoardImage(); setTool('select'); return; }
+    // Pen and highlighter are modes, not one-shot actions.
+    if (next === 'pen' || next === 'highlighter' || next === 'pan' || next === 'select') { setTool(next); return; }
+
+    const creators: Record<string, CanvasElement['type']> = {
+      note: 'note', box: 'box', title: 'title',
+      countdown: 'countdown', stopwatch: 'stopwatch', voice: 'voice',
+    };
+    const kind = creators[next];
+    if (!kind) { setTool(next); return; }
+    dropNode(kind);
     setTool('select');
   }
   const panRef = useRef<{ px: number; py: number; ox: number; oy: number } | null>(null);
@@ -242,6 +321,41 @@ export function GeneralJobsPage() {
   const deleteRef = useRef<() => void>(() => {});
   const editInputRef = useRef<HTMLTextAreaElement>(null);
 
+  /**
+   * The four bins exist on every board.
+   *
+   * They are ordinary CanvasElements carrying a `binKind`, so they move, resize
+   * and sync like anything else — but they are never created by the user, so any
+   * that are missing get seeded once, down the right-hand edge.
+   */
+  const seededBins = useRef(false);
+  useEffect(() => {
+    if (currentProjectId !== 'general' || seededBins.current) return;
+    const have = new Set(canvasElements.filter(e => e.binKind).map(e => e.binKind));
+    if (have.size === BIN_KINDS.length) { seededBins.current = true; return; }
+    // Wait for the first load to settle before deciding something is missing.
+    const t = setTimeout(() => {
+      if (seededBins.current) return;
+      seededBins.current = true;
+      const size = NODE_DEFAULT_SIZE.bin;
+      BIN_KINDS.forEach((kind, i) => {
+        if (have.has(kind)) return;
+        addCanvasElement({
+          id: `CE-bin-${kind}`,
+          type: 'bin',
+          binKind: kind,
+          // Clear of the default job grid, so a first-run board never overlaps.
+          x: GAP + PER_ROW * (TILE_W + GAP) + 40,
+          y: GAP + i * (size.h + 12),
+          w: size.w, h: size.h,
+          text: BIN_META[kind].label,
+          color: BIN_META[kind].color,
+        });
+      });
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [canvasElements, currentProjectId, addCanvasElement]);
+
   // ── Redirect guard (after all hooks) ─────────────────────────────
   if (currentProjectId !== 'general') return <Navigate to="/project" replace />;
 
@@ -276,6 +390,232 @@ export function GeneralJobsPage() {
     return { x: el.x, y: el.y, w: el.w, h: el.h };
   }
 
+  // ── Bins ──────────────────────────────────────────────────────────
+  const binNodes = canvasElements.filter(el => el.type === 'bin' && el.binKind);
+  const binCount = (kind: BinKind) =>
+    apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed && a.boardBin === kind).length;
+
+  /** Which bin, if any, sits under a world point. Used as a drag drop test. */
+  function binAt(wx: number, wy: number): CanvasElement | null {
+    for (const b of binNodes) {
+      const p = elPos(b);
+      if (wx >= p.x && wx <= p.x + p.w && wy >= p.y && wy <= p.y + p.h) return b;
+    }
+    return null;
+  }
+
+  // ── Ghosts ────────────────────────────────────────────────────────
+  /**
+   * A ghost is the SAME job drawn a second time, not a copy. It is placed near
+   * the original so it is obvious where it came from; from there it can be
+   * dragged anywhere.
+   */
+  function handleCreateGhost(ids: string[]) {
+    ids.forEach(id => {
+      const idx = jobs.findIndex(j => j.id === id);
+      if (idx === -1) return;
+      const p = jobPos(jobs[idx], idx);
+      addGhost(id, Math.round(p.x + TILE_W + 20), Math.round(p.y + 20));
+    });
+    setCtxMenu(null);
+  }
+
+  function ghostPos(jobId: string, index: number, g: { x: number; y: number }) {
+    if (ghostDrag && ghostDrag.jobId === jobId && ghostDrag.index === index) {
+      return { x: ghostDrag.startX + ghostDrag.dx, y: ghostDrag.startY + ghostDrag.dy };
+    }
+    return g;
+  }
+
+  function onGhostPointerDown(e: React.PointerEvent, job: Apartment, index: number, g: { x: number; y: number }) {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    setCtxMenu(null); setColorPicker(null);
+    const w0 = toWorld(e.clientX, e.clientY);
+    setGhostDrag({ jobId: job.id, index, startX: g.x, startY: g.y, grabX: w0.x, grabY: w0.y, dx: 0, dy: 0, moved: false });
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onGhostPointerMove(e: React.PointerEvent) {
+    if (!ghostDrag) return;
+    const w0 = toWorld(e.clientX, e.clientY);
+    const dx = w0.x - ghostDrag.grabX;
+    const dy = w0.y - ghostDrag.grabY;
+    setGhostDrag({ ...ghostDrag, dx, dy, moved: ghostDrag.moved || Math.abs(dx) > 4 || Math.abs(dy) > 4 });
+    setHoverBin(binAt(w0.x, w0.y)?.id ?? null);
+  }
+
+  function onGhostPointerUp(e: React.PointerEvent, job: Apartment) {
+    if (!ghostDrag) return;
+    if (ghostDrag.moved) {
+      const w0 = toWorld(e.clientX, e.clientY);
+      const bin = binAt(w0.x, w0.y);
+      if (bin?.binKind) {
+        // Binning a ghost bins the JOB — there is only one record.
+        moveToBin(job.id, bin.binKind);
+      } else {
+        moveGhost(ghostDrag.jobId, ghostDrag.index,
+          Math.max(0, Math.round(ghostDrag.startX + ghostDrag.dx)),
+          Math.max(0, Math.round(ghostDrag.startY + ghostDrag.dy)));
+      }
+    } else {
+      setSelectedJob(job);
+    }
+    setGhostDrag(null);
+    setHoverBin(null);
+  }
+
+  // ── Thumbs up ─────────────────────────────────────────────────────
+  function bumpThumbs(kind: 'job' | 'element', ids: string[], delta: number) {
+    ids.forEach(id => {
+      if (kind === 'job') {
+        const j = apartments.find(a => a.id === id);
+        if (j && currentUser) updateApartment(id, { thumbsUp: Math.max(0, (j.thumbsUp ?? 0) + delta) }, currentUser);
+      } else {
+        const el = canvasElements.find(e => e.id === id);
+        if (el) updateCanvasElement(id, { thumbsUp: Math.max(0, (el.thumbsUp ?? 0) + delta) });
+      }
+    });
+    setCtxMenu(null);
+  }
+
+  // ── Right-click paste ─────────────────────────────────────────────
+  /**
+   * Reads the clipboard when a context menu opens so the menu can offer one
+   * specific action ("Paste as Drive link") instead of a generic Paste. A
+   * refusal or an empty clipboard simply leaves the entry disabled.
+   */
+  function refreshClipboard() {
+    if (!navigator.clipboard?.readText) { setClip(detectPasteIntent('')); return; }
+    navigator.clipboard.readText()
+      .then(t => setClip(detectPasteIntent(t)))
+      .catch(() => setClip(detectPasteIntent('')));
+  }
+
+  function applyPaste(jobId: string, intent: PasteIntent, force = false) {
+    const field = fieldForIntent(intent.kind);
+    if (!field || !currentUser) return;
+    const job = apartments.find(a => a.id === jobId);
+    if (!job) return;
+    const existing = (job[field] as string | undefined) ?? '';
+    if (existing && !force) {
+      setPasteConfirm({ jobId, intent, existing });
+      setCtxMenu(null);
+      return;
+    }
+    updateApartment(jobId, { [field]: intent.value }, currentUser);
+    setToast(`${intent.label.replace('Paste as ', '')} updated`);
+    setCtxMenu(null);
+    setPasteConfirm(null);
+  }
+
+  /** Empty-board paste of a link creates a job, named from the Drive folder. */
+  async function createJobFromLink(intent: PasteIntent, wx: number, wy: number) {
+    const now = new Date().toISOString();
+    const id = genId('G');
+    const isDrive = intent.kind === 'drive';
+    let name = '';
+    if (isDrive) {
+      const folderId = extractFolderId(intent.value);
+      if (folderId) {
+        const folderName = await getFolderNameViaBackend(folderId).catch(() => null);
+        if (folderName) name = familyNameFromFolderName(folderName);
+      }
+    }
+    addApartment({
+      id, buildingId: 'G', apartmentNumber: '',
+      displayName: name, floor: 0, colPosition: 1, colSpan: 1,
+      isDuplexApt: false, currentStageId: null, classification: 'standard',
+      shinuiDetails: null, generalNotes: '', isUnnamed: false,
+      driveLink: isDrive ? intent.value : undefined,
+      zohoLink: isDrive ? undefined : intent.value,
+      canvasX: Math.max(0, Math.round(wx)), canvasY: Math.max(0, Math.round(wy)),
+      createdAt: now, updatedAt: now, contentUpdatedAt: now,
+      updatedBy: currentUser?.id ?? '', updatedByName: currentUser?.name ?? '',
+    });
+    setCreateFromLink(null);
+    setToast(name ? `Job "${name}" created` : 'Job created');
+  }
+
+  // ── Voice memo ────────────────────────────────────────────────────
+  /**
+   * Where a recording actually lives.
+   *
+   * Drive first, so the clip is shared with everyone and nothing large lands in
+   * the board record. Without the upload backend it falls back to an inline data
+   * URL, which does persist and does sync — but only up to a size that cannot
+   * threaten the Firestore document limit. A longer memo without Drive is
+   * refused out loud rather than silently truncated.
+   */
+  async function storeAudio(blob: Blob, secs: number): Promise<string | null> {
+    const parent = backupDriveFolderLink ? extractFolderId(backupDriveFolderLink) : null;
+    if (isUploadBackendConfigured() && parent) {
+      try {
+        const folderId = await findOrCreateFolderViaBackend(parent, 'Voice Memos');
+        const file = new File([blob], `memo-${Date.now()}.webm`, { type: blob.type || 'audio/webm' });
+        const res = await uploadFileViaBackend(folderId, file);
+        if (res?.webViewLink) return res.webViewLink;
+      } catch {
+        // fall through to the local path
+      }
+    }
+    if (blob.size > 700_000) {
+      setToast(`Memo too long to store locally (${secs}s) — set up the Drive folder in App settings`);
+      return null;
+    }
+    return await new Promise<string>((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(String(fr.result));
+      fr.onerror = reject;
+      fr.readAsDataURL(blob);
+    }).catch(() => null);
+  }
+
+  async function startRecording(elId: string) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const rec = new MediaRecorder(stream);
+      const chunks: Blob[] = [];
+      rec.ondataavailable = ev => { if (ev.data.size > 0) chunks.push(ev.data); };
+      rec.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const started = recorderRef.current?.started ?? Date.now();
+        const secs = Math.round((Date.now() - started) / 1000);
+        const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
+        setRecordingEl(null);
+        setSavingAudio(true);
+        try {
+          const url = await storeAudio(blob, secs);
+          if (url) {
+            updateCanvasElement(elId, { audioUrl: url, audioSeconds: secs });
+            setToast(`Recorded ${secs}s`);
+          }
+        } finally {
+          setSavingAudio(false);
+        }
+      };
+      recorderRef.current = { rec, chunks, started: Date.now() };
+      rec.start();
+      setRecordingEl(elId);
+    } catch {
+      setToast('Microphone not available');
+    }
+  }
+
+  function stopRecording() {
+    recorderRef.current?.rec.stop();
+  }
+
+  // ── Export board image ────────────────────────────────────────────
+  /**
+   * Prints the board. The browser's own print-to-PDF is used rather than a
+   * canvas rasteriser, because it keeps text sharp at any board size and needs
+   * no extra dependency.
+   */
+  function exportBoardImage() {
+    window.print();
+  }
+
   // ── Delete / duplicate ────────────────────────────────────────────
   function handleDeleteJobs(ids: string[]) {
     const taskCount = contractorAssignments.filter(a => ids.includes(a.apartmentId)).length;
@@ -294,8 +634,12 @@ export function GeneralJobsPage() {
   }
 
   function handleDeleteEls(ids: string[]) {
+    // Bins are fixtures of every board, so they are filtered out here as well as
+    // hidden from the menu — otherwise the Delete key could still remove one.
+    const removable = ids.filter(id => canvasElements.find(e => e.id === id)?.type !== 'bin');
+    if (removable.length === 0) return;
     if (!window.confirm('Delete selected items?')) return;
-    ids.forEach(id => deleteCanvasElement(id));
+    removable.forEach(id => deleteCanvasElement(id));
     setSelectedElIds(new Set());
     setCtxMenu(null);
   }
@@ -396,6 +740,10 @@ export function GeneralJobsPage() {
   function onJobPointerDown(e: React.PointerEvent, job: Apartment, index: number) {
     if (e.button !== 0) return;
     if ((e.target as HTMLElement).closest('[data-no-drag]')) return;
+    // With the pen or highlighter armed, a press starts a stroke wherever it
+    // lands — including on top of a tile. Otherwise you could not draw across
+    // the board, only in the gaps between jobs.
+    if (drawMode) { startStrokeAt(e); return; }
     e.stopPropagation();
     setCtxMenu(null); setColorPicker(null);
 
@@ -432,25 +780,38 @@ export function GeneralJobsPage() {
     const dx = w0.x - drag.grabX;
     const dy = w0.y - drag.grabY;
     setDrag({ ...drag, dx, dy, moved: drag.moved || Math.abs(dx) > 4 || Math.abs(dy) > 4 });
+    setHoverBin(binAt(w0.x, w0.y)?.id ?? null);
   }
 
-  function onJobPointerUp(job: Apartment) {
+  function onJobPointerUp(e: React.PointerEvent, job: Apartment) {
     if (!drag || drag.kind !== 'job') return;
     if (drag.moved) {
-      if (currentUser) drag.ids.forEach(id => {
-        const st = drag.starts.get(id)!;
-        updateApartment(id, { canvasX: Math.max(0, Math.round(st.x + drag.dx)), canvasY: Math.max(0, Math.round(st.y + drag.dy)) }, currentUser);
-      });
+      // Dropping onto a bin FILES the job rather than positioning it. Nothing is
+      // deleted; the job simply moves off the board into that collection.
+      const w0 = toWorld(e.clientX, e.clientY);
+      const bin = binAt(w0.x, w0.y);
+      if (bin?.binKind) {
+        drag.ids.forEach(id => moveToBin(id, bin.binKind!));
+        setToast(`Moved to ${BIN_META[bin.binKind].label}`);
+        setSelectedJobIds(new Set());
+      } else if (currentUser) {
+        drag.ids.forEach(id => {
+          const st = drag.starts.get(id)!;
+          updateApartment(id, { canvasX: Math.max(0, Math.round(st.x + drag.dx)), canvasY: Math.max(0, Math.round(st.y + drag.dy)) }, currentUser);
+        });
+      }
     } else if (drag.ids.length === 1 && drag.ids[0] === job.id) {
       setSelectedJobIds(new Set()); setSelectedJob(job);
     }
     setDrag(null);
+    setHoverBin(null);
   }
 
   function onJobContextMenu(e: React.MouseEvent, job: Apartment) {
     e.preventDefault(); e.stopPropagation();
     const ids = selectedJobIds.has(job.id) && selectedJobIds.size > 1 ? [...selectedJobIds] : [job.id];
     if (!selectedJobIds.has(job.id)) setSelectedJobIds(new Set([job.id]));
+    refreshClipboard();
     setCtxMenu({ x: e.clientX, y: e.clientY, kind: 'job', ids });
   }
 
@@ -458,6 +819,7 @@ export function GeneralJobsPage() {
   function onElPointerDown(e: React.PointerEvent, el: CanvasElement) {
     if (e.button !== 0) return;
     if ((e.target as HTMLElement).closest('[data-el-action]')) return;
+    if (drawMode) { startStrokeAt(e); return; }
     e.stopPropagation();
     setCtxMenu(null); setColorPicker(null);
 
@@ -532,24 +894,68 @@ export function GeneralJobsPage() {
     setResize(null);
   }
 
-  // ── Lasso ─────────────────────────────────────────────────────────
+  // ── Lasso + freehand drawing ──────────────────────────────────────
+  const drawMode = tool === 'pen' || tool === 'highlighter';
+
+  /** Begins a freehand stroke at a pointer position, whatever it landed on. */
+  function startStrokeAt(e: React.PointerEvent) {
+    const { x, y } = toWorld(e.clientX, e.clientY);
+    setCtxMenu(null); setColorPicker(null);
+    setDrawing({ pts: [{ x, y }], marker: tool === 'highlighter' });
+    canvasRef.current?.setPointerCapture(e.pointerId);
+  }
+
   function onCanvasPointerDown(e: React.PointerEvent) {
     if (e.button !== 0) return;
     if ((e.target as Element) !== canvasRef.current) return;
     setCtxMenu(null); setColorPicker(null);
-    setSelectedJobIds(new Set()); setSelectedElIds(new Set());
     const { x, y } = toWorld(e.clientX, e.clientY);
+
+    // Pen and highlighter take over the same gesture the lasso normally uses.
+    if (drawMode) { startStrokeAt(e); return; }
+
+    setSelectedJobIds(new Set()); setSelectedElIds(new Set());
     setLasso({ sx: x, sy: y, ex: x, ey: y });
     canvasRef.current!.setPointerCapture(e.pointerId);
   }
 
   function onCanvasPointerMove(e: React.PointerEvent) {
+    if (drawing) {
+      const w = toWorld(e.clientX, e.clientY);
+      setDrawing(d => {
+        if (!d) return d;
+        const last = d.pts[d.pts.length - 1];
+        // Thin the path: sub-pixel samples add nothing but storage.
+        if (Math.hypot(w.x - last.x, w.y - last.y) < 2.5 / zoom) return d;
+        return { ...d, pts: [...d.pts, w] };
+      });
+      return;
+    }
     if (!lasso) return;
     const w = toWorld(e.clientX, e.clientY);
     setLasso(l => l ? { ...l, ex: w.x, ey: w.y } : null);
   }
 
   function onCanvasPointerUp() {
+    if (drawing) {
+      // One record per stroke — never one per point, which would flood the store.
+      if (drawing.pts.length > 1) {
+        const xs = drawing.pts.map(p => p.x), ys = drawing.pts.map(p => p.y);
+        addCanvasElement({
+          id: genId('CE'),
+          type: 'stroke',
+          x: Math.min(...xs), y: Math.min(...ys),
+          w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys),
+          text: '',
+          color: drawing.marker ? '#facc15' : '#1e3a5f',
+          points: drawing.pts.map(p => `${Math.round(p.x)},${Math.round(p.y)}`).join(' '),
+          strokeWidth: drawing.marker ? 16 : 3,
+          ...(drawing.marker ? { art: 'marker' as const } : {}),
+        });
+      }
+      setDrawing(null);
+      return;
+    }
     if (!lasso) return;
     const { sx, sy, ex, ey } = lasso;
     if (Math.abs(ex - sx) > 8 || Math.abs(ey - sy) > 8) {
@@ -695,20 +1101,26 @@ export function GeneralJobsPage() {
 
         {/* Tool buttons */}
         <div className="flex items-center gap-2">
-          <button
-            onClick={addNote}
-            title="Add sticky note"
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-yellow-50 hover:border-yellow-300 hover:text-yellow-700 transition-all"
-          >
-            <StickyNote size={15} /> Note
-          </button>
-          <button
-            onClick={addBox}
-            title="Add section box"
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-all"
-          >
-            <Square size={15} /> Box
-          </button>
+          {/* The same jobs, read two ways. Positions are kept either way, so
+              switching back to the board restores the arrangement exactly. */}
+          <div className="flex items-center rounded-xl border border-gray-200 overflow-hidden">
+            {([
+              { id: 'canvas', icon: LayoutGrid, label: 'Board' },
+              { id: 'stages', icon: Columns3, label: 'Stages' },
+            ] as const).map(({ id, icon: Icon, label }) => (
+              <button
+                key={id}
+                onClick={() => setBoardSetting('viewMode', id)}
+                title={id === 'stages' ? 'Group by stage — drag a card to change its stage' : 'Free board'}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors"
+                style={viewMode === id
+                  ? { backgroundColor: '#1e3a5f', color: '#fff' }
+                  : { color: '#64748b' }}
+              >
+                <Icon size={15} /> {label}
+              </button>
+            ))}
+          </div>
           <div className="w-px h-6 bg-gray-200" />
           <button
             onClick={() => setShowAddModal(true)}
@@ -720,14 +1132,20 @@ export function GeneralJobsPage() {
         </div>
       </div>
 
+      {/* ── Stage columns ──
+          The same records, grouped by stage. Dragging a card between columns
+          changes the stage; canvas positions are untouched. */}
+      {viewMode === 'stages' && <StageBoard onOpenJob={setSelectedJob} />}
+
       {/* ── Canvas viewport ──
           Fixed frame, native scrolling OFF. The world inside is translated and
           scaled; pan and zoom are the only movement system, which keeps hit
           testing correct at every zoom level. */}
       <div
+        hidden={viewMode === 'stages'}
         ref={viewportRef}
         className="flex-1 min-h-0 relative overflow-hidden"
-        style={{ cursor: spaceHeld ? 'grab' : undefined, touchAction: 'none' }}
+        style={{ cursor: spaceHeld ? 'grab' : drawMode ? 'crosshair' : undefined, touchAction: 'none' }}
         onPointerDown={onViewportPointerDown}
         onPointerMove={onViewportPointerMove}
         onPointerUp={onViewportPointerUp}
@@ -844,7 +1262,13 @@ export function GeneralJobsPage() {
             onPointerDown={onCanvasPointerDown}
             onPointerMove={onCanvasPointerMove}
             onPointerUp={onCanvasPointerUp}
-            onContextMenu={e => { e.preventDefault(); setCtxMenu(null); }}
+            onContextMenu={e => {
+              e.preventDefault();
+              if ((e.target as Element) !== canvasRef.current) { setCtxMenu(null); return; }
+              const w = toWorld(e.clientX, e.clientY);
+              refreshClipboard();
+              setCtxMenu({ x: e.clientX, y: e.clientY, kind: 'canvas', ids: [], worldX: w.x, worldY: w.y });
+            }}
           >
             {/* Lasso box */}
             {lasso && (Math.abs(lasso.ex - lasso.sx) > 4 || Math.abs(lasso.ey - lasso.sy) > 4) && (
@@ -858,13 +1282,49 @@ export function GeneralJobsPage() {
               />
             )}
 
-            {/* ── Canvas elements (notes & boxes) ── */}
+            {/* ── Canvas nodes ──
+                Strokes and pinned titles are drawn by their own layers, so they
+                are skipped here; everything else is a positioned node. */}
             <StrokeLayer elements={canvasElements} />
+            {drawing && drawing.pts.length > 1 && (
+              <svg className="absolute inset-0 pointer-events-none z-30" style={{ overflow: 'visible' }}>
+                <polyline
+                  points={drawing.pts.map(p => `${p.x},${p.y}`).join(' ')}
+                  fill="none"
+                  stroke={drawing.marker ? '#facc15' : '#1e3a5f'}
+                  strokeWidth={drawing.marker ? 16 : 3}
+                  strokeLinecap="round" strokeLinejoin="round"
+                  opacity={drawing.marker ? 0.45 : 1}
+                />
+              </svg>
+            )}
             {canvasElements.map(el => {
+              if (el.type === 'stroke') return null;
+              if (el.type === 'title' && el.pinned) return null;
+
               const pos = elPos(el);
               const isSelected = selectedElIds.has(el.id);
               const isDragging = drag?.kind === 'element' && drag.ids.includes(el.id) && drag.moved;
               const isEditing = editingEl === el.id;
+              const isBin = el.type === 'bin' && !!el.binKind;
+              const binHot = hoverBin === el.id;
+              const plain = el.type === 'clipart';
+
+              // Each node type carries its own surface. A bin is a dashed drop
+              // zone, clip art has no chrome at all, and the rest keep the card
+              // look that notes and boxes established.
+              const surface: React.CSSProperties = isBin
+                ? {
+                    backgroundColor: binHot ? `${el.color}22` : 'rgba(255,255,255,.82)',
+                    border: `2px dashed ${binHot ? el.color : '#cbd5e1'}`,
+                    boxShadow: binHot ? `0 0 0 4px ${el.color}22` : undefined,
+                  }
+                : plain
+                ? { background: 'none', border: 'none' }
+                : {
+                    backgroundColor: el.type === 'box' ? el.color : (el.color || '#ffffff'),
+                    border: `1px solid ${el.type === 'box' ? el.color.replace('0.45', '0.8') : 'rgba(0,0,0,0.1)'}`,
+                  };
 
               return (
                 <div
@@ -873,51 +1333,109 @@ export function GeneralJobsPage() {
                   onPointerMove={onElPointerMove}
                   onPointerUp={() => onElPointerUp(el)}
                   onContextMenu={e => onElContextMenu(e, el)}
-                  onDoubleClick={() => startEdit(el)}
-                  className={`absolute rounded-xl select-none ${
-                    el.type === 'box' ? 'border-2' : 'shadow-md border'
-                  } ${
-                    isDragging ? 'cursor-grabbing z-20' :
-                    isSelected ? 'cursor-grab z-10' : 'cursor-grab'
+                  onDoubleClick={() => { if (!plain) startEdit(el); }}
+                  className={`absolute rounded-xl select-none ${plain || isBin ? '' : 'shadow-md'} ${
+                    isDragging ? 'cursor-grabbing' : 'cursor-grab'
                   }`}
                   style={{
                     left: pos.x, top: pos.y, width: pos.w, height: pos.h,
-                    backgroundColor: el.color,
-                    borderColor: isSelected ? '#4aa8d8' : el.type === 'box' ? el.color.replace('0.45', '0.8') : 'rgba(0,0,0,0.1)',
+                    ...surface,
+                    ...(isSelected ? { borderColor: '#4aa8d8' } : {}),
                     outline: isSelected && !isDragging ? '2px solid rgba(74,168,216,0.5)' : undefined,
                     outlineOffset: '2px',
                     touchAction: 'none',
-                    zIndex: el.type === 'box' ? 1 : 5,
+                    zIndex: el.type === 'box' ? 1 : isBin ? 4 : 5,
                   }}
                 >
-                  {/* Element actions (always visible on selected, hover otherwise) */}
-                  <div className={`absolute top-1.5 right-1.5 flex gap-1 ${isSelected ? 'opacity-100' : 'opacity-0 hover:opacity-100'} group-hover:opacity-100 transition-opacity`}
-                    style={{ pointerEvents: 'auto' }}>
-                    <button
-                      data-el-action
-                      onClick={e => { e.stopPropagation(); setColorPicker({ x: e.clientX, y: e.clientY, kind: 'element', ids: [el.id] }); }}
-                      className="p-1 rounded-md bg-white/70 hover:bg-white text-gray-500 hover:text-gray-700 transition-all"
-                    >
-                      <Palette size={11} />
-                    </button>
-                    <button
-                      data-el-action
-                      onClick={e => { e.stopPropagation(); startEdit(el); }}
-                      className="p-1 rounded-md bg-white/70 hover:bg-white text-gray-500 hover:text-gray-700 transition-all"
-                    >
-                      <Pencil size={11} />
-                    </button>
-                    <button
-                      data-el-action
-                      onClick={e => { e.stopPropagation(); deleteCanvasElement(el.id); }}
-                      className="p-1 rounded-md bg-white/70 hover:bg-red-100 text-gray-400 hover:text-red-500 transition-all"
-                    >
-                      <X size={11} />
-                    </button>
-                  </div>
+                  {/* Node actions — always on when selected, on hover otherwise.
+                      Bins have no colour picker and can never be deleted. */}
+                  {!plain && (
+                    <div className={`absolute top-1.5 right-1.5 flex gap-1 ${isSelected ? 'opacity-100' : 'opacity-0 hover:opacity-100'} transition-opacity`}
+                      style={{ pointerEvents: 'auto' }}>
+                      {!isBin && (
+                        <button
+                          data-el-action
+                          onClick={e => { e.stopPropagation(); setColorPicker({ x: e.clientX, y: e.clientY, kind: 'element', ids: [el.id] }); }}
+                          className="p-1 rounded-md bg-white/70 hover:bg-white text-gray-500 hover:text-gray-700 transition-all"
+                        >
+                          <Palette size={11} />
+                        </button>
+                      )}
+                      <button
+                        data-el-action
+                        onClick={e => { e.stopPropagation(); startEdit(el); }}
+                        className="p-1 rounded-md bg-white/70 hover:bg-white text-gray-500 hover:text-gray-700 transition-all"
+                      >
+                        <Pencil size={11} />
+                      </button>
+                      {!isBin && (
+                        <button
+                          data-el-action
+                          onClick={e => { e.stopPropagation(); deleteCanvasElement(el.id); }}
+                          className="p-1 rounded-md bg-white/70 hover:bg-red-100 text-gray-400 hover:text-red-500 transition-all"
+                        >
+                          <X size={11} />
+                        </button>
+                      )}
+                    </div>
+                  )}
 
-                  {/* Text content */}
-                  {isEditing ? (
+                  {/* Wallboard visibility — every node carries the same switch. */}
+                  {!plain && (
+                    <button
+                      data-el-action
+                      onClick={e => { e.stopPropagation(); updateCanvasElement(el.id, { showOnTv: el.showOnTv === false ? undefined : false }); }}
+                      title={el.showOnTv === false ? 'Hidden from TV' : 'Showing on TV'}
+                      className={`absolute bottom-1.5 right-1.5 p-1 rounded-md transition-all ${isSelected ? 'opacity-100' : 'opacity-0 hover:opacity-100'}`}
+                      style={{ color: el.showOnTv === false ? '#dc2626' : '#94a3b8' }}
+                    >
+                      <TvIcon size={11} hidden={el.showOnTv === false} />
+                    </button>
+                  )}
+
+                  {/* ── Type-specific content ── */}
+                  {isBin ? (
+                    <button
+                      data-el-action
+                      onClick={e => { e.stopPropagation(); setOpenBin(el.binKind!); }}
+                      className="w-full h-full flex flex-col items-start justify-center px-3 text-left"
+                    >
+                      <span className="flex items-center gap-1.5 font-extrabold text-[12.5px]" style={{ color: el.color }}>
+                        {el.binKind === 'done' ? <CheckCircle2 size={14} />
+                          : el.binKind === 'ready' ? <PlayCircle size={14} />
+                          : el.binKind === 'archive' ? <Archive size={14} />
+                          : <Trash2 size={14} />}
+                        {BIN_META[el.binKind!].label}
+                      </span>
+                      <span className="text-[11px] text-gray-500 mt-0.5">
+                        {binCount(el.binKind!)} {binCount(el.binKind!) === 1 ? 'job' : 'jobs'}
+                      </span>
+                      <span className="text-[9px] text-gray-400 mt-0.5">
+                        {binHot ? 'Release to file it here' : 'Click to open · drag jobs in'}
+                      </span>
+                    </button>
+                  ) : el.type === 'countdown' ? (
+                    <CountdownNode el={el} />
+                  ) : el.type === 'stopwatch' ? (
+                    <StopwatchNode el={el} onToggle={() => updateCanvasElement(el.id, el.startedAt
+                      ? { startedAt: undefined, elapsedMs: (el.elapsedMs ?? 0) + (Date.now() - new Date(el.startedAt).getTime()) }
+                      : { startedAt: new Date().toISOString() })} />
+                  ) : el.type === 'voice' ? (
+                    <VoiceMemoNode
+                      el={el}
+                      recording={recordingEl === el.id}
+                      busy={savingAudio}
+                      onRecord={() => startRecording(el.id)}
+                      onStop={stopRecording}
+                    />
+                  ) : el.type === 'clipart' ? (
+                    <ClipArtNode el={el} />
+                  ) : el.type === 'title' ? (
+                    <div className="w-full h-full flex items-center px-2 font-black leading-none"
+                      style={{ fontSize: el.fontSize ?? 22, color: el.color || '#0f172a' }}>
+                      {el.text || 'Title'}
+                    </div>
+                  ) : isEditing ? (
                     <textarea
                       ref={editInputRef}
                       value={editText}
@@ -946,8 +1464,20 @@ export function GeneralJobsPage() {
                     </div>
                   )}
 
-                  {/* Resize handle (bottom-right corner) */}
-                  {el.type === 'box' && (
+                  {/* Thumbs-up reaction — click the badge to take one back. */}
+                  {(el.thumbsUp ?? 0) > 0 && (
+                    <button
+                      data-el-action
+                      onClick={e => { e.stopPropagation(); bumpThumbs('element', [el.id], -1); }}
+                      title="Remove a thumbs up"
+                      className="absolute -top-2 -left-2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-white border border-gray-200 shadow-sm text-[10px] font-bold text-emerald-600"
+                    >
+                      <ThumbsUp size={10} /> {el.thumbsUp}
+                    </button>
+                  )}
+
+                  {/* Resize handle — boxes and bins are both resizable. */}
+                  {(el.type === 'box' || isBin) && (
                     <div
                       data-el-action
                       onPointerDown={e => onResizePointerDown(e, el)}
@@ -960,6 +1490,52 @@ export function GeneralJobsPage() {
                 </div>
               );
             })}
+
+            {/* ── Ghost appearances ──
+                The SAME job drawn a second time. One record, several places, so
+                an edit through a ghost is an edit to the job. */}
+            {jobs.flatMap(job => (job.ghosts ?? []).map((g, gi) => {
+              const p = ghostPos(job.id, gi, g);
+              const stage = job.currentStageId ? stageMap.get(job.currentStageId) : null;
+              const dragging = ghostDrag?.jobId === job.id && ghostDrag.index === gi && ghostDrag.moved;
+              return (
+                <div
+                  key={`${job.id}-ghost-${gi}`}
+                  onPointerDown={e => onGhostPointerDown(e, job, gi, p)}
+                  onPointerMove={onGhostPointerMove}
+                  onPointerUp={e => onGhostPointerUp(e, job)}
+                  onContextMenu={e => {
+                    e.preventDefault(); e.stopPropagation();
+                    setCtxMenu({ x: e.clientX, y: e.clientY, kind: 'ghost', ids: [job.id], ghostIndex: gi });
+                  }}
+                  className="absolute rounded-xl p-3 select-none cursor-grab"
+                  style={{
+                    left: p.x, top: p.y, width: TILE_W, height: TILE_H,
+                    touchAction: 'none',
+                    backgroundColor: job.tileColor ?? '#ffffff',
+                    border: `4px dashed ${stage?.color ?? '#cbd5e1'}`,
+                    opacity: dragging ? 0.75 : 0.45,
+                    zIndex: dragging ? 20 : 4,
+                  }}
+                >
+                  <span className="absolute top-1.5 right-2 flex items-center gap-1 text-[9px] font-bold text-gray-400">
+                    <Ghost size={10} /> ghost
+                  </span>
+                  <div className="flex items-start gap-2 mb-1.5 pr-10">
+                    {stage && <span className="flex-shrink-0 w-2.5 h-2.5 rounded-full mt-1" style={{ backgroundColor: stage.color }} />}
+                    <h3 className="font-semibold text-gray-900 text-sm leading-tight line-clamp-2">
+                      {job.displayName || s.jobLabel}
+                    </h3>
+                  </div>
+                  {job.address && (
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                      <MapPin size={11} className="flex-shrink-0 text-gray-400" />
+                      <span className="truncate">{job.address}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            }))}
 
             {/* ── Job tiles ── */}
             {jobs.map((job, i) => {
@@ -975,7 +1551,7 @@ export function GeneralJobsPage() {
                   key={job.id}
                   onPointerDown={e => onJobPointerDown(e, job, i)}
                   onPointerMove={onJobPointerMove}
-                  onPointerUp={() => onJobPointerUp(job)}
+                  onPointerUp={e => onJobPointerUp(e, job)}
                   onContextMenu={e => onJobContextMenu(e, job)}
                   className={`absolute rounded-xl border p-3 group select-none ${
                     isDragging ? 'shadow-2xl cursor-grabbing z-20' :
@@ -1098,12 +1674,14 @@ export function GeneralJobsPage() {
         </div>
       </div>
 
-      {/* ── Right-click context menu ── */}
+      {/* ── Right-click context menu ──
+          The paste entry is driven by what is actually on the clipboard: a plain
+          "Paste" is never offered, only the one action that fits. */}
       {ctxMenu && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setCtxMenu(null)} />
-          <div className="fixed z-50 bg-white rounded-xl shadow-xl border border-gray-100 py-1 min-w-[170px]"
-            style={{ left: ctxMenu.x, top: ctxMenu.y }}>
+          <div className="fixed z-50 bg-white rounded-xl shadow-xl border border-gray-100 py-1 min-w-[196px]"
+            style={{ left: Math.min(ctxMenu.x, window.innerWidth - 220), top: Math.min(ctxMenu.y, window.innerHeight - 300) }}>
             {ctxMenu.kind === 'job' ? (
               <>
                 <button onClick={() => handleDuplicateJobs(ctxMenu.ids)}
@@ -1111,15 +1689,84 @@ export function GeneralJobsPage() {
                   <Copy size={14} className="text-gray-400" />
                   {ctxMenu.ids.length > 1 ? `Duplicate (${ctxMenu.ids.length})` : 'Duplicate'}
                 </button>
-                <button onClick={e => { setColorPicker({ x: ctxMenu.x + 170, y: ctxMenu.y, kind: 'job', ids: ctxMenu.ids }); setCtxMenu(null); }}
+                <button onClick={() => handleCreateGhost(ctxMenu.ids)}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5"
+                  title="Show this same job in another place">
+                  <Ghost size={14} className="text-gray-400" />
+                  {ctxMenu.ids.length > 1 ? `Create ghosts (${ctxMenu.ids.length})` : 'Create ghost'}
+                </button>
+                <button onClick={() => bumpThumbs('job', ctxMenu.ids, 1)}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
+                  <ThumbsUp size={14} className="text-gray-400" /> Thumbs up
+                </button>
+                <button onClick={() => { setColorPicker({ x: ctxMenu.x + 170, y: ctxMenu.y, kind: 'job', ids: ctxMenu.ids }); setCtxMenu(null); }}
                   className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
                   <Palette size={14} className="text-gray-400" /> Change Color
                 </button>
+
+                <div className="h-px bg-gray-100 my-1" />
+                <button
+                  disabled={clip.kind === 'none' || ctxMenu.ids.length !== 1}
+                  onClick={() => applyPaste(ctxMenu.ids[0], clip)}
+                  className="w-full px-4 py-2 text-left text-sm flex items-center gap-2.5 disabled:text-gray-300 text-gray-700 hover:bg-gray-50 disabled:hover:bg-transparent"
+                  title={clip.kind === 'none' ? 'Nothing pasteable on the clipboard' : clip.value.slice(0, 80)}>
+                  <ClipboardPaste size={14} className={clip.kind === 'none' ? 'text-gray-200' : 'text-gray-400'} />
+                  {clip.kind === 'none' ? 'Paste' : clip.label}
+                </button>
+
+                <div className="h-px bg-gray-100 my-1" />
+                <div className="px-4 pt-1 pb-0.5 text-[10px] font-bold text-gray-400 tracking-wide">MOVE TO</div>
+                {BIN_KINDS.map(k => (
+                  <button key={k}
+                    onClick={() => { ctxMenu.ids.forEach(id => moveToBin(id, k)); setSelectedJobIds(new Set()); setCtxMenu(null); setToast(`Moved to ${BIN_META[k].label}`); }}
+                    className="w-full px-4 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: BIN_META[k].color }} />
+                    {BIN_META[k].label}
+                  </button>
+                ))}
+
                 <div className="h-px bg-gray-100 my-1" />
                 <button onClick={() => handleDeleteJobs(ctxMenu.ids)}
                   className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2.5">
                   <Trash2 size={14} />
-                  {ctxMenu.ids.length > 1 ? `Delete (${ctxMenu.ids.length})` : 'Delete'}
+                  {ctxMenu.ids.length > 1 ? `Delete forever (${ctxMenu.ids.length})` : 'Delete forever'}
+                </button>
+              </>
+            ) : ctxMenu.kind === 'ghost' ? (
+              <>
+                <div className="px-4 py-1.5 text-[10px] font-bold text-gray-400 tracking-wide">
+                  GHOST · same job, another place
+                </div>
+                <button onClick={() => { const j = jobs.find(x => x.id === ctxMenu.ids[0]); if (j) setSelectedJob(j); setCtxMenu(null); }}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
+                  <Pencil size={14} className="text-gray-400" /> Open the job
+                </button>
+                <button onClick={() => { removeGhost(ctxMenu.ids[0], ctxMenu.ghostIndex ?? 0); setCtxMenu(null); }}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
+                  <X size={14} className="text-gray-400" /> Remove this ghost
+                </button>
+                <div className="px-4 pb-2 pt-0.5 text-[10px] text-gray-400 leading-snug">
+                  Removing a ghost only removes this appearance. The job itself is untouched.
+                </div>
+              </>
+            ) : ctxMenu.kind === 'canvas' ? (
+              <>
+                <button onClick={() => { dropNode('note', { x: ctxMenu.worldX ?? 0, y: ctxMenu.worldY ?? 0 }, { color: NOTE_PALETTE[0], text: '' }); setCtxMenu(null); }}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
+                  <StickyNote size={14} className="text-gray-400" /> Add note here
+                </button>
+                <button onClick={() => { dropNode('box', { x: ctxMenu.worldX ?? 0, y: ctxMenu.worldY ?? 0 }, { color: BOX_PALETTE[0], text: 'Section' }); setCtxMenu(null); }}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
+                  <Square size={14} className="text-gray-400" /> Add box here
+                </button>
+                <div className="h-px bg-gray-100 my-1" />
+                <button
+                  disabled={!canCreateFromIntent(clip.kind)}
+                  onClick={() => setCreateFromLink({ intent: clip, x: (ctxMenu.worldX ?? 0) - TILE_W / 2, y: (ctxMenu.worldY ?? 0) - TILE_H / 2 })}
+                  className="w-full px-4 py-2 text-left text-sm flex items-center gap-2.5 disabled:text-gray-300 text-gray-700 hover:bg-gray-50 disabled:hover:bg-transparent"
+                  title={canCreateFromIntent(clip.kind) ? clip.value.slice(0, 80) : 'Copy a Drive or Zoho link first'}>
+                  <ClipboardPaste size={14} className={canCreateFromIntent(clip.kind) ? 'text-gray-400' : 'text-gray-200'} />
+                  {canCreateFromIntent(clip.kind) ? 'Create job from this link' : 'Paste'}
                 </button>
               </>
             ) : (
@@ -1128,7 +1775,11 @@ export function GeneralJobsPage() {
                   className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
                   <Pencil size={14} className="text-gray-400" /> Edit Text
                 </button>
-                <button onClick={e => { setColorPicker({ x: ctxMenu.x + 170, y: ctxMenu.y, kind: 'element', ids: ctxMenu.ids }); setCtxMenu(null); }}
+                <button onClick={() => bumpThumbs('element', ctxMenu.ids, 1)}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
+                  <ThumbsUp size={14} className="text-gray-400" /> Thumbs up
+                </button>
+                <button onClick={() => { setColorPicker({ x: ctxMenu.x + 170, y: ctxMenu.y, kind: 'element', ids: ctxMenu.ids }); setCtxMenu(null); }}
                   className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
                   <Palette size={14} className="text-gray-400" /> Change Color
                 </button>
@@ -1137,17 +1788,106 @@ export function GeneralJobsPage() {
                   <Copy size={14} className="text-gray-400" />
                   {ctxMenu.ids.length > 1 ? `Duplicate (${ctxMenu.ids.length})` : 'Duplicate'}
                 </button>
-                <div className="h-px bg-gray-100 my-1" />
-                <button onClick={() => handleDeleteEls(ctxMenu.ids)}
-                  className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2.5">
-                  <Trash2 size={14} />
-                  {ctxMenu.ids.length > 1 ? `Delete (${ctxMenu.ids.length})` : 'Delete'}
-                </button>
+                {/* Bins are permanent fixtures of the board, so they are never
+                    offered for deletion — only the other node types are. */}
+                {!ctxMenu.ids.some(id => canvasElements.find(e => e.id === id)?.type === 'bin') && (
+                  <>
+                    <div className="h-px bg-gray-100 my-1" />
+                    <button onClick={() => handleDeleteEls(ctxMenu.ids)}
+                      className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2.5">
+                      <Trash2 size={14} />
+                      {ctxMenu.ids.length > 1 ? `Delete (${ctxMenu.ids.length})` : 'Delete'}
+                    </button>
+                  </>
+                )}
               </>
             )}
           </div>
         </>
       )}
+
+      {/* ── Clip-art picker ── */}
+      {artPicker && (
+        <>
+          <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setArtPicker(false)} />
+          <div className="fixed z-50 bg-white rounded-2xl shadow-2xl p-4"
+            style={{ left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: 'min(320px, 92vw)' }}>
+            <h3 className="text-sm font-bold text-gray-900 mb-3">Clip art</h3>
+            <div className="grid grid-cols-4 gap-2">
+              {ART_KINDS.map(art => (
+                <button
+                  key={art}
+                  title={art.replace('-', ' ')}
+                  onClick={() => { dropNode('clipart', undefined, { art }); setArtPicker(false); }}
+                  className="aspect-square rounded-xl border border-gray-200 p-2 hover:border-[#4aa8d8] hover:bg-sky-50 transition-colors"
+                >
+                  <ClipArtNode el={{
+                    id: 'preview', type: 'clipart', art, x: 0, y: 0, w: 40, h: 40, text: '', color: '#dc2626',
+                  }} />
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Paste over an existing value ──
+          Only shown when the field already holds something, so a paste can
+          never quietly overwrite a link someone typed. */}
+      {pasteConfirm && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setPasteConfirm(null)} />
+          <div className="fixed z-50 bg-white rounded-2xl shadow-2xl p-5"
+            style={{ left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: 'min(420px, 92vw)' }}>
+            <h3 className="text-base font-bold text-gray-900 mb-1">Replace what is there?</h3>
+            <p className="text-xs text-gray-500 mb-3">
+              This job already has a value for {pasteConfirm.intent.label.replace('Paste as ', '')}.
+            </p>
+            <div className="text-[11px] bg-gray-50 rounded-lg p-2 mb-1 break-all text-gray-500">
+              <span className="font-bold">Now:</span> {pasteConfirm.existing}
+            </div>
+            <div className="text-[11px] bg-sky-50 rounded-lg p-2 mb-4 break-all text-sky-800">
+              <span className="font-bold">New:</span> {pasteConfirm.intent.value}
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setPasteConfirm(null)}
+                className="flex-1 py-2 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">Keep it</button>
+              <button onClick={() => applyPaste(pasteConfirm.jobId, pasteConfirm.intent, true)}
+                className="flex-1 py-2 rounded-xl text-sm font-semibold text-white"
+                style={{ background: 'linear-gradient(135deg, #1e3a5f, #2d5a8e)' }}>Replace</button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Create a job from a pasted link ── */}
+      {createFromLink && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setCreateFromLink(null)} />
+          <div className="fixed z-50 bg-white rounded-2xl shadow-2xl p-5"
+            style={{ left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: 'min(420px, 92vw)' }}>
+            <h3 className="text-base font-bold text-gray-900 mb-1">Create a new job with this link?</h3>
+            <p className="text-xs text-gray-500 mb-3">
+              {createFromLink.intent.kind === 'drive'
+                ? 'The family name is taken from the Drive folder automatically.'
+                : 'The link is saved as the job’s Zoho link.'}
+            </p>
+            <div className="text-[11px] bg-gray-50 rounded-lg p-2 mb-4 break-all text-gray-500">
+              {createFromLink.intent.value}
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setCreateFromLink(null)}
+                className="flex-1 py-2 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">{s.cancel}</button>
+              <button onClick={() => { createJobFromLink(createFromLink.intent, createFromLink.x, createFromLink.y); setCtxMenu(null); }}
+                className="flex-1 py-2 rounded-xl text-sm font-semibold text-white"
+                style={{ background: 'linear-gradient(135deg, #1e3a5f, #2d5a8e)' }}>Create job</button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Bin window ── */}
+      {openBin && <BinWindow bin={openBin} onClose={() => setOpenBin(null)} />}
 
       {/* ── Color picker popup ── */}
       {colorPicker && (

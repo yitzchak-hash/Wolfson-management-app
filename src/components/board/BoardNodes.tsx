@@ -15,8 +15,16 @@ export const NODE_DEFAULT_SIZE: Record<string, { w: number; h: number }> = {
   countdown: { w: 190, h: 96 },
   stopwatch: { w: 190, h: 96 },
   clipart: { w: 64, h: 64 },
+  voice: { w: 190, h: 78 },
+  bin: { w: 178, h: 92 },
   stroke: { w: 0, h: 0 },
 };
+
+/** Every clip-art piece the picker offers. */
+export const ART_KINDS = [
+  'pin', 'tape', 'clip', 'marker', 'sticky-stack', 'document', 'arrow', 'star',
+] as const;
+export type ArtKind = (typeof ART_KINDS)[number];
 
 // ─── Pinned title ────────────────────────────────────────────────────────────
 
@@ -142,6 +150,49 @@ export function StopwatchNode({ el, onToggle }: { el: CanvasElement; onToggle?: 
       >
         {running ? 'Stop' : 'Start'}
       </button>
+    </div>
+  );
+}
+
+// ─── Voice memo ──────────────────────────────────────────────────────────────
+
+/**
+ * A short spoken note pinned to the board.
+ *
+ * The audio itself is NEVER stored in the element record. Recordings go to the
+ * job's Drive folder through the existing upload backend and only the resulting
+ * URL is kept, so a board full of memos cannot blow the Firestore document limit
+ * or the localStorage quota the way inlined base64 would.
+ */
+export function VoiceMemoNode({
+  el, onRecord, onStop, recording, busy,
+}: {
+  el: CanvasElement;
+  onRecord: () => void;
+  onStop: () => void;
+  recording: boolean;
+  busy: boolean;
+}) {
+  const secs = el.audioSeconds ?? 0;
+  return (
+    <div className="w-full h-full flex flex-col justify-center px-2.5 gap-1">
+      <div className="text-[10px] font-bold text-gray-500 truncate">{el.text || 'Voice memo'}</div>
+      {el.audioUrl ? (
+        <audio data-no-drag data-el-action controls src={el.audioUrl} className="w-full h-7" />
+      ) : (
+        <button
+          data-no-drag data-el-action
+          onClick={e => { e.stopPropagation(); recording ? onStop() : onRecord(); }}
+          disabled={busy}
+          className="text-[10px] font-bold px-2 py-1 rounded-full self-start disabled:opacity-50"
+          style={recording
+            ? { backgroundColor: '#fee2e2', color: '#b91c1c' }
+            : { backgroundColor: '#e0f2fe', color: '#0369a1' }}
+        >
+          {busy ? 'Saving…' : recording ? '■ Stop' : '● Record'}
+        </button>
+      )}
+      {secs > 0 && <div className="text-[9px] text-gray-400">{secs}s</div>}
     </div>
   );
 }

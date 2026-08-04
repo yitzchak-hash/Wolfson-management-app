@@ -1,12 +1,12 @@
 import React, { useRef, useState } from 'react';
 import {
   MousePointer2, Hand, Plus, StickyNote, Square, Type, Pen, Highlighter,
-  Palette, Maximize, Settings, Timer, Clock, Keyboard, GripVertical,
+  Palette, Maximize, Settings, Timer, Clock, Keyboard, GripVertical, Mic, Image,
 } from 'lucide-react';
 
 export type BoardTool =
   | 'select' | 'pan' | 'job' | 'note' | 'box' | 'title'
-  | 'pen' | 'highlighter' | 'clipart' | 'countdown' | 'stopwatch';
+  | 'pen' | 'highlighter' | 'clipart' | 'countdown' | 'stopwatch' | 'voice' | 'export';
 
 interface ToolDef { id: BoardTool; icon: React.ElementType; label: string; tip: string }
 
@@ -37,6 +37,10 @@ const TOOLS: ToolDef[][] = [
   [
     { id: 'countdown', icon: Timer, label: 'Timer', tip: 'Countdown' },
     { id: 'stopwatch', icon: Clock, label: 'Watch', tip: 'Stopwatch' },
+    { id: 'voice',     icon: Mic,   label: 'Voice', tip: 'Voice memo' },
+  ],
+  [
+    { id: 'export', icon: Image, label: 'Save', tip: 'Export board image' },
   ],
 ];
 

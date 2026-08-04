@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS } from '../types';
+import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BoardSetting, BoardSettingKey } from '../types';
 
 // Always merge stored mainUiStrings ON TOP of the fresh preset so code-added keys
 // are never missing even when localStorage has an older saved version.
@@ -214,6 +214,7 @@ interface AppState {
   moveToBin: (id: string, bin: Apartment['boardBin'] | null) => void;
   /** Extra board position for the SAME job — one record, drawn twice. */
   addGhost: (id: string, x: number, y: number) => void;
+  moveGhost: (id: string, index: number, x: number, y: number) => void;
   removeGhost: (id: string, index: number) => void;
 
   upsertStageNote: (apartmentId: string, stageId: string, noteText: string, user: User, attachment?: { filename?: string; mimeType?: string; dataUrl?: string; driveFileId?: string; driveUrl?: string } | null, attachments?: StageNoteAttachment[]) => void;
@@ -299,8 +300,8 @@ interface AppState {
   setDashboardLayout: (order: string[], hidden: string[]) => void;
 
   /** Board appearance & behaviour, one entry per project. Synced via settings/app. */
-  boardSettings: Record<string, { themeId?: string; snapToGrid?: boolean; showControls?: boolean }>;
-  setBoardSetting: (key: 'themeId' | 'snapToGrid' | 'showControls', value: string | boolean) => void;
+  boardSettings: Record<string, BoardSetting>;
+  setBoardSetting: <K extends BoardSettingKey>(key: K, value: BoardSetting[K]) => void;
 
   // Contractor status spreadsheet — one link per project, synced via settings/app
   contractorSheetLinks: Record<string, string>;
@@ -364,7 +365,7 @@ export const useStore = create<AppState>((set, get) => ({
   pendingOpenAptId: null,
   dashboardWidgetOrder: (stored?.dashboardWidgetOrder as string[] | null) ?? ['apt-stats', 'task-stats', 'stage-progress', 'building-progress', 'activity'],
   dashboardHiddenWidgets: (stored?.dashboardHiddenWidgets as string[] | null) ?? [],
-  boardSettings: (stored?.boardSettings as Record<string, { themeId?: string; snapToGrid?: boolean; showControls?: boolean }> | null) ?? {},
+  boardSettings: (stored?.boardSettings as Record<string, BoardSetting> | null) ?? {},
   contractorSheetLinks: (stored?.contractorSheetLinks as Record<string, string> | null) ?? {},
   currentProjectId: _activeProjectId,
   projects: DEFAULT_PROJECTS,
@@ -660,6 +661,17 @@ export const useStore = create<AppState>((set, get) => ({
     set(state => ({
       apartments: state.apartments.map(a => a.id === id
         ? { ...a, ghosts: [...(a.ghosts ?? []), { x, y }] } : a),
+    }));
+    persist(get);
+    const u = get().apartments.find(a => a.id === id);
+    if (u) fsSet(projectCollection(pid, 'apartments'), id, u);
+  },
+
+  moveGhost: (id, index, x, y) => {
+    const pid = get().currentProjectId;
+    set(state => ({
+      apartments: state.apartments.map(a => a.id === id
+        ? { ...a, ghosts: (a.ghosts ?? []).map((g, i) => (i === index ? { x, y } : g)) } : a),
     }));
     persist(get);
     const u = get().apartments.find(a => a.id === id);
@@ -1544,7 +1556,7 @@ export const useStore = create<AppState>((set, get) => ({
         ...(appSettings.autoBackup           !== undefined ? { autoBackup: appSettings.autoBackup as boolean } : {}),
         ...(appSettings.mainUiStrings        ? { mainUiStrings: mergeFreshMainUi(appSettings.mainUiStrings as Partial<MainUiStrings>) } : {}),
         ...(appSettings.contractorSheetLinks ? { contractorSheetLinks: appSettings.contractorSheetLinks as Record<string, string> } : {}),
-        ...(appSettings.boardSettings ? { boardSettings: appSettings.boardSettings as Record<string, { themeId?: string; snapToGrid?: boolean; showControls?: boolean }> } : {}),
+        ...(appSettings.boardSettings ? { boardSettings: appSettings.boardSettings as Record<string, BoardSetting> } : {}),
       }));
       persist(get);
 
@@ -1700,7 +1712,7 @@ export const useStore = create<AppState>((set, get) => ({
           ...(appS.autoBackup           !== undefined ? { autoBackup: appS.autoBackup as boolean } : {}),
           ...(appS.mainUiStrings        ? { mainUiStrings: mergeFreshMainUi(appS.mainUiStrings as Partial<MainUiStrings>) } : {}),
           ...(appS.contractorSheetLinks ? { contractorSheetLinks: appS.contractorSheetLinks as Record<string, string> } : {}),
-          ...(appS.boardSettings ? { boardSettings: appS.boardSettings as Record<string, { themeId?: string; snapToGrid?: boolean; showControls?: boolean }> } : {}),
+          ...(appS.boardSettings ? { boardSettings: appS.boardSettings as Record<string, BoardSetting> } : {}),
           ...(appS.driveExportFrequency ? { driveExportFrequency: appS.driveExportFrequency as DriveExportFrequency } : {}),
         }));
         persist(get);

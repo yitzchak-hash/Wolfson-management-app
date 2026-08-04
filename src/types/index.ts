@@ -17,6 +17,37 @@ export function projectColor(projects: Project[], id: string): string {
   return projects.find(p => p.id === id)?.color ?? '#1e3a5f';
 }
 
+/** The four board bins. Organisational only — completely independent of stages. */
+export type BinKind = 'done' | 'ready' | 'archive' | 'trash';
+
+export const BIN_KINDS: BinKind[] = ['done', 'ready', 'archive', 'trash'];
+
+export const BIN_META: Record<BinKind, { label: string; color: string }> = {
+  ready:   { label: 'Ready to Start', color: '#0ea5e9' },
+  done:    { label: 'Done',           color: '#16a34a' },
+  archive: { label: 'Archive',        color: '#64748b' },
+  trash:   { label: 'Trash',          color: '#dc2626' },
+};
+
+/**
+ * Board appearance and behaviour, stored per project inside `settings/app`.
+ *
+ * Bins are NOT stored here: they are real CanvasElements with a `binKind`, so
+ * they move, resize and sync exactly like every other node.
+ */
+export interface BoardSetting {
+  themeId?: string;
+  snapToGrid?: boolean;
+  showControls?: boolean;
+  /** 'canvas' = the free board, 'stages' = the same jobs in stage columns. */
+  viewMode?: 'canvas' | 'stages';
+  /** TV wallboard: default language and manual display-scale override. */
+  tvLang?: 'en' | 'he';
+  tvScale?: number;
+}
+
+export type BoardSettingKey = keyof BoardSetting;
+
 export interface User {
   id: string;
   name: string;
@@ -155,6 +186,13 @@ export interface Apartment {
    */
   ghosts?: { x: number; y: number }[];
   /**
+   * Thumbs-up count. Right-click adds one, clicking the badge takes one back.
+   * A count rather than a flag because several people share one board.
+   */
+  thumbsUp?: number;
+  /** Optional photo behind the tile. Stored as a URL, never as bytes. */
+  tilePhotoUrl?: string;
+  /**
    * Whether this appears on the TV wallboard. UNDEFINED MEANS VISIBLE —
    * everything shows by default and Esther switches off only what is private.
    */
@@ -176,7 +214,7 @@ export interface Apartment {
 // Free-form canvas elements in the General Jobs canvas (sticky notes, section boxes)
 export interface CanvasElement {
   id: string;
-  type: 'note' | 'box' | 'title' | 'countdown' | 'stopwatch' | 'clipart' | 'stroke';
+  type: 'note' | 'box' | 'title' | 'countdown' | 'stopwatch' | 'clipart' | 'stroke' | 'bin' | 'voice';
   /** countdown: target ISO time · stopwatch: started ISO time (absent = paused) */
   targetAt?: string;
   startedAt?: string;
@@ -199,7 +237,13 @@ export interface CanvasElement {
    * Bin nodes are drop targets for jobs. They are movable and resizable like any
    * other element, and entirely independent of stages.
    */
-  binKind?: 'done' | 'ready' | 'archive' | 'trash';
+  binKind?: BinKind;
+  /** voice: Firebase Storage download URL + its storage path, for deletion. */
+  audioUrl?: string;
+  audioPath?: string;
+  audioSeconds?: number;
+  /** Thumbs-up count — see Apartment.thumbsUp. */
+  thumbsUp?: number;
   /** See Apartment.showOnTv — undefined means visible. */
   showOnTv?: boolean;
   /**
