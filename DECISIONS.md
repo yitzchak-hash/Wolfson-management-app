@@ -161,7 +161,7 @@ name derived from the Drive folder automatically.
 |---|---|---|
 | 23 | Stage board (Kanban) | **Yes** — main board + stage board. Dragging across stages **changes the stage**. Within a stage, sort vertically by **last modified**, newest on top |
 | 24 | Mobile mode | **Yes — but after this whole list, on its own branch** |
-| 25 | TV wallboard | **Yes, big one.** Link from **app settings**; open on a TV, press fullscreen. Also a **presentation mode** and a **literal job-board mode** on the TV. *Five totally different mockups requested, one as close to the job board as possible* |
+| 25 | TV presentation | **Yes** — see §9, its own full spec |
 | 26 | Comments/@mentions | **Skip** — general notes + its history already serve as comments |
 | 27 | Read-only share link | **Skip** |
 | 28 | Live change pulse + ticker | **Yes** |
@@ -210,3 +210,51 @@ produces a flattened copy with the pins burned in. Live use = overlay; download 
 ## 8. Deliverables at the end
 1. A short paragraph listing **every** change made.
 2. A **short, non-technical update for Esther** (secretary) in plain language.
+
+
+---
+
+## 9. TV presentation (expanded)
+
+**It is not a mirror — it is the board itself**, in the **light theme**, looking exactly as it does in the
+app. Its own link, opened on the TV, then fullscreen.
+
+### On screen
+- **Project buttons** across the top: Job Board · Wolfson · Netiv · **Company dashboard**.
+- The **company dashboard** is its own view — totals across all three projects, progress per project,
+  and a needs-attention list. Not any single project's dashboard.
+- **Tapping a job** opens a room-sized view:
+  - **plan top-left** — tapping it opens the plan **in Google Drive**, so it can be drawn on with the
+    interactive display
+  - **details bottom-left**
+  - **latest site photos (plural)** on the right
+  - contractor status alongside
+- **Hebrew / English toggle** on the TV itself, with the **default set in TV settings**.
+- **Live updates** — the TV subscribes to the same real-time listeners as the app, so changes appear as
+  they happen. The refresh interval is only a fallback if the connection drops.
+
+### Esther's control over what appears
+- Every job, note, box, title and bin carries a small **TV icon**.
+- **Everything shows by default**; she switches off only what should stay private.
+- Icon is a TV, with a **slash through it when hidden**, so the state reads without hovering.
+- Tooltip: **"Showing on TV"** / **"Hidden from TV"**.
+
+### TV settings (app settings → TV Presentation)
+Presentation link · start view · rotate views + interval · **theme** · **language default (he/en)** ·
+display size for 4K at distance · refresh fallback · which projects appear · show completed ·
+**read-only lock (recommended)** · auto-return home when idle · screen schedule · burn-in protection ·
+show clock / attention strip.
+
+> **Read-only lock matters most.** It is an editable board on a shared touchscreen — without a lock a
+> stray palm can move a job or drop it in a bin, silently. Read-only by default, PIN to unlock.
+
+### Presentation themes (4)
+Daylight (default, exactly the app) · Contrast (heavier, for a big room) · Midnight · Studio.
+
+---
+
+## 10. Board themes — eleven
+
+1. **Default** *(current app look — remains the default)* · 2. Light blueprint · 3. Dark blueprint ·
+4. Cork board *(more realistic: denser grain, wooden frame, pins)* · 5. Whiteboard · 6. Dark studio ·
+7. Site plan · 8. Engineering pad · 9. Chalkboard · 10. Kraft workshop · 11. Steel shop
