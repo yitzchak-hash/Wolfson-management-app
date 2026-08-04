@@ -16,7 +16,7 @@ const CAT_COLORS: Record<string, string> = { drywall: '#f59e0b', ac: '#3b82f6', 
  */
 export function ProjectCalendarPage() {
   const {
-    contractorAssignments, apartments, contractors, projects,
+    contractorAssignments, apartments, contractors, projects, stages,
     currentProjectId, mainUiStrings: s,
   } = useStore();
   const navigate = useNavigate();
@@ -35,6 +35,7 @@ export function ProjectCalendarPage() {
       if (!showCompleted && a.completedAt) continue;
       const apt = apartments.find(ap => ap.id === a.apartmentId);
       const contractor = contractors.find(c => c.id === a.contractorId);
+      const stage = apt ? stages.find(st => st.id === apt.currentStageId) : undefined;
       out.push({
         id: a.id,
         date: a.dueDate,
@@ -43,13 +44,23 @@ export function ProjectCalendarPage() {
         color: contractor ? (CAT_COLORS[contractor.category] ?? '#6b7280') : '#6b7280',
         completed: !!a.completedAt,
         onClick: () => navigate('/tasks'),
+        // Full-node payload so a day renders the same card the board does
+        node: apt ? {
+          stageName: stage?.name,
+          stageColor: stage?.color,
+          address: apt.address,
+          driveLink: apt.driveLink,
+          zohoLink: apt.zohoLink,
+          plansPdfLink: apt.plansPdfLink,
+          pendingTasks: contractorAssignments.filter(x => x.apartmentId === apt.id && !x.completedAt).length,
+        } : undefined,
       });
     }
     return out;
-  }, [contractorAssignments, apartments, contractors, filterContractorId, showCompleted, navigate]);
+  }, [contractorAssignments, apartments, contractors, stages, filterContractorId, showCompleted, navigate]);
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-6 w-full">
       <h1 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
         <CalendarDays size={24} style={{ color: accent }} />
         {projectName} · {s.navCalendar}

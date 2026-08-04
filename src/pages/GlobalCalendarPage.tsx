@@ -96,7 +96,7 @@ export function GlobalCalendarPage() {
   }, [allData, filterProject, filterContractorId, showCompleted, contractors]);
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-6 w-full">
       <h1 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
         <CalendarDays size={24} className="text-[#1e3a5f]" />
         {s.globalCalendarTitle}

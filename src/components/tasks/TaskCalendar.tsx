@@ -4,6 +4,7 @@ import {
   startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   addMonths, subMonths, eachDayOfInterval, format, isSameMonth, isSameDay, parseISO,
 } from 'date-fns';
+import { DriveIcon, ZohoIcon, PlanIcon } from '../ui/BrandIcons';
 
 export interface CalendarEvent {
   id: string;
@@ -13,6 +14,22 @@ export interface CalendarEvent {
   color: string;       // chip accent color (hex)
   completed: boolean;
   onClick?: () => void;
+
+  /**
+   * Optional full-node rendering. When present the calendar draws the same card
+   * the board draws — stage border, Drive/Zoho/plan buttons, last edited — so a
+   * day reads exactly like the board rather than as a coloured strip.
+   */
+  node?: {
+    stageName?: string;
+    stageColor?: string;
+    address?: string;
+    driveLink?: string;
+    zohoLink?: string;
+    plansPdfLink?: string;
+    lastEdited?: string;
+    pendingTasks?: number;
+  };
 }
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -93,9 +110,12 @@ export function TaskCalendar({
           return (
             <div
               key={idx}
-              className={`min-h-[92px] border-b border-r border-gray-50 p-1 flex flex-col gap-0.5 ${
+              className={`border-b border-r border-gray-50 p-1.5 flex flex-col gap-1 ${
                 inMonth ? 'bg-white' : 'bg-gray-50/60'
               } ${idx % 7 === 6 ? 'border-r-0' : ''}`}
+              /* The week ROW grows to fit its busiest day rather than each cell
+                 scrolling internally — a day with one job shows it full size. */
+              style={{ minHeight: 132 }}
             >
               <div className="flex items-center justify-center">
                 <span
@@ -108,25 +128,57 @@ export function TaskCalendar({
                   {format(day, 'd')}
                 </span>
               </div>
-              <div className="flex flex-col gap-0.5 overflow-y-auto max-h-[120px] scrollbar-thin">
-                {dayEvents.map(ev => (
-                  <button
-                    key={ev.id}
-                    onClick={ev.onClick}
-                    title={`${ev.title}${ev.subtitle ? ' — ' + ev.subtitle : ''}`}
-                    className={`text-left rounded px-1 py-0.5 text-[9px] leading-tight transition-all hover:brightness-95 ${
-                      ev.completed ? 'opacity-50 line-through' : ''
-                    }`}
-                    style={{ backgroundColor: ev.color + '22', borderLeft: `2px solid ${ev.color}` }}
-                  >
-                    <span className="block font-semibold truncate" style={{ color: ev.color }}>
-                      {ev.subtitle || ev.title}
-                    </span>
-                    {ev.subtitle && (
-                      <span className="block text-gray-500 truncate">{ev.title}</span>
-                    )}
-                  </button>
-                ))}
+              <div className="flex flex-col gap-1 flex-1">
+                {dayEvents.map(ev => {
+                  // One job fills the day; several share it and shrink together.
+                  const roomy = dayEvents.length === 1;
+                  const compact = dayEvents.length > 3;
+                  const accent = ev.node?.stageColor ?? ev.color;
+                  return (
+                    <button
+                      key={ev.id}
+                      onClick={ev.onClick}
+                      title={`${ev.title}${ev.subtitle ? ' — ' + ev.subtitle : ''}`}
+                      className={`text-left rounded-lg bg-white transition-all hover:shadow-md flex-1 min-h-0 ${
+                        ev.completed ? 'opacity-50' : ''
+                      }`}
+                      style={{
+                        border: `${compact ? 2 : 3}px solid ${accent}`,
+                        padding: compact ? '2px 4px' : '4px 6px',
+                      }}
+                    >
+                      <span className={`block font-bold truncate ${roomy ? 'text-[12px]' : compact ? 'text-[9px]' : 'text-[10.5px]'}`}
+                        style={{ textDecoration: ev.completed ? 'line-through' : undefined }}>
+                        {ev.subtitle || ev.title}
+                      </span>
+                      {!compact && ev.subtitle && (
+                        <span className="block text-gray-500 truncate text-[9.5px]">{ev.title}</span>
+                      )}
+                      {roomy && ev.node?.address && (
+                        <span className="block text-gray-400 truncate text-[9px]">{ev.node.address}</span>
+                      )}
+                      {!compact && ev.node?.stageName && (
+                        <span className="inline-block mt-1 text-[8.5px] font-bold px-1.5 py-0.5 rounded-full"
+                          style={{ backgroundColor: `${accent}22`, color: accent }}>
+                          {ev.node.stageName}
+                        </span>
+                      )}
+                      {roomy && (
+                        <span className="flex items-center gap-1 mt-1">
+                          {ev.node?.driveLink && <span className="w-4 h-4 rounded bg-gray-50 border border-gray-200 flex items-center justify-center"><DriveIcon size={9} /></span>}
+                          {ev.node?.zohoLink && <span className="w-4 h-4 rounded bg-gray-50 border border-gray-200 flex items-center justify-center"><ZohoIcon size={9} /></span>}
+                          {ev.node?.plansPdfLink && <span className="w-4 h-4 rounded bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-600"><PlanIcon size={9} /></span>}
+                          {!!ev.node?.pendingTasks && (
+                            <span className="ml-auto text-[9px] font-bold text-amber-600">{ev.node.pendingTasks}</span>
+                          )}
+                        </span>
+                      )}
+                      {roomy && ev.node?.lastEdited && (
+                        <span className="block text-[8.5px] text-gray-400 mt-0.5">{ev.node.lastEdited}</span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           );
