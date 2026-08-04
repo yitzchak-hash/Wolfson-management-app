@@ -38,7 +38,30 @@ export function Sidebar() {
   ];
 
   return (
-    <div className="flex flex-shrink-0 z-20">
+    <>
+      {/* Phone: the sidebar becomes a bottom bar, which is where a thumb reaches.
+          Hidden on md and up, where the vertical rail returns. */}
+      <nav
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 flex items-stretch overflow-x-auto"
+        style={{
+          backgroundColor: lightTheme ? '#ffffff' : '#162d4a',
+          borderTop: `3px solid ${accent}`,
+          paddingBottom: 'env(safe-area-inset-bottom)',
+        }}
+      >
+        {navItems.map(({ to, icon: Icon, label }) => (
+          <NavLink key={to} to={to} title={label}
+            className="flex-1 min-w-[62px] flex flex-col items-center justify-center gap-0.5 py-2"
+            style={({ isActive }) => (isActive
+              ? { color: accent, fontWeight: 700 }
+              : { color: lightTheme ? '#9ca3af' : '#6b7280' })}>
+            <Icon size={19} />
+            <span className="text-[8.5px] leading-none">{label}</span>
+          </NavLink>
+        ))}
+      </nav>
+
+    <div className="hidden md:flex flex-shrink-0 z-20">
       {/* Workspace identity rail */}
       <div style={{ width: '4px', backgroundColor: accent }} aria-hidden="true" />
 
@@ -67,5 +90,6 @@ export function Sidebar() {
         ))}
       </aside>
     </div>
+    </>
   );
 }

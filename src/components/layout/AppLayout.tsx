@@ -19,7 +19,7 @@ export function AppLayout() {
   return (
     <div className="flex flex-col h-screen bg-gray-100" dir={mainUiStrings.isRtl ? 'rtl' : 'ltr'}>
       <Header />
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden pb-[62px] md:pb-0">
         <Sidebar />
         <main className="flex-1 overflow-auto">
           <Outlet />
