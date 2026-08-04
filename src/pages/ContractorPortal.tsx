@@ -2,6 +2,7 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useStore } from '../data/store';
 import { ContractorAssignment, ContractorPhoto, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, getStageName, aptLabel } from '../types';
+import { PlanPinOverlay } from '../components/apartment/PlanPinOverlay';
 import { format, isPast, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import {
   Camera, CheckCircle2, Clock, Building2, CalendarDays, FileText,
@@ -982,6 +983,18 @@ export function ContractorPortal() {
                         title="Engineering Plans"
                         style={{ border: 'none', display: 'block', pointerEvents: showPlansPdf ? 'auto' : 'none' }}
                       />
+                      {/* The SAME pins the office sees, drawn from the same
+                          coordinates — read-only here, because the punch list
+                          is the office's to write. */}
+                      {showPlansPdf && apt && (
+                        <div onClick={e => e.stopPropagation()}>
+                          <PlanPinOverlay
+                            apartmentId={apt.id}
+                            apartmentLabel={aptLabel(apt)}
+                            readOnly
+                          />
+                        </div>
+                      )}
                       {!showPlansPdf && (
                         <div className="absolute inset-0 flex items-end justify-center pb-2 bg-gradient-to-t from-black/20 to-transparent">
                           <span className="text-white text-xs font-medium bg-black/40 px-2 py-0.5 rounded">{s.tapToExpand}</span>

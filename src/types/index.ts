@@ -270,6 +270,29 @@ export interface CanvasElement {
   pinTop?: number;
 }
 
+/**
+ * A punch-list pin dropped on an apartment's engineering plan.
+ *
+ * Stored as a PERCENTAGE position against the plan, never baked into the PDF:
+ * the original file in Drive is never touched, and the office viewer and the
+ * contractor portal draw the same overlay from the same coordinates, so both
+ * see identical markup. Percentages rather than pixels so a pin stays put at
+ * any viewer size, on any screen.
+ */
+export interface PlanPin {
+  id: string;
+  apartmentId: string;
+  /** 0-100, relative to the plan viewer's box. */
+  xPct: number;
+  yPct: number;
+  text: string;
+  createdAt: string;
+  createdBy: string;
+  /** Set when the item is done. Resolved pins stay, greyed, as a record. */
+  resolvedAt?: string;
+  resolvedBy?: string;
+}
+
 export interface ActivityLog {
   id: string;
   userId: string;

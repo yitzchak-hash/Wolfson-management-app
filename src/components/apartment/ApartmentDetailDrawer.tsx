@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3 } from 'lucide-react';
-import { Apartment, User, getStageName, TaskAttachment, TaskPriority } from '../../types';
+import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel } from '../../types';
 import { useStore } from '../../data/store';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import { StageNotesSection } from './StageNotesSection';
 import { ActivitySection } from './ActivitySection';
 import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, findAllPlansPdfsViaBackend, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, extractFolderId, driveThumbUrl, listAllPhotosViaBackend, getFolderNameViaBackend, familyNameFromFolderName, DrivePhotoItem, DriveFile, FolderHealth, checkFolderHealthViaBackend } from '../../data/driveApi';
 import { Tooltip } from '../ui/Tooltip';
+import { PlanPinOverlay } from './PlanPinOverlay';
 import { ContractorStatusPanel } from './ContractorStatusPanel';
 
 interface Props {
@@ -1128,6 +1129,19 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                         title={ui.engineeringPlans}
                         style={{ border: 'none', display: 'block', pointerEvents: showPdfViewer ? 'auto' : 'none' }}
                       />
+                      {/* Punch-list pins live OVER the plan, never inside the
+                          PDF — the file in Drive stays untouched. Only shown
+                          once the viewer is expanded, so the collapsed preview
+                          keeps its click-to-expand behaviour. */}
+                      {showPdfViewer && (
+                        <div onClick={e => e.stopPropagation()}>
+                          <PlanPinOverlay
+                            apartmentId={apartment.id}
+                            apartmentLabel={aptLabel(apartment)}
+                            authorName={currentUser.name}
+                          />
+                        </div>
+                      )}
                       {!showPdfViewer && (
                         <div className="absolute inset-0 flex items-end justify-center pb-2 bg-gradient-to-t from-black/20 to-transparent">
                           <span className="text-white text-[10px] font-medium bg-black/40 px-2 py-0.5 rounded">{ui.clickToExpand}</span>
