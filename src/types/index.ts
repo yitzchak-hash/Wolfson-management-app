@@ -148,6 +148,12 @@ export interface Apartment {
    * so tidying the board does not make every tile read "edited just now".
    */
   contentUpdatedAt?: string;
+  /**
+   * Extra board positions for the SAME job. A ghost is not a copy — there is one
+   * record, drawn in several places, so editing either edits the same job.
+   * Rendered more transparent than the real node.
+   */
+  ghosts?: { x: number; y: number }[];
   stageDates?: Record<string, string>; // stageId → ISO timestamp of when that stage was first set
   driveLink?: string; // Google Drive folder URL for this apartment's files
   plansPdfLink?: string; // Google Drive link to the Engineering Plans PDF
@@ -172,6 +178,18 @@ export interface CanvasElement {
   h: number;
   text: string;
   color: string;
+  /**
+   * Bin nodes are drop targets for jobs. They are movable and resizable like any
+   * other element, and entirely independent of stages.
+   */
+  binKind?: 'done' | 'ready' | 'archive' | 'trash';
+  /**
+   * Pinned elements keep their board X (so they pan and zoom sideways with the
+   * content they label) but hold a FIXED screen Y, so they stay put vertically
+   * while the board scrolls. They still scale with zoom.
+   */
+  pinned?: boolean;
+  pinTop?: number;
 }
 
 export interface ActivityLog {

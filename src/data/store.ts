@@ -212,6 +212,9 @@ interface AppState {
   deleteApartment: (id: string) => void;
   /** Move a job into a board bin (or back to the board with null). Never destroys anything. */
   moveToBin: (id: string, bin: Apartment['boardBin'] | null) => void;
+  /** Extra board position for the SAME job — one record, drawn twice. */
+  addGhost: (id: string, x: number, y: number) => void;
+  removeGhost: (id: string, index: number) => void;
 
   upsertStageNote: (apartmentId: string, stageId: string, noteText: string, user: User, attachment?: { filename?: string; mimeType?: string; dataUrl?: string; driveFileId?: string; driveUrl?: string } | null, attachments?: StageNoteAttachment[]) => void;
   getStageNote: (apartmentId: string, stageId: string) => StageNote | undefined;
@@ -650,6 +653,28 @@ export const useStore = create<AppState>((set, get) => ({
     set(state => ({ apartments: [...state.apartments, apt] }));
     persist(get);
     fsSet(projectCollection(get().currentProjectId, 'apartments'), apt.id, apt);
+  },
+
+  addGhost: (id, x, y) => {
+    const pid = get().currentProjectId;
+    set(state => ({
+      apartments: state.apartments.map(a => a.id === id
+        ? { ...a, ghosts: [...(a.ghosts ?? []), { x, y }] } : a),
+    }));
+    persist(get);
+    const u = get().apartments.find(a => a.id === id);
+    if (u) fsSet(projectCollection(pid, 'apartments'), id, u);
+  },
+
+  removeGhost: (id, index) => {
+    const pid = get().currentProjectId;
+    set(state => ({
+      apartments: state.apartments.map(a => a.id === id
+        ? { ...a, ghosts: (a.ghosts ?? []).filter((_, i) => i !== index) } : a),
+    }));
+    persist(get);
+    const u = get().apartments.find(a => a.id === id);
+    if (u) fsSet(projectCollection(pid, 'apartments'), id, u);
   },
 
   moveToBin: (id, bin) => {
