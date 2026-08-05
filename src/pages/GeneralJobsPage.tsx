@@ -18,10 +18,14 @@ import { BOARD_THEMES, getBoardTheme } from '../data/boardThemes';
 import { MiniMap } from '../components/board/MiniMap';
 import { BinBoard } from '../components/board/BinBoard';
 import { BoardSearch, BoardHit } from '../components/board/BoardSearch';
+import { NodeSettings } from '../components/board/NodeSettings';
 import { StageBoard } from '../components/board/StageBoard';
 import { WidgetStore } from '../components/board/WidgetStore';
 import { TitleEditor } from '../components/board/TitleEditor';
-import { AttachedArtLayer, ArrowLayer, ArrowDraft, HostBox } from '../components/board/AttachLayer';
+import {
+  AttachedArtLayer, ArrowLayer, ArrowDraft, AnchorHints, HostBox, Anchor,
+  nearestAnchor, anchorOf, attachBox, DEFAULT_ATTACH_SCALE,
+} from '../components/board/AttachLayer';
 import { renderWidget, WidgetDef, WidgetCtx } from '../data/widgets';
 import { JobTile, GhostTile, BoardNode, BoardHandlers } from '../components/board/BoardItems';
 import { useTouchGestures } from '../hooks/useTouchGestures';
@@ -73,6 +77,11 @@ const TILE_PALETTE = [
 ];
 
 /** Solid, saturated colours — a group is a label, not a translucent box. */
+/** Plain words for the five anchors, for the toast after a drop. */
+const ANCHOR_WORDS: Record<Anchor, string> = {
+  tl: 'top left', tm: 'top middle', tr: 'top right', bl: 'bottom left', br: 'bottom right',
+};
+
 const BIN_PALETTE = ['#16a34a', '#0ea5e9', '#7c3aed', '#ea6b13', '#dc2626', '#0d9488', '#64748b', '#b8860b'];
 
 const NOTE_PALETTE = ['#fef9c3', '#dcfce7', '#fce7f3', '#dbeafe', '#f3e8ff', '#ffedd5', '#ccfbf1', '#ffe4e6'];
@@ -205,6 +214,10 @@ export function GeneralJobsPage() {
   const [lasso, setLasso] = useState<LassoState | null>(null);
   const [ctxMenu, setCtxMenu] = useState<CtxMenu | null>(null);
   const [colorPicker, setColorPicker] = useState<ColorPickerState | null>(null);
+  /** Which node's settings panel is open — what the pencil opens now. */
+  const [settingsEl, setSettingsEl] = useState<string | null>(null);
+  /** While a piece of clip art is being dragged: what it is over, and where it would land. */
+  const [attachHint, setAttachHint] = useState<{ hostId: string; anchor: Anchor } | null>(null);
   const [editingEl, setEditingEl] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
 
@@ -391,6 +404,19 @@ export function GeneralJobsPage() {
     // Clip art is a first-class node type, not a widget wrapper — that is what
     // lets it stick to a job and travel with it.
     const isArt = def.id.startsWith('art-');
+    // A group is a real bin node, not a widget wrapper — a wrapper would get the
+    // widget chrome and none of the drop-target behaviour.
+    if (def.id === 'add-bin') {
+      const id = 'CE-bin-' + Math.random().toString(36).slice(2, 8);
+      addCanvasElement({
+        id, type: 'bin',
+        x: Math.round(at.x), y: Math.round(at.y), w: def.w, h: def.h,
+        text: 'New group', color: '#7c3aed',
+      });
+      setStoreOpen(false);
+      setTimeout(() => setSettingsEl(id), 0);   // straight into naming it
+      return;
+    }
     if (def.id === 'w-title') {
       const id = 'CE-' + Math.random().toString(36).slice(2, 9);
       addCanvasElement({
@@ -518,6 +544,7 @@ export function GeneralJobsPage() {
     elUp: el => live.current.elUp(el),
     elMenu: (e, el) => live.current.elMenu(e, el),
     elEdit: el => live.current.elEdit(el),
+    elSettings: el => live.current.elSettings(el),
     elDelete: id => live.current.elDelete(id),
     elColor: (e, id) => live.current.elColor(e, id),
     elPatch: (id, p) => live.current.elPatch(id, p),
@@ -635,14 +662,40 @@ export function GeneralJobsPage() {
    */
   function goToHit(hit: BoardHit) {
     setSearchOpen(false);
-    setSearchHit(hit.job.id);
+
+    // A group itself: open it. That IS the destination.
+    if (hit.kind === 'bin' && hit.bin) {
+      setOpenBin(binKeyOf(hit.bin));
+      return;
+    }
+
+    // A note, heading or widget: fly to it on the board, or open the group it
+    // was filed on and let the group scroll to it.
+    if (hit.kind === 'node' && hit.node) {
+      if (hit.bin) { setOpenBin(binKeyOf(hit.bin)); return; }
+      const vp = viewportRef.current;
+      if (vp) {
+        setFlying(true);
+        setPan(clampPanRef.current({
+          x: vp.clientWidth / 2 - (hit.node.x + hit.node.w / 2) * zoom,
+          y: vp.clientHeight / 2 - (hit.node.y + hit.node.h / 2) * zoom,
+        }));
+        setTimeout(() => setFlying(false), 620);
+      }
+      setSelectedElIds(new Set([hit.node.id]));
+      return;
+    }
+
+    const job = hit.job;
+    if (!job) return;
+    setSearchHit(job.id);
 
     if (hit.bin) {
       setOpenBin(binKeyOf(hit.bin));
       // The group's own board scrolls to it and pulses; opening the job on top
       // of that would hide the group you were just shown, so it waits.
       setTimeout(() => {
-        const j = apartments.find(a => a.id === hit.job.id);
+        const j = apartments.find(a => a.id === job.id);
         if (j) setSelectedJob(j);
       }, 900);
       setTimeout(() => setSearchHit(null), 2600);
@@ -650,7 +703,7 @@ export function GeneralJobsPage() {
     }
 
     const vp = viewportRef.current;
-    const idx = jobs.findIndex(j => j.id === hit.job.id);
+    const idx = jobs.findIndex(j => j.id === job.id);
     if (vp && idx !== -1) {
       const p = jobPos(jobs[idx], idx);
       setFlying(true);
@@ -660,9 +713,9 @@ export function GeneralJobsPage() {
       }));
       setTimeout(() => setFlying(false), 620);
     }
-    setSelectedJobIds(new Set([hit.job.id]));
+    setSelectedJobIds(new Set([job.id]));
     setTimeout(() => {
-      const j = apartments.find(a => a.id === hit.job.id);
+      const j = apartments.find(a => a.id === job.id);
       if (j) setSelectedJob(j);
     }, 780);
     setTimeout(() => setSearchHit(null), 2600);
@@ -714,9 +767,11 @@ export function GeneralJobsPage() {
     if (ghostDrag.moved) {
       const w0 = toWorld(e.clientX, e.clientY);
       const bin = binAt(w0.x, w0.y);
-      if (bin?.binKind) {
+      if (bin) {
         // Binning a ghost bins the JOB — there is only one record.
-        fileInBin([job.id], bin.binKind, bin);
+        // Keyed by binKeyOf, not binKind: a group you made yourself has no
+        // binKind, and requiring one meant custom groups refused every drop.
+        fileInBin([job.id], binKeyOf(bin), bin);
       } else {
         moveGhost(ghostDrag.jobId, ghostDrag.index,
           Math.max(0, Math.round(ghostDrag.startX + ghostDrag.dx)),
@@ -742,11 +797,27 @@ export function GeneralJobsPage() {
   }
 
   /** Files a job into a group, with the Done celebration when that is the one. */
+  /**
+   * Filing a job into a group.
+   *
+   * A group may OPTIONALLY stand for a stage. When it does, filing a job also
+   * moves it to that stage — which is what "Ready to start" actually means to
+   * the office. When it does not, filing is filing and the job keeps whatever
+   * stage it was at. The two systems stay independent; this is a link somebody
+   * chose in the group's settings, not a coupling.
+   */
   function fileInBin(ids: string[], key: string, at?: CanvasElement) {
     ids.forEach(id => moveToBin(id, key));
-    if (key === 'done' && at) celebrateAt(at);
+
+    const stageId = at?.stageId;
+    if (stageId && currentUser) {
+      ids.forEach(id => updateApartment(id, { currentStageId: stageId }, currentUser));
+    }
+
+    if (at?.binKind === 'done') celebrateAt(at);
     const label = at ? binLabelOf(at) : key;
-    setToast(`Moved to ${label}`);
+    const stageName = stageId ? stages.find(st => st.id === stageId)?.name : undefined;
+    setToast(stageName ? `Moved to ${label} · stage set to ${stageName}` : `Moved to ${label}`);
   }
 
   /**
@@ -1261,8 +1332,8 @@ export function GeneralJobsPage() {
       // deleted; the job simply moves off the board into that collection.
       const w0 = toWorld(e.clientX, e.clientY);
       const bin = binAt(w0.x, w0.y);
-      if (bin?.binKind) {
-        fileInBin(drag.ids, bin.binKind, bin);
+      if (bin) {
+        fileInBin(drag.ids, binKeyOf(bin), bin);
         setSelectedJobIds(new Set());
       } else if (currentUser) {
         drag.ids.forEach(id => {
@@ -1320,7 +1391,20 @@ export function GeneralJobsPage() {
     const w0 = toWorld(e.clientX, e.clientY);
     const dx = w0.x - drag.grabX;
     const dy = w0.y - drag.grabY;
-    setDrag({ ...drag, dx, dy, moved: drag.moved || Math.abs(dx) > 4 || Math.abs(dy) > 4 });
+    const moved = drag.moved || Math.abs(dx) > 4 || Math.abs(dy) > 4;
+    setDrag({ ...drag, dx, dy, moved });
+
+    // Show where a piece of clip art would land, so the drop is decided before
+    // you let go rather than found out afterwards.
+    if (moved && drag.ids.length === 1) {
+      const el = canvasElements.find(x => x.id === drag.ids[0]);
+      if (el?.type === 'clipart') {
+        const host = hostAt(w0.x, w0.y, el.id);
+        setAttachHint(host ? { hostId: host.id, anchor: nearestAnchor(host, w0.x, w0.y) } : null);
+        return;
+      }
+    }
+    if (attachHint) setAttachHint(null);
   }
 
   /** The host under a world point, if any — used to decide an attach or arrow. */
@@ -1346,19 +1430,32 @@ export function GeneralJobsPage() {
       const cx = st.x + drag.dx + el.w / 2;
       const cy = st.y + drag.dy + el.h / 2;
       const host = hostAt(cx, cy, el.id);
+      setAttachHint(null);
       if (host) {
+        const anchor = nearestAnchor(host, cx, cy);
         updateCanvasElement(el.id, {
           attachedTo: host.id,
-          attachAt: {
-            fx: Math.min(1, Math.max(0, (cx - host.x) / host.w)),
-            fy: Math.min(1, Math.max(0, (cy - host.y) / host.h)),
-          },
+          attachAnchor: anchor,
+          // Its size becomes a share of the host's width, so resizing the tile
+          // resizes the piece with it — which is what being stuck on means.
+          attachScale: el.attachScale ?? Math.min(0.5, Math.max(0.08, el.w / Math.max(1, host.w))),
+          attachAt: undefined,
         });
         setDrag(null); setHoverBin(null);
-        setToast('Stuck on');
+        setToast(`Stuck on the ${ANCHOR_WORDS[anchor]}`);
         return;
       }
-      if (el.attachedTo) updateCanvasElement(el.id, { attachedTo: undefined, attachAt: undefined });
+      if (el.attachedTo) {
+        // Dragged off. It keeps the size it had while attached, so it does not
+        // jump when it lands back on the board.
+        updateCanvasElement(el.id, {
+          attachedTo: undefined, attachAnchor: undefined, attachAt: undefined,
+          x: Math.max(0, Math.round(cx - el.w / 2)), y: Math.max(0, Math.round(cy - el.h / 2)),
+        });
+        setDrag(null); setHoverBin(null);
+        setToast('Unstuck');
+        return;
+      }
     }
 
     if (drag.moved) {
@@ -1372,6 +1469,7 @@ export function GeneralJobsPage() {
       setOpenBin(el.binKind);
     }
     setDrag(null);
+    setAttachHint(null);
   }
 
   function onElContextMenu(e: React.MouseEvent, el: CanvasElement) {
@@ -1815,7 +1913,14 @@ export function GeneralJobsPage() {
   const EDGE_PAD = 140;
   let contentX = 0, contentY = 0;
   jobs.forEach((job, i) => { const p = jobPos(job, i); contentX = Math.max(contentX, p.x + TILE_W); contentY = Math.max(contentY, p.y + TILE_H); });
-  canvasElements.forEach(el => { contentX = Math.max(contentX, el.x + el.w); contentY = Math.max(contentY, el.y + el.h); });
+  canvasElements.forEach(el => {
+    // Nodes filed inside a group, and art stuck to something, have no position
+    // on THIS board — counting them stretched the surface to fit coordinates
+    // that are never drawn here.
+    if (el.board || el.attachedTo || el.type === 'stroke') return;
+    contentX = Math.max(contentX, el.x + el.w);
+    contentY = Math.max(contentY, el.y + el.h);
+  });
   const step = (n: number) => Math.ceil(n / 400) * 400;
   const maxX = Math.max(step(contentX + EDGE_PAD), step((vp.w - pan.x) / zoom + 200), 1200);
   const maxY = Math.max(step(contentY + EDGE_PAD), step((vp.h - pan.y) / zoom + 200), 800);
@@ -1829,6 +1934,7 @@ export function GeneralJobsPage() {
     jobThumbsDown: (id: string, d: number) => bumpThumbs('job', [id], d, 'down'),
     elDown: onElPointerDown, elMove: onElPointerMove, elUp: onElPointerUp,
     elMenu: onElContextMenu, elEdit: startEdit,
+    elSettings: (el: CanvasElement) => setSettingsEl(el.id),
     elDelete: (id: string) => deleteCanvasElement(id),
     elColor: (e: React.MouseEvent, id: string) => setColorPicker({ x: e.clientX, y: e.clientY, kind: 'element', ids: [id] }),
     elPatch: (id: string, patch: Partial<CanvasElement>) => updateCanvasElement(id, patch),
@@ -2104,10 +2210,14 @@ export function GeneralJobsPage() {
           onJump={(wx, wy) => {
             const vp = viewportRef.current;
             if (!vp) return;
-            setPan({
+            // Through the clamp, like every other pan. This was the one caller
+            // that set the pan raw, which is why dragging the minimap's square
+            // to an edge slid the view off the board surface and showed the
+            // page behind it.
+            setPan(clampPanRef.current({
               x: vp.clientWidth / 2 - wx * zoom,
               y: vp.clientHeight / 2 - wy * zoom,
-            });
+            }));
           }}
         />
 
@@ -2189,8 +2299,29 @@ export function GeneralJobsPage() {
             )}
             <ArrowLayer elements={canvasElements} hosts={hostBoxes}
               onSelect={el => setSelectedElIds(new Set([el.id]))} />
-            <AttachedArtLayer elements={canvasElements} hosts={hostBoxes}
-              onSelect={el => setSelectedElIds(new Set([el.id]))} />
+            <AttachedArtLayer
+              elements={canvasElements}
+              hosts={hostBoxes}
+              selectedIds={selectedElIds}
+              onSelect={el => setSelectedElIds(new Set([el.id]))}
+              onGrab={(e, el) => onElPointerDown(e, el)}
+              onMenu={(e, el) => onElContextMenu(e, el)}
+              onDetach={id => {
+                const el = canvasElements.find(x => x.id === id);
+                const host = el?.attachedTo ? hostBoxes.get(el.attachedTo) : null;
+                const b = el && host ? attachBox(host, el) : null;
+                updateCanvasElement(id, {
+                  attachedTo: undefined, attachAnchor: undefined, attachAt: undefined,
+                  ...(b ? { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.w), h: Math.round(b.h) } : {}),
+                });
+                setToast('Unstuck');
+              }}
+              onDelete={id => deleteCanvasElement(id)}
+            />
+            {/* Where it would land, while it is on its way there. */}
+            {attachHint && (
+              <AnchorHints host={hostBoxes.get(attachHint.hostId) ?? null} active={attachHint.anchor} />
+            )}
             {arrowFrom && (
               <ArrowDraft from={hostBoxes.get(arrowFrom) ?? null} to={arrowTip} />
             )}
@@ -2720,7 +2851,14 @@ export function GeneralJobsPage() {
         const el = canvasElements.find(e => e.id === docTarget);
         if (!el) return null;
         const save = (url: string, name: string) => {
-          updateCanvasElement(docTarget, { docUrl: url, docName: name });
+          // Keep whatever extension we can find, because the icon shows the file
+          // TYPE across its face — a Drive link with no name would otherwise be
+          // another anonymous grey page.
+          const fromUrl = url.split(/[?#]/)[0].split('/').pop() ?? '';
+          const final = /\.[a-z0-9]{1,5}$/i.test(name) ? name
+            : /\.[a-z0-9]{1,5}$/i.test(fromUrl) ? decodeURIComponent(fromUrl)
+            : name;
+          updateCanvasElement(docTarget, { docUrl: url, docName: final });
           setDocTarget(null);
           setToast('File attached');
         };
@@ -2826,6 +2964,7 @@ export function GeneralJobsPage() {
         <BoardSearch
           jobs={apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed)}
           bins={binNodes}
+          nodes={canvasElements.filter(e => e.type !== 'bin' && e.type !== 'stroke' && e.type !== 'arrow')}
           stages={stages}
           assignments={contractorAssignments}
           onGo={goToHit}
@@ -2834,6 +2973,19 @@ export function GeneralJobsPage() {
       )}
 
       {/* ── Color picker popup ── */}
+      {/* The panel the pencil opens. Every node type has one. */}
+      {settingsEl && (() => {
+        const el = canvasElements.find(e => e.id === settingsEl);
+        if (!el) return null;
+        return (
+          <NodeSettings
+            el={el}
+            onClose={() => setSettingsEl(null)}
+            onDelete={id => deleteCanvasElement(id)}
+          />
+        );
+      })()}
+
       {colorPicker && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setColorPicker(null)} />

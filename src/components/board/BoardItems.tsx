@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { MapPin, ClipboardList, Trash2, Palette, Pencil, X, ThumbsUp, ThumbsDown, Ghost,
   Archive, CheckCircle2, PlayCircle, FolderOpen } from 'lucide-react';
 import { Apartment, CanvasElement, Stage, BinKind, BIN_META, binKeyOf, binLabelOf } from '../../types';
+import { Settings2 } from 'lucide-react';
 import { DriveIcon, ZohoIcon, PlanIcon, TvIcon } from '../ui/BrandIcons';
 import { CountdownNode, StopwatchNode, ClipArtNode, VoiceMemoNode } from './BoardNodes';
 import { renderWidget, WidgetCtx } from '../../data/widgets';
@@ -34,6 +35,8 @@ export interface BoardHandlers {
   elUp: (el: CanvasElement) => void;
   elMenu: (e: React.MouseEvent, el: CanvasElement) => void;
   elEdit: (el: CanvasElement) => void;
+  /** Opens the node's real settings panel — what the pencil should always have done. */
+  elSettings: (el: CanvasElement) => void;
   elDelete: (id: string) => void;
   elColor: (e: React.MouseEvent, id: string) => void;
   elPatch: (id: string, patch: Partial<CanvasElement>) => void;
@@ -300,6 +303,25 @@ export const BoardNode = React.memo(function BoardNode({
   const plain = el.type === 'clipart';
   const isWidget = el.type === 'widget';
 
+  /**
+   * A widget that can actually save what you do to it.
+   *
+   * `WidgetCtx.update` takes a patch with no element id, so ONE shared context
+   * cannot know which node to write to — and it had been stubbed out to `() => {}`
+   * to keep the context stable for memoisation. The result was that every
+   * interactive widget on the board silently discarded every edit: checklist
+   * ticks, tally taps, the progress slider, table cells, the week planner, the
+   * contact card, the banner's own text. All of it looked like it worked.
+   *
+   * Binding it HERE keeps both properties: the shared context stays stable, and
+   * each node gets an update that knows its own id. No widget's render function
+   * had to change.
+   */
+  const boundCtx = useMemo<WidgetCtx>(
+    () => ({ ...ctx, update: patch => H.elPatch(el.id, patch) }),
+    [ctx, el.id, H],
+  );
+
   // Each node type carries its own surface. A bin is a dashed drop zone, clip
   // art has no chrome at all, and the rest keep the card look that notes and
   // boxes established.
@@ -317,7 +339,9 @@ export const BoardNode = React.memo(function BoardNode({
     : {
         backgroundColor: isBin
           ? (binHot ? `${el.color}22` : 'rgba(255,255,255,.82)')
-          : isWidget ? '#ffffff'
+          // Was hardcoded white, so the colour picker wrote a value no widget
+          // ever read — pick a colour, nothing happens, on all 47 of them.
+          : isWidget ? (el.color || '#ffffff')
           : el.type === 'box' ? el.color
           : (el.color || '#ffffff'),
         borderStyle: isBin ? 'dashed' : 'solid',
@@ -358,10 +382,19 @@ export const BoardNode = React.memo(function BoardNode({
             <Palette size={11} />
           </button>
           <button data-el-action
-            onClick={e => { e.stopPropagation(); H.elEdit(el); }}
+            title="Settings"
+            onClick={e => { e.stopPropagation(); H.elSettings(el); }}
             className="p-1 rounded-md bg-white/70 hover:bg-white text-gray-500 hover:text-gray-700 transition-all">
-            <Pencil size={11} />
+            <Settings2 size={11} />
           </button>
+          {(el.type === 'note' || el.type === 'box') && (
+            <button data-el-action
+              title="Edit the text"
+              onClick={e => { e.stopPropagation(); H.elEdit(el); }}
+              className="p-1 rounded-md bg-white/70 hover:bg-white text-gray-500 hover:text-gray-700 transition-all">
+              <Pencil size={11} />
+            </button>
+          )}
           {!isBin && (
             <button data-el-action
               onClick={e => { e.stopPropagation(); H.elDelete(el.id); }}
@@ -414,7 +447,7 @@ export const BoardNode = React.memo(function BoardNode({
           onRecord={() => onRecord(el.id)} onStop={onStopRecord}
           onUpload={f => onUploadAudio(el.id, f)} />
       ) : isWidget ? (
-        renderWidget(el, ctx)
+        renderWidget(el, boundCtx)
       ) : el.type === 'clipart' ? (
         <ClipArtNode el={el} />
       ) : el.type === 'title' ? (
@@ -441,8 +474,17 @@ export const BoardNode = React.memo(function BoardNode({
         />
       ) : (
         <div
-          className={`${el.type === 'box' ? 'font-semibold text-sm pt-2 px-3' : 'text-sm pt-8 px-3'} text-gray-700 leading-snug whitespace-pre-wrap break-words`}
-          style={{ maxHeight: '100%', overflow: 'hidden' }}
+          className={`${el.type === 'box' ? 'pt-2 px-3' : 'pt-8 px-3'} text-gray-700 leading-snug whitespace-pre-wrap break-words`}
+          style={{
+            maxHeight: '100%', overflow: 'hidden',
+            // A note had no way to change its own type at all. It uses the same
+            // controls the heading always had, so one set covers every text node.
+            fontSize: el.fontSize ?? 14,
+            fontWeight: el.fontWeight ?? (el.type === 'box' ? 600 : 400),
+            textAlign: el.align ?? 'left',
+            fontStyle: el.italic ? 'italic' : undefined,
+            textDecoration: el.underline ? 'underline' : undefined,
+          }}
         >
           {el.text || <span className="italic text-gray-400">Double-click to edit</span>}
         </div>

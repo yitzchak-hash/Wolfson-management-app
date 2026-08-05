@@ -5,7 +5,7 @@ import {
   AlertTriangle, HardHat, CalendarDays, Camera, Briefcase, Activity,
   CircleDashed, Archive, StickyNote, Copy, Check, Filter, CalendarCheck,
   Calculator, Ruler, Target, Users, GitCommitHorizontal, TimerReset,
-  ArrowRightLeft, ListFilter, Search, Sparkles, Timer, Sticker, Type,
+  ArrowRightLeft, ListFilter, Search, Sparkles, Timer, Sticker, Type, FolderPlus,
 } from 'lucide-react';
 import {
   Apartment, CanvasElement, Stage, ContractorAssignment, Contractor,
@@ -1006,6 +1006,36 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
 
+  /**
+   * A group, from the shelf.
+   *
+   * The four that ship with the board — Done, Ready, Archive, Trash — are
+   * ordinary CanvasElements with a `binKind`, so there was never anything
+   * special about them except that only they existed. This is the same thing
+   * without one: your own group, with your own name, colour and board, and
+   * optionally standing for a stage.
+   *
+   * It is placed as `type: 'bin'` rather than as a widget wrapper, exactly the
+   * way clip art is placed as `type: 'clipart'` — a wrapper would inherit the
+   * widget chrome and none of the drop-target behaviour.
+   */
+  {
+    id: 'add-bin', name: 'Group', category: 'plan', icon: FolderPlus, w: 178, h: 92,
+    blurb: 'A place to file jobs — like Done or Archive, but yours. Give it a name, a colour, '
+      + 'and optionally a stage so filing a job here also moves it to that stage.',
+    data: {},
+    render: () => (
+      <div className="w-full h-full flex flex-col items-start justify-center px-3 rounded-xl"
+        style={{ border: '2px dashed #cbd5e1', backgroundColor: 'rgba(255,255,255,.82)' }}>
+        <span className="flex items-center gap-1.5 font-extrabold text-[12.5px]" style={{ color: '#7c3aed' }}>
+          <FolderPlus size={14} /> Ready to price
+        </span>
+        <span className="text-[11px] text-gray-500 mt-0.5">6 jobs</span>
+        <span className="text-[9px] text-gray-400 mt-0.5">Click to open · drag jobs in</span>
+      </div>
+    ),
+  },
+
   // ── Look & feel ───────────────────────────────────────────────────────────
   {
     id: 'clock', name: 'Wall clock', category: 'visual', icon: Clock3, w: 190, h: 110,
@@ -1429,6 +1459,32 @@ const SAMPLE_LOGS: ActivityLog[] = [
     createdAt: new Date(Date.now() - 95 * 60_000).toISOString() },
 ] as unknown as ActivityLog[];
 
+/**
+ * Stand-in site photos.
+ *
+ * `photos` was the one context field with no sample, so "Latest photos" and
+ * "Photos to review" were the two widgets that previewed empty on every board
+ * that had not yet had a picture come back from site — which is every new board.
+ */
+const shot = (a: string, b: string, roof: string) =>
+  'data:image/svg+xml;utf8,' + encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120">
+       <rect width="120" height="120" fill="${a}"/>
+       <rect y="74" width="120" height="46" fill="${b}"/>
+       <rect x="18" y="30" width="34" height="44" fill="${roof}"/>
+       <rect x="62" y="44" width="40" height="30" fill="${roof}" opacity=".75"/>
+       <circle cx="96" cy="24" r="10" fill="#ffffff" opacity=".55"/>
+     </svg>`);
+
+const SAMPLE_PHOTOS: ContractorPhoto[] = [
+  { id: 'p1', dataUrl: shot('#bfdbfe', '#cbd5e1', '#64748b'), uploadedAt: new Date(Date.now() - 3_600_000).toISOString() },
+  { id: 'p2', dataUrl: shot('#bbf7d0', '#d1d5db', '#475569'), uploadedAt: new Date(Date.now() - 9_000_000).toISOString() },
+  { id: 'p3', dataUrl: shot('#fde68a', '#e2e8f0', '#78716c'), uploadedAt: new Date(Date.now() - 26_000_000).toISOString() },
+  { id: 'p4', dataUrl: shot('#fecaca', '#cbd5e1', '#57534e'), uploadedAt: new Date(Date.now() - 51_000_000).toISOString() },
+  { id: 'p5', dataUrl: shot('#ddd6fe', '#d1d5db', '#52525b'), uploadedAt: new Date(Date.now() - 76_000_000).toISOString() },
+  { id: 'p6', dataUrl: shot('#a5f3fc', '#e5e7eb', '#3f3f46'), uploadedAt: new Date(Date.now() - 99_000_000).toISOString() },
+] as unknown as ContractorPhoto[];
+
 /** Real data where there is any, samples where there is not — field by field. */
 export function withSampleData(ctx: WidgetCtx): WidgetCtx {
   return {
@@ -1438,6 +1494,7 @@ export function withSampleData(ctx: WidgetCtx): WidgetCtx {
     assignments: ctx.assignments.length ? ctx.assignments : SAMPLE_TASKS,
     contractors: ctx.contractors.length ? ctx.contractors : SAMPLE_CONTRACTORS,
     logs: ctx.logs.length ? ctx.logs : SAMPLE_LOGS,
+    photos: ctx.photos.length ? ctx.photos : SAMPLE_PHOTOS,
     readOnly: true,
   };
 }

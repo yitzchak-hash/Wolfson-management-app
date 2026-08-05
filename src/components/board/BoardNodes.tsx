@@ -226,6 +226,35 @@ export function VoiceMemoNode({
 
 // ─── Clip art ────────────────────────────────────────────────────────────────
 
+/**
+ * The extension, from the name or failing that from the link.
+ *
+ * A Drive link carries no extension, so a file attached by link falls back to
+ * its name — which is why the name is asked for on attach.
+ */
+export function fileExt(name?: string, url?: string): string | null {
+  const from = (v?: string) => {
+    if (!v) return null;
+    const clean = v.split(/[?#]/)[0];
+    const m = clean.match(/\.([a-z0-9]{1,5})$/i);
+    return m ? m[1].toLowerCase() : null;
+  };
+  return from(name) ?? from(url);
+}
+
+/** Each format in the colour people already expect it to be. */
+export const EXT_COLOR: Record<string, string> = {
+  pdf: '#dc2626',
+  doc: '#2563eb', docx: '#2563eb', rtf: '#2563eb', txt: '#64748b', md: '#64748b',
+  xls: '#16a34a', xlsx: '#16a34a', csv: '#16a34a',
+  ppt: '#ea580c', pptx: '#ea580c',
+  png: '#7c3aed', jpg: '#7c3aed', jpeg: '#7c3aed', gif: '#7c3aed', webp: '#7c3aed',
+  heic: '#7c3aed', svg: '#7c3aed',
+  dwg: '#0d9488', dxf: '#0d9488', rvt: '#0d9488', ifc: '#0d9488',
+  zip: '#a16207', rar: '#a16207', '7z': '#a16207',
+  mp4: '#be185d', mov: '#be185d', avi: '#be185d',
+};
+
 /** Small decorative pieces that make the board feel like a real board. */
 export function ClipArtNode({ el }: { el: CanvasElement }) {
   const art = el.art ?? 'pin';
@@ -283,17 +312,38 @@ export function ClipArtNode({ el }: { el: CanvasElement }) {
           <rect x="14" y="22" width="12" height="4" fill="rgba(0,0,0,.18)" />
         </svg>
       );
-    case 'document':
+    case 'document': {
       // Carries a real file. With one attached it turns into a link you can
       // click; without one it is a blank sheet waiting for a document.
+      //
+      // Once there IS a file, the sheet says which KIND — PDF, PNG, XLSX —
+      // across the middle of it, in that format's own colour. A row of
+      // identical grey pages tells you nothing about what is on the board.
+      const ext = fileExt(el.docName, el.docUrl);
+      const tint = ext ? EXT_COLOR[ext] ?? '#475569' : null;
+      const ink = el.docUrl ? (tint ?? '#2d6a9f') : '#94a3b8';
       return (
         <span className="relative block w-full h-full">
           <svg viewBox="0 0 40 40" style={common} aria-hidden="true">
-            <path d="M9 4h16l6 6v26H9z" fill="#fff" stroke={el.docUrl ? '#2d6a9f' : '#94a3b8'} strokeWidth="1.6" />
-            <path d="M25 4v6h6" fill="none" stroke={el.docUrl ? '#2d6a9f' : '#94a3b8'} strokeWidth="1.6" />
-            <path d="M14 17h12M14 22h12M14 27h8" stroke={el.docUrl ? '#93c5fd' : '#cbd5e1'} strokeWidth="1.8" strokeLinecap="round" />
-            {el.docUrl && <circle cx="31" cy="31" r="7" fill="#2d6a9f" />}
-            {el.docUrl && <path d="M31 27.5v6.5M28 31l3 3 3-3" fill="none" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />}
+            <path d="M9 4h16l6 6v26H9z" fill="#fff" stroke={ink} strokeWidth="1.6" />
+            <path d="M25 4v6h6" fill="none" stroke={ink} strokeWidth="1.6" />
+            {ext ? (
+              <>
+                {/* The band and the wording ARE the icon once a file is on it. */}
+                <rect x="6" y="19" width="28" height="11" rx="2" fill={ink} />
+                <text
+                  x="20" y="27.4" textAnchor="middle"
+                  style={{ fontSize: ext.length > 3 ? 7 : 8.4, fontWeight: 900, fill: '#fff',
+                           fontFamily: 'Segoe UI, Helvetica, Arial, sans-serif', letterSpacing: '.4px' }}
+                >
+                  {ext.toUpperCase()}
+                </text>
+              </>
+            ) : (
+              <path d="M14 17h12M14 22h12M14 27h8" stroke={el.docUrl ? '#93c5fd' : '#cbd5e1'} strokeWidth="1.8" strokeLinecap="round" />
+            )}
+            {el.docUrl && !ext && <circle cx="31" cy="31" r="7" fill="#2d6a9f" />}
+            {el.docUrl && !ext && <path d="M31 27.5v6.5M28 31l3 3 3-3" fill="none" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />}
           </svg>
           {el.docUrl && (
             <a
@@ -313,6 +363,7 @@ export function ClipArtNode({ el }: { el: CanvasElement }) {
           )}
         </span>
       );
+    }
     case 'sticky-stack':
       return (
         <svg viewBox="0 0 40 40" style={common} aria-hidden="true">

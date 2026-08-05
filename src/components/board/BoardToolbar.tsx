@@ -113,7 +113,7 @@ export function BoardToolbar({
           onPointerMove={onGripMove}
           onPointerUp={onGripUp}
           onPointerCancel={onGripUp}
-          className="w-full flex justify-center py-0.5 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-400"
+          className="col-span-2 w-full flex justify-center py-0.5 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-400"
           title="Move toolbar"
         >
           <GripVertical size={13} />
@@ -121,7 +121,7 @@ export function BoardToolbar({
 
         {TOOLS.map((group, gi) => (
           <React.Fragment key={gi}>
-            {gi > 0 && <div className="w-7 h-px bg-gray-200 my-1" />}
+            {gi > 0 && <div className="col-span-2 w-16 h-px bg-gray-200 my-1 justify-self-center" />}
             {group.map(({ id, icon: Icon, label, tip }) => (
               <button
                 key={id}
@@ -144,7 +144,7 @@ export function BoardToolbar({
           </React.Fragment>
         ))}
 
-        <div className="w-7 h-px bg-gray-200 my-1" />
+        <div className="col-span-2 w-16 h-px bg-gray-200 my-1 justify-self-center" />
 
         <button onClick={onOpenStore} title="Widget store"
           className="w-full flex flex-col items-center gap-0.5 py-1.5 rounded-lg text-gray-500 hover:bg-gray-50">
@@ -184,9 +184,14 @@ export function BoardToolbar({
             screen once Store and Map joined it, hiding Setup entirely. Drag the
             handle at the bottom to decide how tall it is. */}
         <div className="relative">
+          {/* TWO columns.
+              One column ran the full height of the board and still reached down
+              into the minimap's corner. Two makes the rail half as tall for the
+              same buttons, which is what stops it overlapping. The grip and the
+              dividers stay full width by spanning both columns. */}
           <div
             ref={railRef}
-            className="w-[62px] bg-white border border-gray-200 rounded-xl shadow-lg p-1.5 pb-3 flex flex-col items-center gap-0.5 overflow-y-auto board-rail"
+            className="w-[116px] bg-white border border-gray-200 rounded-xl shadow-lg p-1.5 pb-3 grid grid-cols-2 gap-x-0.5 gap-y-0.5 justify-items-center content-start overflow-y-auto board-rail"
             style={height ? { height } : { maxHeight: '100%' }}
           >
             {buttons}
@@ -258,7 +263,7 @@ export function BoardControlsPanel() {
     ['Escape', 'Clear selection'],
   ];
   return (
-    <div className="absolute right-[86px] top-3 z-40 w-[188px] bg-white border border-gray-200 rounded-xl shadow-lg p-2.5">
+    <div className="absolute right-[140px] top-3 z-40 w-[188px] bg-white border border-gray-200 rounded-xl shadow-lg p-2.5">
       <div className="text-[10px] font-extrabold text-gray-700 mb-1.5 tracking-wide">CONTROLS</div>
       <div className="flex flex-col gap-1">
         {rows.map(([k, v]) => (

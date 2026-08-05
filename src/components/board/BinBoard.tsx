@@ -1,13 +1,17 @@
 import React, { useMemo, useRef, useState, useCallback, useEffect } from 'react';
-import { X, Undo2, Trash2, Search, StickyNote, Square, LayoutGrid, Palette, Check } from 'lucide-react';
+import {
+  X, Undo2, Trash2, Search, StickyNote, Square, LayoutGrid, Settings2, Plus,
+} from 'lucide-react';
 import { useStore } from '../../data/store';
 import {
-  Apartment, CanvasElement, binLabelOf, isBuiltInBin, BIN_META, BinKind,
+  Apartment, CanvasElement, binLabelOf, BIN_META,
 } from '../../types';
 import { getBoardTheme } from '../../data/boardThemes';
 import { WidgetStore } from './WidgetStore';
-import { WidgetDef, renderWidget, WidgetCtx } from '../../data/widgets';
-import { NODE_DEFAULT_SIZE, ART_KINDS, ArtKind, ClipArtNode } from './BoardNodes';
+import { WidgetDef, WidgetCtx } from '../../data/widgets';
+import { NODE_DEFAULT_SIZE, ArtKind } from './BoardNodes';
+import { BoardNode, BoardHandlers } from './BoardItems';
+import { NodeSettings } from './NodeSettings';
 
 const TILE_W = 190, TILE_H = 116;
 
@@ -16,16 +20,22 @@ const TILE_W = 190, TILE_H = 116;
  *
  * A bin was a list you could look at. It is now a real surface: the jobs inside
  * have their own positions, you can put notes, boxes and widgets on it from the
- * same store, and clicking a job opens it exactly as it does outside. It wears
- * the same theme as the main board and, on the physical themes, the same frame.
+ * same store, and clicking a job opens it exactly as it does outside.
+ *
+ * **It draws its nodes with the main board's own `BoardNode`.** The first
+ * version re-implemented them here in miniature, which is why the inside of a
+ * group was so much worse than the outside: no resize handle, no colour, no
+ * settings, no right-click, no support for headings or countdowns, and — worst
+ * — a `WidgetCtx.update` stubbed to do nothing, so any widget placed in a group
+ * threw away every edit. Sharing the component means a group cannot drift from
+ * the board again, and anything added to nodes arrives here for free.
  *
  * Positions inside a bin are stored in `binX`/`binY`, deliberately separate from
  * `canvasX`/`canvasY` — so a job filed away and later restored goes back to
  * where it was on the main board rather than to wherever it was left in here.
  *
  * The nodes on this board carry `board: <bin key>`, which is the only thing
- * separating them from the main board's nodes. Everything else — dragging,
- * resizing, syncing, backup — is the machinery that was already there.
+ * separating them from the main board's nodes.
  */
 export function BinBoard({ bin, onClose, onOpenJob, highlightJobId }: {
   bin: CanvasElement;
@@ -48,9 +58,20 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId }: {
   const [query, setQuery] = useState('');
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [storeOpen, setStoreOpen] = useState(false);
+  const [settingsId, setSettingsId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [editingEl, setEditingEl] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
+  const [menu, setMenu] = useState<
+    { x: number; y: number; kind: 'canvas' | 'element' | 'job'; ids: string[]; wx?: number; wy?: number } | null>(null);
   const [drag, setDrag] = useState<
-    { kind: 'job' | 'el'; id: string; sx: number; sy: number; gx: number; gy: number; dx: number; dy: number; moved: boolean } | null>(null);
+    { kind: 'job' | 'el'; ids: string[]; starts: Map<string, { x: number; y: number }>;
+      gx: number; gy: number; dx: number; dy: number; moved: boolean } | null>(null);
+  const [resize, setResize] = useState<
+    { id: string; startW: number; startH: number; startPX: number; startPY: number; dw: number; dh: number } | null>(null);
+
   const surfaceRef = useRef<HTMLDivElement>(null);
+  const editRef = useRef<HTMLTextAreaElement>(null);
 
   const items = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -68,17 +89,30 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId }: {
 
   /** Laid out in a grid until somebody drags one, then it keeps its place. */
   const jobPos = useCallback((a: Apartment, i: number) => {
-    if (drag?.kind === 'job' && drag.id === a.id) {
-      return { x: (a.binX ?? gridX(i)) + drag.dx, y: (a.binY ?? gridY(i)) + drag.dy };
+    const base = { x: a.binX ?? gridX(i), y: a.binY ?? gridY(i) };
+    if (drag?.kind === 'job' && drag.ids.includes(a.id)) {
+      return { x: base.x + drag.dx, y: base.y + drag.dy };
     }
-    return { x: a.binX ?? gridX(i), y: a.binY ?? gridY(i) };
+    return base;
   }, [drag]);
 
   const elPos = useCallback((el: CanvasElement) => {
-    if (drag?.kind === 'el' && drag.id === el.id) return { x: el.x + drag.dx, y: el.y + drag.dy };
-    return { x: el.x, y: el.y };
-  }, [drag]);
+    const live = resize?.id === el.id
+      ? { w: Math.max(60, el.w + resize.dw), h: Math.max(40, el.h + resize.dh) }
+      : { w: el.w, h: el.h };
+    if (drag?.kind === 'el' && drag.ids.includes(el.id)) {
+      return { x: el.x + drag.dx, y: el.y + drag.dy, ...live };
+    }
+    return { x: el.x, y: el.y, ...live };
+  }, [drag, resize]);
 
+  /**
+   * A context that can actually save.
+   *
+   * The old one passed `update: () => {}`, so every interactive widget placed
+   * inside a group silently discarded everything typed into it. `BoardNode`
+   * binds the real per-element update on top of this.
+   */
   const widgetCtx: WidgetCtx = useMemo(() => ({
     jobs: apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed),
     stages, assignments: contractorAssignments, contractors,
@@ -87,39 +121,142 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId }: {
     openJob: (id: string) => { const j = apartments.find(x => x.id === id); if (j) onOpenJob(j); },
   }), [apartments, stages, contractorAssignments, contractors, contractorPhotos, activityLogs, onOpenJob]);
 
-  function toLocal(e: React.PointerEvent) {
+  function toLocal(e: { clientX: number; clientY: number }) {
     const r = surfaceRef.current?.getBoundingClientRect();
     return r ? { x: e.clientX - r.left + (surfaceRef.current?.scrollLeft ?? 0),
                  y: e.clientY - r.top + (surfaceRef.current?.scrollTop ?? 0) }
              : { x: e.clientX, y: e.clientY };
   }
 
-  function startDrag(e: React.PointerEvent, kind: 'job' | 'el', id: string, x: number, y: number) {
+  // ── drag ────────────────────────────────────────────────────────────────
+  function startDrag(e: React.PointerEvent, kind: 'job' | 'el', id: string) {
     if (e.button !== 0) return;
-    if ((e.target as HTMLElement).closest('[data-no-drag]')) return;
+    if ((e.target as HTMLElement).closest('[data-no-drag],[data-el-action]')) return;
     e.stopPropagation();
+    setMenu(null);
+
+    const ids = selected.has(id) && selected.size > 1 ? [...selected] : [id];
+    if (!selected.has(id)) setSelected(new Set([id]));
+
+    const starts = new Map<string, { x: number; y: number }>();
+    if (kind === 'el') nodes.forEach(n => { if (ids.includes(n.id)) starts.set(n.id, { x: n.x, y: n.y }); });
+    else items.forEach((a, i) => { if (ids.includes(a.id)) starts.set(a.id, jobPos(a, i)); });
+
     const p = toLocal(e);
-    setDrag({ kind, id, sx: x, sy: y, gx: p.x, gy: p.y, dx: 0, dy: 0, moved: false });
+    setDrag({ kind, ids, starts, gx: p.x, gy: p.y, dx: 0, dy: 0, moved: false });
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
+
   function moveDrag(e: React.PointerEvent) {
     if (!drag) return;
     const p = toLocal(e);
     const dx = p.x - drag.gx, dy = p.y - drag.gy;
     setDrag({ ...drag, dx, dy, moved: drag.moved || Math.abs(dx) > 4 || Math.abs(dy) > 4 });
   }
+
   function endDrag(job?: Apartment) {
     if (!drag) return;
     if (drag.moved) {
-      const x = Math.max(0, Math.round(drag.sx + drag.dx));
-      const y = Math.max(0, Math.round(drag.sy + drag.dy));
-      if (drag.kind === 'job' && currentUser) updateApartment(drag.id, { binX: x, binY: y }, currentUser);
-      if (drag.kind === 'el') updateCanvasElement(drag.id, { x, y });
+      drag.ids.forEach(id => {
+        const st = drag.starts.get(id);
+        if (!st) return;
+        const x = Math.max(0, Math.round(st.x + drag.dx));
+        const y = Math.max(0, Math.round(st.y + drag.dy));
+        if (drag.kind === 'job' && currentUser) updateApartment(id, { binX: x, binY: y }, currentUser);
+        if (drag.kind === 'el') updateCanvasElement(id, { x, y });
+      });
     } else if (drag.kind === 'job' && job) {
       onOpenJob(job);
     }
     setDrag(null);
   }
+
+  // ── resize ──────────────────────────────────────────────────────────────
+  function resizeDown(e: React.PointerEvent, el: CanvasElement) {
+    e.stopPropagation(); e.preventDefault();
+    setResize({ id: el.id, startW: el.w, startH: el.h, startPX: e.clientX, startPY: e.clientY, dw: 0, dh: 0 });
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+  function resizeMove(e: React.PointerEvent) {
+    if (!resize) return;
+    setResize({ ...resize, dw: e.clientX - resize.startPX, dh: e.clientY - resize.startPY });
+  }
+  function resizeUp() {
+    if (resize && (resize.dw || resize.dh)) {
+      updateCanvasElement(resize.id, {
+        w: Math.max(60, Math.round(resize.startW + resize.dw)),
+        h: Math.max(40, Math.round(resize.startH + resize.dh)),
+      });
+    }
+    setResize(null);
+  }
+
+  /**
+   * The same handler bundle the main board builds, so `BoardNode` behaves the
+   * same in here. Held in a ref and never replaced, or memoisation is defeated
+   * and a drag re-renders every node.
+   */
+  const live = useRef<Record<string, (...a: unknown[]) => unknown>>({});
+  const H = useRef<BoardHandlers>({
+    jobDown: () => {}, jobMove: () => {}, jobUp: () => {}, jobMenu: () => {},
+    jobDelete: () => {}, jobTv: () => {}, jobThumbs: () => {}, jobThumbsDown: () => {},
+    elDown: (e, el) => live.current.elDown(e, el),
+    elMove: e => live.current.elMove(e),
+    elUp: el => live.current.elUp(el),
+    elMenu: (e, el) => live.current.elMenu(e, el),
+    elEdit: el => live.current.elEdit(el),
+    elSettings: el => live.current.elSettings(el),
+    elDelete: id => live.current.elDelete(id),
+    elColor: (e, id) => live.current.elColor(e, id),
+    elPatch: (id, p) => live.current.elPatch(id, p),
+    elThumbs: (id, d) => live.current.elThumbs(id, d),
+    elThumbsDown: (id, d) => live.current.elThumbsDown(id, d),
+    editChange: v => live.current.editChange(v),
+    editCommit: () => live.current.editCommit(),
+    editCancel: () => live.current.editCancel(),
+    resizeDown: (e, el) => live.current.resizeDown(e, el),
+    resizeMove: e => live.current.resizeMove(e),
+    resizeUp: () => live.current.resizeUp(),
+    openBin: () => {},
+    binCount: () => 0,
+  } as BoardHandlers).current;
+
+  live.current = {
+    elDown: (e, el) => startDrag(e as React.PointerEvent, 'el', (el as CanvasElement).id),
+    elMove: e => moveDrag(e as React.PointerEvent),
+    elUp: () => endDrag(),
+    elMenu: (e, el) => {
+      const ev = e as React.MouseEvent;
+      ev.preventDefault(); ev.stopPropagation();
+      const id = (el as CanvasElement).id;
+      const ids = selected.has(id) && selected.size > 1 ? [...selected] : [id];
+      if (!selected.has(id)) setSelected(new Set([id]));
+      setMenu({ x: ev.clientX, y: ev.clientY, kind: 'element', ids });
+    },
+    elEdit: el => {
+      const e = el as CanvasElement;
+      setEditingEl(e.id); setEditText(e.text);
+      setTimeout(() => editRef.current?.focus(), 30);
+    },
+    elSettings: el => setSettingsId((el as CanvasElement).id),
+    elDelete: id => deleteCanvasElement(id as string),
+    elColor: (_e, id) => setSettingsId(id as string),
+    elPatch: (id, p) => updateCanvasElement(id as string, p as Partial<CanvasElement>),
+    elThumbs: (id, d) => {
+      const el = nodes.find(n => n.id === id);
+      if (el) updateCanvasElement(el.id, { thumbsUp: Math.max(0, (el.thumbsUp ?? 0) + (d as number)) });
+    },
+    elThumbsDown: (id, d) => {
+      const el = nodes.find(n => n.id === id);
+      if (el) updateCanvasElement(el.id, { thumbsDown: Math.max(0, (el.thumbsDown ?? 0) + (d as number)) });
+    },
+    editChange: v => setEditText(v as string),
+    editCommit: () => { if (editingEl) updateCanvasElement(editingEl, { text: editText }); setEditingEl(null); },
+    editCancel: () => setEditingEl(null),
+    resizeDown: (e, el) => resizeDown(e as React.PointerEvent, el as CanvasElement),
+    resizeMove: e => resizeMove(e as React.PointerEvent),
+    resizeUp: () => resizeUp(),
+  };
 
   /** Somewhere free, so two new nodes never land on top of each other. */
   function freeSpot(w: number, h: number) {
@@ -138,44 +275,65 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId }: {
     return { x: 20, y: 20 };
   }
 
-  function place(def: WidgetDef) {
-    const at = freeSpot(def.w, def.h);
+  function place(def: WidgetDef, at?: { x: number; y: number }) {
+    const spot = at ?? freeSpot(def.w, def.h);
     const isArt = def.id.startsWith('art-');
+    const id = 'CE-' + Math.random().toString(36).slice(2, 9);
+    if (def.id === 'add-bin') { setStoreOpen(false); return; }   // no groups inside a group
     addCanvasElement({
-      id: 'CE-' + Math.random().toString(36).slice(2, 9),
+      id,
       ...(isArt
         ? { type: 'clipart' as const, art: def.id.slice(4) as ArtKind }
-        : { type: 'widget' as const, widget: def.id }),
+        : def.id === 'w-title'
+          ? { type: 'title' as const, fontSize: 26, fontWeight: 800, align: 'left' as const }
+          : { type: 'widget' as const, widget: def.id }),
       board: binKey,               // the one thing that keeps it in this bin
-      x: at.x, y: at.y, w: def.w, h: def.h,
-      text: '', color: isArt ? '#dc2626' : '#ffffff',
+      x: Math.round(spot.x), y: Math.round(spot.y), w: def.w, h: def.h,
+      text: '', color: isArt ? '#dc2626' : def.id === 'w-title' ? '#0f172a' : '#ffffff',
       data: isArt ? {} : (def.data ? JSON.parse(JSON.stringify(def.data)) : {}),
     });
     setStoreOpen(false);
   }
 
-  function addSimple(type: 'note' | 'box') {
+  function addSimple(type: 'note' | 'box', at?: { x: number; y: number }) {
     const size = NODE_DEFAULT_SIZE[type];
-    const at = freeSpot(size.w, size.h);
+    const spot = at ?? freeSpot(size.w, size.h);
     addCanvasElement({
       id: 'CE-' + Math.random().toString(36).slice(2, 9),
       type, board: binKey,
-      x: at.x, y: at.y, w: size.w, h: size.h,
+      x: Math.round(spot.x), y: Math.round(spot.y), w: size.w, h: size.h,
       text: type === 'box' ? 'Section' : '',
       color: type === 'box' ? 'rgba(219,234,254,0.45)' : '#fef9c3',
     });
   }
 
-  // The surface must cover its own contents.
+  /**
+   * The surface must cover the WINDOW, not just its contents.
+   *
+   * It used to start at 640×380 inside a window nearly 900 wide, so the themed
+   * board stopped partway across and the rest was raw backdrop — which is what
+   * "the board itself is messed up" was.
+   */
+  const [box, setBox] = useState({ w: 860, h: 520 });
+  useEffect(() => {
+    const measure = () => {
+      const r = surfaceRef.current?.getBoundingClientRect();
+      if (r) setBox({ w: Math.round(r.width), h: Math.round(r.height) });
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
+
   const extent = useMemo(() => {
-    let w = 640, h = 380;
+    let w = box.w, h = box.h;
     items.forEach((a, i) => {
       const p = jobPos(a, i);
       w = Math.max(w, p.x + TILE_W + 24); h = Math.max(h, p.y + TILE_H + 24);
     });
     nodes.forEach(n => { w = Math.max(w, n.x + n.w + 24); h = Math.max(h, n.y + n.h + 24); });
     return { w, h };
-  }, [items, nodes, jobPos]);
+  }, [items, nodes, jobPos, box]);
 
   const stageOf = (a: Apartment) => stages.find(s => s.id === a.currentStageId) ?? null;
   const taskCount = (a: Apartment) => contractorAssignments.filter(x => x.apartmentId === a.id).length;
@@ -191,6 +349,23 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId }: {
     return () => clearTimeout(t);
   }, [highlightJobId, items.length]);
 
+  useEffect(() => {
+    function key(e: KeyboardEvent) {
+      if ((e.target as HTMLElement)?.tagName?.match(/INPUT|TEXTAREA/)) return;
+      if (e.key === 'Escape') { if (menu) setMenu(null); else if (selected.size) setSelected(new Set()); else onClose(); }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selected.size) {
+        selected.forEach(id => { if (nodes.some(n => n.id === id)) deleteCanvasElement(id); });
+        setSelected(new Set());
+      }
+    }
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  });
+
+  const settingsEl = settingsId
+    ? (settingsId === bin.id ? bin : nodes.find(n => n.id === settingsId))
+    : null;
+
   return (
     <>
       <div className="fixed inset-0 bg-black/45 z-[70]" onClick={onClose} />
@@ -198,7 +373,7 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId }: {
         className="fixed z-[80] flex flex-col bin-window-in"
         style={{
           left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
-          width: 'min(900px, 94vw)', height: 'min(700px, 88vh)',
+          width: 'min(1080px, 95vw)', height: 'min(760px, 90vh)',
           ...(theme.frame ?? { padding: 0, borderRadius: 16, boxShadow: '0 18px 44px rgba(15,23,42,.3)' }),
         }}
       >
@@ -211,6 +386,11 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId }: {
             <span className="text-[11px] text-white/70">
               {items.length} {items.length === 1 ? 'job' : 'jobs'}
             </span>
+            {bin.stageId && (
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-white/20">
+                sets stage · {stages.find(st => st.id === bin.stageId)?.name ?? '—'}
+              </span>
+            )}
             <span className="flex-1" />
             <button onClick={() => addSimple('note')} title="Sticky note"
               className="p-1.5 rounded-lg hover:bg-white/15"><StickyNote size={15} /></button>
@@ -218,6 +398,8 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId }: {
               className="p-1.5 rounded-lg hover:bg-white/15"><Square size={15} /></button>
             <button onClick={() => setStoreOpen(true)} title="Widget store"
               className="p-1.5 rounded-lg hover:bg-white/15"><LayoutGrid size={15} /></button>
+            <button onClick={() => setSettingsId(bin.id)} title="Group settings"
+              className="p-1.5 rounded-lg hover:bg-white/15"><Settings2 size={15} /></button>
             <span className="w-px h-4 bg-white/25 mx-0.5" />
             <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/15"><X size={16} /></button>
           </div>
@@ -228,54 +410,58 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId }: {
             <input value={query} onChange={e => setQuery(e.target.value)}
               placeholder="Search inside this group…"
               className="flex-1 text-[12.5px] outline-none bg-transparent" />
-            <span className="text-[10.5px] text-gray-400">drag to arrange · click to open</span>
+            <span className="text-[10.5px] text-gray-400">drag to arrange · right-click for more</span>
           </div>
 
-          <div ref={surfaceRef} className="flex-1 min-h-0 overflow-auto relative"
-            onPointerMove={moveDrag} onPointerUp={() => endDrag()}>
-            <div className="relative" style={{ width: extent.w, height: extent.h, ...theme.surface }}>
+          <div
+            ref={surfaceRef}
+            className="flex-1 min-h-0 overflow-auto relative"
+            onPointerMove={e => { moveDrag(e); resizeMove(e); }}
+            onPointerUp={() => { endDrag(); resizeUp(); }}
+            onPointerDown={e => {
+              if (e.target === e.currentTarget || (e.target as HTMLElement).dataset.binSurface) {
+                setSelected(new Set()); setMenu(null);
+              }
+            }}
+            onContextMenu={e => {
+              if (!(e.target as HTMLElement).dataset.binSurface) return;
+              e.preventDefault();
+              const p = toLocal(e);
+              setMenu({ x: e.clientX, y: e.clientY, kind: 'canvas', ids: [], wx: p.x, wy: p.y });
+            }}
+          >
+            <div data-bin-surface="1" className="relative"
+              style={{ width: extent.w, height: extent.h, ...theme.surface }}>
               {items.length === 0 && nodes.length === 0 && (
-                <div className="absolute inset-0 flex items-center justify-center text-sm"
+                <div className="absolute inset-0 flex items-center justify-center text-sm pointer-events-none"
                   style={{ color: theme.dark ? 'rgba(255,255,255,.55)' : 'rgba(15,23,42,.45)' }}>
                   Nothing here yet — drag jobs onto this group from the board.
                 </div>
               )}
 
-              {/* Notes, boxes, widgets and clip art that live in this bin. */}
+              {/* The main board's own node, so a group behaves like the board. */}
               {nodes.map(el => {
                 const p = elPos(el);
                 return (
-                  <div
+                  <BoardNode
                     key={el.id}
-                    onPointerDown={e => startDrag(e, 'el', el.id, el.x, el.y)}
-                    onPointerMove={moveDrag}
-                    onPointerUp={() => endDrag()}
-                    className="absolute group rounded-xl cursor-grab select-none"
-                    style={{
-                      left: p.x, top: p.y, width: el.w, height: el.h,
-                      backgroundColor: el.type === 'clipart' ? 'transparent'
-                        : el.type === 'box' ? el.color : (el.color || '#fff'),
-                      border: el.type === 'clipart' ? 'none' : '1px solid rgba(0,0,0,.10)',
-                      boxShadow: el.type === 'clipart' ? 'none' : '0 1px 3px rgba(15,23,42,.10)',
-                      touchAction: 'none',
-                    }}
-                  >
-                    <button data-no-drag onClick={() => deleteCanvasElement(el.id)}
-                      className="absolute -top-2 -right-2 z-10 p-1 rounded-full bg-white border border-gray-200 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <X size={11} />
-                    </button>
-                    {el.type === 'widget' ? renderWidget(el, widgetCtx)
-                      : el.type === 'clipart' ? <ClipArtNode el={el} />
-                      : (
-                        <textarea
-                          data-no-drag
-                          value={el.text}
-                          onChange={e => updateCanvasElement(el.id, { text: e.target.value })}
-                          placeholder={el.type === 'box' ? 'Section' : 'Note…'}
-                          className="w-full h-full bg-transparent outline-none resize-none p-2.5 text-[12.5px] text-gray-700"
-                        />
-                      )}
-                  </div>
+                    el={el}
+                    x={p.x} y={p.y} w={p.w} h={p.h}
+                    isSelected={selected.has(el.id)}
+                    isDragging={!!drag && drag.kind === 'el' && drag.ids.includes(el.id) && drag.moved}
+                    isEditing={editingEl === el.id}
+                    editText={editingEl === el.id ? editText : ''}
+                    binHot={false}
+                    binCount={0}
+                    recording={false}
+                    savingAudio={false}
+                    ctx={widgetCtx}
+                    editRef={editRef}
+                    H={H}
+                    onRecord={() => {}}
+                    onStopRecord={() => {}}
+                    onUploadAudio={() => {}}
+                  />
                 );
               })}
 
@@ -288,16 +474,23 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId }: {
                   <div
                     key={a.id}
                     data-bin-job={a.id}
-                    onPointerDown={e => startDrag(e, 'job', a.id, a.binX ?? gridX(i), a.binY ?? gridY(i))}
+                    onPointerDown={e => startDrag(e, 'job', a.id)}
                     onPointerMove={moveDrag}
                     onPointerUp={() => endDrag(a)}
+                    onContextMenu={e => {
+                      e.preventDefault(); e.stopPropagation();
+                      setSelected(new Set([a.id]));
+                      setMenu({ x: e.clientX, y: e.clientY, kind: 'job', ids: [a.id] });
+                    }}
                     className={`absolute rounded-xl p-2.5 cursor-grab select-none group ${lit ? 'search-hit' : ''}`}
                     style={{
                       left: p.x, top: p.y, width: TILE_W, height: TILE_H,
                       ...theme.node,
                       border: `3px solid ${st?.color ?? '#e2e8f0'}`,
+                      outline: selected.has(a.id) ? '2px solid rgba(74,168,216,.55)' : undefined,
+                      outlineOffset: 2,
                       touchAction: 'none',
-                      zIndex: drag?.id === a.id ? 20 : 5,
+                      zIndex: drag?.ids.includes(a.id) ? 20 : 5,
                     }}
                   >
                     <div className="font-bold text-[12.5px] leading-tight truncate"
@@ -348,8 +541,89 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId }: {
         </div>
       </div>
 
-      {storeOpen && <WidgetStore onPick={place} onClose={() => setStoreOpen(false)} />}
+      {/* Right-click, inside a group as well as outside it. */}
+      {menu && (
+        <>
+          <div className="fixed inset-0 z-[88]" onClick={() => setMenu(null)} onContextMenu={e => { e.preventDefault(); setMenu(null); }} />
+          <div className="fixed z-[89] bg-white rounded-xl shadow-2xl border border-gray-100 py-1.5 min-w-[186px]"
+            style={{ left: Math.min(menu.x, window.innerWidth - 210), top: Math.min(menu.y, window.innerHeight - 280) }}>
+            {menu.kind === 'canvas' && (
+              <>
+                <MenuItem icon={StickyNote} label="Sticky note"
+                  onClick={() => { addSimple('note', { x: menu.wx ?? 20, y: menu.wy ?? 20 }); setMenu(null); }} />
+                <MenuItem icon={Square} label="Section box"
+                  onClick={() => { addSimple('box', { x: menu.wx ?? 20, y: menu.wy ?? 20 }); setMenu(null); }} />
+                <MenuItem icon={LayoutGrid} label="Widget store…"
+                  onClick={() => { setStoreOpen(true); setMenu(null); }} />
+                <div className="h-px bg-gray-100 my-1" />
+                <MenuItem icon={Settings2} label="Group settings…"
+                  onClick={() => { setSettingsId(bin.id); setMenu(null); }} />
+              </>
+            )}
+            {menu.kind === 'element' && (
+              <>
+                <MenuItem icon={Settings2} label="Settings…"
+                  onClick={() => { setSettingsId(menu.ids[0]); setMenu(null); }} />
+                <MenuItem icon={Plus} label={menu.ids.length > 1 ? `Duplicate (${menu.ids.length})` : 'Duplicate'}
+                  onClick={() => {
+                    menu.ids.forEach(id => {
+                      const el = nodes.find(n => n.id === id);
+                      if (!el) return;
+                      addCanvasElement({ ...el, id: 'CE-' + Math.random().toString(36).slice(2, 9), x: el.x + 24, y: el.y + 24 });
+                    });
+                    setMenu(null);
+                  }} />
+                <div className="h-px bg-gray-100 my-1" />
+                <MenuItem icon={Trash2} danger
+                  label={menu.ids.length > 1 ? `Remove (${menu.ids.length})` : 'Remove'}
+                  onClick={() => { menu.ids.forEach(deleteCanvasElement); setSelected(new Set()); setMenu(null); }} />
+              </>
+            )}
+            {menu.kind === 'job' && (
+              <>
+                <MenuItem icon={Undo2} label="Put back on the board"
+                  onClick={() => { menu.ids.forEach(id => moveToBin(id, null)); setMenu(null); }} />
+                <MenuItem icon={Search} label="Open the job"
+                  onClick={() => {
+                    const j = items.find(x => x.id === menu.ids[0]);
+                    if (j) onOpenJob(j);
+                    setMenu(null);
+                  }} />
+                {bin.binKind === 'trash' && (
+                  <>
+                    <div className="h-px bg-gray-100 my-1" />
+                    <MenuItem icon={Trash2} danger label="Delete forever"
+                      onClick={() => { menu.ids.forEach(deleteApartment); setMenu(null); }} />
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        </>
+      )}
+
+      {settingsEl && (
+        <NodeSettings
+          el={settingsEl}
+          onClose={() => setSettingsId(null)}
+          onDelete={settingsEl.id === bin.id ? undefined : id => deleteCanvasElement(id)}
+        />
+      )}
+
+      {storeOpen && <WidgetStore onPick={def => place(def)} onClose={() => setStoreOpen(false)} />}
     </>
+  );
+}
+
+function MenuItem({ icon: Icon, label, onClick, danger }: {
+  icon: React.ElementType; label: string; onClick: () => void; danger?: boolean;
+}) {
+  return (
+    <button onClick={onClick}
+      className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12.5px] text-left hover:bg-gray-50 ${
+        danger ? 'text-red-600' : 'text-gray-700'}`}>
+      <Icon size={13} /> {label}
+    </button>
   );
 }
 

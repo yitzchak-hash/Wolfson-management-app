@@ -3,6 +3,7 @@ import { X, Search, Plus } from 'lucide-react';
 import { useStore } from '../../data/store';
 import { WIDGETS, CATEGORY_LABEL, WidgetCategory, WidgetDef, WidgetCtx, withSampleData } from '../../data/widgets';
 import { CanvasElement } from '../../types';
+import { WIDGET_PREVIEW, WIDGET_PREVIEW_COLOR } from '../../data/widgetFields';
 
 /**
  * Browse and place widgets.
@@ -111,28 +112,54 @@ export function WidgetStore({ onPick, onClose }: {
 }
 
 /**
- * One shelf item: the widget itself, running, at its real proportions.
+ * One shelf item: the widget itself, running, filled with something to look at.
  *
- * Scaled rather than re-laid-out, so the preview is the thing you get and not a
- * separate drawing that can drift from it. The overlay swallows clicks so a
- * preview cannot be interacted with by accident — the whole card is the button.
+ * Two things were wrong here and they pulled in opposite directions.
+ *
+ * The scale was `max(BOX_W/w, min(BOX_H/h, 1.6))` — a "cover" fit. On a 56px
+ * pin that works out at 4x, which is why the clip art was enormous; on the
+ * 400px-wide week planner it is 0.86, which pushed a 343px widget through a
+ * 226px window and cropped a third of it off. It is a CONTAIN fit now, capped
+ * so a small piece is enlarged a little but never blown up, and centred.
+ *
+ * The content was drawn from `def.data`, which is the seed a NEWLY PLACED
+ * widget starts with — correctly empty, because a checklist you place should be
+ * yours to fill. Reusing it for the preview is what made half the shelf show
+ * blank boxes and the week planner show an empty week. Previews use
+ * `WIDGET_PREVIEW` instead, which exists only for this.
  */
 function WidgetCard({ def, ctx, onPick }: {
   def: WidgetDef; ctx: WidgetCtx; onPick: (d: WidgetDef) => void;
 }) {
   const Icon = def.icon;
   const BOX_W = 226, BOX_H = 150;
-  // Cover, not contain: the widget fills the tile edge to edge and anything
-  // past the bottom is simply cropped, the way a real store shelf looks.
-  const k = Math.max(BOX_W / def.w, Math.min(BOX_H / def.h, 1.6));
+  const isArt = def.id.startsWith('art-');
+
+  // A widget fills the card's WIDTH — that is what makes the shelf look full
+  // rather than like a grid of postage stamps in white boxes. Anything taller
+  // than the card is cropped with a fade, the way a real shelf looks.
+  //
+  // Clip art is the exception and has to be: filling the width with a 56px pin
+  // means scaling it four times, which is what made it enormous. It gets a
+  // contain fit against a board-textured backdrop instead.
+  const contain = Math.min((BOX_W - 16) / def.w, (BOX_H - 16) / def.h);
+  const k = isArt ? Math.min(contain, 1.5) : Math.min((BOX_W - 10) / def.w, 1.5);
+  const drawnW = def.w * k, drawnH = def.h * k;
 
   const preview: CanvasElement = {
     id: `preview-${def.id}`,
     type: 'widget',
     widget: def.id,
     x: 0, y: 0, w: def.w, h: def.h,
-    text: '', color: '#ffffff',
-    data: def.data ? JSON.parse(JSON.stringify(def.data)) : {},
+    text: def.id === 'w-title' ? 'THIS WEEK' : '',
+    color: WIDGET_PREVIEW_COLOR[def.id] ?? '#ffffff',
+    ...(isArt ? { art: def.id.slice(4) as CanvasElement['art'] } : {}),
+    ...(def.id === 'w-countdown' ? { targetAt: new Date(Date.now() + 61 * 3_600_000).toISOString() } : {}),
+    ...(def.id === 'w-stopwatch' ? { elapsedMs: 1_000 * (60 * 42 + 17) } : {}),
+    data: {
+      ...(def.data ? JSON.parse(JSON.stringify(def.data)) : {}),
+      ...(WIDGET_PREVIEW[def.id] ?? {}),
+    },
   };
 
   return (
@@ -140,23 +167,44 @@ function WidgetCard({ def, ctx, onPick }: {
       role="button" tabIndex={0}
       onClick={() => onPick(def)}
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(def); } }}
-      className="group text-left rounded-xl border border-gray-200 overflow-hidden hover:border-[#4aa8d8] transition-colors flex flex-col cursor-pointer"
+      className="group text-left rounded-xl border border-gray-200 overflow-hidden hover:border-[#4aa8d8] hover:shadow-md transition-all flex flex-col cursor-pointer"
     >
-      <div className="relative bg-white overflow-hidden" style={{ height: BOX_H }}>
+      <div
+        className="relative overflow-hidden flex justify-center"
+        style={{
+          height: BOX_H,
+          alignItems: drawnH > BOX_H - 4 ? 'flex-start' : 'center',
+          // Clip art is a thing you stick ON a board, so it is shown against
+          // one rather than floating on white.
+          background: isArt
+            ? 'radial-gradient(circle at 1px 1px, rgba(15,23,42,.10) 1px, transparent 0) 0 0/12px 12px, #f8fafc'
+            : '#ffffff',
+        }}
+      >
         <div
-          className="absolute top-0 left-0 origin-top-left"
+          className="origin-center"
           style={{
             width: def.w, height: def.h,
             transform: `scale(${k})`,
             // The preview is a picture of the widget, not a working copy.
             pointerEvents: 'none',
+            // Reserve the SCALED footprint so centring is honest.
+            marginLeft: (drawnW - def.w) / 2,
+            marginTop: (drawnH - def.h) / 2,
+            ...(isArt ? {} : {
+              borderRadius: 12,
+              border: '1px solid #e2e8f0',
+              boxShadow: '0 1px 4px rgba(15,23,42,.06)',
+              backgroundColor: '#fff',
+              overflow: 'hidden',
+            }),
           }}
         >
           {def.render(preview, ctx)}
         </div>
         {/* A soft fade where a tall widget is cropped, so the cut looks meant. */}
-        {def.h * k > BOX_H && (
-          <div className="absolute inset-x-0 bottom-0 h-8 pointer-events-none"
+        {drawnH > BOX_H - 4 && (
+          <div className="absolute inset-x-0 bottom-0 h-9 pointer-events-none"
             style={{ background: 'linear-gradient(transparent, #ffffff)' }} />
         )}
         <span className="absolute right-1.5 bottom-1.5 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity"

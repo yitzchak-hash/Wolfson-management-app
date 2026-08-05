@@ -304,6 +304,13 @@ export interface CanvasElement {
    */
   binKind?: BinKind;
   /**
+   * A group may OPTIONALLY stand for a stage. When it does, filing a job into
+   * it moves the job to that stage as well; when it does not, the group is
+   * filing only. Bins and stages stay independent systems either way — this is
+   * a link somebody chose, not a coupling.
+   */
+  stageId?: string;
+  /**
    * Which board this node lives on. Absent means the main board; a bin key
    * means it lives inside that bin — which is what makes a bin a real board
    * with its own notes, widgets and arrangement rather than just a list.
@@ -322,7 +329,20 @@ export interface CanvasElement {
    * because that is what being stuck to something means.
    */
   attachedTo?: string;
-  /** Where on the host it sits, as a fraction of the host's box. */
+  /**
+   * Which of the five anchors it is stuck to. Free fractions drifted — a pin
+   * dropped "near the top-left" landed wherever the pointer happened to be, and
+   * two pins on two tiles never lined up. Snapping to named anchors means a
+   * pinned corner is the same corner on every tile.
+   */
+  attachAnchor?: 'tl' | 'tr' | 'bl' | 'br' | 'tm';
+  /**
+   * Its size as a fraction of the host's WIDTH. Attached art has no size of its
+   * own for the same reason it has no position of its own: resize the tile and
+   * a pin that stayed 64px would be wrong immediately.
+   */
+  attachScale?: number;
+  /** Legacy free-position attach. Read for older records, never written. */
   attachAt?: { fx: number; fy: number };
   /**
    * The document piece carries a real file: a Drive link or an upload, plus the
