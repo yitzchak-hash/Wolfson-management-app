@@ -32,19 +32,31 @@ export function BoardRegionPicker({
   const dragRef = useRef<{ mode: 'move' | 'resize'; px: number; py: number; start: Region } | null>(null);
   const [live, setLive] = useState<Region | null>(null);
 
-  // Board extent, with a floor so an empty board is still drawable.
+  /**
+   * The map tracks the board.
+   *
+   * Sized from the same content the board is, plus the same kind of margin, so
+   * as jobs spread out the map grows with them and the rectangle keeps meaning
+   * the same thing. A floor keeps an empty board drawable.
+   */
   const world = useMemo(() => {
-    let w = 900, h = 600;
+    let w = 0, h = 0;
     jobs.forEach((j, i) => {
       const x = j.canvasX ?? 24 + (i % 4) * 240;
       const y = j.canvasY ?? 24 + Math.floor(i / 4) * 150;
       w = Math.max(w, x + TILE_W); h = Math.max(h, y + TILE_H);
     });
-    elements.forEach(e => { w = Math.max(w, e.x + e.w); h = Math.max(h, e.y + e.h); });
-    return { w: w + 40, h: h + 40 };
+    elements.forEach(e => {
+      if (e.type === 'stroke') return;
+      w = Math.max(w, e.x + e.w); h = Math.max(h, e.y + e.h);
+    });
+    return { w: Math.max(w + 160, 1200), h: Math.max(h + 160, 800) };
   }, [jobs, elements]);
 
+  // The drawing keeps the board's real proportions, so the rectangle you drag
+  // is not a differently-shaped approximation of what the TV will show.
   const k = Math.min(width / world.w, height / world.h);
+  const drawW = world.w * k, drawH = world.h * k;
   const region = live ?? value ?? { x: 0, y: 0, w: world.w, h: world.h };
   const stageColor = (id?: string | null) => stages.find(s => s.id === id)?.color ?? '#cbd5e1';
 
@@ -89,7 +101,7 @@ export function BoardRegionPicker({
       <div
         ref={boxRef}
         className="relative rounded-xl border border-gray-200 overflow-hidden bg-slate-50"
-        style={{ width, height }}
+        style={{ width: drawW, height: drawH }}
         onPointerMove={move}
         onPointerUp={up}
         onPointerCancel={up}
@@ -157,9 +169,10 @@ export function BoardRegionPicker({
         </div>
       </div>
 
-      <div className="flex items-center gap-2 mt-2">
+      <div className="flex items-center gap-2 mt-2" style={{ width: drawW }}>
         <span className="text-[10.5px] text-gray-400 flex-1">
           Drag the box to aim the TV; drag its corner to take in more or less.
+          The map grows as the board does.
         </span>
         <button
           onClick={() => onChange(undefined)}

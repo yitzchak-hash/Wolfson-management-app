@@ -11,7 +11,7 @@ import { Apartment, CanvasElement, Stage } from '../../types';
  * Deliberately built AFTER zoom and pan: a minimap needs a viewport rect to
  * draw, so building it first would have meant building it twice.
  */
-export function MiniMap({
+export const MiniMap = React.memo(function MiniMap({
   jobs, elements, stages, worldW, worldH, zoom, pan, viewportW, viewportH, onJump,
   tileW = 215, tileH = 132, force,
 }: {
@@ -90,4 +90,4 @@ export function MiniMap({
         }} />
     </div>
   );
-}
+});

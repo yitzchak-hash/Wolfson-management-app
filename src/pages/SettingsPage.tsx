@@ -1225,6 +1225,8 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
           elements={canvasElements}
           stages={stages}
           value={tv.tvView}
+          width={560}
+          height={330}
           onChange={r => { setTvSetting('tvView', r); onToast(r ? 'TV view updated' : 'TV shows the whole board'); }}
         />
       </div>

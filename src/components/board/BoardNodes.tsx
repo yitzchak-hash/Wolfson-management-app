@@ -41,7 +41,7 @@ export type ArtKind = (typeof ART_KINDS)[number];
  * render in its own always-on-top layer. Lasso selection works in world space
  * and would otherwise select a title that is visually somewhere else entirely.
  */
-export function PinnedTitleLayer({
+export const PinnedTitleLayer = React.memo(function PinnedTitleLayer({
   elements, zoom, panX, onEdit,
 }: {
   elements: CanvasElement[];
@@ -79,7 +79,7 @@ export function PinnedTitleLayer({
       ))}
     </div>
   );
-}
+});
 
 // ─── Countdown ───────────────────────────────────────────────────────────────
 
@@ -274,7 +274,7 @@ export function ClipArtNode({ el }: { el: CanvasElement }) {
  * pan and zoom with everything else. One record per stroke — never one per
  * point, which would flood both the store and Firestore.
  */
-export function StrokeLayer({ elements }: { elements: CanvasElement[] }) {
+export const StrokeLayer = React.memo(function StrokeLayer({ elements }: { elements: CanvasElement[] }) {
   const strokes = elements.filter(el => el.type === 'stroke' && el.points);
   if (strokes.length === 0) return null;
   return (
@@ -293,4 +293,4 @@ export function StrokeLayer({ elements }: { elements: CanvasElement[] }) {
       ))}
     </svg>
   );
-}
+});

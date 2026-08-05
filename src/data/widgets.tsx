@@ -3,7 +3,9 @@ import {
   Gauge, ListChecks, Hash, BarChart3, Table2, ShoppingCart, CalendarRange,
   Flag, User2, Link2, MapPin, Clock3, Megaphone, Image as ImageIcon,
   AlertTriangle, HardHat, CalendarDays, Camera, Briefcase, Activity,
-  CircleDashed, Archive, StickyNote,
+  CircleDashed, Archive, StickyNote, Copy, Check, Filter, CalendarCheck,
+  Calculator, Ruler, Target, Users, GitCommitHorizontal, TimerReset,
+  ArrowRightLeft, ListFilter, Search, Sparkles,
 } from 'lucide-react';
 import {
   Apartment, CanvasElement, Stage, ContractorAssignment, Contractor,
@@ -634,6 +636,298 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
 
+
+  // ── Fifteen more ──────────────────────────────────────────────────────────
+  {
+    id: 'contractor-links', name: 'Contractor links', category: 'live', icon: Copy, w: 250, h: 195,
+    blurb: 'Every contractor with a one-tap copy of their portal link. New contractors appear on their own.',
+    render: (_el, c) => <ContractorLinks contractors={c.contractors} assignments={c.assignments} />,
+  },
+  {
+    id: 'stage-funnel', name: 'Stage funnel', category: 'live', icon: ListFilter, w: 260, h: 180,
+    blurb: 'Bars showing how the board is spread across the stages.',
+    render: (_el, c) => {
+      const rows = c.stages.map(st => ({ st, n: c.jobs.filter(j => j.currentStageId === st.id).length }));
+      const top = Math.max(1, ...rows.map(r => r.n));
+      return (
+        <Frame title="Spread by stage" icon={ListFilter}>
+          <div className="flex flex-col gap-1 h-full overflow-y-auto pr-1">
+            {rows.map(({ st, n }) => (
+              <div key={st.id}>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-[9.5px] text-gray-600 truncate flex-1">{st.name}</span>
+                  <span className="text-[9.5px] font-bold tabular-nums" style={{ color: st.color }}>{n}</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                  <div className="h-full rounded-full" style={{ width: `${(n / top) * 100}%`, backgroundColor: st.color }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Frame>
+      );
+    },
+  },
+  {
+    id: 'due-today', name: 'Due today', category: 'live', icon: CalendarCheck, w: 230, h: 165,
+    blurb: 'Only what is due today. The morning list.',
+    render: (_el, c) => {
+      const list = c.assignments.filter(a => !a.completedAt && a.dueDate === today());
+      return (
+        <Frame title={`Due today · ${list.length}`} icon={CalendarCheck} tone="#d97706">
+          <div className="flex flex-col gap-1 h-full overflow-y-auto pr-1">
+            {list.length === 0 && <span className="text-[10.5px] text-gray-400">Nothing due today</span>}
+            {list.map(a => {
+              const job = c.jobs.find(j => j.id === a.apartmentId);
+              const con = c.contractors.find(x => x.id === a.contractorId);
+              return (
+                <button key={a.id} data-no-drag data-el-action onClick={() => job && c.openJob(job.id)}
+                  className="text-left">
+                  <span className="text-[10.5px] text-gray-700 truncate block">{job?.displayName || a.taskDescription}</span>
+                  {con && <span className="text-[9px] text-gray-400">{con.name}</span>}
+                </button>
+              );
+            })}
+          </div>
+        </Frame>
+      );
+    },
+  },
+  {
+    id: 'job-list', name: 'Job list', category: 'live', icon: Filter, w: 235, h: 195,
+    blurb: 'A live list of the jobs at one stage. Click any to open it.',
+    data: {},
+    render: (el, c) => {
+      const sid = d(el).stageId as string | undefined;
+      const st = c.stages.find(x => x.id === sid);
+      const list = sid ? c.jobs.filter(j => j.currentStageId === sid) : c.jobs;
+      return (
+        <Frame title={`${st?.name ?? 'All jobs'} · ${list.length}`} icon={Filter} tone={st?.color}>
+          <div className="flex flex-col gap-0.5 h-full overflow-y-auto pr-1">
+            {list.map(j => (
+              <button key={j.id} data-no-drag data-el-action onClick={() => c.openJob(j.id)}
+                className="text-[10.5px] text-gray-700 truncate text-left hover:text-[#1e3a5f]">
+                {j.displayName || 'Job'}
+              </button>
+            ))}
+            {list.length === 0 && <span className="text-[10px] text-gray-400">Nothing here</span>}
+          </div>
+        </Frame>
+      );
+    },
+  },
+  {
+    id: 'photo-review', name: 'Photos to review', category: 'live', icon: Camera, w: 175, h: 105,
+    blurb: 'How many site photos nobody has looked at yet.',
+    render: (_el, c) => {
+      const n = c.photos.filter(p => !p.reviewedAt).length;
+      return (
+        <Frame title="To review" icon={Camera} tone={n ? '#d97706' : undefined}>
+          <Big value={n} sub={n === 1 ? 'photo waiting' : 'photos waiting'} color={n ? '#d97706' : '#16a34a'} />
+        </Frame>
+      );
+    },
+  },
+  {
+    id: 'count-by-stage', name: 'Stage count', category: 'live', icon: Gauge, w: 175, h: 105,
+    blurb: 'One big number: how many jobs sit at a chosen stage.',
+    data: {},
+    render: (el, c) => {
+      const st = c.stages.find(x => x.id === d(el).stageId) ?? c.stages[0];
+      const n = st ? c.jobs.filter(j => j.currentStageId === st.id).length : 0;
+      return (
+        <Frame title={st?.name ?? 'Stage'} icon={Gauge} tone={st?.color}>
+          <Big value={n} sub="jobs at this stage" color={st?.color} />
+        </Frame>
+      );
+    },
+  },
+  {
+    id: 'recent-jobs', name: 'New this week', category: 'live', icon: Sparkles, w: 220, h: 160,
+    blurb: 'Jobs added in the last seven days.',
+    render: (_el, c) => {
+      const cut = new Date(Date.now() - 7 * 86_400_000).toISOString();
+      const list = c.jobs.filter(j => (j.createdAt ?? '') > cut)
+        .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
+      return (
+        <Frame title={`New this week · ${list.length}`} icon={Sparkles}>
+          <div className="flex flex-col gap-0.5 h-full overflow-y-auto pr-1">
+            {list.length === 0 && <span className="text-[10px] text-gray-400">Nothing new</span>}
+            {list.map(j => (
+              <button key={j.id} data-no-drag data-el-action onClick={() => c.openJob(j.id)}
+                className="text-[10.5px] text-gray-700 truncate text-left">{j.displayName || 'Job'}</button>
+            ))}
+          </div>
+        </Frame>
+      );
+    },
+  },
+  {
+    id: 'job-search', name: 'Find a job', category: 'live', icon: Search, w: 230, h: 160,
+    blurb: 'Type a name and jump straight to the job.',
+    render: (_el, c) => <JobSearch jobs={c.jobs} openJob={c.openJob} />,
+  },
+  {
+    id: 'calculator', name: 'Calculator', category: 'plan', icon: Calculator, w: 190, h: 175,
+    blurb: 'A plain calculator, for when the phone is across the room.',
+    render: () => <CalcWidget />,
+  },
+  {
+    id: 'converter', name: 'HVAC converter', category: 'plan', icon: ArrowRightLeft, w: 225, h: 165,
+    blurb: 'BTU, kW, tons, metres, feet and degrees — the conversions this trade actually uses.',
+    data: { kind: 'btu', v: '12000' },
+    render: (el, c) => <Converter el={el} update={c.update} readOnly={c.readOnly} />,
+  },
+  {
+    id: 'weekly-goal', name: 'Target', category: 'plan', icon: Target, w: 195, h: 120,
+    blurb: 'A target and how far along you are against it.',
+    data: { title: 'This week', target: 10, done: 0 },
+    render: (el, c) => {
+      const t = Number(d(el).target ?? 0), n = Number(d(el).done ?? 0);
+      const pct = t > 0 ? Math.min(100, Math.round((n / t) * 100)) : 0;
+      return (
+        <Frame title={d(el).title ?? 'Target'} icon={Target}>
+          <div className="h-full flex flex-col justify-center gap-1.5">
+            <div className="flex items-baseline gap-1">
+              <span className="font-black tabular-nums text-[26px]">{n}</span>
+              <span className="text-[11px] text-gray-400">/ {t}</span>
+              {!c.readOnly && (
+                <span className="ml-auto flex gap-1">
+                  <button data-no-drag data-el-action onClick={() => c.update({ data: { ...d(el), done: n + 1 } })}
+                    className="w-5 h-5 rounded bg-gray-100 text-gray-600 text-[11px] font-bold">+</button>
+                  <button data-no-drag data-el-action onClick={() => c.update({ data: { ...d(el), done: Math.max(0, n - 1) } })}
+                    className="w-5 h-5 rounded bg-gray-100 text-gray-600 text-[11px] font-bold">−</button>
+                </span>
+              )}
+            </div>
+            <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+              <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: pct >= 100 ? '#16a34a' : '#4aa8d8' }} />
+            </div>
+          </div>
+        </Frame>
+      );
+    },
+  },
+  {
+    id: 'team-today', name: 'On site today', category: 'plan', icon: Users, w: 215, h: 175,
+    blurb: 'Who is where today. The question the office is asked most.',
+    data: { rows: [{ who: '', where: '' }] },
+    render: (el, c) => {
+      const rows = (d(el).rows ?? []) as { who: string; where: string }[];
+      const set = (next: typeof rows) => c.update({ data: { ...d(el), rows: next } });
+      return (
+        <Frame title="On site today" icon={Users}>
+          <div className="flex flex-col gap-1 h-full overflow-y-auto pr-1">
+            {rows.map((r, i) => (
+              <div key={i} className="flex items-center gap-1.5">
+                <Line value={r.who} readOnly={c.readOnly} placeholder="Who"
+                  onChange={v => set(rows.map((x, j) => j === i ? { ...x, who: v } : x))}
+                  className="text-[10.5px] font-bold text-gray-800 w-[42%]" />
+                <Line value={r.where} readOnly={c.readOnly} placeholder="Where"
+                  onChange={v => set(rows.map((x, j) => j === i ? { ...x, where: v } : x))}
+                  className="text-[10.5px] text-gray-500 flex-1" />
+              </div>
+            ))}
+            {!c.readOnly && (
+              <button data-no-drag data-el-action onClick={() => set([...rows, { who: '', where: '' }])}
+                className="text-[10px] text-gray-400 hover:text-gray-600 text-left">+ add</button>
+            )}
+          </div>
+        </Frame>
+      );
+    },
+  },
+  {
+    id: 'timeline', name: 'Timeline', category: 'plan', icon: GitCommitHorizontal, w: 380, h: 110,
+    blurb: 'Key dates laid out left to right, with today marked.',
+    data: { items: [{ t: 'Start', on: '' }, { t: 'Handover', on: '' }] },
+    render: (el, c) => {
+      const items = (d(el).items ?? []) as { t: string; on: string }[];
+      const dated = items.filter(i => i.on).map(i => ({ ...i, ms: new Date(i.on).getTime() }));
+      const lo = Math.min(Date.now(), ...dated.map(i => i.ms));
+      const hi = Math.max(Date.now(), ...dated.map(i => i.ms));
+      const at = (ms: number) => (hi === lo ? 50 : ((ms - lo) / (hi - lo)) * 100);
+      return (
+        <Frame title="Timeline" icon={GitCommitHorizontal}>
+          <div className="relative h-full">
+            <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-slate-200" />
+            <div className="absolute top-1/2 -translate-y-1/2 w-0.5 h-4 bg-red-500"
+              style={{ left: `${at(Date.now())}%` }} title="today" />
+            {dated.map((i, k) => (
+              <div key={k} className="absolute -translate-x-1/2" style={{ left: `${at(i.ms)}%`, top: 0 }}>
+                <div className="text-[9px] text-gray-600 whitespace-nowrap">{i.t}</div>
+                <div className="w-2 h-2 rounded-full bg-[#1e3a5f] mx-auto mt-1" />
+                <div className="text-[8px] text-gray-400 whitespace-nowrap mt-0.5">
+                  {new Date(i.on).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                </div>
+              </div>
+            ))}
+            {dated.length === 0 && <span className="text-[10px] text-gray-400">Add dates in Key dates style</span>}
+          </div>
+        </Frame>
+      );
+    },
+  },
+  {
+    id: 'multi-timer', name: 'Several timers', category: 'plan', icon: TimerReset, w: 215, h: 170,
+    blurb: 'A few labelled countdowns in one node, instead of one each.',
+    data: { items: [{ t: 'Crane', on: '' }] },
+    render: (el, c) => {
+      const items = (d(el).items ?? []) as { t: string; on: string }[];
+      const set = (next: typeof items) => c.update({ data: { ...d(el), items: next } });
+      return (
+        <Frame title="Timers" icon={TimerReset}>
+          <div className="flex flex-col gap-1 h-full overflow-y-auto pr-1">
+            {items.map((it, i) => {
+              const ms = it.on ? new Date(it.on).getTime() - Date.now() : null;
+              const hrs = ms === null ? null : Math.floor(Math.abs(ms) / 3_600_000);
+              return (
+                <div key={i} className="flex items-center gap-1.5">
+                  <span className="text-[9px] font-black tabular-nums w-11 flex-shrink-0"
+                    style={{ color: ms === null ? '#cbd5e1' : ms < 0 ? '#dc2626' : hrs! < 24 ? '#d97706' : '#64748b' }}>
+                    {ms === null ? '—' : hrs! >= 48 ? `${Math.floor(hrs! / 24)}d` : `${hrs}h`}
+                  </span>
+                  <Line value={it.t} readOnly={c.readOnly}
+                    onChange={v => set(items.map((x, j) => j === i ? { ...x, t: v } : x))}
+                    className="text-[10.5px] text-gray-700 flex-1" />
+                  {!c.readOnly && (
+                    <input data-no-drag data-el-action type="datetime-local" value={it.on}
+                      onChange={e => set(items.map((x, j) => j === i ? { ...x, on: e.target.value } : x))}
+                      className="text-[8px] text-gray-400 bg-transparent outline-none w-[74px]" />
+                  )}
+                </div>
+              );
+            })}
+            {!c.readOnly && (
+              <button data-no-drag data-el-action onClick={() => set([...items, { t: '', on: '' }])}
+                className="text-[10px] text-gray-400 hover:text-gray-600 text-left">+ add</button>
+            )}
+          </div>
+        </Frame>
+      );
+    },
+  },
+  {
+    id: 'handover', name: 'Shift handover', category: 'ref', icon: ListChecks, w: 240, h: 185,
+    blurb: 'What the next person needs to know. Structured, so nothing is left implied.',
+    data: { done: '', next: '', watch: '' },
+    render: (el, c) => (
+      <Frame title="Handover" icon={ListChecks}>
+        <div className="flex flex-col gap-1 h-full">
+          {([['done', 'Done'], ['next', 'Next'], ['watch', 'Watch out']] as const).map(([k, label]) => (
+            <div key={k} className="flex-1 min-h-0 flex flex-col">
+              <span className="text-[8.5px] font-bold text-gray-400">{label.toUpperCase()}</span>
+              <textarea data-no-drag data-el-action readOnly={c.readOnly}
+                value={(d(el)[k] as string) ?? ''}
+                onChange={e => c.update({ data: { ...d(el), [k]: e.target.value } })}
+                className="flex-1 min-h-0 bg-slate-50 rounded px-1.5 py-0.5 outline-none resize-none text-[10px] text-gray-700" />
+            </div>
+          ))}
+        </div>
+      </Frame>
+    ),
+  },
+
   // ── Look & feel ───────────────────────────────────────────────────────────
   {
     id: 'clock', name: 'Wall clock', category: 'visual', icon: Clock3, w: 190, h: 110,
@@ -670,6 +964,196 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
 ];
+
+
+/**
+ * Every contractor with a one-tap copy of their portal link.
+ *
+ * Reads the live contractor list, so a contractor added in settings shows up
+ * here on its own — the point of it being a live widget rather than a set of
+ * link tiles somebody has to maintain by hand.
+ */
+function ContractorLinks({ contractors, assignments }: {
+  contractors: Contractor[]; assignments: ContractorAssignment[];
+}) {
+  const [copied, setCopied] = useState<string | null>(null);
+  const active = contractors.filter(c => c.active);
+
+  function copy(c: Contractor) {
+    const url = `${window.location.origin}/c/${c.token}`;
+    navigator.clipboard?.writeText(url).then(() => {
+      setCopied(c.id);
+      setTimeout(() => setCopied(null), 1600);
+    }).catch(() => {});
+  }
+
+  return (
+    <Frame title={`Contractor links · ${active.length}`} icon={Copy}>
+      <div className="flex flex-col gap-1 h-full overflow-y-auto pr-1">
+        {active.length === 0 && <span className="text-[10px] text-gray-400">No contractors yet</span>}
+        {active.map(c => {
+          const open = assignments.filter(a => a.contractorId === c.id && !a.completedAt).length;
+          return (
+            <div key={c.id} className="flex items-center gap-1.5">
+              <span className="text-[10.5px] text-gray-700 truncate flex-1">{c.name}</span>
+              {open > 0 && <span className="text-[9px] text-gray-400 tabular-nums">{open}</span>}
+              <button
+                data-no-drag data-el-action
+                onClick={() => copy(c)}
+                title="Copy this contractor's portal link"
+                className="p-1 rounded-md flex-shrink-0 transition-colors"
+                style={copied === c.id
+                  ? { backgroundColor: '#dcfce7', color: '#166534' }
+                  : { backgroundColor: '#f1f5f9', color: '#64748b' }}
+              >
+                {copied === c.id ? <Check size={11} /> : <Copy size={11} />}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </Frame>
+  );
+}
+
+function JobSearch({ jobs, openJob }: { jobs: Apartment[]; openJob: (id: string) => void }) {
+  const [q, setQ] = useState('');
+  const needle = q.trim().toLowerCase();
+  const hits = needle
+    ? jobs.filter(j => (j.displayName ?? '').toLowerCase().includes(needle)
+        || (j.address ?? '').toLowerCase().includes(needle)).slice(0, 8)
+    : [];
+  return (
+    <Frame title="Find a job" icon={Search}>
+      <div className="h-full flex flex-col gap-1">
+        <input
+          data-no-drag data-el-action value={q} onChange={e => setQ(e.target.value)}
+          placeholder="Name or address…"
+          className="text-[11px] bg-slate-50 rounded px-2 py-1 outline-none flex-shrink-0"
+        />
+        <div className="flex-1 min-h-0 overflow-y-auto pr-1 flex flex-col gap-0.5">
+          {hits.map(j => (
+            <button key={j.id} data-no-drag data-el-action onClick={() => openJob(j.id)}
+              className="text-[10.5px] text-gray-700 truncate text-left hover:text-[#1e3a5f]">
+              {j.displayName || 'Job'}
+            </button>
+          ))}
+          {needle && hits.length === 0 && <span className="text-[10px] text-gray-400">No match</span>}
+        </div>
+      </div>
+    </Frame>
+  );
+}
+
+function CalcWidget() {
+  const [expr, setExpr] = useState('');
+  const [out, setOut] = useState('');
+  const KEYS = ['7','8','9','/','4','5','6','*','1','2','3','-','0','.','=','+'];
+
+  /**
+   * Evaluated by a tiny parser rather than `eval`. Only digits and the four
+   * operators are ever accepted, so nothing that arrives here can be code.
+   */
+  function calc(src: string): string {
+    if (!/^[\d+\-*/.\s]+$/.test(src)) return '';
+    const toks = src.match(/\d*\.?\d+|[+\-*/]/g);
+    if (!toks) return '';
+    const nums: number[] = [], ops: string[] = [];
+    for (const t of toks) {
+      if (/[+\-*/]/.test(t)) ops.push(t);
+      else {
+        let n = parseFloat(t);
+        // Multiplication and division bind tighter, so they resolve immediately.
+        while (ops.length && (ops[ops.length - 1] === '*' || ops[ops.length - 1] === '/')) {
+          const op = ops.pop()!, a = nums.pop()!;
+          n = op === '*' ? a * n : a / n;
+        }
+        nums.push(n);
+      }
+    }
+    let acc = nums[0] ?? 0;
+    for (let i = 0; i < ops.length; i++) acc = ops[i] === '+' ? acc + nums[i + 1] : acc - nums[i + 1];
+    return Number.isFinite(acc) ? String(Math.round(acc * 1e6) / 1e6) : '';
+  }
+
+  return (
+    <div className="w-full h-full flex flex-col p-1.5 gap-1">
+      <div className="bg-slate-50 rounded px-2 py-1 text-right flex-shrink-0">
+        <div className="text-[10px] text-gray-400 truncate h-3.5">{expr || '\u00a0'}</div>
+        <div className="text-[15px] font-black tabular-nums">{out || '0'}</div>
+      </div>
+      <div className="grid grid-cols-4 gap-0.5 flex-1 min-h-0">
+        {KEYS.map(k => (
+          <button key={k} data-no-drag data-el-action
+            onClick={() => {
+              if (k === '=') { setOut(calc(expr)); return; }
+              setExpr(e => e + k);
+            }}
+            className="rounded text-[11px] font-bold text-gray-700 bg-slate-50 hover:bg-slate-100">
+            {k}
+          </button>
+        ))}
+        <button data-no-drag data-el-action onClick={() => { setExpr(''); setOut(''); }}
+          className="col-span-4 rounded text-[10px] font-bold text-gray-500 bg-slate-50 hover:bg-slate-100 py-0.5">
+          clear
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** The conversions this trade actually reaches for, in one node. */
+const CONVERSIONS: { id: string; label: string; from: string; to: string; f: (n: number) => number }[] = [
+  { id: 'btu',   label: 'BTU/h → kW',  from: 'BTU/h', to: 'kW',    f: n => n * 0.00029307107 },
+  { id: 'kw',    label: 'kW → BTU/h',  from: 'kW',    to: 'BTU/h', f: n => n / 0.00029307107 },
+  { id: 'ton',   label: 'Tons → kW',   from: 'tons',  to: 'kW',    f: n => n * 3.516853 },
+  { id: 'tonbtu',label: 'Tons → BTU/h',from: 'tons',  to: 'BTU/h', f: n => n * 12000 },
+  { id: 'm',     label: 'Metres → ft', from: 'm',     to: 'ft',    f: n => n * 3.280839895 },
+  { id: 'ft',    label: 'Feet → m',    from: 'ft',    to: 'm',     f: n => n / 3.280839895 },
+  { id: 'c',     label: '°C → °F',     from: '°C',    to: '°F',    f: n => n * 9 / 5 + 32 },
+  { id: 'f',     label: '°F → °C',     from: '°F',    to: '°C',    f: n => (n - 32) * 5 / 9 },
+];
+
+function Converter({ el, update, readOnly }: {
+  el: CanvasElement; update: (p: Partial<CanvasElement>) => void; readOnly?: boolean;
+}) {
+  const data = d(el);
+  const conv = CONVERSIONS.find(c => c.id === data.kind) ?? CONVERSIONS[0];
+  const n = parseFloat(String(data.v ?? ''));
+  const out = Number.isFinite(n) ? conv.f(n) : null;
+  const round = (x: number) => Math.abs(x) >= 100 ? Math.round(x) : Math.round(x * 100) / 100;
+
+  return (
+    <Frame title="Convert" icon={ArrowRightLeft}>
+      <div className="h-full flex flex-col gap-1">
+        <select
+          data-no-drag data-el-action disabled={readOnly}
+          value={conv.id}
+          onChange={e => update({ data: { ...data, kind: e.target.value } })}
+          className="text-[10px] bg-slate-50 rounded px-1.5 py-1 outline-none flex-shrink-0"
+        >
+          {CONVERSIONS.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+        </select>
+        <div className="flex items-center gap-1">
+          <input
+            data-no-drag data-el-action readOnly={readOnly}
+            value={String(data.v ?? '')}
+            onChange={e => update({ data: { ...data, v: e.target.value } })}
+            inputMode="decimal"
+            className="w-[52%] text-[13px] font-bold bg-slate-50 rounded px-1.5 py-1 outline-none tabular-nums"
+          />
+          <span className="text-[9px] text-gray-400">{conv.from}</span>
+        </div>
+        <div className="flex items-baseline gap-1">
+          <span className="text-[18px] font-black tabular-nums text-[#1e3a5f]">
+            {out === null ? '—' : round(out)}
+          </span>
+          <span className="text-[10px] text-gray-400">{conv.to}</span>
+        </div>
+      </div>
+    </Frame>
+  );
+}
 
 function ClockWidget() {
   const [now, setNow] = useState(new Date());

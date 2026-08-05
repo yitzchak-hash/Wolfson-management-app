@@ -18,7 +18,8 @@ import { MiniMap } from '../components/board/MiniMap';
 import { BinWindow } from '../components/board/BinWindow';
 import { StageBoard } from '../components/board/StageBoard';
 import { WidgetStore } from '../components/board/WidgetStore';
-import { renderWidget, WidgetDef } from '../data/widgets';
+import { renderWidget, WidgetDef, WidgetCtx } from '../data/widgets';
+import { JobTile, GhostTile, BoardNode, BoardHandlers } from '../components/board/BoardItems';
 import { useTouchGestures } from '../hooks/useTouchGestures';
 import { detectPasteIntent, fieldForIntent, canCreateFromIntent, PasteIntent } from '../data/pasteIntent';
 import { exportBoardPng, exportBoardPdf } from '../data/boardExport';
@@ -249,6 +250,19 @@ export function GeneralJobsPage() {
    */
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  /** Live viewport size — the board surface is sized against it. */
+  const [vp, setVp] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(([e]) => {
+      const r = e.contentRect;
+      setVp(prev => (Math.abs(prev.w - r.width) < 1 && Math.abs(prev.h - r.height) < 1
+        ? prev : { w: r.width, h: r.height }));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const [spaceHeld, setSpaceHeld] = useState(false);
   const [tool, setTool] = useState<BoardTool>('select');
   const [boardSettingsOpen, setBoardSettingsOpen] = useState(false);
@@ -401,6 +415,50 @@ export function GeneralJobsPage() {
     });
   }, []);
   const deleteRef = useRef<() => void>(() => {});
+  /**
+   * The bridge that makes memoisation actually work.
+   *
+   * `live` is rewritten on every render with the current closures; `H` is
+   * created once and only ever calls through `live`. The memoised tiles and
+   * nodes therefore see a prop that never changes, while still invoking the
+   * freshest handler.
+   */
+  const openJobRef = useRef<(id: string) => void>(() => {});
+  const live = useRef<Record<string, (...a: any[]) => any>>({});
+  const H = useRef<BoardHandlers>({
+    jobDown: (e, j, i) => live.current.jobDown(e, j, i),
+    jobMove: e => live.current.jobMove(e),
+    jobUp: (e, j) => live.current.jobUp(e, j),
+    jobMenu: (e, j) => live.current.jobMenu(e, j),
+    jobDelete: ids => live.current.jobDelete(ids),
+    jobTv: j => live.current.jobTv(j),
+    jobThumbs: (id, d) => live.current.jobThumbs(id, d),
+    elDown: (e, el) => live.current.elDown(e, el),
+    elMove: e => live.current.elMove(e),
+    elUp: el => live.current.elUp(el),
+    elMenu: (e, el) => live.current.elMenu(e, el),
+    elEdit: el => live.current.elEdit(el),
+    elDelete: id => live.current.elDelete(id),
+    elColor: (e, id) => live.current.elColor(e, id),
+    elPatch: (id, p) => live.current.elPatch(id, p),
+    elThumbs: (id, d) => live.current.elThumbs(id, d),
+    editChange: v => live.current.editChange(v),
+    editCommit: () => live.current.editCommit(),
+    editCancel: () => live.current.editCancel(),
+    resizeDown: (e, el) => live.current.resizeDown(e, el),
+    resizeMove: e => live.current.resizeMove(e),
+    resizeUp: () => live.current.resizeUp(),
+    openBin: k => live.current.openBin(k),
+    binCount: k => live.current.binCount(k),
+  }).current;
+  /**
+   * Keeps the board covering the screen.
+   *
+   * Without it you can drag the surface away and stare at the grey behind it,
+   * which looks like the app has broken rather than like the edge of a board.
+   * When the board is smaller than the screen it simply pins to the left/top.
+   */
+  const clampPanRef = useRef<(p: { x: number; y: number }) => { x: number; y: number }>(p => p);
   const editInputRef = useRef<HTMLTextAreaElement>(null);
 
   /**
@@ -1104,9 +1162,9 @@ export function GeneralJobsPage() {
         zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1 : -1);
       } else {
         e.preventDefault();
-        setPan(p => e.shiftKey
+        setPan(p => clampPanRef.current(e.shiftKey
           ? { x: p.x - e.deltaY - e.deltaX, y: p.y }
-          : { x: p.x - e.deltaX, y: p.y - e.deltaY });
+          : { x: p.x - e.deltaX, y: p.y - e.deltaY }));
       }
     };
     vp.addEventListener('wheel', onWheel, { passive: false });
@@ -1132,7 +1190,7 @@ export function GeneralJobsPage() {
         return next;
       });
     },
-    onPan: (dx, dy) => setPan(p => ({ x: p.x + dx, y: p.y + dy })),
+    onPan: (dx, dy) => setPan(p => clampPanRef.current({ x: p.x + dx, y: p.y + dy })),
   });
 
   /**
@@ -1185,7 +1243,7 @@ export function GeneralJobsPage() {
   function onViewportPointerMove(e: React.PointerEvent) {
     const st = panRef.current;
     if (!st) return;
-    setPan({ x: st.ox + (e.clientX - st.px), y: st.oy + (e.clientY - st.py) });
+    setPan(clampPanRef.current({ x: st.ox + (e.clientX - st.px), y: st.oy + (e.clientY - st.py) }));
   }
   function onViewportPointerUp() { panRef.current = null; }
 
@@ -1234,6 +1292,13 @@ export function GeneralJobsPage() {
   }
 
   fitRef.current = zoomToFit;
+  clampPanRef.current = (p) => {
+    const w = maxX * zoom, h = maxY * zoom;
+    return {
+      x: w <= vp.w ? Math.max(0, Math.min(p.x, vp.w - w)) : Math.min(0, Math.max(p.x, vp.w - w)),
+      y: h <= vp.h ? Math.max(0, Math.min(p.y, vp.h - h)) : Math.min(0, Math.max(p.y, vp.h - h)),
+    };
+  };
 
   // ── Start text edit for element ───────────────────────────────────
   function startEdit(el: CanvasElement) {
@@ -1247,10 +1312,75 @@ export function GeneralJobsPage() {
     setEditingEl(null);
   }
 
+  /** One pass over the tasks instead of one scan per tile. */
+  const pendingByJob = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const a of contractorAssignments) {
+      if (a.completedAt) continue;
+      m.set(a.apartmentId, (m.get(a.apartmentId) ?? 0) + 1);
+    }
+    return m;
+  }, [contractorAssignments]);
+
+  const tileLabels = useMemo(
+    () => ({ job: s.jobLabel, folder: s.openFolderTooltip, plans: s.engineeringPlans }),
+    [s.jobLabel, s.openFolderTooltip, s.engineeringPlans],
+  );
+
+  /**
+   * Stable between renders unless the underlying data really changed — so a
+   * drag, which only moves local state, cannot re-render every live widget.
+   */
+  const widgetCtx: WidgetCtx = useMemo(() => ({
+    jobs: apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed),
+    stages: allStages.filter(st => st.projectId === 'general'),
+    assignments: contractorAssignments,
+    contractors,
+    photos: contractorPhotos,
+    logs: activityLogs,
+    update: () => {},
+    openJob: (id: string) => openJobRef.current(id),
+  }), [apartments, allStages, contractorAssignments, contractors, contractorPhotos, activityLogs]);
+
   // ── Canvas size ───────────────────────────────────────────────────
-  let maxX = 700, maxY = 500;
-  jobs.forEach((job, i) => { const p = jobPos(job, i); maxX = Math.max(maxX, p.x + TILE_W + GAP); maxY = Math.max(maxY, p.y + TILE_H + GAP); });
-  canvasElements.forEach(el => { maxX = Math.max(maxX, el.x + el.w + GAP); maxY = Math.max(maxY, el.y + el.h + GAP); });
+  /**
+   * The board is bigger than its contents, always.
+   *
+   * Two rules, and they matter for different reasons:
+   *  - **At least the viewport.** Sizing the surface to the content left a grey
+   *    void around a small board, which reads as the end of the world rather
+   *    than as empty board.
+   *  - **A generous margin past the furthest thing.** There is always somewhere
+   *    to drag a tile to; the surface grows to meet it instead of stopping.
+   *
+   * Rounded to a coarse step so panning does not resize the surface every
+   * frame — the sizes change in chunks, not continuously.
+   */
+  const EDGE_PAD = 900;
+  let contentX = 0, contentY = 0;
+  jobs.forEach((job, i) => { const p = jobPos(job, i); contentX = Math.max(contentX, p.x + TILE_W); contentY = Math.max(contentY, p.y + TILE_H); });
+  canvasElements.forEach(el => { contentX = Math.max(contentX, el.x + el.w); contentY = Math.max(contentY, el.y + el.h); });
+  const step = (n: number) => Math.ceil(n / 400) * 400;
+  const maxX = Math.max(step(contentX + EDGE_PAD), step((vp.w - pan.x) / zoom + 200), 1200);
+  const maxY = Math.max(step(contentY + EDGE_PAD), step((vp.h - pan.y) / zoom + 200), 800);
+
+  openJobRef.current = (id: string) => { const j = jobs.find(x => x.id === id); if (j) setSelectedJob(j); };
+  live.current = {
+    jobDown: onJobPointerDown, jobMove: onJobPointerMove, jobUp: onJobPointerUp,
+    jobMenu: onJobContextMenu, jobDelete: handleDeleteJobs,
+    jobTv: (j: Apartment) => { if (currentUser) updateApartment(j.id, { showOnTv: j.showOnTv === false }, currentUser); },
+    jobThumbs: (id: string, d: number) => bumpThumbs('job', [id], d),
+    elDown: onElPointerDown, elMove: onElPointerMove, elUp: onElPointerUp,
+    elMenu: onElContextMenu, elEdit: startEdit,
+    elDelete: (id: string) => deleteCanvasElement(id),
+    elColor: (e: React.MouseEvent, id: string) => setColorPicker({ x: e.clientX, y: e.clientY, kind: 'element', ids: [id] }),
+    elPatch: (id: string, patch: Partial<CanvasElement>) => updateCanvasElement(id, patch),
+    elThumbs: (id: string, d: number) => bumpThumbs('element', [id], d),
+    editChange: setEditText, editCommit: commitEdit, editCancel: () => setEditingEl(null),
+    resizeDown: onResizePointerDown, resizeMove: onResizePointerMove, resizeUp: onResizePointerUp,
+    openBin: (k: BinKind) => setOpenBin(k),
+    binCount,
+  };
 
   const totalSelected = selectedJobIds.size + selectedElIds.size;
 
@@ -1512,7 +1642,7 @@ export function GeneralJobsPage() {
             ref={canvasRef}
             className="relative"
             style={{
-              width: maxX, height: maxY, minWidth: '100%', minHeight: '100%',
+              width: maxX, height: maxY,
               ...theme.surface,
                             userSelect: 'none',
             }}
@@ -1568,405 +1698,69 @@ export function GeneralJobsPage() {
             {canvasElements.map(el => {
               if (el.type === 'stroke') return null;
               if (el.type === 'title' && el.pinned) return null;
-
               const pos = elPos(el);
-              const isSelected = selectedElIds.has(el.id);
-              const isDragging = drag?.kind === 'element' && drag.ids.includes(el.id) && drag.moved;
-              const isEditing = editingEl === el.id;
-              const isBin = el.type === 'bin' && !!el.binKind;
-              const binHot = hoverBin === el.id;
-              const plain = el.type === 'clipart';
-              const isWidget = el.type === 'widget';
-
-              // Each node type carries its own surface. A bin is a dashed drop
-              // zone, clip art has no chrome at all, and the rest keep the card
-              // look that notes and boxes established.
-              const surface: React.CSSProperties = isBin
-                ? {
-                    backgroundColor: binHot ? `${el.color}22` : 'rgba(255,255,255,.82)',
-                    border: `2px dashed ${binHot ? el.color : '#cbd5e1'}`,
-                    boxShadow: binHot ? `0 0 0 4px ${el.color}22` : undefined,
-                  }
-                : plain
-                ? { background: 'none', border: 'none' }
-                : isWidget
-                ? { backgroundColor: '#ffffff', border: '1px solid #e2e8f0' }
-                : {
-                    backgroundColor: el.type === 'box' ? el.color : (el.color || '#ffffff'),
-                    border: `1px solid ${el.type === 'box' ? el.color.replace('0.45', '0.8') : 'rgba(0,0,0,0.1)'}`,
-                  };
-
               return (
-                <div
+                <BoardNode
                   key={el.id}
-                  onPointerDown={e => onElPointerDown(e, el)}
-                  onPointerMove={onElPointerMove}
-                  onPointerUp={() => onElPointerUp(el)}
-                  onContextMenu={e => onElContextMenu(e, el)}
-                  onDoubleClick={() => { if (!plain) startEdit(el); }}
-                  className={`absolute rounded-xl select-none ${plain || isBin ? '' : 'shadow-md'} ${
-                    isDragging ? 'cursor-grabbing' : 'cursor-grab'
-                  }`}
-                  style={{
-                    left: pos.x, top: pos.y, width: pos.w, height: pos.h,
-                    ...surface,
-                    ...(isSelected ? { borderColor: '#4aa8d8' } : {}),
-                    outline: isSelected && !isDragging ? '2px solid rgba(74,168,216,0.5)' : undefined,
-                    outlineOffset: '2px',
-                    touchAction: 'none',
-                    zIndex: el.type === 'box' ? 1 : isBin ? 4 : 5,
-                  }}
-                >
-                  {/* Node actions — always on when selected, on hover otherwise.
-                      Bins have no colour picker and can never be deleted. */}
-                  {!plain && (
-                    <div className={`absolute top-1.5 right-1.5 flex gap-1 ${isSelected ? 'opacity-100' : 'opacity-0 hover:opacity-100'} transition-opacity`}
-                      style={{ pointerEvents: 'auto' }}>
-                      {!isBin && (
-                        <button
-                          data-el-action
-                          onClick={e => { e.stopPropagation(); setColorPicker({ x: e.clientX, y: e.clientY, kind: 'element', ids: [el.id] }); }}
-                          className="p-1 rounded-md bg-white/70 hover:bg-white text-gray-500 hover:text-gray-700 transition-all"
-                        >
-                          <Palette size={11} />
-                        </button>
-                      )}
-                      <button
-                        data-el-action
-                        onClick={e => { e.stopPropagation(); startEdit(el); }}
-                        className="p-1 rounded-md bg-white/70 hover:bg-white text-gray-500 hover:text-gray-700 transition-all"
-                      >
-                        <Pencil size={11} />
-                      </button>
-                      {!isBin && (
-                        <button
-                          data-el-action
-                          onClick={e => { e.stopPropagation(); deleteCanvasElement(el.id); }}
-                          className="p-1 rounded-md bg-white/70 hover:bg-red-100 text-gray-400 hover:text-red-500 transition-all"
-                        >
-                          <X size={11} />
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Wallboard visibility — every node carries the same switch. */}
-                  {!plain && (
-                    <button
-                      data-el-action
-                      onClick={e => { e.stopPropagation(); updateCanvasElement(el.id, { showOnTv: el.showOnTv === false ? undefined : false }); }}
-                      title={el.showOnTv === false ? 'Hidden from TV' : 'Showing on TV'}
-                      className={`absolute bottom-1.5 right-1.5 p-1 rounded-md transition-all ${isSelected ? 'opacity-100' : 'opacity-0 hover:opacity-100'}`}
-                      style={{ color: el.showOnTv === false ? '#dc2626' : '#94a3b8' }}
-                    >
-                      <TvIcon size={11} hidden={el.showOnTv === false} />
-                    </button>
-                  )}
-
-                  {/* ── Type-specific content ── */}
-                  {isBin ? (
-                    <button
-                      data-el-action
-                      onClick={e => { e.stopPropagation(); setOpenBin(el.binKind!); }}
-                      className="w-full h-full flex flex-col items-start justify-center px-3 text-left"
-                    >
-                      <span className="flex items-center gap-1.5 font-extrabold text-[12.5px]" style={{ color: el.color }}>
-                        {el.binKind === 'done' ? <CheckCircle2 size={14} />
-                          : el.binKind === 'ready' ? <PlayCircle size={14} />
-                          : el.binKind === 'archive' ? <Archive size={14} />
-                          : <Trash2 size={14} />}
-                        {BIN_META[el.binKind!].label}
-                      </span>
-                      <span className="text-[11px] text-gray-500 mt-0.5">
-                        {binCount(el.binKind!)} {binCount(el.binKind!) === 1 ? 'job' : 'jobs'}
-                      </span>
-                      <span className="text-[9px] text-gray-400 mt-0.5">
-                        {binHot ? 'Release to file it here' : 'Click to open · drag jobs in'}
-                      </span>
-                    </button>
-                  ) : el.type === 'countdown' ? (
-                    <CountdownNode el={el} />
-                  ) : el.type === 'stopwatch' ? (
-                    <StopwatchNode el={el} onToggle={() => updateCanvasElement(el.id, el.startedAt
-                      ? { startedAt: undefined, elapsedMs: (el.elapsedMs ?? 0) + (Date.now() - new Date(el.startedAt).getTime()) }
-                      : { startedAt: new Date().toISOString() })} />
-                  ) : el.type === 'voice' ? (
-                    <VoiceMemoNode
-                      el={el}
-                      recording={recordingEl === el.id}
-                      busy={savingAudio}
-                      onRecord={() => startRecording(el.id)}
-                      onStop={stopRecording}
-                    />
-                  ) : isWidget ? (
-                    renderWidget(el, {
-                      jobs: apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed),
-                      stages, assignments: contractorAssignments, contractors,
-                      photos: contractorPhotos, logs: activityLogs,
-                      update: patch => updateCanvasElement(el.id, patch),
-                      openJob: id => { const j = jobs.find(x => x.id === id); if (j) setSelectedJob(j); },
-                    })
-                  ) : el.type === 'clipart' ? (
-                    <ClipArtNode el={el} />
-                  ) : el.type === 'title' ? (
-                    <div className="w-full h-full flex items-center px-2 font-black leading-none"
-                      style={{ fontSize: el.fontSize ?? 22, color: el.color || '#0f172a' }}>
-                      {el.text || 'Title'}
-                    </div>
-                  ) : isEditing ? (
-                    <textarea
-                      ref={editInputRef}
-                      value={editText}
-                      onChange={e => setEditText(e.target.value)}
-                      onBlur={commitEdit}
-                      onKeyDown={e => { if (e.key === 'Escape') { setEditingEl(null); } if (e.key === 'Enter' && e.metaKey) commitEdit(); }}
-                      className="absolute inset-0 w-full h-full bg-transparent border-none outline-none resize-none p-2.5 text-sm"
-                      style={{ paddingTop: el.type === 'box' ? '8px' : '32px', zIndex: 20 }}
-                    />
-                  ) : (
-                    <div
-                      className={`${el.type === 'box' ? 'font-semibold text-sm pt-2 px-3' : 'text-sm pt-8 px-3'} text-gray-700 leading-snug whitespace-pre-wrap break-words`}
-                      style={{ maxHeight: '100%', overflow: 'hidden' }}
-                    >
-                      {el.text || <span className="italic text-gray-400">Double-click to edit</span>}
-                    </div>
-                  )}
-
-                  {/* Box title bar */}
-                  {el.type === 'box' && !isEditing && (
-                    <div
-                      className="absolute top-0 left-0 right-0 px-3 py-1.5 font-semibold text-sm text-gray-700 rounded-t-xl cursor-grab"
-                      style={{ backgroundColor: el.color.replace('0.45', '0.7') }}
-                    >
-                      {el.text}
-                    </div>
-                  )}
-
-                  {/* Thumbs-up reaction — click the badge to take one back. */}
-                  {(el.thumbsUp ?? 0) > 0 && (
-                    <button
-                      data-el-action
-                      onClick={e => { e.stopPropagation(); bumpThumbs('element', [el.id], -1); }}
-                      title="Remove a thumbs up"
-                      className="absolute -top-2 -left-2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-white border border-gray-200 shadow-sm text-[10px] font-bold text-emerald-600"
-                    >
-                      <ThumbsUp size={10} /> {el.thumbsUp}
-                    </button>
-                  )}
-
-                  {/* Resize handle — boxes, bins and widgets are all resizable. */}
-                  {(el.type === 'box' || isBin || isWidget) && (
-                    <div
-                      data-el-action
-                      onPointerDown={e => onResizePointerDown(e, el)}
-                      onPointerMove={onResizePointerMove}
-                      onPointerUp={onResizePointerUp}
-                      className="absolute bottom-1 right-1 w-4 h-4 cursor-se-resize opacity-30 hover:opacity-80 transition-opacity"
-                      style={{ borderRight: '2px solid #6b7280', borderBottom: '2px solid #6b7280', borderRadius: '0 0 4px 0' }}
-                    />
-                  )}
-                </div>
+                  el={el}
+                  x={pos.x} y={pos.y} w={pos.w} h={pos.h}
+                  isSelected={selectedElIds.has(el.id)}
+                  isDragging={drag?.kind === 'element' && drag.ids.includes(el.id) && drag.moved}
+                  isEditing={editingEl === el.id}
+                  editText={editingEl === el.id ? editText : ''}
+                  binHot={hoverBin === el.id}
+                  binCount={el.binKind ? binCount(el.binKind) : 0}
+                  recording={recordingEl === el.id}
+                  savingAudio={savingAudio}
+                  ctx={widgetCtx}
+                  editRef={editInputRef}
+                  H={H}
+                  onRecord={startRecording}
+                  onStopRecord={stopRecording}
+                />
               );
             })}
-
             {/* ── Ghost appearances ──
                 The SAME job drawn a second time. One record, several places, so
                 an edit through a ghost is an edit to the job. */}
             {jobs.flatMap(job => (job.ghosts ?? []).map((g, gi) => {
               const p = ghostPos(job.id, gi, g);
-              const stage = job.currentStageId ? stageMap.get(job.currentStageId) : null;
-              const dragging = ghostDrag?.jobId === job.id && ghostDrag.index === gi && ghostDrag.moved;
               return (
-                <div
+                <GhostTile
                   key={`${job.id}-ghost-${gi}`}
-                  onPointerDown={e => onGhostPointerDown(e, job, gi, p)}
-                  onPointerMove={onGhostPointerMove}
-                  onPointerUp={e => onGhostPointerUp(e, job)}
-                  onContextMenu={e => {
+                  job={job} index={gi}
+                  x={p.x} y={p.y} w={TILE_W} h={TILE_H}
+                  stage={job.currentStageId ? stageMap.get(job.currentStageId) ?? null : null}
+                  dragging={!!ghostDrag && ghostDrag.jobId === job.id && ghostDrag.index === gi && ghostDrag.moved}
+                  label={s.jobLabel}
+                  onDown={onGhostPointerDown}
+                  onMove={onGhostPointerMove}
+                  onUp={onGhostPointerUp}
+                  onMenu={(e, j, i) => {
                     e.preventDefault(); e.stopPropagation();
-                    setCtxMenu({ x: e.clientX, y: e.clientY, kind: 'ghost', ids: [job.id], ghostIndex: gi });
+                    setCtxMenu({ x: e.clientX, y: e.clientY, kind: 'ghost', ids: [j.id], ghostIndex: i });
                   }}
-                  className="absolute rounded-xl p-3 select-none cursor-grab"
-                  style={{
-                    left: p.x, top: p.y, width: TILE_W, height: TILE_H,
-                    touchAction: 'none',
-                    backgroundColor: job.tileColor ?? '#ffffff',
-                    border: `4px dashed ${stage?.color ?? '#cbd5e1'}`,
-                    opacity: dragging ? 0.75 : 0.45,
-                    zIndex: dragging ? 20 : 4,
-                  }}
-                >
-                  <span className="absolute top-1.5 right-2 flex items-center gap-1 text-[9px] font-bold text-gray-400">
-                    <Ghost size={10} /> ghost
-                  </span>
-                  <div className="flex items-start gap-2 mb-1.5 pr-10">
-                    {stage && <span className="flex-shrink-0 w-2.5 h-2.5 rounded-full mt-1" style={{ backgroundColor: stage.color }} />}
-                    <h3 className="font-semibold text-gray-900 text-sm leading-tight line-clamp-2">
-                      {job.displayName || s.jobLabel}
-                    </h3>
-                  </div>
-                  {job.address && (
-                    <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                      <MapPin size={11} className="flex-shrink-0 text-gray-400" />
-                      <span className="truncate">{job.address}</span>
-                    </div>
-                  )}
-                </div>
+                />
               );
             }))}
-
-            {/* ── Job tiles ── */}
             {jobs.map((job, i) => {
               const pos = jobPos(job, i);
-              const stage = job.currentStageId ? stageMap.get(job.currentStageId) : null;
-              const pendingTasks = contractorAssignments.filter(a => a.apartmentId === job.id && !a.completedAt).length;
-              const isDragging = drag?.kind === 'job' && drag.ids.includes(job.id) && drag.moved;
-              const isSelected = selectedJobIds.has(job.id);
-              const tilePalette = TILE_PALETTE.find(p => p.bg === job.tileColor) ?? TILE_PALETTE[0];
               const changedAt = job.contentUpdatedAt ?? job.updatedAt;
-              const justChanged = !!changedAt && pulseNow - new Date(changedAt).getTime() < 25_000;
-
               return (
-                <div
+                <JobTile
                   key={job.id}
-                  onPointerDown={e => onJobPointerDown(e, job, i)}
-                  onPointerMove={onJobPointerMove}
-                  onPointerUp={e => onJobPointerUp(e, job)}
-                  onContextMenu={e => onJobContextMenu(e, job)}
-                  className={`absolute rounded-xl border px-3 pb-3 pt-[22px] group select-none ${
-                    isDragging ? 'shadow-2xl cursor-grabbing z-20' :
-                    isSelected ? 'shadow-md cursor-grab z-10' : 'shadow-sm hover:shadow-md cursor-grab z-5'
-                  } ${justChanged && !isDragging ? 'live-change-pulse' : ''}`}
-                  style={{
-                    left: pos.x, top: pos.y, width: TILE_W, height: TILE_H,
-                    touchAction: 'none',
-                    // The stage colour is a THICK BORDER, never a fill. Flooding the
-                    // tile made the name, address and buttons unreadable at some
-                    // stages; the border carries the same information and leaves the
-                    // content legible at every one.
-                    backgroundColor: job.tileColor ?? '#ffffff',
-                    // A photo behind the tile, when one is set. Text keeps a
-                    // white scrim over it so the name stays readable whatever
-                    // the picture is.
-                    ...(job.tilePhotoUrl ? {
-                      backgroundImage: `linear-gradient(rgba(255,255,255,.78), rgba(255,255,255,.88)), url(${JSON.stringify(job.tilePhotoUrl)})`,
-                      backgroundSize: 'cover',
-                      backgroundPosition: 'center',
-                    } : {}),
-                    border: `4px solid ${isSelected ? '#4aa8d8' : (stage?.color ?? tilePalette.border)}`,
-                    outline: isSelected && !isDragging ? '2px solid rgba(74,168,216,0.4)' : undefined,
-                    outlineOffset: '1px',
-                    zIndex: isDragging ? 20 : isSelected ? 10 : 5,
-                  }}
-                >
-                  {/* Wallboard visibility. Everything shows by default; this only
-                      ever switches something OFF. Slash through the TV when hidden,
-                      so the state reads without hovering. */}
-                  <button
-                    data-no-drag
-                    onClick={e => {
-                      e.stopPropagation();
-                      if (currentUser) updateApartment(job.id, { showOnTv: job.showOnTv === false }, currentUser);
-                    }}
-                    title={job.showOnTv === false ? 'Hidden from TV' : 'Showing on TV'}
-                    className="absolute top-1 right-9 p-1 rounded-md transition-all"
-                    style={{
-                      color: job.showOnTv === false ? '#dc2626' : '#94a3b8',
-                      backgroundColor: job.showOnTv === false ? '#fee2e2' : 'transparent',
-                    }}
-                  >
-                    <TvIcon size={13} hidden={job.showOnTv === false} />
-                  </button>
-
-                  {/* Hover delete */}
-                  <button
-                    data-no-drag
-                    onClick={() => handleDeleteJobs([job.id])}
-                    className="absolute top-1 right-1.5 p-1.5 rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50/80 transition-all opacity-0 group-hover:opacity-100"
-                  >
-                    <Trash2 size={13} />
-                  </button>
-
-                  {/* Name */}
-                  <div className="flex items-start gap-2 mb-1.5 pr-6">
-                    {stage && <span className="flex-shrink-0 w-2.5 h-2.5 rounded-full mt-1" style={{ backgroundColor: stage.color }} />}
-                    <h3 className="font-semibold text-gray-900 text-sm leading-tight line-clamp-2">
-                      {job.displayName || s.jobLabel}
-                    </h3>
-                  </div>
-
-                  {stage && (
-                    <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mb-1.5"
-                      style={{ backgroundColor: `${stage.color}22`, color: stage.color }}>
-                      {stage.name}
-                    </span>
-                  )}
-
-                  {job.address && (
-                    <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
-                      <MapPin size={11} className="flex-shrink-0 text-gray-400" />
-                      <span className="truncate">{job.address}</span>
-                    </div>
-                  )}
-
-                  {/* Buttons appear only when the data exists. Tooltips are short by design. */}
-                  <div className="absolute bottom-2.5 left-3 right-3 flex items-center gap-1.5">
-                    {job.driveLink && (
-                      <a data-no-drag title={s.openFolderTooltip}
-                        href={job.driveLink.startsWith('http') ? job.driveLink : `https://${job.driveLink}`}
-                        target="_blank" rel="noopener noreferrer"
-                        onClick={e => e.stopPropagation()}
-                        className="w-6 h-6 rounded-md bg-gray-50 border border-gray-200 flex items-center justify-center hover:border-gray-300 transition-colors"
-                      >
-                        <DriveIcon size={13} />
-                      </a>
-                    )}
-                    {job.zohoLink && (
-                      <a data-no-drag title="Zoho"
-                        href={job.zohoLink.startsWith('http') ? job.zohoLink : `https://${job.zohoLink}`}
-                        target="_blank" rel="noopener noreferrer"
-                        onClick={e => e.stopPropagation()}
-                        className="w-6 h-6 rounded-md bg-gray-50 border border-gray-200 flex items-center justify-center hover:border-gray-300 transition-colors"
-                      >
-                        <ZohoIcon size={13} />
-                      </a>
-                    )}
-                    {job.plansPdfLink && (
-                      <a data-no-drag title={s.engineeringPlans}
-                        href={job.plansPdfLink}
-                        target="_blank" rel="noopener noreferrer"
-                        onClick={e => e.stopPropagation()}
-                        className="w-6 h-6 rounded-md bg-gray-50 border border-gray-200 flex items-center justify-center hover:border-gray-300 transition-colors text-gray-600"
-                      >
-                        <PlanIcon size={13} />
-                      </a>
-                    )}
-                    {pendingTasks > 0 && (
-                      <span className="ml-auto flex items-center gap-1 text-[11px] text-amber-600 font-bold">
-                        <ClipboardList size={11} /> {pendingTasks}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Thumbs-up reaction — click the badge to take one back. */}
-                  {(job.thumbsUp ?? 0) > 0 && (
-                    <button
-                      data-no-drag
-                      onClick={e => { e.stopPropagation(); bumpThumbs('job', [job.id], -1); }}
-                      title="Remove a thumbs up"
-                      className="absolute -top-2 -left-2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-white border border-gray-200 shadow-sm text-[10px] font-bold text-emerald-600"
-                    >
-                      <ThumbsUp size={10} /> {job.thumbsUp}
-                    </button>
-                  )}
-
-                  {/* Last edited — content changes only, never board tidying */}
-                  {(job.contentUpdatedAt ?? job.updatedAt) && (
-                    <span className="absolute top-1.5 left-3 text-[9px] text-gray-400 pointer-events-none">
-                      {relativeTime(job.contentUpdatedAt ?? job.updatedAt)}
-                    </span>
-                  )}
-                </div>
+                  job={job} index={i}
+                  x={pos.x} y={pos.y} w={TILE_W} h={TILE_H}
+                  stage={job.currentStageId ? stageMap.get(job.currentStageId) ?? null : null}
+                  pendingTasks={pendingByJob.get(job.id) ?? 0}
+                  isSelected={selectedJobIds.has(job.id)}
+                  isDragging={drag?.kind === 'job' && drag.ids.includes(job.id) && drag.moved}
+                  justChanged={!!changedAt && pulseNow - new Date(changedAt).getTime() < 25_000}
+                  fallbackBorder={(TILE_PALETTE.find(p => p.bg === job.tileColor) ?? TILE_PALETTE[0]).border}
+                  lastEdited={relativeTime(changedAt)}
+                  labels={tileLabels}
+                  H={H}
+                />
               );
             })}
           </div>

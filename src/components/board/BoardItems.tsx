@@ -1,0 +1,447 @@
+import React from 'react';
+import { MapPin, ClipboardList, Trash2, Palette, Pencil, X, ThumbsUp, Ghost,
+  Archive, CheckCircle2, PlayCircle } from 'lucide-react';
+import { Apartment, CanvasElement, Stage, BinKind, BIN_META } from '../../types';
+import { DriveIcon, ZohoIcon, PlanIcon, TvIcon } from '../ui/BrandIcons';
+import { CountdownNode, StopwatchNode, ClipArtNode, VoiceMemoNode } from './BoardNodes';
+import { renderWidget, WidgetCtx } from '../../data/widgets';
+
+/**
+ * The board's two repeated items, each memoised.
+ *
+ * They were inline in the page, which meant every pointer frame of a drag
+ * re-rendered every tile, every node and every live widget on the board — 72ms
+ * a move on a board of sixty jobs and thirty widgets, which is about fourteen
+ * frames a second. Memoising them means a drag re-renders only what moved.
+ *
+ * For that to work the props must be comparable by value, so positions arrive
+ * as numbers and callbacks arrive through one `handlers` object that is created
+ * once and never replaced (it reads live closures through a ref).
+ */
+
+export interface BoardHandlers {
+  jobDown: (e: React.PointerEvent, job: Apartment, index: number) => void;
+  jobMove: (e: React.PointerEvent) => void;
+  jobUp: (e: React.PointerEvent, job: Apartment) => void;
+  jobMenu: (e: React.MouseEvent, job: Apartment) => void;
+  jobDelete: (ids: string[]) => void;
+  jobTv: (job: Apartment) => void;
+  jobThumbs: (id: string, delta: number) => void;
+
+  elDown: (e: React.PointerEvent, el: CanvasElement) => void;
+  elMove: (e: React.PointerEvent) => void;
+  elUp: (el: CanvasElement) => void;
+  elMenu: (e: React.MouseEvent, el: CanvasElement) => void;
+  elEdit: (el: CanvasElement) => void;
+  elDelete: (id: string) => void;
+  elColor: (e: React.MouseEvent, id: string) => void;
+  elPatch: (id: string, patch: Partial<CanvasElement>) => void;
+  elThumbs: (id: string, delta: number) => void;
+
+  editChange: (v: string) => void;
+  editCommit: () => void;
+  editCancel: () => void;
+
+  resizeDown: (e: React.PointerEvent, el: CanvasElement) => void;
+  resizeMove: (e: React.PointerEvent) => void;
+  resizeUp: () => void;
+
+  openBin: (kind: BinKind) => void;
+  binCount: (kind: BinKind) => number;
+}
+
+// ─── Job tile ────────────────────────────────────────────────────────────────
+
+export interface JobTileProps {
+  job: Apartment;
+  index: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  stage: Stage | null;
+  pendingTasks: number;
+  isSelected: boolean;
+  isDragging: boolean;
+  justChanged: boolean;
+  fallbackBorder: string;
+  lastEdited: string;
+  labels: { job: string; folder: string; plans: string };
+  H: BoardHandlers;
+}
+
+export const JobTile = React.memo(function JobTile({
+  job, index, x, y, w, h, stage, pendingTasks, isSelected, isDragging,
+  justChanged, fallbackBorder, lastEdited, labels, H,
+}: JobTileProps) {
+  return (
+    <div
+      onPointerDown={e => H.jobDown(e, job, index)}
+      onPointerMove={H.jobMove}
+      onPointerUp={e => H.jobUp(e, job)}
+      onContextMenu={e => H.jobMenu(e, job)}
+      className={`absolute rounded-xl border px-3 pb-3 pt-[22px] group select-none ${
+        isDragging ? 'shadow-2xl cursor-grabbing' :
+        isSelected ? 'shadow-md cursor-grab' : 'shadow-sm hover:shadow-md cursor-grab'
+      } ${justChanged && !isDragging ? 'live-change-pulse' : ''}`}
+      style={{
+        left: x, top: y, width: w, height: h,
+        touchAction: 'none',
+        // The stage colour is a THICK BORDER, never a fill. Flooding the tile
+        // made the name, address and buttons unreadable at some stages; the
+        // border carries the same information and leaves the content legible.
+        backgroundColor: job.tileColor ?? '#ffffff',
+        ...(job.tilePhotoUrl ? {
+          backgroundImage: `linear-gradient(rgba(255,255,255,.78), rgba(255,255,255,.88)), url(${JSON.stringify(job.tilePhotoUrl)})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        } : {}),
+        border: `4px solid ${isSelected ? '#4aa8d8' : (stage?.color ?? fallbackBorder)}`,
+        outline: isSelected && !isDragging ? '2px solid rgba(74,168,216,0.4)' : undefined,
+        outlineOffset: '1px',
+        zIndex: isDragging ? 20 : isSelected ? 10 : 5,
+      }}
+    >
+      {/* Wallboard visibility. Everything shows by default; this only ever
+          switches something OFF. Slash through the TV when hidden, so the state
+          reads without hovering. */}
+      <button
+        data-no-drag
+        onClick={e => { e.stopPropagation(); H.jobTv(job); }}
+        title={job.showOnTv === false ? 'Hidden from TV' : 'Showing on TV'}
+        className="absolute top-1 right-9 p-1 rounded-md transition-all"
+        style={{
+          color: job.showOnTv === false ? '#dc2626' : '#94a3b8',
+          backgroundColor: job.showOnTv === false ? '#fee2e2' : 'transparent',
+        }}
+      >
+        <TvIcon size={13} hidden={job.showOnTv === false} />
+      </button>
+
+      <button
+        data-no-drag
+        onClick={() => H.jobDelete([job.id])}
+        className="absolute top-1 right-1.5 p-1.5 rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50/80 transition-all opacity-0 group-hover:opacity-100"
+      >
+        <Trash2 size={13} />
+      </button>
+
+      <div className="flex items-start gap-2 mb-1.5 pr-6">
+        {stage && <span className="flex-shrink-0 w-2.5 h-2.5 rounded-full mt-1" style={{ backgroundColor: stage.color }} />}
+        <h3 className="font-semibold text-gray-900 text-sm leading-tight line-clamp-2">
+          {job.displayName || labels.job}
+        </h3>
+      </div>
+
+      {stage && (
+        <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mb-1.5"
+          style={{ backgroundColor: `${stage.color}22`, color: stage.color }}>
+          {stage.name}
+        </span>
+      )}
+
+      {job.address && (
+        <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
+          <MapPin size={11} className="flex-shrink-0 text-gray-400" />
+          <span className="truncate">{job.address}</span>
+        </div>
+      )}
+
+      {/* Buttons appear only when the data exists. Tooltips are short by design. */}
+      <div className="absolute bottom-2.5 left-3 right-3 flex items-center gap-1.5">
+        {job.driveLink && (
+          <a data-no-drag title={labels.folder}
+            href={job.driveLink.startsWith('http') ? job.driveLink : `https://${job.driveLink}`}
+            target="_blank" rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            className="w-6 h-6 rounded-md bg-gray-50 border border-gray-200 flex items-center justify-center hover:border-gray-300 transition-colors"
+          >
+            <DriveIcon size={13} />
+          </a>
+        )}
+        {job.zohoLink && (
+          <a data-no-drag title="Zoho"
+            href={job.zohoLink.startsWith('http') ? job.zohoLink : `https://${job.zohoLink}`}
+            target="_blank" rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            className="w-6 h-6 rounded-md bg-gray-50 border border-gray-200 flex items-center justify-center hover:border-gray-300 transition-colors"
+          >
+            <ZohoIcon size={13} />
+          </a>
+        )}
+        {job.plansPdfLink && (
+          <a data-no-drag title={labels.plans}
+            href={job.plansPdfLink}
+            target="_blank" rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            className="w-6 h-6 rounded-md bg-gray-50 border border-gray-200 flex items-center justify-center hover:border-gray-300 transition-colors text-gray-600"
+          >
+            <PlanIcon size={13} />
+          </a>
+        )}
+        {pendingTasks > 0 && (
+          <span className="ml-auto flex items-center gap-1 text-[11px] text-amber-600 font-bold">
+            <ClipboardList size={11} /> {pendingTasks}
+          </span>
+        )}
+      </div>
+
+      {(job.thumbsUp ?? 0) > 0 && (
+        <button
+          data-no-drag
+          onClick={e => { e.stopPropagation(); H.jobThumbs(job.id, -1); }}
+          title="Remove a thumbs up"
+          className="absolute -top-2 -left-2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-white border border-gray-200 shadow-sm text-[10px] font-bold text-emerald-600"
+        >
+          <ThumbsUp size={10} /> {job.thumbsUp}
+        </button>
+      )}
+
+      {lastEdited && (
+        <span className="absolute top-1.5 left-3 text-[9px] text-gray-400 pointer-events-none">
+          {lastEdited}
+        </span>
+      )}
+    </div>
+  );
+});
+
+// ─── Ghost ───────────────────────────────────────────────────────────────────
+
+export const GhostTile = React.memo(function GhostTile({
+  job, index, x, y, w, h, stage, dragging, label, onDown, onMove, onUp, onMenu,
+}: {
+  job: Apartment; index: number; x: number; y: number; w: number; h: number;
+  stage: Stage | null; dragging: boolean; label: string;
+  onDown: (e: React.PointerEvent, job: Apartment, i: number, p: { x: number; y: number }) => void;
+  onMove: (e: React.PointerEvent) => void;
+  onUp: (e: React.PointerEvent, job: Apartment) => void;
+  onMenu: (e: React.MouseEvent, job: Apartment, i: number) => void;
+}) {
+  return (
+    <div
+      onPointerDown={e => onDown(e, job, index, { x, y })}
+      onPointerMove={onMove}
+      onPointerUp={e => onUp(e, job)}
+      onContextMenu={e => onMenu(e, job, index)}
+      className="absolute rounded-xl p-3 select-none cursor-grab"
+      style={{
+        left: x, top: y, width: w, height: h,
+        touchAction: 'none',
+        backgroundColor: job.tileColor ?? '#ffffff',
+        border: `4px dashed ${stage?.color ?? '#cbd5e1'}`,
+        opacity: dragging ? 0.75 : 0.45,
+        zIndex: dragging ? 20 : 4,
+      }}
+    >
+      <span className="absolute top-1.5 right-2 flex items-center gap-1 text-[9px] font-bold text-gray-400">
+        <Ghost size={10} /> ghost
+      </span>
+      <div className="flex items-start gap-2 mb-1.5 pr-10">
+        {stage && <span className="flex-shrink-0 w-2.5 h-2.5 rounded-full mt-1" style={{ backgroundColor: stage.color }} />}
+        <h3 className="font-semibold text-gray-900 text-sm leading-tight line-clamp-2">
+          {job.displayName || label}
+        </h3>
+      </div>
+      {job.address && (
+        <div className="flex items-center gap-1.5 text-xs text-gray-500">
+          <MapPin size={11} className="flex-shrink-0 text-gray-400" />
+          <span className="truncate">{job.address}</span>
+        </div>
+      )}
+    </div>
+  );
+});
+
+// ─── Canvas node ─────────────────────────────────────────────────────────────
+
+export interface BoardNodeProps {
+  el: CanvasElement;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  isSelected: boolean;
+  isDragging: boolean;
+  isEditing: boolean;
+  editText: string;
+  binHot: boolean;
+  binCount: number;
+  recording: boolean;
+  savingAudio: boolean;
+  ctx: WidgetCtx;
+  editRef: React.RefObject<HTMLTextAreaElement | null>;
+  H: BoardHandlers;
+  onRecord: (id: string) => void;
+  onStopRecord: () => void;
+}
+
+export const BoardNode = React.memo(function BoardNode({
+  el, x, y, w, h, isSelected, isDragging, isEditing, editText, binHot, binCount,
+  recording, savingAudio, ctx, editRef, H, onRecord, onStopRecord,
+}: BoardNodeProps) {
+  const isBin = el.type === 'bin' && !!el.binKind;
+  const plain = el.type === 'clipart';
+  const isWidget = el.type === 'widget';
+
+  // Each node type carries its own surface. A bin is a dashed drop zone, clip
+  // art has no chrome at all, and the rest keep the card look that notes and
+  // boxes established.
+  const surface: React.CSSProperties = isBin
+    ? {
+        backgroundColor: binHot ? `${el.color}22` : 'rgba(255,255,255,.82)',
+        border: `2px dashed ${binHot ? el.color : '#cbd5e1'}`,
+        boxShadow: binHot ? `0 0 0 4px ${el.color}22` : undefined,
+      }
+    : plain
+    ? { background: 'none', border: 'none' }
+    : isWidget
+    ? { backgroundColor: '#ffffff', border: '1px solid #e2e8f0' }
+    : {
+        backgroundColor: el.type === 'box' ? el.color : (el.color || '#ffffff'),
+        border: `1px solid ${el.type === 'box' ? el.color.replace('0.45', '0.8') : 'rgba(0,0,0,0.1)'}`,
+      };
+
+  return (
+    <div
+      onPointerDown={e => H.elDown(e, el)}
+      onPointerMove={H.elMove}
+      onPointerUp={() => H.elUp(el)}
+      onContextMenu={e => H.elMenu(e, el)}
+      onDoubleClick={() => { if (!plain) H.elEdit(el); }}
+      className={`absolute rounded-xl select-none ${plain || isBin ? '' : 'shadow-md'} ${
+        isDragging ? 'cursor-grabbing' : 'cursor-grab'
+      }`}
+      style={{
+        left: x, top: y, width: w, height: h,
+        ...surface,
+        ...(isSelected ? { borderColor: '#4aa8d8' } : {}),
+        outline: isSelected && !isDragging ? '2px solid rgba(74,168,216,0.5)' : undefined,
+        outlineOffset: '2px',
+        touchAction: 'none',
+        zIndex: el.type === 'box' ? 1 : isBin ? 4 : 5,
+      }}
+    >
+      {/* Node actions — always on when selected, on hover otherwise. Bins have
+          no colour picker and can never be deleted. */}
+      {!plain && (
+        <div className={`absolute top-1.5 right-1.5 flex gap-1 ${isSelected ? 'opacity-100' : 'opacity-0 hover:opacity-100'} transition-opacity`}
+          style={{ pointerEvents: 'auto' }}>
+          {!isBin && (
+            <button data-el-action
+              onClick={e => { e.stopPropagation(); H.elColor(e, el.id); }}
+              className="p-1 rounded-md bg-white/70 hover:bg-white text-gray-500 hover:text-gray-700 transition-all">
+              <Palette size={11} />
+            </button>
+          )}
+          <button data-el-action
+            onClick={e => { e.stopPropagation(); H.elEdit(el); }}
+            className="p-1 rounded-md bg-white/70 hover:bg-white text-gray-500 hover:text-gray-700 transition-all">
+            <Pencil size={11} />
+          </button>
+          {!isBin && (
+            <button data-el-action
+              onClick={e => { e.stopPropagation(); H.elDelete(el.id); }}
+              className="p-1 rounded-md bg-white/70 hover:bg-red-100 text-gray-400 hover:text-red-500 transition-all">
+              <X size={11} />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Wallboard visibility — every node carries the same switch. */}
+      {!plain && (
+        <button data-el-action
+          onClick={e => { e.stopPropagation(); H.elPatch(el.id, { showOnTv: el.showOnTv === false ? undefined : false }); }}
+          title={el.showOnTv === false ? 'Hidden from TV' : 'Showing on TV'}
+          className={`absolute bottom-1.5 right-1.5 p-1 rounded-md transition-all ${isSelected ? 'opacity-100' : 'opacity-0 hover:opacity-100'}`}
+          style={{ color: el.showOnTv === false ? '#dc2626' : '#94a3b8' }}>
+          <TvIcon size={11} hidden={el.showOnTv === false} />
+        </button>
+      )}
+
+      {/* ── Type-specific content ── */}
+      {isBin ? (
+        <button data-el-action
+          onClick={e => { e.stopPropagation(); H.openBin(el.binKind!); }}
+          className="w-full h-full flex flex-col items-start justify-center px-3 text-left">
+          <span className="flex items-center gap-1.5 font-extrabold text-[12.5px]" style={{ color: el.color }}>
+            {el.binKind === 'done' ? <CheckCircle2 size={14} />
+              : el.binKind === 'ready' ? <PlayCircle size={14} />
+              : el.binKind === 'archive' ? <Archive size={14} />
+              : <Trash2 size={14} />}
+            {BIN_META[el.binKind!].label}
+          </span>
+          <span className="text-[11px] text-gray-500 mt-0.5">
+            {binCount} {binCount === 1 ? 'job' : 'jobs'}
+          </span>
+          <span className="text-[9px] text-gray-400 mt-0.5">
+            {binHot ? 'Release to file it here' : 'Click to open · drag jobs in'}
+          </span>
+        </button>
+      ) : el.type === 'countdown' ? (
+        <CountdownNode el={el} />
+      ) : el.type === 'stopwatch' ? (
+        <StopwatchNode el={el} onToggle={() => H.elPatch(el.id, el.startedAt
+          ? { startedAt: undefined, elapsedMs: (el.elapsedMs ?? 0) + (Date.now() - new Date(el.startedAt).getTime()) }
+          : { startedAt: new Date().toISOString() })} />
+      ) : el.type === 'voice' ? (
+        <VoiceMemoNode el={el} recording={recording} busy={savingAudio}
+          onRecord={() => onRecord(el.id)} onStop={onStopRecord} />
+      ) : isWidget ? (
+        renderWidget(el, ctx)
+      ) : el.type === 'clipart' ? (
+        <ClipArtNode el={el} />
+      ) : el.type === 'title' ? (
+        <div className="w-full h-full flex items-center px-2 font-black leading-none"
+          style={{ fontSize: el.fontSize ?? 22, color: el.color || '#0f172a' }}>
+          {el.text || 'Title'}
+        </div>
+      ) : isEditing ? (
+        <textarea
+          ref={editRef}
+          value={editText}
+          onChange={e => H.editChange(e.target.value)}
+          onBlur={H.editCommit}
+          onKeyDown={e => { if (e.key === 'Escape') H.editCancel(); if (e.key === 'Enter' && e.metaKey) H.editCommit(); }}
+          className="absolute inset-0 w-full h-full bg-transparent border-none outline-none resize-none p-2.5 text-sm"
+          style={{ paddingTop: el.type === 'box' ? '8px' : '32px', zIndex: 20 }}
+        />
+      ) : (
+        <div
+          className={`${el.type === 'box' ? 'font-semibold text-sm pt-2 px-3' : 'text-sm pt-8 px-3'} text-gray-700 leading-snug whitespace-pre-wrap break-words`}
+          style={{ maxHeight: '100%', overflow: 'hidden' }}
+        >
+          {el.text || <span className="italic text-gray-400">Double-click to edit</span>}
+        </div>
+      )}
+
+      {el.type === 'box' && !isEditing && (
+        <div className="absolute top-0 left-0 right-0 px-3 py-1.5 font-semibold text-sm text-gray-700 rounded-t-xl cursor-grab"
+          style={{ backgroundColor: el.color.replace('0.45', '0.7') }}>
+          {el.text}
+        </div>
+      )}
+
+      {(el.thumbsUp ?? 0) > 0 && (
+        <button data-el-action
+          onClick={e => { e.stopPropagation(); H.elThumbs(el.id, -1); }}
+          title="Remove a thumbs up"
+          className="absolute -top-2 -left-2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-white border border-gray-200 shadow-sm text-[10px] font-bold text-emerald-600">
+          <ThumbsUp size={10} /> {el.thumbsUp}
+        </button>
+      )}
+
+      {/* Resize handle — boxes, bins and widgets are all resizable. */}
+      {(el.type === 'box' || isBin || isWidget) && (
+        <div data-el-action
+          onPointerDown={e => H.resizeDown(e, el)}
+          onPointerMove={H.resizeMove}
+          onPointerUp={H.resizeUp}
+          className="absolute bottom-1 right-1 w-4 h-4 cursor-se-resize opacity-30 hover:opacity-80 transition-opacity"
+          style={{ borderRight: '2px solid #6b7280', borderBottom: '2px solid #6b7280', borderRadius: '0 0 4px 0' }}
+        />
+      )}
+    </div>
+  );
+});
