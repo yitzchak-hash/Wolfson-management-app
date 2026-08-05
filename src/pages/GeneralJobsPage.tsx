@@ -3,7 +3,7 @@ import {
   Plus, Briefcase, MapPin, ExternalLink, Trash2, ClipboardList, FolderOpen,
   Copy, StickyNote, Square, Palette, Pencil, X, AlertTriangle,
   Ghost, ThumbsUp, ThumbsDown, ClipboardPaste, LayoutGrid, Columns3, Archive, CheckCircle2, PlayCircle,
-  Image as ImageIcon, ImageOff, History, MoveUpRight, Unlink,
+  Image as ImageIcon, ImageOff, History, MoveUpRight, Unlink, FileText,
 } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 import { useStore } from '../data/store';
@@ -211,6 +211,9 @@ export function GeneralJobsPage() {
   const [createFromLink, setCreateFromLink] = useState<
     { intent: PasteIntent; x: number; y: number } | null>(null);
   const [artPicker, setArtPicker] = useState(false);
+  const [docTarget, setDocTarget] = useState<string | null>(null);
+  const [docUrlField, setDocUrlField] = useState('');
+  const docFileRef = useRef<HTMLInputElement>(null);
   /** Right-clicking the pen or the marker opens its colours and widths. */
   const [penOpts, setPenOpts] = useState<{ tool: 'pen' | 'highlighter'; x: number; y: number } | null>(null);
   const [penStyle, setPenStyle] = useState({ color: '#1e3a5f', width: 3 });
@@ -818,6 +821,19 @@ export function GeneralJobsPage() {
       fr.onerror = reject;
       fr.readAsDataURL(blob);
     }).catch(() => null);
+  }
+
+  /** Same route as a voice memo: Drive when it is set up, and only the URL. */
+  async function storeDocument(file: File): Promise<string | null> {
+    const parent = backupDriveFolderLink ? extractFolderId(backupDriveFolderLink) : null;
+    if (!isUploadBackendConfigured() || !parent) return null;
+    try {
+      const folderId = await findOrCreateFolderViaBackend(parent, 'Board Files');
+      const res = await uploadFileViaBackend(folderId, file);
+      return res?.webViewLink ?? null;
+    } catch {
+      return null;
+    }
   }
 
   async function startRecording(elId: string) {
@@ -2162,6 +2178,19 @@ export function GeneralJobsPage() {
                   className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
                   <MoveUpRight size={14} className="text-gray-400" /> Draw an arrow from here
                 </button>
+                {ctxMenu.ids.length === 1
+                  && canvasElements.find(e => e.id === ctxMenu.ids[0])?.art === 'document' && (
+                  <button onClick={() => {
+                    const el = canvasElements.find(e => e.id === ctxMenu.ids[0]);
+                    setDocUrlField(el?.docUrl ?? '');
+                    setDocTarget(ctxMenu.ids[0]);
+                    setCtxMenu(null);
+                  }}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
+                    <FileText size={14} className="text-gray-400" />
+                    {canvasElements.find(e => e.id === ctxMenu.ids[0])?.docUrl ? 'Change the file' : 'Attach a file'}
+                  </button>
+                )}
                 {ctxMenu.ids.length === 1 && canvasElements.find(e => e.id === ctxMenu.ids[0])?.attachedTo && (
                   <button onClick={() => {
                     updateCanvasElement(ctxMenu.ids[0], { attachedTo: undefined, attachAt: undefined });
@@ -2379,6 +2408,81 @@ export function GeneralJobsPage() {
           </div>
         </>
       )}
+
+      {/* ── Attach a file to a document piece ── */}
+      {docTarget && (() => {
+        const el = canvasElements.find(e => e.id === docTarget);
+        if (!el) return null;
+        const save = (url: string, name: string) => {
+          updateCanvasElement(docTarget, { docUrl: url, docName: name });
+          setDocTarget(null);
+          setToast('File attached');
+        };
+        return (
+          <>
+            <div className="fixed inset-0 bg-black/40 z-[70]" onClick={() => setDocTarget(null)} />
+            <div className="fixed z-[80] bg-white rounded-2xl shadow-2xl p-5"
+              style={{ left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: 'min(440px, 94vw)' }}>
+              <h3 className="text-base font-bold text-gray-900 mb-1">Attach a file</h3>
+              <p className="text-xs text-gray-500 mb-4">
+                Clicking the document on the board opens it. A Drive link is best — it stays where the
+                rest of the job's files live and everyone can reach it.
+              </p>
+
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Link</label>
+              <div className="flex gap-2 mb-3">
+                <input
+                  autoFocus
+                  value={docUrlField}
+                  onChange={e => setDocUrlField(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && docUrlField.trim()) save(docUrlField.trim(), el.docName || 'Document'); }}
+                  placeholder="https://drive.google.com/…"
+                  className="flex-1 min-w-0 border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                />
+                <button
+                  onClick={() => docUrlField.trim() && save(docUrlField.trim(), el.docName || 'Document')}
+                  disabled={!docUrlField.trim()}
+                  className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40"
+                  style={{ background: 'linear-gradient(135deg, #1e3a5f, #2d5a8e)' }}>
+                  Save
+                </button>
+              </div>
+
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Name on the board</label>
+              <input
+                value={el.docName ?? ''}
+                onChange={e => updateCanvasElement(docTarget, { docName: e.target.value })}
+                placeholder="Riser diagram"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+              />
+
+              <div className="flex items-center gap-2 border-t border-gray-100 pt-3">
+                <input ref={docFileRef} type="file" className="hidden"
+                  onChange={async e => {
+                    const f = e.target.files?.[0];
+                    e.currentTarget.value = '';
+                    if (!f) return;
+                    setToast('Uploading…');
+                    const url = await storeDocument(f);
+                    if (url) save(url, f.name);
+                    else setToast('Set up the Drive folder in App settings to upload files');
+                  }} />
+                <button onClick={() => docFileRef.current?.click()}
+                  className="px-4 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">
+                  Upload a file instead
+                </button>
+                <span className="flex-1" />
+                {el.docUrl && (
+                  <button onClick={() => { updateCanvasElement(docTarget, { docUrl: undefined, docName: undefined }); setDocTarget(null); }}
+                    className="text-sm font-semibold text-red-600">Take it off</button>
+                )}
+                <button onClick={() => setDocTarget(null)}
+                  className="px-4 py-2 rounded-xl border border-gray-200 text-sm text-gray-600">Close</button>
+              </div>
+            </div>
+          </>
+        );
+      })()}
 
       {/* ── Title editor ── */}
       {titleEdit && (() => {

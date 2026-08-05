@@ -253,12 +253,34 @@ export function ClipArtNode({ el }: { el: CanvasElement }) {
         </svg>
       );
     case 'document':
+      // Carries a real file. With one attached it turns into a link you can
+      // click; without one it is a blank sheet waiting for a document.
       return (
-        <svg viewBox="0 0 40 40" style={common} aria-hidden="true">
-          <path d="M9 4h16l6 6v26H9z" fill="#fff" stroke="#94a3b8" strokeWidth="1.6" />
-          <path d="M25 4v6h6" fill="none" stroke="#94a3b8" strokeWidth="1.6" />
-          <path d="M14 17h12M14 22h12M14 27h8" stroke="#cbd5e1" strokeWidth="1.8" strokeLinecap="round" />
-        </svg>
+        <span className="relative block w-full h-full">
+          <svg viewBox="0 0 40 40" style={common} aria-hidden="true">
+            <path d="M9 4h16l6 6v26H9z" fill="#fff" stroke={el.docUrl ? '#2d6a9f' : '#94a3b8'} strokeWidth="1.6" />
+            <path d="M25 4v6h6" fill="none" stroke={el.docUrl ? '#2d6a9f' : '#94a3b8'} strokeWidth="1.6" />
+            <path d="M14 17h12M14 22h12M14 27h8" stroke={el.docUrl ? '#93c5fd' : '#cbd5e1'} strokeWidth="1.8" strokeLinecap="round" />
+            {el.docUrl && <circle cx="31" cy="31" r="7" fill="#2d6a9f" />}
+            {el.docUrl && <path d="M31 27.5v6.5M28 31l3 3 3-3" fill="none" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />}
+          </svg>
+          {el.docUrl && (
+            <a
+              data-no-drag data-el-action
+              href={el.docUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              title={`Open ${el.docName || 'the document'}`}
+              className="absolute inset-0"
+            />
+          )}
+          {el.docName && (
+            <span className="absolute left-1/2 -translate-x-1/2 top-full mt-0.5 text-[8px] font-bold text-gray-500 whitespace-nowrap max-w-[110px] truncate">
+              {el.docName}
+            </span>
+          )}
+        </span>
       );
     case 'sticky-stack':
       return (

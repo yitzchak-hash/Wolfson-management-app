@@ -57,13 +57,34 @@ export function BoardRegionPicker({
   // is not a differently-shaped approximation of what the TV will show.
   const k = Math.min(width / world.w, height / world.h);
   const drawW = world.w * k, drawH = world.h * k;
-  const region = live ?? value ?? { x: 0, y: 0, w: world.w, h: world.h };
+
+  /**
+   * Why the box would not move.
+   *
+   * The default region was the WHOLE board, and a box that already fills
+   * everything has nowhere to go — every drag clamped straight back to where it
+   * started, which reads as broken rather than as "already showing everything".
+   * The default is now a screen-shaped slice of it, so it can be dragged the
+   * moment you see it. "Show the whole board" is still one click away.
+   */
+  const defaultRegion = useMemo(() => {
+    const w = Math.min(world.w, Math.max(900, world.w * 0.66));
+    const h = Math.min(world.h, w * (9 / 16));
+    return { x: 0, y: 0, w: Math.round(w), h: Math.round(h) };
+  }, [world]);
+
+  const region = live ?? value ?? defaultRegion;
+  /** No room to move means the box covers everything — worth saying out loud. */
+  const fillsEverything = region.w >= world.w - 1 && region.h >= world.h - 1;
   const stageColor = (id?: string | null) => stages.find(s => s.id === id)?.color ?? '#cbd5e1';
 
   function down(mode: 'move' | 'resize') {
     return (e: React.PointerEvent) => {
       e.preventDefault(); e.stopPropagation();
       dragRef.current = { mode, px: e.clientX, py: e.clientY, start: { ...region } };
+      // A first drag of an unset region commits the default it was showing, so
+      // what you were looking at is what you start moving.
+      if (!value) onChange({ ...region });
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     };
   }
@@ -170,9 +191,11 @@ export function BoardRegionPicker({
       </div>
 
       <div className="flex items-center gap-2 mt-2" style={{ width: drawW }}>
-        <span className="text-[10.5px] text-gray-400 flex-1">
-          Drag the box to aim the TV; drag its corner to take in more or less.
-          The map grows as the board does.
+        <span className="text-[10.5px] flex-1"
+          style={{ color: fillsEverything ? '#b45309' : '#94a3b8' }}>
+          {fillsEverything
+            ? 'The box covers the whole board, so there is nowhere to drag it — pull its corner in first.'
+            : 'Drag the box to aim the TV; drag its corner to take in more or less. The map grows as the board does.'}
         </span>
         <button
           onClick={() => onChange(undefined)}

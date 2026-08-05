@@ -285,6 +285,12 @@ export interface CanvasElement {
   attachedTo?: string;
   /** Where on the host it sits, as a fraction of the host's box. */
   attachAt?: { fx: number; fy: number };
+  /**
+   * The document piece carries a real file: a Drive link or an upload, plus the
+   * name to print on it. Only the URL is ever stored, never the bytes.
+   */
+  docUrl?: string;
+  docName?: string;
   /** Arrows join two things and re-draw themselves as either end moves. */
   fromId?: string;
   toId?: string;
