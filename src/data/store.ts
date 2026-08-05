@@ -147,15 +147,25 @@ function scopeApartmentsToProject(projectId: string, apts: Apartment[], building
   return byId.size === scoped.length ? scoped : Array.from(byId.values());
 }
 
+/**
+ * Seed data for a workspace that has none yet.
+ *
+ * Only the three built-in workspaces have seeds. A workspace created in the app
+ * writes its own storage when it is created, so it must fall through to EMPTY
+ * here — returning Wolfson's buildings would hand a brand-new project 168
+ * apartments that are not its own.
+ */
 function getDefaultBuildings(projectId: string): Building[] {
   if (projectId === 'netiv') return NETIV_BUILDINGS;
   if (projectId === 'general') return [];
-  return DEFAULT_BUILDINGS;
+  if (projectId === 'wolfson') return DEFAULT_BUILDINGS;
+  return [];
 }
 
 function getDefaultApartments(projectId: string): Apartment[] {
   if (projectId === 'netiv') return buildNetivApartments();
   if (projectId === 'general') return [];
+  if (projectId !== 'wolfson') return [];
   return buildDefaultApartments();
 }
 
@@ -322,6 +332,14 @@ interface AppState {
   /** Workspace identity colour. Shared by everyone, so it lives in settings/app. */
   setProjectColor: (projectId: string, color: string) => void;
   projectColors: Record<string, string>;
+  /**
+   * Workspaces created in the app, on top of the three that ship with it.
+   * Shared through settings/app, because a workspace one person creates has to
+   * exist for everyone.
+   */
+  customProjects: Project[];
+  addProject: (project: Project, buildings: Building[], apartments: Apartment[], stages: Stage[]) => void;
+  deleteProject: (id: string) => void;
 
   // General Jobs canvas elements (sticky notes, section boxes)
   canvasElements: CanvasElement[];
@@ -386,7 +404,11 @@ export const useStore = create<AppState>((set, get) => ({
   contractorSheetLinks: (stored?.contractorSheetLinks as Record<string, string> | null) ?? {},
   currentProjectId: _activeProjectId,
   projectColors: (stored?.projectColors as Record<string, string> | null) ?? {},
-  projects: DEFAULT_PROJECTS.map(p => ({
+  customProjects: (stored?.customProjects as Project[] | null) ?? [],
+  projects: [
+    ...DEFAULT_PROJECTS,
+    ...((stored?.customProjects as Project[] | null) ?? []),
+  ].map(p => ({
     ...p,
     color: ((stored?.projectColors as Record<string, string> | null) ?? {})[p.id] ?? p.color,
   })),
@@ -423,8 +445,9 @@ export const useStore = create<AppState>((set, get) => ({
 
     // Load new project's saved data (or fresh defaults)
     const newStored = loadFromStorage(getProjectStorageKey(id), null) as Record<string, unknown> | null;
-    const defaultBuildings = id === 'netiv' ? NETIV_BUILDINGS : id === 'general' ? [] : DEFAULT_BUILDINGS;
-    const defaultApartments = id === 'netiv' ? buildNetivApartments() : id === 'general' ? [] : buildDefaultApartments();
+    // Same rule as getDefaultBuildings: only the built-in three have seeds.
+    const defaultBuildings = getDefaultBuildings(id);
+    const defaultApartments = getDefaultApartments(id);
 
     const rawApartments = (newStored?.apartments as Apartment[] | null) ?? defaultApartments;
     const newProjectData = {
@@ -470,6 +493,59 @@ export const useStore = create<AppState>((set, get) => ({
     if (isFirebaseConfigured && !get().firebaseListening) {
       get().startFirebaseSync();
     }
+  },
+
+  /**
+   * Creates a workspace and seeds it.
+   *
+   * The whole point is that it touches NOTHING that already exists: the new
+   * workspace's records are written to its own storage key and its own
+   * Firestore collections, exactly like the three built-in ones, and the
+   * current workspace is left alone until someone switches to it.
+   */
+  addProject: (project, buildings, apartments, stages) => {
+    const nextCustom = [...get().customProjects, project];
+    set({
+      customProjects: nextCustom,
+      projects: [...get().projects, project],
+      // Stages are global records carrying a projectId, like every other stage.
+      stages: [...get().stages, ...stages],
+    });
+
+    // Seed the new workspace's own storage, without disturbing the live one.
+    saveToStorage(getProjectStorageKey(project.id), {
+      buildings, apartments,
+      stageNotes: [], stageNoteVersions: [], generalNoteVersions: [], activityLogs: [],
+      contractorAssignments: [], contractorNotes: [], contractorPhotos: [],
+      officeNoteFiles: [], canvasElements: [], planPins: [],
+      dashboardWidgetOrder: [], dashboardHiddenWidgets: [],
+    });
+
+    persist(get);
+    fsSet('settings', 'app', { customProjects: nextCustom });
+    if (isFirebaseConfigured) {
+      stages.forEach(st => fsSet('stages', st.id, st));
+      if (apartments.length) {
+        fsBatchSet(projectCollection(project.id, 'apartments'), apartments.map(a => ({ id: a.id, data: a })));
+      }
+    }
+  },
+
+  /**
+   * Removes a workspace from the list. Deliberately does NOT erase its records —
+   * they stay in their own storage and collections, so a workspace removed by
+   * mistake can be brought back by re-creating it with the same id.
+   */
+  deleteProject: (id) => {
+    if (DEFAULT_PROJECTS.some(p => p.id === id)) return;  // the built-in three stay
+    const nextCustom = get().customProjects.filter(p => p.id !== id);
+    set({
+      customProjects: nextCustom,
+      projects: get().projects.filter(p => p.id !== id),
+    });
+    if (get().currentProjectId === id) get().setCurrentProject('general');
+    persist(get);
+    fsSet('settings', 'app', { customProjects: nextCustom });
   },
 
   setProjectColor: (projectId, color) => {
@@ -1314,6 +1390,10 @@ export const useStore = create<AppState>((set, get) => ({
         boardLayouts: data.boardLayouts ?? state.boardLayouts,
         planPins: data.planPins ?? state.planPins,
         projectColors: data.projectColors ?? state.projectColors,
+        ...(data.customProjects ? {
+          customProjects: data.customProjects as Project[],
+          projects: [...DEFAULT_PROJECTS, ...(data.customProjects as Project[])],
+        } : {}),
         // Building definitions and the dashboard layout were never restored, so
         // a project built in the builder came back without its buildings.
         buildings: data.buildings ?? state.buildings,
@@ -1682,6 +1762,10 @@ export const useStore = create<AppState>((set, get) => ({
         ...(appSettings.mainUiStrings        ? { mainUiStrings: mergeFreshMainUi(appSettings.mainUiStrings as Partial<MainUiStrings>) } : {}),
         ...(appSettings.contractorSheetLinks ? { contractorSheetLinks: appSettings.contractorSheetLinks as Record<string, string> } : {}),
         ...(appSettings.boardSettings ? { boardSettings: appSettings.boardSettings as Record<string, BoardSetting> } : {}),
+        ...(appSettings.customProjects ? {
+          customProjects: appSettings.customProjects as Project[],
+          projects: [...DEFAULT_PROJECTS, ...(appSettings.customProjects as Project[])],
+        } : {}),
         ...(appSettings.projectColors ? {
           projectColors: appSettings.projectColors as Record<string, string>,
           projects: state.projects.map(p => ({
@@ -1850,6 +1934,10 @@ export const useStore = create<AppState>((set, get) => ({
           ...(appS.mainUiStrings        ? { mainUiStrings: mergeFreshMainUi(appS.mainUiStrings as Partial<MainUiStrings>) } : {}),
           ...(appS.contractorSheetLinks ? { contractorSheetLinks: appS.contractorSheetLinks as Record<string, string> } : {}),
           ...(appS.boardSettings ? { boardSettings: appS.boardSettings as Record<string, BoardSetting> } : {}),
+          ...(appS.customProjects ? {
+            customProjects: appS.customProjects as Project[],
+            projects: [...DEFAULT_PROJECTS, ...(appS.customProjects as Project[])],
+          } : {}),
           ...(appS.projectColors ? {
             projectColors: appS.projectColors as Record<string, string>,
             projects: get().projects.map(p => ({
@@ -1975,6 +2063,7 @@ function persistNow(get: () => AppState) {
     boardLayouts: state.boardLayouts,
     planPins: state.planPins,
     projectColors: state.projectColors,
+    customProjects: state.customProjects,
   };
 
   const ok = saveToStorage(storageKey, payload);

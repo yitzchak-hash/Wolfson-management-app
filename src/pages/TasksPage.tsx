@@ -25,7 +25,7 @@ export function TasksPage() {
   const {
     contractors, contractorAssignments, apartments, stages, buildings,
     addContractorAssignment, updateContractorAssignment, deleteContractorAssignment,
-    updateApartment, currentUser, mainUiStrings: s,
+    updateApartment, currentUser, mainUiStrings: s, currentProjectId,
   } = useStore();
 
   const PRIORITY_CONFIG: Record<TaskPriority, { label: string; cls: string; dot: string }> = {
@@ -172,7 +172,7 @@ export function TasksPage() {
     setToast({ msg, type });
   }
 
-  const sortedStages = [...stages].filter(s => s.active).sort((a, b) => a.order - b.order);
+  const sortedStages = [...stages].filter(st => st.active && (currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId)).sort((a, b) => a.order - b.order);
   const resApts = apartments
     .filter(a => isCountableApartment(a) && a.floor > 0)
     .sort((a, b) => a.buildingId.localeCompare(b.buildingId) || (Number(a.apartmentNumber) - Number(b.apartmentNumber)));

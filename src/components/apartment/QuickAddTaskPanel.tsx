@@ -18,7 +18,8 @@ interface Props {
 }
 
 export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: Props) {
-  const { stages, contractors, contractorAssignments, updateContractorAssignment, addContractorAssignment, updateApartment } = useStore();
+  const { stages, contractors, contractorAssignments, updateContractorAssignment,
+    addContractorAssignment, updateApartment, currentProjectId } = useStore();
   const s = useStore(state => state.mainUiStrings);
 
   function getDueBadge(dueDate: string | null) {
@@ -34,6 +35,16 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
   const catLabel = (c: string) => c === 'ac' ? s.categoryAC : c === 'drywall' ? s.categoryDrywall : s.categoryGeneral;
 
   const [contractorId, setContractorId] = useState('');
+  const [inlineDrive, setInlineDrive] = useState('');
+
+  /** Sets the job's Drive folder without leaving this panel. */
+  function saveInlineDrive() {
+    const link = inlineDrive.trim();
+    if (!link || !currentUser) return;
+    updateApartment(apartment.id, { driveLink: link }, currentUser);
+    setInlineDrive('');
+    onToast('Drive folder saved');
+  }
   const [task, setTask] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [stageId, setStageId] = useState(apartment.currentStageId ?? '');
@@ -71,7 +82,11 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
     setEditingTaskId(null);
   }
 
-  const sortedStages = [...stages].filter(s => s.active).sort((a, b) => a.order - b.order);
+  // Scoped to THIS workspace. Without the filter the picker listed every
+  // project's stages together, which is the same mixing bug the drawer had.
+  const sortedStages = [...stages]
+    .filter(st => st.active && (currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId))
+    .sort((a, b) => a.order - b.order);
   const currentStage = stages.find(s => s.id === apartment.currentStageId);
   const currentIdx = sortedStages.findIndex(s => s.id === apartment.currentStageId);
   const nextStage = currentIdx >= 0 && currentIdx < sortedStages.length - 1
@@ -159,7 +174,17 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
     <>
       <div className="drawer-overlay fixed inset-0 bg-black/25 z-40" onClick={onClose} />
 
-      <div className="drawer-panel fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl z-50 flex flex-col">
+      {/* Centred, not a side drawer.
+          Everything else that opens over the board is a centred modal now, and
+          a panel that slides in from the right for this one action was the last
+          thing still behaving the old way. */}
+      <div
+        className="drawer-panel fixed bg-white shadow-2xl z-50 flex flex-col rounded-2xl overflow-hidden"
+        style={{
+          left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+          width: 'min(560px, 94vw)', height: 'min(760px, 90vh)',
+        }}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 bg-[#1e3a5f] text-white flex-shrink-0">
           <div className="flex items-center gap-3 min-w-0">
@@ -377,10 +402,32 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                     <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600"><X size={14} /></button>
                   </div>
 
+                  {/* Telling someone to go and do something in another tab, then
+                      come back, is a worse answer than simply letting them do it
+                      here. The field is the fix, not the warning. */}
                   {!apartment.driveLink && (
-                    <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 border border-amber-200">
-                      <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" />
-                      <span>{s.driveWarning}</span>
+                    <div className="text-xs bg-amber-50 rounded-lg px-3 py-2.5 border border-amber-200">
+                      <div className="flex items-start gap-2 text-amber-800 mb-2">
+                        <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" />
+                        <span>This job has no Drive folder yet — the contractor's photos need somewhere to go.</span>
+                      </div>
+                      <div className="flex gap-1.5">
+                        <input
+                          value={inlineDrive}
+                          onChange={e => setInlineDrive(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') saveInlineDrive(); }}
+                          placeholder="https://drive.google.com/drive/folders/…"
+                          className="flex-1 min-w-0 border border-amber-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-amber-300"
+                        />
+                        <button
+                          onClick={saveInlineDrive}
+                          disabled={!inlineDrive.trim()}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-40"
+                          style={{ backgroundColor: '#b45309' }}
+                        >
+                          Save
+                        </button>
+                      </div>
                     </div>
                   )}
 

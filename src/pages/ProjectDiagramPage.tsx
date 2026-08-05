@@ -42,7 +42,8 @@ export function ProjectDiagramPage() {
   const [bulkStageId, setBulkStageId] = useState('');
   const [bulkDropdownOpen, setBulkDropdownOpen] = useState(false);
 
-  const sortedStages = [...stages].filter(s => s.active).sort((a, b) => a.order - b.order);
+  // Only this workspace's stages — a shared list showed General's stages here.
+  const sortedStages = [...stages].filter(st => st.active && (currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId)).sort((a, b) => a.order - b.order);
 
   // Print header shows the project actually being viewed, not a hardcoded name
   const printProject = projects.find(p => p.id === currentProjectId);

@@ -88,7 +88,7 @@ export function AnalyticsDashboard() {
     ? allApartments.filter(a => a.buildingId === 'G' && isCountableApartment(a))
     : allApartments;
 
-  const sortedStages = useMemo(() => [...stages].filter(s => s.active).sort((a, b) => a.order - b.order), [stages]);
+  const sortedStages = useMemo(() => [...stages].filter(st => st.active && (currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId)).sort((a, b) => a.order - b.order), [stages, currentProjectId]);
 
   const stats = useMemo(() => {
     const residentialApts = apartments.filter(a => isCountableApartment(a) && (a.floor > 0 || !/^A\d/.test(a.buildingId)));

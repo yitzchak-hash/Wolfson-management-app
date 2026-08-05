@@ -26,7 +26,7 @@ interface Props {
 export function BulkAddTaskModal({ onClose, onToast }: Props) {
   const {
     apartments, stages, contractors, buildings,
-    addContractorAssignment, updateApartment, currentUser, contractorAssignments,
+    addContractorAssignment, updateApartment, currentUser, contractorAssignments, currentProjectId,
   } = useStore();
   const s = useStore(state => state.mainUiStrings);
 
@@ -57,9 +57,12 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
   const [fileUploadPct, setFileUploadPct] = useState(0);
 
   // ── Derived ───────────────────────────────────────────────────────────────
+  // Scoped to this workspace, like every other stage list in the app.
   const sortedStages = useMemo(
-    () => [...stages].filter(s => s.active).sort((a, b) => a.order - b.order),
-    [stages],
+    () => [...stages]
+      .filter(st => st.active && (currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId))
+      .sort((a, b) => a.order - b.order),
+    [stages, currentProjectId],
   );
 
   const namedApts = useMemo(

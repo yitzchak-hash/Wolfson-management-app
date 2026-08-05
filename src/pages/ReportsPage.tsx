@@ -52,7 +52,7 @@ export function ReportsPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
-  const sortedStages = [...stages].filter(s => s.active).sort((a, b) => a.order - b.order);
+  const sortedStages = [...stages].filter(st => st.active && (currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId)).sort((a, b) => a.order - b.order);
 
   const filtered = useMemo(() => {
     return apartments.filter(apt => {

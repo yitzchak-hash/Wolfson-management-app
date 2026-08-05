@@ -10,6 +10,7 @@ import { Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAU
 import { Tooltip } from '../components/ui/Tooltip';
 import { Toast } from '../components/ui/Toast';
 import { BoardRegionPicker } from '../components/board/BoardRegionPicker';
+import { NewWorkspace } from '../components/settings/NewWorkspace';
 import { format } from 'date-fns';
 import { saveAs } from 'file-saver';
 import { extractFolderId, isUploadBackendConfigured, getFolderNameViaBackend, familyNameFromFolderName } from '../data/driveApi';
@@ -17,7 +18,7 @@ import { fetchContractorSheet } from '../data/sheetApi';
 import { ProjectBuilder } from '../components/settings/ProjectBuilder';
 import { ProjectLayout, layoutToApartments } from '../data/projectLayout';
 
-type Tab = 'stages' | 'users' | 'contractors' | 'app' | 'language' | 'buildings' | 'sheet' | 'tv';
+type Tab = 'stages' | 'users' | 'contractors' | 'app' | 'language' | 'buildings' | 'sheet' | 'tv' | 'workspaces';
 
 /**
  * Settings are split in two, and the split is deliberate:
@@ -34,7 +35,7 @@ type Tab = 'stages' | 'users' | 'contractors' | 'app' | 'language' | 'buildings'
 export type SettingsScope = 'project' | 'app';
 
 const PROJECT_TABS: Tab[] = ['stages', 'buildings', 'sheet'];
-const APP_TABS: Tab[] = ['users', 'contractors', 'tv', 'app', 'language'];
+const APP_TABS: Tab[] = ['workspaces', 'users', 'contractors', 'tv', 'app', 'language'];
 
 const PRESET_COLORS = [
   '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16',
@@ -70,6 +71,7 @@ export function SettingsPage({ scope = 'project' }: { scope?: SettingsScope }) {
     buildings: s.settingsBuildings,
     sheet: s.contractorSheetLabel,
     tv: 'TV',
+    workspaces: 'Projects',
   };
 
   const projectName = projects.find(p => p.id === currentProjectId)?.name ?? currentProjectId;
@@ -107,6 +109,9 @@ export function SettingsPage({ scope = 'project' }: { scope?: SettingsScope }) {
       )}
       {activeTab === 'contractors' && (
         <ContractorsTab onToast={showToast} />
+      )}
+      {activeTab === 'workspaces' && (
+        <NewWorkspace onToast={showToast} />
       )}
       {activeTab === 'tv' && (
         <TvSettings onToast={showToast} />
