@@ -128,7 +128,10 @@ export function SettingsPage({ scope = 'project' }: { scope?: SettingsScope }) {
         <StageSettings stages={sortedStages} updateStage={updateStage} addStage={addStage} deleteStage={deleteStage} onToast={showToast} currentProjectId={currentProjectId} />
       )}
       {activeTab === 'users' && (
-        <UserSettings users={users} updateUser={updateUser} addUser={addUser} onToast={showToast} />
+        <>
+          <UserSettings users={users} updateUser={updateUser} addUser={addUser} onToast={showToast} />
+          <BoardAccess onToast={showToast} />
+        </>
       )}
       {activeTab === 'contractors' && (
         <ContractorsTab onToast={showToast} />
@@ -2793,6 +2796,116 @@ function WorkspaceLook({ onToast }: { onToast: (msg: string) => void }) {
         value={project.color}
         onChange={c => { setProjectColor(project.id, c); onToast(`${project.shortName} colour updated`); }}
       />
+    </div>
+  );
+}
+
+
+/**
+ * Who can see which board.
+ *
+ * The assumption this settles is a reasonable one to have made: boards were
+ * never per-user. `canvasElements` lives in the workspace's own Firestore
+ * collection, so everyone in a workspace has always shared one surface. A
+ * *named board* is a second surface in the same workspace, and this is where it
+ * is handed to people.
+ *
+ * Nobody named on a board means everybody can see it. Naming people narrows it
+ * to them — and removing the last person hands it back to everybody rather than
+ * stranding it with nobody, which would be a board only the database can reach.
+ */
+function BoardAccess({ onToast }: { onToast: (m: string, t?: 'success' | 'error') => void }) {
+  const {
+    boardViews, updateBoardView, deleteBoardView, users, projects,
+    currentProjectId, canvasElements,
+  } = useStore();
+
+  const views = boardViews.filter(v => v.projectId === currentProjectId);
+  const workspace = projects.find(p => p.id === currentProjectId)?.name ?? 'this workspace';
+
+  function toggle(viewId: string, userId: string) {
+    const v = boardViews.find(x => x.id === viewId);
+    if (!v) return;
+    const next = v.userIds.includes(userId)
+      ? v.userIds.filter(u => u !== userId)
+      : [...v.userIds, userId];
+    updateBoardView(viewId, { userIds: next });
+    onToast(next.length === 0
+      ? `“${v.name}” is now visible to everybody`
+      : `“${v.name}” is shared with ${next.length} ${next.length === 1 ? 'person' : 'people'}`);
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5 mt-5">
+      <h3 className="text-sm font-semibold text-gray-700 mb-1">Boards in {workspace}</h3>
+      <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+        Everybody in a workspace shares its main board. A named board is a second
+        surface here — the same jobs, arranged differently, with its own notes and
+        widgets. Tick the people who should see it; tick nobody and everybody sees it.
+        New boards are made from the picker at the top of the job board.
+      </p>
+
+      {views.length === 0 && (
+        <p className="text-xs text-gray-400 italic">
+          No extra boards yet in {workspace}.
+        </p>
+      )}
+
+      <div className="space-y-3">
+        {views.map(v => {
+          const things = canvasElements.filter(el => el.board === v.id).length;
+          return (
+            <div key={v.id} className="border border-gray-200 rounded-lg p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <input
+                  value={v.name}
+                  onChange={e => updateBoardView(v.id, { name: e.target.value })}
+                  className="font-semibold text-sm text-gray-800 bg-transparent outline-none border-b border-transparent focus:border-gray-300"
+                />
+                <span className="text-[11px] text-gray-400">
+                  {things} {things === 1 ? 'thing' : 'things'} on it · made by {v.createdBy}
+                </span>
+                <span className="flex-1" />
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                  style={v.userIds.length === 0
+                    ? { backgroundColor: '#dcfce7', color: '#15803d' }
+                    : { backgroundColor: '#e0f2fe', color: '#0369a1' }}>
+                  {v.userIds.length === 0 ? 'Everybody'
+                    : `${v.userIds.length} ${v.userIds.length === 1 ? 'person' : 'people'}`}
+                </span>
+                <button
+                  onClick={() => {
+                    if (window.confirm(
+                      `Remove the board “${v.name}”?\n\n` +
+                      'Whatever is on it comes back out onto the main board — nothing is destroyed.',
+                    )) {
+                      deleteBoardView(v.id);
+                      onToast(`“${v.name}” removed — its contents are on the main board`);
+                    }
+                  }}
+                  className="text-[11px] font-semibold text-gray-400 hover:text-red-600">
+                  Remove
+                </button>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5">
+                {users.filter(u => u.active).map(u => {
+                  const on = v.userIds.includes(u.id);
+                  return (
+                    <button key={u.id} onClick={() => toggle(v.id, u.id)}
+                      className="px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors"
+                      style={on
+                        ? { backgroundColor: '#1e3a5f', color: '#fff', borderColor: '#1e3a5f' }
+                        : { backgroundColor: '#fff', color: '#64748b', borderColor: '#e2e8f0' }}>
+                      {u.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

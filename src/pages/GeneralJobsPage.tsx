@@ -20,6 +20,7 @@ import { MiniMap } from '../components/board/MiniMap';
 import { BinBoard } from '../components/board/BinBoard';
 import { BoardSearch, BoardHit } from '../components/board/BoardSearch';
 import { NodeSettings } from '../components/board/NodeSettings';
+import { BoardViewPicker } from '../components/board/BoardViewPicker';
 import { StageBoard } from '../components/board/StageBoard';
 import { WidgetStore } from '../components/board/WidgetStore';
 import { TitleEditor } from '../components/board/TitleEditor';
@@ -172,7 +173,7 @@ export function GeneralJobsPage() {
     addApartment,
     deleteApartment,
     updateApartment,
-    canvasElements,
+    canvasElements, activeBoardView,
     addCanvasElement,
     updateCanvasElement,
     deleteCanvasElement,
@@ -320,8 +321,10 @@ export function GeneralJobsPage() {
   /**
    * Set below the redirect guard, where `freeSpot` can see the jobs and
    * elements. A ref rather than a dependency so `dropNode` stays stable.
+   * The active board id rides along the same way, for the same reason.
    */
   const freeSpotRef = useRef<(w: number, h: number) => { x: number; y: number }>(() => ({ x: 40, y: 40 }));
+  const boardRef = useRef<string>('');
 
   /** Centre of the current view, in world coordinates — where new nodes land. */
   const viewCentre = useCallback(() => {
@@ -347,6 +350,8 @@ export function GeneralJobsPage() {
     addCanvasElement({
       id: 'CE-' + Math.random().toString(36).slice(2, 9),
       type: kind,
+      // Whichever board is open is the board it lands on.
+      ...(boardRef.current ? { board: boardRef.current } : {}),
       x: Math.round(c.x),
       y: Math.round(c.y),
       w: size.w, h: size.h,
@@ -398,6 +403,7 @@ export function GeneralJobsPage() {
   }
 
   freeSpotRef.current = freeSpot;
+  boardRef.current = activeBoardView;
 
   /** Drops a widget from the store, seeded with its own default state. */
   function placeWidget(def: WidgetDef) {
@@ -437,6 +443,8 @@ export function GeneralJobsPage() {
       ...(isArt
         ? { type: 'clipart' as const, art: def.id.slice(4) as ArtKind }
         : { type: 'widget' as const, widget: def.id }),
+      // Whatever board is open is the board it lands on.
+      ...(activeBoardView ? { board: activeBoardView } : {}),
       x: Math.round(at.x),
       y: Math.round(at.y),
       w: def.w, h: def.h,
@@ -611,11 +619,31 @@ export function GeneralJobsPage() {
   // not on the main board. Nothing is deleted — they are only moved.
   const jobs = apartments.filter(a => !a.isUnnamed && a.buildingId === 'G' && !a.boardBin);
 
+  /**
+   * A node belongs to exactly one surface.
+   *
+   * `board` is empty for the workspace's main board, a bin key for something
+   * filed inside a group, and a view id for a named board. Everything that
+   * draws, searches, exports or measures the board reads through this, so a
+   * second board cannot leak its notes onto the first.
+   */
+  const onThisBoard = useMemo(
+    () => canvasElements.filter(el => (el.board ?? '') === activeBoardView || el.type === 'bin'),
+    [canvasElements, activeBoardView],
+  );
+
   // ── Position helpers ──────────────────────────────────────────────
   function jobPos(job: Apartment, index: number): { x: number; y: number } {
     if (drag?.kind === 'job' && drag.ids.includes(job.id)) {
       const s = drag.starts.get(job.id)!;
       return { x: s.x + drag.dx, y: s.y + drag.dy };
+    }
+    // A job sits in a different place on each board. The main board keeps using
+    // canvasX/canvasY, so nothing that already exists moves.
+    if (activeBoardView) {
+      const p = job.viewPos?.[activeBoardView];
+      if (p) return p;
+      return defaultPos(index);
     }
     if (typeof job.canvasX === 'number' && typeof job.canvasY === 'number') return { x: job.canvasX, y: job.canvasY };
     return defaultPos(index);
@@ -1339,7 +1367,16 @@ export function GeneralJobsPage() {
       } else if (currentUser) {
         drag.ids.forEach(id => {
           const st = drag.starts.get(id)!;
-          updateApartment(id, { canvasX: Math.max(0, Math.round(st.x + drag.dx)), canvasY: Math.max(0, Math.round(st.y + drag.dy)) }, currentUser);
+          const x = Math.max(0, Math.round(st.x + drag.dx));
+          const y = Math.max(0, Math.round(st.y + drag.dy));
+          if (activeBoardView) {
+            const job = apartments.find(a => a.id === id);
+            updateApartment(id, {
+              viewPos: { ...(job?.viewPos ?? {}), [activeBoardView]: { x, y } },
+            }, currentUser);
+          } else {
+            updateApartment(id, { canvasX: x, canvasY: y }, currentUser);
+          }
         });
       }
     } else if (drag.ids.length === 1 && drag.ids[0] === job.id) {
@@ -2008,6 +2045,10 @@ export function GeneralJobsPage() {
               className="px-2.5 h-9 text-[11px] font-bold text-gray-500 hover:bg-gray-50">Fit</button>
           </div>
 
+          {/* Which board — between the zoom and the Board/Stages toggle. */}
+          <BoardViewPicker />
+          <div className="w-px h-6 bg-gray-200" />
+
           {/* The same jobs, read two ways. Positions are kept either way, so
               switching back to the board restores the arrangement exactly. */}
           <div className="flex items-center rounded-xl border border-gray-200 overflow-hidden">
@@ -2327,8 +2368,8 @@ export function GeneralJobsPage() {
               <ArrowDraft from={hostBoxes.get(arrowFrom) ?? null} to={arrowTip} />
             )}
 
-            {canvasElements.map(el => {
-              if (el.board) return null;        // it lives inside a group
+            {onThisBoard.map(el => {
+              if (el.board && el.board !== activeBoardView) return null;   // filed in a group
               if (el.type === 'stroke') return null;
               if (el.type === 'arrow') return null;          // its own layer
               if (el.attachedTo) return null;                // drawn on its host

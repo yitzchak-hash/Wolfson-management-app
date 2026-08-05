@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BoardSetting, BoardSettingKey, BoardLayout, PlanPin, PlanAnnotation } from '../types';
+import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BoardSetting, BoardSettingKey, BoardLayout, PlanPin, PlanAnnotation, BoardView } from '../types';
 
 // Always merge stored mainUiStrings ON TOP of the fresh preset so code-added keys
 // are never missing even when localStorage has an older saved version.
@@ -352,6 +352,20 @@ interface AppState {
   addPlanPin: (pin: PlanPin) => void;
   updatePlanPin: (id: string, changes: Partial<PlanPin>) => void;
   deletePlanPin: (id: string) => void;
+
+  /**
+   * Named boards inside each workspace, and which one is showing.
+   *
+   * Global, like every other settings-shaped thing, so a board shared with
+   * somebody appears in their picker on their own machine.
+   */
+  boardViews: BoardView[];
+  addBoardView: (v: BoardView) => void;
+  updateBoardView: (id: string, changes: Partial<BoardView>) => void;
+  deleteBoardView: (id: string) => void;
+  /** '' is the workspace's original board. */
+  activeBoardView: string;
+  setActiveBoardView: (id: string) => void;
 
   /** Saved markup versions of engineering plans. */
   planAnnotations: PlanAnnotation[];
@@ -901,6 +915,56 @@ export const useStore = create<AppState>((set, get) => ({
     linkedStageNotes.forEach(n => fsDelete(projectCollection(pid, 'stageNotes'), n.id));
   },
 
+  boardViews: (stored?.boardViews as BoardView[] | null) ?? [],
+  addBoardView: (v) => {
+    set(state => ({ boardViews: [...state.boardViews, v] }));
+    fsSet('settings', 'app', { boardViews: get().boardViews });
+    persist(get);
+  },
+  updateBoardView: (id, changes) => {
+    set(state => ({ boardViews: state.boardViews.map(v => v.id === id ? { ...v, ...changes } : v) }));
+    fsSet('settings', 'app', { boardViews: get().boardViews });
+    persist(get);
+  },
+  deleteBoardView: (id) => {
+    /**
+     * Removing a board must not remove what is on it.
+     *
+     * Its notes, widgets and groups come back out onto the workspace's main
+     * board rather than vanishing with the container — the same rule a group
+     * follows when it is deleted. The jobs were never on it exclusively; only
+     * their positions were, and those are simply forgotten.
+     */
+    set(state => ({
+      boardViews: state.boardViews.filter(v => v.id !== id),
+      canvasElements: state.canvasElements.map(el =>
+        el.board === id ? { ...el, board: undefined } : el),
+      activeBoardView: state.activeBoardView === id ? '' : state.activeBoardView,
+    }));
+    const pid = get().currentProjectId;
+    get().canvasElements
+      .filter(el => el.board === undefined)
+      .forEach(el => fsSet(projectCollection(pid, 'canvasElements'), el.id, el));
+    fsSet('settings', 'app', { boardViews: get().boardViews });
+    persist(get);
+  },
+
+  /**
+   * Which board is showing — on THIS machine, deliberately.
+   *
+   * Somebody choosing to look at the installation board should not move
+   * everybody else's screen, so it is a local preference rather than shared
+   * state. It is remembered per workspace so switching back returns you to the
+   * board you were on.
+   */
+  activeBoardView: (() => {
+    try { return localStorage.getItem('active_board_view') ?? ''; } catch { return ''; }
+  })(),
+  setActiveBoardView: (id) => {
+    try { localStorage.setItem('active_board_view', id); } catch { /* private mode */ }
+    set({ activeBoardView: id });
+  },
+
   planAnnotations: (stored?.planAnnotations as PlanAnnotation[] | null) ?? [],
   savePlanAnnotation: (ann) => {
     set(state => ({
@@ -1378,6 +1442,7 @@ export const useStore = create<AppState>((set, get) => ({
       boardLayouts: state.boardLayouts,
       planPins: state.planPins,
       planAnnotations: state.planAnnotations,
+      boardViews: state.boardViews,
       dashboardWidgetOrder: state.dashboardWidgetOrder,
       dashboardHiddenWidgets: state.dashboardHiddenWidgets,
       // The importer has always READ these two from the top level; the exporter
@@ -1428,6 +1493,7 @@ export const useStore = create<AppState>((set, get) => ({
         boardLayouts: data.boardLayouts ?? state.boardLayouts,
         planPins: data.planPins ?? state.planPins,
         planAnnotations: data.planAnnotations ?? state.planAnnotations,
+        boardViews: data.boardViews ?? state.boardViews,
         projectColors: data.projectColors ?? state.projectColors,
         backupLogs: data.backupLogs ?? state.backupLogs,
         ...(data.customProjects ? {
@@ -1803,6 +1869,7 @@ export const useStore = create<AppState>((set, get) => ({
         ...(appSettings.autoBackup           !== undefined ? { autoBackup: appSettings.autoBackup as boolean } : {}),
         ...(appSettings.mainUiStrings        ? { mainUiStrings: mergeFreshMainUi(appSettings.mainUiStrings as Partial<MainUiStrings>) } : {}),
         ...(appSettings.contractorSheetLinks ? { contractorSheetLinks: appSettings.contractorSheetLinks as Record<string, string> } : {}),
+        ...(appSettings.boardViews ? { boardViews: appSettings.boardViews as BoardView[] } : {}),
         ...(appSettings.boardSettings ? { boardSettings: appSettings.boardSettings as Record<string, BoardSetting> } : {}),
         ...(appSettings.customProjects ? {
           customProjects: appSettings.customProjects as Project[],
@@ -1983,6 +2050,7 @@ export const useStore = create<AppState>((set, get) => ({
           ...(appS.mainUiStrings        ? { mainUiStrings: mergeFreshMainUi(appS.mainUiStrings as Partial<MainUiStrings>) } : {}),
           ...(appS.contractorSheetLinks ? { contractorSheetLinks: appS.contractorSheetLinks as Record<string, string> } : {}),
           ...(appS.boardSettings ? { boardSettings: appS.boardSettings as Record<string, BoardSetting> } : {}),
+          ...(appS.boardViews ? { boardViews: appS.boardViews as BoardView[] } : {}),
           ...(appS.customProjects ? {
             customProjects: appS.customProjects as Project[],
             projects: [...DEFAULT_PROJECTS, ...(appS.customProjects as Project[])],
@@ -2112,6 +2180,7 @@ function persistNow(get: () => AppState) {
     boardLayouts: state.boardLayouts,
     planPins: state.planPins,
     planAnnotations: state.planAnnotations,
+    boardViews: state.boardViews,
     projectColors: state.projectColors,
     customProjects: state.customProjects,
   };

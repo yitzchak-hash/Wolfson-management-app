@@ -105,6 +105,42 @@ export interface User {
   createdAt: string;
 }
 
+/**
+ * A named board inside a workspace.
+ *
+ * Worth being precise about what this is, because the assumption it corrects is
+ * a natural one: boards were never per-user. `canvasElements` lives in the
+ * project's own Firestore collection, so everybody in a workspace has always
+ * been looking at the same surface — there was exactly one board per workspace
+ * and no way to have a second.
+ *
+ * A view is a second surface in the same workspace: its own notes, widgets,
+ * groups and arrangement of the same jobs. Jobs are NOT copied — one job, laid
+ * out differently on each board, which is the point. `Apartment.viewPos` holds
+ * where it sits on each.
+ *
+ * `userIds` empty means everybody sees it. Naming users narrows it to them —
+ * a secretary's own board, until she shares it.
+ */
+export interface BoardView {
+  id: string;                    // 'V-…'
+  projectId: string;
+  name: string;
+  color?: string;
+  /** Empty = everyone in this workspace. */
+  userIds: string[];
+  createdAt: string;
+  createdBy: string;
+}
+
+/** The workspace's original board, which has no record of its own. */
+export const MAIN_BOARD = '';
+
+export function boardsForUser(views: BoardView[], projectId: string, userId: string, isAdmin: boolean) {
+  return views.filter(v => v.projectId === projectId
+    && (isAdmin || v.userIds.length === 0 || v.userIds.includes(userId)));
+}
+
 export interface Building {
   id: BuildingId;
   name: string;
@@ -265,6 +301,11 @@ export interface Apartment {
   plansPdfLink?: string; // Google Drive link to the Engineering Plans PDF
   zohoLink?: string;   // General Jobs: Zoho CRM / work order link
   address?: string;    // General Jobs: job site address
+  /**
+   * Where the job sits on each NAMED board, keyed by view id. The main board
+   * keeps using canvasX/canvasY, so nothing that exists today moves.
+   */
+  viewPos?: Record<string, { x: number; y: number }>;
   canvasX?: number;    // General Jobs: free-canvas X position (px)
   canvasY?: number;    // General Jobs: free-canvas Y position (px)
   tileColor?: string;  // General Jobs: custom background color for the tile
