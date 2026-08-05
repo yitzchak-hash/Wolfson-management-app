@@ -60,6 +60,8 @@ export function isBuiltInBin(el: { binKind?: BinKind }): boolean {
  * they move, resize and sync exactly like every other node.
  */
 export interface BoardSetting {
+  /** What is on the toolbar and in what order. */
+  toolbar?: ToolbarSetup;
   themeId?: string;
   snapToGrid?: boolean;
   showControls?: boolean;
@@ -88,6 +90,26 @@ export type BoardSettingKey = keyof BoardSetting;
  * where they were and cannot resurrect a deleted job or undo an edit, which is
  * exactly the guarantee that makes it safe to press.
  */
+/**
+ * What sits on the board's toolbar, and in what order.
+ *
+ * The rail was a fixed list in code, so an office that never draws still had a
+ * pen and a highlighter taking up two of its slots, and a widget somebody
+ * places twenty times a day was three clicks away in the store. This is the
+ * order, plus any widgets promoted onto the rail.
+ *
+ * Stored per workspace inside `boardSettings`, because a job board and a
+ * building project want different things to hand.
+ */
+export interface ToolbarSetup {
+  /** Built-in tool ids, in order. Absent = the shipped order. */
+  tools?: string[];
+  /** Tool ids that have been switched off. */
+  hidden?: string[];
+  /** Widget ids promoted onto the rail from the store. */
+  widgets?: string[];
+}
+
 export interface BoardLayout {
   id: string;
   at: string;

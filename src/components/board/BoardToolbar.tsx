@@ -1,8 +1,10 @@
 import React, { useRef, useState } from 'react';
+import { ToolbarSetup } from '../../types';
+import { WIDGET_BY_ID } from '../../data/widgets';
 import {
   MousePointer2, Hand, Plus, StickyNote, Square, Type, Pen, Highlighter,
   Palette, Maximize, Settings, Timer, Clock, Keyboard, GripVertical, Mic, Image,
-  Map, LayoutGrid, X,
+  Map as MapIcon, LayoutGrid, X,
 } from 'lucide-react';
 
 export type BoardTool =
@@ -27,6 +29,11 @@ interface ToolDef { id: BoardTool; icon: React.ElementType; label: string; tip: 
  * there. What is left is the handful of gestures — select, pan, draw — plus the
  * three raw board pieces that are not widgets (job, note, box, title).
  */
+export const TOOL_LABELS: Record<string, string> = {
+  select: 'Select', pan: 'Pan', job: 'Job', note: 'Note', box: 'Box', title: 'Title',
+  pen: 'Pen', highlighter: 'Mark', voice: 'Voice', export: 'Save',
+};
+
 const TOOLS: ToolDef[][] = [
   [
     { id: 'select', icon: MousePointer2, label: 'Select', tip: 'Select' },
@@ -50,7 +57,7 @@ const TOOLS: ToolDef[][] = [
 
 export function BoardToolbar({
   active, onPick, onFit, onToggleSettings, onToggleControls, controlsOpen,
-  onOpenStore, onToggleMap, mapOn, onPenOptions,
+  onOpenStore, onToggleMap, mapOn, onPenOptions, setup, onPickWidget,
 }: {
   active: BoardTool;
   onPick: (t: BoardTool) => void;
@@ -62,6 +69,10 @@ export function BoardToolbar({
   onToggleMap: () => void;
   mapOn: boolean;
   onPenOptions: (tool: 'pen' | 'highlighter', x: number, y: number) => void;
+  /** What is on the rail, from this workspace's settings. */
+  setup?: ToolbarSetup;
+  /** A widget promoted onto the rail, placed straight from it. */
+  onPickWidget?: (widgetId: string) => void;
 }) {
   // Offset from the default right-edge dock, so the toolbar can be moved anywhere
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -105,6 +116,29 @@ export function BoardToolbar({
   }
   function onSizeUp() { sizeRef.current = null; }
 
+  /**
+   * The rail, after the workspace's own choices.
+   *
+   * Order and hiding are applied here rather than baked into TOOLS, so the
+   * shipped arrangement stays the fallback for any workspace that has not
+   * touched it.
+   */
+  const shownGroups = React.useMemo(() => {
+    const hidden = new Set(setup?.hidden ?? []);
+    const order = setup?.tools;
+    const groups = TOOLS.map(g => g.filter(t => !hidden.has(t.id))).filter(g => g.length);
+    if (!order?.length) return groups;
+    // `Map` is a lucide icon in this file's imports, so the global is aliased.
+    const byId = new globalThis.Map<string, ToolDef>(TOOLS.flat().map(t => [t.id as string, t]));
+    const picked = order.map(id => byId.get(id)).filter((t): t is ToolDef => !!t && !hidden.has(t.id));
+    const rest = TOOLS.flat().filter(t => !order.includes(t.id) && !hidden.has(t.id));
+    return [picked, rest].filter(g => g.length);
+  }, [setup?.tools, setup?.hidden]);
+
+  const railWidgets = (setup?.widgets ?? [])
+    .map(id => WIDGET_BY_ID.get(id))
+    .filter((w): w is NonNullable<typeof w> => !!w);
+
   const buttons = (
     <>
         {/* Drag grip */}
@@ -119,7 +153,7 @@ export function BoardToolbar({
           <GripVertical size={13} />
         </div>
 
-        {TOOLS.map((group, gi) => (
+        {shownGroups.map((group, gi) => (
           <React.Fragment key={gi}>
             {gi > 0 && <div className="col-span-2 w-16 h-px bg-gray-200 my-1 justify-self-center" />}
             {group.map(({ id, icon: Icon, label, tip }) => (
@@ -144,6 +178,22 @@ export function BoardToolbar({
           </React.Fragment>
         ))}
 
+        {railWidgets.length > 0 && (
+          <>
+            <div className="col-span-2 w-16 h-px bg-gray-200 my-1 justify-self-center" />
+            {railWidgets.map(w => {
+              const WIcon = w.icon;
+              return (
+                <button key={w.id} onClick={() => onPickWidget?.(w.id)} title={`${w.name} — ${w.blurb}`}
+                  className="w-full flex flex-col items-center gap-0.5 py-1.5 rounded-lg text-gray-500 hover:bg-gray-50">
+                  <WIcon size={17} />
+                  <span className="text-[8.5px] font-bold leading-none truncate max-w-[52px]">{w.name}</span>
+                </button>
+              );
+            })}
+          </>
+        )}
+
         <div className="col-span-2 w-16 h-px bg-gray-200 my-1 justify-self-center" />
 
         <button onClick={onOpenStore} title="Widget store"
@@ -153,7 +203,7 @@ export function BoardToolbar({
         <button onClick={onToggleMap} title="Board overview"
           className="w-full flex flex-col items-center gap-0.5 py-1.5 rounded-lg transition-colors"
           style={mapOn ? { backgroundColor: '#1e3a5f', color: '#fff' } : { color: '#64748b' }}>
-          <Map size={17} /><span className="text-[8.5px] font-bold leading-none">Map</span>
+          <MapIcon size={17} /><span className="text-[8.5px] font-bold leading-none">Map</span>
         </button>
         <button onClick={onFit} title="Zoom to fit"
           className="w-full flex flex-col items-center gap-0.5 py-1.5 rounded-lg text-gray-500 hover:bg-gray-50">

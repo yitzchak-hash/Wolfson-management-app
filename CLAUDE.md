@@ -733,3 +733,78 @@ Deliberately excluded from a backup, and why: `currentUser` / `currentProjectId`
 them would be wrong), `backupSnapshots` (in-session restore points — the export *is* the backup).
 
 **Add a state key → add it to persist + export (top level) + import, then re-run the audit.**
+
+---
+
+# v2 — board settings, named boards, editor rebuild
+
+## The two bugs that made half the board feel fake
+1. **`WidgetCtx.update` was `() => {}`** on the main board AND in bin boards. The
+   signature takes a patch with no element id, so one shared context cannot know
+   which node to write to — it had been stubbed to keep the context stable for
+   memoisation. Every interactive widget silently discarded every edit.
+   **`BoardNode` binds it per element** (`boundCtx`), which keeps memoisation and
+   needed no change to any widget's render function. Never un-bind it.
+2. **The pencil called `startEdit`**, which only sets `editingEl` — and the
+   `isWidget ? renderWidget(...)` branch wins the ternary before `isEditing` is
+   reached, so the button did nothing on all 47 widgets, every bin, countdowns
+   and voice memos. The pencil is now `H.elSettings` → `NodeSettings`.
+
+## NodeSettings + widgetFields
+`src/data/widgetFields.ts` declares, per widget id, what can be configured
+(`WIDGET_FIELDS`), what the store preview should show (`WIDGET_PREVIEW`,
+`WIDGET_PREVIEW_COLOR`) and the shared type controls (`TEXT_STYLE_FIELDS`).
+`NodeSettings.tsx` renders a form from that. **Add a widget → add its fields
+here**, or its pencil opens an empty panel.
+
+`WidgetDef.data` is the seed a NEWLY PLACED widget starts with and must stay
+empty; `WIDGET_PREVIEW` is what the store draws. Reusing `data` for previews is
+what made half the shelf blank.
+
+## Clip art attachment
+`attachAnchor` (`tl|tm|tr|bl|br`) + `attachScale` (a fraction of the host's
+WIDTH). Position and size are both DERIVED in `attachBox()` — that is what makes
+art resize when its host does. `AnchorHints` shows the five landing spots during
+a drag. The hit box is the art itself; a halo blocks the tile underneath.
+Legacy `attachAt` is read through `anchorOf()` and never written.
+
+## Bins
+`binKeyOf(bin)`, never `bin.binKind` — a custom group has no `binKind` and both
+drop handlers used to refuse it. A bin may carry `stageId`: filing a job there
+also sets its stage. `BinBoard` draws with the main board's `BoardNode`, so a
+group cannot drift from the board again.
+
+## Named boards (`BoardView`)
+Boards were never per-user — `canvasElements` is a project collection, so a
+workspace had exactly one board. A `BoardView` is a second surface in the same
+workspace: nodes carry `board: viewId`, jobs carry `viewPos[viewId]`, and the
+main board stays `board: undefined` + `canvasX/canvasY` so nothing existing
+moves. `boardViews` lives in `settings/app`; `activeBoardView` is LOCAL
+(localStorage) so switching does not move everybody's screen. Deleting a view
+returns its nodes to the main board.
+
+## Toolbar
+`BoardSetting.toolbar: ToolbarSetup` — order, hidden ids, and widget ids
+promoted onto the rail. Edited in project settings. The rail is two columns so
+it stops reaching into the minimap.
+
+## Plan editor
+- Company navy/accent, `.ink-slider` / `.ink-hue` in `index.css`, and
+  `InkPicker.tsx` (in-app HSV picker with KEPT colours) — never the OS dialog.
+- Tools: move, pen, pencil, marker, highlighter, **eraser directly under it**,
+  line, arrow, box, circle, bubble, text, pan. The hand tool is "Pan"; "Move"
+  is the tool that picks marks up.
+- `hits()` tests each mark AS ITS SHAPE. The old eraser only compared stored
+  points, so a line or box could only be erased at its corners.
+- The arrow's shaft stops at the head's base — on screen and in
+  `api/plan-annotate.js`, from one geometry. Change one, change both.
+- Ctrl/⌘+wheel is registered with `{ passive: false }` or the browser zooms.
+- Escape backs out one panel at a time. Nothing ever prompts save-or-discard.
+- Saving files into **Annotated Plans INSIDE the Engineered Plans folder**,
+  named "annotated version N — date time — who", with the author in the PDF
+  metadata and the OCG layer name.
+- The chip row and the editor's Plans list read `findPlanSetViaBackend`: the
+  plans folder's own PDFs plus its Annotated Plans child, and **no other
+  subfolder**.
+- The TV can mark up a plan and only that; `askWho` locks it until somebody
+  picks a name.

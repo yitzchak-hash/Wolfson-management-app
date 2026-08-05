@@ -23,6 +23,7 @@ import { NodeSettings } from '../components/board/NodeSettings';
 import { BoardViewPicker } from '../components/board/BoardViewPicker';
 import { StageBoard } from '../components/board/StageBoard';
 import { WidgetStore } from '../components/board/WidgetStore';
+import { WIDGETS } from '../data/widgets';
 import { TitleEditor } from '../components/board/TitleEditor';
 import {
   AttachedArtLayer, ArrowLayer, ArrowDraft, AnchorHints, HostBox, Anchor,
@@ -2109,6 +2110,8 @@ export function GeneralJobsPage() {
         onPointerCancel={onViewportPointerUp}
       >
         <BoardToolbar
+          setup={projectBoard.toolbar}
+          onPickWidget={id => { const d = WIDGETS.find(w => w.id === id); if (d) placeWidget(d); }}
           active={tool}
           onPick={handleToolPick}
           onFit={zoomToFit}

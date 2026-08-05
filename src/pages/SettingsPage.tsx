@@ -11,6 +11,7 @@ import { Tooltip } from '../components/ui/Tooltip';
 import { Toast } from '../components/ui/Toast';
 import { BoardRegionPicker } from '../components/board/BoardRegionPicker';
 import { NewWorkspace } from '../components/settings/NewWorkspace';
+import { ToolbarEditor } from '../components/settings/ToolbarEditor';
 import { format } from 'date-fns';
 import { saveAs } from 'file-saver';
 import { extractFolderId, isUploadBackendConfigured, getFolderNameViaBackend, familyNameFromFolderName } from '../data/driveApi';
@@ -123,6 +124,9 @@ export function SettingsPage({ scope = 'project' }: { scope?: SettingsScope }) {
 
       {scope === 'project' && (
         <WorkspaceLook onToast={showToast} />
+      )}
+      {activeTab === 'stages' && scope === 'project' && (
+        <div className="mb-5"><ToolbarEditor onToast={showToast} /></div>
       )}
       {activeTab === 'stages' && (
         <StageSettings stages={sortedStages} updateStage={updateStage} addStage={addStage} deleteStage={deleteStage} onToast={showToast} currentProjectId={currentProjectId} />
