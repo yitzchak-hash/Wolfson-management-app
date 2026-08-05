@@ -102,7 +102,8 @@ export function ProjectCalendarPage() {
         </span>
       </div>
 
-      <TaskCalendar events={events} todayLabel={s.today} />
+      <TaskCalendar events={events} todayLabel={s.today} rtl={!!s.isRtl}
+        printTitle={projectName} />
     </div>
   );
 }

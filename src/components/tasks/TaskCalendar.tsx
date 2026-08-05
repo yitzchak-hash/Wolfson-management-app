@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Printer } from 'lucide-react';
 import {
   startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   addMonths, subMonths, eachDayOfInterval, format, isSameMonth, isSameDay, parseISO,
 } from 'date-fns';
 import { DriveIcon, ZohoIcon, PlanIcon } from '../ui/BrandIcons';
+import { printSheet, printEsc } from '../../data/printing';
 
 export interface CalendarEvent {
   id: string;
@@ -38,10 +39,15 @@ export function TaskCalendar({
   events,
   weekdayLabels = WEEKDAYS,
   todayLabel = 'Today',
+  printTitle = 'Calendar',
+  rtl = false,
 }: {
   events: CalendarEvent[];
   weekdayLabels?: string[];
   todayLabel?: string;
+  /** Names the printed sheet — "Tasks — Wolfson", "All workspaces", and so on. */
+  printTitle?: string;
+  rtl?: boolean;
 }) {
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
 
@@ -64,6 +70,59 @@ export function TaskCalendar({
 
   const today = new Date();
 
+  /**
+   * Print the month as a real month grid.
+   *
+   * A wall planner, not a list: the point of a calendar on paper is seeing the
+   * shape of the week at a glance, and a table of dates loses exactly that.
+   */
+  function printMonth() {
+    const e = printEsc;
+    const rows: string[] = [];
+    for (let i = 0; i < days.length; i += 7) {
+      rows.push(`<tr>${days.slice(i, i + 7).map(day => {
+        const key = format(day, 'yyyy-MM-dd');
+        const evs = eventsByDay.get(key) ?? [];
+        const dim = !isSameMonth(day, month);
+        return `<td class="cal ${dim ? 'dim' : ''}">
+          <div class="d">${format(day, 'd')}</div>
+          ${evs.map(ev => `<div class="ev${ev.completed ? ' done' : ''}"
+              style="border-inline-start:3px solid ${e(ev.color)}">
+            ${e(ev.title)}${ev.subtitle ? `<span class="s">${e(ev.subtitle)}</span>` : ''}
+          </div>`).join('')}
+        </td>`;
+      }).join('')}</tr>`);
+    }
+
+    const inMonthCount = events.filter(ev =>
+      ev.date && isSameMonth(parseISO(ev.date.slice(0, 10)), month)).length;
+
+    printSheet(
+      `${printTitle} — ${format(month, 'MMMM yyyy')}`,
+      `<table class="calgrid">
+        <thead><tr>${weekdayLabels.map(d => `<th>${e(d)}</th>`).join('')}</tr></thead>
+        <tbody>${rows.join('')}</tbody>
+      </table>`,
+      {
+        landscape: true,
+        rtl,
+        subtitle: `${inMonthCount} item${inMonthCount === 1 ? '' : 's'} this month`,
+        css: `
+          .calgrid { table-layout:fixed; }
+          .calgrid th { text-align:center; }
+          td.cal { height:104px; vertical-align:top; border:1px solid #e5e7eb; padding:3px 4px; }
+          td.cal.dim { background:#fafafa; }
+          td.cal.dim .d { color:#d1d5db; }
+          .d { font-size:10px; font-weight:800; color:#6b7280; margin-bottom:2px; }
+          .ev { font-size:8.5px; line-height:1.25; padding:1px 3px; margin-bottom:2px;
+                background:#f8fafc; border-radius:2px; overflow:hidden; }
+          .ev.done { text-decoration:line-through; color:#9ca3af; }
+          .ev .s { display:block; color:#9ca3af; font-size:7.5px; }
+        `,
+      },
+    );
+  }
+
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
       {/* Month navigation */}
@@ -81,6 +140,13 @@ export function TaskCalendar({
             className="text-xs px-2 py-1 rounded-lg border border-gray-200 text-gray-500 hover:border-[#1e3a5f] hover:text-[#1e3a5f] transition-colors"
           >
             {todayLabel}
+          </button>
+          <button
+            onClick={printMonth}
+            title="Print this month"
+            className="p-1 rounded-lg border border-gray-200 text-gray-400 hover:border-[#1e3a5f] hover:text-[#1e3a5f] transition-colors"
+          >
+            <Printer size={13} />
           </button>
         </div>
         <button

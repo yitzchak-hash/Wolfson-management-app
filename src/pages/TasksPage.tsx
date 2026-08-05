@@ -3,12 +3,13 @@ import { useStore } from '../data/store';
 import { contractorLoad } from '../data/contractorLoad';
 import {
   Plus, Trash2, Save, Edit2, X, CheckCircle2, Clock, Paperclip, ExternalLink, Layers, Filter,
-  List, CalendarDays,
+  List, CalendarDays, Printer,
 } from 'lucide-react';
 import { BulkAddTaskModal } from '../components/apartment/BulkAddTaskModal';
 import { TaskCalendar, CalendarEvent } from '../components/tasks/TaskCalendar';
 import { ContractorAssignment, ContractorCategory, TaskAttachment, TaskPriority, getStageName, aptLabel, isCountableApartment } from '../types';
 import { Toast } from '../components/ui/Toast';
+import { printTable, printDot, printPill } from '../data/printing';
 import { Tooltip } from '../components/ui/Tooltip';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import {
@@ -25,8 +26,9 @@ export function TasksPage() {
   const {
     contractors, contractorAssignments, apartments, stages, buildings,
     addContractorAssignment, updateContractorAssignment, deleteContractorAssignment,
-    updateApartment, currentUser, mainUiStrings: s, currentProjectId,
+    updateApartment, currentUser, mainUiStrings: s, currentProjectId, projects,
   } = useStore();
+  const projectName = projects.find(p => p.id === currentProjectId)?.name ?? 'Workspace';
 
   const PRIORITY_CONFIG: Record<TaskPriority, { label: string; cls: string; dot: string }> = {
     urgent: { label: s.urgentPriority, cls: 'text-red-600 bg-red-50 border-red-200', dot: 'bg-red-500' },
@@ -335,6 +337,51 @@ export function TasksPage() {
             {filtered.length} task{filtered.length !== 1 ? 's' : ''} · {filtered.filter(a => a.completedAt).length} done
           </span>
 
+          {/* A work list somebody can carry. Prints exactly what the filters
+              are showing, so "print the AC jobs due this week" is two clicks. */}
+          <Tooltip text="Print this list">
+            <button
+              onClick={() => {
+                const ok = printTable(
+                  `Tasks — ${projectName}`,
+                  filtered,
+                  [
+                    { header: 'Job', value: a => {
+                      const apt = apartments.find(x => x.id === a.apartmentId);
+                      return apt ? aptLabel(apt) : '—';
+                    } },
+                    { header: 'Task', value: a => a.taskDescription || '—' },
+                    { header: 'Contractor', value: a => contractors.find(c => c.id === a.contractorId)?.name ?? '—' },
+                    { header: 'Stage', html: true, width: '130px', value: a => {
+                      const st = stages.find(x => x.id === a.stageId);
+                      return st ? printDot(st.color, getStageName(st, !!s.isRtl)) : '—';
+                    } },
+                    { header: 'Due', width: '86px', value: a => a.dueDate ? format(parseISO(a.dueDate), 'd MMM yyyy') : '—' },
+                    { header: 'Priority', html: true, width: '72px', value: a =>
+                      a.priority === 'urgent' ? printPill('#fee2e2', '#b91c1c', 'Urgent')
+                      : a.priority === 'low' ? printPill('#f1f5f9', '#64748b', 'Low')
+                      : printPill('#e0f2fe', '#0369a1', 'Normal') },
+                    { header: 'Status', html: true, width: '72px', value: a =>
+                      a.completedAt ? printPill('#dcfce7', '#15803d', 'Done')
+                      : printPill('#fef3c7', '#a16207', 'Open') },
+                  ],
+                  {
+                    landscape: true,
+                    rtl: !!s.isRtl,
+                    subtitle: `${filtered.length} task${filtered.length === 1 ? '' : 's'} · `
+                      + `${filtered.filter(a => a.completedAt).length} done`
+                      + (filterContractorId ? ` · ${contractors.find(c => c.id === filterContractorId)?.name}` : '')
+                      + (hasAdvancedFilters ? ' · extra filters applied' : ''),
+                  },
+                );
+                if (!ok) setToast({ msg: 'Your browser blocked the print window.', type: 'error' });
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 text-gray-500 rounded-lg text-sm font-medium hover:border-gray-300 hover:text-gray-700 transition-colors"
+            >
+              <Printer size={14} />
+            </button>
+          </Tooltip>
+
           {/* List / Calendar view toggle */}
           <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden">
             <Tooltip text={s.listView}>
@@ -589,6 +636,8 @@ export function TasksPage() {
           <TaskCalendar
             events={calendarEvents}
             todayLabel={s.today}
+            printTitle={`${s.pageTasks} — ${projectName}`}
+            rtl={!!s.isRtl}
           />
         )}
 

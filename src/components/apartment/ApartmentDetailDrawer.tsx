@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3 } from 'lucide-react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import { X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer } from 'lucide-react';
 import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel } from '../../types';
 import { useStore } from '../../data/store';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
@@ -7,7 +7,13 @@ import { StageNotesSection } from './StageNotesSection';
 import { ActivitySection } from './ActivitySection';
 import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, findAllPlansPdfsViaBackend, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, extractFolderId, driveThumbUrl, listAllPhotosViaBackend, getFolderNameViaBackend, familyNameFromFolderName, DrivePhotoItem, DriveFile, FolderHealth, checkFolderHealthViaBackend } from '../../data/driveApi';
 import { Tooltip } from '../ui/Tooltip';
+import { printSheet, printEsc } from '../../data/printing';
 import { PlanPinOverlay } from './PlanPinOverlay';
+// Lazy, deliberately. The markup studio carries pdf.js — about a megabyte of
+// PDF engine — and nobody should pay for that on the login screen. It arrives
+// the moment someone presses "Mark up", and not before.
+const PlanAnnotator = lazy(() =>
+  import('../plans/PlanAnnotator').then(m => ({ default: m.PlanAnnotator })));
 import { ContractorStatusPanel } from './ContractorStatusPanel';
 
 interface Props {
@@ -137,7 +143,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     officeNoteFiles, addOfficeNoteFile, deleteOfficeNoteFile,
     contractorAssignments, contractors, updateContractorAssignment, deleteContractorAssignment,
     deleteApartment, getGeneralNoteVersions, currentProjectId,
-    contractorPhotos, updateContractorPhoto } = useStore();
+    contractorPhotos, updateContractorPhoto, planAnnotations, stageNotes, planPins } = useStore();
   const isGeneralProject = currentProjectId === 'general';
   const backendConfigured = isUploadBackendConfigured();
   const officeFileRef = useRef<HTMLInputElement>(null);
@@ -167,6 +173,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [showContractorStatus, setShowContractorStatus] = useState(false);
   const [unmergeTarget, setUnmergeTarget] = useState<Apartment | null>(null);
   const [showPdfViewer, setShowPdfViewer] = useState(false);
+  /** null = closed, 'draw' = markup studio, 'view' = same studio read-only. */
+  const [annotating, setAnnotating] = useState<null | 'draw' | 'view'>(null);
   const [showHealthCheck, setShowHealthCheck] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [fetchingPdf, setFetchingPdf] = useState(false);
@@ -221,6 +229,16 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
 
   const detectedPdfId = availablePdfs[selectedPdfIdx]?.id ?? null;
 
+  // Saved markup versions of the plan currently selected, so the drawer can
+  // show how many there are and link straight to the newest PDF.
+  const planVersions = detectedPdfId
+    ? planAnnotations
+        .filter(a => a.apartmentId === apartment.id && a.planFileId === detectedPdfId)
+        .sort((a, b) => b.version - a.version)
+    : [];
+  const latestPlanVersion = planVersions[0];
+  const planVersionCount = planVersions.length ? planVersions[0].version : 0;
+
   const sortedStages = [...stages]
     // EXCLUSIVE per project. The old filter was
     //   (!s.projectId || (isGeneral && s.projectId === 'general'))
@@ -230,6 +248,81 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     .sort((a, b) => a.order - b.order);
   const currentStage = stages.find(s => s.id === currentStageId);
   const aptLogs = activityLogs.filter(l => l.apartmentId === apartment.id).slice(0, 20);
+
+  /**
+   * A job sheet somebody can take out of the office.
+   *
+   * Everything a person standing in the apartment needs and nothing they do
+   * not: where it is, what stage it is at, what is outstanding, what the office
+   * has written down, and the links to the Drive folder and the plan. Built as
+   * a document rather than printing the drawer, which would give a screenshot
+   * of a modal.
+   */
+  function printJobSheet() {
+    const e = printEsc;
+    const tasks = contractorAssignments
+      .filter(a => a.apartmentId === apartment!.id)
+      .sort((a, b) => (a.completedAt ? 1 : 0) - (b.completedAt ? 1 : 0)
+        || (a.dueDate ?? "z").localeCompare(b.dueDate ?? "z"));
+    const notes = stageNotes.filter(nt => nt.apartmentId === apartment!.id);
+    const pins = planPins.filter(pn => pn.apartmentId === apartment!.id);
+
+    const row = (k: string, v: string) => v
+      ? `<tr><td style="width:120px;color:#6b7280;font-size:10.5px">${e(k)}</td><td><b>${e(v)}</b></td></tr>`
+      : "";
+
+    const body = `
+      <table style="margin-bottom:14px">
+        ${row(isGeneralProject ? "Job" : "Apartment", isGeneralProject ? (apartment!.displayName || "Job") : aptLabel(apartment!))}
+        ${row("Building", isGeneralProject ? "" : apartment!.buildingId)}
+        ${row("Address", apartment!.address ?? "")}
+        ${row("Stage", currentStage ? getStageName(currentStage, !!ui.isRtl) : "Not started")}
+        ${row("Type", isGeneralProject ? "" : (classification === "shinui" ? ui.chgShort : "Standard"))}
+        ${row("Drive folder", apartment!.driveLink ?? "")}
+        ${row("Plan", apartment!.plansPdfLink ?? "")}
+        ${row("Latest markup", latestPlanVersion?.driveUrl
+          ? `Version ${latestPlanVersion.version} — ${latestPlanVersion.driveUrl}` : "")}
+      </table>
+
+      <h2 style="font-size:13px;margin:14px 0 6px;color:#1e3a5f">Tasks (${tasks.length})</h2>
+      ${tasks.length ? `<table><thead><tr>
+          <th>Task</th><th style="width:110px">Contractor</th>
+          <th style="width:80px">Due</th><th style="width:64px">Status</th></tr></thead><tbody>
+        ${tasks.map(t => `<tr>
+          <td>${e(t.taskDescription || "—")}</td>
+          <td>${e(contractors.find(c => c.id === t.contractorId)?.name ?? "—")}</td>
+          <td>${t.dueDate ? e(format(parseISO(t.dueDate), "d MMM")) : "—"}</td>
+          <td>${t.completedAt ? "Done" : "Open"}</td></tr>`).join("")}
+      </tbody></table>` : `<p class="muted">No tasks.</p>`}
+
+      ${pins.length ? `<h2 style="font-size:13px;margin:14px 0 6px;color:#1e3a5f">Punch list (${pins.filter(pn => !pn.resolvedAt).length} open)</h2>
+        <table><thead><tr><th style="width:26px">#</th><th>Item</th><th style="width:70px">On plan</th><th style="width:56px">Status</th></tr></thead><tbody>
+        ${pins.map((pn, i) => `<tr><td><b>${i + 1}</b></td><td>${e(pn.text || "—")}</td>
+          <td class="muted">${pn.xPct.toFixed(0)}% / ${pn.yPct.toFixed(0)}%</td>
+          <td>${pn.resolvedAt ? "Done" : "Open"}</td></tr>`).join("")}
+      </tbody></table>` : ""}
+
+      ${apartment!.generalNotes ? `<h2 style="font-size:13px;margin:14px 0 6px;color:#1e3a5f">Office notes</h2>
+        <div class="card" style="white-space:pre-wrap">${e(apartment!.generalNotes)}</div>` : ""}
+
+      ${notes.length ? `<h2 style="font-size:13px;margin:14px 0 6px;color:#1e3a5f">Stage notes</h2>
+        ${notes.map(nt => {
+          const st = stages.find(x => x.id === nt.stageId);
+          return `<div class="card"><h3>${e(st ? getStageName(st, !!ui.isRtl) : "Stage")}</h3>
+            <div style="white-space:pre-wrap">${e(nt.noteText || "—")}</div></div>`;
+        }).join("")}` : ""}
+
+      <h2 style="font-size:13px;margin:16px 0 6px;color:#1e3a5f">Notes on site</h2>
+      <div style="border:1px solid #d1d5db;border-radius:8px;height:130px"></div>
+    `;
+
+    printSheet(
+      isGeneralProject ? (apartment!.displayName || "Job sheet") : `${aptLabel(apartment!)} — job sheet`,
+      body,
+      { rtl: !!ui.isRtl, subtitle: apartment!.address || (isGeneralProject ? "" : apartment!.buildingId) },
+    );
+  }
+
   // Connect-unit picker: one entry per apartment NUMBER in this building.
   // Duplicate records (same number, different id) would otherwise flood the list.
   const sameBuildingApts = Array.from(
@@ -647,6 +740,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               </Tooltip>
             )}
                     </div>
+          <Tooltip text="Print a job sheet" side="left">
+            <button onClick={printJobSheet}
+              className="p-1.5 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0">
+              <Printer size={17} />
+            </button>
+          </Tooltip>
           <Tooltip text={ui.cancel} side="left">
             <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0">
               <X size={20} />
@@ -1148,17 +1247,46 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                         </div>
                       )}
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                       <button onClick={() => setShowPdfViewer(v => !v)}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:border-[#1e3a5f] hover:text-[#1e3a5f] transition-all">
                         {showPdfViewer ? <EyeOff size={12} /> : <Eye size={12} />}
                         {showPdfViewer ? ui.hideLabel : ui.fullView}
+                      </button>
+                      {/* Open the plan properly — full screen, at a size you can
+                          actually read, rather than in a 440px box. */}
+                      <button onClick={() => setAnnotating('view')}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:border-[#1e3a5f] hover:text-[#1e3a5f] transition-all">
+                        <Maximize2 size={12} /> View plan
+                      </button>
+                      {/* Mark it up. Saves a new version straight into the job's
+                          "Annotated Plans" folder in Drive, with the markup on
+                          its own PDF layer. */}
+                      <button onClick={() => setAnnotating('draw')}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all"
+                        style={{ backgroundColor: '#4aa8d8' }}>
+                        <PenLine size={12} /> Mark up
+                        {planVersionCount > 0 && (
+                          <span className="px-1.5 rounded-full text-[9px] font-bold"
+                            style={{ backgroundColor: 'rgba(255,255,255,.28)' }}>
+                            v{planVersionCount}
+                          </span>
+                        )}
                       </button>
                       <a href={driveDownloadUrl(detectedPdfId)} target="_blank" rel="noopener noreferrer"
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:border-[#4aa8d8] hover:text-[#4aa8d8] transition-all">
                         <Download size={12} /> {ui.download}
                       </a>
                     </div>
+                    {latestPlanVersion?.driveUrl && (
+                      <a href={latestPlanVersion.driveUrl} target="_blank" rel="noopener noreferrer"
+                        className="mt-2 flex items-center gap-1.5 text-[11px] text-gray-500 hover:text-[#4aa8d8]">
+                        <ExternalLink size={10} />
+                        Latest markup — version {latestPlanVersion.version},
+                        {' '}{latestPlanVersion.createdBy || 'Office'},
+                        {' '}{new Date(latestPlanVersion.createdAt).toLocaleDateString()}
+                      </a>
+                    )}
                   </>
                 ) : fetchingPdf ? (
                   <div className="flex items-center gap-2 text-xs text-gray-400 py-3">
@@ -1815,6 +1943,30 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           )}
         </div>
       </div>
+
+      {/* Plan markup studio. Full screen and above the drawer, because marking
+          up a construction drawing in a panel the width of a phone is not
+          marking anything up. */}
+      {annotating && detectedPdfId && (
+        <Suspense fallback={
+          <div className="fixed inset-0 z-[150] flex items-center justify-center gap-2 text-white text-sm"
+            style={{ backgroundColor: '#111827' }}>
+            <RefreshCw size={16} className="animate-spin" /> Loading the markup tools…
+          </div>
+        }>
+        <PlanAnnotator
+          planFileId={detectedPdfId}
+          planName={availablePdfs[selectedPdfIdx]?.name}
+          apartmentId={apartment.id}
+          apartmentLabel={isGeneralProject ? (apartment.displayName || 'Job') : aptLabel(apartment)}
+          driveFolderUrl={driveLink}
+          authorName={currentUser.name}
+          readOnly={annotating === 'view'}
+          onClose={() => setAnnotating(null)}
+          onToast={onToast}
+        />
+        </Suspense>
+      )}
 
       {/* Lightbox */}
       {lightbox && (

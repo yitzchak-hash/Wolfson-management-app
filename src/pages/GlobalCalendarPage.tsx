@@ -142,7 +142,8 @@ export function GlobalCalendarPage() {
         </span>
       </div>
 
-      <TaskCalendar events={events} todayLabel={s.today} />
+      <TaskCalendar events={events} todayLabel={s.today} rtl={!!s.isRtl}
+        printTitle="All workspaces" />
     </div>
   );
 }

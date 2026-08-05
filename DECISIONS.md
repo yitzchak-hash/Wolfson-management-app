@@ -401,5 +401,85 @@ collections, its own copied stages. Verified it cannot disturb what exists.
 (they were widening the page), four destinations plus More, and the board fits on load.
 
 ### Data safety — re-verified after every round
-All 22 data-bearing keys survive persist → export → import, checked statically and through a live
+All data-bearing keys survive persist → export → import, checked statically and through a live
 round trip driven by the real `exportData` / `importData` code.
+
+Re-running that audit after adding plan markup caught two keys that had been wrong all along:
+`projectColors` and `customProjects` were READ by the importer and never WRITTEN by the exporter, so
+restoring a backup quietly deleted every workspace built with the project builder. Both are now
+exported at the top level, along with `backupLogs`. This is the second time the audit has found a live
+data-loss bug that nothing else would have. Run it whenever a state key is added.
+
+---
+
+## Marking up plans
+
+### It draws on the real PDF, not on a picture of one
+Drive's preview iframe will show a plan but nothing in our code may measure it or read its pixels — a
+page cannot touch a cross-origin PDF. So the bytes come through `/api/drive-fetch`, where the service
+account (the only thing allowed to read a private Drive file) streams them back, and pdf.js renders
+them onto a canvas the ink canvas is pixel-locked to. Every mark is stored as a **fraction of the
+page**, so a mark made on the 86" screen lands on the same duct on a phone.
+
+### The markup is a real PDF layer
+Saving sends only the vector sketch — a few kilobytes — to `/api/plan-annotate`, which fetches the
+original, draws the marks and uploads the result to an **Annotated Plans** folder beside the job's
+files. No PDF ever travels through the browser, which is what makes it work on a 40 MB site plan.
+
+Everything drawn goes inside an optional-content group, the same mechanism a CAD layer uses. Acrobat,
+Chrome and Drive show it in their layers panel as "Markup — v3" and it can be switched **off** to
+reveal the untouched drawing. Verified by rendering the saved file with the layer off: pixel for pixel
+the plan the engineer issued.
+
+Two things had to be right for it to look correct rather than merely exist:
+- **Per-segment line widths**, so pen pressure survives into the file. One width for a whole polyline
+  would have thrown it away. A test stroke going in at 0.94–1.55 pressure comes out as 15 distinct
+  widths in the PDF.
+- **A page transparency group.** Without one, viewers fall back to Normal blending and the highlighter
+  paints *over* the linework instead of through it. That was the actual symptom; declaring the group
+  is the fix, and it changes nothing about the original content.
+
+### Versions are kept as vectors here, as PDFs there
+The PDF in Drive is the shareable, printable, permanent artefact. The strokes are also kept in the
+app's own data as `planAnnotations`, and that is what makes "carry on from version 2" possible —
+reading ink back out of a PDF is not something a browser can do.
+
+### The Samsung screen has no pressure, and that is fine
+The WAD-series panels (LH75WADWLG / LH86WADWLG, 75" and 86", Android 13) are **infrared** touch:
+a grid of beams across the glass. Infrared knows where something is and how big it is; it cannot know
+how hard you press, and the pens are passive plastic with no battery and no digitiser. Samsung's own
+sheet lists an object-recognition range of 3/5/10/15 mm and no pressure figure at all. What it does
+advertise is the **dual nib** — thin on one end, fat on the other — which the panel tells apart purely
+by contact size.
+
+So a pressure-only implementation would have drawn one dead flat line on the exact screen this was
+built for. `penInput.ts` therefore reads three signals in order of how much they actually know:
+1. real pressure, but only once the value has been seen to *move* — a device with no sensor reports a
+   plausible constant (0.5, or 1) rather than nothing, and trusting it blind disables (2);
+2. contact size, which is how the dual nib expresses itself;
+3. speed, so a plain mouse still gets a line with some life.
+
+A genuine stylus on a PC — Surface, Wacom, an S Pen at 4096 levels — wins when it is present.
+The toolbar says which signal is in use, so it is never a mystery.
+
+### pdf.js is pinned, and shimmed
+The current pdf.js calls `Map.prototype.getOrInsertComputed`, which **Chrome 141 does not have** — the
+plan came up blank in a thoroughly current browser, and would have on every office PC and on the
+panel's Android WebView. Pinned to 5.4.149, which does not use it, plus `pdfCompat.ts` filling in
+`Promise.withResolvers` for anything older than Chrome 119. The studio is also lazy-loaded: pdf.js is
+about a megabyte and nobody should pay for it on the login screen.
+
+---
+
+## Printing
+
+`src/data/printing.ts` builds a real document — title, context line, content — and prints that.
+Never `window.print()` on the app: the app is a dark, scrolling, full-height layout with fixed rails,
+and printing it gives one page of sidebar. The Reports page was doing exactly that and its Print
+button produced a screenshot of the running app; it prints the actual rows now.
+
+Buttons on: the markup studio (the plan with the marks on it, every page, needing no network and no
+saving), the job sheet in the drawer (details, tasks, punch list, notes, and a box to write in), the
+task list, the reports table, both calendars as month grids, the dashboard as a one-page summary, the
+job board as a list with a "where" column so filed jobs are not silently missing, and the contractor
+portal — the people most likely to want the day on paper.

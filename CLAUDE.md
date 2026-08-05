@@ -660,3 +660,76 @@ clamps back to where it started.
 ## Data safety — unchanged and non-negotiable
 Every data-bearing key in **persist + export (top level) + import**. Re-run
 `backup-audit` and the live round-trip after adding one.
+
+---
+
+# v2 — plan markup & printing
+
+## Marking up a plan (`src/components/plans/`)
+
+**Entry points**: the drawer's Engineering Plans block now has **View plan**, **Mark up** (with a `vN`
+badge) and the existing Download. `Mark up` opens `PlanAnnotator` full-screen at `z-[150]`; `View plan`
+opens the same component with `readOnly`.
+
+- `PlanAnnotator.tsx` — the studio. **Lazy-loaded** from `ApartmentDetailDrawer` (`React.lazy` +
+  `Suspense`) because it carries pdf.js.
+- `penInput.ts` — `PenStroke` (pressure → contact size → speed, in that order), `samplesOf()`
+  (coalesced events), `simplify()` (RDP, width-aware).
+- `annotTools.ts` — `TOOLS` presets, `INK_COLORS`, `HIGHLIGHT_COLORS`, recent-colour memory.
+- `pdfCompat.ts` — **import before pdf.js.** Shims `Promise.withResolvers` / `Map.getOrInsertComputed`.
+
+### Rules that must not be broken
+- **pdfjs-dist is pinned to 5.4.149** (`--save-exact`). 5.7+ and 6.x call
+  `Map.prototype.getOrInsertComputed`, which **Chrome 141 does not have** — the plan renders blank.
+  Before bumping it, grep the build for engine methods newer than Chrome 119 and test in a real browser.
+- Three stacked canvases, all the same pixel size: PDF / committed ink / live stroke. The DPR goes
+  into the **viewport scale**, not the context transform — doing both renders at dpr² and clips.
+- Coordinates are normalised 0..1 (x across, y **down**). Widths are against a **1000-unit reference
+  page**. The server (`api/plan-annotate.js`) uses the identical convention — change one, change both.
+- `touchAction: 'none'` on the live canvas, or the Samsung panel pans instead of drawing.
+- Tool hotkeys must bail while `textDraft` is open. Guarding on `e.target` alone is not enough.
+
+### Server routes
+- `api/drive-fetch.js` — POST `{fileId}` → **pipes** the bytes back. Never buffer; a real plan exceeds
+  the platform's buffered-response cap.
+- `api/plan-annotate.js` — POST `{planFileId, parentFolderId, strokes, version, jobName}` →
+  stamps and uploads to an **Annotated Plans** subfolder. Exports `stamp()` for testing.
+  - The markup goes inside an **optional-content group** (`/OCProperties`, `BDC /OC /ocMarkup … EMC`).
+    Existing CAD layers on the plan are joined, never replaced.
+  - Each page gets `/Group << /S /Transparency /CS /DeviceRGB >>` — **without it the highlighter's
+    Multiply silently falls back to Normal** and paints over the linework.
+  - The OCG name uses `PDFHexString.fromText`, not `PDFString.of` — a literal string is PDFDocEncoded
+    and mangles the em dash (and would mangle Hebrew).
+  - Freehand emits a new `w` + `m` whenever the width moves, so pressure survives into the file.
+
+### Data
+- `AnnStroke`, `AnnTool`, `PlanAnnotation` in `types/index.ts`. `pts` is **flat** `[x,y,w, …]`.
+- `planAnnotations` is a per-project Firestore collection via `projectCollection(pid,'planAnnotations')`,
+  wired at all 11 store points exactly like `planPins`.
+- Actions: `savePlanAnnotation` (upsert by id) · `updatePlanAnnotation` · `deletePlanAnnotation`.
+- Contractor portal shows a link to the **latest** markup PDF when one exists — a plain Drive link, not
+  the studio, so a phone on site does not download the whole PDF to render it.
+
+## Printing (`src/data/printing.ts`)
+`printSheet(title, bodyHtml, opts)` · `printTable(title, rows, columns, opts)` · `printImages` ·
+`printDot` / `printPill` / `printEsc`. Options: `subtitle`, `landscape`, `rtl`, `css`, `delay`.
+Returns `false` when the popup was blocked, so the caller can say so.
+
+**Never call `window.print()` on the app.** It prints the running UI — dark chrome, sidebar, and a
+table clipped to its scroll container. The one legitimate exception is `ProjectDiagramPage`, which has
+a purpose-built `print:` layout.
+
+Print buttons live on: the markup studio, the drawer (job sheet), Tasks, Reports, `TaskCalendar`
+(so both calendars get it — pass `printTitle` and `rtl`), Dashboard, the Job Board export menu, and
+the contractor portal header.
+
+## Backup rule — now with teeth
+Re-running the audit after adding `planAnnotations` found `projectColors` and `customProjects` were
+**read by the importer and never written by the exporter** — restoring a backup deleted every
+workspace made with the project builder. Fixed, along with `backupLogs`.
+
+Deliberately excluded from a backup, and why: `currentUser` / `currentProjectId` (session),
+`googleClientId` (dead OAuth field), `lastAutoBackupAt` / `lastDriveExportAt` (schedule, restoring
+them would be wrong), `backupSnapshots` (in-session restore points — the export *is* the backup).
+
+**Add a state key → add it to persist + export (top level) + import, then re-run the audit.**

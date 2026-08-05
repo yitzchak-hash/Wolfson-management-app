@@ -4,9 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import {
   Building2, AlertTriangle, CheckCircle2, Clock, FileText, ClipboardList,
-  AlertCircle, X, ChevronRight, Settings2, ChevronUp, ChevronDown, EyeOff, Eye,
+  AlertCircle, X, ChevronRight, Settings2, ChevronUp, ChevronDown, EyeOff, Eye, Printer,
 } from 'lucide-react';
 import { getStageName, isCountableApartment } from '../types';
+import { printSheet, printEsc } from '../data/printing';
 
 type ModalKind = 'changes' | 'notes' | 'overdue' | 'pending' | 'completedToday' | null;
 
@@ -17,7 +18,7 @@ export function DashboardPage() {
     apartments: allApartments, stages: allStages, activityLogs, contractorAssignments,
     mainUiStrings: s, setPendingOpenAptId,
     dashboardWidgetOrder, dashboardHiddenWidgets, setDashboardLayout,
-    buildings, currentProjectId,
+    buildings, currentProjectId, projects, contractors,
   } = useStore();
   const stages = allStages.filter(st => currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId);
   // Scope apartments to current project only (guard against stale localStorage)
@@ -46,6 +47,61 @@ export function DashboardPage() {
     const apts = apartments.filter(a => a.buildingId === bid && isCountableApartment(a));
     const started = apts.filter(a => a.currentStageId).length;
     return { total: apts.length, started, pct: apts.length > 0 ? Math.round(started / apts.length * 100) : 0 };
+  }
+
+  function printSummary() {
+    const e = printEsc;
+    const projectName = projects.find(p => p.id === currentProjectId)?.name ?? "Workspace";
+    const stageRows = sortedStages.map(st => {
+      const count = apartments.filter(a => a.currentStageId === st.id && isCountableApartment(a)).length;
+      const pct = total ? Math.round((count / total) * 100) : 0;
+      return `<tr>
+        <td><span class="dot" style="background:${e(st.color)}"></span>${e(getStageName(st, !!s.isRtl))}</td>
+        <td style="width:56px;text-align:end"><b>${count}</b></td>
+        <td style="width:180px">
+          <div style="background:#eef2f6;height:8px;border-radius:4px;overflow:hidden">
+            <div style="background:${e(st.color)};height:8px;width:${pct}%"></div>
+          </div>
+        </td>
+        <td style="width:44px;text-align:end" class="muted">${pct}%</td>
+      </tr>`;
+    }).join("");
+
+    const buildingRows = buildings.map(b => {
+      const p = getBuildingProgress(b.id);
+      return `<tr><td>${e(b.name ?? b.id)}</td>
+        <td style="width:70px;text-align:end">${p.started} / ${p.total}</td>
+        <td style="width:180px">
+          <div style="background:#eef2f6;height:8px;border-radius:4px;overflow:hidden">
+            <div style="background:#1e3a5f;height:8px;width:${p.pct}%"></div>
+          </div></td>
+        <td style="width:44px;text-align:end" class="muted">${p.pct}%</td></tr>`;
+    }).join("");
+
+    const num = (label: string, value: number | string, tone = "#1e3a5f") =>
+      `<div class="card" style="text-align:center;padding:12px 8px">
+        <div style="font-size:24px;font-weight:800;color:${tone};line-height:1">${e(value)}</div>
+        <div class="muted" style="font-size:10px;margin-top:3px">${e(label)}</div>
+      </div>`;
+
+    printSheet(`${s.pageDashboard} — ${projectName}`, `
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px">
+        ${num(s.totalApartments ?? "Total", total)}
+        ${num(s.notStarted ?? "Not started", notStarted, "#6b7280")}
+        ${num(s.changes, shinuiCount, "#d97706")}
+        ${num(s.withNotes, withNotes, "#0d9488")}
+        ${num(s.pendingTasks ?? "Tasks open", pendingCount, "#2563eb")}
+        ${num(s.overdueTasks, overdueCount, overdueCount ? "#dc2626" : "#6b7280")}
+        ${num(s.completedToday ?? "Done today", completedTodayCount, "#16a34a")}
+        ${num("Contractors", contractors.length, "#7c3aed")}
+      </div>
+
+      <h2 style="font-size:13px;margin:0 0 6px;color:#1e3a5f">Stages</h2>
+      <table>${stageRows || '<tr><td class="muted">No stages yet.</td></tr>'}</table>
+
+      ${buildings.length ? `<h2 style="font-size:13px;margin:16px 0 6px;color:#1e3a5f">Buildings</h2>
+      <table>${buildingRows}</table>` : ""}
+    `, { rtl: !!s.isRtl, subtitle: `${total} unit${total === 1 ? "" : "s"} counted` });
   }
 
   function openApartment(aptId: string) {
@@ -320,13 +376,24 @@ export function DashboardPage() {
             </button>
           </div>
         ) : (
-          <button
-            onClick={enterCustomize}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-colors"
-          >
-            <Settings2 size={14} />
-            {s.customizeDashboard}
-          </button>
+          <div className="flex items-center gap-2">
+            {/* A one-page state-of-play for a meeting: the same numbers as the
+                cards, on paper, so nobody has to read them off a screen. */}
+            <button
+              onClick={printSummary}
+              title="Print a summary"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-colors"
+            >
+              <Printer size={14} />
+            </button>
+            <button
+              onClick={enterCustomize}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-colors"
+            >
+              <Settings2 size={14} />
+              {s.customizeDashboard}
+            </button>
+          </div>
         )}
       </div>
 

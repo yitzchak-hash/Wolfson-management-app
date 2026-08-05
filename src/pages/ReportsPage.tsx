@@ -3,13 +3,15 @@ import { Download, Printer, Filter, SlidersHorizontal, Search, X, ClipboardList 
 import { useStore } from '../data/store';
 import { format } from 'date-fns';
 import { saveAs } from 'file-saver';
+import { printTable } from '../data/printing';
 import { getStageName as getStageNameBilingual, aptLabel, isCountableApartment } from '../types';
 
 type BuildingFilter = string;
 type ClassFilter = 'all' | 'standard' | 'shinui';
 
 export function ReportsPage() {
-  const { apartments: allApartments, stages: allStages, buildings, stageNotes, contractorAssignments, contractors, mainUiStrings: s, currentProjectId } = useStore();
+  const { apartments: allApartments, stages: allStages, buildings, stageNotes, contractorAssignments, contractors, mainUiStrings: s, currentProjectId, projects } = useStore();
+  const projectName = projects.find(p => p.id === currentProjectId)?.name ?? 'Workspace';
 
   // Scope data to the current project only
   const apartments = currentProjectId === 'general'
@@ -161,6 +163,33 @@ export function ReportsPage() {
     saveAs(blob, `wolfson-report-${format(new Date(), 'yyyy-MM-dd')}.csv`);
   }
 
+  /**
+   * Print the report as it is on screen.
+   *
+   * This used to be `window.print()`, which printed the running app — dark
+   * chrome, sidebar, and a table clipped at whatever the scroll container
+   * happened to be showing. It prints the actual rows now, the same ones the
+   * CSV export would give, with the column choices and filters honoured.
+   */
+  function printReport() {
+    const rows = filtered.map(buildRow);
+    const headers = rows.length ? Object.keys(rows[0]) : [];
+    printTable(
+      `${s.reportsPage} — ${projectName}`,
+      rows,
+      headers.map(h => ({ header: h, value: (r: Record<string, string>) => r[h] ?? '' })),
+      {
+        landscape: true,
+        rtl: !!s.isRtl,
+        subtitle: `${filtered.length} of ${apartments.length} · `
+          + (buildingFilter === 'all' ? 'all buildings' : buildingFilter)
+          + (classFilter === 'all' ? '' : ` · ${classFilter}`)
+          + (hasDateFilter ? ' · date range applied' : '')
+          + (appliedSearch.trim() ? ` · matching “${appliedSearch.trim()}”` : ''),
+      },
+    );
+  }
+
   const hasDateFilter = !!dateFrom || !!dateTo;
 
   return (
@@ -178,7 +207,7 @@ export function ReportsPage() {
             {s.columnsBtn}
           </button>
           <button
-            onClick={() => window.print()}
+            onClick={printReport}
             className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
           >
             <Printer size={16} />

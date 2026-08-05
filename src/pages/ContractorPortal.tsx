@@ -3,12 +3,13 @@ import { useParams } from 'react-router-dom';
 import { useStore } from '../data/store';
 import { ContractorAssignment, ContractorPhoto, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, getStageName, aptLabel } from '../types';
 import { PlanPinOverlay } from '../components/apartment/PlanPinOverlay';
+import { printTable, printDot } from '../data/printing';
 import { format, isPast, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import {
   Camera, CheckCircle2, Clock, Building2, CalendarDays, FileText,
   Plus, Send, AlertCircle, X, Play, File as FileIcon, MapPin,
   BookOpen, Download, Paperclip, MessageSquare, CloudUpload,
-  ChevronLeft, ChevronRight, Languages, History,
+  ChevronLeft, ChevronRight, Languages, History, PenLine, Printer,
 } from 'lucide-react';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
 import { TaskCalendar, CalendarEvent } from '../components/tasks/TaskCalendar';
@@ -282,7 +283,7 @@ export function ContractorPortal() {
     apartments, stages, stageNotes,
     addContractorNote, addContractorPhoto, deleteContractorPhoto,
     updateContractorAssignment, addActivityLog,
-    contractorUiStrings,
+    contractorUiStrings, planAnnotations,
   } = useStore();
 
   const [langOverride, setLangOverride] = useState<'en' | 'he' | null>(null);
@@ -598,6 +599,40 @@ export function ContractorPortal() {
       <header className="flex items-center justify-between px-4 py-3 shadow-md flex-shrink-0" style={{ backgroundColor: '#0f1f35' }}>
         <img src="/tzviair-logo.png" alt="TzviAir" style={{ height: '32px', filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.9)) drop-shadow(0 1px 3px rgba(0,0,0,0.7))' }} />
         <div className="flex items-center gap-2.5">
+          {/* A work list for the van. Contractors are the people most likely to
+              want the day on paper — no signal in a stairwell, no battery
+              anxiety on a site. */}
+          <button
+            onClick={() => printTable(
+              `${contractor!.name} — tasks`,
+              [...assignments].sort((a, b) => (a.completedAt ? 1 : 0) - (b.completedAt ? 1 : 0)
+                || (a.dueDate ?? 'z').localeCompare(b.dueDate ?? 'z')),
+              [
+                { header: s.apartmentColumn, width: '110px', value: a => {
+                  const apt = apartments.find(x => x.id === a.apartmentId);
+                  return apt ? aptLabel(apt) : '—';
+                } },
+                { header: s.taskSingular, value: a => a.taskDescription || '—' },
+                { header: s.stageColumn, html: true, width: '120px', value: a => {
+                  const st = stages.find(x => x.id === a.stageId);
+                  return st ? printDot(st.color, getStageName(st, !!s.isRtl)) : '—';
+                } },
+                { header: s.duePrefix, width: '80px', value: a =>
+                  a.dueDate ? format(parseISO(a.dueDate), 'd MMM yyyy') : '—' },
+                { header: s.doneLabel, width: '54px', value: a => a.completedAt ? '✓' : '' },
+              ],
+              {
+                rtl: !!s.isRtl,
+                subtitle: `${assignments.length} ${assignments.length === 1 ? s.taskSingular : s.taskPlural}`
+                  + ` · ${assignments.filter(a => a.completedAt).length} ${s.doneLabel}`,
+              },
+            )}
+            className="flex items-center px-2.5 py-1.5 rounded-lg border border-white/25 text-white/80 hover:bg-white/10 active:bg-white/20 transition-colors"
+            title={s.printLabel}
+          >
+            <Printer size={14} />
+          </button>
+
           {/* Language toggle — always visible */}
           <button
             onClick={() => setLangOverride(s.isRtl ? 'en' : 'he')}
@@ -970,6 +1005,34 @@ export function ContractorPortal() {
                         </button>
                       </div>
                     </div>
+
+                    {/* The office's markup, when there is one.
+                        A straight Drive link rather than the markup studio: on a
+                        phone on site the studio would pull the whole PDF down to
+                        render it, and all the contractor needs is to look at what
+                        was drawn — which the Drive viewer does natively, with the
+                        markup layer already switched on. */}
+                    {(() => {
+                      const latest = apt
+                        ? planAnnotations
+                            .filter(x => x.apartmentId === apt.id && x.planFileId === plansPdfFileId && x.driveUrl)
+                            .sort((x, y) => y.version - x.version)[0]
+                        : undefined;
+                      if (!latest) return null;
+                      return (
+                        <a href={latest.driveUrl} target="_blank" rel="noopener noreferrer"
+                          className="mb-2 flex items-center gap-2 px-3 py-2 rounded-xl border"
+                          style={{ borderColor: '#fcd34d', backgroundColor: '#fffbeb' }}>
+                          <PenLine size={13} className="text-amber-600 flex-shrink-0" />
+                          <span className="text-xs font-semibold text-amber-800 flex-1">
+                            {s.markedUpPlan}
+                          </span>
+                          <span className="text-[10px] text-amber-600">
+                            v{latest.version} · {format(new Date(latest.createdAt), 'MMM d')}
+                          </span>
+                        </a>
+                      );
+                    })()}
                     <div
                       className="rounded-xl overflow-hidden border border-gray-200 cursor-pointer relative"
                       style={{ height: showPlansPdf ? '420px' : '160px' }}

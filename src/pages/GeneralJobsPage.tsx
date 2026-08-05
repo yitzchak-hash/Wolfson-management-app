@@ -3,11 +3,12 @@ import {
   Plus, Briefcase, MapPin, ExternalLink, Trash2, ClipboardList, FolderOpen,
   Copy, StickyNote, Square, Palette, Pencil, X, AlertTriangle,
   Ghost, ThumbsUp, ThumbsDown, ClipboardPaste, LayoutGrid, Columns3, Archive, CheckCircle2, PlayCircle,
-  Image as ImageIcon, ImageOff, History, MoveUpRight, Unlink, FileText, Search, FolderPlus,
+  Image as ImageIcon, ImageOff, History, MoveUpRight, Unlink, FileText, Search, FolderPlus, Printer,
 } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 import { useStore } from '../data/store';
-import { Apartment, CanvasElement, BinKind, BIN_KINDS, BIN_META, binKeyOf, binLabelOf, isBuiltInBin } from '../types';
+import { Apartment, CanvasElement, BinKind, BIN_KINDS, BIN_META, binKeyOf, binLabelOf, isBuiltInBin, getStageName } from '../types';
+import { printTable, printDot } from '../data/printing';
 import { ApartmentDetailDrawer } from '../components/apartment/ApartmentDetailDrawer';
 import { QuickAddTaskPanel } from '../components/apartment/QuickAddTaskPanel';
 import { Toast } from '../components/ui/Toast';
@@ -1011,6 +1012,43 @@ export function GeneralJobsPage() {
   }
 
   function exportBoardImage() { setExportMenu(true); }
+
+  /**
+   * The board as a list you can carry.
+   *
+   * Groups are shown as a column rather than filtered out — "which jobs are in
+   * Done" is exactly the question somebody asks of a printed board, and a list
+   * that quietly omitted them would answer it wrongly.
+   */
+  function printJobList() {
+    const binName = (key?: string) => {
+      if (!key) return 'On the board';
+      const bin = canvasElements.find(el => (el.binKind ?? el.id) === key);
+      return bin ? binLabelOf(bin) : key;
+    };
+    const rows: Apartment[] = apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed)
+      .sort((a, b) => (a.boardBin ? 1 : 0) - (b.boardBin ? 1 : 0)
+        || (a.displayName ?? '').localeCompare(b.displayName ?? ''));
+
+    printTable(
+      'Job board',
+      rows,
+      [
+        { header: 'Job', value: j => j.displayName || 'Job' },
+        { header: 'Address', value: j => j.address ?? '' },
+        { header: 'Stage', html: true, width: '140px', value: j => {
+          const st = stages.find(x => x.id === j.currentStageId);
+          return st ? printDot(st.color, getStageName(st, !!s.isRtl)) : '—';
+        } },
+        { header: 'Tasks open', width: '68px', value: j =>
+          String(contractorAssignments.filter(a => a.apartmentId === j.id && !a.completedAt).length || '') },
+        { header: 'Where', width: '96px', value: j => binName(j.boardBin) },
+        { header: 'Last edited', width: '86px', value: j =>
+          j.contentUpdatedAt ? new Date(j.contentUpdatedAt).toLocaleDateString() : '' },
+      ],
+      { landscape: true, rtl: !!s.isRtl, subtitle: `${rows.length} job${rows.length === 1 ? '' : 's'}` },
+    );
+  }
 
   // ── Delete / duplicate ────────────────────────────────────────────
   function handleDeleteJobs(ids: string[]) {
@@ -2663,9 +2701,16 @@ export function GeneralJobsPage() {
               <button
                 onClick={() => { setExportMenu(false); exportBoardPdf(exportInput()); }}
                 className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">
-                Print / PDF
+                Picture of the board
               </button>
             </div>
+            {/* A picture of the board is for the wall. This is for the clipboard:
+                the same jobs as rows you can read, tick and hand to somebody. */}
+            <button
+              onClick={() => { setExportMenu(false); printJobList(); }}
+              className="w-full mt-2 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 flex items-center justify-center gap-1.5">
+              <Printer size={14} /> Job list to print
+            </button>
           </div>
         </>
       )}

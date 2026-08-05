@@ -379,6 +379,73 @@ export interface PlanPin {
   resolvedBy?: string;
 }
 
+/** The drawing tools available when marking up a plan. */
+export type AnnTool =
+  | 'pen' | 'marker' | 'highlighter' | 'pencil'
+  | 'line' | 'arrow' | 'rect' | 'ellipse' | 'text';
+
+/**
+ * One mark on a plan.
+ *
+ * Coordinates are NORMALISED against the page — x and y each run 0..1, across
+ * and DOWN. That is what lets a mark made on the 86" screen land on exactly the
+ * same duct when the same plan is opened on a phone, and what lets the server
+ * stamp it into a PDF of any paper size without knowing anything about the
+ * device it was drawn on.
+ *
+ * `pts` is flat — [x, y, w, x, y, w, …] — rather than an array of objects. A
+ * detailed markup runs to thousands of points and goes into both Firestore and
+ * a request body; the flat form is roughly a third of the size for identical
+ * information. `w` is the per-point width multiplier, which is where pen
+ * pressure (or the Samsung dual nib's contact size) is preserved.
+ *
+ * Widths are given against a 1000-unit-wide reference page, so the same stroke
+ * is the same relative weight on A4 and on A0.
+ */
+export interface AnnStroke {
+  id: string;
+  /** 0-based page index within the PDF. */
+  page: number;
+  tool: AnnTool;
+  color: string;
+  width: number;
+  opacity: number;
+  pts: number[];
+  /** Text tools only. */
+  text?: string;
+  fontSize?: number;
+  /** Shapes only — filled as well as outlined. */
+  fill?: boolean;
+}
+
+/**
+ * A saved markup version of one plan.
+ *
+ * The strokes are kept here, in the app's own data, as well as being stamped
+ * into a PDF in Drive. That is deliberate: the PDF is the shareable, printable,
+ * permanent artefact, and this is the editable source. It is what makes "start
+ * from version 2 and add to it" possible without ever having to read ink back
+ * out of a PDF, which is not something a browser can do.
+ */
+export interface PlanAnnotation {
+  id: string;
+  apartmentId: string;
+  /** Drive file id of the plan that was marked up. */
+  planFileId: string;
+  planName?: string;
+  version: number;
+  strokes: AnnStroke[];
+  pageCount: number;
+  createdAt: string;
+  createdBy: string;
+  /** The stamped PDF in Drive, once it has been filed. */
+  driveFileId?: string;
+  driveUrl?: string;
+  /** Which version this one was continued from, when it was. */
+  basedOn?: number;
+  note?: string;
+}
+
 export interface ActivityLog {
   id: string;
   userId: string;
@@ -587,12 +654,18 @@ export interface ContractorUiStrings {
   viewOnDrive: string;
   hide: string;
   view: string;
+  /** Shown when the office has marked up the plan. */
+  markedUpPlan: string;
   download: string;
   taskSingular: string;
   taskPlural: string;
   doneLabel: string;
   duePrefix: string;
   calendarTab: string;
+  /** Print sheet — button and column headings. */
+  printLabel: string;
+  apartmentColumn: string;
+  stageColumn: string;
 }
 
 export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
@@ -635,11 +708,15 @@ export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   viewOnDrive: 'View on Drive',
   hide: 'Hide',
   view: 'View',
+  markedUpPlan: 'Plan with the office markup',
   download: 'Download',
   taskSingular: 'task',
   taskPlural: 'tasks',
   doneLabel: 'done',
   duePrefix: 'Due',
+  printLabel: 'Print my tasks',
+  apartmentColumn: 'Apartment',
+  stageColumn: 'Stage',
   calendarTab: 'Calendar',
 };
 
@@ -683,11 +760,15 @@ export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   viewOnDrive: 'הצג ב-Drive',
   hide: 'הסתר',
   view: 'הצג',
+  markedUpPlan: 'תוכנית עם הערות המשרד',
   download: 'הורד',
   taskSingular: 'משימה',
   taskPlural: 'משימות',
   doneLabel: 'הושלם',
   duePrefix: 'תאריך יעד',
+  printLabel: 'הדפס את המשימות שלי',
+  apartmentColumn: 'דירה',
+  stageColumn: 'שלב',
   calendarTab: 'לוח שנה',
 };
 

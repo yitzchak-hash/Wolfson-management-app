@@ -556,3 +556,61 @@ export async function listAllPhotosViaBackend(driveLink: string): Promise<DriveP
     return [];
   }
 }
+
+// ---------------------------------------------------------------------------
+// Plan markup
+// ---------------------------------------------------------------------------
+
+/**
+ * Pull a Drive file's actual bytes.
+ *
+ * The Drive preview iframe can SHOW a plan but nothing in our code can measure
+ * or draw on it — a page may not read a cross-origin PDF. To annotate in
+ * register with the drawing we need the bytes themselves, and only the service
+ * account may read a private file, so the request goes through our own route.
+ */
+export async function fetchPlanBytes(fileId: string): Promise<ArrayBuffer> {
+  const resp = await fetch('/api/drive-fetch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': DRIVE_API_KEY },
+    body: JSON.stringify({ fileId }),
+  });
+  if (!resp.ok) {
+    const msg = await resp.text().catch(() => '');
+    throw new Error(`Could not open the plan (${resp.status}). ${msg.slice(0, 180)}`);
+  }
+  return resp.arrayBuffer();
+}
+
+export interface StampedPlan {
+  fileId: string;
+  name: string;
+  webViewLink: string;
+  folderId: string;
+  version: number;
+  sizeBytes: number;
+}
+
+/**
+ * Stamp a markup onto the plan and file the result in Drive.
+ *
+ * Only the vector sketch travels — a few kilobytes — and the server does the
+ * rest, so this works the same on a 40 MB site plan as on a one-page detail.
+ */
+export async function stampPlanToDrive(input: {
+  planFileId: string;
+  parentFolderId: string;
+  strokes: unknown[];
+  version: number;
+  jobName?: string;
+  folderName?: string;
+}): Promise<StampedPlan> {
+  const resp = await fetch('/api/plan-annotate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': DRIVE_API_KEY },
+    body: JSON.stringify({ folderName: 'Annotated Plans', ...input }),
+  });
+  const body = await resp.json().catch(() => ({} as Record<string, unknown>));
+  if (!resp.ok) throw new Error((body as { error?: string }).error ?? `Save failed (${resp.status})`);
+  return body as StampedPlan;
+}

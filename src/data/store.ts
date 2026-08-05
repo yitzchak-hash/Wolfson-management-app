@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BoardSetting, BoardSettingKey, BoardLayout, PlanPin } from '../types';
+import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BoardSetting, BoardSettingKey, BoardLayout, PlanPin, PlanAnnotation } from '../types';
 
 // Always merge stored mainUiStrings ON TOP of the fresh preset so code-added keys
 // are never missing even when localStorage has an older saved version.
@@ -352,6 +352,12 @@ interface AppState {
   addPlanPin: (pin: PlanPin) => void;
   updatePlanPin: (id: string, changes: Partial<PlanPin>) => void;
   deletePlanPin: (id: string) => void;
+
+  /** Saved markup versions of engineering plans. */
+  planAnnotations: PlanAnnotation[];
+  savePlanAnnotation: (ann: PlanAnnotation) => void;
+  updatePlanAnnotation: (id: string, changes: Partial<PlanAnnotation>) => void;
+  deletePlanAnnotation: (id: string) => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -470,6 +476,7 @@ export const useStore = create<AppState>((set, get) => ({
       dashboardHiddenWidgets:(newStored?.dashboardHiddenWidgets as string[] | null)   ?? [],
       canvasElements:        (newStored?.canvasElements as CanvasElement[] | null)    ?? [],
       planPins:              (newStored?.planPins as PlanPin[] | null)                  ?? [],
+      planAnnotations:       (newStored?.planAnnotations as PlanAnnotation[] | null)    ?? [],
     };
 
     // Cancel existing Firebase listeners and switch project
@@ -517,7 +524,7 @@ export const useStore = create<AppState>((set, get) => ({
       buildings, apartments,
       stageNotes: [], stageNoteVersions: [], generalNoteVersions: [], activityLogs: [],
       contractorAssignments: [], contractorNotes: [], contractorPhotos: [],
-      officeNoteFiles: [], canvasElements: [], planPins: [],
+      officeNoteFiles: [], canvasElements: [], planPins: [], planAnnotations: [],
       dashboardWidgetOrder: [], dashboardHiddenWidgets: [],
     });
 
@@ -892,6 +899,28 @@ export const useStore = create<AppState>((set, get) => ({
     linkedNotes.forEach(n  => fsDelete(projectCollection(pid, 'contractorNotes'), n.id));
     linkedPhotos.forEach(p => fsDelete(projectCollection(pid, 'contractorPhotos'), p.id));
     linkedStageNotes.forEach(n => fsDelete(projectCollection(pid, 'stageNotes'), n.id));
+  },
+
+  planAnnotations: (stored?.planAnnotations as PlanAnnotation[] | null) ?? [],
+  savePlanAnnotation: (ann) => {
+    set(state => ({
+      planAnnotations: [...state.planAnnotations.filter(a => a.id !== ann.id), ann],
+    }));
+    fsSet(projectCollection(get().currentProjectId, 'planAnnotations'), ann.id, ann);
+    persist(get);
+  },
+  updatePlanAnnotation: (id, changes) => {
+    set(state => ({
+      planAnnotations: state.planAnnotations.map(a => a.id === id ? { ...a, ...changes } : a),
+    }));
+    const updated = get().planAnnotations.find(a => a.id === id);
+    if (updated) fsSet(projectCollection(get().currentProjectId, 'planAnnotations'), id, updated);
+    persist(get);
+  },
+  deletePlanAnnotation: (id) => {
+    set(state => ({ planAnnotations: state.planAnnotations.filter(a => a.id !== id) }));
+    fsDelete(projectCollection(get().currentProjectId, 'planAnnotations'), id);
+    persist(get);
   },
 
   planPins: (stored?.planPins as PlanPin[] | null) ?? [],
@@ -1348,8 +1377,17 @@ export const useStore = create<AppState>((set, get) => ({
       boardSettings: state.boardSettings,
       boardLayouts: state.boardLayouts,
       planPins: state.planPins,
+      planAnnotations: state.planAnnotations,
       dashboardWidgetOrder: state.dashboardWidgetOrder,
       dashboardHiddenWidgets: state.dashboardHiddenWidgets,
+      // The importer has always READ these two from the top level; the exporter
+      // never wrote them. A restore therefore wiped every workspace made with
+      // the project builder, and every workspace colour, without saying so.
+      // Found by re-running the backup audit — which is why the audit exists.
+      projectColors: state.projectColors,
+      customProjects: state.customProjects,
+      // The record of which backups have been taken. Small, and it is history.
+      backupLogs: state.backupLogs,
       settings: {
         autoBackup: state.autoBackup,
         backupFrequency: state.backupFrequency,
@@ -1389,7 +1427,9 @@ export const useStore = create<AppState>((set, get) => ({
         boardSettings: data.boardSettings ?? state.boardSettings,
         boardLayouts: data.boardLayouts ?? state.boardLayouts,
         planPins: data.planPins ?? state.planPins,
+        planAnnotations: data.planAnnotations ?? state.planAnnotations,
         projectColors: data.projectColors ?? state.projectColors,
+        backupLogs: data.backupLogs ?? state.backupLogs,
         ...(data.customProjects ? {
           customProjects: data.customProjects as Project[],
           projects: [...DEFAULT_PROJECTS, ...(data.customProjects as Project[])],
@@ -1678,7 +1718,7 @@ export const useStore = create<AppState>((set, get) => ({
     const [
       fbApts, fbStageNotes, fbStages, fbUsers, fbLogs,
       fbContractors, fbAssignments, fbNotes, fbPhotos, fbOfficeFiles, fbSettings,
-      fbStageNoteVersions, fbGeneralNoteVersions, fbCanvasElements, fbPlanPins,
+      fbStageNoteVersions, fbGeneralNoteVersions, fbCanvasElements, fbPlanPins, fbPlanAnnotations,
     ] = await Promise.all([
       fsGetAll(col('apartments')),
       fsGetAll(col('stageNotes')),
@@ -1695,6 +1735,7 @@ export const useStore = create<AppState>((set, get) => ({
       fsGetAll(col('generalNoteVersions')),
       fsGetAll(col('canvasElements')),
       fsGetAll(col('planPins')),
+      fsGetAll(col('planAnnotations')),
     ]);
 
     // Only PROJECT-scoped signals decide whether this project has already been seeded.
@@ -1755,6 +1796,7 @@ export const useStore = create<AppState>((set, get) => ({
         generalNoteVersions:   fbGeneralNoteVersions.length > 0 ? (fbGeneralNoteVersions as unknown as GeneralNoteVersion[]) : state.generalNoteVersions,
         canvasElements:        fbCanvasElements.length > 0 ? (fbCanvasElements as unknown as CanvasElement[]) : state.canvasElements,
         planPins:              fbPlanPins.length > 0 ? (fbPlanPins as unknown as PlanPin[]) : state.planPins,
+        planAnnotations:       fbPlanAnnotations.length > 0 ? (fbPlanAnnotations as unknown as PlanAnnotation[]) : state.planAnnotations,
         ...(appSettings.backupFrequency      ? { backupFrequency:      appSettings.backupFrequency as BackupFrequency }      : {}),
         ...(appSettings.backupDriveFolderLink !== undefined ? { backupDriveFolderLink: appSettings.backupDriveFolderLink as string } : {}),
         ...(appSettings.contractorUiStrings  ? { contractorUiStrings:  appSettings.contractorUiStrings as ContractorUiStrings } : {}),
@@ -1832,6 +1874,9 @@ export const useStore = create<AppState>((set, get) => ({
           : Promise.resolve(),
         state.planPins.length > 0
           ? fsBatchSet(col('planPins'), state.planPins.map(p => ({ id: p.id, data: p })))
+          : Promise.resolve(),
+        state.planAnnotations.length > 0
+          ? fsBatchSet(col('planAnnotations'), state.planAnnotations.map(a => ({ id: a.id, data: a })))
           : Promise.resolve(),
         fsSet('settings', 'app', {
           autoBackup:            state.autoBackup,
@@ -1916,6 +1961,10 @@ export const useStore = create<AppState>((set, get) => ({
       }),
       fsListen(col('planPins'), (docs) => {
         set({ planPins: docs as unknown as PlanPin[] });
+        persist(get);
+      }),
+      fsListen(col('planAnnotations'), (docs) => {
+        set({ planAnnotations: docs as unknown as PlanAnnotation[] });
         persist(get);
       }),
       fsListen('stages', (docs) => {
@@ -2062,6 +2111,7 @@ function persistNow(get: () => AppState) {
     boardSettings: state.boardSettings,
     boardLayouts: state.boardLayouts,
     planPins: state.planPins,
+    planAnnotations: state.planAnnotations,
     projectColors: state.projectColors,
     customProjects: state.customProjects,
   };
