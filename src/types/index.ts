@@ -214,8 +214,16 @@ export interface Apartment {
    * A count rather than a flag because several people share one board.
    */
   thumbsUp?: number;
+  /** Thumbs down, counted separately so both numbers are visible at once. */
+  thumbsDown?: number;
   /** Optional photo behind the tile. Stored as a URL, never as bytes. */
   tilePhotoUrl?: string;
+  /**
+   * Hand-set position within a stage column. Absent means "sort by last
+   * modified", which stays the default — this only records a deliberate
+   * reordering, so a column nobody has touched still surfaces recent work.
+   */
+  stageOrder?: number;
   /**
    * Whether this appears on the TV wallboard. UNDEFINED MEANS VISIBLE —
    * everything shows by default and Esther switches off only what is private.
@@ -238,7 +246,7 @@ export interface Apartment {
 // Free-form canvas elements in the General Jobs canvas (sticky notes, section boxes)
 export interface CanvasElement {
   id: string;
-  type: 'note' | 'box' | 'title' | 'countdown' | 'stopwatch' | 'clipart' | 'stroke' | 'bin' | 'voice' | 'widget';
+  type: 'note' | 'box' | 'title' | 'countdown' | 'stopwatch' | 'clipart' | 'stroke' | 'bin' | 'voice' | 'widget' | 'arrow';
   /** countdown: target ISO time · stopwatch: started ISO time (absent = paused) */
   targetAt?: string;
   startedAt?: string;
@@ -268,6 +276,23 @@ export interface CanvasElement {
   audioSeconds?: number;
   /** Thumbs-up count — see Apartment.thumbsUp. */
   thumbsUp?: number;
+  thumbsDown?: number;
+  /**
+   * Clip art can ATTACH to a job or another node: a pin stuck through its
+   * corner, a clip on its edge. The art then follows whatever it is stuck to,
+   * because that is what being stuck to something means.
+   */
+  attachedTo?: string;
+  /** Where on the host it sits, as a fraction of the host's box. */
+  attachAt?: { fx: number; fy: number };
+  /** Arrows join two things and re-draw themselves as either end moves. */
+  fromId?: string;
+  toId?: string;
+  /** Title styling, set in the title editor. */
+  fontWeight?: number;
+  align?: 'left' | 'center' | 'right';
+  italic?: boolean;
+  underline?: boolean;
   /**
    * Widgets: which kind this is (see `src/data/widgets.tsx`) and its own state.
    * Keeping the state in one free-form bag is what lets a new widget be added

@@ -1,5 +1,5 @@
 import React from 'react';
-import { MapPin, ClipboardList, Trash2, Palette, Pencil, X, ThumbsUp, Ghost,
+import { MapPin, ClipboardList, Trash2, Palette, Pencil, X, ThumbsUp, ThumbsDown, Ghost,
   Archive, CheckCircle2, PlayCircle } from 'lucide-react';
 import { Apartment, CanvasElement, Stage, BinKind, BIN_META } from '../../types';
 import { DriveIcon, ZohoIcon, PlanIcon, TvIcon } from '../ui/BrandIcons';
@@ -27,6 +27,7 @@ export interface BoardHandlers {
   jobDelete: (ids: string[]) => void;
   jobTv: (job: Apartment) => void;
   jobThumbs: (id: string, delta: number) => void;
+  jobThumbsDown: (id: string, delta: number) => void;
 
   elDown: (e: React.PointerEvent, el: CanvasElement) => void;
   elMove: (e: React.PointerEvent) => void;
@@ -37,6 +38,7 @@ export interface BoardHandlers {
   elColor: (e: React.MouseEvent, id: string) => void;
   elPatch: (id: string, patch: Partial<CanvasElement>) => void;
   elThumbs: (id: string, delta: number) => void;
+  elThumbsDown: (id: string, delta: number) => void;
 
   editChange: (v: string) => void;
   editCommit: () => void;
@@ -186,15 +188,25 @@ export const JobTile = React.memo(function JobTile({
         )}
       </div>
 
-      {(job.thumbsUp ?? 0) > 0 && (
-        <button
-          data-no-drag
-          onClick={e => { e.stopPropagation(); H.jobThumbs(job.id, -1); }}
-          title="Remove a thumbs up"
-          className="absolute -top-2 -left-2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-white border border-gray-200 shadow-sm text-[10px] font-bold text-emerald-600"
-        >
-          <ThumbsUp size={10} /> {job.thumbsUp}
-        </button>
+      {((job.thumbsUp ?? 0) > 0 || (job.thumbsDown ?? 0) > 0) && (
+        <span className="absolute -top-2 -left-2 flex items-center gap-1">
+          {(job.thumbsUp ?? 0) > 0 && (
+            <button data-no-drag
+              onClick={e => { e.stopPropagation(); H.jobThumbs(job.id, -1); }}
+              title="Take one back"
+              className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-white border border-gray-200 shadow-sm text-[10px] font-bold text-emerald-600">
+              <ThumbsUp size={10} /> {job.thumbsUp}
+            </button>
+          )}
+          {(job.thumbsDown ?? 0) > 0 && (
+            <button data-no-drag
+              onClick={e => { e.stopPropagation(); H.jobThumbsDown(job.id, -1); }}
+              title="Take one back"
+              className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-white border border-gray-200 shadow-sm text-[10px] font-bold text-rose-600">
+              <ThumbsDown size={10} /> {job.thumbsDown}
+            </button>
+          )}
+        </span>
       )}
 
       {lastEdited && (
@@ -274,11 +286,12 @@ export interface BoardNodeProps {
   H: BoardHandlers;
   onRecord: (id: string) => void;
   onStopRecord: () => void;
+  onUploadAudio: (id: string, file: File) => void;
 }
 
 export const BoardNode = React.memo(function BoardNode({
   el, x, y, w, h, isSelected, isDragging, isEditing, editText, binHot, binCount,
-  recording, savingAudio, ctx, editRef, H, onRecord, onStopRecord,
+  recording, savingAudio, ctx, editRef, H, onRecord, onStopRecord, onUploadAudio,
 }: BoardNodeProps) {
   const isBin = el.type === 'bin' && !!el.binKind;
   const plain = el.type === 'clipart';
@@ -296,7 +309,7 @@ export const BoardNode = React.memo(function BoardNode({
     : el.type === 'box' ? el.color.replace('0.45', '0.8')
     : 'rgba(0,0,0,0.1)';
 
-  const surface: React.CSSProperties = plain
+  const surface: React.CSSProperties = (plain || el.type === 'title')
     ? { backgroundColor: 'transparent', borderStyle: 'none', borderWidth: 0 }
     : {
         backgroundColor: isBin
@@ -317,7 +330,8 @@ export const BoardNode = React.memo(function BoardNode({
       onPointerUp={() => H.elUp(el)}
       onContextMenu={e => H.elMenu(e, el)}
       onDoubleClick={() => { if (!plain) H.elEdit(el); }}
-      className={`absolute rounded-xl select-none ${plain || isBin ? '' : 'shadow-md'} ${
+      data-node-id={el.id}
+      className={`group absolute rounded-xl select-none ${plain || isBin ? '' : 'shadow-md'} ${
         isDragging ? 'cursor-grabbing' : 'cursor-grab'
       }`}
       style={{
@@ -332,7 +346,8 @@ export const BoardNode = React.memo(function BoardNode({
       {/* Node actions — always on when selected, on hover otherwise. Bins have
           no colour picker and can never be deleted. */}
       {!plain && (
-        <div className={`absolute top-1.5 right-1.5 flex gap-1 ${isSelected ? 'opacity-100' : 'opacity-0 hover:opacity-100'} transition-opacity`}
+        <div className={`absolute top-1.5 right-1.5 flex gap-1 z-10 transition-opacity ${
+            isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'}`}
           style={{ pointerEvents: 'auto' }}>
           {!isBin && (
             <button data-el-action
@@ -361,7 +376,8 @@ export const BoardNode = React.memo(function BoardNode({
         <button data-el-action
           onClick={e => { e.stopPropagation(); H.elPatch(el.id, { showOnTv: el.showOnTv === false ? undefined : false }); }}
           title={el.showOnTv === false ? 'Hidden from TV' : 'Showing on TV'}
-          className={`absolute bottom-1.5 right-1.5 p-1 rounded-md transition-all ${isSelected ? 'opacity-100' : 'opacity-0 hover:opacity-100'}`}
+          className={`absolute bottom-1.5 right-1.5 p-1 rounded-md transition-all z-10 ${
+            isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'}`}
           style={{ color: el.showOnTv === false ? '#dc2626' : '#94a3b8' }}>
           <TvIcon size={11} hidden={el.showOnTv === false} />
         </button>
@@ -392,15 +408,23 @@ export const BoardNode = React.memo(function BoardNode({
           : { startedAt: new Date().toISOString() })} />
       ) : el.type === 'voice' ? (
         <VoiceMemoNode el={el} recording={recording} busy={savingAudio}
-          onRecord={() => onRecord(el.id)} onStop={onStopRecord} />
+          onRecord={() => onRecord(el.id)} onStop={onStopRecord}
+          onUpload={f => onUploadAudio(el.id, f)} />
       ) : isWidget ? (
         renderWidget(el, ctx)
       ) : el.type === 'clipart' ? (
         <ClipArtNode el={el} />
       ) : el.type === 'title' ? (
-        <div className="w-full h-full flex items-center px-2 font-black leading-none"
-          style={{ fontSize: el.fontSize ?? 22, color: el.color || '#0f172a' }}>
-          {el.text || 'Title'}
+        <div className="w-full h-full flex items-center px-2 leading-tight overflow-hidden"
+          style={{
+            fontSize: el.fontSize ?? 30,
+            fontWeight: el.fontWeight ?? 800,
+            color: el.color || '#0f172a',
+            fontStyle: el.italic ? 'italic' : 'normal',
+            textDecoration: el.underline ? 'underline' : 'none',
+            justifyContent: el.align === 'center' ? 'center' : el.align === 'right' ? 'flex-end' : 'flex-start',
+          }}>
+          {el.text || <span className="italic opacity-40">Title</span>}
         </div>
       ) : isEditing ? (
         <textarea
@@ -428,23 +452,38 @@ export const BoardNode = React.memo(function BoardNode({
         </div>
       )}
 
-      {(el.thumbsUp ?? 0) > 0 && (
-        <button data-el-action
-          onClick={e => { e.stopPropagation(); H.elThumbs(el.id, -1); }}
-          title="Remove a thumbs up"
-          className="absolute -top-2 -left-2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-white border border-gray-200 shadow-sm text-[10px] font-bold text-emerald-600">
-          <ThumbsUp size={10} /> {el.thumbsUp}
-        </button>
+      {((el.thumbsUp ?? 0) > 0 || (el.thumbsDown ?? 0) > 0) && (
+        <span className="absolute -top-2 -left-2 flex items-center gap-1">
+          {(el.thumbsUp ?? 0) > 0 && (
+            <button data-el-action
+              onClick={e => { e.stopPropagation(); H.elThumbs(el.id, -1); }}
+              title="Take one back"
+              className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-white border border-gray-200 shadow-sm text-[10px] font-bold text-emerald-600">
+              <ThumbsUp size={10} /> {el.thumbsUp}
+            </button>
+          )}
+          {(el.thumbsDown ?? 0) > 0 && (
+            <button data-el-action
+              onClick={e => { e.stopPropagation(); H.elThumbsDown(el.id, -1); }}
+              title="Take one back"
+              className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-white border border-gray-200 shadow-sm text-[10px] font-bold text-rose-600">
+              <ThumbsDown size={10} /> {el.thumbsDown}
+            </button>
+          )}
+        </span>
       )}
 
-      {/* Resize handle — boxes, bins and widgets are all resizable. */}
-      {(el.type === 'box' || isBin || isWidget) && (
+      {/* EVERY node resizes. A note you cannot make bigger for a longer note,
+          or a pin you cannot make smaller, is the odd one out for no reason. */}
+      {el.type !== 'stroke' && (
         <div data-el-action
           onPointerDown={e => H.resizeDown(e, el)}
           onPointerMove={H.resizeMove}
           onPointerUp={H.resizeUp}
-          className="absolute bottom-1 right-1 w-4 h-4 cursor-se-resize opacity-30 hover:opacity-80 transition-opacity"
-          style={{ borderRight: '2px solid #6b7280', borderBottom: '2px solid #6b7280', borderRadius: '0 0 4px 0' }}
+          className={`absolute bottom-0.5 right-0.5 w-3.5 h-3.5 cursor-se-resize transition-opacity z-10 ${
+            isSelected ? 'opacity-60' : 'opacity-0 group-hover:opacity-60'}`}
+          style={{ borderRight: '2px solid currentColor', borderBottom: '2px solid currentColor',
+                   borderRadius: '0 0 4px 0', color: '#64748b' }}
         />
       )}
     </div>

@@ -17,6 +17,8 @@ export function StageBoard({ onOpenJob }: { onOpenJob: (a: Apartment) => void })
   const { apartments, stages, currentProjectId, currentUser, updateApartment, contractorAssignments } = useStore();
   const [dragId, setDragId] = useState<string | null>(null);
   const [overStage, setOverStage] = useState<string | null>(null);
+  /** Where a dragged card would land within the column it is over. */
+  const [overIndex, setOverIndex] = useState<number | null>(null);
 
   const projectStages = useMemo(
     () => stages
@@ -30,9 +32,20 @@ export function StageBoard({ onOpenJob }: { onOpenJob: (a: Apartment) => void })
     [apartments],
   );
 
-  /** Newest content change first — an unset timestamp sorts last. */
-  const byRecency = (a: Apartment, b: Apartment) =>
-    (b.contentUpdatedAt ?? b.updatedAt ?? '').localeCompare(a.contentUpdatedAt ?? a.updatedAt ?? '');
+  /**
+   * Newest content change first, unless someone has said otherwise.
+   *
+   * A hand-set `stageOrder` wins, and only cards that have been deliberately
+   * placed carry one — so a column nobody has reordered still surfaces recent
+   * work at the top, which is the default you asked for.
+   */
+  const byRecency = (a: Apartment, b: Apartment) => {
+    const ao = a.stageOrder, bo = b.stageOrder;
+    if (ao != null && bo != null) return ao - bo;
+    if (ao != null) return -1;
+    if (bo != null) return 1;
+    return (b.contentUpdatedAt ?? b.updatedAt ?? '').localeCompare(a.contentUpdatedAt ?? a.updatedAt ?? '');
+  };
 
   const columns: { stage: Stage | null; items: Apartment[] }[] = [
     { stage: null, items: jobs.filter(j => !j.currentStageId).sort(byRecency) },
@@ -42,14 +55,32 @@ export function StageBoard({ onOpenJob }: { onOpenJob: (a: Apartment) => void })
     })),
   ];
 
-  function drop(stageId: string | null) {
-    if (!dragId || !currentUser) return;
+  /**
+   * Dropping does two things at once, and both matter.
+   *
+   * Across columns it changes the STAGE, which is what this view is for.
+   * Within a column it records an explicit ORDER — renumbered in tens so a
+   * later insertion between two cards has room without rewriting the column.
+   */
+  function drop(stageId: string | null, index: number | null) {
+    if (!dragId || !currentUser) { setDragId(null); setOverStage(null); setOverIndex(null); return; }
     const job = jobs.find(j => j.id === dragId);
-    if (job && job.currentStageId !== stageId) {
-      updateApartment(dragId, { currentStageId: stageId }, currentUser);
+    if (!job) { setDragId(null); setOverStage(null); setOverIndex(null); return; }
+
+    if (job.currentStageId !== stageId) {
+      updateApartment(dragId, { currentStageId: stageId, stageOrder: undefined }, currentUser);
+    } else if (index != null) {
+      const column = columns.find(c => (c.stage?.id ?? null) === stageId);
+      const rest = (column?.items ?? []).filter(j => j.id !== dragId);
+      const next = [...rest.slice(0, index), job, ...rest.slice(index)];
+      next.forEach((j, i) => {
+        const want = (i + 1) * 10;
+        if (j.stageOrder !== want) updateApartment(j.id, { stageOrder: want }, currentUser);
+      });
     }
     setDragId(null);
     setOverStage(null);
+    setOverIndex(null);
   }
 
   const pending = (a: Apartment) =>
@@ -65,8 +96,8 @@ export function StageBoard({ onOpenJob }: { onOpenJob: (a: Apartment) => void })
             <div
               key={key}
               onDragOver={e => { e.preventDefault(); setOverStage(key); }}
-              onDragLeave={() => setOverStage(s => (s === key ? null : s))}
-              onDrop={() => drop(stage?.id ?? null)}
+              onDragLeave={() => { setOverStage(s => (s === key ? null : s)); setOverIndex(null); }}
+              onDrop={() => drop(stage?.id ?? null, overIndex)}
               className="flex flex-col rounded-xl transition-colors flex-shrink-0"
               style={{
                 width: 258,
@@ -83,17 +114,31 @@ export function StageBoard({ onOpenJob }: { onOpenJob: (a: Apartment) => void })
               </div>
 
               <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-2">
-                {items.map(job => (
+                {items.map((job, i) => (
                   <div
                     key={job.id}
                     draggable
                     onDragStart={() => setDragId(job.id)}
-                    onDragEnd={() => { setDragId(null); setOverStage(null); }}
+                    onDragEnd={() => { setDragId(null); setOverStage(null); setOverIndex(null); }}
+                    onDragOver={e => {
+                      e.preventDefault(); e.stopPropagation();
+                      setOverStage(key);
+                      // Above the midpoint means before this card, below means after.
+                      const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                      setOverIndex(e.clientY < r.top + r.height / 2 ? i : i + 1);
+                    }}
+                    onDrop={e => { e.preventDefault(); e.stopPropagation(); drop(stage?.id ?? null, overIndex); }}
                     onClick={() => onOpenJob(job)}
                     className="rounded-lg bg-white p-2 cursor-grab active:cursor-grabbing transition-shadow hover:shadow-md"
                     style={{
                       border: `3px solid ${color}`,
                       opacity: dragId === job.id ? 0.45 : 1,
+                      // A line where it would land, rather than guessing.
+                      boxShadow: dragId && overStage === key && overIndex === i
+                        ? `inset 0 3px 0 -1px ${color}`
+                        : dragId && overStage === key && overIndex === i + 1
+                        ? `inset 0 -3px 0 -1px ${color}`
+                        : undefined,
                     }}
                   >
                     <div className="font-bold text-[12px] text-gray-900 leading-tight">
@@ -114,6 +159,11 @@ export function StageBoard({ onOpenJob }: { onOpenJob: (a: Apartment) => void })
                 ))}
                 {items.length === 0 && (
                   <div className="text-[11px] text-gray-300 text-center py-4 select-none">Drop here</div>
+                )}
+                {items.length > 0 && (
+                  <div className="text-[9.5px] text-gray-300 text-center pt-1 select-none">
+                    drag to reorder
+                  </div>
                 )}
               </div>
             </div>

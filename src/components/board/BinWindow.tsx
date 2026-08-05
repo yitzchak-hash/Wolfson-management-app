@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { X, Undo2, Trash2, Search } from 'lucide-react';
 import { useStore } from '../../data/store';
-import { Apartment } from '../../types';
+import { Apartment, BIN_META, BinKind } from '../../types';
+import { getBoardTheme } from '../../data/boardThemes';
 
 const BIN_LABELS: Record<string, string> = {
   done: 'Done', ready: 'Ready to Start', archive: 'Archive', trash: 'Trash',
@@ -15,11 +16,21 @@ const BIN_LABELS: Record<string, string> = {
  * Trash keeps its contents indefinitely, so this is always a safe place to look.
  * Permanent deletion exists but is explicit, confirmed, and only reachable here.
  */
-export function BinWindow({ bin, onClose }: {
-  bin: 'done' | 'ready' | 'archive' | 'trash';
+export function BinWindow({ bin, onClose, onOpenJob }: {
+  bin: BinKind;
   onClose: () => void;
+  onOpenJob?: (job: Apartment) => void;
 }) {
-  const { apartments, stages, moveToBin, deleteApartment, contractorAssignments } = useStore();
+  const { apartments, stages, moveToBin, deleteApartment, contractorAssignments,
+    boardSettings, currentProjectId } = useStore();
+  /**
+   * A bin is a piece of the same board, so it wears the same surface.
+   *
+   * On cork that means real cork inside a timber surround; on a whiteboard, the
+   * aluminium trim. Themes with no physical frame simply get a plain surround —
+   * the point is that opening a bin does not feel like leaving the board.
+   */
+  const theme = getBoardTheme(boardSettings[currentProjectId]?.themeId);
   const [query, setQuery] = useState('');
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
@@ -38,17 +49,25 @@ export function BinWindow({ bin, onClose }: {
     <>
       <div className="fixed inset-0 bg-black/45 z-[70]" onClick={onClose} />
       <div
-        className="fixed z-[80] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
-        style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 'min(760px, 92vw)', height: 'min(640px, 86vh)' }}
+        className="fixed z-[80] flex flex-col"
+        style={{
+          left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+          width: 'min(780px, 92vw)', height: 'min(660px, 86vh)',
+          ...(theme.frame ?? { padding: 0, borderRadius: 16, boxShadow: '0 18px 44px rgba(15,23,42,.3)' }),
+        }}
       >
-        <div className="flex items-center gap-3 px-4 py-3 bg-[#1e3a5f] text-white flex-shrink-0">
+       <div className="flex flex-col flex-1 min-h-0 overflow-hidden"
+         style={{ borderRadius: theme.frame ? 4 : 16 }}>
+        <div className="flex items-center gap-3 px-4 py-3 text-white flex-shrink-0"
+          style={{ backgroundColor: BIN_META[bin].color }}>
           <span className="font-bold text-sm">{BIN_LABELS[bin]}</span>
           <span className="text-[11px] text-white/60">{items.length} {items.length === 1 ? 'job' : 'jobs'}</span>
           <span className="flex-1" />
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-white/10"><X size={17} /></button>
         </div>
 
-        <div className="px-4 py-2 border-b border-gray-100 flex items-center gap-2 flex-shrink-0">
+        <div className="px-4 py-2 flex items-center gap-2 flex-shrink-0"
+          style={{ backgroundColor: 'rgba(255,255,255,.9)', borderBottom: '1px solid rgba(15,23,42,.08)' }}>
           <Search size={14} className="text-gray-400" />
           <input
             value={query}
@@ -58,9 +77,10 @@ export function BinWindow({ bin, onClose }: {
           />
         </div>
 
-        <div className="flex-1 overflow-y-auto p-3">
+        <div className="flex-1 overflow-y-auto p-3" style={theme.surface}>
           {items.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-sm text-gray-400">
+            <div className="h-full flex items-center justify-center text-sm"
+              style={{ color: theme.dark ? 'rgba(255,255,255,.55)' : 'rgba(15,23,42,.45)' }}>
               Nothing here.
             </div>
           ) : (
@@ -68,9 +88,15 @@ export function BinWindow({ bin, onClose }: {
               {items.map(a => {
                 const st = stageOf(a);
                 return (
-                  <div key={a.id} className="rounded-xl bg-white p-2.5"
-                    style={{ border: `3px solid ${st?.color ?? '#e2e8f0'}` }}>
-                    <div className="font-bold text-sm text-gray-900 leading-tight">{a.displayName || 'Job'}</div>
+                  <div key={a.id} className="p-2.5"
+                    style={{ ...theme.node, border: `3px solid ${st?.color ?? '#e2e8f0'}` }}>
+                    <button
+                      onClick={() => onOpenJob?.(a)}
+                      className="font-bold text-sm leading-tight text-left hover:underline"
+                      style={{ color: (theme.node.color as string) ?? '#111827' }}
+                      title="Open this job">
+                      {a.displayName || 'Job'}
+                    </button>
                     {a.address && <div className="text-[11px] text-gray-500 truncate mt-0.5">{a.address}</div>}
                     <div className="flex items-center gap-1.5 mt-1.5">
                       {st && (
@@ -122,11 +148,13 @@ export function BinWindow({ bin, onClose }: {
         </div>
 
         {bin === 'trash' && (
-          <div className="px-4 py-2 border-t border-gray-100 text-[11px] text-gray-400 flex-shrink-0">
+          <div className="px-4 py-2 text-[11px] text-gray-500 flex-shrink-0"
+            style={{ backgroundColor: 'rgba(255,255,255,.92)', borderTop: '1px solid rgba(15,23,42,.08)' }}>
             Nothing in Trash is ever removed automatically. Deleting permanently also removes the job's
             tasks, notes and photos.
           </div>
         )}
+       </div>
       </div>
     </>
   );

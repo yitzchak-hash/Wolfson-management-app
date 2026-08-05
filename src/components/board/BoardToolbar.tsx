@@ -67,6 +67,14 @@ export function BoardToolbar({
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const dragRef = useRef<{ px: number; py: number; ox: number; oy: number } | null>(null);
   /**
+   * How tall the rail is allowed to be, dragged from its bottom edge.
+   * Zero means "as tall as there is room for", which is the sensible default —
+   * a height is only remembered once somebody has deliberately set one.
+   */
+  const [height, setHeight] = useState(0);
+  const sizeRef = useRef<{ py: number; oh: number } | null>(null);
+  const railRef = useRef<HTMLDivElement>(null);
+  /**
    * On a phone the full rail covered a sixth of the board and ran off the
    * bottom, so it collapses to a single button and opens as a sheet. Desktop is
    * unchanged — the rail is the right shape when there is room for it.
@@ -84,6 +92,18 @@ export function BoardToolbar({
     setOffset({ x: st.ox + (e.clientX - st.px), y: st.oy + (e.clientY - st.py) });
   }
   function onGripUp() { dragRef.current = null; }
+
+  function onSizeDown(e: React.PointerEvent) {
+    e.preventDefault(); e.stopPropagation();
+    sizeRef.current = { py: e.clientY, oh: railRef.current?.getBoundingClientRect().height ?? 0 };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+  function onSizeMove(e: React.PointerEvent) {
+    const st = sizeRef.current;
+    if (!st) return;
+    setHeight(Math.max(140, st.oh + (e.clientY - st.py)));
+  }
+  function onSizeUp() { sizeRef.current = null; }
 
   const buttons = (
     <>
@@ -161,12 +181,27 @@ export function BoardToolbar({
         style={{ right: 12 - offset.x, top: 12 + offset.y, bottom: 124, alignItems: 'flex-start' }}
       >
         {/* Capped and scrollable: the rail grew past the bottom of a laptop
-            screen once Store and Map joined it, hiding Setup entirely. */}
-        <div
-          className="w-[62px] bg-white border border-gray-200 rounded-xl shadow-lg p-1.5 flex flex-col items-center gap-0.5 overflow-y-auto board-toolbar-scroll"
-          style={{ maxHeight: 'calc(100% - 140px)' }}
-        >
-          {buttons}
+            screen once Store and Map joined it, hiding Setup entirely. Drag the
+            handle at the bottom to decide how tall it is. */}
+        <div className="relative">
+          <div
+            ref={railRef}
+            className="w-[62px] bg-white border border-gray-200 rounded-xl shadow-lg p-1.5 pb-3 flex flex-col items-center gap-0.5 overflow-y-auto board-rail"
+            style={height ? { height } : { maxHeight: '100%' }}
+          >
+            {buttons}
+          </div>
+          <div
+            onPointerDown={onSizeDown}
+            onPointerMove={onSizeMove}
+            onPointerUp={onSizeUp}
+            onPointerCancel={onSizeUp}
+            onDoubleClick={() => setHeight(0)}
+            title="Drag to resize · double-click to fit"
+            className="absolute left-0 right-0 -bottom-1 h-3 flex items-center justify-center cursor-ns-resize group/size"
+          >
+            <span className="w-6 h-[3px] rounded-full bg-gray-200 group-hover/size:bg-gray-400 transition-colors" />
+          </div>
         </div>
       </div>
 

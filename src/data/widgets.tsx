@@ -122,6 +122,34 @@ function Line({ value, onChange, placeholder, className, readOnly }: {
 
 const overdueOf = (a: ContractorAssignment) => !a.completedAt && !!a.dueDate && a.dueDate < today();
 
+/**
+ * The clip-art shelf.
+ *
+ * Every piece attaches: drag one onto a job or a note and it sticks there, with
+ * a small impact as it lands, and from then on it travels with whatever it is
+ * stuck to. Take it off from its right-click menu.
+ */
+const ART_PIECES: WidgetDef[] = ([
+  ['pin',          'Push pin',    'Stick it through a job to mark it. Travels with the job from then on.',        56, 56],
+  ['clip',         'Paperclip',   'Clips onto the edge of a job or a note, and stays clipped to it.',             56, 56],
+  ['star',         'Star',        'Mark the one that matters. Sticks to whatever you drop it on.',                48, 48],
+  ['tape',         'Tape',        'A strip of masking tape across a corner.',                                     72, 32],
+  ['marker',       'Marker',      'A marker pen resting on the board.',                                           48, 48],
+  ['document',     'Document',    'A paper stub for a drawing or a spec — link it and it opens.',                 52, 62],
+  ['sticky-stack', 'Note pad',    'A pad of unused notes, for the corner of a section.',                          56, 56],
+  ['arrow',        'Arrow mark',  'A drawn arrow. To CONNECT two jobs, right-click one and choose Draw an arrow.', 52, 52],
+] as const).map(([art, name, blurb, w, h]) => ({
+  id: `art-${art}`,
+  name,
+  category: 'visual' as const,
+  icon: Sticker,
+  w, h,
+  blurb,
+  data: { art },
+  render: (el: CanvasElement, c: WidgetCtx) => <ArtInner el={el} update={c.update} readOnly={c.readOnly} />,
+}));
+
+
 // ─── Registry ────────────────────────────────────────────────────────────────
 
 export const WIDGETS: WidgetDef[] = [
@@ -950,12 +978,16 @@ export const WIDGETS: WidgetDef[] = [
     data: { elapsedMs: 0 },
     render: (el, c) => <StopwatchInner el={el} update={c.update} readOnly={c.readOnly} />,
   },
-  {
-    id: 'w-art', name: 'Clip art', category: 'visual', icon: Sticker, w: 72, h: 72,
-    blurb: 'A pin, a clip, a star, an arrow — the little pieces that make it a board.',
-    data: { art: 'pin' },
-    render: (el, c) => <ArtInner el={el} update={c.update} readOnly={c.readOnly} />,
-  },
+  /**
+   * Each piece is its own item on the shelf.
+   *
+   * One "Clip art" entry that opened a chooser meant the store showed a pin and
+   * nothing else — you could not see what was in there without placing one
+   * first. Eight entries means eight pictures, and the blurb says what each one
+   * actually DOES, because these are not decoration: drop one on a job and it
+   * sticks to it.
+   */
+  ...ART_PIECES,
 
   // ── Look & feel ───────────────────────────────────────────────────────────
   {
@@ -1329,6 +1361,70 @@ function ClockWidget() {
     </div>
   );
 }
+
+
+/**
+ * Stand-in data for the store's previews.
+ *
+ * A brand-new board has no jobs, no tasks and no contractors, so a preview
+ * running on the real data would show every live widget as an empty box —
+ * which tells you nothing about whether it is worth placing. Sample rows are
+ * used only when the real thing has nothing to show, so as soon as there IS
+ * real data you are looking at your own.
+ */
+const SAMPLE_STAGES: Stage[] = [
+  { id: 'x1', name: 'Survey', color: '#8b5cf6', order: 1, active: true, description: '', createdAt: '', updatedAt: '' },
+  { id: 'x2', name: 'Piping', color: '#0ea5e9', order: 2, active: true, description: '', createdAt: '', updatedAt: '' },
+  { id: 'x3', name: 'Units In', color: '#f59e0b', order: 3, active: true, description: '', createdAt: '', updatedAt: '' },
+  { id: 'x4', name: 'Start-up', color: '#16a34a', order: 4, active: true, description: '', createdAt: '', updatedAt: '' },
+] as unknown as Stage[];
+
+const SAMPLE_JOBS: Apartment[] = [
+  { id: 'j1', displayName: 'Artzi, Avital', address: '14 Ben Gurion', currentStageId: 'x2' },
+  { id: 'j2', displayName: 'Cohen, Miriam', address: '3 Herzl', currentStageId: 'x3' },
+  { id: 'j3', displayName: 'Levi, Yosef', address: '88 Dizengoff', currentStageId: 'x1' },
+  { id: 'j4', displayName: 'Mizrahi, Dana', address: '5 Rothschild', currentStageId: 'x4' },
+  { id: 'j5', displayName: 'Peretz, Eli', address: '21 Allenby', currentStageId: 'x2' },
+  { id: 'j6', displayName: 'Shapiro, Ruth', address: '9 Bialik', currentStageId: 'x3', boardBin: 'done' },
+].map(j => ({ ...j, buildingId: 'G', isUnnamed: false, createdAt: new Date(Date.now() - 2 * 86_400_000).toISOString() })) as unknown as Apartment[];
+
+const day = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+const SAMPLE_TASKS: ContractorAssignment[] = [
+  { id: 't1', apartmentId: 'j1', contractorId: 'k1', taskDescription: 'Hang the units', dueDate: day(-6) },
+  { id: 't2', apartmentId: 'j3', contractorId: 'k2', taskDescription: 'Duct run', dueDate: day(-2) },
+  { id: 't3', apartmentId: 'j2', contractorId: 'k1', taskDescription: 'Grilles', dueDate: day(0) },
+  { id: 't4', apartmentId: 'j4', contractorId: 'k3', taskDescription: 'Commissioning', dueDate: day(2) },
+  { id: 't5', apartmentId: 'j5', contractorId: 'k2', taskDescription: 'Thermostats', dueDate: day(4) },
+] as unknown as ContractorAssignment[];
+
+const SAMPLE_CONTRACTORS: Contractor[] = [
+  { id: 'k1', name: 'Avi Drywall', category: 'drywall', token: 'sample1', active: true, email: '', createdAt: '' },
+  { id: 'k2', name: 'Moshe AC', category: 'ac', token: 'sample2', active: true, email: '', createdAt: '' },
+  { id: 'k3', name: 'Yoni General', category: 'general', token: 'sample3', active: true, email: '', createdAt: '' },
+] as unknown as Contractor[];
+
+const SAMPLE_LOGS: ActivityLog[] = [
+  { id: 'g1', userName: 'Esther', apartmentId: 'j1', apartmentNumber: 'Artzi, Avital', actionType: 'update',
+    fieldChanged: 'currentStageId', previousValue: 'Survey', newValue: 'Piping',
+    createdAt: new Date(Date.now() - 12 * 60_000).toISOString() },
+  { id: 'g2', userName: 'Yitzchak', apartmentId: 'j4', apartmentNumber: 'Mizrahi, Dana', actionType: 'update',
+    fieldChanged: 'address', previousValue: '', newValue: '5 Rothschild',
+    createdAt: new Date(Date.now() - 95 * 60_000).toISOString() },
+] as unknown as ActivityLog[];
+
+/** Real data where there is any, samples where there is not — field by field. */
+export function withSampleData(ctx: WidgetCtx): WidgetCtx {
+  return {
+    ...ctx,
+    jobs: ctx.jobs.length ? ctx.jobs : SAMPLE_JOBS,
+    stages: ctx.stages.length ? ctx.stages : SAMPLE_STAGES,
+    assignments: ctx.assignments.length ? ctx.assignments : SAMPLE_TASKS,
+    contractors: ctx.contractors.length ? ctx.contractors : SAMPLE_CONTRACTORS,
+    logs: ctx.logs.length ? ctx.logs : SAMPLE_LOGS,
+    readOnly: true,
+  };
+}
+
 
 export const WIDGET_BY_ID = new Map(WIDGETS.map(w => [w.id, w]));
 

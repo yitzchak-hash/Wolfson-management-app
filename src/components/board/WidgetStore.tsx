@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { X, Search, Plus } from 'lucide-react';
 import { useStore } from '../../data/store';
-import { WIDGETS, CATEGORY_LABEL, WidgetCategory, WidgetDef, WidgetCtx } from '../../data/widgets';
+import { WIDGETS, CATEGORY_LABEL, WidgetCategory, WidgetDef, WidgetCtx, withSampleData } from '../../data/widgets';
 import { CanvasElement } from '../../types';
 
 /**
@@ -34,6 +34,10 @@ export function WidgetStore({ onPick, onClose }: {
     photos: contractorPhotos, logs: activityLogs,
     update: () => {}, openJob: () => {}, readOnly: true,
   }), [apartments, stages, contractorAssignments, contractors, contractorPhotos, activityLogs]);
+
+  // Samples fill in only where the real thing is empty, so a new board still
+  // shows what each widget looks like with something in it.
+  const shownCtx = useMemo(() => withSampleData(previewCtx), [previewCtx]);
 
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -90,7 +94,7 @@ export function WidgetStore({ onPick, onClose }: {
               </div>
               <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(226px, 1fr))' }}>
                 {items.map(w => (
-                  <WidgetCard key={w.id} def={w} ctx={previewCtx} onPick={onPick} />
+                  <WidgetCard key={w.id} def={w} ctx={shownCtx} onPick={onPick} />
                 ))}
               </div>
             </div>
@@ -117,8 +121,10 @@ function WidgetCard({ def, ctx, onPick }: {
   def: WidgetDef; ctx: WidgetCtx; onPick: (d: WidgetDef) => void;
 }) {
   const Icon = def.icon;
-  const BOX_W = 208, BOX_H = 124;
-  const k = Math.min(BOX_W / def.w, BOX_H / def.h, 1);
+  const BOX_W = 226, BOX_H = 150;
+  // Cover, not contain: the widget fills the tile edge to edge and anything
+  // past the bottom is simply cropped, the way a real store shelf looks.
+  const k = Math.max(BOX_W / def.w, Math.min(BOX_H / def.h, 1.6));
 
   const preview: CanvasElement = {
     id: `preview-${def.id}`,
@@ -136,27 +142,29 @@ function WidgetCard({ def, ctx, onPick }: {
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(def); } }}
       className="group text-left rounded-xl border border-gray-200 overflow-hidden hover:border-[#4aa8d8] transition-colors flex flex-col cursor-pointer"
     >
-      <div className="relative bg-slate-50 flex items-center justify-center overflow-hidden"
-        style={{ height: BOX_H }}>
+      <div className="relative bg-white overflow-hidden" style={{ height: BOX_H }}>
         <div
-          className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden"
+          className="absolute top-0 left-0 origin-top-left"
           style={{
             width: def.w, height: def.h,
             transform: `scale(${k})`,
-            transformOrigin: 'center',
-            flexShrink: 0,
             // The preview is a picture of the widget, not a working copy.
             pointerEvents: 'none',
           }}
         >
           {def.render(preview, ctx)}
         </div>
+        {/* A soft fade where a tall widget is cropped, so the cut looks meant. */}
+        {def.h * k > BOX_H && (
+          <div className="absolute inset-x-0 bottom-0 h-8 pointer-events-none"
+            style={{ background: 'linear-gradient(transparent, #ffffff)' }} />
+        )}
         <span className="absolute right-1.5 bottom-1.5 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity"
           style={{ backgroundColor: '#1e3a5f' }}>
           <Plus size={10} /> Add
         </span>
       </div>
-      <div className="p-2.5 flex-1">
+      <div className="p-2.5 flex-1 border-t border-gray-100">
         <div className="flex items-center gap-1.5 mb-0.5">
           <Icon size={13} className="text-[#1e3a5f] flex-shrink-0" />
           <span className="font-bold text-[12px] text-gray-900">{def.name}</span>

@@ -23,6 +23,15 @@ export interface BoardTheme {
   title: React.CSSProperties;
   /** True when the surface is dark, so text flips to light. */
   dark?: boolean;
+  /**
+   * The frame a bin window is drawn in.
+   *
+   * A bin holding cork-board jobs should look like a piece of that cork board,
+   * with the timber surround a real one has — not a plain white dialog with the
+   * texture pasted inside it. Themes without a physical frame leave this unset
+   * and get a plain surround.
+   */
+  frame?: React.CSSProperties;
 }
 
 const dots = (c: string, size = 22) => ({
@@ -78,6 +87,13 @@ export const BOARD_THEMES: BoardTheme[] = [
     node: { backgroundColor: '#fffdf5', borderRadius: '4px', boxShadow: '0 5px 11px rgba(50,26,6,.40)' },
     note: { backgroundColor: '#fde68a', borderRadius: '2px', color: '#5b3d05', boxShadow: '0 5px 11px rgba(50,26,6,.36)' },
     title: { color: '#402711', fontFamily: 'Georgia, serif', fontWeight: 800 },
+    // Stained timber with a bevel, the way a real cork board is surrounded.
+    frame: {
+      padding: '14px',
+      background: 'linear-gradient(150deg,#8a5a2b,#6f4520 42%,#7d5027 60%,#5c3617)',
+      boxShadow: 'inset 0 1px 0 rgba(255,225,180,.35), inset 0 -2px 3px rgba(0,0,0,.45), 0 18px 44px rgba(0,0,0,.45)',
+      borderRadius: '10px',
+    },
   },
   {
     id: 'whiteboard', name: 'Whiteboard',
@@ -89,6 +105,13 @@ export const BOARD_THEMES: BoardTheme[] = [
     node: { backgroundColor: '#ffffff', borderRadius: '10px', boxShadow: '0 1px 3px rgba(15,23,42,.10)' },
     note: { backgroundColor: '#fef9c3', borderRadius: '6px', color: '#713f12' },
     title: { color: '#1e40af', fontFamily: "'Comic Sans MS','Segoe Print',cursive", fontWeight: 800 },
+    // The aluminium trim a whiteboard is edged with.
+    frame: {
+      padding: '11px',
+      background: 'linear-gradient(160deg,#dfe4ea,#b9c0ca 45%,#cfd6de)',
+      boxShadow: 'inset 0 1px 0 rgba(255,255,255,.9), 0 16px 40px rgba(15,23,42,.28)',
+      borderRadius: '8px',
+    },
   },
   {
     id: 'dark-studio', name: 'Dark studio',

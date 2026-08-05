@@ -67,9 +67,12 @@ export const PinnedTitleLayer = React.memo(function PinnedTitleLayer({
             // zoomed far out, which is the intended behaviour here.
             transform: `scale(${zoom})`,
             transformOrigin: '0 0',
-            fontSize: el.fontSize ?? 22,
-            fontWeight: 900,
+            fontSize: el.fontSize ?? 30,
+            fontWeight: el.fontWeight ?? 800,
             color: el.color || '#0f172a',
+            fontStyle: el.italic ? 'italic' : 'normal',
+            textDecoration: el.underline ? 'underline' : 'none',
+            textAlign: el.align ?? 'left',
             whiteSpace: 'nowrap',
             textShadow: '0 1px 0 rgba(255,255,255,.85), 0 0 8px rgba(255,255,255,.7)',
           }}
@@ -165,11 +168,12 @@ export function StopwatchNode({ el, onToggle }: { el: CanvasElement; onToggle?: 
  * or the localStorage quota the way inlined base64 would.
  */
 export function VoiceMemoNode({
-  el, onRecord, onStop, recording, busy,
+  el, onRecord, onStop, onUpload, recording, busy,
 }: {
   el: CanvasElement;
   onRecord: () => void;
   onStop: () => void;
+  onUpload?: (file: File) => void;
   recording: boolean;
   busy: boolean;
 }) {
@@ -180,17 +184,30 @@ export function VoiceMemoNode({
       {el.audioUrl ? (
         <audio data-no-drag data-el-action controls src={el.audioUrl} className="w-full h-7" />
       ) : (
-        <button
-          data-no-drag data-el-action
-          onClick={e => { e.stopPropagation(); recording ? onStop() : onRecord(); }}
-          disabled={busy}
-          className="text-[10px] font-bold px-2 py-1 rounded-full self-start disabled:opacity-50"
-          style={recording
-            ? { backgroundColor: '#fee2e2', color: '#b91c1c' }
-            : { backgroundColor: '#e0f2fe', color: '#0369a1' }}
-        >
-          {busy ? 'Saving…' : recording ? '■ Stop' : '● Record'}
-        </button>
+        // Record OR upload. A memo recorded on a phone and dropped in is just as
+        // useful as one spoken at the desk, and often the only one that exists.
+        <div className="flex items-center gap-1.5">
+          <button
+            data-no-drag data-el-action
+            onClick={e => { e.stopPropagation(); recording ? onStop() : onRecord(); }}
+            disabled={busy}
+            className="text-[10px] font-bold px-2 py-1 rounded-full disabled:opacity-50"
+            style={recording
+              ? { backgroundColor: '#fee2e2', color: '#b91c1c' }
+              : { backgroundColor: '#e0f2fe', color: '#0369a1' }}
+          >
+            {busy ? 'Saving…' : recording ? '■ Stop' : '● Record'}
+          </button>
+          {!recording && onUpload && (
+            <label data-no-drag data-el-action
+              className="text-[10px] font-bold px-2 py-1 rounded-full cursor-pointer"
+              style={{ backgroundColor: '#f1f5f9', color: '#475569' }}>
+              Upload
+              <input type="file" accept="audio/*" className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) onUpload(f); e.currentTarget.value = ''; }} />
+            </label>
+          )}
+        </div>
       )}
       {secs > 0 && <div className="text-[9px] text-gray-400">{secs}s</div>}
     </div>

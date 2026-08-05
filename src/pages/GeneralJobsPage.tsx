@@ -2,8 +2,8 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import {
   Plus, Briefcase, MapPin, ExternalLink, Trash2, ClipboardList, FolderOpen,
   Copy, StickyNote, Square, Palette, Pencil, X, AlertTriangle,
-  Ghost, ThumbsUp, ClipboardPaste, LayoutGrid, Columns3, Archive, CheckCircle2, PlayCircle,
-  Image as ImageIcon, ImageOff, History,
+  Ghost, ThumbsUp, ThumbsDown, ClipboardPaste, LayoutGrid, Columns3, Archive, CheckCircle2, PlayCircle,
+  Image as ImageIcon, ImageOff, History, MoveUpRight, Unlink,
 } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 import { useStore } from '../data/store';
@@ -18,6 +18,8 @@ import { MiniMap } from '../components/board/MiniMap';
 import { BinWindow } from '../components/board/BinWindow';
 import { StageBoard } from '../components/board/StageBoard';
 import { WidgetStore } from '../components/board/WidgetStore';
+import { TitleEditor } from '../components/board/TitleEditor';
+import { AttachedArtLayer, ArrowLayer, ArrowDraft, HostBox } from '../components/board/AttachLayer';
 import { renderWidget, WidgetDef, WidgetCtx } from '../data/widgets';
 import { JobTile, GhostTile, BoardNode, BoardHandlers } from '../components/board/BoardItems';
 import { useTouchGestures } from '../hooks/useTouchGestures';
@@ -29,7 +31,7 @@ import {
 } from '../data/driveApi';
 import {
   PinnedTitleLayer, StrokeLayer, CountdownNode, StopwatchNode, ClipArtNode, NODE_DEFAULT_SIZE,
-  VoiceMemoNode, ART_KINDS,
+  VoiceMemoNode, ART_KINDS, ArtKind,
 } from '../components/board/BoardNodes';
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
@@ -214,6 +216,11 @@ export function GeneralJobsPage() {
   const [penStyle, setPenStyle] = useState({ color: '#1e3a5f', width: 3 });
   const [markStyle, setMarkStyle] = useState({ color: '#facc15', width: 16 });
   const [exportMenu, setExportMenu] = useState(false);
+  const [titleEdit, setTitleEdit] = useState<string | null>(null);
+  const [zoomField, setZoomField] = useState('100');
+  /** Armed arrow: the first end is chosen, waiting for the second. */
+  const [arrowFrom, setArrowFrom] = useState<string | null>(null);
+  const [arrowTip, setArrowTip] = useState<{ x: number; y: number } | null>(null);
   const [storeOpen, setStoreOpen] = useState(false);
   const [layoutPanel, setLayoutPanel] = useState(false);
   /** A finished job briefly celebrates, at the point on the board it landed. */
@@ -306,7 +313,9 @@ export function GeneralJobsPage() {
       w: size.w, h: size.h,
       text: kind === 'title' ? 'Title' : '',
       color: kind === 'clipart' ? '#dc2626' : 'rgba(250, 204, 21, 0.45)',
-      ...(kind === 'title' ? { pinned: true, pinTop: 12, fontSize: 22 } : {}),
+      // NOT pinned by default: a title you cannot drag is the wrong first
+      // experience of one. Pinning is a deliberate choice in its editor.
+      ...(kind === 'title' ? { fontSize: 30, fontWeight: 800, color: '#0f172a', align: 'left' as const } : {}),
       ...(kind === 'countdown' ? { targetAt: new Date(Date.now() + 86_400_000).toISOString() } : {}),
       ...(kind === 'stopwatch' ? { elapsedMs: 0 } : {}),
       ...(kind === 'clipart' ? { art: 'pin' as const } : {}),
@@ -354,16 +363,20 @@ export function GeneralJobsPage() {
   /** Drops a widget from the store, seeded with its own default state. */
   function placeWidget(def: WidgetDef) {
     const at = freeSpot(def.w, def.h);
+    // Clip art is a first-class node type, not a widget wrapper — that is what
+    // lets it stick to a job and travel with it.
+    const isArt = def.id.startsWith('art-');
     addCanvasElement({
       id: 'CE-' + Math.random().toString(36).slice(2, 9),
-      type: 'widget',
-      widget: def.id,
+      ...(isArt
+        ? { type: 'clipart' as const, art: def.id.slice(4) as ArtKind }
+        : { type: 'widget' as const, widget: def.id }),
       x: Math.round(at.x),
       y: Math.round(at.y),
       w: def.w, h: def.h,
       text: '',
-      color: '#ffffff',
-      data: def.data ? JSON.parse(JSON.stringify(def.data)) : {},
+      color: isArt ? '#dc2626' : '#ffffff',
+      data: isArt ? {} : (def.data ? JSON.parse(JSON.stringify(def.data)) : {}),
     });
     setStoreOpen(false);
     setToast(`${def.name} added`);
@@ -371,6 +384,18 @@ export function GeneralJobsPage() {
 
   function handleToolPick(next: BoardTool) {
     if (next === 'clipart') { setArtPicker(true); setTool('select'); return; }
+    if (next === 'title') {
+      const at = freeSpotRef.current(NODE_DEFAULT_SIZE.title.w, NODE_DEFAULT_SIZE.title.h);
+      const id = 'CE-' + Math.random().toString(36).slice(2, 9);
+      addCanvasElement({
+        id, type: 'title', x: Math.round(at.x), y: Math.round(at.y),
+        w: NODE_DEFAULT_SIZE.title.w, h: NODE_DEFAULT_SIZE.title.h,
+        text: '', color: '#0f172a', fontSize: 30, fontWeight: 800, align: 'left',
+      });
+      setTitleEdit(id);
+      setTool('select');
+      return;
+    }
     if (next === 'job') { setShowAddModal(true); setTool('select'); return; }
     if (next === 'export') { exportBoardImage(); setTool('select'); return; }
     // Pen and highlighter are modes, not one-shot actions.
@@ -418,6 +443,16 @@ export function GeneralJobsPage() {
       return next;
     });
   }, []);
+  // The field follows the zoom unless it is being typed in.
+  useEffect(() => { setZoomField(String(Math.round(zoom * 100))); }, [zoom]);
+
+  /** Zoom from the middle of the view — what the header buttons use. */
+  const zoomCentre = useCallback((dir: 1 | -1) => {
+    const r = viewportRef.current?.getBoundingClientRect();
+    if (!r) return;
+    zoomAt(r.left + r.width / 2, r.top + r.height / 2, dir);
+  }, [zoomAt]);
+
   const deleteRef = useRef<() => void>(() => {});
   /**
    * The bridge that makes memoisation actually work.
@@ -437,6 +472,7 @@ export function GeneralJobsPage() {
     jobDelete: ids => live.current.jobDelete(ids),
     jobTv: j => live.current.jobTv(j),
     jobThumbs: (id, d) => live.current.jobThumbs(id, d),
+    jobThumbsDown: (id, d) => live.current.jobThumbsDown(id, d),
     elDown: (e, el) => live.current.elDown(e, el),
     elMove: e => live.current.elMove(e),
     elUp: el => live.current.elUp(el),
@@ -446,6 +482,7 @@ export function GeneralJobsPage() {
     elColor: (e, id) => live.current.elColor(e, id),
     elPatch: (id, p) => live.current.elPatch(id, p),
     elThumbs: (id, d) => live.current.elThumbs(id, d),
+    elThumbsDown: (id, d) => live.current.elThumbsDown(id, d),
     editChange: v => live.current.editChange(v),
     editCommit: () => live.current.editCommit(),
     editCancel: () => live.current.editCancel(),
@@ -522,10 +559,11 @@ export function GeneralJobsPage() {
       return { x: st.x + drag.dx, y: st.y + drag.dy, w: el.w, h: el.h };
     }
     if (resize?.id === el.id) {
+      const m = minSize(el);
       return {
         x: el.x, y: el.y,
-        w: Math.max(120, resize.startW + resize.dw),
-        h: Math.max(80, resize.startH + resize.dh),
+        w: Math.max(m.w, resize.startW + resize.dw),
+        h: Math.max(m.h, resize.startH + resize.dh),
       };
     }
     return { x: el.x, y: el.y, w: el.w, h: el.h };
@@ -641,15 +679,50 @@ export function GeneralJobsPage() {
     setCtxMenu(null);
   }
 
+  /**
+   * Arrows are drawn end to end, like the joins in the builder: pick the thing
+   * it comes from, then the thing it goes to. Nothing is created until the
+   * second end is chosen, so an abandoned arrow leaves nothing behind.
+   */
+  function startArrow(fromId: string) {
+    setArrowFrom(fromId);
+    setArrowTip(null);
+    setCtxMenu(null);
+    setToast('Now click what it points to');
+  }
+
+  function finishArrow(toId: string) {
+    if (!arrowFrom || arrowFrom === toId) { setArrowFrom(null); return; }
+    addCanvasElement({
+      id: genId('CE'),
+      type: 'arrow',
+      fromId: arrowFrom,
+      toId,
+      x: 0, y: 0, w: 0, h: 0,
+      text: '',
+      color: '#1e3a5f',
+      strokeWidth: 2.5,
+    });
+    setArrowFrom(null);
+    setArrowTip(null);
+    setToast('Connected');
+  }
+
   // ── Thumbs up ─────────────────────────────────────────────────────
-  function bumpThumbs(kind: 'job' | 'element', ids: string[], delta: number) {
+  /** Up and down are counted separately, so both numbers stay visible. */
+  function bumpThumbs(kind: 'job' | 'element', ids: string[], delta: number, dir: 'up' | 'down' = 'up') {
+    const field = dir === 'up' ? 'thumbsUp' : 'thumbsDown';
     ids.forEach(id => {
       if (kind === 'job') {
         const j = apartments.find(a => a.id === id);
-        if (j && currentUser) updateApartment(id, { thumbsUp: Math.max(0, (j.thumbsUp ?? 0) + delta) }, currentUser);
+        if (j && currentUser) {
+          updateApartment(id, { [field]: Math.max(0, ((j as unknown as Record<string, unknown>)[field] as number ?? 0) + delta) }, currentUser);
+        }
       } else {
         const el = canvasElements.find(e => e.id === id);
-        if (el) updateCanvasElement(id, { thumbsUp: Math.max(0, (el.thumbsUp ?? 0) + delta) });
+        if (el) {
+          updateCanvasElement(id, { [field]: Math.max(0, ((el as unknown as Record<string, unknown>)[field] as number ?? 0) + delta) });
+        }
       }
     });
     setCtxMenu(null);
@@ -782,6 +855,22 @@ export function GeneralJobsPage() {
     recorderRef.current?.rec.stop();
   }
 
+  /** An audio file dropped in goes to exactly the same place a recording does. */
+  async function uploadAudio(elId: string, file: File) {
+    setSavingAudio(true);
+    try {
+      const url = await storeAudio(file, 0);
+      if (url) {
+        updateCanvasElement(elId, { audioUrl: url, text: file.name.replace(/\.[^.]+$/, '') });
+        setToast('Voice memo added');
+      }
+    } catch {
+      setToast('Could not add that file');
+    } finally {
+      setSavingAudio(false);
+    }
+  }
+
   // ── Export board ──────────────────────────────────────────────────
   function exportInput() {
     return { jobs, elements: canvasElements, stages, title: s.generalJobsTitle, tileW: TILE_W, tileH: TILE_H, defaultPos };
@@ -874,7 +963,11 @@ export function GeneralJobsPage() {
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       if (e.key === 'Delete' || e.key === 'Backspace') deleteRef.current();
-      if (e.key === 'Escape') { setSelectedJobIds(new Set()); setSelectedElIds(new Set()); setCtxMenu(null); setColorPicker(null); }
+      if (e.key === 'Escape') {
+        setSelectedJobIds(new Set()); setSelectedElIds(new Set());
+        setCtxMenu(null); setColorPicker(null);
+        setArrowFrom(null); setArrowTip(null);
+      }
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -912,6 +1005,7 @@ export function GeneralJobsPage() {
   // ── Job drag ──────────────────────────────────────────────────────
   function onJobPointerDown(e: React.PointerEvent, job: Apartment, index: number) {
     if (e.button !== 0) return;
+    if (arrowFrom) { e.stopPropagation(); finishArrow(job.id); return; }
     if ((e.target as HTMLElement).closest('[data-no-drag]')) return;
     // With the pen or highlighter armed, a press starts a stroke wherever it
     // lands — including on top of a tile. Otherwise you could not draw across
@@ -990,6 +1084,7 @@ export function GeneralJobsPage() {
   // ── Element drag ──────────────────────────────────────────────────
   function onElPointerDown(e: React.PointerEvent, el: CanvasElement) {
     if (e.button !== 0) return;
+    if (arrowFrom) { e.stopPropagation(); finishArrow(el.id); return; }
     if ((e.target as HTMLElement).closest('[data-el-action]')) return;
     if (drawMode) { startStrokeAt(e); return; }
     e.stopPropagation();
@@ -1024,8 +1119,44 @@ export function GeneralJobsPage() {
     setDrag({ ...drag, dx, dy, moved: drag.moved || Math.abs(dx) > 4 || Math.abs(dy) > 4 });
   }
 
+  /** The host under a world point, if any — used to decide an attach or arrow. */
+  function hostAt(wx: number, wy: number, exceptId?: string): HostBox | null {
+    let best: HostBox | null = null;
+    hostBoxes.forEach(h => {
+      if (h.id === exceptId) return;
+      if (wx >= h.x && wx <= h.x + h.w && wy >= h.y && wy <= h.y + h.h) {
+        // Smallest wins, so a pin dropped on a note inside a box sticks to the note.
+        if (!best || h.w * h.h < best.w * best.h) best = h;
+      }
+    });
+    return best;
+  }
+
   function onElPointerUp(el: CanvasElement) {
     if (!drag || drag.kind !== 'element') return;
+
+    // Clip art dropped on top of something STICKS to it, and from then on has
+    // no position of its own — it has that thing's, plus an offset.
+    if (drag.moved && el.type === 'clipart' && drag.ids.length === 1) {
+      const st = drag.starts.get(el.id)!;
+      const cx = st.x + drag.dx + el.w / 2;
+      const cy = st.y + drag.dy + el.h / 2;
+      const host = hostAt(cx, cy, el.id);
+      if (host) {
+        updateCanvasElement(el.id, {
+          attachedTo: host.id,
+          attachAt: {
+            fx: Math.min(1, Math.max(0, (cx - host.x) / host.w)),
+            fy: Math.min(1, Math.max(0, (cy - host.y) / host.h)),
+          },
+        });
+        setDrag(null); setHoverBin(null);
+        setToast('Stuck on');
+        return;
+      }
+      if (el.attachedTo) updateCanvasElement(el.id, { attachedTo: undefined, attachAt: undefined });
+    }
+
     if (drag.moved) {
       drag.ids.forEach(id => {
         const st = drag.starts.get(id)!;
@@ -1047,6 +1178,15 @@ export function GeneralJobsPage() {
   }
 
   // ── Box resize ────────────────────────────────────────────────────
+  /** Smallest a node may be — a pin is not a section box. */
+  function minSize(el: CanvasElement): { w: number; h: number } {
+    if (el.type === 'clipart') return { w: 24, h: 24 };
+    if (el.type === 'title') return { w: 80, h: 28 };
+    if (el.type === 'voice' || el.type === 'note') return { w: 110, h: 56 };
+    if (el.type === 'widget') return { w: 120, h: 64 };
+    return { w: 120, h: 80 };
+  }
+
   function onResizePointerDown(e: React.PointerEvent, el: CanvasElement) {
     e.stopPropagation(); e.preventDefault();
     setResize({ id: el.id, startW: el.w, startH: el.h, startPX: e.clientX, startPY: e.clientY, dw: 0, dh: 0 });
@@ -1057,14 +1197,22 @@ export function GeneralJobsPage() {
     if (!resize) return;
     // Local only. Writing to the store here serialised the entire project to
     // localStorage on every pointer frame; the commit happens on pointerup.
-    setResize({ ...resize, dw: e.clientX - resize.startPX, dh: e.clientY - resize.startPY });
+    // Divided by zoom, or the corner would run away from the cursor at any
+    // zoom but 100% — the same trap the tile drag fell into.
+    setResize({
+      ...resize,
+      dw: (e.clientX - resize.startPX) / zoom,
+      dh: (e.clientY - resize.startPY) / zoom,
+    });
   }
 
   function onResizePointerUp() {
     if (resize && (resize.dw !== 0 || resize.dh !== 0)) {
+      const el = canvasElements.find(e => e.id === resize.id);
+      const m = el ? minSize(el) : { w: 120, h: 80 };
       updateCanvasElement(resize.id, {
-        w: Math.max(120, resize.startW + resize.dw),
-        h: Math.max(80, resize.startH + resize.dh),
+        w: Math.max(m.w, resize.startW + resize.dw),
+        h: Math.max(m.h, resize.startH + resize.dh),
       });
     }
     setResize(null);
@@ -1129,6 +1277,7 @@ export function GeneralJobsPage() {
       });
       return;
     }
+    if (arrowFrom) { const w = toWorld(e.clientX, e.clientY); setArrowTip(w); }
     if (!lasso) return;
     const w = toWorld(e.clientX, e.clientY);
     setLasso(l => l ? { ...l, ex: w.x, ey: w.y } : null);
@@ -1323,6 +1472,16 @@ export function GeneralJobsPage() {
   }
 
   fitRef.current = zoomToFit;
+
+  /** Typing a percentage snaps to the nearest step the board actually uses. */
+  function commitZoomField() {
+    const want = Number(zoomField) / 100;
+    if (!Number.isFinite(want) || want <= 0) { setZoomField(String(Math.round(zoom * 100))); return; }
+    const step = ZOOM_STEPS.reduce((best, z) =>
+      Math.abs(z - want) < Math.abs(best - want) ? z : best, ZOOM_STEPS[0]);
+    setZoom(step);
+    setPan(p => clampPanRef.current(p));
+  }
   clampPanRef.current = (p) => {
     const w = maxX * zoom, h = maxY * zoom;
     return {
@@ -1333,6 +1492,8 @@ export function GeneralJobsPage() {
 
   // ── Start text edit for element ───────────────────────────────────
   function startEdit(el: CanvasElement) {
+    // A title's whole purpose is how it reads, so it gets the type editor.
+    if (el.type === 'title') { setTitleEdit(el.id); return; }
     setEditingEl(el.id);
     setEditText(el.text);
     setTimeout(() => editInputRef.current?.focus(), 30);
@@ -1342,6 +1503,28 @@ export function GeneralJobsPage() {
     if (editingEl) updateCanvasElement(editingEl, { text: editText });
     setEditingEl(null);
   }
+
+  /**
+   * Every box something can be attached to.
+   *
+   * Built from live positions — including a tile mid-drag — so a pin stuck to a
+   * job travels with it and an arrow re-draws itself as either end moves,
+   * without either of them storing a coordinate that could go stale.
+   */
+  const hostBoxes = useMemo(() => {
+    const m = new Map<string, HostBox>();
+    jobs.forEach((j, i) => {
+      const p = jobPos(j, i);
+      m.set(j.id, { id: j.id, x: p.x, y: p.y, w: TILE_W, h: TILE_H });
+    });
+    canvasElements.forEach(el => {
+      if (el.type === 'stroke' || el.type === 'arrow' || el.attachedTo) return;
+      const p = elPos(el);
+      m.set(el.id, { id: el.id, x: p.x, y: p.y, w: p.w, h: p.h });
+    });
+    return m;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobs, canvasElements, drag, resize]);
 
   /** One pass over the tasks instead of one scan per tile. */
   const pendingByJob = useMemo(() => {
@@ -1403,12 +1586,14 @@ export function GeneralJobsPage() {
     jobMenu: onJobContextMenu, jobDelete: handleDeleteJobs,
     jobTv: (j: Apartment) => { if (currentUser) updateApartment(j.id, { showOnTv: j.showOnTv === false }, currentUser); },
     jobThumbs: (id: string, d: number) => bumpThumbs('job', [id], d),
+    jobThumbsDown: (id: string, d: number) => bumpThumbs('job', [id], d, 'down'),
     elDown: onElPointerDown, elMove: onElPointerMove, elUp: onElPointerUp,
     elMenu: onElContextMenu, elEdit: startEdit,
     elDelete: (id: string) => deleteCanvasElement(id),
     elColor: (e: React.MouseEvent, id: string) => setColorPicker({ x: e.clientX, y: e.clientY, kind: 'element', ids: [id] }),
     elPatch: (id: string, patch: Partial<CanvasElement>) => updateCanvasElement(id, patch),
     elThumbs: (id: string, d: number) => bumpThumbs('element', [id], d),
+    elThumbsDown: (id: string, d: number) => bumpThumbs('element', [id], d, 'down'),
     editChange: setEditText, editCommit: commitEdit, editCancel: () => setEditingEl(null),
     resizeDown: onResizePointerDown, resizeMove: onResizePointerMove, resizeUp: onResizePointerUp,
     openBin: (k: BinKind) => setOpenBin(k),
@@ -1444,6 +1629,30 @@ export function GeneralJobsPage() {
 
         {/* Tool buttons */}
         <div className="flex items-center gap-2">
+          {/* Zoom, where it can be reached without hunting the corner. The
+              percentage is typeable — "150" is faster than five clicks. */}
+          <div className="hidden sm:flex items-center rounded-xl border border-gray-200 overflow-hidden">
+            <button onClick={() => zoomCentre(-1)} title="Zoom out"
+              className="w-8 h-9 text-gray-500 hover:bg-gray-50 text-base font-bold">−</button>
+            <input
+              value={zoomField}
+              onChange={e => setZoomField(e.target.value.replace(/[^\d]/g, ''))}
+              onBlur={commitZoomField}
+              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+              className="w-11 h-9 text-center text-[12px] font-bold text-gray-700 tabular-nums outline-none"
+              title="Type a zoom level"
+            />
+            <span className="text-[11px] text-gray-400 pr-1.5 -ml-1">%</span>
+            <button onClick={() => zoomCentre(1)} title="Zoom in"
+              className="w-8 h-9 text-gray-500 hover:bg-gray-50 text-base font-bold">+</button>
+            <span className="w-px h-5 bg-gray-200" />
+            <button onClick={() => { setZoom(1); setPan(clampPanRef.current({ x: 0, y: 0 })); }}
+              title="Back to 100%"
+              className="px-2.5 h-9 text-[11px] font-bold text-gray-500 hover:bg-gray-50">100%</button>
+            <button onClick={zoomToFit} title="Fit the whole board"
+              className="px-2.5 h-9 text-[11px] font-bold text-gray-500 hover:bg-gray-50">Fit</button>
+          </div>
+
           {/* The same jobs, read two ways. Positions are kept either way, so
               switching back to the board restores the arrangement exactly. */}
           <div className="flex items-center rounded-xl border border-gray-200 overflow-hidden">
@@ -1486,7 +1695,14 @@ export function GeneralJobsPage() {
         hidden={viewMode === 'stages'}
         ref={viewportRef}
         className="flex-1 min-h-0 relative overflow-hidden"
-        style={{ cursor: spaceHeld ? 'grab' : drawMode ? 'crosshair' : 'grab', touchAction: 'none' }}
+        style={{
+          cursor: panRef.current ? 'grabbing'
+            : spaceHeld ? 'grab'
+            : drawMode ? 'crosshair'
+            : arrowFrom ? 'crosshair'
+            : 'default',
+          touchAction: 'none',
+        }}
         onPointerDown={onViewportPointerDown}
         onPointerMove={onViewportPointerMove}
         onPointerUp={onViewportPointerUp}
@@ -1505,6 +1721,13 @@ export function GeneralJobsPage() {
           onToggleSettings={() => setBoardSettingsOpen(v => !v)}
         />
         {showControls && <BoardControlsPanel />}
+
+        {arrowFrom && (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 px-3 py-1.5 rounded-full text-[11.5px] font-bold shadow-lg"
+            style={{ backgroundColor: '#1e3a5f', color: '#fff' }}>
+            Click what the arrow points to · Esc to cancel
+          </div>
+        )}
 
         {boardSettingsOpen && (
           <div className="absolute right-[86px] z-40 w-[236px] bg-white border border-gray-200 rounded-xl shadow-lg p-3"
@@ -1636,26 +1859,6 @@ export function GeneralJobsPage() {
           }}
         />
 
-        {/* Zoom readout + fit, bottom-left so it never covers the toolbar */}
-        <div className="absolute bottom-3 left-3 z-30 flex items-center gap-1 bg-white/95 border border-gray-200 rounded-lg shadow-sm px-1.5 py-1">
-          <button onClick={() => zoomAt(
-              (viewportRef.current?.getBoundingClientRect().left ?? 0) + (viewportRef.current?.clientWidth ?? 0) / 2,
-              (viewportRef.current?.getBoundingClientRect().top ?? 0) + (viewportRef.current?.clientHeight ?? 0) / 2, -1)}
-            className="w-6 h-6 rounded text-gray-500 hover:bg-gray-100 text-sm font-bold" title="Zoom out">−</button>
-          <span className="text-[11px] font-bold text-gray-600 tabular-nums w-11 text-center">
-            {Math.round(zoom * 100)}%
-          </span>
-          <button onClick={() => zoomAt(
-              (viewportRef.current?.getBoundingClientRect().left ?? 0) + (viewportRef.current?.clientWidth ?? 0) / 2,
-              (viewportRef.current?.getBoundingClientRect().top ?? 0) + (viewportRef.current?.clientHeight ?? 0) / 2, 1)}
-            className="w-6 h-6 rounded text-gray-500 hover:bg-gray-100 text-sm font-bold" title="Zoom in">+</button>
-          <div className="w-px h-4 bg-gray-200 mx-0.5" />
-          <button onClick={zoomToFit}
-            className="px-2 h-6 rounded text-[11px] font-bold text-gray-500 hover:bg-gray-100" title="Zoom to fit">Fit</button>
-          <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
-            className="px-2 h-6 rounded text-[11px] font-bold text-gray-500 hover:bg-gray-100" title="Reset to 100%">100%</button>
-        </div>
-
         <div
           className="absolute top-0 left-0"
           style={{
@@ -1727,8 +1930,18 @@ export function GeneralJobsPage() {
                 />
               </svg>
             )}
+            <ArrowLayer elements={canvasElements} hosts={hostBoxes}
+              onSelect={el => setSelectedElIds(new Set([el.id]))} />
+            <AttachedArtLayer elements={canvasElements} hosts={hostBoxes}
+              onSelect={el => setSelectedElIds(new Set([el.id]))} />
+            {arrowFrom && (
+              <ArrowDraft from={hostBoxes.get(arrowFrom) ?? null} to={arrowTip} />
+            )}
+
             {canvasElements.map(el => {
               if (el.type === 'stroke') return null;
+              if (el.type === 'arrow') return null;          // its own layer
+              if (el.attachedTo) return null;                // drawn on its host
               if (el.type === 'title' && el.pinned) return null;
               const pos = elPos(el);
               return (
@@ -1749,6 +1962,7 @@ export function GeneralJobsPage() {
                   H={H}
                   onRecord={startRecording}
                   onStopRecord={stopRecording}
+                  onUploadAudio={uploadAudio}
                 />
               );
             })}
@@ -1815,6 +2029,11 @@ export function GeneralJobsPage() {
                   <Copy size={14} className="text-gray-400" />
                   {ctxMenu.ids.length > 1 ? `Duplicate (${ctxMenu.ids.length})` : 'Duplicate'}
                 </button>
+                <button onClick={() => startArrow(ctxMenu.ids[0])}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5"
+                  title="Then click what it points to">
+                  <MoveUpRight size={14} className="text-gray-400" /> Draw an arrow from here
+                </button>
                 <button onClick={() => handleCreateGhost(ctxMenu.ids)}
                   className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5"
                   title="Show this same job in another place">
@@ -1823,8 +2042,26 @@ export function GeneralJobsPage() {
                 </button>
                 <button onClick={() => bumpThumbs('job', ctxMenu.ids, 1)}
                   className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
-                  <ThumbsUp size={14} className="text-gray-400" /> Thumbs up
+                  <ThumbsUp size={14} className="text-emerald-500" /> Thumbs up
                 </button>
+                <button onClick={() => bumpThumbs('job', ctxMenu.ids, 1, 'down')}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
+                  <ThumbsDown size={14} className="text-rose-500" /> Thumbs down
+                </button>
+                {(() => {
+                  const anyHidden = ctxMenu.ids.some(id => apartments.find(a => a.id === id)?.showOnTv === false);
+                  return (
+                    <button onClick={() => {
+                      if (currentUser) ctxMenu.ids.forEach(id =>
+                        updateApartment(id, { showOnTv: anyHidden ? undefined : false }, currentUser));
+                      setCtxMenu(null);
+                    }}
+                      className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
+                      <TvIcon size={14} hidden={!anyHidden} />
+                      {anyHidden ? 'Show on the TV' : 'Hide from the TV'}
+                    </button>
+                  );
+                })()}
                 <button onClick={() => { setColorPicker({ x: ctxMenu.x + 170, y: ctxMenu.y, kind: 'job', ids: ctxMenu.ids }); setCtxMenu(null); }}
                   className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
                   <Palette size={14} className="text-gray-400" /> Change Color
@@ -1921,10 +2158,43 @@ export function GeneralJobsPage() {
                   className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
                   <Pencil size={14} className="text-gray-400" /> Edit Text
                 </button>
+                <button onClick={() => startArrow(ctxMenu.ids[0])}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
+                  <MoveUpRight size={14} className="text-gray-400" /> Draw an arrow from here
+                </button>
+                {ctxMenu.ids.length === 1 && canvasElements.find(e => e.id === ctxMenu.ids[0])?.attachedTo && (
+                  <button onClick={() => {
+                    updateCanvasElement(ctxMenu.ids[0], { attachedTo: undefined, attachAt: undefined });
+                    setCtxMenu(null); setToast('Unstuck');
+                  }}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
+                    <Unlink size={14} className="text-gray-400" /> Take it off
+                  </button>
+                )}
                 <button onClick={() => bumpThumbs('element', ctxMenu.ids, 1)}
                   className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
-                  <ThumbsUp size={14} className="text-gray-400" /> Thumbs up
+                  <ThumbsUp size={14} className="text-emerald-500" /> Thumbs up
                 </button>
+                <button onClick={() => bumpThumbs('element', ctxMenu.ids, 1, 'down')}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
+                  <ThumbsDown size={14} className="text-rose-500" /> Thumbs down
+                </button>
+                {/* Clip art and pins are too small to carry the icon, so every
+                    node gets the switch here whether it shows one or not. */}
+                {(() => {
+                  const anyHidden = ctxMenu.ids.some(id =>
+                    canvasElements.find(e => e.id === id)?.showOnTv === false);
+                  return (
+                    <button onClick={() => {
+                      ctxMenu.ids.forEach(id => updateCanvasElement(id, { showOnTv: anyHidden ? undefined : false }));
+                      setCtxMenu(null);
+                    }}
+                      className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
+                      <TvIcon size={14} hidden={!anyHidden} />
+                      {anyHidden ? 'Show on the TV' : 'Hide from the TV'}
+                    </button>
+                  );
+                })()}
                 <button onClick={() => { setColorPicker({ x: ctxMenu.x + 170, y: ctxMenu.y, kind: 'element', ids: ctxMenu.ids }); setCtxMenu(null); }}
                   className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
                   <Palette size={14} className="text-gray-400" /> Change Color
@@ -2110,11 +2380,26 @@ export function GeneralJobsPage() {
         </>
       )}
 
+      {/* ── Title editor ── */}
+      {titleEdit && (() => {
+        const el = canvasElements.find(e => e.id === titleEdit);
+        if (!el) return null;
+        return (
+          <TitleEditor
+            el={el}
+            onChange={patch => updateCanvasElement(el.id, patch)}
+            onClose={() => setTitleEdit(null)}
+            onDelete={() => { deleteCanvasElement(el.id); setTitleEdit(null); }}
+          />
+        );
+      })()}
+
       {/* ── Widget store ── */}
       {storeOpen && <WidgetStore onPick={placeWidget} onClose={() => setStoreOpen(false)} />}
 
       {/* ── Bin window ── */}
-      {openBin && <BinWindow bin={openBin} onClose={() => setOpenBin(null)} />}
+      {openBin && <BinWindow bin={openBin} onClose={() => setOpenBin(null)}
+        onOpenJob={j => { setOpenBin(null); setSelectedJob(j); }} />}
 
       {/* ── Color picker popup ── */}
       {colorPicker && (
