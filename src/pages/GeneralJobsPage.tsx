@@ -3,11 +3,11 @@ import {
   Plus, Briefcase, MapPin, ExternalLink, Trash2, ClipboardList, FolderOpen,
   Copy, StickyNote, Square, Palette, Pencil, X, AlertTriangle,
   Ghost, ThumbsUp, ThumbsDown, ClipboardPaste, LayoutGrid, Columns3, Archive, CheckCircle2, PlayCircle,
-  Image as ImageIcon, ImageOff, History, MoveUpRight, Unlink, FileText,
+  Image as ImageIcon, ImageOff, History, MoveUpRight, Unlink, FileText, Search, FolderPlus,
 } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 import { useStore } from '../data/store';
-import { Apartment, CanvasElement, BinKind, BIN_KINDS, BIN_META } from '../types';
+import { Apartment, CanvasElement, BinKind, BIN_KINDS, BIN_META, binKeyOf, binLabelOf, isBuiltInBin } from '../types';
 import { ApartmentDetailDrawer } from '../components/apartment/ApartmentDetailDrawer';
 import { QuickAddTaskPanel } from '../components/apartment/QuickAddTaskPanel';
 import { Toast } from '../components/ui/Toast';
@@ -15,7 +15,8 @@ import { DriveIcon, ZohoIcon, PlanIcon, TvIcon } from '../components/ui/BrandIco
 import { BoardToolbar, BoardControlsPanel, BoardTool } from '../components/board/BoardToolbar';
 import { BOARD_THEMES, getBoardTheme } from '../data/boardThemes';
 import { MiniMap } from '../components/board/MiniMap';
-import { BinWindow } from '../components/board/BinWindow';
+import { BinBoard } from '../components/board/BinBoard';
+import { BoardSearch, BoardHit } from '../components/board/BoardSearch';
 import { StageBoard } from '../components/board/StageBoard';
 import { WidgetStore } from '../components/board/WidgetStore';
 import { TitleEditor } from '../components/board/TitleEditor';
@@ -69,6 +70,9 @@ const TILE_PALETTE = [
   { label: 'Teal', bg: '#ccfbf1', border: '#5eead4' },
   { label: 'Navy', bg: '#dbeafe', border: '#93c5fd' },
 ];
+
+/** Solid, saturated colours — a group is a label, not a translucent box. */
+const BIN_PALETTE = ['#16a34a', '#0ea5e9', '#7c3aed', '#ea6b13', '#dc2626', '#0d9488', '#64748b', '#b8860b'];
 
 const NOTE_PALETTE = ['#fef9c3', '#dcfce7', '#fce7f3', '#dbeafe', '#f3e8ff', '#ffedd5', '#ccfbf1', '#ffe4e6'];
 
@@ -204,7 +208,10 @@ export function GeneralJobsPage() {
   const [editText, setEditText] = useState('');
 
   const [ghostDrag, setGhostDrag] = useState<GhostDrag | null>(null);
-  const [openBin, setOpenBin] = useState<BinKind | null>(null);
+  const [openBin, setOpenBin] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  /** A job the search sent us to: pulsed once the view lands on it. */
+  const [searchHit, setSearchHit] = useState<string | null>(null);
   /** Which bin the pointer is currently over mid-drag, so it can light up. */
   const [hoverBin, setHoverBin] = useState<string | null>(null);
   /** Clipboard contents, read when the context menu opens. */
@@ -232,6 +239,8 @@ export function GeneralJobsPage() {
   const leftDown = useRef(false);
   const panFromJob = useRef<Apartment | null>(null);
   const [panning, setPanning] = useState(false);
+  /** True while the view is gliding to a search result. */
+  const [flying, setFlying] = useState(false);
   const zoomHold = useRef<number | undefined>(undefined);
   /** Armed arrow: the first end is chosen, waiting for the second. */
   const [arrowFrom, setArrowFrom] = useState<string | null>(null);
@@ -483,6 +492,7 @@ export function GeneralJobsPage() {
   }, [zoomAt]);
 
   const deleteRef = useRef<() => void>(() => {});
+  const openSearchRef = useRef<() => void>(() => {});
   /**
    * The bridge that makes memoisation actually work.
    *
@@ -599,9 +609,10 @@ export function GeneralJobsPage() {
   }
 
   // ── Bins ──────────────────────────────────────────────────────────
-  const binNodes = canvasElements.filter(el => el.type === 'bin' && el.binKind);
-  const binCount = (kind: BinKind) =>
-    apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed && a.boardBin === kind).length;
+  // Bins are just nodes, so a custom one is as real as a built-in one.
+  const binNodes = canvasElements.filter(el => el.type === 'bin' && !el.board);
+  const binCount = (key: string) =>
+    apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed && a.boardBin === key).length;
 
   /** Which bin, if any, sits under a world point. Used as a drag drop test. */
   function binAt(wx: number, wy: number): CanvasElement | null {
@@ -610,6 +621,50 @@ export function GeneralJobsPage() {
       if (wx >= p.x && wx <= p.x + p.w && wy >= p.y && wy <= p.y + p.h) return b;
     }
     return null;
+  }
+
+  /**
+   * Takes you to whatever the search found.
+   *
+   * On the board it centres the view on the job, pulses it, and opens it once
+   * the view has arrived — travelling there rather than teleporting, so you can
+   * see WHERE it was. In a group it opens the group first, and the same pulse
+   * happens inside. Either way the job ends up open, which is what you were
+   * after when you searched.
+   */
+  function goToHit(hit: BoardHit) {
+    setSearchOpen(false);
+    setSearchHit(hit.job.id);
+
+    if (hit.bin) {
+      setOpenBin(binKeyOf(hit.bin));
+      // The group's own board scrolls to it and pulses; opening the job on top
+      // of that would hide the group you were just shown, so it waits.
+      setTimeout(() => {
+        const j = apartments.find(a => a.id === hit.job.id);
+        if (j) setSelectedJob(j);
+      }, 900);
+      setTimeout(() => setSearchHit(null), 2600);
+      return;
+    }
+
+    const vp = viewportRef.current;
+    const idx = jobs.findIndex(j => j.id === hit.job.id);
+    if (vp && idx !== -1) {
+      const p = jobPos(jobs[idx], idx);
+      setFlying(true);
+      setPan(clampPanRef.current({
+        x: vp.clientWidth / 2 - (p.x + TILE_W / 2) * zoom,
+        y: vp.clientHeight / 2 - (p.y + TILE_H / 2) * zoom,
+      }));
+      setTimeout(() => setFlying(false), 620);
+    }
+    setSelectedJobIds(new Set([hit.job.id]));
+    setTimeout(() => {
+      const j = apartments.find(a => a.id === hit.job.id);
+      if (j) setSelectedJob(j);
+    }, 780);
+    setTimeout(() => setSearchHit(null), 2600);
   }
 
   // ── Ghosts ────────────────────────────────────────────────────────
@@ -685,11 +740,48 @@ export function GeneralJobsPage() {
     setTimeout(() => setCelebrate(null), 1100);
   }
 
-  /** Files a job into a bin, with the Done celebration when that is the bin. */
-  function fileInBin(ids: string[], kind: BinKind, at?: CanvasElement) {
-    ids.forEach(id => moveToBin(id, kind));
-    if (kind === 'done' && at) celebrateAt(at);
-    setToast(`Moved to ${BIN_META[kind].label}`);
+  /** Files a job into a group, with the Done celebration when that is the one. */
+  function fileInBin(ids: string[], key: string, at?: CanvasElement) {
+    ids.forEach(id => moveToBin(id, key));
+    if (key === 'done' && at) celebrateAt(at);
+    const label = at ? binLabelOf(at) : key;
+    setToast(`Moved to ${label}`);
+  }
+
+  /**
+   * A new group of your own.
+   *
+   * The four that ship with the board are only the ones that exist on day one;
+   * this makes another exactly like them, with its own name, colour and board.
+   */
+  function addBin() {
+    const size = NODE_DEFAULT_SIZE.bin;
+    const at = freeSpot(size.w, size.h);
+    const id = 'CE-bin-' + Math.random().toString(36).slice(2, 8);
+    addCanvasElement({
+      id, type: 'bin',
+      x: Math.round(at.x), y: Math.round(at.y), w: size.w, h: size.h,
+      text: 'New group',
+      color: '#7c3aed',
+    });
+    setToast('Group added — double-click it to rename');
+  }
+
+  /**
+   * Removing a group.
+   *
+   * Whatever is inside comes back OUT to the board first. Nothing that took
+   * work to create disappears because a container was tidied away.
+   */
+  function removeBin(el: CanvasElement) {
+    const key = binKeyOf(el);
+    const inside = apartments.filter(a => a.boardBin === key);
+    inside.forEach(a => moveToBin(a.id, null));
+    canvasElements.filter(n => n.board === key).forEach(n => deleteCanvasElement(n.id));
+    deleteCanvasElement(el.id);
+    setToast(inside.length
+      ? `Group removed — ${inside.length} ${inside.length === 1 ? 'job' : 'jobs'} back on the board`
+      : 'Group removed');
   }
 
   // ── Tile photo background ─────────────────────────────────────────
@@ -995,6 +1087,7 @@ export function GeneralJobsPage() {
   }
 
   // ── Delete key ────────────────────────────────────────────────────
+  openSearchRef.current = () => setSearchOpen(true);
   deleteRef.current = () => {
     if (selectedJobIds.size > 0) handleDeleteJobs([...selectedJobIds]);
     else if (selectedElIds.size > 0) handleDeleteEls([...selectedElIds]);
@@ -1004,6 +1097,11 @@ export function GeneralJobsPage() {
     function onKey(e: KeyboardEvent) {
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if ((e.key === 'f' || e.key === 'F') && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        openSearchRef.current();
+        return;
+      }
       if (e.key === 'Delete' || e.key === 'Backspace') deleteRef.current();
       if (e.key === 'Escape') {
         setSelectedJobIds(new Set()); setSelectedElIds(new Set());
@@ -1622,7 +1720,7 @@ export function GeneralJobsPage() {
       m.set(j.id, { id: j.id, x: p.x, y: p.y, w: TILE_W, h: TILE_H });
     });
     canvasElements.forEach(el => {
-      if (el.type === 'stroke' || el.type === 'arrow' || el.attachedTo) return;
+      if (el.type === 'stroke' || el.type === 'arrow' || el.attachedTo || el.board) return;
       const p = elPos(el);
       m.set(el.id, { id: el.id, x: p.x, y: p.y, w: p.w, h: p.h });
     });
@@ -1733,6 +1831,14 @@ export function GeneralJobsPage() {
 
         {/* Tool buttons */}
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setSearchOpen(true)}
+            title="Find a job — including anything filed into a group (⌘F)"
+            className="flex items-center gap-1.5 px-2.5 md:px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:border-gray-300"
+          >
+            <Search size={15} /> <span className="hidden md:inline">Find</span>
+          </button>
+
           {/* Zoom, where it can be reached without hunting the corner. The
               percentage is typeable — "150" is faster than five clicks. */}
           <div className="hidden sm:flex items-center rounded-xl border border-gray-200 overflow-hidden">
@@ -1972,6 +2078,9 @@ export function GeneralJobsPage() {
           style={{
             transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
             transformOrigin: '0 0',
+            // Only while travelling to a search result. A permanent transition
+            // would put a lag on every pan and drag.
+            transition: flying ? 'transform 600ms cubic-bezier(.22,.9,.28,1)' : undefined,
           }}
         >
         {jobs.length === 0 && canvasElements.length === 0 ? (
@@ -2025,7 +2134,7 @@ export function GeneralJobsPage() {
             {/* ── Canvas nodes ──
                 Strokes and pinned titles are drawn by their own layers, so they
                 are skipped here; everything else is a positioned node. */}
-            <StrokeLayer elements={canvasElements} />
+            <StrokeLayer elements={canvasElements.filter(e => !e.board)} />
             {drawing && drawing.pts.length > 1 && (
               <svg className="absolute inset-0 pointer-events-none z-30" style={{ overflow: 'visible' }}>
                 <polyline
@@ -2049,6 +2158,7 @@ export function GeneralJobsPage() {
             )}
 
             {canvasElements.map(el => {
+              if (el.board) return null;        // it lives inside a group
               if (el.type === 'stroke') return null;
               if (el.type === 'arrow') return null;          // its own layer
               if (el.attachedTo) return null;                // drawn on its host
@@ -2112,6 +2222,7 @@ export function GeneralJobsPage() {
                   isSelected={selectedJobIds.has(job.id)}
                   isDragging={drag?.kind === 'job' && drag.ids.includes(job.id) && drag.moved}
                   justChanged={!!changedAt && pulseNow - new Date(changedAt).getTime() < 25_000}
+                  searchLit={searchHit === job.id}
                   fallbackBorder={(TILE_PALETTE.find(p => p.bg === job.tileColor) ?? TILE_PALETTE[0]).border}
                   lastEdited={relativeTime(changedAt)}
                   labels={tileLabels}
@@ -2205,18 +2316,21 @@ export function GeneralJobsPage() {
 
                 <div className="h-px bg-gray-100 my-1" />
                 <div className="px-4 pt-1 pb-0.5 text-[10px] font-bold text-gray-400 tracking-wide">MOVE TO</div>
-                {BIN_KINDS.map(k => (
-                  <button key={k}
-                    onClick={() => {
-                      fileInBin(ctxMenu.ids, k, binNodes.find(b => b.binKind === k));
-                      setSelectedJobIds(new Set());
-                      setCtxMenu(null);
-                    }}
-                    className="w-full px-4 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: BIN_META[k].color }} />
-                    {BIN_META[k].label}
-                  </button>
-                ))}
+                {binNodes.map(b => {
+                  const k = binKeyOf(b);
+                  return (
+                    <button key={b.id}
+                      onClick={() => {
+                        fileInBin(ctxMenu.ids, k, b);
+                        setSelectedJobIds(new Set());
+                        setCtxMenu(null);
+                      }}
+                      className="w-full px-4 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: b.color }} />
+                      {binLabelOf(b)}
+                    </button>
+                  );
+                })}
 
                 <div className="h-px bg-gray-100 my-1" />
                 <button onClick={() => handleDeleteJobs(ctxMenu.ids)}
@@ -2256,6 +2370,11 @@ export function GeneralJobsPage() {
                 <button onClick={() => { dropNode('box', { x: ctxMenu.worldX ?? 0, y: ctxMenu.worldY ?? 0 }, { color: BOX_PALETTE[0], text: 'Section' }); setCtxMenu(null); }}
                   className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
                   <Square size={14} className="text-gray-400" /> Add box here
+                </button>
+                <button onClick={() => { addBin(); setCtxMenu(null); }}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5"
+                  title="A named group with a board of its own">
+                  <FolderPlus size={14} className="text-gray-400" /> Add a group
                 </button>
                 <div className="h-px bg-gray-100 my-1" />
                 <button
@@ -2332,18 +2451,45 @@ export function GeneralJobsPage() {
                   <Copy size={14} className="text-gray-400" />
                   {ctxMenu.ids.length > 1 ? `Duplicate (${ctxMenu.ids.length})` : 'Duplicate'}
                 </button>
-                {/* Bins are permanent fixtures of the board, so they are never
-                    offered for deletion — only the other node types are. */}
-                {!ctxMenu.ids.some(id => canvasElements.find(e => e.id === id)?.type === 'bin') && (
-                  <>
-                    <div className="h-px bg-gray-100 my-1" />
-                    <button onClick={() => handleDeleteEls(ctxMenu.ids)}
-                      className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2.5">
-                      <Trash2 size={14} />
-                      {ctxMenu.ids.length > 1 ? `Delete (${ctxMenu.ids.length})` : 'Delete'}
-                    </button>
-                  </>
-                )}
+                {(() => {
+                  const binEl = ctxMenu.ids.length === 1
+                    ? canvasElements.find(e => e.id === ctxMenu.ids[0] && e.type === 'bin')
+                    : undefined;
+                  if (binEl) {
+                    // A group you made can be removed; the four the board ships
+                    // with stay, because everything files into them by default.
+                    return (
+                      <>
+                        <div className="h-px bg-gray-100 my-1" />
+                        <button onClick={() => { setOpenBin(binKeyOf(binEl)); setCtxMenu(null); }}
+                          className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
+                          <FolderOpen size={14} className="text-gray-400" /> Open this group
+                        </button>
+                        {isBuiltInBin(binEl) ? (
+                          <div className="px-4 py-2 text-[10.5px] text-gray-400 leading-snug">
+                            One of the four the board comes with, so it stays. Rename or recolour it
+                            freely.
+                          </div>
+                        ) : (
+                          <button onClick={() => { removeBin(binEl); setCtxMenu(null); }}
+                            className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2.5">
+                            <Trash2 size={14} /> Remove this group
+                          </button>
+                        )}
+                      </>
+                    );
+                  }
+                  return (
+                    <>
+                      <div className="h-px bg-gray-100 my-1" />
+                      <button onClick={() => handleDeleteEls(ctxMenu.ids)}
+                        className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2.5">
+                        <Trash2 size={14} />
+                        {ctxMenu.ids.length > 1 ? `Delete (${ctxMenu.ids.length})` : 'Delete'}
+                      </button>
+                    </>
+                  );
+                })()}
               </>
             )}
           </div>
@@ -2616,9 +2762,31 @@ export function GeneralJobsPage() {
       {/* ── Widget store ── */}
       {storeOpen && <WidgetStore onPick={placeWidget} onClose={() => setStoreOpen(false)} />}
 
-      {/* ── Bin window ── */}
-      {openBin && <BinWindow bin={openBin} onClose={() => setOpenBin(null)}
-        onOpenJob={j => { setOpenBin(null); setSelectedJob(j); }} />}
+      {/* ── A group, opened as its own board ── */}
+      {openBin && (() => {
+        const el = binNodes.find(b => binKeyOf(b) === openBin);
+        if (!el) return null;
+        return (
+          <BinBoard
+            bin={el}
+            highlightJobId={searchHit}
+            onClose={() => setOpenBin(null)}
+            onOpenJob={j => setSelectedJob(j)}
+          />
+        );
+      })()}
+
+      {/* ── Search ── */}
+      {searchOpen && (
+        <BoardSearch
+          jobs={apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed)}
+          bins={binNodes}
+          stages={stages}
+          assignments={contractorAssignments}
+          onGo={goToHit}
+          onClose={() => setSearchOpen(false)}
+        />
+      )}
 
       {/* ── Color picker popup ── */}
       {colorPicker && (
@@ -2628,9 +2796,11 @@ export function GeneralJobsPage() {
             style={{ left: Math.min(colorPicker.x, window.innerWidth - 200), top: colorPicker.y }}>
             <p className="text-[11px] font-medium text-gray-500 mb-2">Choose color</p>
             <div className="flex flex-wrap gap-2" style={{ width: 168 }}>
-              {(colorPicker.kind === 'job' ? TILE_PALETTE : (colorPicker.kind === 'element' ?
-                (canvasElements.find(e => e.id === colorPicker.ids[0])?.type === 'note' ? NOTE_PALETTE : BOX_PALETTE).map(c => c)
-                : NOTE_PALETTE
+              {(colorPicker.kind === 'job' ? TILE_PALETTE : (colorPicker.kind === 'element' ? (() => {
+                const t = canvasElements.find(e => e.id === colorPicker.ids[0])?.type;
+                if (t === 'bin') return BIN_PALETTE;
+                return t === 'note' ? NOTE_PALETTE : BOX_PALETTE;
+              })() : NOTE_PALETTE
               )).map((c, i) => {
                 const isObj = typeof c === 'object' && c !== null && 'bg' in (c as object);
                 const color = isObj ? (c as typeof TILE_PALETTE[0]).bg : c as string;

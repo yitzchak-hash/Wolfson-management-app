@@ -1,7 +1,7 @@
 import React from 'react';
 import { MapPin, ClipboardList, Trash2, Palette, Pencil, X, ThumbsUp, ThumbsDown, Ghost,
-  Archive, CheckCircle2, PlayCircle } from 'lucide-react';
-import { Apartment, CanvasElement, Stage, BinKind, BIN_META } from '../../types';
+  Archive, CheckCircle2, PlayCircle, FolderOpen } from 'lucide-react';
+import { Apartment, CanvasElement, Stage, BinKind, BIN_META, binKeyOf, binLabelOf } from '../../types';
 import { DriveIcon, ZohoIcon, PlanIcon, TvIcon } from '../ui/BrandIcons';
 import { CountdownNode, StopwatchNode, ClipArtNode, VoiceMemoNode } from './BoardNodes';
 import { renderWidget, WidgetCtx } from '../../data/widgets';
@@ -48,8 +48,8 @@ export interface BoardHandlers {
   resizeMove: (e: React.PointerEvent) => void;
   resizeUp: () => void;
 
-  openBin: (kind: BinKind) => void;
-  binCount: (kind: BinKind) => number;
+  openBin: (key: string) => void;
+  binCount: (key: string) => number;
 }
 
 // ─── Job tile ────────────────────────────────────────────────────────────────
@@ -66,6 +66,7 @@ export interface JobTileProps {
   isSelected: boolean;
   isDragging: boolean;
   justChanged: boolean;
+  searchLit: boolean;
   fallbackBorder: string;
   lastEdited: string;
   labels: { job: string; folder: string; plans: string };
@@ -74,7 +75,7 @@ export interface JobTileProps {
 
 export const JobTile = React.memo(function JobTile({
   job, index, x, y, w, h, stage, pendingTasks, isSelected, isDragging,
-  justChanged, fallbackBorder, lastEdited, labels, H,
+  justChanged, searchLit, fallbackBorder, lastEdited, labels, H,
 }: JobTileProps) {
   return (
     <div
@@ -86,7 +87,7 @@ export const JobTile = React.memo(function JobTile({
       className={`absolute rounded-xl border px-3 pb-3 pt-[22px] group select-none ${
         isDragging ? 'shadow-2xl cursor-grabbing' :
         isSelected ? 'shadow-md cursor-grab' : 'shadow-sm hover:shadow-md cursor-grab'
-      } ${justChanged && !isDragging ? 'live-change-pulse' : ''}`}
+      } ${justChanged && !isDragging ? 'live-change-pulse' : ''} ${searchLit ? 'search-hit' : ''}`}
       style={{
         left: x, top: y, width: w, height: h,
         touchAction: 'none',
@@ -294,7 +295,8 @@ export const BoardNode = React.memo(function BoardNode({
   el, x, y, w, h, isSelected, isDragging, isEditing, editText, binHot, binCount,
   recording, savingAudio, ctx, editRef, H, onRecord, onStopRecord, onUploadAudio,
 }: BoardNodeProps) {
-  const isBin = el.type === 'bin' && !!el.binKind;
+  // Any bin node, built-in or one you made.
+  const isBin = el.type === 'bin';
   const plain = el.type === 'clipart';
   const isWidget = el.type === 'widget';
 
@@ -350,13 +352,11 @@ export const BoardNode = React.memo(function BoardNode({
         <div className={`absolute top-1.5 right-1.5 flex gap-1 z-10 transition-opacity ${
             isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'}`}
           style={{ pointerEvents: 'auto' }}>
-          {!isBin && (
-            <button data-el-action
-              onClick={e => { e.stopPropagation(); H.elColor(e, el.id); }}
-              className="p-1 rounded-md bg-white/70 hover:bg-white text-gray-500 hover:text-gray-700 transition-all">
-              <Palette size={11} />
-            </button>
-          )}
+          <button data-el-action
+            onClick={e => { e.stopPropagation(); H.elColor(e, el.id); }}
+            className="p-1 rounded-md bg-white/70 hover:bg-white text-gray-500 hover:text-gray-700 transition-all">
+            <Palette size={11} />
+          </button>
           <button data-el-action
             onClick={e => { e.stopPropagation(); H.elEdit(el); }}
             className="p-1 rounded-md bg-white/70 hover:bg-white text-gray-500 hover:text-gray-700 transition-all">
@@ -387,12 +387,14 @@ export const BoardNode = React.memo(function BoardNode({
       {/* ── Type-specific content ── */}
       {isBin ? (
         <div className="w-full h-full flex flex-col items-start justify-center px-3 text-left pointer-events-none">
-          <span className="flex items-center gap-1.5 font-extrabold text-[12.5px]" style={{ color: el.color }}>
+          <span className="flex items-center gap-1.5 font-extrabold text-[12.5px] truncate max-w-full"
+            style={{ color: el.color }}>
             {el.binKind === 'done' ? <CheckCircle2 size={14} />
               : el.binKind === 'ready' ? <PlayCircle size={14} />
               : el.binKind === 'archive' ? <Archive size={14} />
-              : <Trash2 size={14} />}
-            {BIN_META[el.binKind!].label}
+              : el.binKind === 'trash' ? <Trash2 size={14} />
+              : <FolderOpen size={14} />}
+            {binLabelOf(el)}
           </span>
           <span className="text-[11px] text-gray-500 mt-0.5">
             {binCount} {binCount === 1 ? 'job' : 'jobs'}

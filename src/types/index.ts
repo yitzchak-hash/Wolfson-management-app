@@ -17,7 +17,15 @@ export function projectColor(projects: Project[], id: string): string {
   return projects.find(p => p.id === id)?.color ?? '#1e3a5f';
 }
 
-/** The four board bins. Organisational only — completely independent of stages. */
+/**
+ * The four bins the board ships with.
+ *
+ * A bin is now just a NAMED, COLOURED GROUP that also happens to be a board of
+ * its own, so these four are only the ones that exist on day one — you can add,
+ * rename, recolour and remove your own. A job's `boardBin` therefore holds
+ * either one of these four words or the id of a bin node you made, and
+ * `binKeyOf()` is the single place that resolves either into the same thing.
+ */
 export type BinKind = 'done' | 'ready' | 'archive' | 'trash';
 
 export const BIN_KINDS: BinKind[] = ['done', 'ready', 'archive', 'trash'];
@@ -28,6 +36,22 @@ export const BIN_META: Record<BinKind, { label: string; color: string }> = {
   archive: { label: 'Archive',        color: '#64748b' },
   trash:   { label: 'Trash',          color: '#dc2626' },
 };
+
+/** The value a job's `boardBin` takes for this bin node. */
+export function binKeyOf(el: { id: string; binKind?: BinKind }): string {
+  return el.binKind ?? el.id;
+}
+
+/** What a bin is called: whatever you typed, or its built-in name. */
+export function binLabelOf(el: { text?: string; binKind?: BinKind }): string {
+  if (el.text && el.text.trim()) return el.text.trim();
+  return el.binKind ? BIN_META[el.binKind].label : 'Group';
+}
+
+/** The four that ship with the board are permanent; your own are not. */
+export function isBuiltInBin(el: { binKind?: BinKind }): boolean {
+  return !!el.binKind;
+}
 
 /**
  * Board appearance and behaviour, stored per project inside `settings/app`.
@@ -196,7 +220,14 @@ export interface Apartment {
    * Bins are ORGANISATIONAL and entirely independent of `currentStageId` —
    * a job can be at stage "Piping" and sit in Done. Nothing is ever purged.
    */
-  boardBin?: 'done' | 'ready' | 'archive' | 'trash';
+  boardBin?: string;
+  /**
+   * Position inside its bin's own board. Separate from canvasX/canvasY so a job
+   * filed into a bin and taken out again returns to where it was on the main
+   * board, rather than to wherever it was left inside the bin.
+   */
+  binX?: number;
+  binY?: number;
   binnedAt?: string;   // when it entered the bin — used for date filtering
   /**
    * Last change to the job's CONTENT. Deliberately not bumped by canvasX/canvasY,
@@ -272,6 +303,12 @@ export interface CanvasElement {
    * other element, and entirely independent of stages.
    */
   binKind?: BinKind;
+  /**
+   * Which board this node lives on. Absent means the main board; a bin key
+   * means it lives inside that bin — which is what makes a bin a real board
+   * with its own notes, widgets and arrangement rather than just a list.
+   */
+  board?: string;
   /** voice: Firebase Storage download URL + its storage path, for deletion. */
   audioUrl?: string;
   audioPath?: string;

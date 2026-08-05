@@ -450,7 +450,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       {/* Stage-change → assign task modal */}
       {stageChangeModal && (
         <>
-          <div className="fixed inset-0 bg-black/50 z-[60]" />
+          <div className="fixed inset-0 bg-black/50 z-[130]" />
           <div className="fixed z-[70] bg-white rounded-2xl shadow-2xl p-6" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 'min(380px, 90vw)' }}>
             <div className="flex items-center gap-2 mb-2">
               <ClipboardList size={18} className="text-[#1e3a5f]" />
@@ -487,7 +487,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       {/* Keep stage history modal (shown when resetting apartment to Not Started) */}
       {keepHistoryModal && (
         <>
-          <div className="fixed inset-0 bg-black/50 z-[60]" />
+          <div className="fixed inset-0 bg-black/50 z-[130]" />
           <div className="fixed z-[70] bg-white rounded-2xl shadow-2xl p-6" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 'min(380px, 90vw)' }}>
             <div className="flex items-center gap-2 mb-2">
               <Clock size={18} className="text-amber-500" />
@@ -517,7 +517,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       {/* Unmerge modal */}
       {showUnmergeModal && unmergeTarget && (
         <>
-          <div className="fixed inset-0 bg-black/50 z-[60]" onClick={() => { setShowUnmergeModal(false); setUnmergeTarget(null); }} />
+          <div className="fixed inset-0 bg-black/50 z-[130]" onClick={() => { setShowUnmergeModal(false); setUnmergeTarget(null); }} />
           <div className="fixed z-[70] bg-white rounded-2xl shadow-2xl p-6" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 'min(400px, 90vw)' }}>
             <h3 className="font-bold text-gray-900 mb-1 text-base">{ui.unlinkApartments}</h3>
             <p className="text-sm text-gray-500 mb-4">
@@ -551,7 +551,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         const label = apartment.displayName || apartment.apartmentNumber || apartment.id;
         return (
           <>
-            <div className="fixed inset-0 bg-black/50 z-[60]" onClick={() => setShowDeleteConfirm(false)} />
+            <div className="fixed inset-0 bg-black/50 z-[130]" onClick={() => setShowDeleteConfirm(false)} />
             <div className="fixed z-[70] bg-white rounded-2xl shadow-2xl p-6 text-center"
               style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 'min(360px, 90vw)' }}>
               <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-3">
@@ -598,10 +598,10 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       {/* Centred modal, not a side drawer. Roughly twice the usable width and it
           no longer squeezes the board or diagram behind it. Applies to every
           project — Job Board, Wolfson, Netiv and anything added later. */}
-      <div className="drawer-overlay fixed inset-0 bg-black/50 z-40" onClick={onClose} />
+      <div className="drawer-overlay fixed inset-0 bg-black/50 z-[110]" onClick={onClose} />
 
       <div
-        className="drawer-panel fixed bg-white shadow-2xl z-50 flex flex-col rounded-2xl overflow-hidden"
+        className="drawer-panel fixed bg-white shadow-2xl z-[120] flex flex-col rounded-2xl overflow-hidden"
         style={{
           left: '50%',
           top: '50%',

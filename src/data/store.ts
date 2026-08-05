@@ -221,7 +221,7 @@ interface AppState {
   /** PERMANENT, cascading. Only reachable from the Trash window. */
   deleteApartment: (id: string) => void;
   /** Move a job into a board bin (or back to the board with null). Never destroys anything. */
-  moveToBin: (id: string, bin: Apartment['boardBin'] | null) => void;
+  moveToBin: (id: string, bin: string | null) => void;
   /** Extra board position for the SAME job — one record, drawn twice. */
   addGhost: (id: string, x: number, y: number) => void;
   moveGhost: (id: string, index: number, x: number, y: number) => void;
