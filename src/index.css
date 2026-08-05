@@ -139,3 +139,31 @@
    scrollbar inside a 62px rail is more noise than signal. */
 .board-toolbar-scroll { scrollbar-width: none; }
 .board-toolbar-scroll::-webkit-scrollbar { width: 0; height: 0; }
+
+/* ── Selected-item treatment ──
+   One look for "this is the one you're on", used by the sidebar, the header
+   project chips, the settings tabs and the board's view toggle. The fill grows
+   from the centre rather than snapping on, which is what made the older
+   version feel responsive; the label lifts a hair as it lands. */
+.pick {
+  position: relative;
+  isolation: isolate;
+  transition: color 180ms ease, transform 180ms cubic-bezier(.2,.8,.3,1);
+}
+.pick::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--pick-fill, #1e3a5f);
+  transform: scale(.72);
+  opacity: 0;
+  z-index: -1;
+  transition: transform 220ms cubic-bezier(.2,.9,.3,1), opacity 160ms ease;
+}
+.pick-on::before { transform: scale(1); opacity: 1; }
+.pick-on { transform: translateY(-1px); }
+.pick:active { transform: translateY(0) scale(.97); }
+
+/* Same idea for a light "pill" tab strip, where the fill is white on grey. */
+.pick-pill::before { background: var(--pick-fill, #ffffff); box-shadow: 0 1px 2px rgba(0,0,0,.08); }

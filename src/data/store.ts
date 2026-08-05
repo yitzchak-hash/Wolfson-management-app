@@ -319,6 +319,9 @@ interface AppState {
   currentProjectId: string;
   projects: Project[];
   setCurrentProject: (id: string) => void;
+  /** Workspace identity colour. Shared by everyone, so it lives in settings/app. */
+  setProjectColor: (projectId: string, color: string) => void;
+  projectColors: Record<string, string>;
 
   // General Jobs canvas elements (sticky notes, section boxes)
   canvasElements: CanvasElement[];
@@ -382,7 +385,11 @@ export const useStore = create<AppState>((set, get) => ({
   boardSettings: (stored?.boardSettings as Record<string, BoardSetting> | null) ?? {},
   contractorSheetLinks: (stored?.contractorSheetLinks as Record<string, string> | null) ?? {},
   currentProjectId: _activeProjectId,
-  projects: DEFAULT_PROJECTS,
+  projectColors: (stored?.projectColors as Record<string, string> | null) ?? {},
+  projects: DEFAULT_PROJECTS.map(p => ({
+    ...p,
+    color: ((stored?.projectColors as Record<string, string> | null) ?? {})[p.id] ?? p.color,
+  })),
   lightTheme: localStorage.getItem(THEME_KEY) !== 'dark',
   setPendingOpenAptId: (id: string | null) => {
     set({ pendingOpenAptId: id });
@@ -463,6 +470,16 @@ export const useStore = create<AppState>((set, get) => ({
     if (isFirebaseConfigured && !get().firebaseListening) {
       get().startFirebaseSync();
     }
+  },
+
+  setProjectColor: (projectId, color) => {
+    const next = { ...get().projectColors, [projectId]: color };
+    set({
+      projectColors: next,
+      projects: get().projects.map(p => (p.id === projectId ? { ...p, color } : p)),
+    });
+    persist(get);
+    fsSet('settings', 'app', { projectColors: next });
   },
 
   setBoardSetting: (key, value) => {
@@ -1296,6 +1313,7 @@ export const useStore = create<AppState>((set, get) => ({
         boardSettings: data.boardSettings ?? state.boardSettings,
         boardLayouts: data.boardLayouts ?? state.boardLayouts,
         planPins: data.planPins ?? state.planPins,
+        projectColors: data.projectColors ?? state.projectColors,
         // Building definitions and the dashboard layout were never restored, so
         // a project built in the builder came back without its buildings.
         buildings: data.buildings ?? state.buildings,
@@ -1664,6 +1682,11 @@ export const useStore = create<AppState>((set, get) => ({
         ...(appSettings.mainUiStrings        ? { mainUiStrings: mergeFreshMainUi(appSettings.mainUiStrings as Partial<MainUiStrings>) } : {}),
         ...(appSettings.contractorSheetLinks ? { contractorSheetLinks: appSettings.contractorSheetLinks as Record<string, string> } : {}),
         ...(appSettings.boardSettings ? { boardSettings: appSettings.boardSettings as Record<string, BoardSetting> } : {}),
+        ...(appSettings.projectColors ? {
+          projectColors: appSettings.projectColors as Record<string, string>,
+          projects: state.projects.map(p => ({
+            ...p, color: (appSettings.projectColors as Record<string, string>)[p.id] ?? p.color })),
+        } : {}),
       }));
       persist(get);
 
@@ -1827,6 +1850,11 @@ export const useStore = create<AppState>((set, get) => ({
           ...(appS.mainUiStrings        ? { mainUiStrings: mergeFreshMainUi(appS.mainUiStrings as Partial<MainUiStrings>) } : {}),
           ...(appS.contractorSheetLinks ? { contractorSheetLinks: appS.contractorSheetLinks as Record<string, string> } : {}),
           ...(appS.boardSettings ? { boardSettings: appS.boardSettings as Record<string, BoardSetting> } : {}),
+          ...(appS.projectColors ? {
+            projectColors: appS.projectColors as Record<string, string>,
+            projects: get().projects.map(p => ({
+              ...p, color: (appS.projectColors as Record<string, string>)[p.id] ?? p.color })),
+          } : {}),
           ...(appS.driveExportFrequency ? { driveExportFrequency: appS.driveExportFrequency as DriveExportFrequency } : {}),
         }));
         persist(get);
@@ -1946,6 +1974,7 @@ function persistNow(get: () => AppState) {
     boardSettings: state.boardSettings,
     boardLayouts: state.boardLayouts,
     planPins: state.planPins,
+    projectColors: state.projectColors,
   };
 
   const ok = saveToStorage(storageKey, payload);

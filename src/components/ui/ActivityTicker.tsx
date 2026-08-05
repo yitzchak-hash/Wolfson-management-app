@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Activity } from 'lucide-react';
 import { useStore } from '../../data/store';
+import { describeActivity } from '../../data/activityText';
 
 /**
  * A quiet line showing what just changed.
@@ -48,15 +49,12 @@ export function ActivityTicker({ light }: { light: boolean }) {
   if (recent.length === 0) return null;
 
   const entry = recent[Math.min(index, recent.length - 1)];
-  const apt = apartments.find(a => a.id === entry.apartmentId);
-  const who = entry.userName || 'Someone';
-  const what = apt?.displayName || apt?.apartmentNumber || entry.apartmentNumber || entry.fieldChanged || 'a record';
-  const mins = Math.max(0, Math.round((Date.now() - new Date(entry.createdAt).getTime()) / 60_000));
+  const { who, what, when } = describeActivity(entry, apartments);
 
   return (
     <div
       className="hidden lg:flex items-center gap-1.5 min-w-0 max-w-[280px] transition-opacity"
-      title={`${who} changed ${what}`}
+      title={`${who} ${what} · ${when}`}
     >
       <Activity
         size={12}
@@ -68,7 +66,7 @@ export function ActivityTicker({ light }: { light: boolean }) {
         className="text-[11px] truncate live-ticker-line"
         style={{ color: light ? '#94a3b8' : '#94a3b8' }}
       >
-        <b className="font-semibold">{who}</b> · {what} · {mins === 0 ? 'just now' : `${mins}m ago`}
+        <b className="font-semibold">{who}</b> {what} · {when}
       </span>
     </div>
   );

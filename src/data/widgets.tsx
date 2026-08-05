@@ -5,12 +5,14 @@ import {
   AlertTriangle, HardHat, CalendarDays, Camera, Briefcase, Activity,
   CircleDashed, Archive, StickyNote, Copy, Check, Filter, CalendarCheck,
   Calculator, Ruler, Target, Users, GitCommitHorizontal, TimerReset,
-  ArrowRightLeft, ListFilter, Search, Sparkles,
+  ArrowRightLeft, ListFilter, Search, Sparkles, Timer, Sticker,
 } from 'lucide-react';
 import {
   Apartment, CanvasElement, Stage, ContractorAssignment, Contractor,
   ContractorPhoto, ActivityLog, BIN_KINDS, BIN_META,
 } from '../types';
+import { describeActivity } from './activityText';
+import { ClipArtNode, ART_KINDS, ArtKind } from '../components/board/BoardNodes';
 
 /**
  * The widget store.
@@ -289,11 +291,15 @@ export const WIDGETS: WidgetDef[] = [
     render: (_el, c) => (
       <Frame title="What changed" icon={Activity}>
         <div className="flex flex-col gap-1 h-full overflow-y-auto pr-1">
-          {c.logs.slice(0, 8).map(l => (
-            <div key={l.id} className="text-[10px] text-gray-600 truncate">
-              <b className="text-gray-800">{l.userName}</b> · {l.apartmentNumber || l.fieldChanged}
-            </div>
-          ))}
+          {c.logs.slice(0, 8).map(l => {
+            const { who, what, when } = describeActivity(l, c.jobs);
+            return (
+              <div key={l.id} className="text-[10px] leading-tight">
+                <span className="text-gray-700"><b className="text-gray-900">{who}</b> {what}</span>
+                <span className="text-gray-400"> · {when}</span>
+              </div>
+            );
+          })}
           {c.logs.length === 0 && <span className="text-[10px] text-gray-400">Nothing yet</span>}
         </div>
       </Frame>
@@ -928,6 +934,29 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
 
+
+  // ── Things that used to sit on the toolbar ────────────────────────────────
+  // They are things you PLACE, not ways of working, so the store is where they
+  // belong; the toolbar is left with gestures and the raw board pieces.
+  {
+    id: 'w-countdown', name: 'Countdown', category: 'plan', icon: Timer, w: 190, h: 96,
+    blurb: 'Counts down to a date and turns amber, then red, as it arrives.',
+    data: {},
+    render: (el, c) => <CountdownInner el={el} update={c.update} readOnly={c.readOnly} />,
+  },
+  {
+    id: 'w-stopwatch', name: 'Stopwatch', category: 'plan', icon: Clock3, w: 190, h: 96,
+    blurb: 'Counts up. Start it when a crew starts, stop it when they finish.',
+    data: { elapsedMs: 0 },
+    render: (el, c) => <StopwatchInner el={el} update={c.update} readOnly={c.readOnly} />,
+  },
+  {
+    id: 'w-art', name: 'Clip art', category: 'visual', icon: Sticker, w: 72, h: 72,
+    blurb: 'A pin, a clip, a star, an arrow — the little pieces that make it a board.',
+    data: { art: 'pin' },
+    render: (el, c) => <ArtInner el={el} update={c.update} readOnly={c.readOnly} />,
+  },
+
   // ── Look & feel ───────────────────────────────────────────────────────────
   {
     id: 'clock', name: 'Wall clock', category: 'visual', icon: Clock3, w: 190, h: 110,
@@ -1152,6 +1181,134 @@ function Converter({ el, update, readOnly }: {
         </div>
       </div>
     </Frame>
+  );
+}
+
+
+// ─── The three that moved off the toolbar ────────────────────────────────────
+
+function splitMs(ms: number) {
+  const abs = Math.abs(ms);
+  return {
+    d: Math.floor(abs / 86_400_000),
+    h: Math.floor((abs % 86_400_000) / 3_600_000),
+    m: Math.floor((abs % 3_600_000) / 60_000),
+    s: Math.floor((abs % 60_000) / 1000),
+    past: ms < 0,
+  };
+}
+
+function useTick(on = true, everyMs = 1000) {
+  const [, set] = useState(0);
+  useEffect(() => {
+    if (!on) return;
+    const t = setInterval(() => set(n => n + 1), everyMs);
+    return () => clearInterval(t);
+  }, [on, everyMs]);
+}
+
+function CountdownInner({ el, update, readOnly }: {
+  el: CanvasElement; update: (p: Partial<CanvasElement>) => void; readOnly?: boolean;
+}) {
+  useTick();
+  const data = d(el);
+  const target = data.targetAt as string | undefined;
+  if (!target) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center gap-1 px-2">
+        <span className="text-[10px] text-gray-400">Counting down to…</span>
+        {!readOnly && (
+          <input data-no-drag data-el-action type="datetime-local"
+            onChange={e => update({ data: { ...data, targetAt: new Date(e.target.value).toISOString() } })}
+            className="text-[10px] bg-slate-50 rounded px-1.5 py-1 outline-none" />
+        )}
+      </div>
+    );
+  }
+  const ms = new Date(target).getTime() - Date.now();
+  const { d: dd, h, m, s: ss, past } = splitMs(ms);
+  const colour = past ? '#dc2626' : dd === 0 && h < 4 ? '#d97706' : '#0f172a';
+  return (
+    <div className="w-full h-full flex flex-col items-center justify-center px-2">
+      <Line value={(data.title as string) ?? ''} readOnly={readOnly} placeholder="Countdown"
+        onChange={v => update({ data: { ...data, title: v } })}
+        className="text-[10px] font-bold text-gray-500 text-center" />
+      <div className="font-black tabular-nums leading-none mt-1" style={{ color: colour, fontSize: 22 }}>
+        {dd > 0 ? `${dd}d ${h}h` : h > 0 ? `${h}h ${m}m` : `${m}:${String(ss).padStart(2, '0')}`}
+      </div>
+      <div className="text-[9px] text-gray-400 mt-0.5">{past ? 'overdue' : 'remaining'}</div>
+    </div>
+  );
+}
+
+function StopwatchInner({ el, update, readOnly }: {
+  el: CanvasElement; update: (p: Partial<CanvasElement>) => void; readOnly?: boolean;
+}) {
+  const data = d(el);
+  const startedAt = data.startedAt as string | undefined;
+  useTick(!!startedAt);
+  const base = Number(data.elapsedMs ?? 0);
+  const live = startedAt ? Date.now() - new Date(startedAt).getTime() : 0;
+  const { d: dd, h, m, s: ss } = splitMs(base + live);
+  return (
+    <div className="w-full h-full flex flex-col items-center justify-center px-2">
+      <Line value={(data.title as string) ?? ''} readOnly={readOnly} placeholder="Stopwatch"
+        onChange={v => update({ data: { ...data, title: v } })}
+        className="text-[10px] font-bold text-gray-500 text-center" />
+      <div className="font-black tabular-nums leading-none mt-1" style={{ fontSize: 22 }}>
+        {dd > 0 ? `${dd}d ${h}h` : `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`}
+      </div>
+      {!readOnly && (
+        <button data-no-drag data-el-action
+          onClick={() => update({ data: startedAt
+            ? { ...data, startedAt: undefined, elapsedMs: base + live }
+            : { ...data, startedAt: new Date().toISOString() } })}
+          className="mt-1 text-[9px] font-bold px-2 py-0.5 rounded-full"
+          style={startedAt ? { backgroundColor: '#fee2e2', color: '#b91c1c' } : { backgroundColor: '#dcfce7', color: '#166534' }}>
+          {startedAt ? 'Stop' : 'Start'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Clip art, with its piece chosen on the node itself.
+ *
+ * Attaching to a job is handled by the board (it knows where everything is);
+ * this only draws the piece and lets you swap it.
+ */
+function ArtInner({ el, update, readOnly }: {
+  el: CanvasElement; update: (p: Partial<CanvasElement>) => void; readOnly?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const data = d(el);
+  const art = (data.art as ArtKind) ?? 'pin';
+  return (
+    <div className="w-full h-full relative">
+      <ClipArtNode el={{ ...el, art, color: (data.color as string) || '#dc2626' }} />
+      {!readOnly && (
+        <button data-no-drag data-el-action
+          onClick={e => { e.stopPropagation(); setOpen(v => !v); }}
+          title="Change the piece"
+          className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-white border border-gray-200 text-[8px] text-gray-500 opacity-0 hover:opacity-100 focus:opacity-100">
+          ⋯
+        </button>
+      )}
+      {open && !readOnly && (
+        <div data-no-drag data-el-action
+          className="absolute z-30 top-full left-0 mt-1 bg-white rounded-lg shadow-xl border border-gray-200 p-1 grid grid-cols-4 gap-0.5"
+          style={{ width: 150 }}>
+          {ART_KINDS.map(k => (
+            <button key={k} title={k.replace('-', ' ')}
+              onClick={() => { update({ data: { ...data, art: k } }); setOpen(false); }}
+              className="aspect-square rounded hover:bg-slate-100 p-0.5">
+              <ClipArtNode el={{ ...el, art: k, w: 30, h: 30 }} />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

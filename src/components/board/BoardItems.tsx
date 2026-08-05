@@ -287,19 +287,27 @@ export const BoardNode = React.memo(function BoardNode({
   // Each node type carries its own surface. A bin is a dashed drop zone, clip
   // art has no chrome at all, and the rest keep the card look that notes and
   // boxes established.
-  const surface: React.CSSProperties = isBin
-    ? {
-        backgroundColor: binHot ? `${el.color}22` : 'rgba(255,255,255,.82)',
-        border: `2px dashed ${binHot ? el.color : '#cbd5e1'}`,
-        boxShadow: binHot ? `0 0 0 4px ${el.color}22` : undefined,
-      }
-    : plain
-    ? { background: 'none', border: 'none' }
-    : isWidget
-    ? { backgroundColor: '#ffffff', border: '1px solid #e2e8f0' }
+  // Longhand only. Mixing `border` with a later `borderColor` override made
+  // React warn about shorthand/longhand conflicts and can genuinely mis-style,
+  // so the selected colour is folded in here rather than layered on top.
+  const borderColor = isSelected ? '#4aa8d8'
+    : isBin ? (binHot ? el.color : '#cbd5e1')
+    : isWidget ? '#e2e8f0'
+    : el.type === 'box' ? el.color.replace('0.45', '0.8')
+    : 'rgba(0,0,0,0.1)';
+
+  const surface: React.CSSProperties = plain
+    ? { backgroundColor: 'transparent', borderStyle: 'none', borderWidth: 0 }
     : {
-        backgroundColor: el.type === 'box' ? el.color : (el.color || '#ffffff'),
-        border: `1px solid ${el.type === 'box' ? el.color.replace('0.45', '0.8') : 'rgba(0,0,0,0.1)'}`,
+        backgroundColor: isBin
+          ? (binHot ? `${el.color}22` : 'rgba(255,255,255,.82)')
+          : isWidget ? '#ffffff'
+          : el.type === 'box' ? el.color
+          : (el.color || '#ffffff'),
+        borderStyle: isBin ? 'dashed' : 'solid',
+        borderWidth: isBin ? 2 : 1,
+        borderColor,
+        boxShadow: isBin && binHot ? `0 0 0 4px ${el.color}22` : undefined,
       };
 
   return (
@@ -315,7 +323,6 @@ export const BoardNode = React.memo(function BoardNode({
       style={{
         left: x, top: y, width: w, height: h,
         ...surface,
-        ...(isSelected ? { borderColor: '#4aa8d8' } : {}),
         outline: isSelected && !isDragging ? '2px solid rgba(74,168,216,0.5)' : undefined,
         outlineOffset: '2px',
         touchAction: 'none',
@@ -362,9 +369,7 @@ export const BoardNode = React.memo(function BoardNode({
 
       {/* ── Type-specific content ── */}
       {isBin ? (
-        <button data-el-action
-          onClick={e => { e.stopPropagation(); H.openBin(el.binKind!); }}
-          className="w-full h-full flex flex-col items-start justify-center px-3 text-left">
+        <div className="w-full h-full flex flex-col items-start justify-center px-3 text-left pointer-events-none">
           <span className="flex items-center gap-1.5 font-extrabold text-[12.5px]" style={{ color: el.color }}>
             {el.binKind === 'done' ? <CheckCircle2 size={14} />
               : el.binKind === 'ready' ? <PlayCircle size={14} />
@@ -378,7 +383,7 @@ export const BoardNode = React.memo(function BoardNode({
           <span className="text-[9px] text-gray-400 mt-0.5">
             {binHot ? 'Release to file it here' : 'Click to open · drag jobs in'}
           </span>
-        </button>
+        </div>
       ) : el.type === 'countdown' ? (
         <CountdownNode el={el} />
       ) : el.type === 'stopwatch' ? (

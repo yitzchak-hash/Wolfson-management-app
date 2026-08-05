@@ -58,12 +58,12 @@ export function Sidebar() {
             key={to}
             to={to}
             title={label}
-            className="flex flex-col items-center justify-center w-12 h-12 rounded-xl transition-all text-xs gap-1"
-            style={({ isActive }) => (
-              isActive
-                ? { backgroundColor: accent, color: '#ffffff' }
-                : { color: lightTheme ? '#9ca3af' : '#6b7280' }
-            )}
+            className={({ isActive }) =>
+              `pick flex flex-col items-center justify-center w-12 h-12 rounded-xl text-xs gap-1 ${isActive ? 'pick-on' : ''}`}
+            style={({ isActive }) => ({
+              ['--pick-fill' as string]: accent,
+              color: isActive ? '#ffffff' : (lightTheme ? '#9ca3af' : '#6b7280'),
+            })}
           >
             <Icon size={20} />
             <span className="text-[9px] leading-none font-medium text-center px-0.5">{label}</span>
@@ -138,11 +138,13 @@ export function MobileNav() {
             <div className="grid grid-cols-4 gap-2">
               {overflow.map(({ to, icon: Icon, label }) => (
                 <NavLink key={to} to={to} onClick={() => setMoreOpen(false)}
-                  className="flex flex-col items-center justify-center gap-1 py-3 rounded-xl"
-                  style={({ isActive }) => (isActive
-                    ? { backgroundColor: accent, color: '#ffffff' }
-                    : { color: lightTheme ? '#6b7280' : '#9ca3af',
-                        backgroundColor: lightTheme ? '#f8fafc' : 'rgba(255,255,255,.05)' })}>
+                  className={({ isActive }) =>
+                    `pick flex flex-col items-center justify-center gap-1 py-3 rounded-xl ${isActive ? 'pick-on' : ''}`}
+                  style={({ isActive }) => ({
+                    ['--pick-fill' as string]: accent,
+                    color: isActive ? '#ffffff' : (lightTheme ? '#6b7280' : '#9ca3af'),
+                    backgroundColor: isActive ? undefined : (lightTheme ? '#f8fafc' : 'rgba(255,255,255,.05)'),
+                  })}>
                   <Icon size={20} />
                   <span className="text-[10px] leading-none text-center">{label}</span>
                 </NavLink>

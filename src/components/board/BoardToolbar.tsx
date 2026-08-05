@@ -19,6 +19,14 @@ interface ToolDef { id: BoardTool; icon: React.ElementType; label: string; tip: 
  * what make it usable on the interactive display, where hovering to discover an
  * icon is not practical.
  */
+/**
+ * Tools only.
+ *
+ * Anything that is really a *thing you place* rather than a *way of working*
+ * belongs in the widget store: clip art, countdowns and stopwatches all moved
+ * there. What is left is the handful of gestures — select, pan, draw — plus the
+ * three raw board pieces that are not widgets (job, note, box, title).
+ */
 const TOOLS: ToolDef[][] = [
   [
     { id: 'select', icon: MousePointer2, label: 'Select', tip: 'Select' },
@@ -28,17 +36,12 @@ const TOOLS: ToolDef[][] = [
     { id: 'job',   icon: Plus,        label: 'Job',   tip: 'New job' },
     { id: 'note',  icon: StickyNote,  label: 'Note',  tip: 'Sticky note' },
     { id: 'box',   icon: Square,      label: 'Box',   tip: 'Section box' },
-    { id: 'title', icon: Type,        label: 'Title', tip: 'Pinned title' },
+    { id: 'title', icon: Type,        label: 'Title', tip: 'Title' },
   ],
   [
-    { id: 'pen',         icon: Pen,         label: 'Pen',   tip: 'Draw' },
-    { id: 'highlighter', icon: Highlighter, label: 'Mark',  tip: 'Highlight' },
-    { id: 'clipart',     icon: Palette,     label: 'Art',   tip: 'Clip art' },
-  ],
-  [
-    { id: 'countdown', icon: Timer, label: 'Timer', tip: 'Countdown' },
-    { id: 'stopwatch', icon: Clock, label: 'Watch', tip: 'Stopwatch' },
-    { id: 'voice',     icon: Mic,   label: 'Voice', tip: 'Voice memo' },
+    { id: 'pen',         icon: Pen,         label: 'Pen',   tip: 'Draw · right-click for colours' },
+    { id: 'highlighter', icon: Highlighter, label: 'Mark',  tip: 'Highlight · right-click for colours' },
+    { id: 'voice',       icon: Mic,         label: 'Voice', tip: 'Voice memo' },
   ],
   [
     { id: 'export', icon: Image, label: 'Save', tip: 'Export board image' },
@@ -47,7 +50,7 @@ const TOOLS: ToolDef[][] = [
 
 export function BoardToolbar({
   active, onPick, onFit, onToggleSettings, onToggleControls, controlsOpen,
-  onOpenStore, onToggleMap, mapOn,
+  onOpenStore, onToggleMap, mapOn, onPenOptions,
 }: {
   active: BoardTool;
   onPick: (t: BoardTool) => void;
@@ -58,6 +61,7 @@ export function BoardToolbar({
   onOpenStore: () => void;
   onToggleMap: () => void;
   mapOn: boolean;
+  onPenOptions: (tool: 'pen' | 'highlighter', x: number, y: number) => void;
 }) {
   // Offset from the default right-edge dock, so the toolbar can be moved anywhere
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -102,6 +106,11 @@ export function BoardToolbar({
               <button
                 key={id}
                 onClick={() => onPick(id)}
+                onContextMenu={e => {
+                  if (id !== 'pen' && id !== 'highlighter') return;
+                  e.preventDefault(); e.stopPropagation();
+                  onPenOptions(id, e.clientX, e.clientY);
+                }}
                 title={tip}
                 className="w-full flex flex-col items-center gap-0.5 py-1.5 rounded-lg transition-colors"
                 style={active === id
@@ -145,15 +154,17 @@ export function BoardToolbar({
   return (
     <>
       {/* Desktop: the floating rail, draggable anywhere. */}
+      {/* Bottom is reserved for the minimap and the zoom readout, so the rail
+          stops short of them and scrolls inside itself instead of overlapping. */}
       <div
-        className="hidden md:block absolute z-40 select-none"
-        style={{ right: 12 - offset.x, top: 12 + offset.y }}
+        className="hidden md:flex absolute z-40 select-none"
+        style={{ right: 12 - offset.x, top: 12 + offset.y, bottom: 124, alignItems: 'flex-start' }}
       >
         {/* Capped and scrollable: the rail grew past the bottom of a laptop
             screen once Store and Map joined it, hiding Setup entirely. */}
         <div
           className="w-[62px] bg-white border border-gray-200 rounded-xl shadow-lg p-1.5 flex flex-col items-center gap-0.5 overflow-y-auto board-toolbar-scroll"
-          style={{ maxHeight: 'calc(100vh - 190px)' }}
+          style={{ maxHeight: 'calc(100% - 140px)' }}
         >
           {buttons}
         </div>
@@ -194,8 +205,10 @@ export function BoardToolbar({
  */
 export function BoardControlsPanel() {
   const rows: [string, string][] = [
-    ['Drag tile', 'Move it'],
-    ['Drag empty space', 'Lasso select'],
+    ['Click a job', 'Open it'],
+    ['Drag a job', 'Move it'],
+    ['Drag empty space', 'Move the board'],
+    ['Ctrl / ⌘ + drag', 'Select several'],
     ['Ctrl / ⌘ + click', 'Add to selection'],
     ['Ctrl / ⌘ + wheel', 'Zoom board'],
     ['Wheel', 'Pan up / down'],

@@ -209,6 +209,10 @@ export function GeneralJobsPage() {
   const [createFromLink, setCreateFromLink] = useState<
     { intent: PasteIntent; x: number; y: number } | null>(null);
   const [artPicker, setArtPicker] = useState(false);
+  /** Right-clicking the pen or the marker opens its colours and widths. */
+  const [penOpts, setPenOpts] = useState<{ tool: 'pen' | 'highlighter'; x: number; y: number } | null>(null);
+  const [penStyle, setPenStyle] = useState({ color: '#1e3a5f', width: 3 });
+  const [markStyle, setMarkStyle] = useState({ color: '#facc15', width: 16 });
   const [exportMenu, setExportMenu] = useState(false);
   const [storeOpen, setStoreOpen] = useState(false);
   const [layoutPanel, setLayoutPanel] = useState(false);
@@ -407,7 +411,7 @@ export function GeneralJobsPage() {
         (i === -1 ? ZOOM_STEPS.indexOf(1) : i) + dir))];
       if (next === prevZoom) return prevZoom;
       const cx = clientX - r.left, cy = clientY - r.top;
-      setPan(prevPan => ({
+      setPan(prevPan => clampPanRef.current({
         x: cx - (cx - prevPan.x) * (next / prevZoom),
         y: cy - (cy - prevPan.y) * (next / prevZoom),
       }));
@@ -1027,6 +1031,10 @@ export function GeneralJobsPage() {
         const st = drag.starts.get(id)!;
         updateCanvasElement(id, { x: Math.max(0, Math.round(st.x + drag.dx)), y: Math.max(0, Math.round(st.y + drag.dy)) });
       });
+    } else if (el.type === 'bin' && el.binKind && drag.ids.length === 1 && drag.ids[0] === el.id) {
+      // A press that never became a drag is a click, so the bin opens. Deciding
+      // it here rather than with an onClick is what lets a bin be dragged at all.
+      setOpenBin(el.binKind);
     }
     setDrag(null);
   }
@@ -1073,21 +1081,43 @@ export function GeneralJobsPage() {
     canvasRef.current?.setPointerCapture(e.pointerId);
   }
 
+  /**
+   * What a press on empty board means.
+   *
+   * Plain left-drag PANS. That is the gesture people arrive with from every map
+   * and every canvas, and it was previously spent on the lasso — which is the
+   * rarer action of the two by a wide margin. Ctrl/⌘ + drag draws the selection
+   * box instead, which also matches Ctrl/⌘ + click already meaning "add to
+   * selection". Space-drag and middle-drag still pan, so nothing that worked
+   * before stopped working.
+   */
   function onCanvasPointerDown(e: React.PointerEvent) {
     if (e.button !== 0) return;
     if ((e.target as Element) !== canvasRef.current) return;
     setCtxMenu(null); setColorPicker(null);
     const { x, y } = toWorld(e.clientX, e.clientY);
 
-    // Pen and highlighter take over the same gesture the lasso normally uses.
+    // Pen and highlighter take the gesture outright while they are armed.
     if (drawMode) { startStrokeAt(e); return; }
 
+    if (e.ctrlKey || e.metaKey) {
+      setSelectedJobIds(new Set()); setSelectedElIds(new Set());
+      setLasso({ sx: x, sy: y, ex: x, ey: y });
+      canvasRef.current!.setPointerCapture(e.pointerId);
+      return;
+    }
+
     setSelectedJobIds(new Set()); setSelectedElIds(new Set());
-    setLasso({ sx: x, sy: y, ex: x, ey: y });
+    panRef.current = { px: e.clientX, py: e.clientY, ox: pan.x, oy: pan.y };
     canvasRef.current!.setPointerCapture(e.pointerId);
   }
 
   function onCanvasPointerMove(e: React.PointerEvent) {
+    if (panRef.current) {
+      const st = panRef.current;
+      setPan(clampPanRef.current({ x: st.ox + (e.clientX - st.px), y: st.oy + (e.clientY - st.py) }));
+      return;
+    }
     if (drawing) {
       const w = toWorld(e.clientX, e.clientY);
       setDrawing(d => {
@@ -1105,6 +1135,7 @@ export function GeneralJobsPage() {
   }
 
   function onCanvasPointerUp() {
+    if (panRef.current) { panRef.current = null; return; }
     if (drawing) {
       // One record per stroke — never one per point, which would flood the store.
       if (drawing.pts.length > 1) {
@@ -1115,9 +1146,9 @@ export function GeneralJobsPage() {
           x: Math.min(...xs), y: Math.min(...ys),
           w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys),
           text: '',
-          color: drawing.marker ? '#facc15' : '#1e3a5f',
+          color: drawing.marker ? markStyle.color : penStyle.color,
           points: drawing.pts.map(p => `${Math.round(p.x)},${Math.round(p.y)}`).join(' '),
-          strokeWidth: drawing.marker ? 16 : 3,
+          strokeWidth: drawing.marker ? markStyle.width : penStyle.width,
           ...(drawing.marker ? { art: 'marker' as const } : {}),
         });
       }
@@ -1183,7 +1214,7 @@ export function GeneralJobsPage() {
       setZoom(prev => {
         const next = Math.min(3, Math.max(0.25, prev * delta));
         const px = cx - r.left, py = cy - r.top;
-        setPan(pp => ({
+        setPan(pp => clampPanRef.current({
           x: px - (px - pp.x) * (next / prev),
           y: py - (py - pp.y) * (next / prev),
         }));
@@ -1268,10 +1299,10 @@ export function GeneralJobsPage() {
     const s = Math.max(raw, MIN);
     const step = [...ZOOM_STEPS].reverse().find(z => z <= s) ?? ZOOM_STEPS[0];
     setZoom(step);
-    setPan({
+    setPan(clampPanRef.current({
       x: Math.min(24, (r.width - b.w * step) / 2) - b.x * step,
       y: 16 - b.y * step,
-    });
+    }));
   }
 
   /** Bounding box of everything on the board, or null when it is empty. */
@@ -1350,13 +1381,15 @@ export function GeneralJobsPage() {
    *  - **At least the viewport.** Sizing the surface to the content left a grey
    *    void around a small board, which reads as the end of the world rather
    *    than as empty board.
-   *  - **A generous margin past the furthest thing.** There is always somewhere
-   *    to drag a tile to; the surface grows to meet it instead of stopping.
+   *  - **A small margin past the furthest thing.** The board grows to MEET what
+   *    you drag out — `jobPos` reports the live drag position, so the surface
+   *    extends under the tile as it goes — rather than always carrying a slab of
+   *    empty space you can scroll into for no reason.
    *
    * Rounded to a coarse step so panning does not resize the surface every
    * frame — the sizes change in chunks, not continuously.
    */
-  const EDGE_PAD = 900;
+  const EDGE_PAD = 140;
   let contentX = 0, contentY = 0;
   jobs.forEach((job, i) => { const p = jobPos(job, i); contentX = Math.max(contentX, p.x + TILE_W); contentY = Math.max(contentY, p.y + TILE_H); });
   canvasElements.forEach(el => { contentX = Math.max(contentX, el.x + el.w); contentY = Math.max(contentY, el.y + el.h); });
@@ -1422,10 +1455,8 @@ export function GeneralJobsPage() {
                 key={id}
                 onClick={() => setBoardSetting('viewMode', id)}
                 title={id === 'stages' ? 'Group by stage — drag a card to change its stage' : 'Free board'}
-                className="flex items-center gap-1.5 px-2.5 md:px-3 py-2 text-sm font-medium transition-colors"
-                style={viewMode === id
-                  ? { backgroundColor: '#1e3a5f', color: '#fff' }
-                  : { color: '#64748b' }}
+                className={`pick flex items-center gap-1.5 px-2.5 md:px-3 py-2 text-sm font-medium ${viewMode === id ? 'pick-on' : ''}`}
+                style={{ ['--pick-fill' as string]: '#1e3a5f', color: viewMode === id ? '#fff' : '#64748b' }}
               >
                 <Icon size={15} /> <span className="hidden sm:inline">{label}</span>
               </button>
@@ -1455,7 +1486,7 @@ export function GeneralJobsPage() {
         hidden={viewMode === 'stages'}
         ref={viewportRef}
         className="flex-1 min-h-0 relative overflow-hidden"
-        style={{ cursor: spaceHeld ? 'grab' : drawMode ? 'crosshair' : undefined, touchAction: 'none' }}
+        style={{ cursor: spaceHeld ? 'grab' : drawMode ? 'crosshair' : 'grab', touchAction: 'none' }}
         onPointerDown={onViewportPointerDown}
         onPointerMove={onViewportPointerMove}
         onPointerUp={onViewportPointerUp}
@@ -1467,6 +1498,7 @@ export function GeneralJobsPage() {
           onFit={zoomToFit}
           onOpenStore={() => setStoreOpen(true)}
           onToggleMap={() => setBoardSetting('showMinimap', !(projectBoard.showMinimap ?? false))}
+          onPenOptions={(tool, x, y) => { setTool(tool); setPenOpts({ tool, x, y }); }}
           mapOn={projectBoard.showMinimap ?? false}
           controlsOpen={showControls}
           onToggleControls={() => setBoardSetting('showControls', !showControls)}
@@ -1688,8 +1720,8 @@ export function GeneralJobsPage() {
                 <polyline
                   points={drawing.pts.map(p => `${p.x},${p.y}`).join(' ')}
                   fill="none"
-                  stroke={drawing.marker ? '#facc15' : '#1e3a5f'}
-                  strokeWidth={drawing.marker ? 16 : 3}
+                  stroke={drawing.marker ? markStyle.color : penStyle.color}
+                  strokeWidth={drawing.marker ? markStyle.width : penStyle.width}
                   strokeLinecap="round" strokeLinejoin="round"
                   opacity={drawing.marker ? 0.45 : 1}
                 />
@@ -1919,6 +1951,51 @@ export function GeneralJobsPage() {
           </div>
         </>
       )}
+
+      {/* ── Pen & marker settings ── */}
+      {penOpts && (() => {
+        const isMark = penOpts.tool === 'highlighter';
+        const cur = isMark ? markStyle : penStyle;
+        const setCur = (p: Partial<typeof cur>) =>
+          (isMark ? setMarkStyle : setPenStyle)(v => ({ ...v, ...p }));
+        const COLORS = isMark
+          ? ['#facc15', '#86efac', '#93c5fd', '#f9a8d4', '#fdba74', '#c4b5fd']
+          : ['#1e3a5f', '#dc2626', '#16a34a', '#2563eb', '#d97706', '#0f172a'];
+        const WIDTHS = isMark ? [10, 16, 26, 38] : [1.5, 3, 6, 10];
+        return (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setPenOpts(null)} />
+            <div className="fixed z-50 bg-white rounded-xl shadow-xl border border-gray-100 p-3"
+              style={{ left: Math.min(penOpts.x, window.innerWidth - 220), top: Math.min(penOpts.y, window.innerHeight - 200) }}>
+              <div className="text-[10px] font-extrabold text-gray-700 mb-2 tracking-wide">
+                {isMark ? 'HIGHLIGHTER' : 'PEN'}
+              </div>
+              <div className="flex gap-1.5 mb-3">
+                {COLORS.map(c => (
+                  <button key={c} onClick={() => setCur({ color: c })}
+                    className="w-6 h-6 rounded-full border-2 transition-transform hover:scale-110"
+                    style={{ backgroundColor: c, borderColor: cur.color === c ? '#1e3a5f' : 'rgba(0,0,0,.12)' }} />
+                ))}
+              </div>
+              <div className="text-[9.5px] font-bold text-gray-500 mb-1">Thickness</div>
+              <div className="flex items-center gap-2">
+                {WIDTHS.map(w => (
+                  <button key={w} onClick={() => setCur({ width: w })}
+                    className="flex-1 h-8 rounded-lg flex items-center justify-center transition-colors"
+                    style={{ backgroundColor: cur.width === w ? 'rgba(30,58,95,.08)' : '#f8fafc' }}>
+                    <span className="rounded-full block"
+                      style={{ width: Math.min(w, 22), height: Math.min(w, 22), backgroundColor: cur.color,
+                               opacity: isMark ? 0.55 : 1 }} />
+                  </button>
+                ))}
+              </div>
+              <p className="text-[9.5px] text-gray-400 mt-2 leading-snug">
+                Draw anywhere, tiles included. Each stroke is one item you can delete on its own.
+              </p>
+            </div>
+          </>
+        );
+      })()}
 
       {/* ── Clip-art picker ── */}
       {artPicker && (

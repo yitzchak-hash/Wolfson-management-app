@@ -47,7 +47,11 @@ const CAT_COLORS: Record<ContractorCategory, string> = { drywall: '#f59e0b', ac:
 
 export function SettingsPage({ scope = 'project' }: { scope?: SettingsScope }) {
   const { stages, users, updateStage, addStage, deleteStage, updateUser, addUser, lightTheme, setLightTheme, mainUiStrings: s, currentProjectId, projects } = useStore();
-  const tabs = scope === 'app' ? APP_TABS : PROJECT_TABS;
+  // The Job Board has no buildings and no contractor status sheet, so those
+  // tabs would open on an empty page that can never be filled.
+  const tabs = scope === 'app'
+    ? APP_TABS
+    : (currentProjectId === 'general' ? (['stages'] as Tab[]) : PROJECT_TABS);
   const [activeTab, setActiveTab] = useState<Tab>(tabs[0]);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
@@ -84,14 +88,17 @@ export function SettingsPage({ scope = 'project' }: { scope?: SettingsScope }) {
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-6 flex-wrap">
         {tabs.map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              activeTab === tab ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            className={`pick pick-pill px-4 py-2 rounded-lg text-sm font-medium ${
+              activeTab === tab ? 'pick-on text-gray-900' : 'text-gray-500 hover:text-gray-700'
             }`}>
             {TAB_LABELS[tab]}
           </button>
         ))}
       </div>
 
+      {scope === 'project' && (
+        <WorkspaceLook onToast={showToast} />
+      )}
       {activeTab === 'stages' && (
         <StageSettings stages={sortedStages} updateStage={updateStage} addStage={addStage} deleteStage={deleteStage} onToast={showToast} currentProjectId={currentProjectId} />
       )}
@@ -169,6 +176,38 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
   const [newStageNameHe, setNewStageNameHe] = useState('');
   const [newStageColor, setNewStageColor] = useState('#6366f1');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  /** Deleting or hiding a stage that still holds jobs opens this first. */
+  const [stageAction, setStageAction] = useState<{ stage: Stage; mode: 'delete' | 'hide' } | null>(null);
+  const [moveTo, setMoveTo] = useState<string>('');
+  const { apartments, currentUser, bulkUpdateApartments } = useStore();
+
+  const scoped = apartments.filter(a =>
+    !a.isUnnamed && (isGeneral ? a.buildingId === 'G' : a.buildingId !== 'G'));
+  const countIn = (stageId: string) => scoped.filter(a => a.currentStageId === stageId).length;
+
+  /**
+   * Moves every job out of a stage, then does the thing that was asked for.
+   *
+   * Only `currentStageId` is written — no tasks are created, no notes touched,
+   * nothing else about a job changes. That restraint is the whole point: this
+   * is a bulk correction, not a workflow step.
+   */
+  function confirmStageAction() {
+    if (!stageAction || !currentUser) return;
+    const { stage, mode } = stageAction;
+    const ids = scoped.filter(a => a.currentStageId === stage.id).map(a => a.id);
+    if (ids.length > 0) {
+      bulkUpdateApartments(ids, { currentStageId: moveTo || null }, currentUser);
+    }
+    if (mode === 'delete') deleteStage(stage.id);
+    else updateStage(stage.id, { active: false });
+    const dest = projectStages.find(x => x.id === moveTo)?.name ?? 'Not started';
+    onToast(ids.length
+      ? `${ids.length} ${ids.length === 1 ? 'job' : 'jobs'} moved to ${dest}`
+      : (mode === 'delete' ? 'Stage deleted' : 'Stage hidden'));
+    setStageAction(null);
+    setMoveTo('');
+  }
 
   function getEdit(id: string): Partial<Stage> { return edits[id] ?? {}; }
   function setEdit(id: string, changes: Partial<Stage>) {
@@ -248,7 +287,12 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
                   />
                 </div>
                 <Tooltip text={active ? s.hideStage : s.activateStage}>
-                  <button onClick={() => setEdit(stage.id, { active: !active })}
+                  <button onClick={() => {
+                    // Hiding a stage that still holds jobs strands them, so it
+                    // goes through the same move-them-first flow as deleting.
+                    if (active && countIn(stage.id) > 0) setStageAction({ stage, mode: 'hide' });
+                    else setEdit(stage.id, { active: !active });
+                  }}
                     className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-all whitespace-nowrap ${active ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-100 border-gray-200 text-gray-500'}`}>
                     {active ? s.activeLabel : s.hiddenLabel}
                   </button>
@@ -257,7 +301,7 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
                   <button onClick={() => saveStage(stage)} className="p-2 text-[#1e3a5f] hover:bg-[#1e3a5f]/5 rounded-lg"><Save size={16} /></button>
                 </Tooltip>
                 <Tooltip text={s.deleteStageTooltip}>
-                  <button onClick={() => { if (confirm(s.deleteStageConfirmMsg)) deleteStage(stage.id); }}
+                  <button onClick={() => setStageAction({ stage, mode: 'delete' })}
                     className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
                 </Tooltip>
               </div>
@@ -271,6 +315,67 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
           );
         })}
       </div>
+
+      {/* ── Moving jobs out of a stage before it goes ── */}
+      {stageAction && (() => {
+        const n = countIn(stageAction.stage.id);
+        const others = projectStages.filter(x => x.id !== stageAction.stage.id && x.active);
+        const dest = others.find(x => x.id === moveTo);
+        return (
+          <>
+            <div className="fixed inset-0 bg-black/45 z-[90]" onClick={() => setStageAction(null)} />
+            <div className="fixed z-[95] bg-white rounded-2xl shadow-2xl p-5"
+              style={{ left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: 'min(460px, 94vw)' }}>
+              <div className="flex items-center gap-2 mb-1">
+                <AlertTriangle size={18} className="text-amber-500" />
+                <h3 className="text-base font-bold text-gray-900">
+                  {stageAction.mode === 'delete' ? 'Delete' : 'Hide'} “{stageAction.stage.name}”?
+                </h3>
+              </div>
+
+              {n > 0 ? (
+                <>
+                  <p className="text-xs text-gray-600 mb-3">
+                    <b>{n} {n === 1 ? 'job is' : 'jobs are'}</b> at this stage. Choose where they should go —
+                    only their stage changes, nothing else about them is touched and no tasks are created.
+                  </p>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Move them to</label>
+                  <select value={moveTo} onChange={e => setMoveTo(e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white mb-3">
+                    <option value="">Not started</option>
+                    {others.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+                  </select>
+                  <div className="text-[11px] rounded-lg px-3 py-2 mb-4"
+                    style={{ backgroundColor: '#fef3c7', color: '#92400e' }}>
+                    {n} {n === 1 ? 'job moves' : 'jobs move'} to <b>{dest?.name ?? 'Not started'}</b>, then the
+                    stage is {stageAction.mode === 'delete' ? 'deleted' : 'hidden'}.
+                    {stageAction.mode === 'delete' && ' This cannot be undone.'}
+                  </div>
+                </>
+              ) : (
+                <p className="text-xs text-gray-600 mb-4">
+                  No jobs are at this stage, so nothing moves.
+                  {stageAction.mode === 'delete' && ' Deleting it cannot be undone.'}
+                </p>
+              )}
+
+              <div className="flex gap-2">
+                <button onClick={() => { setStageAction(null); setMoveTo(''); }}
+                  className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
+                  {s.cancel}
+                </button>
+                <button onClick={confirmStageAction}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white"
+                  style={{ backgroundColor: stageAction.mode === 'delete' ? '#dc2626' : '#1e3a5f' }}>
+                  {n > 0
+                    ? `Move ${n} and ${stageAction.mode === 'delete' ? 'delete' : 'hide'}`
+                    : (stageAction.mode === 'delete' ? 'Delete' : 'Hide')}
+                </button>
+              </div>
+            </div>
+          </>
+        );
+      })()}
 
       <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-4">
         <h3 className="text-sm font-semibold text-gray-700 mb-3">{s.addNewStage}</h3>
@@ -2584,6 +2689,36 @@ function BuildingsTab({ onToast }: { onToast: (msg: string, type?: 'success' | '
           );
         })}
       </div>
+    </div>
+  );
+}
+
+
+/**
+ * The workspace's own identity colour.
+ *
+ * Lives in project settings because it belongs to the workspace, but it is
+ * stored app-wide — everyone sees the same colour, and it is what the rail, the
+ * header chip and the sidebar highlight all read.
+ */
+function WorkspaceLook({ onToast }: { onToast: (msg: string) => void }) {
+  const { projects, currentProjectId, setProjectColor } = useStore();
+  const project = projects.find(p => p.id === currentProjectId);
+  if (!project) return null;
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5 mb-5">
+      <h2 className="font-semibold text-gray-800 mb-1 flex items-center gap-2">
+        <span className="w-3.5 h-3.5 rounded-full" style={{ backgroundColor: project.color }} />
+        {project.name} colour
+      </h2>
+      <p className="text-xs text-gray-500 mb-3">
+        The stripe down the side, the chip at the top and the highlighted tab all use this, so you can
+        tell which workspace you are in from the corner of your eye.
+      </p>
+      <ColorPickerWithPresets
+        value={project.color}
+        onChange={c => { setProjectColor(project.id, c); onToast(`${project.shortName} colour updated`); }}
+      />
     </div>
   );
 }
