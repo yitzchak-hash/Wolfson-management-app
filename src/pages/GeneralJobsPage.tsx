@@ -4,6 +4,7 @@ import {
   Copy, StickyNote, Square, Palette, Pencil, X, AlertTriangle,
   Ghost, ThumbsUp, ThumbsDown, ClipboardPaste, LayoutGrid, Columns3, Archive, CheckCircle2, PlayCircle,
   Image as ImageIcon, ImageOff, History, MoveUpRight, Unlink, FileText, Search, FolderPlus, Printer,
+  Settings2 as Settings,
 } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 import { useStore } from '../data/store';
@@ -2557,7 +2558,20 @@ export function GeneralJobsPage() {
               </>
             ) : (
               <>
-                <button onClick={() => { const el = canvasElements.find(e => e.id === ctxMenu.ids[0]); if (el) startEdit(el); setCtxMenu(null); }}
+                {/* Settings first — for a widget or a group there is no text to
+                    edit, and this menu item used to call the same dead editor
+                    the pencil did. */}
+                <button onClick={() => { setSettingsEl(ctxMenu.ids[0]); setCtxMenu(null); }}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
+                  <Settings size={14} className="text-gray-400" /> Settings…
+                </button>
+                <button onClick={() => {
+                    const el = canvasElements.find(e => e.id === ctxMenu.ids[0]);
+                    // Only the node types that actually render an editor.
+                    if (el && (el.type === 'note' || el.type === 'box' || el.type === 'title')) startEdit(el);
+                    else setSettingsEl(ctxMenu.ids[0]);
+                    setCtxMenu(null);
+                  }}
                   className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
                   <Pencil size={14} className="text-gray-400" /> Edit Text
                 </button>

@@ -62,6 +62,17 @@ export function NodeSettings({ el, onClose, onDelete }: {
     if (el.type === 'voice') {
       return [{ key: 'text', label: 'Label', kind: 'text', scope: 'element' }];
     }
+    // A countdown placed straight onto the board said "Set a time" and offered
+    // no way to set one.
+    if (el.type === 'countdown') {
+      return [
+        { key: 'text', label: 'Label', kind: 'text', scope: 'element', placeholder: 'Countdown' },
+        { key: 'targetAt', label: 'Counting down to', kind: 'datetime', scope: 'element' },
+      ];
+    }
+    if (el.type === 'stopwatch') {
+      return [{ key: 'text', label: 'Label', kind: 'text', scope: 'element', placeholder: 'Stopwatch' }];
+    }
     return [];
   }, [el.type, el.widget]);
 

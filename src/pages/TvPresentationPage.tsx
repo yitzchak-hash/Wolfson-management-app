@@ -418,7 +418,10 @@ export function TvPresentationPage() {
                   ...(isBin
                     ? { backgroundColor: 'rgba(255,255,255,.82)', border: `2px dashed ${el.color}` }
                     : el.type === 'widget'
-                    ? { backgroundColor: '#ffffff', border: '1px solid #e2e8f0' }
+                    // The same hardcode the board had: a widget's chosen colour
+                    // was ignored here too, so a board coloured for the wall
+                    // came out plain white on the wall.
+                    ? { backgroundColor: el.color || '#ffffff', border: '1px solid #e2e8f0' }
                     : el.type === 'clipart'
                     ? {}
                     : { backgroundColor: el.color, border: '1px solid rgba(0,0,0,.08)' }),
