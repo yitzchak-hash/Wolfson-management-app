@@ -604,6 +604,8 @@ export async function stampPlanToDrive(input: {
   version: number;
   jobName?: string;
   folderName?: string;
+  /** Who marked it up — goes in the file name, the layer name and the PDF. */
+  author?: string;
 }): Promise<StampedPlan> {
   const resp = await fetch('/api/plan-annotate', {
     method: 'POST',
@@ -613,4 +615,72 @@ export async function stampPlanToDrive(input: {
   const body = await resp.json().catch(() => ({} as Record<string, unknown>));
   if (!resp.ok) throw new Error((body as { error?: string }).error ?? `Save failed (${resp.status})`);
   return body as StampedPlan;
+}
+
+/**
+ * The plans on a job: the originals, and the markups made from them.
+ *
+ * Deliberately only ONE level. The Engineered Plans folder often has other
+ * subfolders — superseded issues, a contractor's own set, photographs — and
+ * pulling PDFs out of all of them would fill the chip row with sheets nobody
+ * asked for. Only the folder itself and its "Annotated Plans" child count.
+ */
+export interface PlanEntry {
+  id: string;
+  name: string;
+  kind: 'original' | 'annotated';
+  modifiedTime?: string;
+}
+
+/**
+ * Everything the chip row needs, from the job's own Drive link.
+ *
+ * Returns the Engineered Plans folder id as well, because that is where a new
+ * markup has to be filed — inside the plans folder, not beside it.
+ */
+export async function findPlanSetViaBackend(driveLink: string): Promise<{
+  plansFolderId: string | null;
+  plans: PlanEntry[];
+}> {
+  const folderId = extractFolderId(driveLink);
+  if (!folderId) return { plansFolderId: null, plans: [] };
+  try {
+    const files = await listFolderViaBackend(folderId);
+    const plansFolder = files.find(f => f.mimeType === FOLDER_MIME && isEngineeredPlansFolder(f.name));
+    if (!plansFolder) return { plansFolderId: null, plans: [] };
+    const { plans } = await listPlansViaBackend(plansFolder.id);
+    return { plansFolderId: plansFolder.id, plans };
+  } catch {
+    return { plansFolderId: null, plans: [] };
+  }
+}
+
+export async function listPlansViaBackend(plansFolderId: string): Promise<{
+  plans: PlanEntry[];
+  annotatedFolderId: string | null;
+}> {
+  const isPdf = (f: DriveFile) => /pdf/i.test(f.mimeType) || /\.pdf$/i.test(f.name);
+  const out: PlanEntry[] = [];
+  let annotatedFolderId: string | null = null;
+
+  try {
+    const top = await listFolderViaBackend(plansFolderId);
+    for (const f of top) {
+      if (isPdf(f)) out.push({ id: f.id, name: f.name, kind: 'original' });
+    }
+    const sub = top.find(f =>
+      f.mimeType === 'application/vnd.google-apps.folder'
+      && /annotated\s*plans/i.test(f.name));
+    if (sub) {
+      annotatedFolderId = sub.id;
+      const inner = await listFolderViaBackend(sub.id);
+      for (const f of inner) {
+        if (isPdf(f)) out.push({ id: f.id, name: f.name, kind: 'annotated' });
+      }
+    }
+  } catch { /* the chips just stay as they were */ }
+
+  // Newest markup first — "annotated version 3" is the one people want.
+  out.sort((a, b) => (a.kind === b.kind ? b.name.localeCompare(a.name, undefined, { numeric: true }) : 0));
+  return { plans: out, annotatedFolderId };
 }

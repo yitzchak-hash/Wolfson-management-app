@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useStore, loadAllProjectsTaskData } from '../data/store';
 import { Apartment, CanvasElement, isCountableApartment, BIN_META, getStageName } from '../types';
@@ -7,6 +7,15 @@ import { getBoardTheme } from '../data/boardThemes';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
 import { CountdownNode, StopwatchNode, ClipArtNode, StrokeLayer } from '../components/board/BoardNodes';
 import { renderWidget } from '../data/widgets';
+import { extractFileId } from '../data/driveApi';
+import { PenLine } from 'lucide-react';
+
+/**
+ * Lazy, like everywhere else — the wallboard is the last place that should
+ * download a megabyte of PDF engine before it can show a board.
+ */
+const PlanAnnotator = lazy(() =>
+  import('../components/plans/PlanAnnotator').then(m => ({ default: m.PlanAnnotator })));
 
 /**
  * The office wall display.
@@ -26,6 +35,7 @@ export function TvPresentationPage() {
   const {
     projects, apartments, stages, contractorAssignments, contractorPhotos, canvasElements,
     boardSettings, currentProjectId, setCurrentProject, startFirebaseSync, firebaseListening,
+    users,
   } = useStore();
 
   /**
@@ -116,6 +126,8 @@ export function TvPresentationPage() {
     setParams(p, { replace: true });
   };
   const [showScale, setShowScale] = useState(false);
+  /** The wallboard's single writable action: marking up a plan. */
+  const [markUp, setMarkUp] = useState(false);
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 30_000);
@@ -234,6 +246,7 @@ export function TvPresentationPage() {
 
   // ── Job detail ──
   if (openJob) {
+    const planId = openJob.plansPdfLink ? extractFileId(openJob.plansPdfLink) : null;
     const st = stageOf(openJob);
     const photos = contractorPhotos
       .filter(p => contractorAssignments.some(a => a.id === p.assignmentId && a.apartmentId === openJob.id))
@@ -241,14 +254,45 @@ export function TvPresentationPage() {
     return (
       <div ref={frameRef} dir={isRtl ? 'rtl' : 'ltr'} className="h-screen w-screen flex flex-col bg-slate-100 overflow-hidden">
         {bar}
+        {markUp && planId && (
+          <Suspense fallback={null}>
+            <PlanAnnotator
+              planFileId={planId}
+              planName={t('Engineering plan', 'תוכנית הנדסית')}
+              apartmentId={openJob.id}
+              apartmentLabel={openJob.displayName || openJob.apartmentNumber || 'Job'}
+              driveFolderUrl={openJob.driveLink}
+              authorName=""
+              askWho
+              people={users.filter(u => u.active !== false).map(u => u.name)}
+              onClose={() => setMarkUp(false)}
+            />
+          </Suspense>
+        )}
         <div className="flex-1 grid gap-3 p-3 min-h-0"
           style={{ gridTemplateColumns: '1.05fr 1fr', gridTemplateRows: '1.15fr 1fr', fontSize: 15 * Math.min(scale, 1.6) }}>
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col">
             <div className="px-3 py-2 font-extrabold border-b border-gray-200 flex items-center gap-2">
               <PlanIcon size={16} /> {t('Engineering plan', 'תוכנית הנדסית')}
               {openJob.plansPdfLink && (
-                <a href={openJob.plansPdfLink} target="_blank" rel="noopener noreferrer"
-                  className="ml-auto text-[#4aa8d8] font-bold">{t('open in Drive', 'פתח בדרייב')} ↗</a>
+                <>
+                  {/*
+                    The one thing the wallboard is allowed to change.
+                    Everything else here stays read-only on purpose — but the
+                    screen is in the middle of the office and marking a plan up
+                    on it is the reason anybody walks over to it. It asks who is
+                    drawing first, so the version carries a real name rather than
+                    "the office".
+                  */}
+                  <button
+                    onClick={() => setMarkUp(true)}
+                    className="ml-auto flex items-center gap-1.5 px-3 py-1 rounded-lg font-bold text-white"
+                    style={{ backgroundColor: '#4aa8d8' }}>
+                    <PenLine size={14} /> {t('Mark up', 'סימון')}
+                  </button>
+                  <a href={openJob.plansPdfLink} target="_blank" rel="noopener noreferrer"
+                    className="text-[#4aa8d8] font-bold">{t('open in Drive', 'פתח בדרייב')} ↗</a>
+                </>
               )}
             </div>
             {openJob.plansPdfLink ? (

@@ -5,7 +5,7 @@ import { useStore } from '../../data/store';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import { StageNotesSection } from './StageNotesSection';
 import { ActivitySection } from './ActivitySection';
-import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, findAllPlansPdfsViaBackend, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, extractFolderId, driveThumbUrl, listAllPhotosViaBackend, getFolderNameViaBackend, familyNameFromFolderName, DrivePhotoItem, DriveFile, FolderHealth, checkFolderHealthViaBackend } from '../../data/driveApi';
+import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, findAllPlansPdfsViaBackend, findPlanSetViaBackend, PlanEntry, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, extractFolderId, driveThumbUrl, listAllPhotosViaBackend, getFolderNameViaBackend, familyNameFromFolderName, DrivePhotoItem, DriveFile, FolderHealth, checkFolderHealthViaBackend } from '../../data/driveApi';
 import { Tooltip } from '../ui/Tooltip';
 import { printSheet, printEsc } from '../../data/printing';
 import { PlanPinOverlay } from './PlanPinOverlay';
@@ -175,6 +175,15 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [showPdfViewer, setShowPdfViewer] = useState(false);
   /** null = closed, 'draw' = markup studio, 'view' = same studio read-only. */
   const [annotating, setAnnotating] = useState<null | 'draw' | 'view'>(null);
+  /**
+   * Every plan on this job: the originals from the Engineered Plans folder and
+   * the markups from its "Annotated Plans" child. Only those two levels — the
+   * plans folder often has other subfolders whose PDFs nobody wants in the row.
+   */
+  const [planSet, setPlanSet] = useState<{ plansFolderId: string | null; plans: PlanEntry[] }>(
+    { plansFolderId: null, plans: [] });
+  /** Which chip is showing — an id from planSet, or null for the detected default. */
+  const [shownPlanId, setShownPlanId] = useState<string | null>(null);
   const [showHealthCheck, setShowHealthCheck] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [fetchingPdf, setFetchingPdf] = useState(false);
@@ -210,6 +219,15 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       const existingFileId = apartment.plansPdfLink ? extractFileId(apartment.plansPdfLink) : null;
       setAvailablePdfs(existingFileId ? [{ id: existingFileId, name: '', mimeType: 'application/pdf' }] : []);
       setSelectedPdfIdx(0);
+      setPlanSet({ plansFolderId: null, plans: [] });
+      setShownPlanId(null);
+
+      if (apartment.driveLink && backendConfigured) {
+        // One scan gets the originals, the markups and the folder a new markup
+        // has to be filed into.
+        findPlanSetViaBackend(apartment.driveLink).then(setPlanSet).catch(() => {});
+      }
+
       if (!existingFileId && apartment.driveLink && backendConfigured) {
         setFetchingPdf(true);
         findAllPlansPdfsViaBackend(apartment.driveLink).then(pdfs => {
@@ -1186,44 +1204,70 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
 
                 {detectedPdfId ? (
                   <>
-                    {/* File picker chips — only shown when multiple PDFs exist */}
-                    {availablePdfs.length > 1 && (
-                      <div className="flex flex-wrap gap-1.5 mb-2">
-                        {availablePdfs.map((pdf, idx) => {
-                          const label = pdf.name ? pdf.name.replace(/\.pdf$/i, '') : `Plan ${idx + 1}`;
-                          const active = idx === selectedPdfIdx;
-                          return (
-                            <button
-                              key={pdf.id}
-                              onClick={() => {
-                                setSelectedPdfIdx(idx);
-                                const link = `https://drive.google.com/file/d/${pdf.id}/view`;
-                                setPlansPdfLink(link);
-                                // Persist immediately so the selected plan shows in the contractor portal
-                                updateApartment(apartment!.id, { plansPdfLink: link }, currentUser);
-                              }}
-                              className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all truncate max-w-[160px] ${
-                                active
-                                  ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]'
-                                  : 'bg-white text-gray-500 border-gray-200 hover:border-[#1e3a5f] hover:text-[#1e3a5f]'
-                              }`}
-                              title={pdf.name}
-                            >
-                              {label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
+                    {/* The plan chips.
+                        Originals from the Engineered Plans folder, then a rule,
+                        then the markups from its "Annotated Plans" child — so
+                        version 3 can be looked at without opening the studio.
+                        PDFs in any OTHER subfolder are deliberately left out. */}
+                    {(() => {
+                      const originals = planSet.plans.filter(p => p.kind === 'original');
+                      const marked = planSet.plans.filter(p => p.kind === 'annotated');
+                      const fallback = availablePdfs.map((pdf, i) => ({
+                        id: pdf.id,
+                        name: pdf.name || `Plan ${i + 1}`,
+                        kind: 'original' as const,
+                      }));
+                      const shownOriginals = originals.length ? originals : fallback;
+                      if (shownOriginals.length + marked.length < 2) return null;
+
+                      const chip = (p: { id: string; name: string }, active: boolean, tone: string) => (
+                        <button
+                          key={p.id}
+                          onClick={() => {
+                            setShownPlanId(p.id);
+                            const link = `https://drive.google.com/file/d/${p.id}/view`;
+                            const idx = availablePdfs.findIndex(x => x.id === p.id);
+                            if (idx >= 0) setSelectedPdfIdx(idx);
+                            // Only an ORIGINAL becomes the job's plan — the one
+                            // the contractor is shown should not silently become
+                            // somebody's markup.
+                            if (originals.some(o => o.id === p.id) || idx >= 0) {
+                              setPlansPdfLink(link);
+                              updateApartment(apartment!.id, { plansPdfLink: link }, currentUser);
+                            }
+                          }}
+                          className="px-2.5 py-1 rounded-lg text-xs font-medium border transition-all truncate max-w-[190px]"
+                          style={active
+                            ? { backgroundColor: tone, color: '#fff', borderColor: tone }
+                            : { backgroundColor: '#fff', color: '#64748b', borderColor: '#e2e8f0' }}
+                          title={p.name}
+                        >
+                          {p.name.replace(/\.pdf$/i, '')}
+                        </button>
+                      );
+
+                      return (
+                        <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                          {shownOriginals.map(p => chip(p, (shownPlanId ?? detectedPdfId) === p.id, '#1e3a5f'))}
+                          {marked.length > 0 && (
+                            <span className="w-px h-5 mx-0.5" style={{ backgroundColor: '#e2e8f0' }} />
+                          )}
+                          {marked.map(p => chip(p, shownPlanId === p.id, '#4aa8d8'))}
+                        </div>
+                      );
+                    })()}
+
                     <div
                       className="rounded-xl overflow-hidden border border-gray-200 cursor-pointer relative mb-2"
-                      style={{ height: showPdfViewer ? '440px' : '160px' }}
+                      // Tall enough to read the first page. A 160px strip shows
+                      // the top border of a drawing and nothing else.
+                      style={{ height: showPdfViewer ? '620px' : '330px' }}
                       onClick={() => setShowPdfViewer(v => !v)}
                     >
                       <iframe
-                        src={drivePreviewUrl(detectedPdfId)}
+                        src={drivePreviewUrl(shownPlanId ?? detectedPdfId)}
                         width="100%"
-                        height={showPdfViewer ? '440' : '160'}
+                        height={showPdfViewer ? '620' : '330'}
                         allow="autoplay"
                         title={ui.engineeringPlans}
                         style={{ border: 'none', display: 'block', pointerEvents: showPdfViewer ? 'auto' : 'none' }}
@@ -1273,7 +1317,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                           </span>
                         )}
                       </button>
-                      <a href={driveDownloadUrl(detectedPdfId)} target="_blank" rel="noopener noreferrer"
+                      <a href={driveDownloadUrl(shownPlanId ?? detectedPdfId)} target="_blank" rel="noopener noreferrer"
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:border-[#4aa8d8] hover:text-[#4aa8d8] transition-all">
                         <Download size={12} /> {ui.download}
                       </a>
@@ -1955,13 +1999,18 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           </div>
         }>
         <PlanAnnotator
-          planFileId={detectedPdfId}
-          planName={availablePdfs[selectedPdfIdx]?.name}
+          planFileId={shownPlanId ?? detectedPdfId}
+          planName={planSet.plans.find(p => p.id === (shownPlanId ?? detectedPdfId))?.name
+            ?? availablePdfs[selectedPdfIdx]?.name}
           apartmentId={apartment.id}
           apartmentLabel={isGeneralProject ? (apartment.displayName || 'Job') : aptLabel(apartment)}
           driveFolderUrl={driveLink}
+          plansFolderId={planSet.plansFolderId ?? undefined}
+          plans={planSet.plans}
+          onPickPlan={p => setShownPlanId(p.id)}
           authorName={currentUser.name}
           readOnly={annotating === 'view'}
+          onStartMarkup={() => setAnnotating('draw')}
           onClose={() => setAnnotating(null)}
           onToast={onToast}
         />

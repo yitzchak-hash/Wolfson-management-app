@@ -233,3 +233,54 @@
 @media (prefers-reduced-motion: reduce) {
   .bin-window-in, .search-hit { animation: none; }
 }
+
+/* ── Plan markup studio ──────────────────────────────────────────────────────
+   The editor's own sliders. The browser default is a grey groove and a chrome
+   knob that looks like a 2010 form control next to the rest of the app; these
+   are the company navy with a proper thumb, and the hue rail carries the
+   spectrum it selects from. */
+.ink-slider {
+  -webkit-appearance: none; appearance: none;
+  height: 4px; border-radius: 999px; outline: none;
+  background: linear-gradient(90deg, #4aa8d8 var(--fill, 50%), rgba(255,255,255,.18) var(--fill, 50%));
+}
+.ink-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 15px; height: 15px; border-radius: 50%;
+  background: #ffffff; border: 3px solid #4aa8d8; cursor: pointer;
+  box-shadow: 0 1px 4px rgba(15,23,42,.45);
+  transition: transform 90ms;
+}
+.ink-slider::-webkit-slider-thumb:hover { transform: scale(1.14); }
+.ink-slider::-moz-range-thumb {
+  width: 15px; height: 15px; border-radius: 50%;
+  background: #ffffff; border: 3px solid #4aa8d8; cursor: pointer;
+  box-shadow: 0 1px 4px rgba(15,23,42,.45);
+}
+.ink-slider::-moz-range-track { height: 4px; border-radius: 999px; background: rgba(255,255,255,.18); }
+
+.ink-hue {
+  -webkit-appearance: none; appearance: none;
+  height: 12px; border-radius: 999px; outline: none;
+  background: linear-gradient(90deg,
+    #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%);
+}
+.ink-hue::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: transparent; border: 3px solid #ffffff; cursor: pointer;
+  box-shadow: 0 0 0 1.5px rgba(15,23,42,.4), 0 1px 3px rgba(15,23,42,.35);
+}
+.ink-hue::-moz-range-thumb {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: transparent; border: 3px solid #ffffff; cursor: pointer;
+  box-shadow: 0 0 0 1.5px rgba(15,23,42,.4);
+}
+
+/* The nib preview that follows the cursor — a real circle at the real width,
+   so the size is chosen by looking rather than by trying. */
+.nib-ghost {
+  position: fixed; pointer-events: none; z-index: 155;
+  border-radius: 50%; transform: translate(-50%, -50%);
+  mix-blend-mode: difference;
+}

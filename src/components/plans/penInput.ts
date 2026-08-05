@@ -210,3 +210,14 @@ export function simplify(pts: PenSample[], tolerance = 0.4): PenSample[] {
   for (let i = 0; i < pts.length; i++) if (keep[i]) out.push(pts[i]);
   return out;
 }
+
+/** Distance from a point to a line segment. Used for hit-testing marks. */
+export function nearSegment(
+  px: number, py: number, ax: number, ay: number, bx: number, by: number,
+): number {
+  const dx = bx - ax, dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  if (len2 === 0) return Math.hypot(px - ax, py - ay);
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}

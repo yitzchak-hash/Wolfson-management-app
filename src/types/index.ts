@@ -402,7 +402,7 @@ export interface PlanPin {
 /** The drawing tools available when marking up a plan. */
 export type AnnTool =
   | 'pen' | 'marker' | 'highlighter' | 'pencil'
-  | 'line' | 'arrow' | 'rect' | 'ellipse' | 'text';
+  | 'line' | 'arrow' | 'rect' | 'ellipse' | 'text' | 'bubble';
 
 /**
  * One mark on a plan.
@@ -431,7 +431,7 @@ export interface AnnStroke {
   width: number;
   opacity: number;
   pts: number[];
-  /** Text tools only. */
+  /** Text and speech-bubble tools. */
   text?: string;
   fontSize?: number;
   /** Shapes only — filled as well as outlined. */

@@ -139,6 +139,38 @@ function strokeOps(stroke, pts, scale) {
 
   const kind = stroke.tool;
 
+  if (kind === 'bubble') {
+    // A speech balloon: rounded box plus a tail down to the bottom-left, so it
+    // reads as somebody saying something about the thing it points at.
+    const a = pts[0], z = pts[pts.length - 1];
+    if (!a || !z) { ops.push(op(Ops.PopGraphicsState)); return ops; }
+    const x0 = Math.min(a.x, z.x), x1 = Math.max(a.x, z.x);
+    const yTop = Math.max(a.y, z.y), yBot = Math.min(a.y, z.y);
+    const w = x1 - x0, h = yTop - yBot;
+    const tail = Math.min(18 * scale, h * 0.32);
+    const bodyBot = yBot + tail;
+    const r = Math.min(10 * scale, w / 4, (yTop - bodyBot) / 3);
+
+    ops.push(op(Ops.SetLineWidth, n(base)));
+    ops.push(op(Ops.NonStrokingColorRgb, '1', '1', '1'));
+    ops.push(op(Ops.MoveTo, n(x0 + r), n(bodyBot)));
+    ops.push(op(Ops.LineTo, n(x0 + w * 0.26), n(bodyBot)));
+    ops.push(op(Ops.LineTo, n(x0 + w * 0.16), n(yBot)));                 // the tail
+    ops.push(op(Ops.LineTo, n(x0 + w * 0.36), n(bodyBot)));
+    ops.push(op(Ops.LineTo, n(x1 - r), n(bodyBot)));
+    ops.push(op(Ops.AppendBezierCurve, n(x1), n(bodyBot), n(x1), n(bodyBot), n(x1), n(bodyBot + r)));
+    ops.push(op(Ops.LineTo, n(x1), n(yTop - r)));
+    ops.push(op(Ops.AppendBezierCurve, n(x1), n(yTop), n(x1), n(yTop), n(x1 - r), n(yTop)));
+    ops.push(op(Ops.LineTo, n(x0 + r), n(yTop)));
+    ops.push(op(Ops.AppendBezierCurve, n(x0), n(yTop), n(x0), n(yTop), n(x0), n(yTop - r)));
+    ops.push(op(Ops.LineTo, n(x0), n(bodyBot + r)));
+    ops.push(op(Ops.AppendBezierCurve, n(x0), n(bodyBot), n(x0), n(bodyBot), n(x0 + r), n(bodyBot)));
+    ops.push(op(Ops.ClosePath));
+    ops.push(op(Ops.FillNonZeroAndStroke));
+    ops.push(op(Ops.PopGraphicsState));
+    return ops;
+  }
+
   if (kind === 'rect' || kind === 'ellipse' || kind === 'line' || kind === 'arrow') {
     const a = pts[0];
     const z = pts[pts.length - 1];
@@ -160,13 +192,24 @@ function strokeOps(stroke, pts, scale) {
       ops.push(op(Ops.AppendBezierCurve, n(cx - rx * k), n(cy - ry), n(cx - rx), n(cy - ry * k), n(cx - rx), n(cy)));
       ops.push(op(stroke.fill ? Ops.FillNonZeroAndStroke : Ops.StrokePath));
     } else {
-      ops.push(op(Ops.MoveTo, n(a.x), n(a.y)));
-      ops.push(op(Ops.LineTo, n(z.x), n(z.y)));
+      if (kind === 'arrow') {
+        // Same geometry as the on-screen arrow: the shaft stops at the base of
+        // the head, or a round cap pokes out past the point.
+        const ang0 = Math.atan2(z.y - a.y, z.x - a.x);
+        const len = Math.hypot(z.x - a.x, z.y - a.y);
+        const h0 = Math.min(Math.max(base * 4.2, 6), len * 0.42);
+        ops.push(op(Ops.MoveTo, n(a.x), n(a.y)));
+        ops.push(op(Ops.LineTo, n(z.x - Math.cos(ang0) * h0 * 0.86), n(z.y - Math.sin(ang0) * h0 * 0.86)));
+      } else {
+        ops.push(op(Ops.MoveTo, n(a.x), n(a.y)));
+        ops.push(op(Ops.LineTo, n(z.x), n(z.y)));
+      }
       ops.push(op(Ops.StrokePath));
       if (kind === 'arrow') {
         const ang = Math.atan2(z.y - a.y, z.x - a.x);
-        const head = Math.max(base * 3.2, 5);
-        const spread = 0.42;
+        const lenA = Math.hypot(z.x - a.x, z.y - a.y);
+        const head = Math.min(Math.max(base * 4.2, 6), lenA * 0.42);
+        const spread = 0.38;
         ops.push(op(Ops.MoveTo, n(z.x), n(z.y)));
         ops.push(op(Ops.LineTo, n(z.x - head * Math.cos(ang - spread)), n(z.y - head * Math.sin(ang - spread))));
         ops.push(op(Ops.LineTo, n(z.x - head * Math.cos(ang + spread)), n(z.y - head * Math.sin(ang + spread))));
@@ -207,9 +250,26 @@ function strokeOps(stroke, pts, scale) {
   return ops;
 }
 
-export async function stamp(bytes, strokes, label) {
+/** yyyy-mm-dd HH.MM — safe in a filename on every platform. */
+function stampTime() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}.${p(d.getMinutes())}`;
+}
+
+export async function stamp(bytes, strokes, label, author) {
   const pdf = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
-  const ocgRef = makeLayer(pdf, label);
+  // Who marked it up travels IN the file, so a copy that leaves Drive still
+  // says whose markup it is. The layer name carries it too, because that is
+  // what a viewer's layers panel shows.
+  const ocgRef = makeLayer(pdf, author ? `${label} — ${author}` : label);
+  if (author) {
+    try {
+      pdf.setAuthor(author);
+      pdf.setSubject(`Plan markup ${label} by ${author}`);
+      pdf.setProducer('TzviAir job management');
+    } catch { /* some plans refuse metadata writes; the markup still lands */ }
+  }
   const pages = pdf.getPages();
   let font = null;
 
@@ -245,6 +305,25 @@ export async function stamp(bytes, strokes, label) {
       const alpha = typeof s.opacity === 'number' ? s.opacity : 1;
       const blend = s.tool === 'highlighter' ? 'Multiply' : 'Normal';
       s.gsKey = gsFor(pdf, page, alpha, blend);
+
+      if (s.tool === 'bubble' && s.text) {
+        // Its words, laid inside the balloon rather than at a point.
+        if (!font) font = await pdf.embedFont(StandardFonts.Helvetica);
+        const p = readPoints(s, W, H);
+        const a = p[0], z = p[p.length - 1];
+        if (a && z) {
+          const size = Math.max(5, (s.fontSize || 15) * scale);
+          const [r, g, b] = hexToRgb(s.color);
+          const x0 = Math.min(a.x, z.x) + 8 * scale;
+          const boxW = Math.abs(z.x - a.x) - 16 * scale;
+          const yTop = Math.max(a.y, z.y) - size - 6 * scale;
+          page.drawText(String(s.text), {
+            x: x0, y: yTop, size, font, color: rgb(r, g, b),
+            maxWidth: Math.max(10, boxW), lineHeight: size * 1.22,
+          });
+        }
+        continue;
+      }
 
       if (s.tool === 'text') {
         if (!font) font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -298,7 +377,9 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const { planFileId, parentFolderId, strokes, version, jobName, folderName } = req.body || {};
+  const {
+    planFileId, parentFolderId, strokes, version, jobName, folderName, author,
+  } = req.body || {};
   if (!planFileId || !parentFolderId) {
     return res.status(400).json({ error: 'Missing planFileId or parentFolderId' });
   }
@@ -316,12 +397,29 @@ export default async function handler(req, res) {
     );
 
     const v = Number(version) > 0 ? Number(version) : 1;
-    const out = await stamp(Buffer.from(original.data), strokes, `Markup — v${v}`);
+    const who = String(author || '').trim();
+    const out = await stamp(Buffer.from(original.data), strokes, `Markup — v${v}`, who);
 
+    /**
+     * The name says which version, when, and by whom.
+     *
+     * A folder of "Plan — markup v1.pdf, v2.pdf, v3.pdf" tells you the order
+     * and nothing else; the office needs to know which of this morning's three
+     * is the one the engineer marked up, without opening all three.
+     */
     const base = (meta.data.name || 'Plan').replace(/\.pdf$/i, '');
-    const stem = jobName ? `${jobName} — ${base}` : base;
-    const filename = `${stem} — markup v${v}.pdf`;
+    const when = stampTime();
+    const parts = [
+      jobName ? `${jobName} — ${base}` : base,
+      `annotated version ${v}`,
+      when,
+    ];
+    if (who) parts.push(who);
+    const filename = `${parts.join(' — ')}.pdf`;
 
+    // "Annotated Plans" belongs INSIDE the plans folder it came from, not
+    // beside it — the markup of a plan is a plan, and the office looks for it
+    // where the plans are.
     const folderId = await folderFor(drive, parentFolderId, folderName || 'Annotated Plans');
 
     const created = await drive.files.create({
