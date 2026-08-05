@@ -26,6 +26,16 @@ export const ART_KINDS = [
 ] as const;
 export type ArtKind = (typeof ART_KINDS)[number];
 
+/** How a stroke's line is shaped. Colour and width are separate from this. */
+export type StrokeNib = 'round' | 'chisel' | 'dashed' | 'dotted' | 'soft';
+
+/** The dash pattern for a nib, scaled to the line's own width. */
+export function nibDash(nib: StrokeNib | undefined, width: number): string | undefined {
+  if (nib === 'dashed') return `${Math.max(6, width * 2.4)} ${Math.max(5, width * 1.8)}`;
+  if (nib === 'dotted') return `0.1 ${Math.max(4, width * 1.9)}`;
+  return undefined;
+}
+
 // ─── Pinned title ────────────────────────────────────────────────────────────
 
 /**
@@ -224,11 +234,26 @@ export function ClipArtNode({ el }: { el: CanvasElement }) {
 
   switch (art) {
     case 'pin':
+      // Seen slightly from above, the way a pin pushed into a board actually
+      // looks: a domed head, a collar catching the light, a needle going away
+      // from you, and a soft shadow on the surface it is stuck in.
       return (
         <svg viewBox="0 0 40 40" style={common} aria-hidden="true">
-          <circle cx="20" cy="15" r="10" fill={c} />
-          <circle cx="16.5" cy="11.5" r="3.4" fill="rgba(255,255,255,.55)" />
-          <path d="M20 24 L20 37" stroke="#6b7280" strokeWidth="2.4" strokeLinecap="round" />
+          <defs>
+            <radialGradient id={`pinHead-${c.replace('#', '')}`} cx="34%" cy="28%" r="72%">
+              <stop offset="0%" stopColor="#fff" stopOpacity=".85" />
+              <stop offset="42%" stopColor={c} />
+              <stop offset="100%" stopColor="#000" stopOpacity=".35" />
+            </radialGradient>
+          </defs>
+          <ellipse cx="21.5" cy="33" rx="6" ry="2" fill="rgba(0,0,0,.20)" />
+          <path d="M19.6 21 L21.4 34.5" stroke="#7b8493" strokeWidth="1.9" strokeLinecap="round" />
+          <path d="M19.9 21 L20.7 28" stroke="rgba(255,255,255,.5)" strokeWidth=".8" strokeLinecap="round" />
+          <ellipse cx="19" cy="19.5" rx="7.4" ry="3.1" fill={c} opacity=".55" />
+          <circle cx="19" cy="15" r="9.4" fill={`url(#pinHead-${c.replace('#', '')})`} />
+          <ellipse cx="15.6" cy="10.8" rx="3.2" ry="2.2" fill="rgba(255,255,255,.7)"
+            transform="rotate(-28 15.6 10.8)" />
+          <circle cx="19" cy="15" r="9.4" fill="none" stroke="rgba(0,0,0,.18)" strokeWidth=".8" />
         </svg>
       );
     case 'tape':
@@ -239,9 +264,15 @@ export function ClipArtNode({ el }: { el: CanvasElement }) {
         </svg>
       );
     case 'clip':
+      // Wire with a highlight down one side, so it reads as metal.
       return (
-        <svg viewBox="0 0 40 40" style={common} fill="none" stroke="#64748b" strokeWidth="3" strokeLinecap="round" aria-hidden="true">
-          <path d="M26 12v14a7 7 0 01-14 0V11a4.5 4.5 0 019 0v14a2.2 2.2 0 01-4.4 0V13" />
+        <svg viewBox="0 0 40 40" style={common} fill="none" aria-hidden="true">
+          <path d="M26 12v14a7 7 0 01-14 0V11a4.5 4.5 0 019 0v14a2.2 2.2 0 01-4.4 0V13"
+            stroke="rgba(0,0,0,.18)" strokeWidth="4.6" strokeLinecap="round" transform="translate(.8 1)" />
+          <path d="M26 12v14a7 7 0 01-14 0V11a4.5 4.5 0 019 0v14a2.2 2.2 0 01-4.4 0V13"
+            stroke="#7c8798" strokeWidth="3.4" strokeLinecap="round" />
+          <path d="M25 13v13a6 6 0 01-12 0V11.5"
+            stroke="rgba(255,255,255,.65)" strokeWidth="1" strokeLinecap="round" />
         </svg>
       );
     case 'marker':
@@ -300,7 +331,17 @@ export function ClipArtNode({ el }: { el: CanvasElement }) {
     default:
       return (
         <svg viewBox="0 0 40 40" style={common} aria-hidden="true">
-          <path d="M20 4l4.8 10.2 11.2 1.5-8.2 7.7 2.1 11L20 29.1 10.1 34.4l2.1-11L4 15.7l11.2-1.5z" fill={c} />
+          <defs>
+            <linearGradient id={`starF-${c.replace('#', '')}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#fff" stopOpacity=".55" />
+              <stop offset="45%" stopColor={c} />
+              <stop offset="100%" stopColor="#000" stopOpacity=".22" />
+            </linearGradient>
+          </defs>
+          <path d="M20 4l4.8 10.2 11.2 1.5-8.2 7.7 2.1 11L20 29.1 10.1 34.4l2.1-11L4 15.7l11.2-1.5z"
+            fill="rgba(0,0,0,.18)" transform="translate(.7 1.1)" />
+          <path d="M20 4l4.8 10.2 11.2 1.5-8.2 7.7 2.1 11L20 29.1 10.1 34.4l2.1-11L4 15.7l11.2-1.5z"
+            fill={`url(#starF-${c.replace('#', '')})`} stroke={c} strokeWidth=".7" strokeLinejoin="round" />
         </svg>
       );
   }
@@ -325,9 +366,12 @@ export const StrokeLayer = React.memo(function StrokeLayer({ elements }: { eleme
           fill="none"
           stroke={el.color || '#1e3a5f'}
           strokeWidth={el.strokeWidth ?? 3}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          opacity={el.art === 'marker' ? 0.45 : 1}
+          // A chisel nib is square-ended, which is what makes a highlighter
+          // look like a highlighter rather than a fat round pen.
+          strokeLinecap={el.nib === 'chisel' ? 'butt' : 'round'}
+          strokeLinejoin={el.nib === 'chisel' ? 'miter' : 'round'}
+          strokeDasharray={nibDash(el.nib, el.strokeWidth ?? 3)}
+          opacity={el.nib === 'soft' ? 0.32 : el.art === 'marker' ? 0.45 : 1}
         />
       ))}
     </svg>

@@ -5,7 +5,7 @@ import {
   AlertTriangle, HardHat, CalendarDays, Camera, Briefcase, Activity,
   CircleDashed, Archive, StickyNote, Copy, Check, Filter, CalendarCheck,
   Calculator, Ruler, Target, Users, GitCommitHorizontal, TimerReset,
-  ArrowRightLeft, ListFilter, Search, Sparkles, Timer, Sticker,
+  ArrowRightLeft, ListFilter, Search, Sparkles, Timer, Sticker, Type,
 } from 'lucide-react';
 import {
   Apartment, CanvasElement, Stage, ContractorAssignment, Contractor,
@@ -988,6 +988,23 @@ export const WIDGETS: WidgetDef[] = [
    * sticks to it.
    */
   ...ART_PIECES,
+
+  {
+    id: 'w-title', name: 'Heading', category: 'visual', icon: Type, w: 280, h: 48,
+    blurb: 'A heading to label a column or a section. Full type controls, and it can be pinned to the top.',
+    data: {},
+    render: (el, c) => (
+      <div className="w-full h-full flex items-center px-2 leading-tight overflow-hidden"
+        style={{
+          fontSize: (el.fontSize ?? 30) as number,
+          fontWeight: (el.fontWeight ?? 800) as number,
+          color: (el.color && el.color !== '#ffffff') ? el.color : '#0f172a',
+          justifyContent: el.align === 'center' ? 'center' : el.align === 'right' ? 'flex-end' : 'flex-start',
+        }}>
+        {el.text || (c.readOnly ? 'This week' : 'Title')}
+      </div>
+    ),
+  },
 
   // ── Look & feel ───────────────────────────────────────────────────────────
   {

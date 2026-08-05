@@ -24,6 +24,7 @@ import { renderWidget, WidgetDef, WidgetCtx } from '../data/widgets';
 import { JobTile, GhostTile, BoardNode, BoardHandlers } from '../components/board/BoardItems';
 import { useTouchGestures } from '../hooks/useTouchGestures';
 import { detectPasteIntent, fieldForIntent, canCreateFromIntent, PasteIntent } from '../data/pasteIntent';
+import { StrokeNib, nibDash } from '../components/board/BoardNodes';
 import { exportBoardPng, exportBoardPdf } from '../data/boardExport';
 import {
   getFolderNameViaBackend, familyNameFromFolderName, extractFolderId,
@@ -216,8 +217,9 @@ export function GeneralJobsPage() {
   const docFileRef = useRef<HTMLInputElement>(null);
   /** Right-clicking the pen or the marker opens its colours and widths. */
   const [penOpts, setPenOpts] = useState<{ tool: 'pen' | 'highlighter'; x: number; y: number } | null>(null);
-  const [penStyle, setPenStyle] = useState({ color: '#1e3a5f', width: 3 });
-  const [markStyle, setMarkStyle] = useState({ color: '#facc15', width: 16 });
+  /** Nib as well as colour and width — a dashed line means something different. */
+  const [penStyle, setPenStyle] = useState({ color: '#1e3a5f', width: 3, nib: 'round' as StrokeNib });
+  const [markStyle, setMarkStyle] = useState({ color: '#facc15', width: 16, nib: 'chisel' as StrokeNib });
   const [exportMenu, setExportMenu] = useState(false);
   const [titleEdit, setTitleEdit] = useState<string | null>(null);
   const [zoomField, setZoomField] = useState('100');
@@ -369,6 +371,20 @@ export function GeneralJobsPage() {
     // Clip art is a first-class node type, not a widget wrapper — that is what
     // lets it stick to a job and travel with it.
     const isArt = def.id.startsWith('art-');
+    if (def.id === 'w-title') {
+      const id = 'CE-' + Math.random().toString(36).slice(2, 9);
+      addCanvasElement({
+        id, type: 'title', x: Math.round(at.x), y: Math.round(at.y),
+        w: def.w, h: def.h, text: '', color: '#0f172a',
+        fontSize: 30, fontWeight: 800, align: 'left',
+      });
+      setStoreOpen(false);
+      // Opened on the next tick, not in this click. Mounting the editor's
+      // backdrop under a pointer that is still finishing its click closes it
+      // again immediately.
+      setTimeout(() => setTitleEdit(id), 0);
+      return;
+    }
     addCanvasElement({
       id: 'CE-' + Math.random().toString(36).slice(2, 9),
       ...(isArt
@@ -395,7 +411,7 @@ export function GeneralJobsPage() {
         w: NODE_DEFAULT_SIZE.title.w, h: NODE_DEFAULT_SIZE.title.h,
         text: '', color: '#0f172a', fontSize: 30, fontWeight: 800, align: 'left',
       });
-      setTitleEdit(id);
+      setTimeout(() => setTitleEdit(id), 0);
       setTool('select');
       return;
     }
@@ -1314,6 +1330,7 @@ export function GeneralJobsPage() {
           color: drawing.marker ? markStyle.color : penStyle.color,
           points: drawing.pts.map(p => `${Math.round(p.x)},${Math.round(p.y)}`).join(' '),
           strokeWidth: drawing.marker ? markStyle.width : penStyle.width,
+          nib: drawing.marker ? markStyle.nib : penStyle.nib,
           ...(drawing.marker ? { art: 'marker' as const } : {}),
         });
       }
@@ -1941,6 +1958,8 @@ export function GeneralJobsPage() {
                   fill="none"
                   stroke={drawing.marker ? markStyle.color : penStyle.color}
                   strokeWidth={drawing.marker ? markStyle.width : penStyle.width}
+                  strokeDasharray={nibDash(drawing.marker ? markStyle.nib : penStyle.nib,
+                    drawing.marker ? markStyle.width : penStyle.width)}
                   strokeLinecap="round" strokeLinejoin="round"
                   opacity={drawing.marker ? 0.45 : 1}
                 />
@@ -2261,6 +2280,10 @@ export function GeneralJobsPage() {
           ? ['#facc15', '#86efac', '#93c5fd', '#f9a8d4', '#fdba74', '#c4b5fd']
           : ['#1e3a5f', '#dc2626', '#16a34a', '#2563eb', '#d97706', '#0f172a'];
         const WIDTHS = isMark ? [10, 16, 26, 38] : [1.5, 3, 6, 10];
+        const NIBS: { id: StrokeNib; label: string }[] = isMark
+          ? [{ id: 'chisel', label: 'Chisel' }, { id: 'round', label: 'Round' }, { id: 'soft', label: 'Soft' }]
+          : [{ id: 'round', label: 'Round' }, { id: 'chisel', label: 'Chisel' },
+             { id: 'dashed', label: 'Dashed' }, { id: 'dotted', label: 'Dotted' }];
         return (
           <>
             <div className="fixed inset-0 z-40" onClick={() => setPenOpts(null)} />
@@ -2285,6 +2308,18 @@ export function GeneralJobsPage() {
                     <span className="rounded-full block"
                       style={{ width: Math.min(w, 22), height: Math.min(w, 22), backgroundColor: cur.color,
                                opacity: isMark ? 0.55 : 1 }} />
+                  </button>
+                ))}
+              </div>
+              <div className="text-[9.5px] font-bold text-gray-500 mt-3 mb-1">Nib</div>
+              <div className="grid grid-cols-2 gap-1">
+                {NIBS.map(n => (
+                  <button key={n.id} onClick={() => setCur({ nib: n.id })}
+                    className="px-2 py-1.5 rounded-lg text-[10.5px] font-bold transition-colors"
+                    style={cur.nib === n.id
+                      ? { backgroundColor: '#1e3a5f', color: '#fff' }
+                      : { backgroundColor: '#f8fafc', color: '#64748b' }}>
+                    {n.label}
                   </button>
                 ))}
               </div>

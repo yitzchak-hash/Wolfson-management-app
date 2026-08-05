@@ -22,7 +22,8 @@ const PRESET_COLORS = [
  * built-in ones, so creating it cannot disturb anything that already exists.
  */
 export function NewWorkspace({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
-  const { projects, customProjects, addProject, deleteProject, stages, setCurrentProject } = useStore();
+  const { projects, customProjects, addProject, deleteProject, stages, setCurrentProject,
+    setProjectColor } = useStore();
   const [step, setStep] = useState<0 | 1 | 2 | 3>(0);
 
   const [name, setName] = useState('');
@@ -99,8 +100,8 @@ export function NewWorkspace({ onToast }: { onToast: (msg: string, type?: 'succe
           </button>
         </div>
         <p className="text-xs text-gray-500 mb-4">
-          Draw the real building: mark gaps where there is no apartment, stairwells, and duplexes that
-          count once. Numbering re-flows through the rules, and hand-typed numbers stay put.
+          Draw the real building: mark the positions where there is no apartment, and join the ones that
+          are really one home. Numbering re-flows through the rules, and hand-typed numbers stay put.
         </p>
         <ProjectBuilder initial={layout} onSave={setLayout} onToast={onToast} />
       </div>
@@ -116,18 +117,41 @@ export function NewWorkspace({ onToast }: { onToast: (msg: string, type?: 'succe
         </h2>
         <p className="text-xs text-gray-500 mb-4">
           Each workspace keeps its own buildings, stages, jobs, tasks and board. Nothing crosses between
-          them.
+          them. The dot on the left is that workspace's colour — click it to change it, and it updates
+          everywhere at once.
         </p>
         <div className="flex flex-col gap-2">
           {projects.map(p => {
             const isBuiltIn = !customProjects.some(c => c.id === p.id);
             return (
-              <div key={p.id} className="flex items-center gap-3 border border-gray-200 rounded-xl px-3 py-2.5">
-                <span className="w-3.5 h-3.5 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
+              <div key={p.id} className="flex items-center gap-3 border border-gray-200 rounded-xl px-3 py-2.5 flex-wrap">
+                {/* The colour is edited here as well as in the workspace's own
+                    settings — this is the page where you can see all of them
+                    together, which is when you actually want to tell them
+                    apart. */}
+                <span className="relative flex-shrink-0" title={`${p.shortName} colour`}>
+                  <span className="block w-5 h-5 rounded-full border-2 border-white"
+                    style={{ backgroundColor: p.color, boxShadow: '0 0 0 1px rgba(15,23,42,.15)' }} />
+                  <input
+                    type="color"
+                    value={p.color}
+                    onChange={e => setProjectColor(p.id, e.target.value)}
+                    aria-label={`${p.name} colour`}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-5 h-5"
+                  />
+                </span>
                 <span className="font-semibold text-sm text-gray-800">{p.name}</span>
                 <span className="text-[11px] text-gray-400">{p.shortName}</span>
                 {isBuiltIn && <span className="text-[10px] text-gray-300">built in</span>}
                 <span className="flex-1" />
+                <span className="flex items-center gap-1">
+                  {PRESET_COLORS.slice(0, 6).map(c => (
+                    <button key={c} onClick={() => setProjectColor(p.id, c)}
+                      title="Use this colour"
+                      className="w-4 h-4 rounded-full border transition-transform hover:scale-125"
+                      style={{ backgroundColor: c, borderColor: p.color === c ? '#1e3a5f' : 'rgba(0,0,0,.15)' }} />
+                  ))}
+                </span>
                 <button onClick={() => setCurrentProject(p.id)}
                   className="text-[11px] font-bold text-[#1e3a5f] hover:underline">Open</button>
                 {!isBuiltIn && (

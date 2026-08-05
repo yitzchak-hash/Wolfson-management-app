@@ -257,6 +257,8 @@ export interface CanvasElement {
   /** stroke: freehand path in world coordinates, "x,y x,y …" */
   points?: string;
   strokeWidth?: number;
+  /** Stroke shape: round, chisel, dashed, dotted, soft. See StrokeNib. */
+  nib?: 'round' | 'chisel' | 'dashed' | 'dotted' | 'soft';
   /** Sizes vary by node type — not everything is the same size. */
   fontSize?: number;
   x: number;
