@@ -184,6 +184,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     { plansFolderId: null, plans: [] });
   /** Which chip is showing — an id from planSet, or null for the detected default. */
   const [shownPlanId, setShownPlanId] = useState<string | null>(null);
+  /** The plan pane beside the fields — off when there is no plan to show. */
+  const [planWanted, setPlanWanted] = useState(true);
   const [showHealthCheck, setShowHealthCheck] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [fetchingPdf, setFetchingPdf] = useState(false);
@@ -255,6 +257,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         .sort((a, b) => b.version - a.version)
     : [];
   const latestPlanVersion = planVersions[0];
+  /** Only split the window when there is actually a plan to put on the right. */
+  const planPaneOn = planWanted && !!detectedPdfId;
+  const setPlanPaneOn = setPlanWanted;
   const planVersionCount = planVersions.length ? planVersions[0].version : 0;
 
   const sortedStages = [...stages]
@@ -717,8 +722,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           left: '50%',
           top: '50%',
           transform: 'translate(-50%, -50%)',
-          width: 'min(1020px, 94vw)',
-          height: 'min(860px, 90vh)',
+          // Wide enough to hold the fields AND the plan side by side, but still
+          // inset on every edge so it reads as a window over the board rather
+          // than as a page you have navigated to.
+          width: planPaneOn ? 'min(1720px, 95vw)' : 'min(1020px, 94vw)',
+          height: 'min(980px, 93vh)',
+          transition: 'width 180ms ease',
         }}
       >
         {/* Header */}
@@ -770,6 +779,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
             </button>
           </Tooltip>
         </div>
+
+        <div className="flex-1 min-h-0 flex">
+        {/* ── Everything written down ── */}
+        <div className="flex flex-col min-h-0 min-w-0"
+          style={{ flex: planPaneOn ? '0 0 46%' : '1 1 100%' }}>
 
         {/* Tabs */}
         <div className="flex border-b border-gray-200 flex-shrink-0 overflow-x-auto">
@@ -1986,6 +2000,65 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
             </div>
           )}
         </div>
+        </div>
+
+        {/* ── The plan, alongside rather than buried in a tab ──
+            It is the thing everyone opens a job to look at, so it gets half the
+            window and stays visible whichever tab is showing. Collapsible,
+            because on a laptop the fields sometimes want the whole width. */}
+        {planPaneOn && (
+          <div className="flex flex-col min-h-0 border-l border-gray-200"
+            style={{ flex: '1 1 54%', backgroundColor: '#f8fafc' }}>
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-200 flex-shrink-0 bg-white">
+              <BookOpen size={13} className="text-[#1e3a5f]" />
+              <span className="text-[12px] font-bold text-gray-800 truncate">
+                {planSet.plans.find(p => p.id === (shownPlanId ?? detectedPdfId))?.name?.replace(/\.pdf$/i, '')
+                  ?? ui.engineeringPlans}
+              </span>
+              <span className="flex-1" />
+              <Tooltip text="Mark up this plan" side="left">
+                <button onClick={() => setAnnotating('draw')}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11.5px] font-bold text-white"
+                  style={{ backgroundColor: '#4aa8d8' }}>
+                  <PenLine size={11} /> Mark up
+                  {planVersionCount > 0 && (
+                    <span className="px-1 rounded-full text-[9px]" style={{ backgroundColor: 'rgba(255,255,255,.28)' }}>
+                      v{planVersionCount}
+                    </span>
+                  )}
+                </button>
+              </Tooltip>
+              <Tooltip text="Full screen" side="left">
+                <button onClick={() => setAnnotating('view')}
+                  className="p-1 rounded-lg text-gray-400 hover:text-[#1e3a5f]"><Maximize2 size={13} /></button>
+              </Tooltip>
+              <Tooltip text="Hide the plan" side="left">
+                <button onClick={() => setPlanPaneOn(false)}
+                  className="p-1 rounded-lg text-gray-400 hover:text-gray-700"><ChevronRight size={15} /></button>
+              </Tooltip>
+            </div>
+            <iframe
+              src={drivePreviewUrl(shownPlanId ?? detectedPdfId!)}
+              title={ui.engineeringPlans}
+              className="flex-1 w-full"
+              style={{ border: 'none' }}
+              allow="autoplay"
+            />
+          </div>
+        )}
+        </div>
+
+        {/* Bring it back. */}
+        {!planPaneOn && detectedPdfId && (
+          <button
+            onClick={() => setPlanPaneOn(true)}
+            title="Show the plan beside the details"
+            className="absolute right-0 top-1/2 -translate-y-1/2 z-10 flex items-center gap-1 px-1.5 py-4 rounded-l-lg text-white text-[10px] font-bold"
+            style={{ backgroundColor: '#1e3a5f', writingMode: 'vertical-rl' }}
+          >
+            <ChevronLeft size={12} style={{ transform: 'rotate(90deg)' }} /> PLAN
+          </button>
+        )}
       </div>
 
       {/* Plan markup studio. Full screen and above the drawer, because marking
