@@ -2,10 +2,12 @@ import React, { useMemo, useState } from 'react';
 import { Copy, Check, Wand2, Plus, Trash2, ArrowLeftRight, Link2, Unlink, Layers } from 'lucide-react';
 import {
   LayoutBuilding, LayoutSlot, ProjectLayout, JoinKind, SlotPos,
-  applyNumbering, proposeNumbering, findDuplicateNumbers, countUnits, generateGrid,
+  findDuplicateNumbers, countUnits, generateGrid,
   newSlot, joinSlots, unjoinSlot, joinRefusal, findSlot, isDuplexUpper,
 } from '../../data/projectLayout';
 import { buildImportPrompt, parseLayoutJson, ParseResult } from '../../data/layoutImport';
+import { BuilderMenu, BuilderMenuState, BuilderTarget } from './BuilderMenu';
+import { NumberingPanel } from './NumberingPanel';
 
 const CELL_W = 54;
 const CELL_H = 40;
@@ -43,9 +45,13 @@ export function ProjectBuilder({
   const [importText, setImportText] = useState('');
   const [importResult, setImportResult] = useState<ParseResult | null>(null);
   const [promptCopied, setPromptCopied] = useState(false);
-  const [numberPreview, setNumberPreview] = useState<ReturnType<typeof proposeNumbering> | null>(null);
-  const [numberTarget, setNumberTarget] = useState(0);
   const [drag, setDrag] = useState<{ b: number; f: number; s: number } | null>(null);
+  const [menu, setMenu] = useState<BuilderMenuState | null>(null);
+  const [numbering, setNumbering] = useState<number | null>(null);
+  /** Copied position / floor. Plain data, so pasting never shares a uid. */
+  const [slotClip, setSlotClip] = useState<LayoutSlot | null>(null);
+  const [floorClip, setFloorClip] = useState<LayoutSlot[] | null>(null);
+  const [big, setBig] = useState(false);
 
   const units = useMemo(() => countUnits(layout), [layout]);
 
@@ -125,8 +131,242 @@ export function ProjectBuilder({
     setDrag(null);
   }
 
+  /** A fresh copy of a slot: same content, new identity, no join. */
+  function detached(src: LayoutSlot): LayoutSlot {
+    return { ...newSlot(src.kind), number: src.number, pinned: src.pinned };
+  }
+
+  const T = menu?.target;
+  const menuSlot = T?.kind === 'slot'
+    ? layout.buildings[T.b]?.floors[T.f]?.slots[T.s] ?? null : null;
+
+  /** Which joins would actually be accepted from the menu's position. */
+  function joinable(kind: JoinKind) {
+    if (!T || T.kind !== 'slot') return { up: false, down: false, left: false, right: false };
+    const B = layout.buildings[T.b];
+    const test = (f: number, sx: number) =>
+      !!B.floors[f]?.slots[sx] && joinRefusal(B, { f: T.f, s: T.s }, { f, s: sx }, kind) === null;
+    return {
+      up: test(T.f - 1, T.s), down: test(T.f + 1, T.s),
+      left: test(T.f, T.s - 1), right: test(T.f, T.s + 1),
+    };
+  }
+
+  const actions = {
+    copySlot: () => { if (menuSlot) setSlotClip(structuredClone(menuSlot)); onToast('Copied'); },
+    cutSlot: () => {
+      if (!menuSlot || !T || T.kind !== 'slot') return;
+      setSlotClip(structuredClone(menuSlot));
+      edit(l => {
+        const sl = l.buildings[T.b].floors[T.f].slots[T.s];
+        if (sl.joinUid) unjoinSlot(l.buildings[T.b], sl.uid);
+        l.buildings[T.b].floors[T.f].slots[T.s] = newSlot('gap');
+        return l;
+      });
+      onToast('Cut');
+    },
+    pasteSlot: () => {
+      if (!slotClip || !T || T.kind !== 'slot') return;
+      edit(l => {
+        const old = l.buildings[T.b].floors[T.f].slots[T.s];
+        if (old.joinUid) unjoinSlot(l.buildings[T.b], old.uid);
+        l.buildings[T.b].floors[T.f].slots[T.s] = detached(slotClip);
+        return l;
+      });
+    },
+    duplicateSlot: () => {
+      if (!menuSlot || !T || T.kind !== 'slot') return;
+      edit(l => {
+        const row = l.buildings[T.b].floors[T.f].slots;
+        const free = row.findIndex((x, i) => i > T.s && x.kind === 'gap');
+        const copy = detached(menuSlot);
+        delete copy.number; delete copy.pinned;   // a duplicate needs its own number
+        if (free === -1) row.push(copy); else row[free] = copy;
+        return l;
+      });
+    },
+    makeDuplex: (dir: 'up' | 'down') => {
+      if (!T || T.kind !== 'slot') return;
+      const f2 = dir === 'up' ? T.f - 1 : T.f + 1;
+      edit(l => { joinSlots(l.buildings[T.b], { f: T.f, s: T.s }, { f: f2, s: T.s }, 'duplex'); return l; });
+      onToast('Duplex made — one home over two floors');
+    },
+    connect: (dir: 'up' | 'down' | 'left' | 'right') => {
+      if (!T || T.kind !== 'slot') return;
+      const p = dir === 'up' ? { f: T.f - 1, s: T.s } : dir === 'down' ? { f: T.f + 1, s: T.s }
+        : dir === 'left' ? { f: T.f, s: T.s - 1 } : { f: T.f, s: T.s + 1 };
+      edit(l => { joinSlots(l.buildings[T.b], { f: T.f, s: T.s }, p, 'connected'); return l; });
+      onToast('Apartments connected');
+    },
+    separate: () => {
+      if (!menuSlot || !T || T.kind !== 'slot') return;
+      edit(l => { unjoinSlot(l.buildings[T.b], menuSlot.uid); return l; });
+      onToast('Separated');
+    },
+    toggleEmpty: () => {
+      if (!T || T.kind !== 'slot') return;
+      setSel({ b: T.b, f: T.f, s: T.s });
+      setKind(menuSlot?.kind === 'gap' ? 'apartment' : 'gap');
+    },
+    togglePin: () => {
+      if (!T || T.kind !== 'slot') return;
+      edit(l => { const x = l.buildings[T.b].floors[T.f].slots[T.s]; x.pinned = !x.pinned; return l; });
+    },
+    clearNumber: () => {
+      if (!T || T.kind !== 'slot') return;
+      edit(l => { const x = l.buildings[T.b].floors[T.f].slots[T.s]; delete x.number; delete x.pinned; return l; });
+    },
+    deleteSlot: () => {
+      if (!T || T.kind !== 'slot') return;
+      edit(l => {
+        const x = l.buildings[T.b].floors[T.f].slots[T.s];
+        if (x.joinUid) unjoinSlot(l.buildings[T.b], x.uid);
+        l.buildings[T.b].floors[T.f].slots.splice(T.s, 1);
+        return l;
+      });
+      setSel(null);
+    },
+
+    addFloor: (where: 'above' | 'below') => {
+      if (!T || T.kind === 'building') return;
+      const f = T.f;
+      edit(l => {
+        const B = l.buildings[T.b];
+        const width = B.floors[f]?.slots.length ?? 4;
+        B.floors.splice(where === 'above' ? f : f + 1, 0,
+          { label: '', slots: Array.from({ length: width }, () => newSlot('apartment')) });
+        return l;
+      });
+    },
+    duplicateFloor: () => {
+      if (!T || T.kind === 'building') return;
+      edit(l => {
+        const B = l.buildings[T.b];
+        const src = B.floors[T.f];
+        // Copies never carry joins or numbers: a join spans two floors and a
+        // number must be unique, so both belong to the original only.
+        B.floors.splice(T.f, 0, {
+          label: '',
+          slots: src.slots.map(x => ({ ...newSlot(x.kind) })),
+        });
+        return l;
+      });
+    },
+    copyFloor: () => {
+      if (!T || T.kind === 'building') return;
+      setFloorClip(structuredClone(layout.buildings[T.b].floors[T.f].slots));
+      onToast('Floor copied');
+    },
+    pasteFloor: () => {
+      if (!floorClip || !T || T.kind === 'building') return;
+      edit(l => {
+        const B = l.buildings[T.b];
+        B.floors[T.f].slots.forEach(x => { if (x.joinUid) unjoinSlot(B, x.uid); });
+        B.floors[T.f].slots = floorClip.map(detached);
+        return l;
+      });
+    },
+    clearFloor: () => {
+      if (!T || T.kind === 'building') return;
+      edit(l => {
+        const B = l.buildings[T.b];
+        B.floors[T.f].slots.forEach(x => { if (x.joinUid) unjoinSlot(B, x.uid); });
+        B.floors[T.f].slots = B.floors[T.f].slots.map(() => newSlot('gap'));
+        return l;
+      });
+    },
+    addPosition: () => {
+      if (!T || T.kind === 'building') return;
+      edit(l => { l.buildings[T.b].floors[T.f].slots.push(newSlot('apartment')); return l; });
+    },
+    removePosition: () => {
+      if (!T || T.kind === 'building') return;
+      edit(l => {
+        const row = l.buildings[T.b].floors[T.f].slots;
+        const last = row[row.length - 1];
+        if (last?.joinUid) unjoinSlot(l.buildings[T.b], last.uid);
+        row.pop();
+        return l;
+      });
+    },
+    numberFloor: () => { if (T && T.kind !== 'building') setNumbering(T.b); },
+    deleteFloor: () => {
+      if (!T || T.kind === 'building') return;
+      edit(l => {
+        const B = l.buildings[T.b];
+        B.floors[T.f].slots.forEach(x => { if (x.joinUid) unjoinSlot(B, x.uid); });
+        B.floors.splice(T.f, 1);
+        return l;
+      });
+      setSel(null);
+    },
+
+    duplicateBuilding: () => {
+      if (!T) return;
+      edit(l => {
+        const src = l.buildings[T.b];
+        const n = l.buildings.length + 1;
+        l.buildings.push({
+          id: `${src.id}-copy${n}`,
+          name: `${src.name} (copy)`,
+          displayOrder: n,
+          // Fresh identities throughout: a copied building is its own building.
+          floors: src.floors.map(f => ({
+            label: f.label,
+            slots: f.slots.map(x => ({ ...newSlot(x.kind), number: x.number, pinned: x.pinned })),
+          })),
+        });
+        return l;
+      });
+      onToast('Building duplicated');
+    },
+    mirrorBuilding: () => {
+      if (!T) return;
+      edit(l => {
+        const B = l.buildings[T.b];
+        B.floors.forEach(f => { f.slots.reverse(); });
+        return l;
+      });
+      onToast('Mirrored');
+    },
+    addColumn: () => {
+      if (!T) return;
+      edit(l => { l.buildings[T.b].floors.forEach(f => f.slots.push(newSlot('apartment'))); return l; });
+    },
+    removeColumn: () => {
+      if (!T) return;
+      edit(l => {
+        const B = l.buildings[T.b];
+        B.floors.forEach(f => {
+          const last = f.slots[f.slots.length - 1];
+          if (last?.joinUid) unjoinSlot(B, last.uid);
+          f.slots.pop();
+        });
+        return l;
+      });
+    },
+    numberBuilding: () => { if (T) setNumbering(T.b); },
+    deleteBuilding: () => {
+      if (!T) return;
+      edit(l => { l.buildings.splice(T.b, 1); return l; });
+      setSel(null);
+    },
+  };
+
+  function openMenu(e: React.MouseEvent, target: BuilderTarget) {
+    e.preventDefault(); e.stopPropagation();
+    if (target.kind === 'slot') setSel({ b: target.b, f: target.f, s: target.s });
+    setMenu({ x: e.clientX, y: e.clientY, target });
+    setJoining(null);
+  }
+
   return (
-    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden"
+      style={big ? {
+        position: 'fixed', inset: 12, zIndex: 75,
+        display: 'flex', flexDirection: 'column',
+        boxShadow: '0 24px 64px rgba(15,23,42,.35)',
+      } : undefined}>
       {/* Toolbar */}
       <div className="flex items-center gap-1.5 px-3 py-2 border-b border-gray-100 flex-wrap">
         <button
@@ -171,6 +411,14 @@ export function ProjectBuilder({
           className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-gray-600 border border-gray-200">
           <Plus size={12} /> Building
         </button>
+        <button onClick={() => setNumbering(0)}
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-[#1e3a5f] border border-gray-200">
+          <ArrowLeftRight size={12} /> Numbering
+        </button>
+        <button onClick={() => setBig(v => !v)}
+          className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-gray-600 border border-gray-200">
+          {big ? 'Shrink' : 'Full screen'}
+        </button>
         <span className="ml-auto text-[11px] font-bold text-gray-400 tabular-nums">{units} units</span>
         <button onClick={() => { onSave(layout); onToast('Layout saved'); }}
           className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-[11px] font-bold">Save</button>
@@ -192,8 +440,10 @@ export function ProjectBuilder({
         <div className="px-3 py-2 text-[11.5px] font-semibold bg-amber-50 text-amber-800">{refusal}</div>
       )}
 
-      {/* Buildings */}
-      <div className="flex gap-6 overflow-x-auto p-4 items-start">
+      {/* Buildings — the drawing gets the room, so it scrolls in both directions
+          and grows to whatever height is available in full screen. */}
+      <div className={`flex gap-6 overflow-auto p-4 items-start ${big ? 'flex-1 min-h-0' : ''}`}
+        style={big ? undefined : { maxHeight: '58vh' }}>
         {layout.buildings.map((b, bi) => {
           const dupes = findDuplicateNumbers(b);
           let mine = 0;
@@ -206,6 +456,8 @@ export function ProjectBuilder({
                 <input
                   value={b.name}
                   onChange={e => edit(l => { l.buildings[bi].name = e.target.value; return l; })}
+                  onContextMenu={e => openMenu(e, { kind: 'building', b: bi })}
+                  title="Right-click for building actions"
                   className="font-bold text-[13px] text-gray-900 bg-transparent border-b-2 border-gray-800 outline-none focus:border-[#2d6a9f] px-0.5 pb-0.5"
                   style={{ width: 120 }}
                 />
@@ -227,8 +479,9 @@ export function ProjectBuilder({
                   <input
                     value={floor.label}
                     onChange={e => edit(l => { l.buildings[bi].floors[fi].label = e.target.value; return l; })}
+                    onContextMenu={e => openMenu(e, { kind: 'floor', b: bi, f: fi })}
                     className="w-8 flex-none text-right text-[10.5px] font-bold text-gray-400 bg-transparent border-r border-gray-100 outline-none focus:text-[#2d6a9f] pr-2 tabular-nums"
-                    title="Floor label"
+                    title="Floor label · right-click for floor actions"
                   />
                   <div className="flex" style={{ gap: ROW_GAP, paddingTop: 3, paddingBottom: 3 }}>
                     {floor.slots.map((slot, si) => {
@@ -274,6 +527,7 @@ export function ProjectBuilder({
                           onDragOver={e => { if (drag && drag.b === bi) e.preventDefault(); }}
                           onDrop={e => { e.preventDefault(); dropOn(bi, fi, si); }}
                           onClick={() => !eaten && clickCell(bi, fi, si)}
+                          onContextMenu={e => !eaten && openMenu(e, { kind: 'slot', b: bi, f: fi, s: si })}
                           onKeyDown={e => { if (e.key === 'Enter') clickCell(bi, fi, si); }}
                           className="relative flex items-end justify-center rounded font-bold cursor-pointer select-none transition-colors"
                           style={style}
@@ -360,40 +614,36 @@ export function ProjectBuilder({
         </div>
       </div>
 
-      {/* Auto-number, preview first */}
-      <div className="border-t border-gray-100 p-3 flex items-center gap-2 flex-wrap">
-        <select value={numberTarget} onChange={e => setNumberTarget(Number(e.target.value))}
-          className="border border-gray-200 rounded-lg px-2 py-1 text-xs">
-          {layout.buildings.map((b, i) => <option key={b.id} value={i}>{b.name}</option>)}
-        </select>
-        <button
-          onClick={() => setNumberPreview(proposeNumbering(layout.buildings[numberTarget],
-            { start: 1, direction: 'ltr', continueAcrossFloors: true }))}
-          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold text-[#1e3a5f] border border-gray-200">
-          <ArrowLeftRight size={12} /> Preview auto-numbering
-        </button>
-        {numberPreview && (
-          <>
-            <span className="text-[11px] text-gray-500">
-              {numberPreview.length === 0 ? 'Nothing would change' : `${numberPreview.length} slots change`}
-              {numberPreview.length > 0 && ` · ${numberPreview.slice(0, 4).map(c => `${c.from ?? '–'}→${c.to}`).join(', ')}${numberPreview.length > 4 ? '…' : ''}`}
-            </span>
-            {numberPreview.length > 0 && (
-              <button
-                onClick={() => {
-                  edit(l => {
-                    l.buildings[numberTarget] = applyNumbering(l.buildings[numberTarget],
-                      { start: 1, direction: 'ltr', continueAcrossFloors: true });
-                    return l;
-                  });
-                  setNumberPreview(null);
-                  onToast('Numbering applied');
-                }}
-                className="px-2.5 py-1 rounded-lg bg-[#1e3a5f] text-white text-[11px] font-bold">Apply</button>
-            )}
-          </>
-        )}
-      </div>
+      {/* Numbering, previewed properly */}
+      {numbering !== null && layout.buildings[numbering] && (
+        <NumberingPanel
+          building={layout.buildings[numbering]}
+          onClose={() => setNumbering(null)}
+          onApply={next => {
+            edit(l => { l.buildings[numbering] = next; return l; });
+            setNumbering(null);
+            onToast('Numbering applied');
+          }}
+        />
+      )}
+
+      {/* Right-click */}
+      {menu && (
+        <BuilderMenu
+          state={menu}
+          onClose={() => setMenu(null)}
+          actions={actions}
+          info={{
+            slot: menuSlot,
+            canDuplex: joinable('duplex'),
+            canConnect: joinable('connected'),
+            hasSlotClipboard: !!slotClip,
+            hasFloorClipboard: !!floorClip,
+            floorLabel: T && T.kind !== 'building' ? layout.buildings[T.b]?.floors[T.f]?.label : undefined,
+            buildingName: T ? layout.buildings[T.b]?.name : undefined,
+          }}
+        />
+      )}
 
       {/* AI import */}
       {showImport && (

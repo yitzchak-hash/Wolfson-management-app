@@ -13,13 +13,68 @@ import { LayoutBuilding, LayoutFloor, LayoutSlot, ProjectLayout, SlotKind, newSl
  * AI will vary key casing and wrap things in extra objects, but it must not
  * invent a slot kind or a non-numeric floor count.
  */
+/**
+ * The prompt handed to a fresh AI with no context whatsoever.
+ *
+ * Deliberately long. It is pasted into a brand-new conversation alongside a set
+ * of plans, so it has to establish the whole job from nothing: what a floor
+ * plan is in this context, what to look for, what to do about the many things
+ * that are ambiguous on a real drawing, and what the answer must look like
+ * exactly. A short prompt produced short, confident, wrong answers — the model
+ * would guess at floor order, invent numbers, and silently drop the core.
+ */
 export function buildImportPrompt(projectName: string): string {
-  return `I need a building layout as JSON for a project called "${projectName}".
+  return `You are reading architectural drawings and turning them into structured data.
+I will give you floor plans, an elevation, a marketing brochure, a spreadsheet, a
+photograph of a printed plan, or a written description — whatever I have. Your job
+is to work out the LAYOUT OF EVERY FLOOR and reply with JSON only.
 
-I will give you floor plans or a description. Read them and reply with ONLY a JSON
-object — no explanation, no markdown fences.
+The project is called "${projectName}". It is a residential building — usually an
+apartment tower — being fitted with air conditioning, so what matters to me is
+which apartments exist on which floor and where they sit relative to each other.
 
-Shape:
+════════════════════════════════════════════════
+WHAT TO LOOK FOR
+════════════════════════════════════════════════
+
+1. HOW MANY BUILDINGS. A project may be one tower or several. Separate buildings
+   usually have their own name or letter (A1, A2, B, North Tower). If everything
+   is one tower, return one building.
+
+2. THE FLOORS OF EACH BUILDING. Look for a floor schedule, a stacking diagram,
+   an elevation, or repeated "TYPICAL FLOOR PLAN 3-14" notes. A note like
+   "typical floors 3-14" means those twelve floors are IDENTICAL — expand them
+   into twelve separate floors with the same arrangement, do not collapse them
+   into one. Include the ground floor, any lobby, basement or parking levels and
+   the roof ONLY if apartments exist on them.
+
+3. THE APARTMENTS ON EACH FLOOR, IN ORDER. Read each floor left to right as the
+   plan is drawn. I care about the ORDER and the COUNT more than exact geometry:
+   four apartments across a floor become four slots in a row.
+
+4. THE APARTMENT NUMBERS. These are usually printed inside each unit, sometimes
+   as "Apt 37", "37", "3A" or "12-4". Use exactly what is printed. If a number
+   is genuinely unreadable, leave it out rather than inventing one — I would far
+   rather fill in a blank than discover a wrong number later.
+
+5. GAPS. A position on the floor with no apartment — a void, a shaft, a terrace,
+   the stair and lift core, a corridor that interrupts the row — is a "gap".
+   Include it, because it keeps the apartments in the right positions relative
+   to the floors above and below. Do not use gaps to pad every floor out to the
+   same width; only include a gap where the row is genuinely interrupted.
+
+6. DUPLEXES. A duplex, maisonette or two-storey penthouse is ONE home occupying
+   TWO floors. On plans it shows as the same unit number appearing on two
+   consecutive floors, or as an internal stair drawn inside the unit, or as a
+   note like "duplex" / "two-level". Mark it on the LOWER of the two floors with
+   "duplex": true, and leave a "gap" in that position on the floor above.
+
+════════════════════════════════════════════════
+THE ANSWER
+════════════════════════════════════════════════
+
+Reply with ONE JSON object and nothing else. No explanation before it, no
+markdown fences, no trailing commentary.
 
 {
   "buildings": [
@@ -27,36 +82,56 @@ Shape:
       "id": "A1",
       "name": "Building A1",
       "floors": [
-        {
-          "label": "10",
-          "slots": [
-            { "kind": "apartment", "number": "37" },
-            { "kind": "apartment", "number": "38" },
-            { "kind": "stairwell" },
-            { "kind": "apartment", "number": "39" },
-            { "kind": "gap" }
-          ]
-        }
+        { "label": "16", "slots": [
+            { "kind": "apartment", "number": "55" },
+            { "kind": "gap" },
+            { "kind": "apartment", "number": "56" }
+        ] },
+        { "label": "15", "slots": [
+            { "kind": "apartment", "number": "53" },
+            { "kind": "apartment", "number": "54", "duplex": true }
+        ] },
+        { "label": "14", "slots": [
+            { "kind": "apartment", "number": "49" },
+            { "kind": "apartment", "number": "50" },
+            { "kind": "gap" },
+            { "kind": "apartment", "number": "51" },
+            { "kind": "apartment", "number": "52" }
+        ] }
       ]
     }
   ]
 }
 
-Rules:
-- "floors" must be listed TOP FLOOR FIRST, going down to the lowest.
-- "label" is free text: "10", "Ground", "-1", "Lobby", "Roof".
-- "slots" is one row, left to right, exactly as the apartments sit on that floor.
-- "kind" is one of: "apartment", "gap", "stairwell".
-  * "gap" = empty space where no apartment exists.
-  * "stairwell" = the stair/lift core between apartments.
-- A DUPLEX is one apartment across two floors. Put it on its LOWER floor with
-  "duplex": true, and do NOT repeat it on the floor above — leave a "gap" there
-  if the column would otherwise be empty.
-- Give every apartment its real "number" if you can read it. If a number is
-  unknown, omit "number" and I will fill it in.
-- If a unit is wider than one apartment, add "width": 2 (or 3).
+FIELD BY FIELD
+- "id"      short and unique: "A1", "B2", "North". No spaces.
+- "name"    what people call it: "Building A1", "North Tower".
+- "floors"  TOP FLOOR FIRST, descending to the lowest. This matters — I draw the
+            building the way it stands, and a reversed list produces an
+            upside-down building.
+- "label"   free text exactly as the drawing names it: "16", "Ground", "-1",
+            "Lobby", "Roof", "Mezzanine".
+- "slots"   one floor's row, LEFT TO RIGHT as drawn.
+- "kind"    "apartment" or "gap". Nothing else.
+- "number"  the printed apartment number, as a string. Omit if unreadable.
+- "duplex"  true only on the LOWER floor of a two-storey home.
 
-Reply with the JSON only.`;
+════════════════════════════════════════════════
+WHEN THE DRAWING IS UNCLEAR
+════════════════════════════════════════════════
+
+- Two plans contradict each other → follow the one that is dimensioned or
+  titled as the construction set, not the marketing render.
+- You cannot tell whether something is an apartment or a service room → look for
+  a number. Numbered means apartment; unnumbered plant, store, shaft or riser
+  means "gap".
+- The floor count is unclear → count the storeys on the elevation and use that.
+- A floor's arrangement is unreadable → still include the floor with the right
+  NUMBER of slots and omit the numbers, rather than skipping the floor.
+- You genuinely cannot read something → leave the field out. A blank I can fill
+  in beats a confident guess I have to hunt down.
+
+Read everything I give you, then reply with the JSON object only.`;
 }
 
 export interface ParseResult {
