@@ -107,6 +107,47 @@ it full size.
   slider if the board is hard to read from across the room. It sizes itself automatically to whatever
   screen it's plugged into, so you shouldn't normally need it.
 
+## The widget store
+
+There's a **Store** button on the board's toolbar with **47 things** you can put on the board. Each one
+shows you a working picture of itself before you add it, using your own jobs and tasks.
+
+The most useful ones keep themselves up to date — a list of everything running late, how many jobs are
+at each stage, what's due today, the week ahead, and one that lists **every contractor with a button to
+copy their link**, which fills itself in as contractors are added. Others are yours to fill in:
+checklists, an order tracker for equipment on its way, who's on site today, a target for the week.
+There's also a calculator and a converter for BTU, kilowatts, tons, metres, feet and degrees.
+
+## Pins, clips and arrows
+
+The little pictures — a push pin, a paperclip, a star, tape, a marker, a document — aren't just
+decoration. **Drop one on a job and it sticks to it**, and from then on it travels with that job when
+you move it. Take it off by right-clicking. The document one holds a real file: give it a Drive link
+and clicking it opens the file.
+
+To **join two jobs with an arrow**, right-click one and choose *Draw an arrow*, then click the other.
+The arrow follows both of them around.
+
+## Building a new project
+
+App settings now has a **Projects** tab. You can add a whole new project there: name it, pick a colour,
+say roughly how many buildings and floors, and then draw the real building — marking where there's no
+apartment, and joining apartments that are really one home.
+
+**Duplexes work properly now.** Click an apartment, press *Make duplex*, then click the one above or
+below it — and it becomes one home across two floors, counted once. *Connect units* does the same for
+two apartments a buyer knocked together, side by side or one above the other; those stay two homes with
+two numbers.
+
+Right-clicking anywhere in the builder gives you the useful things: copy and paste an apartment, add or
+remove a floor, duplicate a whole floor, duplicate a whole building, or mirror it.
+
+## Changing stages safely
+
+If you delete or hide a stage that still has jobs in it, the app now **asks where those jobs should
+go** and shows you how many will move. It only changes their stage — no tasks are created and nothing
+else about them is touched.
+
 ---
 
 If anything looks wrong or you can't find something, tell Yitzchak and we'll sort it out.

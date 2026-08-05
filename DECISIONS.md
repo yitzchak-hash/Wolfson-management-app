@@ -341,16 +341,65 @@ An audit of all 22 data-bearing keys against persist, export and import found tw
 Both fixed, then verified twice: a static audit of every key, and a live export → import round trip
 driven by the real `exportData` / `importData` code.
 
-### Still open — needs a decision from you
+### Closed
 
-**Netiv floor realignment.** The mockup was delivered; applying it is held on four questions, because
-getting any of them wrong would move real apartments to the wrong floors:
+**Netiv floor realignment — dropped.** Four questions about the contractor sheet were outstanding
+(which block maps to B1 vs B2, what apartments 32–36 are, what `דירה ספריה` is, and whether
+`דירה 7 שני` is a real second unit). Owner's ruling: not needed. Netiv's layout stays as it is, and
+the builder can adjust it by hand if that ever changes.
 
-1. Which sheet building block maps to **B1** and which to **B2**?
-2. Apartments **32–36** appear in the sheet but not in the current layout — new units, or renumbered ones?
-3. What is **דירה ספריה** (library apartment) — a real unit that should be counted, or a shared space?
-4. **דירה 7 שני** — a second apartment 7, or a typo for another number?
+### Still open
 
-Answer those four and the realignment goes in as a single reviewable change.
+**Merge.** Held for approval, as agreed at the start. Note there is no `main` branch in this
+repository — the live branch Vercel deploys is `claude/blissful-cray-spTFY`, so "merge to main" means
+merging into that.
 
-**Merge to main.** Held for your approval, as agreed at the start.
+---
+
+## 13. Later rounds — what else was built
+
+Everything below came out of review sessions after the first build list was finished.
+
+### The board, made consistent
+Every node — note, box, title, timer, clip art, voice memo, widget, bin — drags, resizes, carries a TV
+switch and can be deleted. Bins had been the exception: their body was a full-size button, so they
+could not be moved at all.
+
+**Controls settled.** Left-drag on empty board moves the board; Ctrl/⌘+drag draws the selection box;
+click a job opens it, drag moves it. Space-drag and middle-drag still pan. The cursor says which of
+those the pointer will do.
+
+**The toolbar carries tools only.** Clip art, countdown and stopwatch are things you place, so they
+moved into the store. The rail is draggable, resizable and scrolls with a thin thumb that appears on
+hover. Zoom lives in the page header — minus, plus, a typeable percentage, 100%, Fit.
+
+### Clip art that does something
+All eight pieces are on the store shelf as their own items. Each ATTACHES: drop it on a job or a note
+and it sticks, landing with a small impact, and from then on has no position of its own — it has the
+host's plus an offset. The document piece carries a real file (Drive link or upload) and becomes a link
+you click. Arrows connect two things and re-draw themselves as either end moves.
+
+### Widget store — 47 items
+Four groups. Live ones read the real data and cannot go stale; planning ones hold their own; shortcuts;
+look and feel. Every card shows the widget itself running, filling the card, on your own data — with
+sample rows filling in only where the real thing is empty. Verified: all 49 shelf items place and render
+with no errors.
+
+### Project builder, rebuilt
+The old duplex did one thing: `height: slot.duplex ? 46 : 24`. A join is now a mutual link by `uid`
+between two neighbouring slots, made the way the owner asked — select an apartment, press Duplex or
+Connect, click the neighbour. Duplex is one home over two floors counting once; connected is two homes
+counting twice. Right-click menus on positions, floors and buildings. Numbering shows the whole
+building before and after. The AI prompt is now a self-contained brief.
+
+### Workspaces
+App settings → Projects creates one with the full builder. Its own storage key, its own Firestore
+collections, its own copied stages. Verified it cannot disturb what exists.
+
+### Mobile
+100dvh rather than 100vh (a fixed bar anchored to 100vh sat below the fold), tooltips hidden on touch
+(they were widening the page), four destinations plus More, and the board fits on load.
+
+### Data safety — re-verified after every round
+All 22 data-bearing keys survive persist → export → import, checked statically and through a live
+round trip driven by the real `exportData` / `importData` code.
