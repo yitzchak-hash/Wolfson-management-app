@@ -16,7 +16,7 @@ import { saveAs } from 'file-saver';
 import { extractFolderId, isUploadBackendConfigured, getFolderNameViaBackend, familyNameFromFolderName } from '../data/driveApi';
 import { fetchContractorSheet } from '../data/sheetApi';
 import { ProjectBuilder } from '../components/settings/ProjectBuilder';
-import { ProjectLayout, layoutToApartments } from '../data/projectLayout';
+import { ProjectLayout, layoutToApartments, newSlot, joinSlots, areNeighbours } from '../data/projectLayout';
 
 type Tab = 'stages' | 'users' | 'contractors' | 'app' | 'language' | 'buildings' | 'sheet' | 'tv' | 'workspaces';
 
@@ -872,16 +872,62 @@ function BuildingsBuilderTab({ onToast }: { onToast: (msg: string, type?: 'succe
               .filter(a => a.floor === f)
               .sort((x, y) => (x.colPosition ?? 0) - (y.colPosition ?? 0))
               .map(a => ({
-                kind: 'apartment' as const,
+                ...newSlot('apartment'),
                 number: a.apartmentNumber || undefined,
                 pinned: !!a.apartmentNumber,
-                ...(a.isDuplexApt ? { duplex: true } : {}),
+                // Carried through so the joins can be rebuilt below, once every
+                // slot exists and positions are known.
+                srcId: a.id,
+                srcMergedWith: a.mergedWith,
+                srcDuplex: a.isDuplexApt,
               })),
           })),
         };
       }),
     };
   }, [apartments, buildings]);
+
+  /**
+   * Rebuilds joins from the records.
+   *
+   * `mergedWith` becomes a connected pair; `isDuplexApt` becomes a duplex with
+   * the slot above. Done after the whole layout exists, because a join needs
+   * both halves to be present before it can point at anything.
+   */
+  const initialJoined: ProjectLayout = useMemo(() => {
+    const l: ProjectLayout = structuredClone(initial);
+    for (const b of l.buildings) {
+      const posById = new Map<string, { f: number; s: number }>();
+      b.floors.forEach((fl, f) => fl.slots.forEach((sl, s) => {
+        const src = (sl as unknown as Record<string, unknown>).srcId;
+        if (typeof src === 'string') posById.set(src, { f, s });
+      }));
+      b.floors.forEach((fl, f) => fl.slots.forEach((sl, s) => {
+        const raw = sl as unknown as Record<string, unknown>;
+        if (sl.joinUid) return;
+        if (raw.srcDuplex && f > 0) {
+          const above = b.floors[f - 1]?.slots[s];
+          if (above && above.kind === 'apartment' && !above.joinUid) {
+            joinSlots(b, { f, s }, { f: f - 1, s }, 'duplex');
+            return;
+          }
+        }
+        const partnerId = raw.srcMergedWith;
+        if (typeof partnerId === 'string') {
+          const p = posById.get(partnerId);
+          if (p && !b.floors[p.f].slots[p.s].joinUid && areNeighbours({ f, s }, p)) {
+            joinSlots(b, { f, s }, p, 'connected');
+          }
+        }
+      }));
+      // The carrier fields have done their job.
+      b.floors.forEach(fl => fl.slots.forEach(sl => {
+        const raw = sl as unknown as Record<string, unknown>;
+        delete raw.srcId; delete raw.srcMergedWith; delete raw.srcDuplex;
+      }));
+    }
+    return l;
+  }, [initial]);
 
   if (currentProjectId === 'general') {
     return (
@@ -899,7 +945,7 @@ function BuildingsBuilderTab({ onToast }: { onToast: (msg: string, type?: 'succe
         a large change.
       </div>
       <ProjectBuilder
-        initial={initial}
+        initial={initialJoined}
         onToast={onToast}
         onSave={layout => {
           if (!currentUser) return;

@@ -1,4 +1,4 @@
-import { LayoutBuilding, LayoutFloor, LayoutSlot, ProjectLayout, SlotKind } from './projectLayout';
+import { LayoutBuilding, LayoutFloor, LayoutSlot, ProjectLayout, SlotKind, newSlot, joinSlots } from './projectLayout';
 
 /**
  * The AI round-trip.
@@ -67,7 +67,9 @@ export interface ParseResult {
   summary?: { buildings: number; floors: number; units: number; duplexes: number };
 }
 
-const KINDS: SlotKind[] = ['apartment', 'gap', 'stairwell'];
+// 'stairwell' is accepted from a model's reply and folded into 'gap' — an
+// empty position is what it always meant, and the kind no longer exists.
+const KINDS: SlotKind[] = ['apartment', 'gap'];
 
 /** Strips markdown fences and stray prose, which models add despite instructions. */
 function extractJson(raw: string): string {
@@ -122,6 +124,7 @@ export function parseLayoutJson(raw: string): ParseResult {
       const slots: LayoutSlot[] = rawSlots.map((rs, si) => {
         const s = rs as Record<string, unknown>;
         let kind = String(s.kind ?? 'apartment').toLowerCase() as SlotKind;
+        if (String(kind) === 'stairwell') kind = 'gap';
         if (!KINDS.includes(kind)) {
           warnings.push(`Unknown slot type "${String(s.kind)}" on floor ${label} of ${name} — treated as a gap.`);
           kind = 'gap';
@@ -131,21 +134,36 @@ export function parseLayoutJson(raw: string): ParseResult {
           units++;
           if (!number) warnings.push(`Apartment ${si + 1} on floor ${label} of ${name} has no number.`);
         }
-        const duplex = s.duplex === true;
-        if (duplex) duplexes++;
-        const width = Number(s.width);
+        // A duplex arrives as a flag on one slot; it becomes a real join to the
+        // slot above once the whole building is parsed and positions are known.
+        const wantsDuplex = s.duplex === true;
+        if (wantsDuplex) duplexes++;
         return {
-          kind,
+          ...newSlot(kind),
           ...(number ? { number, pinned: true } : {}),
-          ...(duplex ? { duplex: true } : {}),
-          ...(Number.isFinite(width) && width > 1 ? { width } : {}),
-        };
+          ...(wantsDuplex ? { __wantsDuplex: true } : {}),
+        } as LayoutSlot;
       });
       floors.push({ label, slots });
       floorCount++;
     });
 
-    buildings.push({ id, name, displayOrder: bi + 1, floors });
+    const built: LayoutBuilding = { id, name, displayOrder: bi + 1, floors };
+    // Turn the imported flags into real joins with the slot directly above.
+    built.floors.forEach((floor, fi) => {
+      floor.slots.forEach((slot, si) => {
+        const wants = (slot as unknown as Record<string, unknown>).__wantsDuplex;
+        delete (slot as unknown as Record<string, unknown>).__wantsDuplex;
+        if (!wants || fi === 0) return;
+        const above = built.floors[fi - 1]?.slots[si];
+        if (!above || above.kind !== 'apartment' || above.joinUid) {
+          warnings.push(`Duplex on floor ${floor.label} of ${name} has nothing free above it — left as a single apartment.`);
+          return;
+        }
+        joinSlots(built, { f: fi, s: si }, { f: fi - 1, s: si }, 'duplex');
+      });
+    });
+    buildings.push(built);
   });
 
   if (buildings.length === 0) {

@@ -1,17 +1,15 @@
 import React, { useMemo, useState } from 'react';
-import { Copy, Check, Wand2, Plus, Trash2, ArrowLeftRight } from 'lucide-react';
+import { Copy, Check, Wand2, Plus, Trash2, ArrowLeftRight, Link2, Unlink, Layers } from 'lucide-react';
 import {
-  LayoutBuilding, LayoutSlot, ProjectLayout, SlotKind,
+  LayoutBuilding, LayoutSlot, ProjectLayout, JoinKind, SlotPos,
   applyNumbering, proposeNumbering, findDuplicateNumbers, countUnits, generateGrid,
+  newSlot, joinSlots, unjoinSlot, joinRefusal, findSlot, isDuplexUpper,
 } from '../../data/projectLayout';
 import { buildImportPrompt, parseLayoutJson, ParseResult } from '../../data/layoutImport';
 
-type Tool = 'select' | 'apartment' | 'gap' | 'stairwell' | 'duplex' | 'erase';
-
-const TOOL_LABEL: Record<Tool, string> = {
-  select: 'Select', apartment: 'Apartment', gap: 'Gap',
-  stairwell: 'Stairwell', duplex: 'Duplex', erase: 'Erase',
-};
+const CELL_W = 54;
+const CELL_H = 40;
+const ROW_GAP = 6;
 
 /**
  * Visual builder for a project's buildings.
@@ -20,6 +18,14 @@ const TOOL_LABEL: Record<Tool, string> = {
  * regenerated from the layout on save, matching by building + number, so stages,
  * tasks, photos and Drive links survive an edit — the identity is the record,
  * not the number printed on the tile.
+ *
+ * ── Why there are no tool modes ────────────────────────────────────────────
+ * This used to arm a tool and then interpret a click six different ways, which
+ * is the whole reason the controls felt wrong. Now a click selects, and what
+ * happens next is chosen explicitly. Joining is a two-step gesture because it
+ * is a two-thing action: pick the apartment, press Duplex or Connect, then
+ * click the neighbour it joins to. Its eligible neighbours light up, and an
+ * impossible pick is refused with the reason rather than silently ignored.
  */
 export function ProjectBuilder({
   initial, onSave, onToast,
@@ -29,66 +35,129 @@ export function ProjectBuilder({
   onToast: (msg: string, type?: 'success' | 'error') => void;
 }) {
   const [layout, setLayout] = useState<ProjectLayout>(initial);
-  const [tool, setTool] = useState<Tool>('select');
   const [sel, setSel] = useState<{ b: number; f: number; s: number } | null>(null);
+  /** Armed join: waiting for the second click that says which neighbour. */
+  const [joining, setJoining] = useState<JoinKind | null>(null);
+  const [refusal, setRefusal] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [importText, setImportText] = useState('');
   const [importResult, setImportResult] = useState<ParseResult | null>(null);
   const [promptCopied, setPromptCopied] = useState(false);
   const [numberPreview, setNumberPreview] = useState<ReturnType<typeof proposeNumbering> | null>(null);
   const [numberTarget, setNumberTarget] = useState(0);
+  const [drag, setDrag] = useState<{ b: number; f: number; s: number } | null>(null);
 
   const units = useMemo(() => countUnits(layout), [layout]);
 
-  function edit(fn: (l: ProjectLayout) => ProjectLayout) { setLayout(l => fn(structuredClone(l))); }
-
-  function applyTool(b: number, f: number, s: number) {
-    if (tool === 'select') { setSel({ b, f, s }); return; }
-    edit(l => {
-      const slot = l.buildings[b].floors[f].slots[s];
-      if (tool === 'erase') { l.buildings[b].floors[f].slots.splice(s, 1); return l; }
-      if (tool === 'duplex') { slot.duplex = !slot.duplex; slot.kind = 'apartment'; return l; }
-      slot.kind = tool as SlotKind;
-      if (slot.kind !== 'apartment') { delete slot.number; delete slot.duplex; }
-      return l;
-    });
+  function edit(fn: (l: ProjectLayout) => ProjectLayout) {
+    setLayout(l => fn(structuredClone(l)));
   }
 
-  /** Move a slot within its floor, or to the floor above/below. */
-  function moveSlot(b: number, f: number, s: number, dir: 'left' | 'right' | 'up' | 'down') {
-    edit(l => {
-      const floors = l.buildings[b].floors;
-      const slots = floors[f].slots;
-      if (dir === 'left' && s > 0) { [slots[s - 1], slots[s]] = [slots[s], slots[s - 1]]; setSel({ b, f, s: s - 1 }); }
-      else if (dir === 'right' && s < slots.length - 1) { [slots[s + 1], slots[s]] = [slots[s], slots[s + 1]]; setSel({ b, f, s: s + 1 }); }
-      else if (dir === 'up' && f > 0) {
-        const [moved] = slots.splice(s, 1);
-        floors[f - 1].slots.push(moved); setSel({ b, f: f - 1, s: floors[f - 1].slots.length - 1 });
-      } else if (dir === 'down' && f < floors.length - 1) {
-        const [moved] = slots.splice(s, 1);
-        floors[f + 1].slots.push(moved); setSel({ b, f: f + 1, s: floors[f + 1].slots.length - 1 });
-      }
-      return l;
-    });
+  const slotAt = (p: { b: number; f: number; s: number } | null): LayoutSlot | null =>
+    p ? layout.buildings[p.b]?.floors[p.f]?.slots[p.s] ?? null : null;
+  const selSlot = slotAt(sel);
+
+  /** True when this position is the upper half of a duplex reaching up from below. */
+  function eatenByDuplexBelow(b: number, f: number, s: number): boolean {
+    const slot = layout.buildings[b]?.floors[f]?.slots[s];
+    return !!slot && isDuplexUpper(slot);
   }
 
-  const selSlot: LayoutSlot | null = sel
-    ? layout.buildings[sel.b]?.floors[sel.f]?.slots[sel.s] ?? null : null;
+  /** During an armed join, the neighbours that would actually accept it. */
+  function isJoinCandidate(b: number, f: number, s: number): boolean {
+    if (!joining || !sel || sel.b !== b) return false;
+    return joinRefusal(layout.buildings[b], { f: sel.f, s: sel.s }, { f, s }, joining) === null;
+  }
+
+  function clickCell(b: number, f: number, s: number) {
+    if (joining && sel && sel.b === b) {
+      const why = joinRefusal(layout.buildings[b], { f: sel.f, s: sel.s }, { f, s }, joining);
+      if (why) { setRefusal(why); return; }
+      const kind = joining;
+      edit(l => { joinSlots(l.buildings[b], { f: sel.f, s: sel.s }, { f, s }, kind); return l; });
+      setJoining(null); setRefusal(null);
+      onToast(kind === 'duplex' ? 'Duplex made — one home over two floors' : 'Apartments connected');
+      return;
+    }
+    setSel({ b, f, s });
+    setRefusal(null);
+  }
+
+  function armJoin(kind: JoinKind) {
+    if (!sel || !selSlot) return;
+    if (selSlot.joinUid) {
+      edit(l => { unjoinSlot(l.buildings[sel.b], selSlot.uid); return l; });
+      onToast('Separated');
+      return;
+    }
+    setJoining(joining === kind ? null : kind);
+    setRefusal(null);
+  }
+
+  function setKind(kind: 'apartment' | 'gap') {
+    if (!sel) return;
+    edit(l => {
+      const slot = l.buildings[sel.b].floors[sel.f].slots[sel.s];
+      if (slot.joinUid) unjoinSlot(l.buildings[sel.b], slot.uid);
+      const fresh = l.buildings[sel.b].floors[sel.f].slots[sel.s];
+      fresh.kind = kind;
+      if (kind === 'gap') { delete fresh.number; delete fresh.pinned; }
+      return l;
+    });
+    setJoining(null);
+  }
+
+  /** Dropping one position on another swaps what sits in them. */
+  function dropOn(b: number, f: number, s: number) {
+    if (!drag || drag.b !== b) { setDrag(null); return; }
+    edit(l => {
+      const from = l.buildings[b].floors[drag.f].slots;
+      const to = l.buildings[b].floors[f].slots;
+      // A joined pair would be torn apart by a swap, so it separates first.
+      [from[drag.s], to[s]].forEach(x => { if (x?.joinUid) unjoinSlot(l.buildings[b], x.uid); });
+      const a = l.buildings[b].floors[drag.f].slots[drag.s];
+      const bb = l.buildings[b].floors[f].slots[s];
+      l.buildings[b].floors[drag.f].slots[drag.s] = bb;
+      l.buildings[b].floors[f].slots[s] = a;
+      return l;
+    });
+    setSel({ b, f, s });
+    setDrag(null);
+  }
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
       {/* Toolbar */}
-      <div className="flex items-center gap-1 px-3 py-2 border-b border-gray-100 flex-wrap">
-        {(Object.keys(TOOL_LABEL) as Tool[]).map(tk => (
-          <button key={tk} onClick={() => setTool(tk)}
-            className="px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors"
-            style={tool === tk ? { backgroundColor: '#1e3a5f', color: '#fff' } : { color: '#64748b' }}>
-            {TOOL_LABEL[tk]}
-          </button>
-        ))}
-        <span className="w-px h-5 bg-gray-200 mx-1" />
+      <div className="flex items-center gap-1.5 px-3 py-2 border-b border-gray-100 flex-wrap">
+        <button
+          onClick={() => armJoin('duplex')}
+          disabled={!selSlot || selSlot.kind !== 'apartment'}
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold border transition-colors disabled:opacity-40"
+          style={joining === 'duplex'
+            ? { backgroundColor: '#b3541e', color: '#fff', borderColor: '#b3541e' }
+            : { color: '#b3541e', borderColor: '#e5e7eb' }}>
+          <Layers size={12} />
+          {selSlot?.joinKind === 'duplex' ? 'Separate duplex' : 'Make duplex'}
+        </button>
+        <button
+          onClick={() => armJoin('connected')}
+          disabled={!selSlot || selSlot.kind !== 'apartment'}
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold border transition-colors disabled:opacity-40"
+          style={joining === 'connected'
+            ? { backgroundColor: '#2d6a9f', color: '#fff', borderColor: '#2d6a9f' }
+            : { color: '#2d6a9f', borderColor: '#e5e7eb' }}>
+          {selSlot?.joinKind === 'connected' ? <Unlink size={12} /> : <Link2 size={12} />}
+          {selSlot?.joinKind === 'connected' ? 'Separate' : 'Connect units'}
+        </button>
+        <span className="w-px h-5 bg-gray-200 mx-0.5" />
+        <button onClick={() => setKind(selSlot?.kind === 'gap' ? 'apartment' : 'gap')}
+          disabled={!selSlot}
+          className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-gray-600 border border-gray-200 disabled:opacity-40">
+          {selSlot?.kind === 'gap' ? 'Make apartment' : 'Make it empty'}
+        </button>
+        <span className="w-px h-5 bg-gray-200 mx-0.5" />
         <button onClick={() => setShowImport(true)}
-          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold text-[#1e3a5f] border border-gray-200">
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-[#1e3a5f] border border-gray-200">
           <Wand2 size={12} /> AI import
         </button>
         <button
@@ -99,26 +168,48 @@ export function ProjectBuilder({
             }));
             return l;
           })}
-          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold text-gray-600 border border-gray-200">
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-gray-600 border border-gray-200">
           <Plus size={12} /> Building
         </button>
-        <span className="ml-auto text-[11px] text-gray-400">{units} units</span>
+        <span className="ml-auto text-[11px] font-bold text-gray-400 tabular-nums">{units} units</span>
         <button onClick={() => { onSave(layout); onToast('Layout saved'); }}
-          className="px-3 py-1 rounded-lg bg-green-600 text-white text-[11px] font-bold">Save</button>
+          className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-[11px] font-bold">Save</button>
       </div>
 
-      {/* Buildings — scrolls sideways once there are more than fit */}
-      <div className="flex gap-3 overflow-x-auto p-3">
+      {/* Armed-join banner: the second click is the one that does it. */}
+      {joining && (
+        <div className="px-3 py-2 text-[11.5px] font-semibold flex items-center gap-2"
+          style={{ backgroundColor: joining === 'duplex' ? '#fbeade' : '#e2edf6',
+                   color: joining === 'duplex' ? '#8a3f14' : '#1f4d75' }}>
+          {joining === 'duplex'
+            ? 'Now click the apartment directly above or below it.'
+            : 'Now click the apartment next to it — above, below, left or right.'}
+          <button onClick={() => { setJoining(null); setRefusal(null); }}
+            className="ml-auto text-[11px] underline">Cancel</button>
+        </div>
+      )}
+      {refusal && (
+        <div className="px-3 py-2 text-[11.5px] font-semibold bg-amber-50 text-amber-800">{refusal}</div>
+      )}
+
+      {/* Buildings */}
+      <div className="flex gap-6 overflow-x-auto p-4 items-start">
         {layout.buildings.map((b, bi) => {
           const dupes = findDuplicateNumbers(b);
+          let mine = 0;
+          b.floors.forEach(fl => fl.slots.forEach(sl => {
+            if (sl.kind === 'apartment' && !isDuplexUpper(sl)) mine++;
+          }));
           return (
-            <div key={b.id} className="flex-none" style={{ width: 210 }}>
-              <div className="flex items-center gap-1 mb-1">
+            <div key={b.id} className="flex-none">
+              <div className="flex items-center gap-1.5 mb-2">
                 <input
                   value={b.name}
                   onChange={e => edit(l => { l.buildings[bi].name = e.target.value; return l; })}
-                  className="flex-1 min-w-0 bg-[#1e3a5f] text-white text-center font-bold text-[11px] py-1.5 rounded-t-lg outline-none"
+                  className="font-bold text-[13px] text-gray-900 bg-transparent border-b-2 border-gray-800 outline-none focus:border-[#2d6a9f] px-0.5 pb-0.5"
+                  style={{ width: 120 }}
                 />
+                <span className="text-[10.5px] font-bold text-gray-400 tabular-nums">{mine} units</span>
                 <button onClick={() => edit(l => { l.buildings.splice(bi, 1); return l; })}
                   className="p-1 text-gray-300 hover:text-red-500" title="Remove building">
                   <Trash2 size={12} />
@@ -126,59 +217,114 @@ export function ProjectBuilder({
               </div>
 
               {dupes.length > 0 && (
-                <div className="text-[9px] text-red-600 bg-red-50 border border-red-200 rounded px-1.5 py-0.5 mb-1">
-                  Duplicate: {dupes.join(', ')}
+                <div className="text-[9.5px] text-red-600 bg-red-50 border border-red-200 rounded px-1.5 py-0.5 mb-1.5">
+                  Duplicate number: {dupes.join(', ')}
                 </div>
               )}
 
-              <div className="border border-gray-200 rounded-b-lg p-1 bg-gray-50">
-                {b.floors.map((floor, fi) => (
-                  <div key={fi} className="flex gap-1 mb-1 items-stretch">
-                    <input
-                      value={floor.label}
-                      onChange={e => edit(l => { l.buildings[bi].floors[fi].label = e.target.value; return l; })}
-                      className="w-8 flex-none text-[9px] font-bold text-center text-gray-500 bg-white border border-gray-200 rounded outline-none"
-                      title="Floor label"
-                    />
-                    <div className="flex-1 flex gap-1 min-w-0">
-                      {floor.slots.map((slot, si) => {
-                        const on = sel && sel.b === bi && sel.f === fi && sel.s === si;
-                        const isApt = slot.kind === 'apartment';
-                        return (
-                          <button key={si} onClick={() => applyTool(bi, fi, si)}
-                            className="flex-1 min-w-0 rounded text-[9.5px] font-bold transition-all"
-                            style={{
-                              height: slot.duplex ? 46 : 24,
-                              backgroundColor: slot.kind === 'stairwell' ? '#e2e8f0' : slot.duplex ? '#dbeafe' : '#fff',
-                              border: `1.5px ${isApt ? 'solid' : 'dashed'} ${on ? '#4aa8d8' : slot.duplex ? '#60a5fa' : '#e2e8f0'}`,
-                              boxShadow: on ? '0 0 0 2px rgba(74,168,216,.25)' : undefined,
-                              color: slot.duplex ? '#1e3a8a' : '#334155',
-                            }}
-                            title={slot.kind}
-                          >
-                            {slot.kind === 'stairwell' ? '⌷' : isApt ? (slot.number ?? '–') : ''}
-                          </button>
-                        );
-                      })}
-                      <button
-                        onClick={() => edit(l => { l.buildings[bi].floors[fi].slots.push({ kind: 'apartment' }); return l; })}
-                        className="w-5 flex-none rounded text-gray-300 hover:text-gray-500 text-[11px]"
-                        title="Add slot">+</button>
-                    </div>
+              {b.floors.map((floor, fi) => (
+                <div key={fi} className="flex items-stretch gap-2">
+                  <input
+                    value={floor.label}
+                    onChange={e => edit(l => { l.buildings[bi].floors[fi].label = e.target.value; return l; })}
+                    className="w-8 flex-none text-right text-[10.5px] font-bold text-gray-400 bg-transparent border-r border-gray-100 outline-none focus:text-[#2d6a9f] pr-2 tabular-nums"
+                    title="Floor label"
+                  />
+                  <div className="flex" style={{ gap: ROW_GAP, paddingTop: 3, paddingBottom: 3 }}>
+                    {floor.slots.map((slot, si) => {
+                      const isSel = !!sel && sel.b === bi && sel.f === fi && sel.s === si;
+                      const eaten = eatenByDuplexBelow(bi, fi, si);
+                      const candidate = isJoinCandidate(bi, fi, si);
+                      const isApt = slot.kind === 'apartment';
+                      const dup = slot.joinKind === 'duplex' && slot.joinPrimary;
+                      const conn = slot.joinKind === 'connected';
+
+                      // A duplex grows UP out of its own row and covers the
+                      // position above — the fix for the thing that only ever
+                      // made its own box taller.
+                      const style: React.CSSProperties = {
+                        width: CELL_W,
+                        height: dup ? CELL_H * 2 + ROW_GAP : CELL_H,
+                        marginTop: dup ? -(CELL_H + ROW_GAP) : 0,
+                        zIndex: dup ? 2 : 1,
+                        visibility: eaten ? 'hidden' : 'visible',
+                        backgroundColor: !isApt ? 'transparent'
+                          : dup ? '#fbeade' : conn ? '#e2edf6' : '#ffffff',
+                        borderStyle: isApt ? 'solid' : 'dashed',
+                        borderWidth: 1.5,
+                        borderColor: isSel ? '#1c1f26'
+                          : candidate ? '#2f7d4f'
+                          : dup ? '#d08a5e' : conn ? '#7aa8cb'
+                          : isApt ? '#e2e8f0' : '#cbd5e1',
+                        boxShadow: isSel ? '0 0 0 2.5px rgba(28,31,38,.2)'
+                          : candidate ? '0 0 0 2.5px rgba(47,125,79,.25)' : undefined,
+                        color: dup ? '#b3541e' : conn ? '#2d6a9f' : '#334155',
+                        ...(isApt ? {} : {
+                          backgroundImage: 'repeating-linear-gradient(45deg, transparent 0 4px, #d8d2c4 4px 5px)',
+                        }),
+                      };
+
+                      return (
+                        <div
+                          key={slot.uid}
+                          role="button"
+                          tabIndex={eaten ? -1 : 0}
+                          draggable={!eaten}
+                          onDragStart={() => setDrag({ b: bi, f: fi, s: si })}
+                          onDragOver={e => { if (drag && drag.b === bi) e.preventDefault(); }}
+                          onDrop={e => { e.preventDefault(); dropOn(bi, fi, si); }}
+                          onClick={() => !eaten && clickCell(bi, fi, si)}
+                          onKeyDown={e => { if (e.key === 'Enter') clickCell(bi, fi, si); }}
+                          className="relative flex items-end justify-center rounded font-bold cursor-pointer select-none transition-colors"
+                          style={style}
+                        >
+                          {dup && (
+                            <>
+                              <span className="absolute left-1 right-1 border-t border-dashed"
+                                style={{ top: CELL_H + ROW_GAP / 2, borderColor: 'rgba(179,84,30,.5)' }} />
+                              <span className="absolute top-1 left-0 right-0 text-center text-[8px] tracking-wider opacity-80">
+                                2 FLOORS
+                              </span>
+                            </>
+                          )}
+                          {conn && (
+                            <span className="absolute top-1 left-0 right-0 text-center text-[8px] tracking-wider opacity-80">
+                              JOINED
+                            </span>
+                          )}
+                          <span className="pb-2 text-[12.5px] tabular-nums">
+                            {isApt ? (slot.number ?? '–') : ''}
+                          </span>
+                        </div>
+                      );
+                    })}
+                    <button
+                      onClick={() => edit(l => { l.buildings[bi].floors[fi].slots.push(newSlot('apartment')); return l; })}
+                      className="w-5 flex-none rounded text-gray-300 hover:text-gray-500 text-[13px]"
+                      title="Add a position on this floor">+</button>
                   </div>
-                ))}
-                <div className="flex gap-1 mt-1">
-                  <button
-                    onClick={() => edit(l => { l.buildings[bi].floors.unshift({ label: '', slots: [{ kind: 'apartment' }] }); return l; })}
-                    className="flex-1 text-[9px] font-bold text-gray-500 border border-dashed border-gray-300 rounded py-1">
-                    + floor above
-                  </button>
-                  <button
-                    onClick={() => edit(l => { l.buildings[bi].floors.push({ label: '', slots: [{ kind: 'apartment' }] }); return l; })}
-                    className="flex-1 text-[9px] font-bold text-gray-500 border border-dashed border-gray-300 rounded py-1">
-                    + below
-                  </button>
                 </div>
+              ))}
+
+              <div className="flex gap-1.5 mt-2 ml-10">
+                <button
+                  onClick={() => edit(l => {
+                    const width = l.buildings[bi].floors[0]?.slots.length ?? 4;
+                    l.buildings[bi].floors.unshift({ label: '', slots: Array.from({ length: width }, () => newSlot('apartment')) });
+                    return l;
+                  })}
+                  className="text-[10px] font-bold text-gray-500 border border-dashed border-gray-300 rounded px-2 py-1">
+                  + floor above
+                </button>
+                <button
+                  onClick={() => edit(l => {
+                    const width = l.buildings[bi].floors[0]?.slots.length ?? 4;
+                    l.buildings[bi].floors.push({ label: '', slots: Array.from({ length: width }, () => newSlot('apartment')) });
+                    return l;
+                  })}
+                  className="text-[10px] font-bold text-gray-500 border border-dashed border-gray-300 rounded px-2 py-1">
+                  + below
+                </button>
               </div>
             </div>
           );
@@ -186,42 +332,33 @@ export function ProjectBuilder({
       </div>
 
       {/* Inspector */}
-      {sel && selSlot && (
-        <div className="border-t border-gray-100 p-3 flex flex-wrap items-end gap-3">
-          <div>
-            <div className="text-[9px] font-bold text-gray-400 uppercase mb-1">Number</div>
-            <input
-              value={selSlot.number ?? ''}
-              onChange={e => edit(l => {
-                const s = l.buildings[sel.b].floors[sel.f].slots[sel.s];
-                s.number = e.target.value || undefined;
-                s.pinned = !!e.target.value;   // typed by hand = pinned
-                return l;
-              })}
-              className="w-20 border border-gray-200 rounded-lg px-2 py-1 text-sm"
-            />
-          </div>
-          <div>
-            <div className="text-[9px] font-bold text-gray-400 uppercase mb-1">Move</div>
-            <div className="flex gap-1">
-              {(['left', 'right', 'up', 'down'] as const).map(d => (
-                <button key={d} onClick={() => moveSlot(sel.b, sel.f, sel.s, d)}
-                  className="w-7 h-7 rounded-lg border border-gray-200 text-gray-500 text-xs font-bold">
-                  {d === 'left' ? '←' : d === 'right' ? '→' : d === 'up' ? '↑' : '↓'}
-                </button>
-              ))}
-            </div>
-          </div>
-          <label className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-600 pb-1.5">
-            <input type="checkbox" checked={!!selSlot.duplex}
-              onChange={() => applyTool(sel.b, sel.f, sel.s)} className="rounded" />
-            Duplex (spans the floor above)
-          </label>
-          {selSlot.pinned && (
-            <span className="text-[10px] text-amber-600 font-bold pb-1.5">pinned — auto-numbering skips it</span>
-          )}
+      <div className="border-t border-gray-100 px-4 py-3 flex flex-wrap items-end gap-4 bg-slate-50/60">
+        <div>
+          <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Number</div>
+          <input
+            value={selSlot?.number ?? ''}
+            disabled={!selSlot || selSlot.kind !== 'apartment' || isDuplexUpper(selSlot)}
+            onChange={e => edit(l => {
+              const s = l.buildings[sel!.b].floors[sel!.f].slots[sel!.s];
+              s.number = e.target.value || undefined;
+              s.pinned = !!e.target.value;   // typed by hand = pinned
+              return l;
+            })}
+            placeholder="–"
+            className="w-24 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm font-bold tabular-nums disabled:bg-gray-50 disabled:text-gray-300"
+          />
         </div>
-      )}
+        <div className="text-[11.5px] text-gray-500 max-w-[42ch] leading-snug">
+          {!selSlot ? 'Click any position to select it. Drag one to move it.'
+            : selSlot.joinKind === 'duplex'
+              ? 'One home over two floors. It takes one number and counts once.'
+            : selSlot.joinKind === 'connected'
+              ? 'Two homes knocked together. Both keep their own number and both count.'
+            : selSlot.kind === 'gap' ? 'An empty position — nothing is built here.'
+            : selSlot.pinned ? 'This number was typed by hand, so a renumber leaves it alone.'
+            : 'Drag it to move it. Duplex joins it to the floor above or below; Connect also works sideways.'}
+        </div>
+      </div>
 
       {/* Auto-number, preview first */}
       <div className="border-t border-gray-100 p-3 flex items-center gap-2 flex-wrap">
