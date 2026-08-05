@@ -28,7 +28,7 @@ function TzviAirLogo() {
     <img
       src="/tzviair-logo.png"
       alt="TzviAir"
-      className="flex-shrink-0 h-7 md:h-10 max-w-[110px] md:max-w-none object-contain"
+      className="flex-shrink-0 h-8 md:h-14 max-w-[120px] md:max-w-none object-contain"
       style={{ width: 'auto', display: 'block', filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.18))' }}
     />
   );
@@ -62,7 +62,7 @@ export function Header() {
     <>
     <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
     <header
-      className="h-14 md:h-16 flex items-center justify-between px-2 md:px-5 shadow-lg flex-shrink-0 z-30 transition-colors duration-200 gap-2"
+      className="h-14 md:h-[74px] flex items-center justify-between px-2 md:px-5 shadow-lg flex-shrink-0 z-30 transition-colors duration-200 gap-2"
       style={{ backgroundColor: lightTheme ? '#ffffff' : '#1e3a5f', borderBottom: lightTheme ? '1px solid #e5e7eb' : 'none' }}
     >
       {/* Everything left of the actions has to survive a 390px phone, so the

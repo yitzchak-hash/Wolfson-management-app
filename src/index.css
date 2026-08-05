@@ -200,3 +200,18 @@
 @media (prefers-reduced-motion: reduce) {
   .board-stick, .board-arrow path { animation: none; }
 }
+
+/* ── Pan mode ──
+   The hand is the default, but anything clickable shows an arrow the instant
+   the pointer is over it — a click there still opens the job, and the cursor
+   should say so. Done in CSS because it has to be immediate: detecting the
+   hover in JS and re-rendering to change a cursor is both slower and loses to
+   the node's own cursor class. */
+.board-pan { cursor: grab; }
+.board-pan:active { cursor: grabbing; }
+.board-pan [data-node-id],
+.board-pan [data-node-id] * { cursor: default !important; }
+.board-pan [data-no-drag],
+.board-pan [data-el-action],
+.board-pan a,
+.board-pan button { cursor: pointer !important; }

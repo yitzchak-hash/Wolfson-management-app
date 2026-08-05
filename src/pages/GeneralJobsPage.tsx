@@ -184,6 +184,8 @@ export function GeneralJobsPage() {
   const [selectedJob, setSelectedJob] = useState<Apartment | null>(null);
   const [addTaskJob, setAddTaskJob] = useState<Apartment | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  /** Where a job added from the right-click menu should land. */
+  const [newJobAt, setNewJobAt] = useState<{ x: number; y: number } | null>(null);
   const [jobName, setJobName] = useState('');
   const [jobAddress, setJobAddress] = useState('');
   const [jobZoho, setJobZoho] = useState('');
@@ -223,6 +225,14 @@ export function GeneralJobsPage() {
   const [exportMenu, setExportMenu] = useState(false);
   const [titleEdit, setTitleEdit] = useState<string | null>(null);
   const [zoomField, setZoomField] = useState('100');
+  /** True while a left-button-held wheel zoom is happening, so nothing drags. */
+  const zoomingWithButton = useRef(false);
+  /** Left button currently held, tracked here because a wheel event's
+   *  `buttons` is not dependable across browsers or synthetic input. */
+  const leftDown = useRef(false);
+  const panFromJob = useRef<Apartment | null>(null);
+  const [panning, setPanning] = useState(false);
+  const zoomHold = useRef<number | undefined>(undefined);
   /** Armed arrow: the first end is chosen, waiting for the second. */
   const [arrowFrom, setArrowFrom] = useState<string | null>(null);
   const [arrowTip, setArrowTip] = useState<{ x: number; y: number } | null>(null);
@@ -280,7 +290,7 @@ export function GeneralJobsPage() {
     return () => ro.disconnect();
   }, []);
   const [spaceHeld, setSpaceHeld] = useState(false);
-  const [tool, setTool] = useState<BoardTool>('select');
+  const [tool, setTool] = useState<BoardTool>('pan');
   const [boardSettingsOpen, setBoardSettingsOpen] = useState(false);
 
   /**
@@ -1038,6 +1048,16 @@ export function GeneralJobsPage() {
   function onJobPointerDown(e: React.PointerEvent, job: Apartment, index: number) {
     if (e.button !== 0) return;
     if (arrowFrom) { e.stopPropagation(); finishArrow(job.id); return; }
+    // Pan mode: dragging FROM a tile moves the board, not the tile. A plain
+    // click still opens the job, which is why the cursor flips to an arrow
+    // whenever the pointer is over one.
+    if (tool === 'pan' && !e.ctrlKey && !e.metaKey) {
+      panRef.current = { px: e.clientX, py: e.clientY, ox: pan.x, oy: pan.y };
+      setPanning(true);
+      panFromJob.current = job;
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      return;
+    }
     if ((e.target as HTMLElement).closest('[data-no-drag]')) return;
     // With the pen or highlighter armed, a press starts a stroke wherever it
     // lands — including on top of a tile. Otherwise you could not draw across
@@ -1074,6 +1094,12 @@ export function GeneralJobsPage() {
   }
 
   function onJobPointerMove(e: React.PointerEvent) {
+    if (zoomingWithButton.current) return;   // the wheel has taken over
+    if (panRef.current && panFromJob.current) {
+      const st = panRef.current;
+      setPan(clampPanRef.current({ x: st.ox + (e.clientX - st.px), y: st.oy + (e.clientY - st.py) }));
+      return;
+    }
     if (!drag || drag.kind !== 'job') return;
     const w0 = toWorld(e.clientX, e.clientY);
     const dx = w0.x - drag.grabX;
@@ -1083,6 +1109,16 @@ export function GeneralJobsPage() {
   }
 
   function onJobPointerUp(e: React.PointerEvent, job: Apartment) {
+    if (panRef.current && panFromJob.current) {
+      // A press that never moved is a click, so the job still opens.
+      const moved = Math.abs(e.clientX - panRef.current.px) > 4
+        || Math.abs(e.clientY - panRef.current.py) > 4;
+      panRef.current = null;
+      panFromJob.current = null;
+      setPanning(false);
+      if (!moved) setSelectedJob(job);
+      return;
+    }
     if (!drag || drag.kind !== 'job') return;
     if (drag.moved) {
       // Dropping onto a bin FILES the job rather than positioning it. Nothing is
@@ -1280,19 +1316,28 @@ export function GeneralJobsPage() {
     // Pen and highlighter take the gesture outright while they are armed.
     if (drawMode) { startStrokeAt(e); return; }
 
-    if (e.ctrlKey || e.metaKey) {
-      setSelectedJobIds(new Set()); setSelectedElIds(new Set());
-      setLasso({ sx: x, sy: y, ex: x, ey: y });
-      canvasRef.current!.setPointerCapture(e.pointerId);
-      return;
-    }
-
     setSelectedJobIds(new Set()); setSelectedElIds(new Set());
-    panRef.current = { px: e.clientX, py: e.clientY, ox: pan.x, oy: pan.y };
+
+    /**
+     * Which gesture a plain left-drag on empty board is.
+     *
+     * The two toolbar buttons were doing nothing at all. Now they swap the
+     * default: SELECT drags a selection box, PAN moves the board. Ctrl/Cmd
+     * flips whichever is current, so the other one is always one modifier away
+     * and neither tool ever traps you.
+     */
+    const wantsLasso = tool === 'select' ? !(e.ctrlKey || e.metaKey) : (e.ctrlKey || e.metaKey);
+    if (wantsLasso) {
+      setLasso({ sx: x, sy: y, ex: x, ey: y });
+    } else {
+      panRef.current = { px: e.clientX, py: e.clientY, ox: pan.x, oy: pan.y };
+      setPanning(true);
+    }
     canvasRef.current!.setPointerCapture(e.pointerId);
   }
 
   function onCanvasPointerMove(e: React.PointerEvent) {
+    if (zoomingWithButton.current) return;
     if (panRef.current) {
       const st = panRef.current;
       setPan(clampPanRef.current({ x: st.ox + (e.clientX - st.px), y: st.oy + (e.clientY - st.py) }));
@@ -1316,7 +1361,7 @@ export function GeneralJobsPage() {
   }
 
   function onCanvasPointerUp() {
-    if (panRef.current) { panRef.current = null; return; }
+    if (panRef.current) { panRef.current = null; setPanning(false); return; }
     if (drawing) {
       // One record per stroke — never one per point, which would flood the store.
       if (drawing.pts.length > 1) {
@@ -1369,19 +1414,44 @@ export function GeneralJobsPage() {
   useEffect(() => {
     const vp = viewportRef.current;
     if (!vp) return;
+    const down = (e: PointerEvent) => { if (e.button === 0) leftDown.current = true; };
+    const up = () => { leftDown.current = false; };
+    vp.addEventListener('pointerdown', down);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
     const onWheel = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) {
+      // Anything with its own scroll — the toolbar rail, a list inside a widget —
+      // keeps its wheel. Swallowing it board-wide meant a rail taller than the
+      // screen could not be scrolled at all.
+      const inner = (e.target as HTMLElement | null)?.closest?.('.board-rail, [data-wheel]');
+      if (inner && inner.scrollHeight > inner.clientHeight + 1) return;
+
+      // Ctrl/Cmd + wheel zooms, and so does holding the left button while you
+      // scroll — the second is an ADDITION, for mice where the modifier is
+      // awkward. Both anchor on the cursor.
+      const held = leftDown.current || (e.buttons & 1) === 1;
+      if (e.ctrlKey || e.metaKey || held) {
         e.preventDefault();
+        if (held) {
+          zoomingWithButton.current = true;
+          clearTimeout(zoomHold.current);
+          zoomHold.current = window.setTimeout(() => { zoomingWithButton.current = false; }, 260);
+        }
         zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1 : -1);
-      } else {
-        e.preventDefault();
-        setPan(p => clampPanRef.current(e.shiftKey
-          ? { x: p.x - e.deltaY - e.deltaX, y: p.y }
-          : { x: p.x - e.deltaX, y: p.y - e.deltaY }));
+        return;
       }
+      e.preventDefault();
+      setPan(p => clampPanRef.current(e.shiftKey
+        ? { x: p.x - e.deltaY - e.deltaX, y: p.y }
+        : { x: p.x - e.deltaX, y: p.y - e.deltaY }));
     };
     vp.addEventListener('wheel', onWheel, { passive: false });
-    return () => vp.removeEventListener('wheel', onWheel);
+    return () => {
+      vp.removeEventListener('wheel', onWheel);
+      vp.removeEventListener('pointerdown', down);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+    };
   }, [zoomAt]);
 
   /**
@@ -1450,6 +1520,7 @@ export function GeneralJobsPage() {
     if (e.button === 1 || (spaceHeld && e.button === 0)) {
       e.preventDefault();
       panRef.current = { px: e.clientX, py: e.clientY, ox: pan.x, oy: pan.y };
+      setPanning(true);
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     }
   }
@@ -1458,7 +1529,7 @@ export function GeneralJobsPage() {
     if (!st) return;
     setPan(clampPanRef.current({ x: st.ox + (e.clientX - st.px), y: st.oy + (e.clientY - st.py) }));
   }
-  function onViewportPointerUp() { panRef.current = null; }
+  function onViewportPointerUp() { panRef.current = null; setPanning(false); }
 
   /**
    * Fit what is actually on the board.
@@ -1727,12 +1798,16 @@ export function GeneralJobsPage() {
       <div
         hidden={viewMode === 'stages'}
         ref={viewportRef}
-        className="flex-1 min-h-0 relative overflow-hidden"
+        className={`flex-1 min-h-0 relative overflow-hidden ${tool === 'pan' ? 'board-pan' : ''}`}
         style={{
-          cursor: panRef.current ? 'grabbing'
-            : spaceHeld ? 'grab'
+          // In pan mode the hand is the default, but it flips to an arrow the
+          // instant the pointer is over a tile — because a click there still
+          // opens the job, and the cursor should say so.
+          cursor: panning ? 'grabbing'
             : drawMode ? 'crosshair'
             : arrowFrom ? 'crosshair'
+            : spaceHeld ? 'grab'
+            : tool === 'pan' ? 'grab'
             : 'default',
           touchAction: 'none',
         }}
@@ -2169,6 +2244,11 @@ export function GeneralJobsPage() {
               </>
             ) : ctxMenu.kind === 'canvas' ? (
               <>
+                <button onClick={() => { setNewJobAt({ x: ctxMenu.worldX ?? 0, y: ctxMenu.worldY ?? 0 }); setShowAddModal(true); setCtxMenu(null); }}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
+                  <Plus size={14} className="text-gray-400" /> Add a job here
+                </button>
+                <div className="h-px bg-gray-100 my-1" />
                 <button onClick={() => { dropNode('note', { x: ctxMenu.worldX ?? 0, y: ctxMenu.worldY ?? 0 }, { color: NOTE_PALETTE[0], text: '' }); setCtxMenu(null); }}
                   className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
                   <StickyNote size={14} className="text-gray-400" /> Add note here
@@ -2575,7 +2655,7 @@ export function GeneralJobsPage() {
       {/* ── Add Job modal ── */}
       {showAddModal && (
         <>
-          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setShowAddModal(false)} />
+          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => { setShowAddModal(false); setNewJobAt(null); }} />
           <div className="fixed z-50 bg-white rounded-2xl shadow-2xl p-6"
             style={{ left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: 'min(420px, 92vw)' }}>
             <h2 className="text-lg font-bold text-gray-900 mb-4">{s.addJobBtn}</h2>
@@ -2583,7 +2663,11 @@ export function GeneralJobsPage() {
               e.preventDefault();
               const now = new Date().toISOString();
               const id = genId('G');
-              const pos = defaultPos(jobs.length);
+              // Right-click gives an exact spot; the button falls back to a
+              // free one, so two new jobs never land on top of each other.
+              const pos = newJobAt
+                ? { x: Math.max(0, newJobAt.x - TILE_W / 2), y: Math.max(0, newJobAt.y - TILE_H / 2) }
+                : freeSpot(TILE_W, TILE_H);
               addApartment({
                 id, buildingId: 'G', apartmentNumber: '',
                 displayName: jobName.trim(), floor: 0, colPosition: 1, colSpan: 1,
@@ -2597,7 +2681,7 @@ export function GeneralJobsPage() {
                 updatedBy: currentUser?.id ?? '', updatedByName: currentUser?.name ?? '',
               });
               setJobName(''); setJobAddress(''); setJobZoho(''); setJobDrive('');
-              setShowAddModal(false);
+              setShowAddModal(false); setNewJobAt(null);
             }} className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">{s.jobNameLabel}</label>

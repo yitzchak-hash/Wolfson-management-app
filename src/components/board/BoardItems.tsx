@@ -82,6 +82,7 @@ export const JobTile = React.memo(function JobTile({
       onPointerMove={H.jobMove}
       onPointerUp={e => H.jobUp(e, job)}
       onContextMenu={e => H.jobMenu(e, job)}
+      data-node-id={job.id}
       className={`absolute rounded-xl border px-3 pb-3 pt-[22px] group select-none ${
         isDragging ? 'shadow-2xl cursor-grabbing' :
         isSelected ? 'shadow-md cursor-grab' : 'shadow-sm hover:shadow-md cursor-grab'

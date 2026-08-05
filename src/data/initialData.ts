@@ -141,7 +141,9 @@ export const DEFAULT_PROJECTS: Project[] = [
   { id: 'netiv',    name: 'Netiv Neve Shamir', shortName: 'Netiv',   logoPath: '/netiv-logo.png', color: '#0d9488' },
   // Orange, from the TzviAir mark — the previous violet read as generic app
   // chrome rather than as this company's board.
-  { id: 'general',  name: 'Job Board',         shortName: 'Job Board', logoPath: '/general-logo.svg', type: 'general', color: '#ea6b13' },
+  // The Job Board is the company's own board, so it wears the company mark
+  // rather than a generic briefcase.
+  { id: 'general',  name: 'Job Board',         shortName: 'Job Board', logoPath: '/tzviair-logo.png', type: 'general', color: '#ea6b13' },
 ];
 
 export const NETIV_BUILDINGS: Building[] = [
