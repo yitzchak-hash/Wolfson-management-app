@@ -6,7 +6,7 @@ import {
   Languages, Clock, RotateCcw, Wifi, WifiOff, Loader, Database, RefreshCw, CloudUpload, Search, BookOpen, ExternalLink, AlertTriangle, Tv,
 } from 'lucide-react';
 import { isFirebaseConfigured, db, fsSet, fsGetAll } from '../data/firebase';
-import { Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency, getStageName, Apartment, isCountableApartment } from '../types';
+import { projectColor, Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency, getStageName, Apartment, isCountableApartment } from '../types';
 import { Tooltip } from '../components/ui/Tooltip';
 import { Toast } from '../components/ui/Toast';
 import { BoardRegionPicker } from '../components/board/BoardRegionPicker';
@@ -76,12 +76,31 @@ export function SettingsPage({ scope = 'project' }: { scope?: SettingsScope }) {
 
   const projectName = projects.find(p => p.id === currentProjectId)?.name ?? currentProjectId;
 
+  const accent = projectColor(projects, currentProjectId);
+
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">
-        {scope === 'app' ? s.appSettingsTitle : s.projectSettingsTitle}
-      </h1>
-      <p className="text-sm text-gray-500 mb-6">
+      {/* The two settings pages looked identical, so moving between them read as
+          nothing happening. Project settings now wears the workspace's own
+          colour and says whose settings these are; app settings stays neutral
+          and says it belongs to everything. */}
+      <div className="flex items-center gap-2.5 mb-1">
+        <span
+          className="w-1.5 h-7 rounded-full flex-shrink-0"
+          style={{ backgroundColor: scope === 'app' ? '#94a3b8' : accent }}
+          aria-hidden="true"
+        />
+        <div className="min-w-0">
+          <div className="text-[10px] font-extrabold tracking-widest uppercase"
+            style={{ color: scope === 'app' ? '#94a3b8' : accent }}>
+            {scope === 'app' ? 'Everything' : projectName}
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 leading-tight">
+            {scope === 'app' ? s.appSettingsTitle : s.projectSettingsTitle}
+          </h1>
+        </div>
+      </div>
+      <p className="text-sm text-gray-500 mb-6 ml-4">
         {scope === 'app'
           ? s.appSettingsHint
           : `${projectName} — ${s.projectSettingsHint}`}
@@ -90,9 +109,13 @@ export function SettingsPage({ scope = 'project' }: { scope?: SettingsScope }) {
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-6 flex-wrap">
         {tabs.map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
-            className={`pick pick-pill px-4 py-2 rounded-lg text-sm font-medium ${
-              activeTab === tab ? 'pick-on text-gray-900' : 'text-gray-500 hover:text-gray-700'
-            }`}>
+            className={`pick px-4 py-2 rounded-lg text-sm font-medium ${
+              activeTab === tab ? 'pick-on' : 'text-gray-500 hover:text-gray-700'
+            }`}
+            style={{
+              ['--pick-fill' as string]: scope === 'app' ? '#1e3a5f' : accent,
+              color: activeTab === tab ? '#ffffff' : undefined,
+            }}>
             {TAB_LABELS[tab]}
           </button>
         ))}

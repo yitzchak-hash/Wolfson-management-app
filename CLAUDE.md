@@ -567,3 +567,96 @@ to all three places and re-run the audit.**
 ## New per-project Firestore collection
 `planPins` — namespaced through `projectCollection(pid, 'planPins')` like every other per-project
 collection. `stages`, `users`, `contractors` and `settings/app` remain **bare in every project**.
+
+
+---
+
+# v2 — later rounds
+
+## Board node model
+
+Every node type is draggable and **resizable** (minimums differ per type: clip art
+24px, a title 80×28, a section box 120×80). The resize delta is divided by `zoom`,
+or the corner runs away from the cursor at any zoom but 100% — the same trap the
+tile drag once fell into.
+
+`BoardItems.tsx` holds the two memoised repeated items (`JobTile`, `BoardNode`).
+They take **value props** and one `handlers` object created once via a ref, or
+memoisation is defeated and a drag re-renders the whole board. Measured on 200
+jobs / 80 widgets / 800 tasks: 0.9ms median per drag frame.
+
+**The node must carry `group`.** Its action buttons are `opacity-0
+group-hover:opacity-100`; without the class they only appear when the pointer is
+already exactly on an invisible button, which reads as "the buttons don't work".
+
+## Attaching and connecting
+
+`AttachLayer.tsx` draws two things whose positions are **derived, never stored**:
+
+- **Attached clip art** (`attachedTo` + `attachAt` as fractions) has no position
+  of its own — it has the host's plus an offset, which is why it travels when the
+  host moves and cannot drift out of step.
+- **Arrows** (`type: 'arrow'` + `fromId`/`toId`) have no position at all, only two
+  ends. Recomputed from live host boxes every render.
+
+`hostBoxes` in `GeneralJobsPage` is the map of everything attachable, built from
+live positions **including a tile mid-drag**.
+
+## Controls (settled)
+
+Left-drag empty board **pans**. Ctrl/⌘+drag **lassoes**. Click a job opens it,
+drag moves it. Space-drag and middle-drag still pan. Pen/highlighter are modes and
+take a press on a tile as the start of a stroke. Zoom lives in the page header
+(−, +, typeable %, 100%, Fit) — there is no second copy.
+
+## Widgets
+
+`src/data/widgets.tsx` — 47 entries in four groups. A widget is a `CanvasElement`
+with `type: 'widget'`, a `widget` id and a free-form `data` bag, so it inherits
+drag/resize/colour/TV/sync/backup for free. **Clip art is NOT a widget wrapper** —
+placing an `art-*` store entry creates a real `type: 'clipart'` node, which is what
+lets it attach.
+
+`withSampleData(ctx)` fills in only the fields that are genuinely empty, so store
+previews show something on a new board and your own data as soon as there is any.
+
+## Project layout joins
+
+`projectLayout.ts`. A join is a **mutual link by `uid`**, never by index —
+inserting a floor or column shifts every index and would silently re-point a
+positional link.
+
+| | homes | numbers | counts | record |
+|---|---|---|---|---|
+| `duplex` | 1 over 2 floors | 1 | once | one, `isDuplexApt` |
+| `connected` | 2 knocked together | 2 | twice | two, bilateral `mergedWith` |
+
+`isDuplexUpper()` is the single test for "the half that is not its own home" and
+gates counting, numbering and record generation. `joinRefusal()` returns the
+reason a join cannot be made, so the UI can disable with an explanation.
+
+There is **no `stairwell` kind**. An empty position is a `gap`.
+
+## Settings
+
+- `/settings` (project scope) wears the workspace colour; `/app-settings` is
+  neutral. They looked identical, which made navigating between them read as
+  nothing happening.
+- App settings tabs: **Projects** (create a workspace with the builder), Users,
+  Contractors, TV, App, Language.
+- The Job Board's project settings show **only Stages** — it has no buildings and
+  no contractor sheet.
+- `customProjects` in `settings/app`; a new workspace writes its **own** storage
+  key and Firestore collections. `getDefaultBuildings/Apartments` seed **only** the
+  three built-ins — anything else starts empty, or a new project inherits
+  Wolfson's 168 apartments.
+
+## The TV region
+
+`tvView` in `boardSettings.__tv`. It defaults to a **screen-shaped slice**, not the
+whole board: a box that fills everything has nowhere to move, and every drag
+clamps back to where it started.
+
+## Data safety — unchanged and non-negotiable
+Every data-bearing key in **persist + export (top level) + import**. Re-run
+`backup-audit` and the live round-trip after adding one.
