@@ -7,6 +7,7 @@ import { StageNotesSection } from './StageNotesSection';
 import { ActivitySection } from './ActivitySection';
 import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, findAllPlansPdfsViaBackend, findPlanSetViaBackend, PlanEntry, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, extractFolderId, driveThumbUrl, listAllPhotosViaBackend, getFolderNameViaBackend, familyNameFromFolderName, DrivePhotoItem, DriveFile, FolderHealth, checkFolderHealthViaBackend } from '../../data/driveApi';
 import { Tooltip } from '../ui/Tooltip';
+import { DriveStatus } from '../ui/DriveStatus';
 import { printSheet, printEsc } from '../../data/printing';
 import { PlanPinOverlay } from './PlanPinOverlay';
 // Lazy, deliberately. The markup studio carries pdf.js — about a megabyte of
@@ -767,6 +768,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               </Tooltip>
             )}
                     </div>
+          {/* The same light the tiles carry, so the answer to "is this job set
+              up in Drive" is the same shape wherever you are looking. */}
+          <Tooltip text="Google Drive" side="left">
+            <span className="mr-1"><DriveStatus job={apartment} size="panel" /></span>
+          </Tooltip>
           <Tooltip text="Print a job sheet" side="left">
             <button onClick={printJobSheet}
               className="p-1.5 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0">

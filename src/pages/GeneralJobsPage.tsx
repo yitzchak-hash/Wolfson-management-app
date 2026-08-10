@@ -30,7 +30,7 @@ import {
   nearestAnchor, anchorOf, attachBox, DEFAULT_ATTACH_SCALE,
 } from '../components/board/AttachLayer';
 import { renderWidget, WidgetDef, WidgetCtx } from '../data/widgets';
-import { JobTile, GhostTile, BoardNode, BoardHandlers } from '../components/board/BoardItems';
+import { JobTile, BoardNode, BoardHandlers } from '../components/board/BoardItems';
 import { useTouchGestures } from '../hooks/useTouchGestures';
 import { detectPasteIntent, fieldForIntent, canCreateFromIntent, PasteIntent } from '../data/pasteIntent';
 import { StrokeNib, nibDash } from '../components/board/BoardNodes';
@@ -549,6 +549,10 @@ export function GeneralJobsPage() {
     jobTv: j => live.current.jobTv(j),
     jobThumbs: (id, d) => live.current.jobThumbs(id, d),
     jobThumbsDown: (id, d) => live.current.jobThumbsDown(id, d),
+    ghostDown: (e, j, gi) => live.current.ghostDown(e, j, gi),
+    ghostMove: e => live.current.ghostMove(e),
+    ghostUp: (e, j) => live.current.ghostUp(e, j),
+    ghostMenu: (e, j, gi) => live.current.ghostMenu(e, j, gi),
     elDown: (e, el) => live.current.elDown(e, el),
     elMove: e => live.current.elMove(e),
     elUp: el => live.current.elUp(el),
@@ -1971,6 +1975,13 @@ export function GeneralJobsPage() {
     jobMenu: onJobContextMenu, jobDelete: handleDeleteJobs,
     jobTv: (j: Apartment) => { if (currentUser) updateApartment(j.id, { showOnTv: j.showOnTv === false }, currentUser); },
     jobThumbs: (id: string, d: number) => bumpThumbs('job', [id], d),
+    ghostDown: onGhostPointerDown,
+    ghostMove: onGhostPointerMove,
+    ghostUp: onGhostPointerUp,
+    ghostMenu: (e: React.MouseEvent, j: Apartment, gi: number) => {
+      e.preventDefault(); e.stopPropagation();
+      setCtxMenu({ x: e.clientX, y: e.clientY, kind: 'ghost', ids: [j.id], ghostIndex: gi });
+    },
     jobThumbsDown: (id: string, d: number) => bumpThumbs('job', [id], d, 'down'),
     elDown: onElPointerDown, elMove: onElPointerMove, elUp: onElPointerUp,
     elMenu: onElContextMenu, elEdit: startEdit,
@@ -2423,20 +2434,20 @@ export function GeneralJobsPage() {
             {jobs.flatMap(job => (job.ghosts ?? []).map((g, gi) => {
               const p = ghostPos(job.id, gi, g);
               return (
-                <GhostTile
+                <JobTile
                   key={`${job.id}-ghost-${gi}`}
-                  job={job} index={gi}
+                  job={job} index={gi} ghostIndex={gi}
                   x={p.x} y={p.y} w={TILE_W} h={TILE_H}
                   stage={job.currentStageId ? stageMap.get(job.currentStageId) ?? null : null}
-                  dragging={!!ghostDrag && ghostDrag.jobId === job.id && ghostDrag.index === gi && ghostDrag.moved}
-                  label={s.jobLabel}
-                  onDown={onGhostPointerDown}
-                  onMove={onGhostPointerMove}
-                  onUp={onGhostPointerUp}
-                  onMenu={(e, j, i) => {
-                    e.preventDefault(); e.stopPropagation();
-                    setCtxMenu({ x: e.clientX, y: e.clientY, kind: 'ghost', ids: [j.id], ghostIndex: i });
-                  }}
+                  pendingTasks={pendingByJob.get(job.id) ?? 0}
+                  isSelected={false}
+                  isDragging={!!ghostDrag && ghostDrag.jobId === job.id && ghostDrag.index === gi && ghostDrag.moved}
+                  justChanged={false}
+                  searchLit={false}
+                  fallbackBorder={(TILE_PALETTE.find(pp => pp.bg === job.tileColor) ?? TILE_PALETTE[0]).border}
+                  lastEdited={relativeTime(job.contentUpdatedAt ?? job.updatedAt)}
+                  labels={tileLabels}
+                  H={H}
                 />
               );
             }))}

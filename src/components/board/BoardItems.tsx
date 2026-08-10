@@ -4,6 +4,7 @@ import { MapPin, ClipboardList, Trash2, Palette, Pencil, X, ThumbsUp, ThumbsDown
 import { Apartment, CanvasElement, Stage, BinKind, BIN_META, binKeyOf, binLabelOf } from '../../types';
 import { Settings2 } from 'lucide-react';
 import { DriveIcon, ZohoIcon, PlanIcon, TvIcon } from '../ui/BrandIcons';
+import { DriveStatus } from '../ui/DriveStatus';
 import { CountdownNode, StopwatchNode, ClipArtNode, VoiceMemoNode } from './BoardNodes';
 import { renderWidget, WidgetCtx, WIDGET_BY_ID } from '../../data/widgets';
 
@@ -29,6 +30,11 @@ export interface BoardHandlers {
   jobTv: (job: Apartment) => void;
   jobThumbs: (id: string, delta: number) => void;
   jobThumbsDown: (id: string, delta: number) => void;
+  /** Ghosts use the same tile, so they need their own pointer handlers. */
+  ghostDown?: (e: React.PointerEvent, job: Apartment, ghostIndex: number) => void;
+  ghostMove?: (e: React.PointerEvent) => void;
+  ghostUp?: (e: React.PointerEvent, job: Apartment) => void;
+  ghostMenu?: (e: React.MouseEvent, job: Apartment, ghostIndex: number) => void;
 
   elDown: (e: React.PointerEvent, el: CanvasElement) => void;
   elMove: (e: React.PointerEvent) => void;
@@ -76,18 +82,28 @@ export interface JobTileProps {
   lastEdited: string;
   labels: { job: string; folder: string; plans: string };
   H: BoardHandlers;
+  /**
+   * A ghost is the SAME job drawn a second time, so it is the same tile.
+   *
+   * The first version was a separate stripped-down component — no stage badge,
+   * no links, no task count, and faded to 45% — which is why a ghost looked
+   * like a broken tile rather than the job it is. Passing the index here means
+   * one component draws both and they cannot drift apart.
+   */
+  ghostIndex?: number;
 }
 
 export const JobTile = React.memo(function JobTile({
   job, index, x, y, w, h, stage, pendingTasks, isSelected, isDragging,
-  justChanged, searchLit, fallbackBorder, lastEdited, labels, H,
+  justChanged, searchLit, fallbackBorder, lastEdited, labels, H, ghostIndex,
 }: JobTileProps) {
+  const isGhost = ghostIndex !== undefined;
   return (
     <div
-      onPointerDown={e => H.jobDown(e, job, index)}
-      onPointerMove={H.jobMove}
-      onPointerUp={e => H.jobUp(e, job)}
-      onContextMenu={e => H.jobMenu(e, job)}
+      onPointerDown={e => (isGhost ? H.ghostDown!(e, job, ghostIndex!) : H.jobDown(e, job, index))}
+      onPointerMove={isGhost ? H.ghostMove! : H.jobMove}
+      onPointerUp={e => (isGhost ? H.ghostUp!(e, job) : H.jobUp(e, job))}
+      onContextMenu={e => (isGhost ? H.ghostMenu!(e, job, ghostIndex!) : H.jobMenu(e, job))}
       data-node-id={job.id}
       className={`absolute rounded-xl border px-3 pb-3 pt-[22px] group select-none ${
         isDragging ? 'shadow-2xl cursor-grabbing' :
@@ -111,6 +127,19 @@ export const JobTile = React.memo(function JobTile({
         zIndex: isDragging ? 20 : isSelected ? 10 : 5,
       }}
     >
+      {/* The only thing that marks a ghost out. Everything else on the tile is
+          identical, because it IS the job — same colours, same links, same
+          counts, full opacity. */}
+      {isGhost && (
+        <span
+          className="absolute -top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold"
+          style={{ backgroundColor: '#eef2f7', color: '#64748b', border: '1px solid #dbe3ec' }}
+          title="The same job, shown in a second place. Editing it edits the job."
+        >
+          <Ghost size={9} /> ghost
+        </span>
+      )}
+
       {/* Wallboard visibility. Everything shows by default; this only ever
           switches something OFF. Slash through the TV when hidden, so the state
           reads without hovering. */}
@@ -137,9 +166,11 @@ export const JobTile = React.memo(function JobTile({
 
       <div className="flex items-start gap-2 mb-1.5 pr-6">
         {stage && <span className="flex-shrink-0 w-2.5 h-2.5 rounded-full mt-1" style={{ backgroundColor: stage.color }} />}
-        <h3 className="font-semibold text-gray-900 text-sm leading-tight line-clamp-2">
+        <h3 className="font-semibold text-gray-900 text-sm leading-tight line-clamp-2 flex-1">
           {job.displayName || labels.job}
         </h3>
+        {/* Whether this job's Drive folder is set up, without opening it. */}
+        <DriveStatus job={job} />
       </div>
 
       {stage && (
@@ -227,50 +258,8 @@ export const JobTile = React.memo(function JobTile({
 
 // ─── Ghost ───────────────────────────────────────────────────────────────────
 
-export const GhostTile = React.memo(function GhostTile({
-  job, index, x, y, w, h, stage, dragging, label, onDown, onMove, onUp, onMenu,
-}: {
-  job: Apartment; index: number; x: number; y: number; w: number; h: number;
-  stage: Stage | null; dragging: boolean; label: string;
-  onDown: (e: React.PointerEvent, job: Apartment, i: number, p: { x: number; y: number }) => void;
-  onMove: (e: React.PointerEvent) => void;
-  onUp: (e: React.PointerEvent, job: Apartment) => void;
-  onMenu: (e: React.MouseEvent, job: Apartment, i: number) => void;
-}) {
-  return (
-    <div
-      onPointerDown={e => onDown(e, job, index, { x, y })}
-      onPointerMove={onMove}
-      onPointerUp={e => onUp(e, job)}
-      onContextMenu={e => onMenu(e, job, index)}
-      className="absolute rounded-xl p-3 select-none cursor-grab"
-      style={{
-        left: x, top: y, width: w, height: h,
-        touchAction: 'none',
-        backgroundColor: job.tileColor ?? '#ffffff',
-        border: `4px dashed ${stage?.color ?? '#cbd5e1'}`,
-        opacity: dragging ? 0.75 : 0.45,
-        zIndex: dragging ? 20 : 4,
-      }}
-    >
-      <span className="absolute top-1.5 right-2 flex items-center gap-1 text-[9px] font-bold text-gray-400">
-        <Ghost size={10} /> ghost
-      </span>
-      <div className="flex items-start gap-2 mb-1.5 pr-10">
-        {stage && <span className="flex-shrink-0 w-2.5 h-2.5 rounded-full mt-1" style={{ backgroundColor: stage.color }} />}
-        <h3 className="font-semibold text-gray-900 text-sm leading-tight line-clamp-2">
-          {job.displayName || label}
-        </h3>
-      </div>
-      {job.address && (
-        <div className="flex items-center gap-1.5 text-xs text-gray-500">
-          <MapPin size={11} className="flex-shrink-0 text-gray-400" />
-          <span className="truncate">{job.address}</span>
-        </div>
-      )}
-    </div>
-  );
-});
+// GhostTile is gone: a ghost is a JobTile with `ghostIndex`, so the two can
+// never drift apart again.
 
 /**
  * A widget that grows with its node.
@@ -278,18 +267,14 @@ export const GhostTile = React.memo(function GhostTile({
  * Making a node bigger used to give you a bigger white card with the same
  * small print marooned in the middle of it — the box resized, the information
  * in it did not. Every widget draws at its registered natural size in absolute
- * pixels (`text-[10.5px]`, `fontSize: 34`), so there is no amount of CSS on the
- * outside that reflows them.
+ * pixels, so there is no amount of CSS on the outside that reflows them.
  *
  * So the widget is drawn at its NATURAL width and scaled. Two consequences,
- * both wanted:
- *  - widen the node and every figure, label and row gets proportionally bigger,
- *    which is what "resize the information" means on a wallboard across a room;
- *  - make it TALLER without widening and the inner height grows in natural
- *    units, so a list simply shows more rows rather than stretching its type.
+ * both wanted: widen the node and every figure, label and row gets
+ * proportionally bigger; make it TALLER without widening and the inner height
+ * grows in natural units, so a list shows more rows rather than taller type.
  *
- * `el.fontSize` rides on top as a plain text multiplier, so a widget can be
- * made to read larger without being made physically wider.
+ * `el.fontSize` rides on top as a plain text multiplier.
  */
 function WidgetSurface({ el, w, h, children }: {
   el: CanvasElement; w: number; h: number; children: React.ReactNode;
@@ -297,8 +282,8 @@ function WidgetSurface({ el, w, h, children }: {
   const def = el.widget ? WIDGET_BY_ID.get(el.widget) : undefined;
   const naturalW = def?.w ?? w;
 
-  // Guard the extremes: below a third the type is unreadable, above three times
-  // it is a poster. Both are past the point of being useful.
+  // Guard the extremes: below a third the type is unreadable, above three
+  // times it is a poster. Both are past the point of being useful.
   const bump = el.fontSize ? Math.max(0.4, Math.min(3, el.fontSize / 14)) : 1;
   const k = Math.max(0.34, Math.min(3, (w / Math.max(1, naturalW)) * bump));
 
@@ -307,8 +292,6 @@ function WidgetSurface({ el, w, h, children }: {
       <div
         style={{
           width: naturalW,
-          // The inner box gets the node's real height back in natural units, so
-          // a taller node means more rows rather than taller letters.
           height: h / k,
           transform: `scale(${k})`,
           transformOrigin: '0 0',
