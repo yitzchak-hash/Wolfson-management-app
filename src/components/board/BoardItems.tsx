@@ -391,8 +391,22 @@ export const BoardNode = React.memo(function BoardNode({
     : el.type === 'box' ? withAlpha(el.color, (el.boxOpacity ?? 0.45) + 0.35)
     : 'rgba(0,0,0,0.1)';
 
+  /**
+   * A chosen outline wins over the default border.
+   *
+   * Drawn as the BORDER rather than as an extra ring, so it does not change the
+   * node's size or sit under its neighbours — and so it works on the plain
+   * types (a title, a piece of clip art) that have no border of their own. The
+   * selection blue still beats it, because knowing what you have got hold of
+   * matters more than decoration.
+   */
+  const ring = el.outline?.trim();
+  const ringW = Math.max(1, Math.min(12, Number(el.outlineWidth) || 3));
+
   const surface: React.CSSProperties = (plain || el.type === 'title')
-    ? { backgroundColor: 'transparent', borderStyle: 'none', borderWidth: 0 }
+    ? (ring && !isSelected
+        ? { backgroundColor: 'transparent', borderStyle: 'solid', borderWidth: ringW, borderColor: ring }
+        : { backgroundColor: 'transparent', borderStyle: 'none', borderWidth: 0 })
     : {
         backgroundColor: isBin
           ? (binHot ? `${el.color}22` : 'rgba(255,255,255,.82)')
@@ -401,9 +415,9 @@ export const BoardNode = React.memo(function BoardNode({
           : isWidget ? (el.color || '#ffffff')
           : el.type === 'box' ? withAlpha(el.color, el.boxOpacity)
           : (el.color || '#ffffff'),
-        borderStyle: isBin ? 'dashed' : 'solid',
-        borderWidth: isBin ? 2 : 1,
-        borderColor,
+        borderStyle: isBin && !ring ? 'dashed' : 'solid',
+        borderWidth: ring && !isSelected ? ringW : isBin ? 2 : 1,
+        borderColor: ring && !isSelected ? ring : borderColor,
         boxShadow: isBin && binHot ? `0 0 0 4px ${el.color}22` : undefined,
       };
 

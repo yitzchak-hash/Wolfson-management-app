@@ -415,6 +415,15 @@ export interface CanvasElement {
   /** Section boxes only: how see-through the fill is. */
   boxOpacity?: number;
   /**
+   * An outline round the node, in a colour you choose.
+   *
+   * Not the same thing as `color`, which fills it. An outline is how a wallboard
+   * says "these four belong together" without moving anything — it can be put
+   * on a widget, a note, a title or a job group alike.
+   */
+  outline?: string;
+  outlineWidth?: number;
+  /**
    * Clip art can ATTACH to a job or another node: a pin stuck through its
    * corner, a clip on its edge. The art then follows whatever it is stuck to,
    * because that is what being stuck to something means.

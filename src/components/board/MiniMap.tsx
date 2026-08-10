@@ -1,4 +1,5 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
+import { Maximize2, Minimize2 } from 'lucide-react';
 import { Apartment, CanvasElement, Stage } from '../../types';
 
 /**
@@ -30,10 +31,21 @@ export const MiniMap = React.memo(function MiniMap({
   /** true = always show, false = never, undefined = only when it is useful. */
   force?: boolean;
 }) {
-  const W = 148, H = 104;
+  /**
+   * It expands.
+   *
+   * At 148 x 104 a board of two hundred jobs is a field of two-pixel specks —
+   * enough to see WHERE you are, not enough to see what is over there. Pressing
+   * the corner grows it to a size you can actually aim at, and it stays that way
+   * until you shrink it again, because somebody rearranging a board wants it big
+   * for the whole job rather than for one click.
+   */
+  const [big, setBig] = useState(false);
+  const W = big ? 340 : 148;
+  const H = big ? 238 : 104;
   const scale = useMemo(
     () => Math.min(W / Math.max(worldW, 1), H / Math.max(worldH, 1)),
-    [worldW, worldH],
+    [worldW, worldH, W, H],
   );
 
   // By default it appears only once the board exceeds the screen — but that made
@@ -66,6 +78,24 @@ export const MiniMap = React.memo(function MiniMap({
       onPointerMove={e => { if (e.buttons === 1) jump(e); }}
       title="Board overview — click to jump"
     >
+      {/* Bottom-LEFT, and above a drawing that takes no pointer events at all.
+          Two things had to be got out of the way: the job rectangles are
+          painted after this button, so a job near the board's origin landed
+          exactly on top of it; and the expanded map grows upwards into the
+          toolbar rail, which covered its top-right corner. The bottom-left is
+          clear of both at either size. */}
+      <button
+        data-no-drag
+        onPointerDown={e => { e.stopPropagation(); }}
+        onClick={e => { e.stopPropagation(); setBig(v => !v); }}
+        title={big ? 'Shrink the overview' : 'Expand the overview'}
+        className="absolute bottom-0.5 left-0.5 z-20 p-0.5 rounded bg-white/90 text-gray-400
+                   hover:text-[#1e3a5f] shadow-sm"
+      >
+        {big ? <Minimize2 size={11} /> : <Maximize2 size={11} />}
+      </button>
+
+      <div className="absolute inset-0 pointer-events-none">
       {elements.map(el => (
         <div key={el.id} className="absolute rounded-[1px]"
           style={{
@@ -83,11 +113,12 @@ export const MiniMap = React.memo(function MiniMap({
             backgroundColor: stageColor(j.currentStageId),
           }} />
       ))}
-      <div className="absolute border-2 rounded-[2px] pointer-events-none"
-        style={{
-          left: view.x, top: view.y, width: view.w, height: view.h,
-          borderColor: '#4aa8d8', backgroundColor: 'rgba(74,168,216,.12)',
-        }} />
+        <div className="absolute border-2 rounded-[2px]"
+          style={{
+            left: view.x, top: view.y, width: view.w, height: view.h,
+            borderColor: '#4aa8d8', backgroundColor: 'rgba(74,168,216,.12)',
+          }} />
+      </div>
     </div>
   );
 });

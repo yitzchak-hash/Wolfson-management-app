@@ -18,7 +18,7 @@
 export type WidgetFieldKind =
   | 'text' | 'longtext' | 'number' | 'percent'
   | 'select' | 'colour' | 'url' | 'image' | 'datetime'
-  | 'job' | 'contractor' | 'stage' | 'people';
+  | 'job' | 'jobs' | 'contractor' | 'stage' | 'people';
 
 export interface WidgetField {
   key: string;
@@ -45,6 +45,24 @@ const limit = (label = 'How many to show'): WidgetField =>
  * "Any text should have text control" — so this block is shared rather than
  * re-declared, and a note, a box and a banner all offer the same choices.
  */
+/**
+ * The outline anything can wear.
+ *
+ * Grouping things on a wallboard usually means moving them, which fights every
+ * other reason they are where they are. An outline groups them where they
+ * stand. It goes on every node type — a widget, a note, a heading, a group —
+ * so the same gesture works whatever you are looking at.
+ */
+export const OUTLINE_FIELDS: WidgetField[] = [
+  {
+    key: 'outline', label: 'Outline colour', kind: 'colour', scope: 'element',
+    hint: 'Leave blank for none. Use the same colour on several nodes to tie them together.',
+  },
+  {
+    key: 'outlineWidth', label: 'Outline thickness', kind: 'number', scope: 'element', min: 1, max: 12,
+  },
+];
+
 export const TEXT_STYLE_FIELDS: WidgetField[] = [
   {
     key: 'fontSize', label: 'Text size', kind: 'number', scope: 'element', min: 8, max: 96,
@@ -89,9 +107,13 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
     { key: 'contractorId', label: 'Contractor', kind: 'contractor', allowNone: 'The first one' },
   ],
   'week-ahead': [title()],
-  'recent-photos': [title(), limit('How many photos')],
-  'job-shortcut': [
-    { key: 'jobId', label: 'Which job', kind: 'job', allowNone: 'Not chosen yet' },
+  'recent-photos': [
+    title(),
+    limit('How many photos'),
+    {
+      key: 'jobIds', label: 'Only these jobs', kind: 'jobs',
+      hint: 'Leave empty for every job in this workspace. Search and tick as many as you like.',
+    },
   ],
   'activity-feed': [title(), limit('How many entries')],
   'progress-ring': [
@@ -108,6 +130,10 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
   'photo-review': [title()],
   'count-by-stage': [
     { key: 'stageId', label: 'Which stage', kind: 'stage', allowNone: 'The first one' },
+    {
+      key: 'jobIds', label: 'Only these jobs', kind: 'jobs',
+      hint: 'Leave empty to count every job in this workspace.',
+    },
   ],
   'recent-jobs': [
     title(),
@@ -213,6 +239,14 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
     { key: 'text', label: 'Wording', kind: 'text', placeholder: 'THIS WEEK' },
     ...TEXT_STYLE_FIELDS,
   ],
+  divider: [
+    { key: 'text', label: 'Word on the line', kind: 'text', placeholder: 'Leave blank for a plain rule' },
+  ],
+  quote: [
+    { key: 'text', label: 'Message', kind: 'longtext' },
+    { key: 'by', label: 'Who said it', kind: 'text', placeholder: 'Optional' },
+  ],
+  legend: [title('Heading')],
   photo: [
     { key: 'url', label: 'Picture', kind: 'image', hint: 'Paste a link, or upload from this device.' },
     { key: 'caption', label: 'Caption', kind: 'text', placeholder: 'Optional' },
@@ -235,9 +269,12 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
 const NO_TYPE_CONTROLS = new Set(['calculator', 'converter', 'clock', 'photo', 'add-bin']);
 
 for (const [id, fields] of Object.entries(WIDGET_FIELDS)) {
-  if (NO_TYPE_CONTROLS.has(id)) continue;
-  if (fields.some(f => f.key === 'fontSize')) continue;      // already has them
-  fields.push(...TEXT_STYLE_FIELDS);
+  if (!NO_TYPE_CONTROLS.has(id) && !fields.some(f => f.key === 'fontSize')) {
+    fields.push(...TEXT_STYLE_FIELDS);
+  }
+  // The outline goes on EVERYTHING, including the keypads that opt out of the
+  // type controls — an outline is not text.
+  if (!fields.some(f => f.key === 'outline')) fields.push(...OUTLINE_FIELDS);
 }
 
 /**
@@ -249,11 +286,13 @@ export const BOX_FIELDS: WidgetField[] = [
     placeholder: 'Leave blank for no header' },
   { key: 'boxOpacity', label: 'See-through', kind: 'percent', scope: 'element' },
   ...TEXT_STYLE_FIELDS,
+  ...OUTLINE_FIELDS,
 ];
 
 export const ART_FIELDS: WidgetField[] = [
   { key: 'size', label: 'Size', kind: 'number', scope: 'element', min: 24, max: 320,
     hint: 'Or drag the corner. Attached art scales with whatever it is stuck to.' },
+  ...OUTLINE_FIELDS,
 ];
 
 /**
@@ -322,6 +361,15 @@ function rotaSampleCells(): Record<string, { id: string; text: string }[]> {
 
 export const WIDGET_PREVIEW: Record<string, Record<string, unknown>> = {
   kpi: { metric: 'overdue', title: 'Running late' },
+  divider: { text: 'this week' },
+  quote: { text: 'Ladders get tied off. Every time.', by: 'Site rules' },
+  legend: {
+    rows: [
+      { c: '#dc2626', t: 'Waiting on the customer' },
+      { c: '#d97706', t: 'Materials on order' },
+      { c: '#16a34a', t: 'Ready for the crew' },
+    ],
+  },
   // The store draws it with names and a couple of filled cells, because an
   // empty grid of boxes tells you nothing about what a rota is for.
   rota: {
@@ -403,7 +451,6 @@ export const WIDGET_PREVIEW: Record<string, Record<string, unknown>> = {
   clock: { mode: 'both' },
   'job-list': {},
   // The preview's own job and stage ids, matching the sample rows in widgets.tsx.
-  'job-shortcut': { jobId: 'j1' },
   'count-by-stage': { stageId: 'x2' },
   'progress-ring': { stageId: 'x2' },
   'contractor-load': { contractorId: 'k2' },

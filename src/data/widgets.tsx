@@ -6,15 +6,17 @@ import {
   CircleDashed, Archive, StickyNote, Copy, Check, Filter, CalendarCheck,
   Calculator, Ruler, Target, Users, GitCommitHorizontal, TimerReset,
   ArrowRightLeft, ListFilter, Search, Sparkles, Timer, Sticker, Type, FolderPlus, Building,
+  Minus, MessageSquareQuote, Palette,
 } from 'lucide-react';
 import {
   Apartment, CanvasElement, Stage, ContractorAssignment, Contractor,
-  ContractorPhoto, ActivityLog, BIN_KINDS, BIN_META, isCountableApartment,
+  ContractorPhoto, ActivityLog, BIN_KINDS, BIN_META, isCountableApartment, personColor,
   User,
 } from '../types';
 import { useStore } from './store';
 import { describeActivity } from './activityText';
 import { ClipArtNode, ART_KINDS, ArtKind } from '../components/board/BoardNodes';
+import { MiniJob } from '../components/board/MiniJob';
 import { RotaWidget, RotaData } from '../components/board/RotaWidget';
 
 /**
@@ -190,7 +192,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'stage-legend', rank: 4, name: 'Stage legend', category: 'live', icon: BarChart3, w: 210, h: 175,
+    id: 'stage-legend', rank: 9, name: 'Stage legend', category: 'live', icon: BarChart3, w: 210, h: 175,
     blurb: 'Every stage with a live count, in the stage colours.',
     render: (_el, c) => (
       <Frame title="Stages" icon={BarChart3}>
@@ -223,13 +225,21 @@ export const WIDGETS: WidgetDef[] = [
             {late.slice(0, 12).map(a => {
               const job = c.jobs.find(j => j.id === a.apartmentId);
               const days = Math.floor((Date.now() - new Date(a.dueDate!).getTime()) / 86_400_000);
+              if (!job) {
+                return (
+                  <span key={a.id} className="text-[10.5px] text-gray-400 truncate">
+                    {a.taskDescription}
+                  </span>
+                );
+              }
               return (
-                <button key={a.id} data-no-drag data-el-action
-                  onClick={() => job && c.openJob(job.id)}
-                  className="flex items-center gap-1.5 text-left">
+                <div key={a.id} className="flex items-center gap-1 min-w-0">
                   <span className="text-[9px] font-black text-red-600 tabular-nums w-7 flex-shrink-0">{days}d</span>
-                  <span className="text-[10.5px] text-gray-700 truncate">{job?.displayName || a.taskDescription}</span>
-                </button>
+                  <div className="flex-1 min-w-0">
+                    <MiniJob job={job} stages={c.stages} assignments={c.assignments}
+                      onOpen={c.openJob} sub={a.taskDescription} />
+                  </div>
+                </div>
               );
             })}
           </div>
@@ -238,7 +248,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'contractor-load', rank: 6, name: 'Contractor', category: 'live', icon: HardHat, w: 200, h: 110,
+    id: 'contractor-load', rank: 8, name: 'Contractor', category: 'live', icon: HardHat, w: 200, h: 110,
     blurb: 'One contractor and how much they already have open.',
     data: {},
     render: (el, c) => {
@@ -258,7 +268,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'week-ahead', name: 'Week ahead', category: 'live', icon: CalendarDays, w: 300, h: 130,
+    id: 'week-ahead', rank: 6, name: 'Week ahead', category: 'live', icon: CalendarDays, w: 300, h: 130,
     blurb: 'The next seven days with what falls due on each.',
     render: (_el, c) => {
       const days = Array.from({ length: 7 }, (_, i) => {
@@ -283,15 +293,27 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'recent-photos', rank: 7, name: 'Latest photos', category: 'live', icon: Camera, w: 235, h: 150,
-    blurb: 'The newest pictures back from site.',
-    render: (_el, c) => {
+    id: 'recent-photos', rank: 5, name: 'Latest photos', category: 'live', icon: Camera, w: 235, h: 150,
+    blurb: 'The newest pictures back from site — from every job, or only the ones you choose.',
+    data: {},
+    render: (el, c) => {
+      // Narrowed to chosen jobs, or left open to everything. "Everything" is
+      // the default because a wall widget with nothing configured should still
+      // be showing you something.
+      const only = (d(el).jobIds ?? []) as string[];
+      const allowed = only.length ? new Set(only) : null;
       const recent = [...c.photos]
         .filter(p => p.storageUrl || p.driveUrl || p.dataUrl)
+        .filter(p => {
+          if (!allowed) return true;
+          const a = c.assignments.find(x => x.id === p.assignmentId);
+          return a ? allowed.has(a.apartmentId) : false;
+        })
         .sort((a, b) => (b.uploadedAt ?? '').localeCompare(a.uploadedAt ?? ''))
-        .slice(0, 6);
+        .slice(0, Number(d(el).limit) || 6);
       return (
-        <Frame title="Latest from site" icon={Camera}>
+        <Frame title={(d(el).title as string) || (only.length ? `Photos · ${only.length} jobs` : 'Latest from site')}
+          icon={Camera}>
           {recent.length === 0
             ? <span className="text-[10px] text-gray-400">No photos yet</span>
             : (
@@ -308,26 +330,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'job-shortcut', name: 'Pinned job', category: 'live', icon: Briefcase, w: 200, h: 105,
-    blurb: 'A live card for one job, so it can sit in two places at once.',
-    data: {},
-    render: (el, c) => {
-      const job = c.jobs.find(j => j.id === d(el).jobId);
-      if (!job) return <Frame title="Pinned job" icon={Briefcase}><span className="text-[10px] text-gray-400">Pick a job in the menu</span></Frame>;
-      const st = c.stages.find(x => x.id === job.currentStageId);
-      return (
-        <button data-no-drag data-el-action onClick={() => c.openJob(job.id)} className="w-full h-full text-left">
-          <Frame title="Pinned job" icon={Briefcase} tone={st?.color}>
-            <div className="font-bold text-[13px] text-gray-900 truncate">{job.displayName || 'Job'}</div>
-            {st && <span className="inline-block mt-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full"
-              style={{ backgroundColor: `${st.color}22`, color: st.color }}>{st.name}</span>}
-          </Frame>
-        </button>
-      );
-    },
-  },
-  {
-    id: 'activity-feed', name: 'What changed', category: 'live', icon: Activity, w: 235, h: 150,
+    id: 'activity-feed', rank: 17, name: 'What changed', category: 'live', icon: Activity, w: 235, h: 150,
     blurb: 'The last few edits and who made them.',
     render: (_el, c) => (
       <Frame title="What changed" icon={Activity}>
@@ -347,7 +350,7 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
   {
-    id: 'progress-ring', name: 'Progress ring', category: 'live', icon: CircleDashed, w: 155, h: 155,
+    id: 'progress-ring', rank: 15, name: 'Progress ring', category: 'live', icon: CircleDashed, w: 155, h: 155,
     blurb: 'How much of the board has reached a chosen stage.',
     data: {},
     render: (el, c) => {
@@ -377,7 +380,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'bin-counter', name: 'Bin totals', category: 'live', icon: Archive, w: 200, h: 120,
+    id: 'bin-counter', rank: 14, name: 'Bin totals', category: 'live', icon: Archive, w: 200, h: 120,
     blurb: 'How much sits in Done, Ready, Archive and Trash.',
     render: (_el, c) => (
       <Frame title="In the bins" icon={Archive}>
@@ -397,15 +400,25 @@ export const WIDGETS: WidgetDef[] = [
 
   // ── Planning ──────────────────────────────────────────────────────────────
   {
-    id: 'checklist', rank: 1, name: 'Checklist', category: 'plan', icon: ListChecks, w: 215, h: 185,
+    id: 'checklist', rank: 2, name: 'Checklist', category: 'plan', icon: ListChecks, w: 215, h: 185,
     blurb: 'Tickable list. For the things the app does not model.',
     data: { title: 'Checklist', items: [{ t: 'First item', done: false }] },
     render: (el, c) => {
       const items = (d(el).items ?? []) as { t: string; done: boolean }[];
       const set = (next: typeof items) => c.update({ data: { ...d(el), items: next } });
       const doneN = items.filter(i => i.done).length;
+      // Red through amber to green as it fills. A count alone ("3/11") makes
+      // you do the arithmetic; a bar that changes colour is read across a room.
+      const pct = items.length ? (doneN / items.length) * 100 : 0;
+      const bar = pct >= 100 ? '#16a34a' : pct >= 66 ? '#65a30d'
+        : pct >= 33 ? '#d97706' : '#dc2626';
       return (
-        <Frame title={`${d(el).title ?? 'Checklist'} · ${doneN}/${items.length}`} icon={ListChecks}>
+        <Frame title={`${d(el).title ?? 'Checklist'} · ${doneN}/${items.length}`} icon={ListChecks}
+          tone={items.length ? bar : undefined}>
+          <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden mb-1 flex-shrink-0">
+            <div className="h-full rounded-full transition-all duration-500"
+              style={{ width: `${pct}%`, backgroundColor: bar }} />
+          </div>
           <div className="flex flex-col gap-0.5 h-full overflow-y-auto pr-1">
             {items.map((it, i) => (
               <div key={i} className="flex items-center gap-1.5">
@@ -427,7 +440,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'tally', rank: 4, name: 'Tally counter', category: 'plan', icon: Hash, w: 165, h: 115,
+    id: 'tally', rank: 9, name: 'Tally counter', category: 'plan', icon: Hash, w: 165, h: 115,
     blurb: 'Tap to count. Units delivered, floors done, whatever you are counting.',
     data: { title: 'Count', n: 0 },
     render: (el, c) => (
@@ -447,7 +460,7 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
   {
-    id: 'progress-bar', rank: 5, name: 'Progress bar', category: 'plan', icon: BarChart3, w: 215, h: 95,
+    id: 'progress-bar', rank: 10, name: 'Progress bar', category: 'plan', icon: BarChart3, w: 215, h: 95,
     blurb: 'A percentage you set by hand, for anything the data cannot know.',
     data: { title: 'Progress', pct: 40 },
     render: (el, c) => (
@@ -469,7 +482,7 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
   {
-    id: 'table', rank: 8, name: 'Small table', category: 'plan', icon: Table2, w: 280, h: 165,
+    id: 'table', rank: 12, name: 'Small table', category: 'plan', icon: Table2, w: 280, h: 165,
     blurb: 'A few rows and columns, edited in place.',
     data: { title: 'Table', rows: [['', ''], ['', '']] },
     render: (el, c) => {
@@ -504,7 +517,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'order-list', rank: 7, name: 'Order tracker', category: 'plan', icon: ShoppingCart, w: 240, h: 185,
+    id: 'order-list', rank: 13, name: 'Order tracker', category: 'plan', icon: ShoppingCart, w: 240, h: 185,
     blurb: 'Equipment on order: needed → ordered → arrived. Tap to advance.',
     data: { title: 'On order', items: [{ t: 'Condenser 5t', s: 0 }] },
     render: (el, c) => {
@@ -538,7 +551,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'week-planner', rank: 2, name: 'Week planner', category: 'plan', icon: CalendarRange, w: 400, h: 175,
+    id: 'week-planner', rank: 3, name: 'Week planner', category: 'plan', icon: CalendarRange, w: 400, h: 175,
     blurb: 'Monday to Sunday, free text under each. The wall version of a diary.',
     data: { cols: ['', '', '', '', '', '', ''] },
     render: (el, c) => {
@@ -580,7 +593,7 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
   {
-    id: 'milestones', rank: 3, name: 'Key dates', category: 'plan', icon: Flag, w: 225, h: 165,
+    id: 'milestones', rank: 4, name: 'Key dates', category: 'plan', icon: Flag, w: 225, h: 165,
     blurb: 'Several dated milestones in one node, counting down together.',
     data: { items: [{ t: 'Handover', on: '' }] },
     render: (el, c) => {
@@ -704,12 +717,12 @@ export const WIDGETS: WidgetDef[] = [
 
   // ── Fifteen more ──────────────────────────────────────────────────────────
   {
-    id: 'contractor-links', name: 'Contractor links', category: 'live', icon: Copy, w: 250, h: 195,
+    id: 'contractor-links', rank: 16, name: 'Contractor links', category: 'live', icon: Copy, w: 250, h: 195,
     blurb: 'Every contractor with a one-tap copy of their portal link. New contractors appear on their own.',
     render: (_el, c) => <ContractorLinks contractors={c.contractors} assignments={c.assignments} />,
   },
   {
-    id: 'stage-funnel', name: 'Stage funnel', category: 'live', icon: ListFilter, w: 260, h: 180,
+    id: 'stage-funnel', rank: 7, name: 'Stage funnel', category: 'live', icon: ListFilter, w: 260, h: 180,
     blurb: 'Bars showing how the board is spread across the stages.',
     render: (_el, c) => {
       const rows = c.stages.map(st => ({ st, n: c.jobs.filter(j => j.currentStageId === st.id).length }));
@@ -745,12 +758,15 @@ export const WIDGETS: WidgetDef[] = [
             {list.map(a => {
               const job = c.jobs.find(j => j.id === a.apartmentId);
               const con = c.contractors.find(x => x.id === a.contractorId);
+              if (!job) {
+                return (
+                  <span key={a.id} className="text-[10.5px] text-gray-400 truncate">{a.taskDescription}</span>
+                );
+              }
               return (
-                <button key={a.id} data-no-drag data-el-action onClick={() => job && c.openJob(job.id)}
-                  className="text-left">
-                  <span className="text-[10.5px] text-gray-700 truncate block">{job?.displayName || a.taskDescription}</span>
-                  {con && <span className="text-[9px] text-gray-400">{con.name}</span>}
-                </button>
+                <MiniJob key={a.id} job={job} stages={c.stages} assignments={c.assignments}
+                  onOpen={c.openJob}
+                  sub={con ? `${con.name} · ${a.taskDescription}` : a.taskDescription} />
               );
             })}
           </div>
@@ -759,7 +775,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'job-list', rank: 5, name: 'Job list', category: 'live', icon: Filter, w: 235, h: 195,
+    id: 'job-list', rank: 4, name: 'Job list', category: 'live', icon: Filter, w: 235, h: 195,
     blurb: 'A live list of the jobs at one stage. Click any to open it.',
     data: {},
     render: (el, c) => {
@@ -770,10 +786,7 @@ export const WIDGETS: WidgetDef[] = [
         <Frame title={`${st?.name ?? 'All jobs'} · ${list.length}`} icon={Filter} tone={st?.color}>
           <div className="flex flex-col gap-0.5 h-full overflow-y-auto pr-1">
             {list.map(j => (
-              <button key={j.id} data-no-drag data-el-action onClick={() => c.openJob(j.id)}
-                className="text-[10.5px] text-gray-700 truncate text-left hover:text-[#1e3a5f]">
-                {j.displayName || 'Job'}
-              </button>
+              <MiniJob key={j.id} job={j} stages={c.stages} assignments={c.assignments} onOpen={c.openJob} />
             ))}
             {list.length === 0 && <span className="text-[10px] text-gray-400">Nothing here</span>}
           </div>
@@ -782,33 +795,56 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'photo-review', name: 'Photos to review', category: 'live', icon: Camera, w: 175, h: 105,
-    blurb: 'How many site photos nobody has looked at yet.',
+    id: 'photo-review', rank: 13, name: 'Photos to review', category: 'live', icon: Camera, w: 195, h: 125,
+    blurb: 'How many site photos nobody has looked at, and a way straight to the oldest one.',
     render: (_el, c) => {
-      const n = c.photos.filter(p => !p.reviewedAt).length;
+      const waiting = c.photos.filter(p => !p.reviewedAt)
+        .sort((a, b) => (a.uploadedAt ?? '').localeCompare(b.uploadedAt ?? ''));
+      const n = waiting.length;
+      // Reviewing itself lives in the job window's Photos tab — one place, not
+      // two. So this counts, and then takes you there rather than growing a
+      // second half-copy of the reviewing screen on the board.
+      const oldest = waiting[0];
+      const job = oldest
+        ? c.jobs.find(j => j.id === c.assignments.find(a => a.id === oldest.assignmentId)?.apartmentId)
+        : undefined;
       return (
         <Frame title="To review" icon={Camera} tone={n ? '#d97706' : undefined}>
-          <Big value={n} sub={n === 1 ? 'photo waiting' : 'photos waiting'} color={n ? '#d97706' : '#16a34a'} />
+          <div className="h-full flex flex-col">
+            <div className="flex-1 min-h-0">
+              <Big value={n} sub={n === 1 ? 'photo waiting' : 'photos waiting'} color={n ? '#d97706' : '#16a34a'} />
+            </div>
+            {job && (
+              <button data-no-drag data-el-action onClick={() => c.openJob(job.id)}
+                className="text-[9.5px] text-left text-[#4aa8d8] hover:underline truncate flex-shrink-0"
+                title="Opens the job — reviewing is on its Photos tab">
+                Review in {job.displayName || 'the job'} → Photos
+              </button>
+            )}
+          </div>
         </Frame>
       );
     },
   },
   {
-    id: 'count-by-stage', name: 'Stage count', category: 'live', icon: Gauge, w: 175, h: 105,
-    blurb: 'One big number: how many jobs sit at a chosen stage.',
+    id: 'count-by-stage', rank: 12, name: 'Stage count', category: 'live', icon: Gauge, w: 185, h: 110,
+    blurb: 'One big number: how many jobs sit at a chosen stage, across whichever jobs you pick.',
     data: {},
     render: (el, c) => {
       const st = c.stages.find(x => x.id === d(el).stageId) ?? c.stages[0];
-      const n = st ? c.jobs.filter(j => j.currentStageId === st.id).length : 0;
+      const only = (d(el).jobIds ?? []) as string[];
+      const pool = only.length ? c.jobs.filter(j => only.includes(j.id)) : c.jobs;
+      const n = st ? pool.filter(j => j.currentStageId === st.id).length : 0;
       return (
         <Frame title={st?.name ?? 'Stage'} icon={Gauge} tone={st?.color}>
-          <Big value={n} sub="jobs at this stage" color={st?.color} />
+          <Big value={n} sub={only.length ? `of ${pool.length} chosen jobs` : 'jobs at this stage'}
+            color={st?.color} />
         </Frame>
       );
     },
   },
   {
-    id: 'recent-jobs', name: 'New this week', category: 'live', icon: Sparkles, w: 220, h: 160,
+    id: 'recent-jobs', rank: 10, name: 'New this week', category: 'live', icon: Sparkles, w: 220, h: 160,
     blurb: 'Jobs added in the last seven days.',
     render: (_el, c) => {
       const cut = new Date(Date.now() - 7 * 86_400_000).toISOString();
@@ -819,8 +855,10 @@ export const WIDGETS: WidgetDef[] = [
           <div className="flex flex-col gap-0.5 h-full overflow-y-auto pr-1">
             {list.length === 0 && <span className="text-[10px] text-gray-400">Nothing new</span>}
             {list.map(j => (
-              <button key={j.id} data-no-drag data-el-action onClick={() => c.openJob(j.id)}
-                className="text-[10.5px] text-gray-700 truncate text-left">{j.displayName || 'Job'}</button>
+              <MiniJob key={j.id} job={j} stages={c.stages} assignments={c.assignments} onOpen={c.openJob}
+                sub={j.createdAt
+                  ? `added ${new Date(j.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`
+                  : undefined} />
             ))}
           </div>
         </Frame>
@@ -828,23 +866,25 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'job-search', name: 'Find a job', category: 'live', icon: Search, w: 230, h: 160,
+    id: 'job-search', rank: 11, name: 'Find a job', category: 'live', icon: Search, w: 230, h: 160,
     blurb: 'Type a name and jump straight to the job.',
-    render: (_el, c) => <JobSearch jobs={c.jobs} openJob={c.openJob} />,
+    render: (_el, c) => (
+      <JobSearch jobs={c.jobs} openJob={c.openJob} stages={c.stages} assignments={c.assignments} />
+    ),
   },
   {
-    id: 'calculator', name: 'Calculator', category: 'plan', icon: Calculator, w: 190, h: 175,
+    id: 'calculator', rank: 16, name: 'Calculator', category: 'plan', icon: Calculator, w: 190, h: 175,
     blurb: 'A plain calculator, for when the phone is across the room.',
     render: () => <CalcWidget />,
   },
   {
-    id: 'converter', name: 'HVAC converter', category: 'plan', icon: ArrowRightLeft, w: 225, h: 165,
+    id: 'converter', rank: 17, name: 'HVAC converter', category: 'plan', icon: ArrowRightLeft, w: 225, h: 165,
     blurb: 'BTU, kW, tons, metres, feet and degrees — the conversions this trade actually uses.',
     data: { kind: 'btu', v: '12000' },
     render: (el, c) => <Converter el={el} update={c.update} readOnly={c.readOnly} />,
   },
   {
-    id: 'weekly-goal', name: 'Target', category: 'plan', icon: Target, w: 195, h: 120,
+    id: 'weekly-goal', rank: 11, name: 'Target', category: 'plan', icon: Target, w: 195, h: 120,
     blurb: 'A target and how far along you are against it.',
     data: { title: 'This week', target: 10, done: 0 },
     render: (el, c) => {
@@ -880,11 +920,20 @@ export const WIDGETS: WidgetDef[] = [
     render: (el, c) => {
       const rows = (d(el).rows ?? []) as { who: string; where: string }[];
       const set = (next: typeof rows) => c.update({ data: { ...d(el), rows: next } });
+      // Typing a contractor's name here picks up their colour automatically —
+      // the same colour they have on the rota. Nothing to configure: it matches
+      // on the name, and falls back to a colour derived from whatever is typed.
+      const colourFor = (who: string) => {
+        const hit = c.contractors.find(x => x.name.toLowerCase() === who.trim().toLowerCase());
+        return who.trim() ? personColor(hit?.name ?? who, hit?.color) : '#e2e8f0';
+      };
       return (
         <Frame title="On site today" icon={Users}>
           <div className="flex flex-col gap-1 h-full overflow-y-auto pr-1">
             {rows.map((r, i) => (
               <div key={i} className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: colourFor(r.who) }} />
                 <Line value={r.who} readOnly={c.readOnly} placeholder="Who"
                   onChange={v => set(rows.map((x, j) => j === i ? { ...x, who: v } : x))}
                   className="text-[10.5px] font-bold text-gray-800 w-[42%]" />
@@ -903,11 +952,31 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'timeline', name: 'Timeline', category: 'plan', icon: GitCommitHorizontal, w: 380, h: 110,
-    blurb: 'Key dates laid out left to right, with today marked.',
-    data: { items: [{ t: 'Start', on: '' }, { t: 'Handover', on: '' }] },
+    id: 'timeline', rank: 5, name: 'Timeline', category: 'plan', icon: GitCommitHorizontal, w: 380, h: 110,
+    blurb: 'Laid out left to right with today marked — from the tasks on the calendar, '
+      + 'or from dates you type in.',
+    data: { source: 'tasks', items: [] },
     render: (el, c) => {
-      const items = (d(el).items ?? []) as { t: string; on: string }[];
+      /**
+       * Where the marks come from.
+       *
+       * It used to say "Add dates in Key dates style", which named a thing that
+       * did not exist anywhere in the app — there was no way to add a date to a
+       * timeline at all. It now reads the calendar (every task with a due date)
+       * by default, and typing your own dates is the alternative, chosen in its
+       * settings.
+       */
+      const source = (d(el).source as string) || 'tasks';
+      const items = source === 'own'
+        ? ((d(el).items ?? []) as { t: string; on: string }[])
+        : c.assignments
+          .filter(a => a.dueDate)
+          .sort((a, b) => a.dueDate!.localeCompare(b.dueDate!))
+          .slice(0, 14)
+          .map(a => ({
+            t: c.jobs.find(j => j.id === a.apartmentId)?.displayName || a.taskDescription || 'Task',
+            on: a.dueDate!,
+          }));
       const dated = items.filter(i => i.on).map(i => ({ ...i, ms: new Date(i.on).getTime() }));
       const lo = Math.min(Date.now(), ...dated.map(i => i.ms));
       const hi = Math.max(Date.now(), ...dated.map(i => i.ms));
@@ -927,14 +996,20 @@ export const WIDGETS: WidgetDef[] = [
                 </div>
               </div>
             ))}
-            {dated.length === 0 && <span className="text-[10px] text-gray-400">Add dates in Key dates style</span>}
+            {dated.length === 0 && (
+              <span className="text-[10px] text-gray-400">
+                {source === 'own'
+                  ? 'No dates typed in yet — add them in this widget’s settings.'
+                  : 'Nothing on the calendar with a date yet.'}
+              </span>
+            )}
           </div>
         </Frame>
       );
     },
   },
   {
-    id: 'multi-timer', name: 'Several timers', category: 'plan', icon: TimerReset, w: 215, h: 170,
+    id: 'multi-timer', rank: 14, name: 'Several timers', category: 'plan', icon: TimerReset, w: 215, h: 170,
     blurb: 'A few labelled countdowns in one node, instead of one each.',
     data: { items: [{ t: 'Crane', on: '' }] },
     render: (el, c) => {
@@ -973,7 +1048,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'handover', name: 'Shift handover', category: 'ref', icon: ListChecks, w: 240, h: 185,
+    id: 'handover', rank: 5, name: 'Shift handover', category: 'ref', icon: ListChecks, w: 240, h: 185,
     blurb: 'What the next person needs to know. Structured, so nothing is left implied.',
     data: { done: '', next: '', watch: '' },
     render: (el, c) => (
@@ -998,13 +1073,13 @@ export const WIDGETS: WidgetDef[] = [
   // They are things you PLACE, not ways of working, so the store is where they
   // belong; the toolbar is left with gestures and the raw board pieces.
   {
-    id: 'w-countdown', name: 'Countdown', category: 'plan', icon: Timer, w: 190, h: 96,
+    id: 'w-countdown', rank: 7, name: 'Countdown', category: 'plan', icon: Timer, w: 190, h: 96,
     blurb: 'Counts down to a date and turns amber, then red, as it arrives.',
     data: {},
     render: (el, c) => <CountdownInner el={el} update={c.update} readOnly={c.readOnly} />,
   },
   {
-    id: 'w-stopwatch', name: 'Stopwatch', category: 'plan', icon: Clock3, w: 190, h: 96,
+    id: 'w-stopwatch', rank: 15, name: 'Stopwatch', category: 'plan', icon: Clock3, w: 190, h: 96,
     blurb: 'Counts up. Start it when a crew starts, stop it when they finish.',
     data: { elapsedMs: 0 },
     render: (el, c) => <StopwatchInner el={el} update={c.update} readOnly={c.readOnly} />,
@@ -1046,7 +1121,7 @@ export const WIDGETS: WidgetDef[] = [
    * the board they work on.
    */
   {
-    id: 'project-glance', rank: 8, name: 'Another workspace', category: 'live',
+    id: 'project-glance', rank: 18, name: 'Another workspace', category: 'live',
     icon: Building, w: 250, h: 165,
     blurb: 'A live summary of one of your other workspaces — its stages, its counts, its progress.',
     data: {},
@@ -1067,7 +1142,7 @@ export const WIDGETS: WidgetDef[] = [
    * widget chrome and none of the drop-target behaviour.
    */
   {
-    id: 'add-bin', rank: 1, name: 'Group', category: 'plan', icon: FolderPlus, w: 178, h: 92,
+    id: 'add-bin', rank: 8, name: 'Group', category: 'plan', icon: FolderPlus, w: 178, h: 92,
     blurb: 'A place to file jobs — like Done or Archive, but yours. Give it a name, a colour, '
       + 'and optionally a stage so filing a job here also moves it to that stage.',
     data: {},
@@ -1085,7 +1160,7 @@ export const WIDGETS: WidgetDef[] = [
 
   // ── Look & feel ───────────────────────────────────────────────────────────
   {
-    id: 'clock', rank: 6, name: 'Wall clock', category: 'visual', icon: Clock3, w: 190, h: 110,
+    id: 'clock', rank: 7, name: 'Wall clock', category: 'visual', icon: Clock3, w: 190, h: 110,
     blurb: 'Time and date, big enough to read across the office.',
     render: () => <ClockWidget />,
   },
@@ -1103,7 +1178,84 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
   {
-    id: 'photo', rank: 3, name: 'Photo', category: 'visual', icon: ImageIcon, w: 215, h: 160,
+    id: 'divider', rank: 3, name: 'Divider', category: 'visual', icon: Minus, w: 340, h: 34,
+    blurb: 'A rule across the board, with a word on it if you want one. Separates without moving anything.',
+    data: {},
+    render: (el, c) => {
+      const text = String(d(el).text ?? '');
+      const tone = el.color && el.color !== '#ffffff' ? el.color : '#94a3b8';
+      return (
+        <div className="w-full h-full flex items-center gap-2 px-2">
+          <span className="flex-1 h-px" style={{ backgroundColor: tone, opacity: 0.5 }} />
+          {(text || !c.readOnly) && (
+            <Line value={text} readOnly={c.readOnly} placeholder="…"
+              onChange={v => c.update({ data: { ...d(el), text: v } })}
+              className="text-[10px] font-black tracking-widest uppercase text-center"
+            />
+          )}
+          <span className="flex-1 h-px" style={{ backgroundColor: tone, opacity: 0.5 }} />
+        </div>
+      );
+    },
+  },
+  {
+    id: 'quote', rank: 4, name: 'Message', category: 'visual', icon: MessageSquareQuote, w: 300, h: 130,
+    blurb: 'Something worth saying, in big type — a reminder, a safety note, a thank you.',
+    data: {},
+    render: (el, c) => (
+      <div className="w-full h-full flex flex-col justify-center px-3 py-2">
+        <Line value={String(d(el).text ?? '')} readOnly={c.readOnly}
+          placeholder="Say something"
+          onChange={v => c.update({ data: { ...d(el), text: v } })}
+          className="text-[15px] font-bold text-slate-800 leading-snug" />
+        <Line value={String(d(el).by ?? '')} readOnly={c.readOnly} placeholder="— who said it"
+          onChange={v => c.update({ data: { ...d(el), by: v } })}
+          className="text-[10px] text-slate-400 mt-1" />
+      </div>
+    ),
+  },
+  {
+    id: 'legend', rank: 5, name: 'Colour key', category: 'visual', icon: Palette, w: 200, h: 150,
+    blurb: 'What the colours on this board mean. A key you write yourself, for a code the app does not know.',
+    data: { rows: [{ c: '#dc2626', t: '' }] },
+    render: (el, c) => {
+      const rows = (d(el).rows ?? []) as { c: string; t: string }[];
+      const set = (next: typeof rows) => c.update({ data: { ...d(el), rows: next } });
+      const CHOICES = ['#dc2626', '#d97706', '#16a34a', '#4aa8d8', '#7c3aed', '#0f172a'];
+      return (
+        <Frame title="Key" icon={Palette}>
+          <div className="flex flex-col gap-1 h-full overflow-y-auto pr-1">
+            {rows.map((r, i) => (
+              <div key={i} className="flex items-center gap-1.5">
+                <button
+                  data-no-drag data-el-action
+                  disabled={c.readOnly}
+                  onClick={() => {
+                    const at = CHOICES.indexOf(r.c);
+                    set(rows.map((x, j) => (j === i
+                      ? { ...x, c: CHOICES[(at + 1) % CHOICES.length] } : x)));
+                  }}
+                  title="Click for the next colour"
+                  className="w-3 h-3 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: r.c }}
+                />
+                <Line value={r.t} readOnly={c.readOnly} placeholder="means…"
+                  onChange={v => set(rows.map((x, j) => (j === i ? { ...x, t: v } : x)))}
+                  className="text-[10.5px] text-gray-700 flex-1" />
+              </div>
+            ))}
+            {!c.readOnly && (
+              <button data-no-drag data-el-action
+                onClick={() => set([...rows, { c: '#16a34a', t: '' }])}
+                className="text-[10px] text-gray-400 hover:text-gray-600 text-left">+ add</button>
+            )}
+          </div>
+        </Frame>
+      );
+    },
+  },
+  {
+    id: 'photo', rank: 6, name: 'Photo', category: 'visual', icon: ImageIcon, w: 215, h: 160,
     blurb: 'Pin a picture to the board by its link.',
     data: { url: '' },
     render: (el, c) => (
@@ -1238,6 +1390,10 @@ function ContractorLinks({ contractors, assignments }: {
           const open = assignments.filter(a => a.contractorId === c.id && !a.completedAt).length;
           return (
             <div key={c.id} className="flex items-center gap-1.5">
+              {/* Their own colour, the one they carry on the rota and wherever
+                  else they appear — set on their avatar in app settings. */}
+              <span className="w-2 h-2 rounded-full flex-shrink-0"
+                style={{ backgroundColor: personColor(c.name, c.color) }} />
               <span className="text-[10.5px] text-gray-700 truncate flex-1">{c.name}</span>
               {open > 0 && <span className="text-[9px] text-gray-400 tabular-nums">{open}</span>}
               <button
@@ -1259,7 +1415,10 @@ function ContractorLinks({ contractors, assignments }: {
   );
 }
 
-function JobSearch({ jobs, openJob }: { jobs: Apartment[]; openJob: (id: string) => void }) {
+function JobSearch({ jobs, openJob, stages, assignments }: {
+  jobs: Apartment[]; openJob: (id: string) => void;
+  stages: Stage[]; assignments: ContractorAssignment[];
+}) {
   const [q, setQ] = useState('');
   const needle = q.trim().toLowerCase();
   const hits = needle
@@ -1276,10 +1435,8 @@ function JobSearch({ jobs, openJob }: { jobs: Apartment[]; openJob: (id: string)
         />
         <div className="flex-1 min-h-0 overflow-y-auto pr-1 flex flex-col gap-0.5">
           {hits.map(j => (
-            <button key={j.id} data-no-drag data-el-action onClick={() => openJob(j.id)}
-              className="text-[10.5px] text-gray-700 truncate text-left hover:text-[#1e3a5f]">
-              {j.displayName || 'Job'}
-            </button>
+            <MiniJob key={j.id} job={j} stages={stages} assignments={assignments} onOpen={openJob}
+              sub={j.address || undefined} />
           ))}
           {needle && hits.length === 0 && <span className="text-[10px] text-gray-400">No match</span>}
         </div>
@@ -1442,15 +1599,55 @@ function CountdownInner({ el, update, readOnly }: {
   const ms = new Date(target).getTime() - Date.now();
   const { d: dd, h, m, s: ss, past } = splitMs(ms);
   const colour = past ? '#dc2626' : dd === 0 && h < 4 ? '#d97706' : '#0f172a';
+  // Fireworks for the first hour after it lands. Long enough that the room sees
+  // it, short enough that a countdown left up from last month is not still
+  // celebrating a fortnight later.
+  const justLanded = past && ms > -3_600_000;
   return (
-    <div className="w-full h-full flex flex-col items-center justify-center px-2">
+    <div className="w-full h-full flex flex-col items-center justify-center px-2 relative overflow-hidden">
+      {justLanded && <Fireworks />}
       <Line value={(data.title as string) ?? ''} readOnly={readOnly} placeholder="Countdown"
         onChange={v => update({ data: { ...data, title: v } })}
         className="text-[10px] font-bold text-gray-500 text-center" />
       <div className="font-black tabular-nums leading-none mt-1" style={{ color: colour, fontSize: 22 }}>
         {dd > 0 ? `${dd}d ${h}h` : h > 0 ? `${h}h ${m}m` : `${m}:${String(ss).padStart(2, '0')}`}
       </div>
-      <div className="text-[9px] text-gray-400 mt-0.5">{past ? 'overdue' : 'remaining'}</div>
+      <div className="text-[9px] text-gray-400 mt-0.5">
+        {justLanded ? 'that is time 🎉' : past ? 'overdue' : 'remaining'}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A small burst, for the moment a countdown reaches zero.
+ *
+ * Pure CSS on a handful of spans rather than a canvas or a library: it has to
+ * be able to run on the wallboard next to twenty other widgets without costing
+ * anything, and a burst of twelve dots is all the occasion needs.
+ */
+function Fireworks() {
+  const sparks = Array.from({ length: 12 }, (_, i) => i);
+  const COLORS = ['#f59e0b', '#ef4444', '#4aa8d8', '#22c55e', '#a855f7', '#ec4899'];
+  return (
+    <div className="absolute inset-0 pointer-events-none" aria-hidden>
+      {sparks.map(i => {
+        const angle = (i / sparks.length) * Math.PI * 2;
+        return (
+          <span
+            key={i}
+            className="absolute rounded-full"
+            style={{
+              left: '50%', top: '50%', width: 5, height: 5,
+              backgroundColor: COLORS[i % COLORS.length],
+              animation: `wf-spark 1.6s ease-out ${(i % 4) * 0.28}s infinite`,
+              // Each spark carries its own direction; the keyframes just play it.
+              ['--wf-x' as string]: `${Math.cos(angle) * 46}px`,
+              ['--wf-y' as string]: `${Math.sin(angle) * 46}px`,
+            }}
+          />
+        );
+      })}
     </div>
   );
 }

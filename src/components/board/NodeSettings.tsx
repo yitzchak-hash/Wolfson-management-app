@@ -3,7 +3,7 @@ import { X, Trash2, Upload, Check, Plus, ChevronUp, ChevronDown } from 'lucide-r
 import { useStore } from '../../data/store';
 import { CanvasElement, Stage, binLabelOf, isBuiltInBin, personColor } from '../../types';
 import { WIDGET_BY_ID } from '../../data/widgets';
-import { WidgetField, WIDGET_FIELDS, ART_FIELDS, BOX_FIELDS, TEXT_STYLE_FIELDS } from '../../data/widgetFields';
+import { WidgetField, WIDGET_FIELDS, ART_FIELDS, BOX_FIELDS, TEXT_STYLE_FIELDS, OUTLINE_FIELDS } from '../../data/widgetFields';
 import { ART_KINDS, ArtKind } from './BoardNodes';
 import { ANCHORS, anchorOf } from './AttachLayer';
 
@@ -45,6 +45,22 @@ export function NodeSettings({ el, onClose, onDelete }: {
     [apartments],
   );
 
+  // Escape closes it, like every other panel in the app. Without this the only
+  // ways out were the × and clicking the backdrop, and a full-screen backdrop
+  // you have not noticed swallows every other click on the board.
+  useEffect(() => {
+    function key(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      const t = e.target as HTMLElement | null;
+      // Let a field have the first Escape, so backing out of a typo does not
+      // shut the whole panel.
+      if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) { t.blur(); return; }
+      onClose();
+    }
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, [onClose]);
+
   const def = el.widget ? WIDGET_BY_ID.get(el.widget) : undefined;
 
   const fields: WidgetField[] = useMemo(() => {
@@ -55,13 +71,18 @@ export function NodeSettings({ el, onClose, onDelete }: {
       return [
         { key: 'text', label: 'Note', kind: 'longtext', scope: 'element' },
         ...TEXT_STYLE_FIELDS,
+        ...OUTLINE_FIELDS,
       ];
     }
     if (el.type === 'title') {
-      return [{ key: 'text', label: 'Heading', kind: 'text', scope: 'element' }, ...TEXT_STYLE_FIELDS];
+      return [
+        { key: 'text', label: 'Heading', kind: 'text', scope: 'element' },
+        ...TEXT_STYLE_FIELDS,
+        ...OUTLINE_FIELDS,
+      ];
     }
     if (el.type === 'voice') {
-      return [{ key: 'text', label: 'Label', kind: 'text', scope: 'element' }];
+      return [{ key: 'text', label: 'Label', kind: 'text', scope: 'element' }, ...OUTLINE_FIELDS];
     }
     // A countdown placed straight onto the board said "Set a time" and offered
     // no way to set one.
@@ -348,9 +369,24 @@ function NumBox({ label, value, min, max, onChange }: {
   );
 }
 
-function Swatches({ value, onPick }: { value?: string; onPick: (c: string) => void }) {
+function Swatches({ value, onPick, clearable }: {
+  value?: string; onPick: (c: string | undefined) => void; clearable?: boolean;
+}) {
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
+      {/* "None" has to be reachable. An outline you can set and never unset is
+          a trap, and there is nowhere else in this panel to clear a colour. */}
+      {clearable && (
+        <button onClick={() => onPick(undefined)} title="No outline"
+          className="w-[22px] h-[22px] rounded-lg border-2 flex items-center justify-center"
+          style={{
+            backgroundColor: '#fff',
+            borderColor: !value ? '#1e3a5f' : 'rgba(15,23,42,.12)',
+            transform: !value ? 'scale(1.14)' : undefined,
+          }}>
+          <span className="block w-3.5 h-px bg-red-400 rotate-45" />
+        </button>
+      )}
       {SWATCHES.map(c => (
         <button key={c} onClick={() => onPick(c)} title={c}
           className="w-[22px] h-[22px] rounded-lg border-2 transition-transform"
@@ -365,6 +401,87 @@ function Swatches({ value, onPick }: { value?: string; onPick: (c: string) => vo
         title="Any colour"
         className="w-[26px] h-[26px] rounded-lg cursor-pointer bg-transparent border border-gray-200" />
     </div>
+  );
+}
+
+/**
+ * Which jobs a widget is about.
+ *
+ * Search, then tick. Not a plain multi-select box: a workspace has hundreds of
+ * jobs and picking three of them out of a scrolling list is miserable, whereas
+ * typing two letters of a family name is how anybody in the office already
+ * thinks about finding one. "All of them" stays the default and is one button
+ * away, because that is what most of these widgets should show.
+ */
+function JobsField({ label, hint, value, onChange, jobs }: {
+  label: string; hint?: string; value: string[];
+  onChange: (v: string[] | undefined) => void;
+  jobs: { id: string; displayName?: string }[];
+}) {
+  const [q, setQ] = useState('');
+  const needle = q.trim().toLowerCase();
+  const shown = needle
+    ? jobs.filter(j => (j.displayName ?? '').toLowerCase().includes(needle)).slice(0, 40)
+    : jobs.slice(0, 40);
+
+  const toggle = (id: string) => onChange(
+    value.includes(id) ? value.filter(x => x !== id) : [...value, id],
+  );
+
+  return (
+    <Row label={label} hint={hint}>
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-1.5">
+          <input
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            placeholder="Search jobs…"
+            className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg border border-gray-200 text-[12.5px] outline-none
+                       focus:ring-2 focus:ring-[#1e3a5f]/25"
+          />
+          <button
+            onClick={() => onChange(value.length ? [] : jobs.map(j => j.id))}
+            className="px-2 py-1.5 rounded-lg text-[11.5px] font-semibold border border-gray-200
+                       text-gray-600 hover:border-[#1e3a5f] hover:text-[#1e3a5f] whitespace-nowrap"
+          >
+            {value.length ? 'All jobs' : 'Pick all'}
+          </button>
+        </div>
+
+        <p className="text-[10.5px] text-gray-400">
+          {value.length ? `${value.length} chosen` : 'Every job in this workspace'}
+        </p>
+
+        <div className="max-h-[168px] overflow-y-auto rounded-lg border border-gray-200 divide-y divide-gray-100">
+          {shown.length === 0 && (
+            <p className="px-2 py-2 text-[11px] text-gray-400">Nothing matches.</p>
+          )}
+          {shown.map(j => {
+            const on = value.includes(j.id);
+            return (
+              <button
+                key={j.id}
+                onClick={() => toggle(j.id)}
+                className="w-full flex items-center gap-2 px-2 py-1.5 text-left hover:bg-slate-50"
+              >
+                <span
+                  className="w-3.5 h-3.5 rounded flex items-center justify-center flex-shrink-0"
+                  style={{
+                    backgroundColor: on ? '#1e3a5f' : '#fff',
+                    border: on ? 'none' : '1px solid #cbd5e1',
+                  }}
+                >
+                  {on && <Check size={9} color="#fff" />}
+                </span>
+                <span className="flex-1 min-w-0 truncate text-[12px] text-gray-700">
+                  {j.displayName || 'Job'}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </Row>
   );
 }
 
@@ -466,7 +583,11 @@ function Field({ field, value, onChange, stages, jobs, contractors }: {
   useEffect(() => setLocal(str), [str]);
 
   if (f.kind === 'colour') {
-    return <Row label={f.label} hint={f.hint}><Swatches value={str} onPick={onChange} /></Row>;
+    return (
+      <Row label={f.label} hint={f.hint}>
+        <Swatches value={str} onPick={onChange} clearable={f.key === 'outline'} />
+      </Row>
+    );
   }
 
   if (f.kind === 'select') {
@@ -496,6 +617,11 @@ function Field({ field, value, onChange, stages, jobs, contractors }: {
         )}
       </Row>
     );
+  }
+
+  if (f.kind === 'jobs') {
+    return <JobsField label={f.label} hint={f.hint}
+      value={Array.isArray(value) ? value as string[] : []} onChange={onChange} jobs={jobs} />;
   }
 
   if (f.kind === 'people') {
