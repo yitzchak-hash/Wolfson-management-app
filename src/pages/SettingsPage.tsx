@@ -2906,6 +2906,12 @@ function BoardAccess({ onToast }: { onToast: (m: string, t?: 'success' | 'error'
                   );
                 })}
               </div>
+              <p className="text-[10.5px] text-gray-400 mt-2 leading-snug">
+                Taking somebody off does not strand them: if they are looking at this
+                board when you do, their screen falls back to the last board they were
+                on that they can still see, or to the main board. Nothing on this board
+                is touched.
+              </p>
             </div>
           );
         })}

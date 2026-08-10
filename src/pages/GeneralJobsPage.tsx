@@ -560,6 +560,7 @@ export function GeneralJobsPage() {
     elPatch: (id, p) => live.current.elPatch(id, p),
     elThumbs: (id, d) => live.current.elThumbs(id, d),
     elThumbsDown: (id, d) => live.current.elThumbsDown(id, d),
+    artUse: (el, art) => live.current.artUse(el, art),
     editChange: v => live.current.editChange(v),
     editCommit: () => live.current.editCommit(),
     editCancel: () => live.current.editCancel(),
@@ -1974,6 +1975,22 @@ export function GeneralJobsPage() {
     elDown: onElPointerDown, elMove: onElPointerMove, elUp: onElPointerUp,
     elMenu: onElContextMenu, elEdit: startEdit,
     elSettings: (el: CanvasElement) => setSettingsEl(el.id),
+    /**
+     * The pad hands you a note; the marker hands you the pen in its colour.
+     * Both were pictures of stationery until now.
+     */
+    artUse: (el: CanvasElement, art: string) => {
+      if (art === 'sticky-stack') {
+        dropNode('note', { x: el.x + el.w + 26, y: el.y }, { color: NOTE_PALETTE[0], text: '' });
+        setToast('Note taken from the pad');
+        return;
+      }
+      if (art === 'marker') {
+        setPenStyle(p => ({ ...p, color: el.color || '#dc2626' }));
+        setTool('pen');
+        setToast('Pen picked up');
+      }
+    },
     elDelete: (id: string) => deleteCanvasElement(id),
     elColor: (e: React.MouseEvent, id: string) => setColorPicker({ x: e.clientX, y: e.clientY, kind: 'element', ids: [id] }),
     elPatch: (id: string, patch: Partial<CanvasElement>) => updateCanvasElement(id, patch),

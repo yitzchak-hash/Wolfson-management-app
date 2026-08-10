@@ -133,10 +133,10 @@ const ART_PIECES: WidgetDef[] = ([
   ['pin',          'Push pin',    'Stick it through a job to mark it. Travels with the job from then on.',        56, 56],
   ['clip',         'Paperclip',   'Clips onto the edge of a job or a note, and stays clipped to it.',             56, 56],
   ['star',         'Star',        'Mark the one that matters. Sticks to whatever you drop it on.',                48, 48],
-  ['tape',         'Tape',        'A strip of masking tape across a corner.',                                     72, 32],
-  ['marker',       'Marker',      'A marker pen resting on the board.',                                           48, 48],
+  ['tape',         'Tape',        'A strip of masking tape. Decoration — it holds a section together visually.',  72, 32],
+  ['marker',       'Marker',      'A pen resting on the board — click it to pick it up in that colour.',          48, 48],
   ['document',     'Document',    'A paper stub for a drawing or a spec — link it and it opens.',                 52, 62],
-  ['sticky-stack', 'Note pad',    'A pad of unused notes, for the corner of a section.',                          56, 56],
+  ['sticky-stack', 'Note pad',    'A pad you take notes from — click it and a fresh sticky lands beside it.',     56, 56],
   ['arrow',        'Arrow mark',  'A drawn arrow. To CONNECT two jobs, right-click one and choose Draw an arrow.', 52, 52],
 ] as const).map(([art, name, blurb, w, h]) => ({
   id: `art-${art}`,

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, Plus, Check, Users, Lock, LayoutDashboard } from 'lucide-react';
 import { useStore } from '../../data/store';
 import { BoardView, boardsForUser } from '../../types';
@@ -34,6 +34,30 @@ export function BoardViewPicker({ accent = '#1e3a5f' }: { accent?: string }) {
     () => boardsForUser(boardViews, currentProjectId, currentUser?.id ?? '', isAdmin),
     [boardViews, currentProjectId, currentUser?.id, isAdmin],
   );
+
+  /**
+   * Taken off a board, you land back where you were.
+   *
+   * Unsharing is done by somebody else, on another machine, while you may be
+   * looking at the board they just took you off — so it cannot be handled at
+   * the moment of unassigning. It is handled here, on the machine that is
+   * actually showing it: the moment a board stops being visible to you, the
+   * view falls back to the last one you were on that you can still see, and
+   * failing that to the workspace's main board.
+   *
+   * The previous board is remembered per workspace, so this restores a real
+   * place rather than dumping everybody at the top.
+   */
+  useEffect(() => {
+    if (!activeBoardView) return;
+    if (mine.some(v => v.id === activeBoardView)) {
+      try { localStorage.setItem(`prev_board_${currentProjectId}`, activeBoardView); } catch { /* private mode */ }
+      return;
+    }
+    let back = '';
+    try { back = localStorage.getItem(`prev_board_${currentProjectId}`) ?? ''; } catch { /* ignore */ }
+    setActiveBoardView(mine.some(v => v.id === back) ? back : '');
+  }, [activeBoardView, mine, currentProjectId, setActiveBoardView]);
 
   // Nothing to pick between until somebody has made a second board.
   if (mine.length === 0 && !isAdmin) return null;

@@ -569,7 +569,10 @@ export async function listAllPhotosViaBackend(driveLink: string): Promise<DriveP
  * register with the drawing we need the bytes themselves, and only the service
  * account may read a private file, so the request goes through our own route.
  */
-export async function fetchPlanBytes(fileId: string): Promise<ArrayBuffer> {
+export async function fetchPlanBytes(
+  fileId: string,
+  onProgress?: (bytes: number, total: number | null) => void,
+): Promise<ArrayBuffer> {
   const resp = await fetch('/api/drive-fetch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': DRIVE_API_KEY },
@@ -579,7 +582,33 @@ export async function fetchPlanBytes(fileId: string): Promise<ArrayBuffer> {
     const msg = await resp.text().catch(() => '');
     throw new Error(`Could not open the plan (${resp.status}). ${msg.slice(0, 180)}`);
   }
-  return resp.arrayBuffer();
+
+  /**
+   * Read it in chunks so the wait can be shown.
+   *
+   * A real set is tens of megabytes and takes several seconds on an office
+   * connection. Six seconds of an unchanging "Opening the plan…" is
+   * indistinguishable from a hang, and people reload — which starts the
+   * download again. Counting the bytes costs nothing and turns the wait into
+   * something visibly happening.
+   */
+  if (!resp.body || !onProgress) return resp.arrayBuffer();
+
+  const total = Number(resp.headers.get('Content-Length')) || null;
+  const reader = resp.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let got = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    got += value.byteLength;
+    onProgress(got, total);
+  }
+  const out = new Uint8Array(got);
+  let at = 0;
+  for (const c of chunks) { out.set(c, at); at += c.byteLength; }
+  return out.buffer;
 }
 
 export interface StampedPlan {

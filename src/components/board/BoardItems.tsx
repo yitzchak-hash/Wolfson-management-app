@@ -5,7 +5,7 @@ import { Apartment, CanvasElement, Stage, BinKind, BIN_META, binKeyOf, binLabelO
 import { Settings2 } from 'lucide-react';
 import { DriveIcon, ZohoIcon, PlanIcon, TvIcon } from '../ui/BrandIcons';
 import { CountdownNode, StopwatchNode, ClipArtNode, VoiceMemoNode } from './BoardNodes';
-import { renderWidget, WidgetCtx } from '../../data/widgets';
+import { renderWidget, WidgetCtx, WIDGET_BY_ID } from '../../data/widgets';
 
 /**
  * The board's two repeated items, each memoised.
@@ -42,6 +42,8 @@ export interface BoardHandlers {
   elPatch: (id: string, patch: Partial<CanvasElement>) => void;
   elThumbs: (id: string, delta: number) => void;
   elThumbsDown: (id: string, delta: number) => void;
+  /** A piece of clip art that is actually a tool — the pad, the marker. */
+  artUse: (el: CanvasElement, art: string) => void;
 
   editChange: (v: string) => void;
   editCommit: () => void;
@@ -270,6 +272,56 @@ export const GhostTile = React.memo(function GhostTile({
   );
 });
 
+/**
+ * A widget that grows with its node.
+ *
+ * Making a node bigger used to give you a bigger white card with the same
+ * small print marooned in the middle of it — the box resized, the information
+ * in it did not. Every widget draws at its registered natural size in absolute
+ * pixels (`text-[10.5px]`, `fontSize: 34`), so there is no amount of CSS on the
+ * outside that reflows them.
+ *
+ * So the widget is drawn at its NATURAL width and scaled. Two consequences,
+ * both wanted:
+ *  - widen the node and every figure, label and row gets proportionally bigger,
+ *    which is what "resize the information" means on a wallboard across a room;
+ *  - make it TALLER without widening and the inner height grows in natural
+ *    units, so a list simply shows more rows rather than stretching its type.
+ *
+ * `el.fontSize` rides on top as a plain text multiplier, so a widget can be
+ * made to read larger without being made physically wider.
+ */
+function WidgetSurface({ el, w, h, children }: {
+  el: CanvasElement; w: number; h: number; children: React.ReactNode;
+}) {
+  const def = el.widget ? WIDGET_BY_ID.get(el.widget) : undefined;
+  const naturalW = def?.w ?? w;
+
+  // Guard the extremes: below a third the type is unreadable, above three times
+  // it is a poster. Both are past the point of being useful.
+  const bump = el.fontSize ? Math.max(0.4, Math.min(3, el.fontSize / 14)) : 1;
+  const k = Math.max(0.34, Math.min(3, (w / Math.max(1, naturalW)) * bump));
+
+  return (
+    <div className="w-full h-full overflow-hidden">
+      <div
+        style={{
+          width: naturalW,
+          // The inner box gets the node's real height back in natural units, so
+          // a taller node means more rows rather than taller letters.
+          height: h / k,
+          transform: `scale(${k})`,
+          transformOrigin: '0 0',
+          fontWeight: el.fontWeight,
+          textAlign: el.align,
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 // ─── Canvas node ─────────────────────────────────────────────────────────────
 
 export interface BoardNodeProps {
@@ -447,9 +499,9 @@ export const BoardNode = React.memo(function BoardNode({
           onRecord={() => onRecord(el.id)} onStop={onStopRecord}
           onUpload={f => onUploadAudio(el.id, f)} />
       ) : isWidget ? (
-        renderWidget(el, boundCtx)
+        <WidgetSurface el={el} w={w} h={h}>{renderWidget(el, boundCtx)}</WidgetSurface>
       ) : el.type === 'clipart' ? (
-        <ClipArtNode el={el} />
+        <ClipArtNode el={el} onUse={art => H.artUse(el, art)} />
       ) : el.type === 'title' ? (
         <div className="w-full h-full flex items-center px-2 leading-tight overflow-hidden"
           style={{

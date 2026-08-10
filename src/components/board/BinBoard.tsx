@@ -211,6 +211,7 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId }: {
     elPatch: (id, p) => live.current.elPatch(id, p),
     elThumbs: (id, d) => live.current.elThumbs(id, d),
     elThumbsDown: (id, d) => live.current.elThumbsDown(id, d),
+    artUse: (el, art) => live.current.artUse(el, art),
     editChange: v => live.current.editChange(v),
     editCommit: () => live.current.editCommit(),
     editCancel: () => live.current.editCancel(),
@@ -239,6 +240,12 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId }: {
       setTimeout(() => editRef.current?.focus(), 30);
     },
     elSettings: el => setSettingsId((el as CanvasElement).id),
+    artUse: (el, art) => {
+      // The pad works inside a group too — it drops its note on this board.
+      if (art !== 'sticky-stack') return;
+      const e = el as CanvasElement;
+      addSimple('note', { x: e.x + e.w + 26, y: e.y });
+    },
     elDelete: id => deleteCanvasElement(id as string),
     elColor: (_e, id) => setSettingsId(id as string),
     elPatch: (id, p) => updateCanvasElement(id as string, p as Partial<CanvasElement>),

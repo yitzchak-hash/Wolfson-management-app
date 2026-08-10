@@ -46,7 +46,10 @@ const limit = (label = 'How many to show'): WidgetField =>
  * re-declared, and a note, a box and a banner all offer the same choices.
  */
 export const TEXT_STYLE_FIELDS: WidgetField[] = [
-  { key: 'fontSize', label: 'Text size', kind: 'number', scope: 'element', min: 8, max: 96 },
+  {
+    key: 'fontSize', label: 'Text size', kind: 'number', scope: 'element', min: 8, max: 96,
+    hint: 'On a widget this scales everything in it. Leave blank to follow the node’s width.',
+  },
   {
     key: 'fontWeight', label: 'Weight', kind: 'select', scope: 'element',
     options: [
@@ -193,6 +196,23 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
     },
   ],
 };
+
+/**
+ * The type controls belong on anything that shows words.
+ *
+ * "Any text should have text control" — so rather than remembering to add the
+ * block to each new widget and forgetting on most of them, every widget in the
+ * registry gets it unless it is explicitly opted out. Clip art has no text of
+ * its own; the calculator and converter are keypads whose type is part of the
+ * control.
+ */
+const NO_TYPE_CONTROLS = new Set(['calculator', 'converter', 'clock', 'photo', 'add-bin']);
+
+for (const [id, fields] of Object.entries(WIDGET_FIELDS)) {
+  if (NO_TYPE_CONTROLS.has(id)) continue;
+  if (fields.some(f => f.key === 'fontSize')) continue;      // already has them
+  fields.push(...TEXT_STYLE_FIELDS);
+}
 
 /**
  * Clip art shares one set of settings — it is all the same kind of thing.

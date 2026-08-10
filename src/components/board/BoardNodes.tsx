@@ -256,7 +256,21 @@ export const EXT_COLOR: Record<string, string> = {
 };
 
 /** Small decorative pieces that make the board feel like a real board. */
-export function ClipArtNode({ el }: { el: CanvasElement }) {
+/**
+ * Two of these were furniture pretending to be tools.
+ *
+ * A pad of sticky notes you cannot take a note from, and a marker pen you
+ * cannot pick up, are pictures of stationery — which is what "I don't know what
+ * the point of it is" meant. Both do the obvious thing now: the pad hands you a
+ * note, the marker hands you the pen in its own colour. Tape stays decoration,
+ * and its blurb says so.
+ */
+export const USABLE_ART: Record<string, string> = {
+  'sticky-stack': 'Take a note from the pad',
+  marker: 'Pick up this pen',
+};
+
+export function ClipArtNode({ el, onUse }: { el: CanvasElement; onUse?: (art: string) => void }) {
   const art = el.art ?? 'pin';
   const c = el.color || '#dc2626';
   const common = { width: '100%', height: '100%' } as const;
@@ -306,11 +320,18 @@ export function ClipArtNode({ el }: { el: CanvasElement }) {
       );
     case 'marker':
       return (
-        <svg viewBox="0 0 40 40" style={common} aria-hidden="true">
-          <rect x="14" y="6" width="12" height="20" rx="2" fill={c} />
-          <path d="M14 26 L20 36 L26 26 Z" fill="#334155" />
-          <rect x="14" y="22" width="12" height="4" fill="rgba(0,0,0,.18)" />
-        </svg>
+        <span className="relative block w-full h-full">
+          <svg viewBox="0 0 40 40" style={common} aria-hidden="true">
+            <rect x="14" y="6" width="12" height="20" rx="2" fill={c} />
+            <path d="M14 26 L20 36 L26 26 Z" fill="#334155" />
+            <rect x="14" y="22" width="12" height="4" fill="rgba(0,0,0,.18)" />
+          </svg>
+          {onUse && (
+            <button data-no-drag data-el-action title={USABLE_ART.marker}
+              onClick={e => { e.stopPropagation(); onUse('marker'); }}
+              className="absolute inset-0" />
+          )}
+        </span>
       );
     case 'document': {
       // Carries a real file. With one attached it turns into a link you can
@@ -366,11 +387,22 @@ export function ClipArtNode({ el }: { el: CanvasElement }) {
     }
     case 'sticky-stack':
       return (
-        <svg viewBox="0 0 40 40" style={common} aria-hidden="true">
-          <rect x="6" y="10" width="26" height="26" rx="2" fill="#fcd34d" />
-          <rect x="9" y="7" width="26" height="26" rx="2" fill="#fde68a" />
-          <rect x="12" y="4" width="24" height="24" rx="2" fill="#fef3c7" stroke="rgba(0,0,0,.06)" />
-        </svg>
+        <span className="relative block w-full h-full group/pad">
+          <svg viewBox="0 0 40 40" style={common} aria-hidden="true">
+            <rect x="6" y="10" width="26" height="26" rx="2" fill="#fcd34d" />
+            <rect x="9" y="7" width="26" height="26" rx="2" fill="#fde68a" />
+            {/* The top sheet lifts a little on hover, so it reads as a pad you
+                can take from rather than a picture of one. */}
+            <rect x="12" y="4" width="24" height="24" rx="2" fill="#fef3c7" stroke="rgba(0,0,0,.06)"
+              className="transition-transform"
+              style={{ transformOrigin: 'center', transform: 'translateY(0)' }} />
+          </svg>
+          {onUse && (
+            <button data-no-drag data-el-action title={USABLE_ART['sticky-stack']}
+              onClick={e => { e.stopPropagation(); onUse('sticky-stack'); }}
+              className="absolute inset-0" />
+          )}
+        </span>
       );
     case 'arrow':
       return (

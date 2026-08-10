@@ -136,6 +136,8 @@ export function PlanAnnotator({
 
   const [doc, setDoc] = useState<PdfDoc | null>(null);
   const [loadErr, setLoadErr] = useState('');
+  /** How much of a heavy plan has arrived, so the wait is visible. */
+  const [got, setGot] = useState<{ bytes: number; total: number | null }>({ bytes: 0, total: null });
   const [page, setPage] = useState(0);
   const [scale, setScale] = useState(1.25);
   const [fitting, setFitting] = useState(true);
@@ -178,7 +180,7 @@ export function PlanAnnotator({
   const ocRef = useRef<OcConfig | null>(null);
   const drawing = useRef<{ pen: PenStroke; pts: PenSample[]; startedAt: number } | null>(null);
   /** A drag of something already drawn, rather than a new stroke. */
-  const moving = useRef<{ id: string; nx: number; ny: number; pts: number[] } | null>(null);
+  const moving = useRef<{ id: string; nx: number; ny: number; pts: number[]; grip?: 'a' | 'z' } | null>(null);
   const erased = useRef<Set<string>>(new Set());
   const textRef = useRef<HTMLTextAreaElement>(null);
 
@@ -213,7 +215,8 @@ export function PlanAnnotator({
   useEffect(() => {
     let dead = false;
     setDoc(null); setLoadErr('');
-    fetchPlanBytes(planFileId)
+    setGot({ bytes: 0, total: null });
+    fetchPlanBytes(planFileId, (bytes, total) => { if (!dead) setGot({ bytes, total }); })
       .then(buf => pdfjs.getDocument({ data: new Uint8Array(buf) }).promise)
       .then(d => { if (!dead) { setDoc(d as unknown as PdfDoc); setPage(0); } })
       .catch(e => { if (!dead) setLoadErr(e instanceof Error ? e.message : String(e)); });
@@ -479,6 +482,50 @@ export function PlanAnnotator({
     return () => clearTimeout(t);
   }, [textDraft?.nx, textDraft?.ny]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /**
+   * The picked mark's outline and its two corner grips.
+   *
+   * Drawn on the live layer, which is cleared and redrawn constantly anyway, so
+   * showing a selection costs nothing and never has to be erased by hand.
+   */
+  function drawPicked() {
+    const c = liveRef.current;
+    const s = strokes.find(x => x.id === picked);
+    if (!c || !s || s.page !== page) return;
+    const ctx = c.getContext('2d')!;
+    const grips = gripsOf(s);
+    if (!grips.length) return;
+
+    ctx.save();
+    ctx.setLineDash([5, 4]);
+    ctx.strokeStyle = 'rgba(74,168,216,.9)';
+    ctx.lineWidth = Math.max(1, c.width / 900);
+    const x0 = Math.min(grips[0].x, grips[1].x) * c.width;
+    const x1 = Math.max(grips[0].x, grips[1].x) * c.width;
+    const y0 = Math.min(grips[0].y, grips[1].y) * c.height;
+    const y1 = Math.max(grips[0].y, grips[1].y) * c.height;
+    ctx.strokeRect(x0 - 3, y0 - 3, x1 - x0 + 6, y1 - y0 + 6);
+    ctx.setLineDash([]);
+
+    for (const g of grips) {
+      ctx.beginPath();
+      ctx.arc(g.x * c.width, g.y * c.height, Math.max(5, c.width / 150), 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.strokeStyle = '#1e3a5f';
+      ctx.lineWidth = Math.max(1.5, c.width / 700);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Keep the selection drawn as it moves, and take it away when nothing is picked.
+  useEffect(() => {
+    if (tool !== 'move') return;
+    clearLive();
+    drawPicked();
+  }); // no deps — it must follow every stroke and pick change
+
   function clearLive() {
     const c = liveRef.current;
     if (!c) return;
@@ -555,6 +602,30 @@ export function PlanAnnotator({
     if (hit) setStrokes(prev => prev.filter(s => !erased.current.has(s.id)));
   }
 
+  /**
+   * The two corners of the picked mark, in normalised coordinates.
+   *
+   * Only marks stored as two points have corners; a freehand squiggle has
+   * hundreds and dragging one of them would deform it rather than resize it.
+   */
+  const GRIPPABLE = new Set(['bubble', 'rect', 'ellipse', 'line', 'arrow']);
+  function gripsOf(s: AnnStroke | undefined): { id: 'a' | 'z'; x: number; y: number }[] {
+    if (!s || !GRIPPABLE.has(s.tool) || s.pts.length < 6) return [];
+    const last = s.pts.length - 3;
+    return [
+      { id: 'a', x: s.pts[0], y: s.pts[1] },
+      { id: 'z', x: s.pts[last], y: s.pts[last + 1] },
+    ];
+  }
+
+  function handleAt(nx: number, ny: number): 'a' | 'z' | null {
+    const s = strokes.find(x => x.id === picked);
+    for (const g of gripsOf(s)) {
+      if (Math.hypot(g.x - nx, g.y - ny) < 0.014) return g.id;
+    }
+    return null;
+  }
+
   /** The mark under a point, topmost first — what the move tool picks up. */
   function markAt(nx: number, ny: number): AnnStroke | null {
     const r = 0.012;
@@ -572,6 +643,16 @@ export function PlanAnnotator({
 
     // The move tool picks something up rather than laying something down.
     if (tool === 'move') {
+      // A corner of whatever is already picked resizes it. Checked before the
+      // hit test, or grabbing a handle would simply select what is underneath.
+      const grip = handleAt(dnx, dny);
+      if (grip) {
+        (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
+        e.preventDefault();
+        const s = strokes.find(x => x.id === picked)!;
+        moving.current = { id: s.id, nx: dnx, ny: dny, pts: [...s.pts], grip };
+        return;
+      }
       const hit = markAt(dnx, dny);
       setPicked(hit?.id ?? null);
       if (hit) {
@@ -617,6 +698,25 @@ export function PlanAnnotator({
       e.preventDefault();
       const { nx, ny } = norm(e);
       const dx = nx - m.nx, dy = ny - m.ny;
+
+      if (m.grip) {
+        /**
+         * Resizing a two-corner mark.
+         *
+         * A bubble, box, circle, line or arrow is stored as two points, so
+         * changing its size is a matter of moving the corner you grabbed and
+         * leaving the other one alone. Freehand has no corners to grab and is
+         * only ever moved.
+         */
+        const p = [...m.pts];
+        const last = p.length - 3;
+        const [ix, iy] = m.grip === 'a' ? [0, 1] : [last, last + 1];
+        p[ix] = m.pts[ix] + dx;
+        p[iy] = m.pts[iy] + dy;
+        setStrokes(prev => prev.map(s => (s.id === m.id ? { ...s, pts: p } : s)));
+        return;
+      }
+
       const moved = m.pts.map((v, i) => (i % 3 === 0 ? v + dx : i % 3 === 1 ? v + dy : v));
       setStrokes(prev => prev.map(s => (s.id === m.id ? { ...s, pts: moved } : s)));
       return;
@@ -906,11 +1006,35 @@ export function PlanAnnotator({
    * exactly what you are looking at — and it works with no network and no
    * saving, which is what you want when someone is walking out to site.
    */
+  /**
+   * Which pages an export should cover.
+   *
+   * Rendering every page was fine on a two-page detail and catastrophic on a
+   * real set: a 480-sheet A0 drawing rendered at scale 2 and inlined as JPEG is
+   * tens of gigabytes of canvas and a hung tab. Above a handful of pages it
+   * asks, and the page you are looking at is the default answer — which is what
+   * somebody printing a plan almost always wants anyway.
+   */
+  const BULK_LIMIT = 12;
+  function pagesToExport(what: string): number[] | null {
+    if (!doc) return null;
+    if (doc.numPages <= BULK_LIMIT) return Array.from({ length: doc.numPages }, (_, i) => i);
+    const all = window.confirm(
+      `This plan has ${doc.numPages} pages.\n\n`
+      + `OK — ${what} all ${doc.numPages} of them. On a set this size that takes a long `
+      + `time and a lot of memory.\n`
+      + `Cancel — just page ${page + 1}, the one you are looking at.`,
+    );
+    return all ? Array.from({ length: doc.numPages }, (_, i) => i) : [page];
+  }
+
   async function print() {
     if (!doc) return;
+    const wanted = pagesToExport('print');
+    if (!wanted) return;
     onToast?.('Building the print sheet…');
     const imgs: string[] = [];
-    for (let i = 0; i < doc.numPages; i++) {
+    for (const i of wanted) {
       const p = await doc.getPage(i + 1);
       const vp = p.getViewport({ scale: 2 });
       const c = document.createElement('canvas');
@@ -932,7 +1056,9 @@ export function PlanAnnotator({
         img:last-child { page-break-after:auto; }
       </style>
       <div class="hd"><b>${apartmentLabel} — ${planName || 'Plan'}</b>
-        <span>${strokes.length} mark${strokes.length === 1 ? '' : 's'} · ${new Date().toLocaleString()}</span></div>
+        <span>${strokes.length} mark${strokes.length === 1 ? '' : 's'} · `
+      + `${wanted.length} of ${doc.numPages} page${doc.numPages === 1 ? '' : 's'} · `
+      + `${new Date().toLocaleString()}</span></div>
       ${imgs.map(src => `<img src="${src}">`).join('')}`);
     w.document.close();
     w.focus();
@@ -968,8 +1094,10 @@ export function PlanAnnotator({
    */
   async function downloadImages() {
     if (!doc) return;
+    const wanted = pagesToExport('save');
+    if (!wanted) return;
     onToast?.('Making the pictures…');
-    for (let i = 0; i < doc.numPages; i++) {
+    for (const i of wanted) {
       const p = await doc.getPage(i + 1);
       const vp = p.getViewport({ scale: 2 });
       const c = document.createElement('canvas');
@@ -987,10 +1115,27 @@ export function PlanAnnotator({
       a.href = c.toDataURL('image/png');
       a.click();
     }
-    onToast?.(doc.numPages === 1 ? 'Picture saved' : `${doc.numPages} pictures saved`);
+    onToast?.(wanted.length === 1 ? 'Picture saved' : `${wanted.length} pictures saved`);
   }
 
   // ---- UI ----------------------------------------------------------------
+
+  /**
+   * With a mark picked up, the toolbar edits IT.
+   *
+   * Otherwise the width, colour and see-through sliders only ever describe the
+   * next thing you are about to draw, and changing your mind about something
+   * already on the plan means rubbing it out and doing it again. This is what
+   * makes "resize it and type in there in different sizes" true of a balloon
+   * that already exists.
+   */
+  const pickedMark = tool === 'move' ? strokes.find(s => s.id === picked) : undefined;
+
+  function editPicked(patch: Partial<AnnStroke>) {
+    if (!pickedMark) return;
+    setStrokes(prev => prev.map(s => (s.id === pickedMark.id ? { ...s, ...patch } : s)));
+    setDirty(true);
+  }
 
   const palette = tool === 'highlighter' ? HIGHLIGHT_COLORS : INK_COLORS;
   const marksOnPage = strokes.filter(s => s.page === page).length;
@@ -1173,17 +1318,37 @@ export function PlanAnnotator({
               <span className="w-px h-5 bg-white/10" />
 
               <label className="flex items-center gap-1.5 text-[10.5px] text-white/70">
-                Width
-                <input type="range" min={0.5} max={60} step={0.5} value={width}
-                  onChange={e => setWidth(Number(e.target.value))} className="ink-slider w-[92px]" />
-                <span className="tabular-nums w-6">{width}</span>
+                {pickedMark?.tool === 'bubble' ? 'Text size' : 'Width'}
+                <input type="range" min={0.5} max={60} step={0.5}
+                  value={pickedMark ? (pickedMark.tool === 'bubble'
+                    ? (pickedMark.fontSize ?? 15) : pickedMark.width) : width}
+                  onChange={e => {
+                    const v = Number(e.target.value);
+                    if (pickedMark) {
+                      // On a balloon the slider is its TEXT size, which is the
+                      // thing anyone wants to change about a balloon.
+                      editPicked(pickedMark.tool === 'bubble' ? { fontSize: v } : { width: v });
+                    } else setWidth(v);
+                  }}
+                  className="ink-slider w-[92px]" />
+                <span className="tabular-nums w-6">
+                  {pickedMark ? (pickedMark.tool === 'bubble'
+                    ? (pickedMark.fontSize ?? 15) : pickedMark.width) : width}
+                </span>
               </label>
 
               <label className="flex items-center gap-1.5 text-[10.5px] text-white/70">
                 See-through
-                <input type="range" min={0.05} max={1} step={0.05} value={opacity}
-                  onChange={e => setOpacity(Number(e.target.value))} className="ink-slider w-[80px]" />
-                <span className="tabular-nums w-7">{Math.round(opacity * 100)}%</span>
+                <input type="range" min={0.05} max={1} step={0.05}
+                  value={pickedMark ? pickedMark.opacity : opacity}
+                  onChange={e => {
+                    const v = Number(e.target.value);
+                    if (pickedMark) editPicked({ opacity: v }); else setOpacity(v);
+                  }}
+                  className="ink-slider w-[80px]" />
+                <span className="tabular-nums w-7">
+                  {Math.round((pickedMark ? pickedMark.opacity : opacity) * 100)}%
+                </span>
               </label>
 
               {preset.freehand && preset.sensitivity > 0 && (
@@ -1208,7 +1373,9 @@ export function PlanAnnotator({
 
               <div className="flex-1" />
               <span className="text-[10px] text-white/40">
-                {marksOnPage} mark{marksOnPage === 1 ? '' : 's'} on this page
+                {pickedMark
+                  ? 'editing the mark you picked · click empty space to let go'
+                  : `${marksOnPage} mark${marksOnPage === 1 ? '' : 's'} on this page`}
                 {preset.freehand && preset.sensitivity > 0 && penSource &&
                   ` · ${penSource === 'pressure' ? 'pen pressure' : penSource === 'contact' ? 'nib size' : 'speed'}`}
               </span>
@@ -1226,8 +1393,26 @@ export function PlanAnnotator({
                 </p>
               </div>
             ) : !doc ? (
-              <div className="flex items-center gap-2 text-gray-400 text-[13px] mt-16">
-                <Loader2 size={16} className="animate-spin" /> Opening the plan…
+              <div className="flex flex-col items-center gap-2 text-gray-400 text-[13px] mt-16">
+                <div className="flex items-center gap-2">
+                  <Loader2 size={16} className="animate-spin" /> Opening the plan…
+                </div>
+                {got.bytes > 0 && (
+                  <>
+                    <div className="w-[220px] h-1 rounded-full overflow-hidden"
+                      style={{ backgroundColor: 'rgba(255,255,255,.14)' }}>
+                      <div className="h-full rounded-full transition-all"
+                        style={{
+                          width: got.total ? `${Math.min(100, (got.bytes / got.total) * 100)}%` : '35%',
+                          backgroundColor: ACCENT,
+                        }} />
+                    </div>
+                    <span className="text-[11px] text-gray-500 tabular-nums">
+                      {(got.bytes / 1048576).toFixed(1)} MB
+                      {got.total ? ` of ${(got.total / 1048576).toFixed(1)} MB` : ' so far'}
+                    </span>
+                  </>
+                )}
               </div>
             ) : (
               <div className="relative shadow-2xl" style={{ backgroundColor: '#fff' }}>
@@ -1241,6 +1426,12 @@ export function PlanAnnotator({
                   onPointerUp={onUp}
                   onPointerCancel={onUp}
                   onPointerLeave={() => setNibAt(null)}
+                  onDoubleClick={e => {
+                    // Retype a balloon without redrawing it.
+                    if (tool !== 'move' || !pickedMark || pickedMark.tool !== 'bubble') return;
+                    const { nx, ny } = norm(e);
+                    setTextDraft({ nx, ny, value: pickedMark.text ?? '', forId: pickedMark.id });
+                  }}
                   style={{
                     // The pen must not scroll the page while it draws, and the
                     // palm must not either — without this the Samsung screen
@@ -1250,7 +1441,7 @@ export function PlanAnnotator({
                     // the way — two crosshairs is one too many.
                     cursor: locked || tool === 'pan' ? 'grab'
                       : tool === 'text' ? 'text'
-                      : tool === 'move' ? 'move'
+                      : tool === 'move' ? (picked ? 'move' : 'default')
                       : showNib ? 'none' : 'crosshair',
                     pointerEvents: locked || tool === 'pan' ? 'none' : 'auto',
                   }}
