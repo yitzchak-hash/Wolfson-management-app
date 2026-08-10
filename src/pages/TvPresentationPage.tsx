@@ -147,9 +147,22 @@ export function TvPresentationPage() {
     [apartments, view],
   );
 
+  /**
+   * Which board the wall is showing.
+   *
+   * Chosen once, in app settings, by whoever runs the place — not on the TV,
+   * which has no keyboard and is read-only by design. Empty means the
+   * workspace's main board, which is what it has always shown.
+   *
+   * The region and the scale follow from this, because they are measured
+   * against whatever is on the chosen board: pick a different board and the
+   * saved rectangle is describing somewhere else.
+   */
+  const tvBoard = tvSettings.tvBoard ?? '';
+
   const tvElements = useMemo(
-    () => canvasElements.filter(el => el.showOnTv !== false),
-    [canvasElements],
+    () => canvasElements.filter(el => (el.board ?? '') === tvBoard && el.showOnTv !== false),
+    [canvasElements, tvBoard],
   );
 
   const theme = getBoardTheme(boardSettings[currentProjectId]?.themeId);
@@ -502,8 +515,13 @@ export function TvPresentationPage() {
 
           {jobs.map((job, i) => {
             const st = stageOf(job);
-            const x = job.canvasX ?? 24 + (i % 6) * 240;
-            const y = job.canvasY ?? 24 + Math.floor(i / 6) * 150;
+            // A named board remembers its own position for each job; the main
+            // board uses the job's own. Reading canvasX on a named board put
+            // every tile back where the MAIN board has it, which is the one
+            // arrangement that board was made to differ from.
+            const at = tvBoard ? job.viewPos?.[tvBoard] : undefined;
+            const x = at?.x ?? job.canvasX ?? 24 + (i % 6) * 240;
+            const y = at?.y ?? job.canvasY ?? 24 + Math.floor(i / 6) * 150;
             return (
               <button key={job.id} onClick={() => setOpenJob(job)}
                 className="absolute text-left rounded-xl bg-white p-2.5"

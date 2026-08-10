@@ -73,6 +73,12 @@ export interface BoardSetting {
   tvLang?: 'en' | 'he';
   tvScale?: number;
   /**
+   * Which board the wallboard shows. Empty is the workspace's main board.
+   * Set by the top-level admin in app settings — never on the TV, which has no
+   * keyboard and is read-only by design.
+   */
+  tvBoard?: string;
+  /**
    * Which part of the board the TV shows, in board coordinates.
    *
    * A board grows past what any screen can hold, and the interesting corner is
@@ -161,15 +167,51 @@ export function personColor(name: string, chosen?: string): string {
  * `userIds` empty means everybody sees it. Naming users narrows it to them —
  * a secretary's own board, until she shares it.
  */
+export type BoardAccess = 'edit' | 'view';
+
 export interface BoardView {
   id: string;                    // 'V-…'
   projectId: string;
   name: string;
   color?: string;
-  /** Empty = everyone in this workspace. */
+  /** Whose board it is. Absent on boards made before boards had owners. */
+  ownerId?: string;
+  /**
+   * Who else can reach it, and how far.
+   *
+   * Sharing has three answers, not two: edit it, look at it, or not know it
+   * exists. The third is the absence of an entry — a board you have not been
+   * given does not appear in your picker at all, which is the point of a
+   * board being yours.
+   */
+  share?: Record<string, BoardAccess>;
+  /**
+   * The old field. It meant "these people can edit; empty means everyone".
+   * Kept so boards made before this still open, and read by boardAccess()
+   * when `share` is absent. Nothing writes it any more.
+   */
   userIds: string[];
   createdAt: string;
   createdBy: string;
+}
+
+/**
+ * How far this person can go on this board — or null for "cannot see it".
+ *
+ * One function, so the picker, the board itself and the wallboard cannot
+ * disagree about who may do what. The order matters: the top-level admin and
+ * the owner always get edit, whatever the sharing says, because a board nobody
+ * can get back into is a board that has been lost.
+ */
+export function boardAccess(
+  v: BoardView, userId: string, isAdmin: boolean,
+): BoardAccess | null {
+  if (isAdmin) return 'edit';
+  if (userId && (v.ownerId ?? '') === userId) return 'edit';
+  if (v.share) return v.share[userId] ?? null;
+  // Legacy boards: empty userIds meant everyone, and everyone could edit.
+  if (!v.userIds || v.userIds.length === 0) return 'edit';
+  return v.userIds.includes(userId) ? 'edit' : null;
 }
 
 /** The workspace's original board, which has no record of its own. */
@@ -190,8 +232,7 @@ export const MAIN_BOARD = '';
 export const DASHBOARD_BOARD = '__dashboard';
 
 export function boardsForUser(views: BoardView[], projectId: string, userId: string, isAdmin: boolean) {
-  return views.filter(v => v.projectId === projectId
-    && (isAdmin || v.userIds.length === 0 || v.userIds.includes(userId)));
+  return views.filter(v => v.projectId === projectId && boardAccess(v, userId, isAdmin) !== null);
 }
 
 export interface Building {

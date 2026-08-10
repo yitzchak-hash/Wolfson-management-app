@@ -6,7 +6,8 @@ import {
   Languages, Clock, RotateCcw, Wifi, WifiOff, Loader, Database, RefreshCw, CloudUpload, Search, BookOpen, ExternalLink, AlertTriangle, Tv,
 } from 'lucide-react';
 import { isFirebaseConfigured, db, fsSet, fsGetAll } from '../data/firebase';
-import { personColor, projectColor, Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency, getStageName, Apartment, isCountableApartment } from '../types';
+import type { BoardAccess } from '../types';
+import { personColor, projectColor, BoardView, Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency, getStageName, Apartment, isCountableApartment } from '../types';
 import { Tooltip } from '../components/ui/Tooltip';
 import { Toast } from '../components/ui/Toast';
 import { BoardRegionPicker } from '../components/board/BoardRegionPicker';
@@ -1413,9 +1414,32 @@ function DriveNameBackfill({ onToast }: { onToast: (msg: string, type?: 'success
  * itself and the two things that vary from one room to the next.
  */
 function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
-  const { boardSettings, setTvSetting, apartments, canvasElements, stages } = useStore();
+  const {
+    boardSettings, setTvSetting, apartments, canvasElements, stages,
+    boardViews, currentProjectId, currentUser, users,
+  } = useStore();
   const tv = boardSettings.__tv ?? {};
-  const boardJobs = apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed && !a.boardBin);
+
+  /**
+   * Which board goes on the wall, and who may say so.
+   *
+   * The wallboard is the whole company's screen, so this is not a personal
+   * preference — it is set once by whoever runs the place. Everybody else can
+   * see what it is set to and cannot change it.
+   */
+  const isAdmin = (currentUser?.role ?? '').toLowerCase().includes('admin');
+  const tvBoard = tv.tvBoard ?? '';
+  const boardsHere = boardViews.filter(v => v.projectId === currentProjectId);
+  const chosen = boardsHere.find(v => v.id === tvBoard);
+
+  // Jobs and things as they sit ON THE CHOSEN BOARD, so the region you drag is
+  // measured against what the wall will actually show.
+  const boardJobs = apartments
+    .filter(a => a.buildingId === 'G' && !a.isUnnamed && !a.boardBin)
+    .map(a => (tvBoard
+      ? { ...a, canvasX: a.viewPos?.[tvBoard]?.x ?? a.canvasX, canvasY: a.viewPos?.[tvBoard]?.y ?? a.canvasY }
+      : a));
+  const boardThings = canvasElements.filter(el => (el.board ?? '') === tvBoard);
   const lang = tv.tvLang ?? 'en';
   const boost = tv.tvScale ?? 1;
   const link = `${window.location.origin}/tv`;
@@ -1442,6 +1466,37 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
         </button>
       </div>
 
+      {/* Which board. */}
+      <label className="block text-xs font-semibold text-gray-600 mb-1">Which board the TV shows</label>
+      <p className="text-[11px] text-gray-400 mb-2 leading-snug">
+        {isAdmin
+          ? 'Set once, for the whole office. The region and the size below are measured against '
+            + 'whichever board you pick here, so choose it first.'
+          : `Set by an administrator. The wall is showing ${chosen ? `“${chosen.name}”` : 'the main board'}.`}
+      </p>
+      <select
+        value={tvBoard}
+        disabled={!isAdmin}
+        onChange={e => {
+          // The saved rectangle describes a place on the OLD board. Keeping it
+          // would aim the wall at a corner of somewhere else, so it is cleared
+          // and the whole board is shown until somebody drags a new one.
+          setTvSetting('tvBoard', e.target.value);
+          setTvSetting('tvView', undefined);
+          const name = boardsHere.find(v => v.id === e.target.value)?.name;
+          onToast(name ? `The TV now shows “${name}”` : 'The TV now shows the main board');
+        }}
+        className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm mb-5 bg-white
+                   disabled:bg-gray-50 disabled:text-gray-500"
+      >
+        <option value="">Main board</option>
+        {boardsHere.map(v => (
+          <option key={v.id} value={v.id}>
+            {v.name} — {users.find(u => u.id === v.ownerId)?.name ?? v.createdBy}
+          </option>
+        ))}
+      </select>
+
       {/* Aim the TV at part of the board. */}
       <label className="block text-xs font-semibold text-gray-600 mb-1">What the TV shows</label>
       <p className="text-[11px] text-gray-400 mb-2 leading-snug">
@@ -1451,7 +1506,7 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
       <div className="mb-5">
         <BoardRegionPicker
           jobs={boardJobs}
-          elements={canvasElements}
+          elements={boardThings}
           stages={stages}
           value={tv.tvView}
           width={560}
@@ -2870,16 +2925,31 @@ function BoardAccess({ onToast }: { onToast: (m: string, t?: 'success' | 'error'
   const views = boardViews.filter(v => v.projectId === currentProjectId);
   const workspace = projects.find(p => p.id === currentProjectId)?.name ?? 'this workspace';
 
-  function toggle(viewId: string, userId: string) {
+  /**
+   * Sharing a board cycles through the three real answers.
+   *
+   * Not a tick box: a tick has two states and there are three — can edit, can
+   * look, cannot see it exists. Clicking a name walks round them, so the middle
+   * one is as reachable as the other two rather than hidden behind a menu.
+   */
+  function cycle(viewId: string, userId: string) {
     const v = boardViews.find(x => x.id === viewId);
     if (!v) return;
-    const next = v.userIds.includes(userId)
-      ? v.userIds.filter(u => u !== userId)
-      : [...v.userIds, userId];
-    updateBoardView(viewId, { userIds: next });
-    onToast(next.length === 0
-      ? `“${v.name}” is now visible to everybody`
-      : `“${v.name}” is shared with ${next.length} ${next.length === 1 ? 'person' : 'people'}`);
+    const share = { ...(v.share ?? legacyShare(v)) };
+    const now = share[userId];
+    let next: string;
+    if (!now) { share[userId] = 'edit'; next = 'can edit it'; }
+    else if (now === 'edit') { share[userId] = 'view'; next = 'can look at it'; }
+    else { delete share[userId]; next = 'cannot see it'; }
+    updateBoardView(viewId, { share });
+    onToast(`${users.find(u => u.id === userId)?.name ?? 'They'} ${next}`);
+  }
+
+  /** An old board's `userIds` read as the new shape: those people could edit. */
+  function legacyShare(v: BoardView): Record<string, BoardAccess> {
+    const out: Record<string, BoardAccess> = {};
+    (v.userIds ?? []).forEach(id => { out[id] = 'edit'; });
+    return out;
   }
 
   return (
@@ -2888,7 +2958,9 @@ function BoardAccess({ onToast }: { onToast: (m: string, t?: 'success' | 'error'
       <p className="text-xs text-gray-500 mb-4 leading-relaxed">
         Everybody in a workspace shares its main board. A named board is a second
         surface here — the same jobs, arranged differently, with its own notes and
-        widgets. Tick the people who should see it; tick nobody and everybody sees it.
+        widgets. A board belongs to whoever made it; click a name to give them
+        the board to edit, click again to let them only look at it, click a third
+        time to take it away. Somebody not listed does not know it exists.
         New boards are made from the picker at the top of the job board.
       </p>
 
@@ -2910,16 +2982,22 @@ function BoardAccess({ onToast }: { onToast: (m: string, t?: 'success' | 'error'
                   className="font-semibold text-sm text-gray-800 bg-transparent outline-none border-b border-transparent focus:border-gray-300"
                 />
                 <span className="text-[11px] text-gray-400">
-                  {things} {things === 1 ? 'thing' : 'things'} on it · made by {v.createdBy}
+                  {things} {things === 1 ? 'thing' : 'things'} on it · belongs to{' '}
+                  {users.find(u => u.id === v.ownerId)?.name ?? v.createdBy}
                 </span>
                 <span className="flex-1" />
-                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
-                  style={v.userIds.length === 0
-                    ? { backgroundColor: '#dcfce7', color: '#15803d' }
-                    : { backgroundColor: '#e0f2fe', color: '#0369a1' }}>
-                  {v.userIds.length === 0 ? 'Everybody'
-                    : `${v.userIds.length} ${v.userIds.length === 1 ? 'person' : 'people'}`}
-                </span>
+                {(() => {
+                  const sh = v.share ?? legacyShare(v);
+                  const n = Object.keys(sh).length;
+                  return (
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                      style={n === 0
+                        ? { backgroundColor: '#f1f5f9', color: '#64748b' }
+                        : { backgroundColor: '#e0f2fe', color: '#0369a1' }}>
+                      {n === 0 ? 'Private' : `Shared with ${n}`}
+                    </span>
+                  );
+                })()}
                 <button
                   onClick={() => {
                     if (window.confirm(
@@ -2937,14 +3015,29 @@ function BoardAccess({ onToast }: { onToast: (m: string, t?: 'success' | 'error'
 
               <div className="flex flex-wrap gap-1.5">
                 {users.filter(u => u.active).map(u => {
-                  const on = v.userIds.includes(u.id);
+                  const level = (v.share ?? legacyShare(v))[u.id];
+                  const owner = u.id === v.ownerId;
+                  const look = owner
+                    ? { backgroundColor: '#0f172a', color: '#fff', borderColor: '#0f172a' }
+                    : level === 'edit'
+                      ? { backgroundColor: '#1e3a5f', color: '#fff', borderColor: '#1e3a5f' }
+                      : level === 'view'
+                        ? { backgroundColor: '#fef3c7', color: '#b45309', borderColor: '#fcd34d' }
+                        : { backgroundColor: '#fff', color: '#64748b', borderColor: '#e2e8f0' };
                   return (
-                    <button key={u.id} onClick={() => toggle(v.id, u.id)}
-                      className="px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors"
-                      style={on
-                        ? { backgroundColor: '#1e3a5f', color: '#fff', borderColor: '#1e3a5f' }
-                        : { backgroundColor: '#fff', color: '#64748b', borderColor: '#e2e8f0' }}>
+                    <button
+                      key={u.id}
+                      onClick={() => !owner && cycle(v.id, u.id)}
+                      disabled={owner}
+                      title={owner ? 'It is their board' : 'Click to change what they can do'}
+                      className="px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors
+                                 flex items-center gap-1 disabled:cursor-default"
+                      style={look}
+                    >
                       {u.name}
+                      {owner && <span className="text-[9px] opacity-70">owner</span>}
+                      {!owner && level === 'edit' && <span className="text-[9px] opacity-70">edit</span>}
+                      {!owner && level === 'view' && <span className="text-[9px] opacity-80">view</span>}
                     </button>
                   );
                 })}

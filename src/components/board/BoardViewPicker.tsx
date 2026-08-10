@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, Plus, Check, Users, Lock, LayoutDashboard } from 'lucide-react';
+import { ChevronDown, Plus, Check, Users, Lock, Eye, LayoutDashboard } from 'lucide-react';
 import { useStore } from '../../data/store';
-import { BoardView, boardsForUser } from '../../types';
+import { BoardView, boardsForUser, boardAccess } from '../../types';
 
 /**
  * Which board you are looking at.
@@ -22,7 +22,7 @@ import { BoardView, boardsForUser } from '../../types';
 export function BoardViewPicker({ accent = '#1e3a5f' }: { accent?: string }) {
   const {
     boardViews, activeBoardView, setActiveBoardView, addBoardView,
-    currentProjectId, currentUser, canvasElements, apartments,
+    currentProjectId, currentUser, canvasElements, apartments, users,
   } = useStore();
 
   const [open, setOpen] = useState(false);
@@ -79,6 +79,8 @@ export function BoardViewPicker({ accent = '#1e3a5f' }: { accent?: string }) {
       name,
       // Made for yourself. Sharing it is a deliberate act in settings, so a new
       // board never lands on everybody's screen the moment it is created.
+      ownerId: currentUser.id,
+      share: {},
       userIds: [currentUser.id],
       createdAt: new Date().toISOString(),
       createdBy: currentUser.name,
@@ -124,20 +126,30 @@ export function BoardViewPicker({ accent = '#1e3a5f' }: { accent?: string }) {
               onClick={() => { setActiveBoardView(''); setOpen(false); }}
             />
 
-            {mine.map(v => (
-              <Row
-                key={v.id}
-                name={v.name}
-                sub={`${countOn(v.id)} things on it · ${
-                  v.userIds.length === 0 ? 'everyone'
-                    : v.userIds.length === 1 ? 'just one person'
-                    : `${v.userIds.length} people`}`}
-                shared={v.userIds.length !== 1}
-                restricted={v.userIds.length > 0}
-                on={activeBoardView === v.id}
-                onClick={() => { setActiveBoardView(v.id); setOpen(false); }}
-              />
-            ))}
+            {mine.map(v => {
+              const access = boardAccess(v, currentUser?.id ?? '', isAdmin);
+              const ownerId = v.ownerId ?? '';
+              const mineOwn = ownerId === currentUser?.id || (!ownerId && v.createdBy === currentUser?.name);
+              const owner = users.find(u => u.id === ownerId)?.name ?? v.createdBy;
+              const withCount = Object.keys(v.share ?? {}).length;
+              return (
+                <Row
+                  key={v.id}
+                  name={v.name}
+                  // WHOSE board it is, under its name. Somebody else's board
+                  // appearing in your list with no owner on it is the thing
+                  // that made shared boards confusing.
+                  sub={mineOwn
+                    ? `${countOn(v.id)} things on it · yours${withCount ? ` · shared with ${withCount}` : ''}`
+                    : `${countOn(v.id)} things on it · ${owner}’s`}
+                  viewOnly={access === 'view'}
+                  shared={withCount > 0}
+                  restricted={!mineOwn}
+                  on={activeBoardView === v.id}
+                  onClick={() => { setActiveBoardView(v.id); setOpen(false); }}
+                />
+              );
+            })}
 
             <div className="p-2 border-t border-gray-100">
               <div className="flex items-center gap-1.5">
@@ -169,9 +181,9 @@ export function BoardViewPicker({ accent = '#1e3a5f' }: { accent?: string }) {
   );
 }
 
-function Row({ name, sub, on, onClick, shared, restricted }: {
+function Row({ name, sub, on, onClick, shared, restricted, viewOnly }: {
   name: string; sub: string; on: boolean; onClick: () => void;
-  shared?: boolean; restricted?: boolean;
+  shared?: boolean; restricted?: boolean; viewOnly?: boolean;
 }) {
   return (
     <button
@@ -185,7 +197,10 @@ function Row({ name, sub, on, onClick, shared, restricted }: {
         <span className="block text-[13px] font-semibold text-gray-900 truncate">{name}</span>
         <span className="block text-[10.5px] text-gray-400 truncate">{sub}</span>
       </span>
-      {restricted && (
+      {/* A view-only board says so here and on the board itself, so nobody
+          spends a minute wondering why nothing will move. */}
+      {viewOnly && <span title="View only" className="flex-shrink-0"><Eye size={11} className="text-amber-500" /></span>}
+      {restricted && !viewOnly && (
         shared
           ? <Users size={11} className="text-gray-300 flex-shrink-0" />
           : <Lock size={11} className="text-gray-300 flex-shrink-0" />

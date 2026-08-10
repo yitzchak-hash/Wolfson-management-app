@@ -4,11 +4,12 @@ import {
   Copy, StickyNote, Square, Palette, Pencil, X, AlertTriangle,
   Ghost, ThumbsUp, ThumbsDown, ClipboardPaste, LayoutGrid, Columns3, Archive, CheckCircle2, PlayCircle,
   Image as ImageIcon, ImageOff, History, MoveUpRight, Unlink, FileText, Search, FolderPlus, Printer,
-  Settings2 as Settings, BringToFront, SendToBack, ChevronUp, ChevronDown,
+  Settings2 as Settings, BringToFront, SendToBack, ChevronUp, ChevronDown, Eye,
 } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 import { useStore } from '../data/store';
 import { rotaCellAt, setRotaHover, anyRota, RotaHit } from '../data/rotaDrop';
+import { boardAccess } from '../types';
 import { Apartment, CanvasElement, BinKind, BIN_KINDS, BIN_META, binKeyOf, binLabelOf, isBuiltInBin, getStageName } from '../types';
 import { printTable, printDot } from '../data/printing';
 import { ApartmentDetailDrawer } from '../components/apartment/ApartmentDetailDrawer';
@@ -175,7 +176,7 @@ export function GeneralJobsPage() {
     addApartment,
     deleteApartment,
     updateApartment,
-    canvasElements, activeBoardView,
+    canvasElements, activeBoardView, boardViews,
     addCanvasElement,
     updateCanvasElement,
     deleteCanvasElement,
@@ -198,6 +199,31 @@ export function GeneralJobsPage() {
     restoreBoardLayout,
     deleteBoardLayout,
   } = useStore();
+
+  /**
+   * A board somebody has shared with you to LOOK at.
+   *
+   * Sharing has three answers and this is the middle one: everything that
+   * reads still works — opening a job, searching, the minimap, every live
+   * widget — and everything that changes the board is off. It is enforced at
+   * the few places a change can START (a drag, the keyboard, a right-click,
+   * the toolbar) rather than at each of the sixty actions, because a lever
+   * somebody forgets to pull on the sixty-first is not a lever at all.
+   *
+   * The main board is never view-only: it belongs to the workspace.
+   */
+  const viewOnlyBoard = useMemo(() => {
+    if (!activeBoardView) return false;
+    const v = boardViews.find(b => b.id === activeBoardView);
+    if (!v) return false;
+    const admin = (currentUser?.role ?? '').toLowerCase().includes('admin');
+    return boardAccess(v, currentUser?.id ?? '', admin) === 'view';
+  }, [activeBoardView, boardViews, currentUser]);
+
+  // The keyboard handler is attached once and closes over stale state, so it
+  // reads the flag through a ref like the other refs on this page.
+  const viewOnlyRef = useRef(viewOnlyBoard);
+  viewOnlyRef.current = viewOnlyBoard;
 
   // ── All hooks must come before any early return ──────────────────
   const [selectedJob, setSelectedJob] = useState<Apartment | null>(null);
@@ -1407,6 +1433,7 @@ export function GeneralJobsPage() {
         openSearchRef.current();
         return;
       }
+      if (viewOnlyRef.current) return;          // read-only board: no shortcuts that change it
       if (e.key === 'Delete' || e.key === 'Backspace') deleteRef.current();
 
       /**
@@ -1482,7 +1509,11 @@ export function GeneralJobsPage() {
     // Pan mode: dragging FROM a tile moves the board, not the tile. A plain
     // click still opens the job, which is why the cursor flips to an arrow
     // whenever the pointer is over one.
-    if (tool === 'pan' && !e.ctrlKey && !e.metaKey) {
+    // On a board you can only look at, a press behaves exactly as it does in
+    // Pan mode: dragging moves the BOARD and a click that never moved opens the
+    // job. Opening it on pointerdown instead — which is what this did first —
+    // meant every attempted drag left the job window sitting over the board.
+    if ((tool === 'pan' || viewOnlyBoard) && !e.ctrlKey && !e.metaKey) {
       panRef.current = { px: e.clientX, py: e.clientY, ox: pan.x, oy: pan.y };
       setPanning(true);
       panFromJob.current = job;
@@ -1591,6 +1622,7 @@ export function GeneralJobsPage() {
 
   function onJobContextMenu(e: React.MouseEvent, job: Apartment) {
     e.preventDefault(); e.stopPropagation();
+    if (viewOnlyBoard) return;
     const ids = selectedJobIds.has(job.id) && selectedJobIds.size > 1 ? [...selectedJobIds] : [job.id];
     if (!selectedJobIds.has(job.id)) setSelectedJobIds(new Set([job.id]));
     refreshClipboard();
@@ -1600,6 +1632,7 @@ export function GeneralJobsPage() {
   // ── Element drag ──────────────────────────────────────────────────
   function onElPointerDown(e: React.PointerEvent, el: CanvasElement) {
     if (e.button !== 0) return;
+    if (viewOnlyBoard) return;
     if (arrowFrom) { e.stopPropagation(); finishArrow(el.id); return; }
     if ((e.target as HTMLElement).closest('[data-el-action]')) return;
     if (drawMode) { startStrokeAt(e); return; }
@@ -1714,6 +1747,7 @@ export function GeneralJobsPage() {
   }
 
   function onElContextMenu(e: React.MouseEvent, el: CanvasElement) {
+    if (viewOnlyBoard) { e.preventDefault(); return; }
     e.preventDefault(); e.stopPropagation();
     const ids = selectedElIds.has(el.id) && selectedElIds.size > 1 ? [...selectedElIds] : [el.id];
     if (!selectedElIds.has(el.id)) setSelectedElIds(new Set([el.id]));
@@ -2344,6 +2378,16 @@ export function GeneralJobsPage() {
         onPointerUp={onViewportPointerUp}
         onPointerCancel={onViewportPointerUp}
       >
+        {/* The rail makes things. On a board you can only look at, it would
+            offer a dozen actions that all silently fail. */}
+        {viewOnlyBoard ? (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1.5
+                          px-3 py-1.5 rounded-full text-[12px] font-semibold shadow-sm"
+            style={{ backgroundColor: 'rgba(245,158,11,.14)', color: '#b45309',
+                     border: '1px solid rgba(245,158,11,.35)' }}>
+            <Eye size={13} /> View only — this board is shared with you to look at
+          </div>
+        ) : (
         <BoardToolbar
           setup={projectBoard.toolbar}
           onPickWidget={id => { const d = WIDGETS.find(w => w.id === id); if (d) placeWidget(d); }}
@@ -2358,6 +2402,7 @@ export function GeneralJobsPage() {
           onToggleControls={() => setBoardSetting('showControls', !showControls)}
           onToggleSettings={() => setBoardSettingsOpen(v => !v)}
         />
+        )}
         {showControls && <BoardControlsPanel />}
 
         {arrowFrom && (
