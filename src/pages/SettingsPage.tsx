@@ -873,7 +873,11 @@ interface NameProposal {
 // ─── TV presentation (app-wide) ───────────────────────────────────────────────
 function TvPresentationSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
   const [copied, setCopied] = useState(false);
-  const url = `${window.location.origin}/tv`;
+  // The same short link the TV tab hands out — two places offering two
+  // different addresses for the same screen is how a wrong one gets typed.
+  const tvDomain = useStore(st => (st.boardSettings.__tv ?? {}).tvDomain);
+  const short = (tvDomain ?? '').trim().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  const url = short ? `${short}/tv` : `${window.location.origin}/tv`;
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-5">
@@ -1442,7 +1446,16 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
   const boardThings = canvasElements.filter(el => (el.board ?? '') === tvBoard);
   const lang = tv.tvLang ?? 'en';
   const boost = tv.tvScale ?? 1;
-  const link = `${window.location.origin}/tv`;
+  /**
+   * The link, as short as it can be made.
+   *
+   * A wall panel's browser is driven with a remote or an on-screen keyboard, so
+   * the difference between typing a long deployment URL and typing rsilink.tv
+   * is the difference between somebody doing it and somebody not bothering.
+   * The scheme is dropped as well — browsers add it back.
+   */
+  const domain = (tv.tvDomain ?? '').trim().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  const link = domain ? `${domain}/tv` : `${window.location.origin}/tv`;
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-5">
@@ -1453,6 +1466,21 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
         The wall display is always read-only — it can look, switch project and open a plan in Drive,
         but it can never change anything. Every edit happens from a PC on the normal link.
       </p>
+
+      <label className="block text-xs font-semibold text-gray-600 mb-1">Your own short domain</label>
+      <p className="text-[11px] text-gray-400 mb-2 leading-snug">
+        Optional. Point a short domain at this app — <span className="font-mono">rsilink.tv</span> is
+        the one you had in mind — and the link below becomes short enough to type on a
+        television with a remote. Leave it blank to use this deployment’s own address.
+      </p>
+      <input
+        value={tv.tvDomain ?? ''}
+        onChange={e => setTvSetting('tvDomain', e.target.value)}
+        onBlur={() => onToast(domain ? `The TV link is now ${link}` : 'Using this deployment’s address')}
+        placeholder="rsilink.tv"
+        className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm mb-4 font-mono
+                   focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+      />
 
       <label className="block text-xs font-semibold text-gray-600 mb-1">Presentation link</label>
       <div className="flex gap-2 mb-4">

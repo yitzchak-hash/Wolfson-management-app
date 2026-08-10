@@ -73,6 +73,14 @@ export interface BoardSetting {
   tvLang?: 'en' | 'he';
   tvScale?: number;
   /**
+   * Your own short domain for the wallboard link, e.g. `rsilink.tv`.
+   *
+   * The link somebody types into a wall panel's browser is typed with a remote
+   * or an on-screen keyboard, so every character costs. Point the domain at the
+   * same deployment and put it here, and the app hands out the short one.
+   */
+  tvDomain?: string;
+  /**
    * Which board the wallboard shows. Empty is the workspace's main board.
    * Set by the top-level admin in app settings — never on the TV, which has no
    * keyboard and is read-only by design.

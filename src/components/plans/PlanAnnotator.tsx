@@ -89,7 +89,7 @@ export interface PlanChoice {
 
 export function PlanAnnotator({
   planFileId, planName, apartmentId, apartmentLabel, driveFolderUrl, plansFolderId,
-  authorName, readOnly = false, askWho = false, people = [], plans = [],
+  authorName, readOnly = false, askWho = false, people = [], plans = [], embedded = false,
   onClose, onToast, onPickPlan, onStartMarkup,
 }: {
   planFileId: string;
@@ -105,6 +105,16 @@ export function PlanAnnotator({
   plansFolderId?: string;
   authorName: string;
   readOnly?: boolean;
+  /**
+   * Sit inside the page instead of covering it.
+   *
+   * The wallboard shows a plan as PART of a job screen rather than as a
+   * full-screen studio, and it needs the plan drawn the way this draws it —
+   * pdf.js onto a white canvas, fitted to its space — rather than as a Drive
+   * preview, which frames every sheet in a black surround and cannot be told
+   * not to.
+   */
+  embedded?: boolean;
   /**
    * The wallboard is shared — whoever walks up to it is not "the office".
    * When this is on, the editor asks who is drawing before it will let anyone
@@ -1397,7 +1407,10 @@ export function PlanAnnotator({
   const marksOnPage = strokes.filter(s => s.page === page).length;
 
   return (
-    <div className="fixed inset-0 z-[150] flex flex-col" style={{ backgroundColor: NAVY_DEEP }}>
+    <div
+      className={embedded ? 'absolute inset-0 flex flex-col' : 'fixed inset-0 z-[150] flex flex-col'}
+      style={{ backgroundColor: embedded ? '#ffffff' : NAVY_DEEP }}
+    >
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2 flex-shrink-0" style={{ backgroundColor: NAVY }}>
         <Layers size={16} className="text-[#4aa8d8] flex-shrink-0" />
