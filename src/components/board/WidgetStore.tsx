@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Search, Plus, Check } from 'lucide-react';
 import { useStore } from '../../data/store';
 import {
@@ -33,7 +33,7 @@ export function WidgetStore({ onPick, onClose }: {
   const searchRef = useRef<HTMLInputElement>(null);
 
   const {
-    apartments, stages, contractorAssignments, contractors, contractorPhotos, activityLogs,
+    apartments, stages, contractorAssignments, contractors, contractorPhotos, activityLogs, users,
     projects, currentProjectId,
   } = useStore();
 
@@ -44,12 +44,21 @@ export function WidgetStore({ onPick, onClose }: {
    */
   const previewCtx: WidgetCtx = useMemo(() => ({
     jobs: apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed && !a.boardBin),
-    stages, assignments: contractorAssignments, contractors,
+    stages, assignments: contractorAssignments, contractors, users,
     photos: contractorPhotos, logs: activityLogs,
     update: () => {}, openJob: () => {}, readOnly: true,
   }), [apartments, stages, contractorAssignments, contractors, contractorPhotos, activityLogs]);
 
   const shownCtx = useMemo(() => withSampleData(previewCtx), [previewCtx]);
+
+  // Escape closes it. The store deliberately STAYS OPEN after each placement so
+  // you can take three things in a row, which makes having a way out that does
+  // not involve aiming at a small × more important, not less.
+  useEffect(() => {
+    function key(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, [onClose]);
 
   const matches = useMemo(() => {
     const needle = q.trim().toLowerCase();

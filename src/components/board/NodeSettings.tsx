@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { X, Trash2, Upload, Check, Plus } from 'lucide-react';
+import { X, Trash2, Upload, Check, Plus, ChevronUp, ChevronDown } from 'lucide-react';
 import { useStore } from '../../data/store';
-import { CanvasElement, Stage, binLabelOf, isBuiltInBin } from '../../types';
+import { CanvasElement, Stage, binLabelOf, isBuiltInBin, personColor } from '../../types';
 import { WIDGET_BY_ID } from '../../data/widgets';
 import { WidgetField, WIDGET_FIELDS, ART_FIELDS, BOX_FIELDS, TEXT_STYLE_FIELDS } from '../../data/widgetFields';
 import { ART_KINDS, ArtKind } from './BoardNodes';
@@ -368,6 +368,88 @@ function Swatches({ value, onPick }: { value?: string; onPick: (c: string) => vo
   );
 }
 
+/**
+ * Who is on the rota.
+ *
+ * Contractors and office staff in one list, because the paper sheet mixes them
+ * and the office does not think of them as two kinds of person. Order matters —
+ * the rows come out in the order chosen here — so picking somebody appends them
+ * and there are arrows to move a row up or down.
+ */
+function PeopleField({ label, hint, value, onChange }: {
+  label: string; hint?: string; value: string[]; onChange: (v: string[]) => void;
+}) {
+  const contractors = useStore(st => st.contractors);
+  const users = useStore(st => st.users);
+
+  const choices = [
+    ...contractors.filter(c => c.active).map(c => ({
+      id: `c:${c.id}`, name: c.name, color: personColor(c.name, c.color), kind: 'Contractor',
+    })),
+    ...users.filter(u => u.active).map(u => ({
+      id: `u:${u.id}`, name: u.name, color: personColor(u.name, u.color), kind: 'Office',
+    })),
+  ];
+  const unused = choices.filter(c => !value.includes(c.id));
+
+  function move(i: number, by: number) {
+    const j = i + by;
+    if (j < 0 || j >= value.length) return;
+    const next = [...value];
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange(next);
+  }
+
+  return (
+    <Row label={label} hint={hint}>
+      <div className="space-y-1">
+        {value.map((id, i) => {
+          const c = choices.find(x => x.id === id);
+          const name = c?.name ?? (id.startsWith('n:') ? id.slice(2) : 'Someone who has gone');
+          return (
+            <div key={id} className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-gray-200">
+              <span className="w-2 h-2 rounded-full flex-shrink-0"
+                style={{ backgroundColor: c?.color ?? personColor(name) }} />
+              <span className="flex-1 min-w-0 truncate text-[12px] text-gray-700">{name}</span>
+              <button onClick={() => move(i, -1)} disabled={i === 0} title="Up"
+                className="p-0.5 text-gray-300 hover:text-gray-600 disabled:opacity-30">
+                <ChevronUp size={13} />
+              </button>
+              <button onClick={() => move(i, 1)} disabled={i === value.length - 1} title="Down"
+                className="p-0.5 text-gray-300 hover:text-gray-600 disabled:opacity-30">
+                <ChevronDown size={13} />
+              </button>
+              <button onClick={() => onChange(value.filter(x => x !== id))} title="Take off the rota"
+                className="p-0.5 text-gray-300 hover:text-red-500">
+                <X size={12} />
+              </button>
+            </div>
+          );
+        })}
+
+        {unused.length > 0 && (
+          <select
+            value=""
+            onChange={e => { if (e.target.value) onChange([...value, e.target.value]); }}
+            className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 text-[12.5px] bg-white outline-none"
+          >
+            <option value="">+ add somebody…</option>
+            {unused.map(c => (
+              <option key={c.id} value={c.id}>{c.name} · {c.kind}</option>
+            ))}
+          </select>
+        )}
+
+        {choices.length === 0 && (
+          <p className="text-[10.5px] text-amber-600">
+            No contractors or staff yet — add them in app settings first.
+          </p>
+        )}
+      </div>
+    </Row>
+  );
+}
+
 function Field({ field, value, onChange, stages, jobs, contractors }: {
   field: WidgetField;
   value: unknown;
@@ -414,6 +496,11 @@ function Field({ field, value, onChange, stages, jobs, contractors }: {
         )}
       </Row>
     );
+  }
+
+  if (f.kind === 'people') {
+    return <PeopleField label={f.label} hint={f.hint} value={Array.isArray(value) ? value as string[] : []}
+      onChange={onChange} />;
   }
 
   if (f.kind === 'percent') {

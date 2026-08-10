@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 import { useStore } from '../data/store';
+import { rotaCellAt, setRotaHover, anyRota, RotaHit } from '../data/rotaDrop';
 import { Apartment, CanvasElement, BinKind, BIN_KINDS, BIN_META, binKeyOf, binLabelOf, isBuiltInBin, getStageName } from '../types';
 import { printTable, printDot } from '../data/printing';
 import { ApartmentDetailDrawer } from '../components/apartment/ApartmentDetailDrawer';
@@ -190,6 +191,7 @@ export function GeneralJobsPage() {
     backupDriveFolderLink,
     contractorPhotos,
     contractors,
+    users,
     activityLogs,
     boardLayouts,
     saveBoardLayout,
@@ -890,12 +892,21 @@ export function GeneralJobsPage() {
     const dy = w0.y - ghostDrag.grabY;
     setGhostDrag({ ...ghostDrag, dx, dy, moved: ghostDrag.moved || Math.abs(dx) > 4 || Math.abs(dy) > 4 });
     setHoverBin(binAt(w0.x, w0.y)?.id ?? null);
+    setRotaHover(anyRota() ? rotaCellAt(e.clientX, e.clientY) : null);
   }
 
   function onGhostPointerUp(e: React.PointerEvent, job: Apartment) {
     if (!ghostDrag) return;
     if (ghostDrag.moved) {
       const w0 = toWorld(e.clientX, e.clientY);
+      const cell = anyRota() ? rotaCellAt(e.clientX, e.clientY) : null;
+      if (cell) {
+        // A ghost is the same record, so rota-ing it rotas the job.
+        dropOnRota(cell, [job.id]);
+        setGhostDrag(null);
+        setRotaHover(null);
+        return;
+      }
       const bin = binAt(w0.x, w0.y);
       if (bin) {
         // Binning a ghost bins the JOB — there is only one record.
@@ -912,6 +923,7 @@ export function GeneralJobsPage() {
     }
     setGhostDrag(null);
     setHoverBin(null);
+    setRotaHover(null);
   }
 
   /**
@@ -924,6 +936,32 @@ export function GeneralJobsPage() {
     const p = elPos(el);
     setCelebrate({ x: p.x + p.w / 2, y: p.y + p.h / 2, key: Date.now() });
     setTimeout(() => setCelebrate(null), 1100);
+  }
+
+  /**
+   * Dropping a job onto a rota cell.
+   *
+   * The job STAYS ON THE BOARD — it snaps into the cell rather than moving into
+   * it. A rota entry is a reference, not a relocation: the same job can be on
+   * two people's rows on two days without being duplicated or taken off the
+   * board, and taking it back out of a cell (the × on the chip) leaves the job
+   * exactly where it was.
+   */
+  function dropOnRota(cell: RotaHit, ids: string[]) {
+    setRotaHover(null);
+    const el = canvasElements.find(c => c.id === cell.elId);
+    if (!el) return;
+    const data = (el.data ?? {}) as Record<string, unknown>;
+    const cells = { ...((data.cells ?? {}) as Record<string, { id: string; jobId?: string }[]>) };
+    const key = `${cell.person}|${cell.day}`;
+    const already = cells[key] ?? [];
+    const fresh = ids
+      .filter(id => !already.some(e => e.jobId === id))
+      .map(id => ({ id: `R-${Math.random().toString(36).slice(2, 8)}`, jobId: id }));
+    if (!fresh.length) return;
+    cells[key] = [...already, ...fresh];
+    updateCanvasElement(el.id, { data: { ...data, cells } });
+    setToast(fresh.length === 1 ? 'Put on the rota' : `${fresh.length} jobs put on the rota`);
   }
 
   /** Files a job into a group, with the Done celebration when that is the one. */
@@ -1499,6 +1537,7 @@ export function GeneralJobsPage() {
     const dy = w0.y - drag.grabY;
     setDrag({ ...drag, dx, dy, moved: drag.moved || Math.abs(dx) > 4 || Math.abs(dy) > 4 });
     setHoverBin(binAt(w0.x, w0.y)?.id ?? null);
+    setRotaHover(anyRota() ? rotaCellAt(e.clientX, e.clientY) : null);
   }
 
   function onJobPointerUp(e: React.PointerEvent, job: Apartment) {
@@ -1517,8 +1556,14 @@ export function GeneralJobsPage() {
       // Dropping onto a bin FILES the job rather than positioning it. Nothing is
       // deleted; the job simply moves off the board into that collection.
       const w0 = toWorld(e.clientX, e.clientY);
+      // A rota cell takes precedence: it sits inside a widget, so a bin test
+      // would never fire for it anyway, and it is the more specific target.
+      const cell = anyRota() ? rotaCellAt(e.clientX, e.clientY) : null;
       const bin = binAt(w0.x, w0.y);
-      if (bin) {
+      if (cell) {
+        dropOnRota(cell, drag.ids);
+        setSelectedJobIds(new Set());
+      } else if (bin) {
         fileInBin(drag.ids, binKeyOf(bin), bin);
         setSelectedJobIds(new Set());
       } else if (currentUser) {
@@ -1541,6 +1586,7 @@ export function GeneralJobsPage() {
     }
     setDrag(null);
     setHoverBin(null);
+    setRotaHover(null);
   }
 
   function onJobContextMenu(e: React.MouseEvent, job: Apartment) {
@@ -2092,6 +2138,7 @@ export function GeneralJobsPage() {
     stages: allStages.filter(st => st.projectId === 'general'),
     assignments: contractorAssignments,
     contractors,
+    users,
     photos: contractorPhotos,
     logs: activityLogs,
     update: () => {},

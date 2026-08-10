@@ -18,7 +18,7 @@
 export type WidgetFieldKind =
   | 'text' | 'longtext' | 'number' | 'percent'
   | 'select' | 'colour' | 'url' | 'image' | 'datetime'
-  | 'job' | 'contractor' | 'stage';
+  | 'job' | 'contractor' | 'stage' | 'people';
 
 export interface WidgetField {
   key: string;
@@ -132,6 +132,32 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
     key: 'startsMonday', label: 'Week starts on', kind: 'select',
     options: [{ value: 'mon', label: 'Monday' }, { value: 'sun', label: 'Sunday' }],
   }],
+  rota: [
+    title(),
+    {
+      key: 'people', label: 'Who is on it', kind: 'people',
+      hint: 'Contractors and office staff. Drag the handles to reorder the rows; '
+        + 'each person keeps their own colour.',
+    },
+    {
+      key: 'span', label: 'Days across', kind: 'select',
+      options: [
+        { value: '5', label: 'Sunday to Thursday' },
+        { value: '6', label: 'Sunday to Friday' },
+        { value: '7', label: 'The whole week' },
+      ],
+    },
+    {
+      key: 'weeks', label: 'Weeks stacked', kind: 'number', min: 1, max: 6,
+      hint: 'One for a single week; four or five makes it a month.',
+    },
+    { key: 'textSize', label: 'Text size', kind: 'number', min: 7, max: 20 },
+    { key: 'dayNameSize', label: 'Day-name size', kind: 'number', min: 7, max: 22 },
+    { key: 'bold', label: 'Bold text', kind: 'select',
+      options: [{ value: '', label: 'Normal' }, { value: '1', label: 'Bold' }] },
+    { key: 'start', label: 'Starting week', kind: 'datetime',
+      hint: 'The Sunday the top week begins on. The arrows on the rota move it too.' },
+  ],
   milestones: [title()],
   calculator: [title('Label')],
   converter: [title('Label')],
@@ -261,8 +287,49 @@ const SAMPLE_PHOTO =
        <circle cx="247" cy="74" r="8" fill="#93c5fd"/>
      </svg>`);
 
+/**
+ * Sample rota cells against THIS week's real dates.
+ *
+ * The keys are person-and-date, so a preview written with made-up dates would
+ * land in cells the grid never draws and the store would show an empty rota —
+ * exactly the "blank shelf" problem WIDGET_PREVIEW exists to solve.
+ */
+function rotaSampleCells(): Record<string, { id: string; text: string }[]> {
+  const sunday = new Date();
+  sunday.setDate(sunday.getDate() - sunday.getDay());
+  const day = (n: number) => {
+    const d = new Date(sunday.getTime());
+    d.setDate(d.getDate() + n);
+    const local = new Date(d.getTime() - d.getTimezoneOffset() * 60_000);
+    return local.toISOString().slice(0, 10);
+  };
+  const rows: [string, number, string][] = [
+    ['n:Daniel', 0, 'Dadush'],
+    ['n:Yaakov', 0, 'Pardes 8 am'],
+    ['n:Yaakov', 1, 'Friedman'],
+    ['n:Igor', 0, 'Goodhardt — Kiryat Gat'],
+    ['n:Igor', 2, 'Goodhardt'],
+    ['n:Max', 1, 'Friedman'],
+    ['n:Max', 3, 'Davidian??'],
+  ];
+  const out: Record<string, { id: string; text: string }[]> = {};
+  rows.forEach(([who, d, text], i) => {
+    const k = `${who}|${day(d)}`;
+    (out[k] ??= []).push({ id: `p${i}`, text });
+  });
+  return out;
+}
+
 export const WIDGET_PREVIEW: Record<string, Record<string, unknown>> = {
   kpi: { metric: 'overdue', title: 'Running late' },
+  // The store draws it with names and a couple of filled cells, because an
+  // empty grid of boxes tells you nothing about what a rota is for.
+  rota: {
+    title: 'This week',
+    people: ['n:Daniel', 'n:Yaakov', 'n:Igor', 'n:Max'],
+    weeks: 1, span: 5,
+    cells: rotaSampleCells(),
+  },
   checklist: {
     title: 'Before handover',
     items: [

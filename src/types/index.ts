@@ -125,6 +125,23 @@ export interface User {
   code: string;
   active: boolean;
   createdAt: string;
+  /** Their colour on the rota. Falls back to one derived from the name. */
+  color?: string;
+}
+
+/**
+ * A stable colour for somebody who has not been given one.
+ *
+ * Derived from the name, so the same person is the same colour on every
+ * machine and after every reload without anything having to be stored. The
+ * lightness and saturation are fixed, so no two people can come out as "grey"
+ * or "almost white" — only the hue moves.
+ */
+export function personColor(name: string, chosen?: string): string {
+  if (chosen?.trim()) return chosen;
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+  return `hsl(${h}deg 62% 46%)`;
 }
 
 /**
@@ -570,6 +587,8 @@ export interface Contractor {
   name: string;
   email: string;
   category: ContractorCategory;
+  /** Their colour on the rota. Falls back to one derived from the name. */
+  color?: string;
   token: string; // 24-char random alphanumeric — used in shareable /c/:token URL
   active: boolean;
   createdAt: string;

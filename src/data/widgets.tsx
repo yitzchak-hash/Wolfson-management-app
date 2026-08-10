@@ -10,10 +10,12 @@ import {
 import {
   Apartment, CanvasElement, Stage, ContractorAssignment, Contractor,
   ContractorPhoto, ActivityLog, BIN_KINDS, BIN_META, isCountableApartment,
+  User,
 } from '../types';
 import { useStore } from './store';
 import { describeActivity } from './activityText';
 import { ClipArtNode, ART_KINDS, ArtKind } from '../components/board/BoardNodes';
+import { RotaWidget, RotaData } from '../components/board/RotaWidget';
 
 /**
  * The widget store.
@@ -48,6 +50,8 @@ export interface WidgetCtx {
   stages: Stage[];
   assignments: ContractorAssignment[];
   contractors: Contractor[];
+  /** Staff, so the rota can put office people on it too. */
+  users: User[];
   photos: ContractorPhoto[];
   logs: ActivityLog[];
   /** Writes back into the element — used by the interactive widgets. */
@@ -556,6 +560,24 @@ export const WIDGETS: WidgetDef[] = [
         </Frame>
       );
     },
+  },
+  {
+    id: 'rota', rank: 1, name: 'Rota', category: 'plan', icon: CalendarDays, w: 720, h: 300,
+    blurb: 'People down the left, Sunday to Thursday across the top, weeks stacked. '
+      + 'Drag a job onto a cell, or just type into it.',
+    data: { weeks: 2, span: 5, people: [], cells: {}, textSize: 10, dayNameSize: 10 },
+    render: (el, c) => (
+      <RotaWidget
+        el={el}
+        data={(el.data ?? {}) as RotaData}
+        jobs={c.jobs}
+        contractors={c.contractors}
+        users={c.users}
+        readOnly={c.readOnly}
+        update={c.update}
+        openJob={c.openJob}
+      />
+    ),
   },
   {
     id: 'milestones', rank: 3, name: 'Key dates', category: 'plan', icon: Flag, w: 225, h: 165,

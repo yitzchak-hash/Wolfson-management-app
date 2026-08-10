@@ -1,12 +1,12 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { useStore } from '../data/store';
 import {
-  Plus, Trash2, Save, ChevronUp, ChevronDown, Shield, Sun, Moon,
+  Plus, Trash2, Save, Palette, ChevronUp, ChevronDown, Shield, Sun, Moon,
   Copy, Check, Download, Upload, HardDrive, X, HardDriveDownload, ToggleLeft, ToggleRight,
   Languages, Clock, RotateCcw, Wifi, WifiOff, Loader, Database, RefreshCw, CloudUpload, Search, BookOpen, ExternalLink, AlertTriangle, Tv,
 } from 'lucide-react';
 import { isFirebaseConfigured, db, fsSet, fsGetAll } from '../data/firebase';
-import { projectColor, Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency, getStageName, Apartment, isCountableApartment } from '../types';
+import { personColor, projectColor, Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency, getStageName, Apartment, isCountableApartment } from '../types';
 import { Tooltip } from '../components/ui/Tooltip';
 import { Toast } from '../components/ui/Toast';
 import { BoardRegionPicker } from '../components/board/BoardRegionPicker';
@@ -450,9 +450,11 @@ function UserSettings({ users, updateUser, addUser, onToast }: {
       <div className="space-y-3 mb-6">
         {users.map(user => (
           <div key={user.id} className="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-[#1e3a5f]/10 flex items-center justify-center text-[#1e3a5f] font-bold flex-shrink-0">
-              {user.name.charAt(0)}
-            </div>
+            <PersonColor
+              name={user.name}
+              color={user.color}
+              onPick={hex => updateUser(user.id, { color: hex })}
+            />
             <div className="flex-1 grid grid-cols-3 gap-3">
               <input defaultValue={user.name} onBlur={e => updateUser(user.id, { name: e.target.value })}
                 className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" placeholder={s.nameField} />
@@ -546,12 +548,20 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
           <div className="space-y-2">
             {items.map(c => (
               <div key={c.id} className="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-sm flex-shrink-0"
-                  style={{ backgroundColor: CAT_COLORS[cat] }}>
-                  {c.name.charAt(0).toUpperCase()}
-                </div>
+                {/* The avatar IS their rota colour. One colour per person,
+                    picked here and carried everywhere they appear, rather than
+                    a trade colour that makes four people look like one. */}
+                <PersonColor
+                  name={c.name}
+                  color={c.color}
+                  onPick={hex => updateContractor(c.id, { color: hex })}
+                />
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-gray-900 text-sm">{c.name}</div>
+                  <div className="font-semibold text-gray-900 text-sm flex items-center gap-1.5">
+                  {c.name}
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: CAT_COLORS[cat] }}
+                    title={CAT_LABELS[cat]} />
+                </div>
                   {c.email && <div className="text-xs text-gray-400">{c.email}</div>}
                   <div className="flex items-center gap-2 mt-1">
                     <span className="text-xs text-gray-400 font-mono truncate max-w-[160px]">/c/{c.token}</span>
@@ -598,6 +608,39 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Somebody's colour, shown as their initial and changed by clicking it.
+ *
+ * Everyone has a colour whether or not one has been chosen: personColor()
+ * derives a stable one from the name, so the rota is never a wall of grey and
+ * the same person is the same colour on every machine without anything having
+ * to be stored first.
+ */
+function PersonColor({ name, color, onPick }: {
+  name: string; color?: string; onPick: (hex: string) => void;
+}) {
+  const shown = personColor(name, color);
+  return (
+    <label
+      className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-sm
+                 flex-shrink-0 cursor-pointer relative group/pc"
+      style={{ backgroundColor: shown }}
+      title={`${name}'s colour on the rota — click to change`}
+    >
+      {name.charAt(0).toUpperCase()}
+      <Palette size={11}
+        className="absolute -bottom-0.5 -right-0.5 bg-white rounded-full p-[1px] text-gray-500
+                   opacity-0 group-hover/pc:opacity-100 transition-opacity" />
+      <input
+        type="color"
+        value={/^#[0-9a-f]{6}$/i.test(shown) ? shown : '#1e3a5f'}
+        onChange={e => onPick(e.target.value)}
+        className="absolute inset-0 opacity-0 cursor-pointer"
+      />
+    </label>
   );
 }
 

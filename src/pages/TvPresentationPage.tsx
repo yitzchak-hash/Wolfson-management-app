@@ -35,7 +35,7 @@ export function TvPresentationPage() {
   const {
     projects, apartments, stages, contractorAssignments, contractorPhotos, canvasElements,
     boardSettings, currentProjectId, setCurrentProject, startFirebaseSync, firebaseListening,
-    users,
+    users, contractors,
   } = useStore();
 
   /**
@@ -479,7 +479,7 @@ export function TvPresentationPage() {
                   </div>
                 ) : el.type === 'widget' ? renderWidget(el, {
                     jobs: apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed),
-                    stages, assignments: contractorAssignments, contractors: [],
+                    stages, assignments: contractorAssignments, contractors, users,
                     photos: contractorPhotos, logs: [],
                     update: () => {}, openJob: () => {}, readOnly: true,
                   })

@@ -45,7 +45,7 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId }: {
   highlightJobId?: string | null;
 }) {
   const {
-    apartments, stages, contractors, contractorAssignments, contractorPhotos, activityLogs,
+    apartments, stages, contractors, contractorAssignments, contractorPhotos, activityLogs, users,
     canvasElements, moveToBin, deleteApartment, updateApartment, currentUser,
     addCanvasElement, updateCanvasElement, deleteCanvasElement,
     boardSettings, currentProjectId,
@@ -115,11 +115,11 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId }: {
    */
   const widgetCtx: WidgetCtx = useMemo(() => ({
     jobs: apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed),
-    stages, assignments: contractorAssignments, contractors,
+    stages, assignments: contractorAssignments, contractors, users,
     photos: contractorPhotos, logs: activityLogs,
     update: () => {},
     openJob: (id: string) => { const j = apartments.find(x => x.id === id); if (j) onOpenJob(j); },
-  }), [apartments, stages, contractorAssignments, contractors, contractorPhotos, activityLogs, onOpenJob]);
+  }), [apartments, stages, contractorAssignments, contractors, contractorPhotos, activityLogs, users, onOpenJob]);
 
   function toLocal(e: { clientX: number; clientY: number }) {
     const r = surfaceRef.current?.getBoundingClientRect();
