@@ -221,3 +221,45 @@ export function nearSegment(
   const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2));
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }
+
+/**
+ * Which end of the Samsung pen is touching the glass.
+ *
+ * The WAD panel's pen is passive and double-ended: a thin nib on one end, a fat
+ * one on the other, and the panel tells them apart ONLY by contact size. So
+ * flipping the pen over is a real gesture the hardware supports and the app can
+ * read — it just has to know which sizes count as which, and that varies with
+ * the panel: an 86" 4K screen reports a very different pixel count for the same
+ * physical nib than a 55" 1080p one.
+ *
+ * Rather than ship a magic number per model, this LEARNS. It watches the
+ * contact sizes it has actually seen and splits them at their geometric mean,
+ * and it refuses to answer at all until it has seen two clearly different sizes.
+ * That refusal is the important part: with a single nib in use every stroke
+ * looks like "the big one" or "the small one" depending on the threshold you
+ * guessed, and the tool would flip on its own while somebody was drawing.
+ */
+export class NibWatch {
+  private small = Infinity;
+  private big = 0;
+
+  /** The two nibs must differ by at least this much before we believe in them. */
+  private static RATIO = 1.7;
+
+  /** 'thin' | 'fat', or null while there is not enough evidence to say. */
+  see(contact: number): 'thin' | 'fat' | null {
+    if (!(contact > 0)) return null;              // a mouse reports nothing
+    // Let the extremes drift slowly back together, so one odd sample — the side
+    // of a hand, a knuckle — does not set the scale for the rest of the session.
+    this.small = Math.min(this.small, contact);
+    this.big = Math.max(this.big, contact);
+    this.small *= 1.0008;
+    this.big *= 0.9992;
+
+    if (!(this.big > this.small * NibWatch.RATIO)) return null;
+    return contact >= Math.sqrt(this.small * this.big) ? 'fat' : 'thin';
+  }
+
+  /** For the UI: has this screen shown us both nibs yet? */
+  get sawBoth(): boolean { return this.big > this.small * NibWatch.RATIO; }
+}

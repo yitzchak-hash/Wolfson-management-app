@@ -508,6 +508,8 @@ export interface AnnStroke {
   /** Text and speech-bubble tools. */
   text?: string;
   fontSize?: number;
+  /** Heavier type, for the one note on the sheet that has to be read. */
+  bold?: boolean;
   /** Shapes only — filled as well as outlined. */
   fill?: boolean;
 }

@@ -15,6 +15,9 @@ import { savedColors, saveColor, forgetColor, recentColors, rememberColor } from
  * KEPT. Recents churn; saved ones are the two or three the office decided on.
  */
 
+/** Lightness steps for the tint/shade row. */
+const RAMP = [0.30, 0.48, 0.64, 0.78, 0.9, 1];
+
 export function InkPicker({ value, onChange, palette, onClose, anchor }: {
   value: string;
   onChange: (hex: string) => void;
@@ -25,6 +28,7 @@ export function InkPicker({ value, onChange, palette, onClose, anchor }: {
   anchor: { x: number; y: number };
 }) {
   const [saved, setSaved] = useState<string[]>(() => savedColors());
+  const hasDropper = typeof window !== 'undefined' && 'EyeDropper' in window;
   const [recents] = useState<string[]>(() => recentColors());
   const [hsv, setHsv] = useState(() => hexToHsv(value));
   const [text, setText] = useState(value);
@@ -67,7 +71,7 @@ export function InkPicker({ value, onChange, palette, onClose, anchor }: {
     return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
   });
 
-  const W = 250;
+  const W = 292;
   const left = Math.max(8, Math.min(anchor.x, window.innerWidth - W - 12));
   const top = Math.max(8, Math.min(anchor.y, window.innerHeight - 400));
 
@@ -90,7 +94,7 @@ export function InkPicker({ value, onChange, palette, onClose, anchor }: {
           onPointerDown={e => { dragging.current = 'field'; fieldAt(e); }}
           className="relative cursor-crosshair"
           style={{
-            height: 140,
+            height: 168,
             background:
               `linear-gradient(to top, #000, transparent),
                linear-gradient(to right, #fff, hsl(${hsv.h}deg 100% 50%))`,
@@ -117,6 +121,33 @@ export function InkPicker({ value, onChange, palette, onClose, anchor }: {
             aria-label="Hue"
           />
 
+          {/* What the pen will actually look like. A 22px chip tells you the
+              hue; it does not tell you whether the colour reads against a grey
+              drawing, which is the only question that matters here. */}
+          <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(15,23,42,.08)' }}>
+            <svg viewBox="0 0 260 34" className="block w-full" style={{ height: 34, background: '#eef2f7' }}>
+              <path d="M6 26 H254" stroke="#cbd5e1" strokeWidth="1" />
+              <path d="M6 14 H254" stroke="#cbd5e1" strokeWidth="1" />
+              <path d="M10 24 C 60 4, 110 30, 160 12 S 236 22, 250 14"
+                stroke={hex} strokeWidth="5" fill="none" strokeLinecap="round" />
+            </svg>
+          </div>
+
+          {/* Lighter and darker of the same colour — the row every modern
+              picker has, because the colour you want is usually a step off the
+              one you landed on. */}
+          <div className="flex gap-1">
+            {RAMP.map(v => {
+              const c = hsvToHex({ ...hsv, v });
+              return (
+                <button key={v} onClick={() => { setHsv({ ...hsv, v }); commit(c); }}
+                  title={c}
+                  className="flex-1 h-[18px] rounded-md"
+                  style={{ backgroundColor: c, border: '1px solid rgba(15,23,42,.10)' }} />
+              );
+            })}
+          </div>
+
           <div className="flex items-center gap-2">
             <span className="w-8 h-8 rounded-lg flex-shrink-0"
               style={{ backgroundColor: hex, border: '1px solid rgba(15,23,42,.14)' }} />
@@ -131,6 +162,26 @@ export function InkPicker({ value, onChange, palette, onClose, anchor }: {
               className="flex-1 min-w-0 px-2 py-1.5 rounded-lg text-[12.5px] font-mono outline-none"
               style={{ backgroundColor: '#f1f5f9', color: '#334155' }}
             />
+            {/* Lift a colour straight off the plan. Only offered where the
+                browser has it — Android's Chrome does not, and a button that
+                does nothing is worse than no button. */}
+            {hasDropper && (
+              <button
+                onClick={async () => {
+                  try {
+                    const r = await new (window as unknown as {
+                      EyeDropper: new () => { open(): Promise<{ sRGBHex: string }> };
+                    }).EyeDropper().open();
+                    if (r?.sRGBHex) { setHsv(hexToHsv(r.sRGBHex)); commit(r.sRGBHex); }
+                  } catch { /* the user pressed Escape */ }
+                }}
+                title="Pick a colour off the plan"
+                className="p-1.5 rounded-lg flex-shrink-0"
+                style={{ backgroundColor: '#f1f5f9', color: '#475569' }}
+              >
+                <Pipette size={13} />
+              </button>
+            )}
             <button
               onClick={() => { setSaved(saveColor(hex)); rememberColor(hex); }}
               title="Keep this colour"
@@ -182,14 +233,14 @@ function Shelf({ label, colors, value, onPick, onForget }: {
               <button
                 onClick={() => onPick(c)}
                 title={c}
-                className="w-[22px] h-[22px] rounded-lg flex items-center justify-center transition-transform"
+                className="w-[28px] h-[28px] rounded-lg flex items-center justify-center transition-transform"
                 style={{
                   backgroundColor: c,
                   border: on ? '2px solid #1e3a5f' : '1px solid rgba(15,23,42,.16)',
                   transform: on ? 'scale(1.12)' : undefined,
                 }}
               >
-                {on && <Check size={11} color={isLight(c) ? '#0f172a' : '#fff'} />}
+                {on && <Check size={13} color={isLight(c) ? '#0f172a' : '#fff'} />}
               </button>
               {onForget && (
                 <button

@@ -9,7 +9,7 @@ import { AnnTool } from '../../types';
  * appears everywhere without anything else changing.
  */
 export interface ToolPreset {
-  id: AnnTool | 'eraser' | 'move' | 'pan';
+  id: AnnTool | 'eraser' | 'eraser-object' | 'move' | 'pan';
   label: string;
   /** Base width against a 1000-unit-wide reference page. */
   width: number;
@@ -48,8 +48,13 @@ export const TOOLS: ToolPreset[] = [
     // Directly under the highlighter, where it was asked for — the two get used
     // in the same breath.
     id: 'eraser', label: 'Eraser', width: 26, opacity: 1, freehand: true, sensitivity: 0,
-    hint: 'Rubs out anything you have drawn — strokes, shapes, arrows, notes. '
+    hint: 'Rubs out just the part you pass over, like a real eraser. '
       + 'The plan itself can never be rubbed out.',
+  },
+  {
+    id: 'eraser-object', label: 'Erase whole', width: 20, opacity: 1, freehand: true, sensitivity: 0,
+    hint: 'Touch a mark anywhere and the whole of it goes — the quick way to '
+      + 'clear a box, an arrow or a long squiggle.',
   },
   {
     id: 'line', label: 'Line', width: 3, opacity: 1, freehand: false, sensitivity: 0, snappable: true,

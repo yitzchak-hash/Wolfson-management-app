@@ -29,6 +29,50 @@ import {
 import { Readable } from 'stream';
 
 const REF_WIDTH = 1000;
+/** Line spacing, matching LINE in src/components/plans/paintStroke.ts. */
+const LINE_H = 1.22;
+
+/** Embed a face once per document. */
+async function fontFor(pdf, cache, bold) {
+  const key = bold ? 'bold' : 'plain';
+  if (!cache[key]) {
+    cache[key] = await pdf.embedFont(bold ? StandardFonts.HelveticaBold : StandardFonts.Helvetica);
+  }
+  return cache[key];
+}
+
+/**
+ * The largest size at which this text fits this box, and the lines it makes.
+ *
+ * The twin of fitText() in paintStroke.ts, and it has to stay the twin — the
+ * balloon you see on screen and the balloon in the filed PDF are supposed to be
+ * the same balloon.
+ */
+function fitLines(font, text, boxW, boxH, want) {
+  let size = want;
+  let lines = [];
+  for (let i = 0; i < 26; i++) {
+    lines = wrapAt(font, text, boxW, size);
+    if (lines.length * size * LINE_H <= boxH || size <= 4) break;
+    size = Math.max(4, size * 0.92);
+  }
+  return { size, lines };
+}
+
+function wrapAt(font, text, maxW, size) {
+  const out = [];
+  for (const para of String(text).split('\n')) {
+    let line = '';
+    for (const word of para.split(/\s+/)) {
+      const next = line ? `${line} ${word}` : word;
+      let w;
+      try { w = font.widthOfTextAtSize(next, size); } catch { w = next.length * size * 0.5; }
+      if (w > maxW && line) { out.push(line); line = word; } else line = next;
+    }
+    out.push(line);
+  }
+  return out;
+}
 
 function getDrive() {
   const json = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
@@ -147,9 +191,11 @@ function strokeOps(stroke, pts, scale) {
     const x0 = Math.min(a.x, z.x), x1 = Math.max(a.x, z.x);
     const yTop = Math.max(a.y, z.y), yBot = Math.min(a.y, z.y);
     const w = x1 - x0, h = yTop - yBot;
-    const tail = Math.min(18 * scale, h * 0.32);
+    // The same figures paintStroke.ts uses, so the balloon on screen and the
+    // balloon in the PDF are the same shape.
+    const tail = Math.min(base * 8, h * 0.32);
     const bodyBot = yBot + tail;
-    const r = Math.min(10 * scale, w / 4, (yTop - bodyBot) / 3);
+    const r = Math.min(base * 5, w / 4, (yTop - bodyBot) / 3);
 
     ops.push(op(Ops.SetLineWidth, n(base)));
     ops.push(op(Ops.NonStrokingColorRgb, '1', '1', '1'));
@@ -221,31 +267,51 @@ function strokeOps(stroke, pts, scale) {
     return ops;
   }
 
-  // Freehand. Each segment carries its own width so pen pressure survives into
-  // the PDF — a single polyline with one width would throw that away.
-  if (pts.length === 1) {
-    const p = pts[0];
-    ops.push(op(Ops.SetLineWidth, n(base * p.w)));
-    ops.push(op(Ops.MoveTo, n(p.x), n(p.y)));
-    ops.push(op(Ops.LineTo, n(p.x + 0.01), n(p.y)));
-    ops.push(op(Ops.StrokePath));
-  } else {
-    let runWidth = null;
-    for (let i = 1; i < pts.length; i++) {
-      const w = base * ((pts[i - 1].w + pts[i].w) / 2);
-      // Only re-issue the width when it actually moves — a constant-width pen
-      // then emits one path instead of one per segment.
-      if (runWidth === null || Math.abs(w - runWidth) > base * 0.06) {
-        if (runWidth !== null) ops.push(op(Ops.StrokePath));
-        ops.push(op(Ops.SetLineWidth, n(w)));
-        ops.push(op(Ops.MoveTo, n(pts[i - 1].x), n(pts[i - 1].y)));
-        runWidth = w;
-      }
-      ops.push(op(Ops.LineTo, n(pts[i].x), n(pts[i].y)));
-    }
-    ops.push(op(Ops.StrokePath));
+  // Freehand — pen, pencil, marker, highlighter.
+  //
+  // ONE path, ONE fill: a quad per segment plus a disc per point, every subpath
+  // wound the same way and filled once with the nonzero rule. This is the exact
+  // geometry ribbon() draws on screen in src/components/plans/paintStroke.ts;
+  // change one, change both.
+  //
+  // Emitting a StrokePath per segment (or per run) is what this replaced. Each
+  // StrokePath composites separately against the ExtGState alpha, so anything
+  // under full opacity went darker wherever the strokes overlapped — which is
+  // wherever the hand slowed down — and a segment shorter than its own round cap
+  // came out as a bead. One fill cannot darken against itself however much it
+  // overlaps, and the discs supply the round joins and caps.
+  const flat = kind === 'highlighter';        // a felt chisel has no pressure
+  const half = (w) => Math.max(0.12, (base * (flat ? 1 : w)) / 2);
+
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i];
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 0.01) continue;                 // a pause: the discs cover it
+    const nx = -dy / len, ny = dx / len;
+    const ha = half(a.w), hb = half(b.w);
+    ops.push(op(Ops.MoveTo, n(a.x + nx * ha), n(a.y + ny * ha)));
+    ops.push(op(Ops.LineTo, n(b.x + nx * hb), n(b.y + ny * hb)));
+    ops.push(op(Ops.LineTo, n(b.x - nx * hb), n(b.y - ny * hb)));
+    ops.push(op(Ops.LineTo, n(a.x - nx * ha), n(a.y - ny * ha)));
+    ops.push(op(Ops.ClosePath));
   }
 
+  const K = 0.5523;                           // circle-from-beziers constant
+  for (const p of pts) {
+    // Clockwise, to match the quads above. A disc turning the other way cancels
+    // under the nonzero rule and punches a hole in the line.
+    const r = half(p.w);
+    const k = r * K;
+    ops.push(op(Ops.MoveTo, n(p.x + r), n(p.y)));
+    ops.push(op(Ops.AppendBezierCurve, n(p.x + r), n(p.y - k), n(p.x + k), n(p.y - r), n(p.x), n(p.y - r)));
+    ops.push(op(Ops.AppendBezierCurve, n(p.x - k), n(p.y - r), n(p.x - r), n(p.y - k), n(p.x - r), n(p.y)));
+    ops.push(op(Ops.AppendBezierCurve, n(p.x - r), n(p.y + k), n(p.x - k), n(p.y + r), n(p.x), n(p.y + r)));
+    ops.push(op(Ops.AppendBezierCurve, n(p.x + k), n(p.y + r), n(p.x + r), n(p.y + k), n(p.x + r), n(p.y)));
+    ops.push(op(Ops.ClosePath));
+  }
+
+  ops.push(op(Ops.FillNonZero));
   ops.push(op(Ops.PopGraphicsState));
   return ops;
 }
@@ -271,7 +337,7 @@ export async function stamp(bytes, strokes, label, author) {
     } catch { /* some plans refuse metadata writes; the markup still lands */ }
   }
   const pages = pdf.getPages();
-  let font = null;
+  const fonts = {};
 
   const byPage = new Map();
   for (const s of strokes) {
@@ -307,32 +373,41 @@ export async function stamp(bytes, strokes, label, author) {
       s.gsKey = gsFor(pdf, page, alpha, blend);
 
       if (s.tool === 'bubble' && s.text) {
-        // Its words, laid inside the balloon rather than at a point.
-        if (!font) font = await pdf.embedFont(StandardFonts.Helvetica);
+        // Its words, laid inside the balloon rather than at a point — and SIZED
+        // TO FIT it, exactly as fitText() does on screen. A small balloon used
+        // to keep its type size and spill its words out through its own outline.
+        const f = await fontFor(pdf, fonts, s.bold);
         const p = readPoints(s, W, H);
         const a = p[0], z = p[p.length - 1];
         if (a && z) {
-          const size = Math.max(5, (s.fontSize || 15) * scale);
           const [r, g, b] = hexToRgb(s.color);
-          const x0 = Math.min(a.x, z.x) + 8 * scale;
-          const boxW = Math.abs(z.x - a.x) - 16 * scale;
-          const yTop = Math.max(a.y, z.y) - size - 6 * scale;
-          page.drawText(String(s.text), {
-            x: x0, y: yTop, size, font, color: rgb(r, g, b),
-            maxWidth: Math.max(10, boxW), lineHeight: size * 1.22,
+          const base = Math.max(0.25, (s.width || 2) * scale);
+          const pad = base * 4;
+          const x0 = Math.min(a.x, z.x), x1 = Math.max(a.x, z.x);
+          const yBot = Math.min(a.y, z.y), yTop = Math.max(a.y, z.y);
+          const tail = Math.min(base * 8, (yTop - yBot) * 0.32);
+          const boxW = Math.max(10, x1 - x0 - pad * 2);
+          const boxH = Math.max(6, (yTop - (yBot + tail)) - pad * 2);
+          const fit = fitLines(f, String(s.text), boxW, boxH, Math.max(5, (s.fontSize || 15) * scale));
+          fit.lines.forEach((line, i) => {
+            page.drawText(line, {
+              x: x0 + pad,
+              y: yTop - pad - fit.size * (i + 1) * LINE_H + fit.size * 0.22,
+              size: fit.size, font: f, color: rgb(r, g, b),
+            });
           });
         }
         continue;
       }
 
       if (s.tool === 'text') {
-        if (!font) font = await pdf.embedFont(StandardFonts.Helvetica);
+        const f = await fontFor(pdf, fonts, s.bold);
         const p = readPoints(s, W, H)[0];
         if (p && s.text) {
           const size = Math.max(4, (s.fontSize || 16) * scale);
           const [r, g, b] = hexToRgb(s.color);
           page.drawText(String(s.text), {
-            x: p.x, y: p.y - size, size, font, color: rgb(r, g, b), opacity: alpha,
+            x: p.x, y: p.y - size, size, font: f, color: rgb(r, g, b), opacity: alpha,
             lineHeight: size * 1.25,
           });
         }

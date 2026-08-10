@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  X, Undo2, Redo2, Trash2, Save, Printer, Download, ChevronLeft, ChevronRight,
+  X, Undo2, Redo2, Trash2, HardDrive, AlertTriangle, SquareDashedMousePointer,
+  Save, Printer, Download, ChevronLeft, ChevronRight,
   Plus, Minus, Maximize2, Loader2, Pen, Pencil, Highlighter, Eraser, Minus as LineIcon,
   ArrowUpRight, Square, Circle, Type, Hand, Layers, FileDown, Check, ExternalLink,
   MessageSquare, Move, Layers2, ChevronsUpDown, User as UserIcon,
@@ -11,29 +12,12 @@ import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { useStore } from '../../data/store';
 import { AnnStroke, AnnTool, PlanAnnotation } from '../../types';
 import { fetchPlanBytes, stampPlanToDrive, extractFolderId, isUploadBackendConfigured } from '../../data/driveApi';
-import { PenStroke, PenSample, samplesOf, simplify, nearSegment } from './penInput';
+import { PenStroke, PenSample, NibWatch, samplesOf, simplify, nearSegment } from './penInput';
 import { TOOLS, toolById, INK_COLORS, HIGHLIGHT_COLORS, rememberColor } from './annotTools';
 import { InkPicker } from './InkPicker';
+import { paintStroke, bubbleTextBox, REF, LINE } from './paintStroke';
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
-
-/** Break a line of text to a width, for the speech balloon. */
-function wrapped(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
-  const out: string[] = [];
-  for (const para of String(text).split('\n')) {
-    let line = '';
-    for (const word of para.split(/\s+/)) {
-      const next = line ? `${line} ${word}` : word;
-      if (ctx.measureText(next).width > maxW && line) { out.push(line); line = word; }
-      else line = next;
-    }
-    out.push(line);
-  }
-  return out;
-}
-
-/** The reference page width every stored width is measured against. */
-const REF = 1000;
 
 /**
  * The editor wears the company's colours, not a generic dark-grey app chrome.
@@ -44,10 +28,16 @@ const NAVY = '#1e3a5f';
 const NAVY_DEEP = '#152b47';
 const ACCENT = '#4aa8d8';
 
+/** The tools the pen flip is allowed to swap between. */
+const INK_TOOLS = new Set(['pen', 'pencil', 'marker', 'highlighter']);
+/** What the fat end of the Samsung pen draws with. */
+const FAT_NIB_TOOL = 'highlighter';
+
 const ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
   pen: Pen, pencil: Pencil, marker: Highlighter, highlighter: Highlighter,
   line: LineIcon, arrow: ArrowUpRight, rect: Square, ellipse: Circle,
-  text: Type, eraser: Eraser, pan: Hand, move: Move, bubble: MessageSquare,
+  text: Type, eraser: Eraser, 'eraser-object': SquareDashedMousePointer, pan: Hand, move: Move,
+  bubble: MessageSquare,
 };
 
 interface PdfPage {
@@ -132,6 +122,7 @@ export function PlanAnnotator({
 }) {
   const planAnnotations = useStore(s => s.planAnnotations);
   const savePlanAnnotation = useStore(s => s.savePlanAnnotation);
+  const updatePlanAnnotation = useStore(s => s.updatePlanAnnotation);
   const deletePlanAnnotation = useStore(s => s.deletePlanAnnotation);
 
   const [doc, setDoc] = useState<PdfDoc | null>(null);
@@ -151,6 +142,8 @@ export function PlanAnnotator({
   const [color, setColor] = useState('#dc2626');
   const [width, setWidth] = useState(3);
   const [opacity, setOpacity] = useState(1);
+  /** Heavier type on the next note or balloon. */
+  const [bold, setBold] = useState(false);
   const [sens, setSens] = useState(1);
   const [showPalette, setShowPalette] = useState(false);
   const [paletteAt, setPaletteAt] = useState({ x: 120, y: 120 });
@@ -178,11 +171,32 @@ export function PlanAnnotator({
   const liveRef = useRef<HTMLCanvasElement>(null);
   const renderTask = useRef<{ cancel(): void } | null>(null);
   const ocRef = useRef<OcConfig | null>(null);
-  const drawing = useRef<{ pen: PenStroke; pts: PenSample[]; startedAt: number } | null>(null);
+  const drawing = useRef<{
+    pen: PenStroke; pts: PenSample[]; startedAt: number;
+    /** The tool this stroke actually started with — see nibFlip(). */
+    tool?: string;
+  } | null>(null);
+  /** Learns this panel's two nib sizes, so flipping the pen can switch tools. */
+  const nibs = useRef(new NibWatch());
+  /** The ink tool to come back to when the pen is flipped the right way up. */
+  const thinNibTool = useRef<string>('pen');
   /** A drag of something already drawn, rather than a new stroke. */
   const moving = useRef<{ id: string; nx: number; ny: number; pts: number[]; grip?: 'a' | 'z' } | null>(null);
   const erased = useRef<Set<string>>(new Set());
   const textRef = useRef<HTMLTextAreaElement>(null);
+  /** Where a zoom should land, as a fraction of the content. See renderPage. */
+  const zoomAnchor = useRef<{ fx: number; fy: number; cx: number; cy: number } | null>(null);
+  /** The live scale, for the pinch handler — which is registered once. */
+  const scaleRef = useRef(scale);
+  scaleRef.current = scale;
+
+  /** Abandon a stroke in progress without committing it. */
+  const cancelStroke = useCallback(() => {
+    drawing.current = null;
+    moving.current = null;
+    const c = liveRef.current;
+    if (c) c.getContext('2d')!.clearRect(0, 0, c.width, c.height);
+  }, []);
 
   const preset = toolById(tool);
   const backendReady = isUploadBackendConfigured();
@@ -197,7 +211,8 @@ export function PlanAnnotator({
   const locked = readOnly || (askWho && !who);
 
   /** The pen shows the size it will draw at; the eraser shows what it will take. */
-  const showNib = !locked && (preset.freehand || tool === 'eraser');
+  const isEraser = tool === 'eraser' || tool === 'eraser-object';
+  const showNib = !locked && (preset.freehand || isEraser);
   const nibPx = Math.max(4, width * ((liveRef.current?.width ?? 1000) / REF)
     / Math.max(0.05, window.devicePixelRatio || 1));
   const parentFolderId = driveFolderUrl ? extractFolderId(driveFolderUrl) : null;
@@ -228,13 +243,16 @@ export function PlanAnnotator({
     if (!doc || !pdfRef.current) return;
     const p = await doc.getPage(page + 1);
 
-    // Fit-to-width on first sight of a page, because a construction drawing at
-    // 100% is unusable on any screen and hunting for the zoom first is friction.
+    // The WHOLE page fits on first sight, not just its width. A construction
+    // drawing at 100% is unusable on any screen, and fitting the width alone
+    // still left an A0 sheet taller than the stage — so it opened with a scroll
+    // bar and you could not see what you were about to mark up.
     let s = scale;
     if (fitting && stageRef.current) {
-      const avail = stageRef.current.clientWidth - 32;
-      const nat = p.getViewport({ scale: 1 }).width;
-      s = Math.max(0.2, Math.min(4, avail / nat));
+      const availW = stageRef.current.clientWidth - 32;
+      const availH = stageRef.current.clientHeight - 32;
+      const nat = p.getViewport({ scale: 1 });
+      s = Math.max(0.1, Math.min(4, Math.min(availW / nat.width, availH / nat.height)));
       setScale(s); setFitting(false);
     }
 
@@ -250,6 +268,19 @@ export function PlanAnnotator({
       c.height = Math.round(h * dpr);
       c.style.width = `${w}px`;
       c.style.height = `${h}px`;
+    }
+
+    // Zoom lands on whatever you pointed at. The anchor was taken as a FRACTION
+    // of the content before the scale changed, so now that the canvases have
+    // their new size we can put that same fraction back under the same point on
+    // screen. Reading scrollWidth here is what forces the layout to settle
+    // first — correcting the scroll any later and you see it jump.
+    const anchor = zoomAnchor.current;
+    if (anchor && stageRef.current) {
+      const el = stageRef.current;
+      el.scrollLeft = anchor.fx * el.scrollWidth - anchor.cx;
+      el.scrollTop = anchor.fy * el.scrollHeight - anchor.cy;
+      zoomAnchor.current = null;
     }
 
     renderTask.current?.cancel();
@@ -281,29 +312,94 @@ export function PlanAnnotator({
   }, []);
 
   /**
-   * Ctrl/⌘ + wheel zooms the PLAN, not the browser.
+   * The wheel ALWAYS zooms the plan, and it zooms towards the pointer.
+   *
+   * It used to need Ctrl held down and otherwise scrolled, which on a drawing
+   * is the wrong default twice over: scrolling a plan is rarely what you want,
+   * and a wall panel has no Ctrl key at all. To look somewhere else you zoom
+   * out and back in over there, which is one gesture instead of two.
    *
    * React's onWheel prop is passive in several browsers, where preventDefault()
-   * silently does nothing and the browser zooms the whole page instead — which
+   * silently does nothing and the BROWSER zooms the whole page instead — which
    * on a full-screen editor throws the layout apart. Registering by hand with
    * `{ passive: false }` is the only way to claim the gesture, and it is the
    * same lesson the job board learned.
    */
+  const zoomAt = useCallback((clientX: number, clientY: number, factor: number) => {
+    const el = stageRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const cx = clientX - r.left, cy = clientY - r.top;
+    zoomAnchor.current = {
+      fx: el.scrollWidth ? (el.scrollLeft + cx) / el.scrollWidth : 0.5,
+      fy: el.scrollHeight ? (el.scrollTop + cy) / el.scrollHeight : 0.5,
+      cx, cy,
+    };
+    setFitting(false);
+    setScale(z => Math.min(6, Math.max(0.1, Math.round(z * factor * 100) / 100)));
+  }, []);
+
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return;
     function wheel(e: WheelEvent) {
-      if (!(e.ctrlKey || e.metaKey)) return;      // plain wheel still scrolls
       e.preventDefault();
-      setFitting(false);
-      setScale(z => {
-        const next = z * (e.deltaY < 0 ? 1.12 : 1 / 1.12);
-        return Math.min(6, Math.max(0.15, Math.round(next * 100) / 100));
-      });
+      zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.12 : 1 / 1.12);
     }
     el.addEventListener('wheel', wheel, { passive: false });
     return () => el.removeEventListener('wheel', wheel);
-  }, []);
+  }, [zoomAt]);
+
+  /**
+   * Two fingers pinch, on the touch panel and on a trackpad's touch surface.
+   *
+   * The second finger also CANCELS whatever stroke the first one had started —
+   * otherwise a pinch leaves a stray mark across the plan from wherever the
+   * first finger happened to land.
+   */
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    let base: { dist: number; scale: number } | null = null;
+
+    const gap = (t: TouchList) =>
+      Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+
+    function start(e: TouchEvent) {
+      if (e.touches.length !== 2) return;
+      cancelStroke();
+      base = { dist: gap(e.touches), scale: scaleRef.current };
+    }
+    function move(e: TouchEvent) {
+      if (e.touches.length !== 2 || !base) return;
+      e.preventDefault();
+      const d = gap(e.touches);
+      if (base.dist < 8) return;
+      const want = Math.min(6, Math.max(0.1, base.scale * (d / base.dist)));
+      const r = el!.getBoundingClientRect();
+      const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - r.left;
+      const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - r.top;
+      zoomAnchor.current = {
+        fx: el!.scrollWidth ? (el!.scrollLeft + cx) / el!.scrollWidth : 0.5,
+        fy: el!.scrollHeight ? (el!.scrollTop + cy) / el!.scrollHeight : 0.5,
+        cx, cy,
+      };
+      setFitting(false);
+      setScale(Math.round(want * 100) / 100);
+    }
+    function end(e: TouchEvent) { if (e.touches.length < 2) base = null; }
+
+    el.addEventListener('touchstart', start, { passive: true });
+    el.addEventListener('touchmove', move, { passive: false });
+    el.addEventListener('touchend', end, { passive: true });
+    el.addEventListener('touchcancel', end, { passive: true });
+    return () => {
+      el.removeEventListener('touchstart', start);
+      el.removeEventListener('touchmove', move);
+      el.removeEventListener('touchend', end);
+      el.removeEventListener('touchcancel', end);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
    * The plan's OWN layers.
@@ -342,126 +438,9 @@ export function PlanAnnotator({
     setTimeout(() => void renderPage(), 0);
   }
 
-  // ---- painting ----------------------------------------------------------
-
-  /** Normalised (0..1) point → ink-canvas pixels. */
-  const toPx = (c: HTMLCanvasElement, nx: number, ny: number) => ({ x: nx * c.width, y: ny * c.height });
-
-  function paint(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement, s: AnnStroke) {
-    const unit = c.width / REF;
-    ctx.save();
-    ctx.globalAlpha = s.opacity;
-    ctx.globalCompositeOperation = s.tool === 'highlighter' ? 'multiply' : 'source-over';
-    ctx.strokeStyle = s.color;
-    ctx.fillStyle = s.color;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-
-    const pts: { x: number; y: number; w: number }[] = [];
-    for (let i = 0; i + 2 < s.pts.length + 1; i += 3) {
-      const P = toPx(c, s.pts[i], s.pts[i + 1]);
-      pts.push({ ...P, w: s.pts[i + 2] ?? 1 });
-    }
-    if (!pts.length) { ctx.restore(); return; }
-    const a = pts[0], z = pts[pts.length - 1];
-    const base = Math.max(0.5, s.width * unit);
-
-    if (s.tool === 'text') {
-      const size = Math.max(6, (s.fontSize ?? 16) * unit);
-      ctx.font = `600 ${size}px Segoe UI, Helvetica, Arial, sans-serif`;
-      ctx.textBaseline = 'top';
-      String(s.text ?? '').split('\n').forEach((line, i) => ctx.fillText(line, a.x, a.y + i * size * 1.25));
-      ctx.restore();
-      return;
-    }
-
-    ctx.lineWidth = base;
-    if (s.tool === 'rect') {
-      ctx.beginPath();
-      ctx.rect(Math.min(a.x, z.x), Math.min(a.y, z.y), Math.abs(z.x - a.x), Math.abs(z.y - a.y));
-      if (s.fill) ctx.fill();
-      ctx.stroke();
-    } else if (s.tool === 'ellipse') {
-      ctx.beginPath();
-      ctx.ellipse((a.x + z.x) / 2, (a.y + z.y) / 2, Math.abs(z.x - a.x) / 2, Math.abs(z.y - a.y) / 2, 0, 0, Math.PI * 2);
-      if (s.fill) ctx.fill();
-      ctx.stroke();
-    } else if (s.tool === 'bubble') {
-      // A speech balloon: rounded box, tail to the lower left, white inside so
-      // the words sit on something rather than on the drawing.
-      const x0 = Math.min(a.x, z.x), x1 = Math.max(a.x, z.x);
-      const y0 = Math.min(a.y, z.y), y1 = Math.max(a.y, z.y);
-      const w = x1 - x0, h = y1 - y0;
-      const tail = Math.min(base * 8, h * 0.32);
-      const bot = y1 - tail;
-      const r = Math.min(base * 5, w / 4, (bot - y0) / 3);
-      ctx.beginPath();
-      ctx.moveTo(x0 + r, y0);
-      ctx.lineTo(x1 - r, y0);
-      ctx.quadraticCurveTo(x1, y0, x1, y0 + r);
-      ctx.lineTo(x1, bot - r);
-      ctx.quadraticCurveTo(x1, bot, x1 - r, bot);
-      ctx.lineTo(x0 + w * 0.36, bot);
-      ctx.lineTo(x0 + w * 0.16, y1);                       // the tail
-      ctx.lineTo(x0 + w * 0.26, bot);
-      ctx.lineTo(x0 + r, bot);
-      ctx.quadraticCurveTo(x0, bot, x0, bot - r);
-      ctx.lineTo(x0, y0 + r);
-      ctx.quadraticCurveTo(x0, y0, x0 + r, y0);
-      ctx.closePath();
-      ctx.save();
-      ctx.fillStyle = '#ffffff';
-      ctx.globalAlpha = 0.94;
-      ctx.fill();
-      ctx.restore();
-      ctx.stroke();
-
-      if (s.text) {
-        const size = Math.max(7, (s.fontSize ?? 15) * unit);
-        ctx.font = `600 ${size}px Segoe UI, Helvetica, Arial, sans-serif`;
-        ctx.textBaseline = 'top';
-        wrapped(ctx, s.text, w - base * 8).forEach((line, i) => {
-          ctx.fillText(line, x0 + base * 4, y0 + base * 4 + i * size * 1.22);
-        });
-      }
-    } else if (s.tool === 'line' || s.tool === 'arrow') {
-      if (s.tool === 'arrow') {
-        // The head is proportional and the SHAFT STOPS AT ITS BASE. Drawing the
-        // full line and then a triangle on top of it pokes a blunt round cap out
-        // past the point, which is what made the arrow look wrong.
-        const ang = Math.atan2(z.y - a.y, z.x - a.x);
-        const len = Math.hypot(z.x - a.x, z.y - a.y);
-        const head = Math.min(Math.max(base * 4.2, 9), len * 0.42);
-        const sp = 0.38;
-        const bx = z.x - Math.cos(ang) * head * 0.86;
-        const by = z.y - Math.sin(ang) * head * 0.86;
-        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(bx, by); ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(z.x, z.y);
-        ctx.lineTo(z.x - head * Math.cos(ang - sp), z.y - head * Math.sin(ang - sp));
-        ctx.lineTo(z.x - head * Math.cos(ang + sp), z.y - head * Math.sin(ang + sp));
-        ctx.closePath(); ctx.fill();
-      } else {
-        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(z.x, z.y); ctx.stroke();
-      }
-    } else {
-      // Freehand. Per-segment width is how pen pressure survives — one width
-      // for the whole polyline would throw it away.
-      for (let i = 1; i < pts.length; i++) {
-        ctx.beginPath();
-        ctx.lineWidth = base * ((pts[i - 1].w + pts[i].w) / 2);
-        ctx.moveTo(pts[i - 1].x, pts[i - 1].y);
-        ctx.lineTo(pts[i].x, pts[i].y);
-        ctx.stroke();
-      }
-      if (pts.length === 1) {
-        ctx.beginPath();
-        ctx.arc(a.x, a.y, (base * a.w) / 2, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-    ctx.restore();
-  }
+  // ---- painting ---------------------------------------------------------
+  // The drawing rule itself lives in paintStroke.ts, next to its twin in
+  // api/plan-annotate.js. Change one, change both.
 
   const redrawInk = useCallback(() => {
     const c = inkRef.current;
@@ -469,8 +448,14 @@ export function PlanAnnotator({
     const ctx = c.getContext('2d')!;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, c.width, c.height);
-    for (const s of strokes) if (s.page === page) paint(ctx, c, s);
-  }, [strokes, page]); // eslint-disable-line react-hooks/exhaustive-deps
+    for (const s of strokes) {
+      if (s.page !== page) continue;
+      // The balloon being typed into draws EMPTY: its words are in the text box
+      // sitting on top of it, and drawing them here as well shows them twice,
+      // half a pixel apart, which reads as a rendering fault.
+      paintStroke(ctx, c, s.id === textDraft?.forId ? { ...s, text: '' } : s);
+    }
+  }, [strokes, page, textDraft?.forId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { redrawInk(); }, [redrawInk]);
 
@@ -592,14 +577,122 @@ export function PlanAnnotator({
     return Math.hypot(ax - nx, ay - ny) < r;
   }
 
-  function eraseAt(nx: number, ny: number) {
+  /**
+   * Erase.
+   *
+   * Two tools, because the two jobs are genuinely different and doing both with
+   * one is what made the old one frustrating:
+   *
+   *  - "Erase whole" takes the entire mark you touch. That is what you want for
+   *    a box, an arrow, or a squiggle you have finished with.
+   *  - "Eraser" takes only the part you pass over, like a real one. A freehand
+   *    stroke is cut where you rub and the two halves stay, so you can clean up
+   *    the end of a line without losing the line.
+   *
+   * A box, a circle, a balloon or a note has no meaningful half, so the normal
+   * eraser takes those whole as well rather than pretending otherwise. A plain
+   * line does split, since half a line is still a line — but an arrow does not,
+   * because the half without the head is no longer an arrow.
+   */
+  const SPLITTABLE = new Set(['pen', 'pencil', 'marker', 'highlighter', 'line']);
+
+  function eraseAt(nx: number, ny: number, whole: boolean) {
     const radius = (width / REF) * 0.55 + 0.004;
-    let hit = false;
-    for (const s of strokes) {
-      if (s.page !== page || erased.current.has(s.id)) continue;
-      if (hits(s, nx, ny, radius)) { erased.current.add(s.id); hit = true; }
+
+    if (whole) {
+      let hit = false;
+      for (const s of strokes) {
+        if (s.page !== page || erased.current.has(s.id)) continue;
+        if (hits(s, nx, ny, radius)) { erased.current.add(s.id); hit = true; }
+      }
+      if (hit) setStrokes(prev => prev.filter(s => !erased.current.has(s.id)));
+      return;
     }
-    if (hit) setStrokes(prev => prev.filter(s => !erased.current.has(s.id)));
+
+    let changed = false;
+    const next: AnnStroke[] = [];
+    for (const s of strokes) {
+      if (s.page !== page || !hits(s, nx, ny, radius)) { next.push(s); continue; }
+      if (!SPLITTABLE.has(s.tool)) { changed = true; continue; }        // taken whole
+
+      // A straight line is only two stored points, so rubbing its middle would
+      // do nothing visible. Walk it at the eraser's own resolution instead, and
+      // the pieces that survive come back as lines.
+      const src = s.tool === 'line' ? densify(s.pts, radius / 2) : s.pts;
+
+      const runs: number[][] = [];
+      let run: number[] = [];
+      for (let i = 0; i + 2 < src.length; i += 3) {
+        if (Math.hypot(src[i] - nx, src[i + 1] - ny) < radius) {
+          if (run.length >= 6) runs.push(run);
+          run = [];
+        } else {
+          run.push(src[i], src[i + 1], src[i + 2]);
+        }
+      }
+      if (run.length >= 6) runs.push(run);
+
+      changed = true;
+      runs.forEach((pts, i) => next.push({
+        ...s,
+        // Freehand from here on: what is left of a rubbed line is a polyline,
+        // and an arrow head or a snap would be wrong on it.
+        tool: s.tool === 'line' ? 'pen' : s.tool,
+        id: `${s.id}~${i}`,
+        pts,
+      }));
+    }
+    if (changed) setStrokes(next);
+  }
+
+  /** Add points along a two-point mark so it can be rubbed anywhere along it. */
+  function densify(pts: number[], step: number): number[] {
+    if (pts.length < 6) return pts;
+    const out: number[] = [];
+    for (let i = 0; i + 5 < pts.length; i += 3) {
+      const [ax, ay, aw, bx, by] = [pts[i], pts[i + 1], pts[i + 2], pts[i + 3], pts[i + 4]];
+      const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / Math.max(1e-4, step)));
+      for (let k = 0; k < n; k++) out.push(ax + ((bx - ax) * k) / n, ay + ((by - ay) * k) / n, aw);
+    }
+    out.push(pts[pts.length - 3], pts[pts.length - 2], pts[pts.length - 1]);
+    return out;
+  }
+
+  /**
+   * Where a balloon's words sit, as percentages of the plan.
+   *
+   * The balloon IS the text box now — you type inside it rather than into a
+   * pop-up that appears somewhere else and then teleports its words into the
+   * shape. That only works if the box is in EXACTLY the place the renderer will
+   * draw the text, so both sides go through bubbleTextBox() and this converts
+   * its answer into the percentages the overlay needs.
+   *
+   * The x and y fractions are measured against different dimensions, so the
+   * padding has to be converted twice — using one for both is what would make
+   * the box drift on a landscape sheet.
+   */
+  function bubbleBox(s: AnnStroke) {
+    const c = liveRef.current;
+    const aspect = c && c.height ? c.width / c.height : 1.414;
+    const dpr = c ? c.width / Math.max(1, parseFloat(c.style.width) || c.width) : 1;
+    const last = s.pts.length - 3;
+    const x0 = Math.min(s.pts[0], s.pts[last]), x1 = Math.max(s.pts[0], s.pts[last]);
+    const y0 = Math.min(s.pts[1], s.pts[last + 1]), y1 = Math.max(s.pts[1], s.pts[last + 1]);
+    const baseX = Math.max(0.5, s.width) / REF;
+    const baseY = baseX * aspect;
+    const tail = Math.min(baseY * 8, (y1 - y0) * 0.32);
+    const box = bubbleTextBox(x0, y0, x1 - x0, y1 - tail - y0, baseX);
+    // bubbleTextBox pads both axes with the x-based figure; correct the y one.
+    const padY = baseY * 4, padX = baseX * 4;
+    return {
+      left: box.x * 100,
+      top: (y0 + padY) * 100,
+      width: box.w * 100,
+      height: Math.max(0.02, (y1 - tail - y0 - padY * 2)) * 100,
+      /** CSS pixels, so the typed words are the size the drawn ones will be. */
+      fontPx: Math.max(7, (s.fontSize ?? 15) * ((c?.width ?? REF) / REF)) / dpr,
+      padX, padY,
+    };
   }
 
   /**
@@ -674,17 +767,61 @@ export function PlanAnnotator({
     (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
     e.preventDefault();
 
-    if (tool === 'eraser') {
+    if (isEraser) {
       erased.current = new Set();
       drawing.current = { pen: new PenStroke({ sensitivity: 0 }), pts: [], startedAt: Date.now() };
-      eraseAt(nx, ny);
+      eraseAt(nx, ny, tool === 'eraser-object');
       return;
     }
 
-    const pen = new PenStroke({ sensitivity: preset.sensitivity * sens });
+    // Flipping the pen over changes the tool, because that is what the pen is
+    // for. See nibFlip().
+    const drawWith = nibFlip(e.nativeEvent);
+    const pre = toolById(drawWith);
+
+    const pen = new PenStroke({ sensitivity: pre.sensitivity * sens });
     const s = pen.push(e.nativeEvent, performance.now());
-    drawing.current = { pen, pts: [{ x: nx, y: ny, w: s.w }], startedAt: Date.now() };
+    drawing.current = {
+      pen, pts: [{ x: nx, y: ny, w: s.w }], startedAt: Date.now(), tool: drawWith,
+    };
     setPenSource(pen.usedSource);
+  }
+
+  /**
+   * The Samsung pen is double-ended: flip it and the highlighter comes up, flip
+   * it back and you are on the pen again.
+   *
+   * The panel has no button and no pressure — the only thing it can tell us
+   * about which end is down is the size of the contact patch, so NibWatch
+   * learns the two sizes and reports which one this is.
+   *
+   * It only ever swaps between the INK tools. If you have deliberately picked
+   * the arrow, or the eraser, or text, flipping the pen must not silently take
+   * that away from you — and coming back from the fat nib returns you to the ink
+   * tool you were actually using, not always to the pen.
+   */
+  function nibFlip(e: PointerEvent): string {
+    if (locked || !INK_TOOLS.has(tool)) return tool;
+    const nib = nibs.current.see(Math.max(e.width ?? 0, e.height ?? 0));
+    if (!nib) return tool;
+
+    if (nib === 'fat' && tool !== FAT_NIB_TOOL) {
+      thinNibTool.current = tool;
+      setTool(FAT_NIB_TOOL);
+      setWidth(toolById(FAT_NIB_TOOL).width);
+      setOpacity(toolById(FAT_NIB_TOOL).opacity);
+      if (!HIGHLIGHT_COLORS.includes(color)) setColor(HIGHLIGHT_COLORS[0]);
+      return FAT_NIB_TOOL;
+    }
+    if (nib === 'thin' && tool === FAT_NIB_TOOL) {
+      const back = thinNibTool.current;
+      setTool(back);
+      setWidth(toolById(back).width);
+      setOpacity(toolById(back).opacity);
+      if (HIGHLIGHT_COLORS.includes(color)) setColor(INK_COLORS[0]);
+      return back;
+    }
+    return tool;
   }
 
   function onMove(e: React.PointerEvent<HTMLCanvasElement>) {
@@ -726,9 +863,9 @@ export function PlanAnnotator({
     if (!d) return;
     e.preventDefault();
 
-    if (tool === 'eraser') {
+    if (isEraser) {
       const { nx, ny } = norm(e);
-      eraseAt(nx, ny);
+      eraseAt(nx, ny, tool === 'eraser-object');
       return;
     }
 
@@ -738,24 +875,16 @@ export function PlanAnnotator({
       for (const raw of samplesOf(e.nativeEvent)) {
         const { nx, ny } = norm(raw);
         const s = d.pen.push(raw, performance.now());
-        const prev = d.pts[d.pts.length - 1];
         d.pts.push({ x: nx, y: ny, w: s.w });
-        // Incremental: draw only the new segment, so a long stroke stays
-        // as cheap on frame 5000 as on frame 5.
-        const c = liveRef.current!;
-        const ctx = c.getContext('2d')!;
-        ctx.save();
-        ctx.globalAlpha = opacity;
-        ctx.globalCompositeOperation = tool === 'highlighter' ? 'multiply' : 'source-over';
-        ctx.strokeStyle = color;
-        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-        ctx.lineWidth = Math.max(0.5, width * (c.width / REF)) * ((prev.w + s.w) / 2);
-        ctx.beginPath();
-        ctx.moveTo(prev.x * c.width, prev.y * c.height);
-        ctx.lineTo(nx * c.width, ny * c.height);
-        ctx.stroke();
-        ctx.restore();
       }
+      // The whole stroke is REDRAWN from scratch, through the same paintStroke() the
+      // finished mark uses. Adding only the newest segment was cheaper, but it
+      // is the very thing that beaded the line and darkened the highlighter —
+      // and it also meant what you saw while drawing was not what you got when
+      // you let go. Clearing and redrawing one path costs well under a frame
+      // even on a very long stroke; correctness wins here.
+      clearLive();
+      paintStroke(liveRef.current!.getContext('2d')!, liveRef.current!, draftStroke(d.pts, d.tool ?? tool));
       setPenSource(d.pen.usedSource);
     } else {
       let { nx, ny } = norm(e);
@@ -778,13 +907,13 @@ export function PlanAnnotator({
       }
       d.pts = [a, { x: nx, y: ny, w: 1 }];
       clearLive();
-      paint(liveRef.current!.getContext('2d')!, liveRef.current!, draftStroke(d.pts));
+      paintStroke(liveRef.current!.getContext('2d')!, liveRef.current!, draftStroke(d.pts));
     }
   }
 
-  function draftStroke(pts: PenSample[]): AnnStroke {
+  function draftStroke(pts: PenSample[], asTool: string = tool): AnnStroke {
     return {
-      id: 'draft', page, tool: tool as AnnTool, color, width, opacity,
+      id: 'draft', page, tool: asTool as AnnTool, color, width, opacity,
       pts: pts.flatMap(p => [p.x, p.y, p.w]),
     };
   }
@@ -801,22 +930,30 @@ export function PlanAnnotator({
     try { (e.target as HTMLCanvasElement).releasePointerCapture(e.pointerId); } catch { /* already gone */ }
     if (!d) return;
 
-    if (tool === 'eraser') {
-      if (erased.current.size) { setRedo([]); setDirty(true); }
+    if (isEraser) {
+      // The partial eraser rewrites strokes rather than collecting ids, so it
+      // marks itself dirty as it goes; the whole-mark one is counted here.
+      setRedo([]); setDirty(true);
       erased.current = new Set();
       return;
     }
 
-    const pts = preset.freehand ? simplify(d.pts, 0.0006) : d.pts;
+    // The tool the stroke STARTED with. Flipping the pen mid-air changes the
+    // tool at pointerdown, and React has not necessarily re-rendered by the time
+    // the first sample arrives — so the stroke carries its own answer.
+    const drewWith = d.tool ?? tool;
+    const pre = toolById(drewWith);
+
+    const pts = pre.freehand ? simplify(d.pts, 0.0006) : d.pts;
     // A tap with a shape tool is a mis-click, not a zero-size box.
-    if (!preset.freehand && pts.length > 1 && Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y) < 0.004) {
+    if (!pre.freehand && pts.length > 1 && Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y) < 0.004) {
       clearLive(); return;
     }
     if (!pts.length) { clearLive(); return; }
 
     const s: AnnStroke = {
       id: `S-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-      page, tool: tool as AnnTool, color, width, opacity,
+      page, tool: drewWith as AnnTool, color, width, opacity,
       pts: pts.flatMap(p => [
         Math.round(p.x * 1e4) / 1e4,
         Math.round(p.y * 1e4) / 1e4,
@@ -830,7 +967,7 @@ export function PlanAnnotator({
 
     // A balloon with nothing in it is not a balloon, so it goes straight into
     // typing — anchored to the box that was just drawn.
-    if (tool === 'bubble') {
+    if (drewWith === 'bubble') {
       const x0 = Math.min(pts[0].x, pts[pts.length - 1].x);
       const y0 = Math.min(pts[0].y, pts[pts.length - 1].y);
       setTextDraft({ nx: x0 + 0.008, ny: y0 + 0.01, value: '', forId: s.id });
@@ -846,20 +983,129 @@ export function PlanAnnotator({
       // The words belong to the balloon, not to a separate text mark, so
       // moving or erasing the balloon takes them with it.
       setStrokes(prev => prev.map(s => (s.id === target
-        ? { ...s, text: v, fontSize: Math.max(9, width * 4 + 11) } : s)));
+        ? { ...s, text: v, bold, fontSize: s.fontSize ?? Math.max(9, width * 4 + 11) } : s)));
       setDirty(true);
       return;
     }
     if (!v) return;
     setStrokes(prev => [...prev, {
       id: `S-${Date.now().toString(36)}`,
-      page, tool: 'text', color, width: 0, opacity,
+      page, tool: 'text', color, width: 0, opacity, bold,
       fontSize: Math.max(8, width * 5 + 10),
       text: v,
       pts: [textDraft.nx, textDraft.ny, 1],
     }]);
     setRedo([]); setDirty(true);
   }
+
+  /**
+   * Saving you never have to think about.
+   *
+   * Three separate clocks, because the two destinations have completely
+   * different costs:
+   *
+   *  - **Here, instantly.** The moment you lift the pen the version is written
+   *    into the app's own data. That costs nothing and means the markup exists
+   *    the instant it is drawn.
+   *  - **Drive, once you stop.** Stamping a PDF and uploading it is a real piece
+   *    of work on a real plan, so it waits until nothing has happened for a few
+   *    seconds. Drawing forty marks makes one upload, not forty.
+   *  - **The tab, if you leave early.** Between the two there is a window where
+   *    the markup is safe here but not yet in Drive. Closing the tab in that
+   *    window is the one way to lose it, so the browser is asked to stop you.
+   */
+  const DRIVE_IDLE_MS = 9_000;
+  const [saveState, setSaveState] = useState<'clean' | 'local' | 'sending' | 'sent' | 'failed'>('clean');
+  const idleTimer = useRef<number | undefined>(undefined);
+  const versionIdRef = useRef<string | null>(null);
+  const pushingRef = useRef(false);
+
+  /** The strokes as the server wants them, minus our own ids. */
+  const strokesForDrive = useCallback(
+    () => strokes.map(({ id: _id, ...rest }) => rest),
+    [strokes],
+  );
+
+  /**
+   * One version per sketch, updated in place — not one per mark.
+   *
+   * A version per mark would give a list of two hundred, of which only the last
+   * is any use. This keeps the working sketch as a single record that grows,
+   * and "Start a blank sketch" is what begins a new one.
+   */
+  const keepLocally = useCallback(() => {
+    if (locked || !strokes.length) return;
+    const id = versionIdRef.current
+      ?? `PA-${planFileId.slice(0, 8)}-${nextVersion}-${Date.now().toString(36)}`;
+    versionIdRef.current = id;
+    savePlanAnnotation({
+      id, apartmentId, planFileId, planName,
+      version: nextVersion,
+      strokes,
+      pageCount: doc?.numPages ?? 1,
+      createdAt: new Date().toISOString(),
+      createdBy: who || authorName,
+      basedOn,
+    });
+    setSaveState('local');
+  }, [locked, strokes, planFileId, nextVersion, apartmentId, planName, doc, who, authorName, basedOn, savePlanAnnotation]);
+
+  const pushToDrive = useCallback(async () => {
+    if (pushingRef.current || locked || !strokes.length) return;
+    if (!backendReady || !(plansFolderId || parentFolderId)) return;   // nowhere to put it
+    pushingRef.current = true;
+    setSaveState('sending');
+    try {
+      const out = await stampPlanToDrive({
+        planFileId,
+        parentFolderId: plansFolderId || parentFolderId!,
+        strokes: strokesForDrive(),
+        version: nextVersion,
+        jobName: apartmentLabel,
+        author: who || authorName,
+      });
+      if (versionIdRef.current) {
+        updatePlanAnnotation(versionIdRef.current, {
+          driveFileId: out.fileId, driveUrl: out.webViewLink,
+        });
+      }
+      setSaveState('sent');
+    } catch {
+      setSaveState('failed');
+    } finally {
+      pushingRef.current = false;
+    }
+  }, [locked, strokes.length, backendReady, plansFolderId, parentFolderId, planFileId,
+      strokesForDrive, nextVersion, apartmentLabel, who, authorName, updatePlanAnnotation]);
+
+  // Every change: keep it here now, and set the clock running for Drive.
+  useEffect(() => {
+    if (!dirty || locked || !strokes.length) return;
+    keepLocally();
+    clearTimeout(idleTimer.current);
+    idleTimer.current = window.setTimeout(() => { void pushToDrive(); }, DRIVE_IDLE_MS);
+    return () => clearTimeout(idleTimer.current);
+  }, [strokes, dirty, locked, keepLocally, pushToDrive]);
+
+  /**
+   * Leaving before Drive has it.
+   *
+   * The browser only lets a page ASK, and only when the user has interacted
+   * with it — which after drawing on a plan they certainly have. It shows its
+   * own wording, so the message here is for the browsers that still honour a
+   * custom one.
+   */
+  useEffect(() => {
+    if (saveState !== 'local' && saveState !== 'sending') return;
+    function warn(e: BeforeUnloadEvent) {
+      e.preventDefault();
+      e.returnValue = 'Your markup is saved here but has not reached Drive yet. '
+        + 'Give it a few seconds.';
+      return e.returnValue;
+    }
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [saveState]);
 
   // ---- history -----------------------------------------------------------
   function undo() {
@@ -911,7 +1157,7 @@ export function PlanAnnotator({
         const map: Record<string, string> = {
           p: 'pen', n: 'pencil', m: 'marker', h: 'highlighter', e: 'eraser',
           l: 'line', a: 'arrow', r: 'rect', o: 'ellipse', t: 'text', v: 'pan',
-          s: 'move', b: 'bubble',
+          s: 'move', b: 'bubble', d: 'eraser-object',
         };
         if (map[e.key.toLowerCase()]) pick(map[e.key.toLowerCase()]);
       }
@@ -943,8 +1189,18 @@ export function PlanAnnotator({
   }
 
   function newSketch() {
-    if (dirty && !window.confirm('Start a blank sketch? The marks you have not saved will go.')) return;
+    // Nothing is actually at risk: drawing keeps a version here as you go, so
+    // the marks are already in the list on the left. The question is only
+    // whether you meant to start again.
+    if (strokes.length && !window.confirm('Start a fresh sketch? What is on the plan now stays in the version list.')) return;
     setStrokes([]); setRedo([]); setBasedOn(undefined); setDirty(false);
+  }
+
+  /** Wipe just the sheet you are looking at, on a multi-page set. */
+  function clearPage() {
+    if (!strokes.some(s => s.page === page)) return;
+    setStrokes(prev => prev.filter(s => s.page !== page));
+    setRedo([]); setDirty(true);
   }
 
   async function save() {
@@ -1042,7 +1298,7 @@ export function PlanAnnotator({
       const ctx = c.getContext('2d')!;
       ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
       await p.render({ canvasContext: ctx, viewport: vp }).promise;
-      for (const s of strokes) if (s.page === i) paint(ctx, c, s);
+      for (const s of strokes) if (s.page === i) paintStroke(ctx, c, s);
       imgs.push(c.toDataURL('image/jpeg', 0.92));
     }
     const w = window.open('', '_blank');
@@ -1108,7 +1364,7 @@ export function PlanAnnotator({
         canvasContext: ctx, viewport: vp,
         ...(ocRef.current ? { optionalContentConfigPromise: Promise.resolve(ocRef.current) } : {}),
       }).promise;
-      for (const s of strokes) if (s.page === i) paint(ctx, c, s);
+      for (const s of strokes) if (s.page === i) paintStroke(ctx, c, s);
 
       const a = document.createElement('a');
       a.download = `${apartmentLabel} — ${planName || 'plan'}${doc.numPages > 1 ? ` — page ${i + 1}` : ''}.png`;
@@ -1204,6 +1460,38 @@ export function PlanAnnotator({
           <Printer size={14} /> Print
         </button>
 
+        {/* Where the work has got to.
+            The saving is automatic now, which is only reassuring if you can see
+            it happening — otherwise you are trusting something invisible with a
+            drawing you just spent ten minutes on. Three honest states: kept on
+            this machine, on its way to Drive, and safely in Drive. */}
+        {!locked && saveState !== 'clean' && (
+          <span
+            title={{
+              local: 'Your marks are kept on this machine. Drive gets them in a moment.',
+              sending: 'Filing a PDF copy in Drive now.',
+              sent: 'Filed in Drive.',
+              failed: 'Drive would not take it. Your marks are still kept here — press Save to try again.',
+            }[saveState]}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold"
+            style={{
+              backgroundColor: saveState === 'failed' ? 'rgba(239,68,68,.16)' : 'rgba(255,255,255,.08)',
+              color: saveState === 'failed' ? '#fca5a5'
+                : saveState === 'sent' ? '#86efac' : 'rgba(255,255,255,.75)',
+            }}
+          >
+            {saveState === 'sending'
+              ? <Loader2 size={13} className="animate-spin" />
+              : saveState === 'sent' ? <Check size={13} />
+              : saveState === 'failed' ? <AlertTriangle size={13} />
+              : <HardDrive size={13} />}
+            {{
+              local: 'Saved here', sending: 'Sending to Drive',
+              sent: 'Safe in Drive', failed: 'Drive failed',
+            }[saveState]}
+          </span>
+        )}
+
         {!locked && (
           <button onClick={save} disabled={saving || !strokes.length}
             title="Save this markup as a new version and file a PDF in Drive"
@@ -1274,10 +1562,51 @@ export function PlanAnnotator({
               className="w-[50px] py-1.5 rounded-xl flex flex-col items-center gap-0.5 text-white/60 disabled:opacity-25 hover:bg-white/10">
               <Redo2 size={15} /><span className="text-[8.5px] font-semibold leading-none">Redo</span>
             </button>
-            <button onClick={newSketch} title="Start a blank sketch"
-              className="w-[50px] py-1.5 rounded-xl flex flex-col items-center gap-0.5 text-white/60 hover:bg-white/10">
+            {/* Clear takes THIS PAGE. New starts a fresh sketch. They both used
+                to call newSketch, so on a multi-page set there was no way to
+                wipe one sheet, and two buttons did the same thing. */}
+            <button onClick={clearPage} disabled={!strokes.some(s => s.page === page)}
+              title="Rub out every mark on this page"
+              className="w-[50px] py-1.5 rounded-xl flex flex-col items-center gap-0.5 text-white/60 disabled:opacity-25 hover:bg-white/10">
               <Trash2 size={15} /><span className="text-[8.5px] font-semibold leading-none">Clear</span>
             </button>
+
+            {/* ── Saved versions, on the rail ──
+                They were a 248px panel down the right-hand side, which is a
+                quarter of the screen given to a list you look at twice a day.
+                Newest nearest the top, because that is the one you want. */}
+            <div className="w-8 h-px my-1.5" style={{ backgroundColor: 'rgba(255,255,255,.16)' }} />
+
+            <button onClick={newSketch} title="Start a fresh sketch on this plan"
+              className="w-[50px] py-1.5 rounded-xl flex flex-col items-center gap-0.5 text-white/70 hover:bg-white/10">
+              <Plus size={15} /><span className="text-[8.5px] font-semibold leading-none">New</span>
+            </button>
+
+            {versions.map(v => {
+              const showing = v.strokes?.length === strokes.length && v.version === nextVersion - 1;
+              return (
+                <button
+                  key={v.id}
+                  onClick={() => loadVersion(v, !readOnly)}
+                  title={`Version ${v.version} — ${v.createdBy || 'the office'}, `
+                    + `${new Date(v.createdAt).toLocaleString()}`
+                    + `${v.driveUrl ? ' · in Drive' : ' · not in Drive yet'}`}
+                  className="w-[50px] py-1.5 rounded-xl flex flex-col items-center gap-0.5 transition-colors relative"
+                  style={{
+                    backgroundColor: showing ? 'rgba(255,255,255,.12)' : 'transparent',
+                    color: 'rgba(255,255,255,.72)',
+                  }}
+                >
+                  <span className="text-[13px] font-black leading-none">v{v.version}</span>
+                  <span className="text-[7.5px] leading-none opacity-70">
+                    {new Date(v.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                  </span>
+                  {/* A dot for "this one reached Drive". */}
+                  <span className="absolute top-1 right-1.5 w-1.5 h-1.5 rounded-full"
+                    style={{ backgroundColor: v.driveUrl ? '#4ade80' : 'rgba(255,255,255,.28)' }} />
+                </button>
+              );
+            })}
           </div>
         )}
 
@@ -1286,36 +1615,41 @@ export function PlanAnnotator({
           {!locked && (
             <div className="flex items-center gap-2 px-3 py-1.5 flex-wrap flex-shrink-0"
               style={{ backgroundColor: 'rgba(255,255,255,.04)' }}>
-              {/* Colour — one well, not a strip of swatches and the OS dialog. */}
-              <button
-                onClick={e => {
-                  const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                  setShowPalette(v => !v);
-                  setPaletteAt({ x: r.left, y: r.bottom + 8 });
-                }}
-                title="Ink colour"
-                className="flex items-center gap-1.5 pl-1 pr-2 py-1 rounded-full transition-colors"
-                style={{ backgroundColor: 'rgba(255,255,255,.08)' }}
-              >
-                <span className="w-[20px] h-[20px] rounded-full flex-shrink-0"
-                  style={{ backgroundColor: color, border: '2px solid rgba(255,255,255,.55)' }} />
-                <span className="text-[10.5px] font-mono text-white/70">{color}</span>
-              </button>
+              {/* An eraser has no colour and no see-through: it is not ink.
+                  Showing the controls implied it was, and setting one did
+                  nothing. Width it does have — that is how much it takes. */}
+              {!isEraser && (<>
+                {/* Colour — one well, not a strip of swatches and the OS dialog. */}
+                <button
+                  onClick={e => {
+                    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                    setShowPalette(v => !v);
+                    setPaletteAt({ x: r.left, y: r.bottom + 8 });
+                  }}
+                  title="Ink colour"
+                  className="flex items-center gap-1.5 pl-1 pr-2 py-1 rounded-full transition-colors"
+                  style={{ backgroundColor: 'rgba(255,255,255,.08)' }}
+                >
+                  <span className="w-[20px] h-[20px] rounded-full flex-shrink-0"
+                    style={{ backgroundColor: color, border: '2px solid rgba(255,255,255,.55)' }} />
+                  <span className="text-[10.5px] font-mono text-white/70">{color}</span>
+                </button>
 
-              {/* The tool's own shortlist, so the common ones stay one click away. */}
-              <div className="flex items-center gap-1">
-                {palette.slice(0, 7).map(c => (
-                  <button key={c} onClick={() => setColor(c)} title={c}
-                    className="w-[17px] h-[17px] rounded-full transition-transform"
-                    style={{
-                      backgroundColor: c,
-                      border: color === c ? '2px solid #fff' : '1px solid rgba(255,255,255,.28)',
-                      transform: color === c ? 'scale(1.2)' : undefined,
-                    }} />
-                ))}
-              </div>
+                {/* The tool's own shortlist, so the common ones stay one click away. */}
+                <div className="flex items-center gap-1">
+                  {palette.slice(0, 7).map(c => (
+                    <button key={c} onClick={() => setColor(c)} title={c}
+                      className="w-[17px] h-[17px] rounded-full transition-transform"
+                      style={{
+                        backgroundColor: c,
+                        border: color === c ? '2px solid #fff' : '1px solid rgba(255,255,255,.28)',
+                        transform: color === c ? 'scale(1.2)' : undefined,
+                      }} />
+                  ))}
+                </div>
 
-              <span className="w-px h-5 bg-white/10" />
+                <span className="w-px h-5 bg-white/10" />
+              </>)}
 
               <label className="flex items-center gap-1.5 text-[10.5px] text-white/70">
                 {pickedMark?.tool === 'bubble' ? 'Text size' : 'Width'}
@@ -1337,47 +1671,51 @@ export function PlanAnnotator({
                 </span>
               </label>
 
-              <label className="flex items-center gap-1.5 text-[10.5px] text-white/70">
-                See-through
-                <input type="range" min={0.05} max={1} step={0.05}
-                  value={pickedMark ? pickedMark.opacity : opacity}
-                  onChange={e => {
-                    const v = Number(e.target.value);
-                    if (pickedMark) editPicked({ opacity: v }); else setOpacity(v);
+              {/* Bold, for the note that has to be read from across the room.
+                  Shown for the balloon and the plain note, which are the only
+                  marks made of words. */}
+              {(pickedMark?.tool === 'bubble' || pickedMark?.tool === 'text'
+                || (!pickedMark && (tool === 'bubble' || tool === 'text'))) && (
+                <button
+                  onClick={() => (pickedMark ? editPicked({ bold: !pickedMark.bold }) : setBold(b => !b))}
+                  title="Bold"
+                  className="w-[26px] h-[26px] rounded-lg text-[13px] font-black transition-colors"
+                  style={{
+                    backgroundColor: (pickedMark ? pickedMark.bold : bold)
+                      ? ACCENT : 'rgba(255,255,255,.08)',
+                    color: '#fff',
                   }}
-                  className="ink-slider w-[80px]" />
-                <span className="tabular-nums w-7">
-                  {Math.round((pickedMark ? pickedMark.opacity : opacity) * 100)}%
-                </span>
-              </label>
+                >B</button>
+              )}
 
-              {preset.freehand && preset.sensitivity > 0 && (
-                <label className="flex items-center gap-1.5 text-[10.5px] text-white/70"
-                  title="How much pen pressure — or nib size on the Samsung screen — changes the thickness">
-                  Pressure
-                  <input type="range" min={0} max={2} step={0.1} value={sens}
-                    onChange={e => setSens(Number(e.target.value))} className="ink-slider w-[74px]" />
-                  {/* Which signal it is riding. A stylus with no pressure sensor
-                      reports a plausible constant rather than nothing, so without
-                      this the slider looks broken when it is simply being handed
-                      a flat number. */}
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-full"
-                    style={{ backgroundColor: 'rgba(255,255,255,.10)', color: 'rgba(255,255,255,.62)' }}>
-                    {penSource === 'pressure' ? 'real pressure'
-                      : penSource === 'contact' ? 'nib size'
-                      : penSource ? 'speed — no pressure from this pen'
-                      : 'draw to detect'}
+              {!isEraser && (
+                <label className="flex items-center gap-1.5 text-[10.5px] text-white/70">
+                  See-through
+                  <input type="range" min={0.05} max={1} step={0.05}
+                    value={pickedMark ? pickedMark.opacity : opacity}
+                    onChange={e => {
+                      const v = Number(e.target.value);
+                      if (pickedMark) editPicked({ opacity: v }); else setOpacity(v);
+                    }}
+                    className="ink-slider w-[80px]" />
+                  <span className="tabular-nums w-7">
+                    {Math.round((pickedMark ? pickedMark.opacity : opacity) * 100)}%
                   </span>
                 </label>
               )}
+
+              {/* The pressure control is gone. The Samsung panel's pen has no
+                  pressure sensor at all — it is infrared and passive — so the
+                  slider was a control over a number that never moved. Width
+                  still varies with the nib you are using, which is the signal
+                  that screen actually gives. */}
 
               <div className="flex-1" />
               <span className="text-[10px] text-white/40">
                 {pickedMark
                   ? 'editing the mark you picked · click empty space to let go'
                   : `${marksOnPage} mark${marksOnPage === 1 ? '' : 's'} on this page`}
-                {preset.freehand && preset.sensitivity > 0 && penSource &&
-                  ` · ${penSource === 'pressure' ? 'pen pressure' : penSource === 'contact' ? 'nib size' : 'speed'}`}
+                {/* The old "· speed" meant nothing to anybody reading it. */}
               </span>
             </div>
           )}
@@ -1427,10 +1765,15 @@ export function PlanAnnotator({
                   onPointerCancel={onUp}
                   onPointerLeave={() => setNibAt(null)}
                   onDoubleClick={e => {
-                    // Retype a balloon without redrawing it.
-                    if (tool !== 'move' || !pickedMark || pickedMark.tool !== 'bubble') return;
+                    // Double-click a balloon to retype it. It does NOT have to
+                    // be picked first — needing two separate clicks to get at
+                    // your own words is a rule nobody would guess.
+                    if (locked || tool === 'pan') return;
                     const { nx, ny } = norm(e);
-                    setTextDraft({ nx, ny, value: pickedMark.text ?? '', forId: pickedMark.id });
+                    const hit = markAt(nx, ny);
+                    if (hit?.tool !== 'bubble') return;
+                    setPicked(hit.id);
+                    setTextDraft({ nx, ny, value: hit.text ?? '', forId: hit.id });
                   }}
                   style={{
                     // The pen must not scroll the page while it draws, and the
@@ -1446,103 +1789,56 @@ export function PlanAnnotator({
                     pointerEvents: locked || tool === 'pan' ? 'none' : 'auto',
                   }}
                 />
-                {textDraft && (
-                  <div className="absolute z-10" style={{ left: `${textDraft.nx * 100}%`, top: `${textDraft.ny * 100}%` }}>
-                    <textarea
-                      ref={textRef} rows={2}
-                      value={textDraft.value}
-                      onChange={e => setTextDraft({ ...textDraft, value: e.target.value })}
-                      onBlur={commitText}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitText(); }
-                        if (e.key === 'Escape') setTextDraft(null);
-                      }}
-                      placeholder="Note on the plan…"
-                      className="px-2 py-1 rounded-lg border-2 shadow-lg text-[13px] outline-none resize"
-                      style={{ borderColor: color, color, minWidth: 180 }}
-                    />
-                  </div>
-                )}
+                {textDraft && (() => {
+                  /* Typing happens INSIDE the balloon. The box below is placed
+                     over the balloon's own text area at the balloon's own type
+                     size, with no border and no background, so what you type is
+                     what is drawn — there is no pop-up any more. A plain note,
+                     which has no shape around it, still gets a small framed box
+                     so you can see where you are typing. */
+                  const host = textDraft.forId
+                    ? strokes.find(x => x.id === textDraft.forId) : undefined;
+                  const inBubble = host?.tool === 'bubble';
+                  const b = inBubble ? bubbleBox(host!) : null;
+                  return (
+                    <div
+                      className="absolute z-10"
+                      style={b ? {
+                        left: `${b.left}%`, top: `${b.top}%`,
+                        width: `${b.width}%`, height: `${b.height}%`,
+                      } : { left: `${textDraft.nx * 100}%`, top: `${textDraft.ny * 100}%` }}
+                    >
+                      <textarea
+                        ref={textRef} rows={b ? undefined : 2}
+                        value={textDraft.value}
+                        onChange={e => setTextDraft({ ...textDraft, value: e.target.value })}
+                        onBlur={commitText}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitText(); }
+                          if (e.key === 'Escape') setTextDraft(null);
+                        }}
+                        placeholder={b ? '' : 'Note on the plan…'}
+                        className={b
+                          ? 'w-full h-full bg-transparent border-0 outline-none resize-none p-0 overflow-hidden'
+                          : 'px-2 py-1 rounded-lg border-2 shadow-lg text-[13px] outline-none resize'}
+                        style={b ? {
+                          color: host!.color,
+                          fontFamily: 'Segoe UI, Helvetica, Arial, sans-serif',
+                          fontSize: `${b.fontPx}px`,
+                          fontWeight: host!.bold ? 800 : 600,
+                          lineHeight: LINE,
+                        } : { borderColor: color, color, minWidth: 180 }}
+                      />
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>
         </div>
 
-        {/* Versions */}
-        {showVersions && (
-          <div className="w-[248px] flex-shrink-0 flex flex-col overflow-hidden" style={{ backgroundColor: NAVY }}>
-            <div className="px-3 py-2.5 flex-shrink-0">
-              <div className="text-[12px] font-bold text-white">Saved versions</div>
-              <div className="text-[10px] text-gray-500 mt-0.5">
-                Each one is a PDF in Drive with the markup on its own layer.
-              </div>
-            </div>
-
-            {!readOnly && (
-              <button onClick={newSketch}
-                className="mx-3 mb-2 px-2.5 py-2 rounded-lg text-[11.5px] font-semibold text-white/85 flex items-center gap-1.5 flex-shrink-0"
-                style={{ backgroundColor: 'rgba(255,255,255,.07)' }}>
-                <Plus size={13} /> Start a blank sketch
-              </button>
-            )}
-
-            <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-1.5">
-              {versions.length === 0 && (
-                <p className="text-[11px] text-gray-500 leading-relaxed">
-                  Nothing saved yet. Draw something and press Save — it becomes version 1.
-                </p>
-              )}
-              {versions.map(v => (
-                <div key={v.id} className="rounded-xl p-2.5" style={{ backgroundColor: 'rgba(255,255,255,.06)' }}>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11.5px] font-bold text-white">Version {v.version}</span>
-                    {v.basedOn && <span className="text-[9px] text-gray-500">from v{v.basedOn}</span>}
-                    <span className="flex-1" />
-                    {v.driveUrl && <Check size={11} className="text-emerald-400" />}
-                  </div>
-                  <div className="text-[9.5px] text-gray-500 mt-0.5">
-                    {v.createdBy || 'Office'} · {new Date(v.createdAt).toLocaleDateString()} ·
-                    {' '}{v.strokes?.length ?? 0} marks
-                  </div>
-                  <div className="flex items-center gap-1 mt-1.5 flex-wrap">
-                    <button onClick={() => loadVersion(v, false)}
-                      className="px-1.5 py-1 rounded-md text-[10px] font-semibold text-white/80 hover:bg-white/10"
-                      title="Show this version on the plan">View</button>
-                    {!readOnly && (
-                      <button onClick={() => loadVersion(v, true)}
-                        className="px-1.5 py-1 rounded-md text-[10px] font-semibold text-[#4aa8d8] hover:bg-white/10"
-                        title="Open this version and keep drawing on it">Add to it</button>
-                    )}
-                    {v.driveUrl && (
-                      <>
-                        <a href={v.driveUrl} target="_blank" rel="noopener noreferrer"
-                          className="p-1 rounded-md text-white/60 hover:bg-white/10" title="Open in Drive">
-                          <ExternalLink size={11} />
-                        </a>
-                        <a href={`https://drive.google.com/uc?export=download&id=${v.driveFileId}`}
-                          className="p-1 rounded-md text-white/60 hover:bg-white/10" title="Download this version">
-                          <Download size={11} />
-                        </a>
-                      </>
-                    )}
-                    {!readOnly && (
-                      <button
-                        onClick={() => {
-                          if (window.confirm(`Remove version ${v.version} from the app? The PDF stays in Drive.`)) {
-                            deletePlanAnnotation(v.id);
-                          }
-                        }}
-                        className="p-1 rounded-md text-white/35 hover:text-red-400 hover:bg-white/10"
-                        title="Remove from the list — the Drive file is left alone">
-                        <Trash2 size={11} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* The right-hand Versions panel is gone. It was a quarter of the
+            screen given to a list; the versions live on the left rail now. */}
       </div>
 
       {/* The colour picker, drawn in the app rather than the operating system. */}
@@ -1717,8 +2013,8 @@ export function PlanAnnotator({
           style={{
             left: nibAt.x, top: nibAt.y,
             width: nibPx, height: nibPx,
-            border: tool === 'eraser' ? '2px dashed rgba(255,255,255,.9)' : `2px solid ${color}`,
-            backgroundColor: tool === 'eraser' ? 'transparent' : `${color}22`,
+            border: isEraser ? '2px dashed rgba(255,255,255,.9)' : `2px solid ${color}`,
+            backgroundColor: isEraser ? 'transparent' : `${color}22`,
           }}
         />
       )}
