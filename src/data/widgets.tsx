@@ -17,6 +17,7 @@ import { useStore } from './store';
 import { describeActivity } from './activityText';
 import { ClipArtNode, ART_KINDS, ArtKind } from '../components/board/BoardNodes';
 import { MiniJob } from '../components/board/MiniJob';
+import { ProjectMini, BoardMini, CalendarMini } from '../components/board/DashWidgets';
 import { RotaWidget, RotaData } from '../components/board/RotaWidget';
 
 /**
@@ -59,6 +60,8 @@ export interface WidgetCtx {
   /** Writes back into the element — used by the interactive widgets. */
   update: (patch: Partial<CanvasElement>) => void;
   openJob: (id: string) => void;
+  /** Switch to another workspace. Only the dashboard supplies this. */
+  openProject?: (id: string) => void;
   /** The TV passes this: widgets render, but nothing can be changed. */
   readOnly?: boolean;
 }
@@ -170,7 +173,7 @@ const ART_PIECES: WidgetDef[] = ([
 export const WIDGETS: WidgetDef[] = [
   // ── Live ──────────────────────────────────────────────────────────────────
   {
-    id: 'kpi', rank: 1, name: 'Number', category: 'live', icon: Gauge, w: 175, h: 105,
+    id: 'kpi', rank: 4, name: 'Number', category: 'live', icon: Gauge, w: 175, h: 105,
     blurb: 'One live figure — open tasks, overdue, jobs on the board. Never stale.',
     data: { metric: 'openTasks' },
     render: (el, c) => {
@@ -192,7 +195,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'stage-legend', rank: 9, name: 'Stage legend', category: 'live', icon: BarChart3, w: 210, h: 175,
+    id: 'stage-legend', rank: 12, name: 'Stage legend', category: 'live', icon: BarChart3, w: 210, h: 175,
     blurb: 'Every stage with a live count, in the stage colours.',
     render: (_el, c) => (
       <Frame title="Stages" icon={BarChart3}>
@@ -213,7 +216,7 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
   {
-    id: 'overdue-list', rank: 2, name: 'Running late', category: 'live', icon: AlertTriangle, w: 235, h: 175,
+    id: 'overdue-list', rank: 5, name: 'Running late', category: 'live', icon: AlertTriangle, w: 235, h: 175,
     blurb: 'Every task past its date, worst first. The one list worth a wall.',
     render: (_el, c) => {
       const late = c.assignments.filter(overdueOf)
@@ -248,7 +251,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'contractor-load', rank: 8, name: 'Contractor', category: 'live', icon: HardHat, w: 200, h: 110,
+    id: 'contractor-load', rank: 11, name: 'Contractor', category: 'live', icon: HardHat, w: 200, h: 110,
     blurb: 'One contractor and how much they already have open.',
     data: {},
     render: (el, c) => {
@@ -268,7 +271,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'week-ahead', rank: 6, name: 'Week ahead', category: 'live', icon: CalendarDays, w: 300, h: 130,
+    id: 'week-ahead', rank: 9, name: 'Week ahead', category: 'live', icon: CalendarDays, w: 300, h: 130,
     blurb: 'The next seven days with what falls due on each.',
     render: (_el, c) => {
       const days = Array.from({ length: 7 }, (_, i) => {
@@ -293,7 +296,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'recent-photos', rank: 5, name: 'Latest photos', category: 'live', icon: Camera, w: 235, h: 150,
+    id: 'recent-photos', rank: 8, name: 'Latest photos', category: 'live', icon: Camera, w: 235, h: 150,
     blurb: 'The newest pictures back from site — from every job, or only the ones you choose.',
     data: {},
     render: (el, c) => {
@@ -330,7 +333,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'activity-feed', rank: 17, name: 'What changed', category: 'live', icon: Activity, w: 235, h: 150,
+    id: 'activity-feed', rank: 20, name: 'What changed', category: 'live', icon: Activity, w: 235, h: 150,
     blurb: 'The last few edits and who made them.',
     render: (_el, c) => (
       <Frame title="What changed" icon={Activity}>
@@ -350,7 +353,7 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
   {
-    id: 'progress-ring', rank: 15, name: 'Progress ring', category: 'live', icon: CircleDashed, w: 155, h: 155,
+    id: 'progress-ring', rank: 18, name: 'Progress ring', category: 'live', icon: CircleDashed, w: 155, h: 155,
     blurb: 'How much of the board has reached a chosen stage.',
     data: {},
     render: (el, c) => {
@@ -380,7 +383,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'bin-counter', rank: 14, name: 'Bin totals', category: 'live', icon: Archive, w: 200, h: 120,
+    id: 'bin-counter', rank: 17, name: 'Bin totals', category: 'live', icon: Archive, w: 200, h: 120,
     blurb: 'How much sits in Done, Ready, Archive and Trash.',
     render: (_el, c) => (
       <Frame title="In the bins" icon={Archive}>
@@ -717,12 +720,12 @@ export const WIDGETS: WidgetDef[] = [
 
   // ── Fifteen more ──────────────────────────────────────────────────────────
   {
-    id: 'contractor-links', rank: 16, name: 'Contractor links', category: 'live', icon: Copy, w: 250, h: 195,
+    id: 'contractor-links', rank: 19, name: 'Contractor links', category: 'live', icon: Copy, w: 250, h: 195,
     blurb: 'Every contractor with a one-tap copy of their portal link. New contractors appear on their own.',
     render: (_el, c) => <ContractorLinks contractors={c.contractors} assignments={c.assignments} />,
   },
   {
-    id: 'stage-funnel', rank: 7, name: 'Stage funnel', category: 'live', icon: ListFilter, w: 260, h: 180,
+    id: 'stage-funnel', rank: 10, name: 'Stage funnel', category: 'live', icon: ListFilter, w: 260, h: 180,
     blurb: 'Bars showing how the board is spread across the stages.',
     render: (_el, c) => {
       const rows = c.stages.map(st => ({ st, n: c.jobs.filter(j => j.currentStageId === st.id).length }));
@@ -747,7 +750,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'due-today', rank: 3, name: 'Due today', category: 'live', icon: CalendarCheck, w: 230, h: 165,
+    id: 'due-today', rank: 6, name: 'Due today', category: 'live', icon: CalendarCheck, w: 230, h: 165,
     blurb: 'Only what is due today. The morning list.',
     render: (_el, c) => {
       const list = c.assignments.filter(a => !a.completedAt && a.dueDate === today());
@@ -775,7 +778,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'job-list', rank: 4, name: 'Job list', category: 'live', icon: Filter, w: 235, h: 195,
+    id: 'job-list', rank: 7, name: 'Job list', category: 'live', icon: Filter, w: 235, h: 195,
     blurb: 'A live list of the jobs at one stage. Click any to open it.',
     data: {},
     render: (el, c) => {
@@ -795,7 +798,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'photo-review', rank: 13, name: 'Photos to review', category: 'live', icon: Camera, w: 195, h: 125,
+    id: 'photo-review', rank: 16, name: 'Photos to review', category: 'live', icon: Camera, w: 195, h: 125,
     blurb: 'How many site photos nobody has looked at, and a way straight to the oldest one.',
     render: (_el, c) => {
       const waiting = c.photos.filter(p => !p.reviewedAt)
@@ -827,7 +830,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'count-by-stage', rank: 12, name: 'Stage count', category: 'live', icon: Gauge, w: 185, h: 110,
+    id: 'count-by-stage', rank: 15, name: 'Stage count', category: 'live', icon: Gauge, w: 185, h: 110,
     blurb: 'One big number: how many jobs sit at a chosen stage, across whichever jobs you pick.',
     data: {},
     render: (el, c) => {
@@ -844,7 +847,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'recent-jobs', rank: 10, name: 'New this week', category: 'live', icon: Sparkles, w: 220, h: 160,
+    id: 'recent-jobs', rank: 13, name: 'New this week', category: 'live', icon: Sparkles, w: 220, h: 160,
     blurb: 'Jobs added in the last seven days.',
     render: (_el, c) => {
       const cut = new Date(Date.now() - 7 * 86_400_000).toISOString();
@@ -866,7 +869,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'job-search', rank: 11, name: 'Find a job', category: 'live', icon: Search, w: 230, h: 160,
+    id: 'job-search', rank: 14, name: 'Find a job', category: 'live', icon: Search, w: 230, h: 160,
     blurb: 'Type a name and jump straight to the job.',
     render: (_el, c) => (
       <JobSearch jobs={c.jobs} openJob={c.openJob} stages={c.stages} assignments={c.assignments} />
@@ -1121,7 +1124,7 @@ export const WIDGETS: WidgetDef[] = [
    * the board they work on.
    */
   {
-    id: 'project-glance', rank: 18, name: 'Another workspace', category: 'live',
+    id: 'project-glance', rank: 21, name: 'Another workspace', category: 'live',
     icon: Building, w: 250, h: 165,
     blurb: 'A live summary of one of your other workspaces — its stages, its counts, its progress.',
     data: {},
@@ -1176,6 +1179,27 @@ export const WIDGETS: WidgetDef[] = [
           className="text-center text-white font-black tracking-wide text-[19px]" />
       </div>
     ),
+  },
+  {
+    id: 'project-mini', rank: 1, name: 'Workspace at a glance', category: 'live',
+    icon: Building, w: 250, h: 165,
+    blurb: 'The building diagram in miniature, in its stage colours. Pick which workspace — '
+      + 'put three side by side and the whole company is on one screen.',
+    data: {},
+    render: (el, c) => (
+      <ProjectMini projectId={String(d(el).projectId || '')} onOpen={c.openProject} />
+    ),
+  },
+  {
+    id: 'board-mini', rank: 2, name: 'Job board', category: 'live', icon: Briefcase, w: 300, h: 190,
+    blurb: 'A readable thumbnail of the board, laid out where the jobs actually are. '
+      + 'Click a tile to open the job.',
+    render: (_el, c) => <BoardMini jobs={c.jobs} stages={c.stages} onOpen={c.openJob} />,
+  },
+  {
+    id: 'calendar-mini', rank: 3, name: 'Calendar', category: 'live', icon: CalendarDays, w: 220, h: 185,
+    blurb: 'This month, with the busy days marked. Opens the full calendar.',
+    render: (_el, c) => <CalendarMini assignments={c.assignments} jobs={c.jobs} />,
   },
   {
     id: 'divider', rank: 3, name: 'Divider', category: 'visual', icon: Minus, w: 340, h: 34,

@@ -175,8 +175,16 @@ export function TasksPage() {
   }
 
   const sortedStages = [...stages].filter(st => st.active && (currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId)).sort((a, b) => a.order - b.order);
+  /**
+   * The units a task can be put against.
+   *
+   * isCountableApartment() and nothing else. The extra `floor > 0` that used to
+   * be here excluded a ground-floor unit somebody had deliberately named — and
+   * on the Job Board, where every job is stored at floor 0, it excluded ALL of
+   * them.
+   */
   const resApts = apartments
-    .filter(a => isCountableApartment(a) && a.floor > 0)
+    .filter(isCountableApartment)
     .sort((a, b) => a.buildingId.localeCompare(b.buildingId) || (Number(a.apartmentNumber) - Number(b.apartmentNumber)));
 
   const today = new Date().toISOString().split('T')[0];
@@ -523,15 +531,23 @@ export function TasksPage() {
                 className="col-span-2 border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white"
               >
                 <option value="">{s.selectApartment}</option>
-                {buildings.map(bld => (
-                  <optgroup key={bld.id} label={bld.name}>
-                    {resApts.filter(a => a.buildingId === bld.id).map(a => (
-                      <option key={a.id} value={a.id}>
-                        {s.aptPrefix} {aptLabel(a)} ({s.floorPrefix} {a.floor})
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
+                {/* The Job Board has no buildings, so grouping by building left
+                    the whole list empty there — every job hidden behind a
+                    heading that never rendered. A workspace without buildings
+                    gets a flat list. */}
+                {buildings.length === 0
+                  ? resApts.map(a => (
+                    <option key={a.id} value={a.id}>{aptLabel(a)}</option>
+                  ))
+                  : buildings.map(bld => (
+                    <optgroup key={bld.id} label={bld.name}>
+                      {resApts.filter(a => a.buildingId === bld.id).map(a => (
+                        <option key={a.id} value={a.id}>
+                          {s.aptPrefix} {aptLabel(a)} ({s.floorPrefix} {a.floor})
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
               </select>
               <select
                 value={addForm.stageId}

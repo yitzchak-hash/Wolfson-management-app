@@ -91,7 +91,17 @@ export function AnalyticsDashboard() {
   const sortedStages = useMemo(() => [...stages].filter(st => st.active && (currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId)).sort((a, b) => a.order - b.order), [stages, currentProjectId]);
 
   const stats = useMemo(() => {
-    const residentialApts = apartments.filter(a => isCountableApartment(a) && (a.floor > 0 || !/^A\d/.test(a.buildingId)));
+    /**
+     * The same rule as everywhere else, and ONLY that rule.
+     *
+     * This used to add `(floor > 0 || not an A building)` on top of
+     * isCountableApartment(), which is a Wolfson-specific guess at what counts.
+     * The moment somebody named a ground-floor slot in A1 — which is exactly
+     * what naming one is FOR — the Dashboard counted it and Analytics did not,
+     * and the two pages disagreed with no way to tell which was right.
+     * isCountableApartment() is the single answer; nothing may add to it.
+     */
+    const residentialApts = apartments.filter(isCountableApartment);
     const total = residentialApts.length;
     const started = residentialApts.filter(a => a.currentStageId).length;
     const byStage = new Map<string, number>();
@@ -109,15 +119,27 @@ export function AnalyticsDashboard() {
     return { total, started, byStage, byBuilding };
   }, [apartments, sortedStages, buildings]);
 
+  /**
+   * Tasks whose job still counts.
+   *
+   * Filing a job into Done or Trash takes it out of every unit total, so its
+   * tasks have to come out of every task total as well — otherwise the page
+   * reports work outstanding on jobs it does not otherwise admit exist.
+   */
+  const liveAssignments = useMemo(() => {
+    const live = new Set(apartments.filter(isCountableApartment).map(a => a.id));
+    return contractorAssignments.filter(a => live.has(a.apartmentId));
+  }, [apartments, contractorAssignments]);
+
   const contractorStats = useMemo(() => {
-    const total = contractorAssignments.length;
-    const completed = contractorAssignments.filter(a => a.completedAt).length;
+    const total = liveAssignments.length;
+    const completed = liveAssignments.filter(a => a.completedAt).length;
     const pending = total - completed;
-    const overdue = contractorAssignments.filter(a =>
+    const overdue = liveAssignments.filter(a =>
       !a.completedAt && a.dueDate && new Date(a.dueDate) < new Date()
     ).length;
     return { total, completed, pending, overdue };
-  }, [contractorAssignments]);
+  }, [liveAssignments]);
 
   const recentActivity = useMemo(() =>
     [...activityLogs].slice(0, 15),
@@ -134,7 +156,7 @@ export function AnalyticsDashboard() {
 
       // Count stage date entries that fall in this week
       let stageCompletions = 0;
-      apartments.forEach(a => {
+      apartments.filter(isCountableApartment).forEach(a => {
         if (!a.stageDates) return;
         Object.values(a.stageDates).forEach(dateStr => {
           if (dateStr >= wStart && dateStr <= wEnd) stageCompletions++;
@@ -142,13 +164,13 @@ export function AnalyticsDashboard() {
       });
 
       // Count completed tasks in this week
-      const tasksCompleted = contractorAssignments.filter(a =>
+      const tasksCompleted = liveAssignments.filter(a =>
         a.completedAt && a.completedAt >= wStart && a.completedAt <= wEnd
       ).length;
 
       return { label, stageCompletions, tasksCompleted };
     });
-  }, [apartments, contractorAssignments]);
+  }, [apartments, liveAssignments]);
 
   const bgPage = lightTheme ? '#f8fafc' : '#0f1b2d';
   const bgCard = lightTheme ? 'white' : '#1a2d45';
@@ -294,7 +316,7 @@ export function AnalyticsDashboard() {
 
               <div className="space-y-2 mt-2">
                 {contractors.filter(c => c.active).map(c => {
-                  const assigned = contractorAssignments.filter(a => a.contractorId === c.id);
+                  const assigned = liveAssignments.filter(a => a.contractorId === c.id);
                   const done = assigned.filter(a => a.completedAt).length;
                   return (
                     <div key={c.id} className="flex items-center justify-between">

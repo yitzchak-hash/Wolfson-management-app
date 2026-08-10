@@ -175,6 +175,20 @@ export interface BoardView {
 /** The workspace's original board, which has no record of its own. */
 export const MAIN_BOARD = '';
 
+/**
+ * The dashboard is a board too.
+ *
+ * Its widgets are ordinary CanvasElements carrying this board id, which means
+ * they are persisted, synced to Firestore, exported into a backup and read back
+ * out of one by machinery that already exists and is already tested. A separate
+ * `dashboardWidgets` collection would have meant eleven new store points and a
+ * new way to lose data; this needs none.
+ *
+ * It never appears in the board picker — `boardsForUser` lists `boardViews`,
+ * and this is not one of them.
+ */
+export const DASHBOARD_BOARD = '__dashboard';
+
 export function boardsForUser(views: BoardView[], projectId: string, userId: string, isAdmin: boolean) {
   return views.filter(v => v.projectId === projectId
     && (isAdmin || v.userIds.length === 0 || v.userIds.includes(userId)));

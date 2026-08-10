@@ -41,6 +41,26 @@ export function loadAllProjectsTaskData(): ProjectTaskData[] {
   });
 }
 
+/**
+ * One workspace's rooms and stages, read from its own cache.
+ *
+ * The dashboard shows a miniature of EVERY workspace at once, and only the
+ * active one is live in the store — the others are whatever `persist()` last
+ * wrote for them. That is the same limitation the global calendar carries, and
+ * for a thumbnail it is the right trade: the alternative is holding three
+ * projects' worth of Firestore listeners open on a page that is mostly numbers.
+ */
+export function loadProjectSnapshot(projectId: string): {
+  apartments: Apartment[]; buildings: { id: string; name?: string }[]; stages: Stage[];
+} {
+  const data = loadFromStorage(getProjectStorageKey(projectId), null) as Record<string, unknown> | null;
+  return {
+    apartments: (data?.apartments as Apartment[] | null) ?? [],
+    buildings: (data?.buildings as { id: string; name?: string }[] | null) ?? [],
+    stages: (data?.stages as Stage[] | null) ?? [],
+  };
+}
+
 // Holds unsubscribe functions for all active Firestore real-time listeners.
 // Stored outside the Zustand state (not serializable) so they survive re-renders.
 let _firebaseUnsubscribers: Array<() => void> = [];

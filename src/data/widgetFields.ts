@@ -18,7 +18,7 @@
 export type WidgetFieldKind =
   | 'text' | 'longtext' | 'number' | 'percent'
   | 'select' | 'colour' | 'url' | 'image' | 'datetime'
-  | 'job' | 'jobs' | 'contractor' | 'stage' | 'people';
+  | 'job' | 'jobs' | 'contractor' | 'stage' | 'people' | 'project';
 
 export interface WidgetField {
   key: string;
@@ -106,6 +106,14 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
   'contractor-load': [
     { key: 'contractorId', label: 'Contractor', kind: 'contractor', allowNone: 'The first one' },
   ],
+  'project-mini': [
+    {
+      key: 'projectId', label: 'Which workspace', kind: 'project',
+      hint: 'Place one per workspace and the whole company fits on one screen.',
+    },
+  ],
+  'board-mini': [title()],
+  'calendar-mini': [title()],
   'week-ahead': [title()],
   'recent-photos': [
     title(),

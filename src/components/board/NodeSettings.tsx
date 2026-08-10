@@ -404,6 +404,26 @@ function Swatches({ value, onPick, clearable }: {
   );
 }
 
+/** Which workspace a widget is about. */
+function ProjectField({ label, hint, value, onChange }: {
+  label: string; hint?: string; value: string; onChange: (v: string) => void;
+}) {
+  const projects = useStore(st => st.projects);
+  const current = useStore(st => st.currentProjectId);
+  return (
+    <Row label={label} hint={hint}>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 text-[12.5px] bg-white outline-none"
+      >
+        <option value="">The one you are in ({projects.find(p => p.id === current)?.name ?? current})</option>
+        {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+      </select>
+    </Row>
+  );
+}
+
 /**
  * Which jobs a widget is about.
  *
@@ -617,6 +637,10 @@ function Field({ field, value, onChange, stages, jobs, contractors }: {
         )}
       </Row>
     );
+  }
+
+  if (f.kind === 'project') {
+    return <ProjectField label={f.label} hint={f.hint} value={str} onChange={onChange} />;
   }
 
   if (f.kind === 'jobs') {
