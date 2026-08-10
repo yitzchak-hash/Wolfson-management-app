@@ -8,6 +8,7 @@ import { ActivitySection } from './ActivitySection';
 import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, findAllPlansPdfsViaBackend, findPlanSetViaBackend, PlanEntry, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, extractFolderId, driveThumbUrl, listAllPhotosViaBackend, getFolderNameViaBackend, familyNameFromFolderName, DrivePhotoItem, DriveFile, FolderHealth, checkFolderHealthViaBackend } from '../../data/driveApi';
 import { Tooltip } from '../ui/Tooltip';
 import { DriveStatus } from '../ui/DriveStatus';
+import { LinkField } from '../ui/LinkField';
 import { printSheet, printEsc } from '../../data/printing';
 import { PlanPinOverlay } from './PlanPinOverlay';
 // Lazy, deliberately. The markup studio carries pdf.js — about a megabyte of
@@ -185,6 +186,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     { plansFolderId: null, plans: [] });
   /** Which chip is showing — an id from planSet, or null for the detected default. */
   const [shownPlanId, setShownPlanId] = useState<string | null>(null);
+  /** The Drive folder's own title, so the link field can show it instead of a URL. */
+  const [driveFolderName, setDriveFolderName] = useState('');
   /** The plan pane beside the fields — off when there is no plan to show. */
   const [planWanted, setPlanWanted] = useState(true);
   const [showHealthCheck, setShowHealthCheck] = useState(false);
@@ -225,10 +228,13 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       setPlanSet({ plansFolderId: null, plans: [] });
       setShownPlanId(null);
 
+      setDriveFolderName('');
       if (apartment.driveLink && backendConfigured) {
         // One scan gets the originals, the markups and the folder a new markup
         // has to be filed into.
         findPlanSetViaBackend(apartment.driveLink).then(setPlanSet).catch(() => {});
+        const fid = extractFolderId(apartment.driveLink);
+        if (fid) getFolderNameViaBackend(fid).then(n => { if (n) setDriveFolderName(n); }).catch(() => {});
       }
 
       if (!existingFileId && apartment.driveLink && backendConfigured) {
@@ -918,63 +924,19 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 </div>
               )}
 
-              {/* General Jobs: Zoho Link + Address */}
+              {/* Address. The Drive and Zoho links that used to sit here too are
+                  in the shared pair below General Notes now, so a General job
+                  and an apartment are edited the same way. */}
               {isGeneralProject && (
-                <div className="grid grid-cols-1 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.addressLabel}</label>
-                    <input
-                      value={addressLocal}
-                      onChange={e => setAddressLocal(e.target.value)}
-                      onBlur={autoSave}
-                      placeholder={ui.addressLabel}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.zohoLinkLabel}</label>
-                    <div className="flex gap-2">
-                      <input
-                        value={zohoLinkLocal}
-                        onChange={e => setZohoLinkLocal(e.target.value)}
-                        onBlur={autoSave}
-                        placeholder="https://crm.zoho.com/..."
-                        className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
-                      />
-                      {zohoLinkLocal.trim() && (
-                        <a
-                          href={zohoLinkLocal.startsWith('http') ? zohoLinkLocal : `https://${zohoLinkLocal}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 px-3 py-2 rounded-lg border border-[#4aa8d8] text-[#4aa8d8] text-xs font-medium hover:bg-[#4aa8d8]/10 transition-all flex-shrink-0"
-                        >
-                          <ExternalLink size={12} /> {ui.openZohoBtn}
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.driveFolder}</label>
-                    <div className="flex gap-2">
-                      <input
-                        value={driveLink}
-                        onChange={e => setDriveLink(e.target.value)}
-                        onBlur={autoSave}
-                        placeholder="https://drive.google.com/..."
-                        className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
-                      />
-                      {driveLink.trim() && (
-                        <a
-                          href={driveLink.startsWith('http') ? driveLink : `https://${driveLink}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 px-3 py-2 rounded-lg border border-[#4aa8d8] text-[#4aa8d8] text-xs font-medium hover:bg-[#4aa8d8]/10 transition-all flex-shrink-0"
-                        >
-                          <FolderOpen size={12} /> {ui.openFolderTooltip}
-                        </a>
-                      )}
-                    </div>
-                  </div>
+                <div>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.addressLabel}</label>
+                  <input
+                    value={addressLocal}
+                    onChange={e => setAddressLocal(e.target.value)}
+                    onBlur={autoSave}
+                    placeholder={ui.addressLabel}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                  />
                 </div>
               )}
 
@@ -1181,186 +1143,68 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 })()}
               </div>
 
-              {/* Engineering Plans PDF */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
-                    <BookOpen size={11} /> {ui.engineeringPlans}
-                  </label>
-                  {driveLink && backendConfigured && (
-                      <Tooltip text={ui.rescanDriveTooltip}>
-                        <button
-                          onClick={() => {
-                            setFetchingPdf(true);
-                            findAllPlansPdfsViaBackend(driveLink).then(pdfs => {
-                              if (pdfs.length > 0) {
-                                setAvailablePdfs(pdfs);
-                                setSelectedPdfIdx(0);
-                                const link = `https://drive.google.com/file/d/${pdfs[0].id}/view`;
-                                setPlansPdfLink(link);
-                                updateApartment(apartment!.id, { plansPdfLink: link }, currentUser);
-                                onToast(ui.pdfFound);
-                              } else {
-                                // Explicit re-scan found no Engineered Plans folder — drop any
-                                // previously detected plan so a wrong one can't reach the contractor.
-                                setAvailablePdfs([]);
-                                setSelectedPdfIdx(0);
-                                setPlansPdfLink('');
-                                if (apartment!.plansPdfLink) {
-                                  updateApartment(apartment!.id, { plansPdfLink: undefined }, currentUser);
-                                }
-                                onToast(ui.noPdfFound, 'error');
-                              }
-                            }).finally(() => setFetchingPdf(false));
-                          }}
-                          className="flex items-center gap-1 text-xs text-gray-400 hover:text-[#1e3a5f] transition-colors"
-                        >
-                          <RefreshCw size={11} className={fetchingPdf ? 'animate-spin' : ''} />
-                          {fetchingPdf ? ui.detecting : ui.refreshButton}
-                        </button>
-                      </Tooltip>
-                    )}
-                </div>
+              {/* The Engineering Plans block used to live here AND on the right,
+                  so every job with a plan showed it twice. It is on the right
+                  only — see the plan pane, which carries the file chips too. */}
 
-                {detectedPdfId ? (
-                  <>
-                    {/* The plan chips.
-                        Originals from the Engineered Plans folder, then a rule,
-                        then the markups from its "Annotated Plans" child — so
-                        version 3 can be looked at without opening the studio.
-                        PDFs in any OTHER subfolder are deliberately left out. */}
-                    {(() => {
-                      const originals = planSet.plans.filter(p => p.kind === 'original');
-                      const marked = planSet.plans.filter(p => p.kind === 'annotated');
-                      const fallback = availablePdfs.map((pdf, i) => ({
-                        id: pdf.id,
-                        name: pdf.name || `Plan ${i + 1}`,
-                        kind: 'original' as const,
-                      }));
-                      const shownOriginals = originals.length ? originals : fallback;
-                      if (shownOriginals.length + marked.length < 2) return null;
+              {/* ── Where the job's files live ──
+                  Moved out of the Settings collapsible: the Drive folder is not
+                  a setting, it is the thing everybody opens twenty times a day,
+                  and it was two clicks down behind a fold. Settings keeps only
+                  the connected unit, which genuinely is a setting. */}
+              <div className="grid gap-3" style={{ gridTemplateColumns: isGeneralProject ? '1fr' : '1fr 1fr' }}>
+                <LinkField
+                  label={ui.driveFolder}
+                  icon={FolderOpen}
+                  value={driveLink}
+                  display={driveFolderName || 'Drive folder'}
+                  placeholder="https://drive.google.com/drive/folders/…"
+                  onSave={next => {
+                    setDriveLink(next);
+                    if (!currentUser) return;
+                    updateApartment(apartment!.id, { driveLink: next || undefined }, currentUser);
+                    const folderId = next ? extractFolderId(next) : null;
+                    if (folderId && backendConfigured) {
+                      findOrCreateFolderViaBackend(folderId, 'Photos').catch(() => {});
+                      autoFillFamilyNameFromFolder(folderId);
+                      findPlanSetViaBackend(next).then(setPlanSet).catch(() => {});
+                      setFetchingPdf(true);
+                      findAllPlansPdfsViaBackend(next)
+                        .then(pdfs => {
+                          setAvailablePdfs(pdfs);
+                          setSelectedPdfIdx(0);
+                          if (pdfs.length > 0) {
+                            const link = `https://drive.google.com/file/d/${pdfs[0].id}/view`;
+                            setPlansPdfLink(link);
+                            updateApartment(apartment!.id, { plansPdfLink: link }, currentUser);
+                          }
+                        })
+                        .finally(() => setFetchingPdf(false));
+                    }
+                  }}
+                  hint={
+                    <span className="flex items-center gap-1.5 text-[10.5px] text-gray-400">
+                      <DriveStatus job={apartment} />
+                      {driveLink
+                        ? (detectedPdfId ? 'Plans found' : fetchingPdf ? 'Looking for plans…' : 'No plans in this folder yet')
+                        : 'Nothing linked'}
+                    </span>
+                  }
+                />
 
-                      const chip = (p: { id: string; name: string }, active: boolean, tone: string) => (
-                        <button
-                          key={p.id}
-                          onClick={() => {
-                            setShownPlanId(p.id);
-                            const link = `https://drive.google.com/file/d/${p.id}/view`;
-                            const idx = availablePdfs.findIndex(x => x.id === p.id);
-                            if (idx >= 0) setSelectedPdfIdx(idx);
-                            // Only an ORIGINAL becomes the job's plan — the one
-                            // the contractor is shown should not silently become
-                            // somebody's markup.
-                            if (originals.some(o => o.id === p.id) || idx >= 0) {
-                              setPlansPdfLink(link);
-                              updateApartment(apartment!.id, { plansPdfLink: link }, currentUser);
-                            }
-                          }}
-                          className="px-2.5 py-1 rounded-lg text-xs font-medium border transition-all truncate max-w-[190px]"
-                          style={active
-                            ? { backgroundColor: tone, color: '#fff', borderColor: tone }
-                            : { backgroundColor: '#fff', color: '#64748b', borderColor: '#e2e8f0' }}
-                          title={p.name}
-                        >
-                          {p.name.replace(/\.pdf$/i, '')}
-                        </button>
-                      );
-
-                      return (
-                        <div className="flex flex-wrap items-center gap-1.5 mb-2">
-                          {shownOriginals.map(p => chip(p, (shownPlanId ?? detectedPdfId) === p.id, '#1e3a5f'))}
-                          {marked.length > 0 && (
-                            <span className="w-px h-5 mx-0.5" style={{ backgroundColor: '#e2e8f0' }} />
-                          )}
-                          {marked.map(p => chip(p, shownPlanId === p.id, '#4aa8d8'))}
-                        </div>
-                      );
-                    })()}
-
-                    <div
-                      className="rounded-xl overflow-hidden border border-gray-200 cursor-pointer relative mb-2"
-                      // Tall enough to read the first page. A 160px strip shows
-                      // the top border of a drawing and nothing else.
-                      style={{ height: showPdfViewer ? '620px' : '330px' }}
-                      onClick={() => setShowPdfViewer(v => !v)}
-                    >
-                      <iframe
-                        src={drivePreviewUrl(shownPlanId ?? detectedPdfId)}
-                        width="100%"
-                        height={showPdfViewer ? '620' : '330'}
-                        allow="autoplay"
-                        title={ui.engineeringPlans}
-                        style={{ border: 'none', display: 'block', pointerEvents: showPdfViewer ? 'auto' : 'none' }}
-                      />
-                      {/* Punch-list pins live OVER the plan, never inside the
-                          PDF — the file in Drive stays untouched. Only shown
-                          once the viewer is expanded, so the collapsed preview
-                          keeps its click-to-expand behaviour. */}
-                      {showPdfViewer && (
-                        <div onClick={e => e.stopPropagation()}>
-                          <PlanPinOverlay
-                            apartmentId={apartment.id}
-                            apartmentLabel={aptLabel(apartment)}
-                            authorName={currentUser.name}
-                          />
-                        </div>
-                      )}
-                      {!showPdfViewer && (
-                        <div className="absolute inset-0 flex items-end justify-center pb-2 bg-gradient-to-t from-black/20 to-transparent">
-                          <span className="text-white text-[10px] font-medium bg-black/40 px-2 py-0.5 rounded">{ui.clickToExpand}</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex gap-2 flex-wrap">
-                      <button onClick={() => setShowPdfViewer(v => !v)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:border-[#1e3a5f] hover:text-[#1e3a5f] transition-all">
-                        {showPdfViewer ? <EyeOff size={12} /> : <Eye size={12} />}
-                        {showPdfViewer ? ui.hideLabel : ui.fullView}
-                      </button>
-                      {/* Open the plan properly — full screen, at a size you can
-                          actually read, rather than in a 440px box. */}
-                      <button onClick={() => setAnnotating('view')}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:border-[#1e3a5f] hover:text-[#1e3a5f] transition-all">
-                        <Maximize2 size={12} /> View plan
-                      </button>
-                      {/* Mark it up. Saves a new version straight into the job's
-                          "Annotated Plans" folder in Drive, with the markup on
-                          its own PDF layer. */}
-                      <button onClick={() => setAnnotating('draw')}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all"
-                        style={{ backgroundColor: '#4aa8d8' }}>
-                        <PenLine size={12} /> Mark up
-                        {planVersionCount > 0 && (
-                          <span className="px-1.5 rounded-full text-[9px] font-bold"
-                            style={{ backgroundColor: 'rgba(255,255,255,.28)' }}>
-                            v{planVersionCount}
-                          </span>
-                        )}
-                      </button>
-                      <a href={driveDownloadUrl(shownPlanId ?? detectedPdfId)} target="_blank" rel="noopener noreferrer"
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:border-[#4aa8d8] hover:text-[#4aa8d8] transition-all">
-                        <Download size={12} /> {ui.download}
-                      </a>
-                    </div>
-                    {latestPlanVersion?.driveUrl && (
-                      <a href={latestPlanVersion.driveUrl} target="_blank" rel="noopener noreferrer"
-                        className="mt-2 flex items-center gap-1.5 text-[11px] text-gray-500 hover:text-[#4aa8d8]">
-                        <ExternalLink size={10} />
-                        Latest markup — version {latestPlanVersion.version},
-                        {' '}{latestPlanVersion.createdBy || 'Office'},
-                        {' '}{new Date(latestPlanVersion.createdAt).toLocaleDateString()}
-                      </a>
-                    )}
-                  </>
-                ) : fetchingPdf ? (
-                  <div className="flex items-center gap-2 text-xs text-gray-400 py-3">
-                    <RefreshCw size={12} className="animate-spin" /> {ui.lookingForPdf}
-                  </div>
-                ) : (
-                  <div className="text-xs text-gray-400 italic py-1">
-                    {driveLink ? `${ui.noPdfFound}. ${ui.refreshButton}` : ui.setPdfHint}
-                  </div>
-                )}
+                {/* Zoho, on every job rather than only on the job board. */}
+                <LinkField
+                  label={ui.zohoLinkLabel}
+                  icon={ExternalLink}
+                  value={zohoLinkLocal}
+                  display="Zoho record"
+                  placeholder="https://crm.zoho.com/…"
+                  accent="#ea6b13"
+                  onSave={next => {
+                    setZohoLinkLocal(next);
+                    if (currentUser) updateApartment(apartment!.id, { zohoLink: next || undefined }, currentUser);
+                  }}
+                />
               </div>
 
               {/* No Save button — every field on this tab saves on its own:
@@ -1376,121 +1220,10 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 >
                   {showSettings ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                   {ui.settingsLabel}
-                  <span className="ml-auto text-xs text-gray-400">{ui.driveFolder} · {ui.connectedUnit}</span>
                 </button>
 
                 {showSettings && (
                   <div className="mt-3 space-y-4">
-                    {/* Google Drive link */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
-                          <ExternalLink size={11} /> {ui.driveFolder}
-                        </label>
-                        <Tooltip text={showHealthCheck ? ui.hideLabel : ui.statusLabel}>
-                          <button
-                            onClick={() => setShowHealthCheck(v => !v)}
-                            className={`flex items-center gap-1 text-xs transition-colors ${showHealthCheck ? 'text-[#1e3a5f]' : 'text-gray-400 hover:text-[#1e3a5f]'}`}
-                          >
-                            <Activity size={11} /> {ui.statusLabel}
-                          </button>
-                        </Tooltip>
-                      </div>
-
-                      {showHealthCheck && (
-                        <div className="mb-2 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-1.5">
-                          {[
-                            { label: ui.driveLinkedCheck, ok: !!driveLink.trim() },
-                            { label: ui.plansDetected, ok: !!detectedPdfId },
-                          ].map(({ label, ok }) => (
-                            <div key={label} className="flex items-center gap-2 text-xs">
-                              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0 ${ok ? 'bg-green-500' : 'bg-red-400'}`} style={{ fontSize: '9px' }}>
-                                {ok ? '✓' : '✗'}
-                              </span>
-                              <span className="text-gray-600">{label}</span>
-                            </div>
-                          ))}
-                          {!detectedPdfId && !fetchingPdf && driveLink && (
-                            <p className="text-[10px] text-gray-400 mt-1 pt-1 border-t border-gray-200">
-                              {ui.noPdfHelp}
-                            </p>
-                          )}
-                        </div>
-                      )}
-
-                      <div className="flex gap-2">
-                        <input
-                          value={driveLink}
-                          onChange={e => setDriveLink(e.target.value)}
-                          onBlur={async () => {
-                            const trimmed = driveLink.trim();
-                            if (trimmed === (apartment.driveLink ?? '')) return;
-                            handleSaveBasic();
-                            // After saving a new drive link, auto-create Photos/ folder and refresh PDF detection
-                            if (trimmed && backendConfigured) {
-                              const folderId = extractFolderId(trimmed);
-                              if (folderId) {
-                                findOrCreateFolderViaBackend(folderId, 'Photos').catch(() => {});
-                                autoFillFamilyNameFromFolder(folderId);
-                                if (!detectedPdfId) {
-                                  setFetchingPdf(true);
-                                  findAllPlansPdfsViaBackend(trimmed)
-                                    .then(pdfs => {
-                                      if (pdfs.length > 0) {
-                                        setAvailablePdfs(pdfs);
-                                        setSelectedPdfIdx(0);
-                                        const link = `https://drive.google.com/file/d/${pdfs[0].id}/view`;
-                                        setPlansPdfLink(link);
-                                        updateApartment(apartment!.id, { plansPdfLink: link }, currentUser);
-                                      }
-                                    })
-                                    .finally(() => setFetchingPdf(false));
-                                }
-                              }
-                            }
-                          }}
-                          placeholder="https://drive.google.com/drive/folders/…"
-                          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
-                        />
-                        {driveLink && (
-                          <Tooltip text={ui.openFolderTooltip}>
-                            <a href={driveLink} target="_blank" rel="noopener noreferrer"
-                              className="flex items-center px-2.5 py-2 rounded-lg border border-gray-200 text-gray-500 hover:text-[#4aa8d8] hover:border-[#4aa8d8] transition-all">
-                              <ExternalLink size={14} />
-                            </a>
-                          </Tooltip>
-                        )}
-                        <Tooltip text={ui.saveDriveLinkTooltip}>
-                          <button
-                            onClick={async () => {
-                              handleSaveBasic();
-                              const trimmed = driveLink.trim();
-                              if (trimmed && backendConfigured) {
-                                const folderId = extractFolderId(trimmed);
-                                if (folderId) {
-                                  findOrCreateFolderViaBackend(folderId, 'Photos').catch(() => {});
-                                  autoFillFamilyNameFromFolder(folderId);
-                                  setFetchingPdf(true);
-                                  findAllPlansPdfsViaBackend(trimmed)
-                                    .then(pdfs => { if (pdfs.length > 0) { setAvailablePdfs(pdfs); setSelectedPdfIdx(0); } })
-                                    .finally(() => setFetchingPdf(false));
-                                }
-                              }
-                            }}
-                            className="flex items-center px-2.5 py-2 rounded-lg border border-gray-200 text-gray-500 hover:text-[#1e3a5f] hover:border-[#1e3a5f] transition-all"
-                          >
-                            <Save size={14} />
-                          </button>
-                        </Tooltip>
-                      </div>
-                      {mergedPartner?.driveLink && driveLink && mergedPartner.driveLink !== driveLink.trim() && (
-                        <div className="mt-1.5 flex items-start gap-1.5 text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 border border-red-200">
-                          <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" />
-                          <span>{ui.mergedDriveDiffers}</span>
-                        </div>
-                      )}
-                    </div>
-
                     {/* Connected unit */}
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1.5 flex items-center gap-1.5">
@@ -1516,7 +1249,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                           ))}
                         </select>
                         {mergedWithId !== (apartment.mergedWith ?? '') && (
-                          <Tooltip text={mergedWithId ? ui.linkMutualHint : ui.unlinkApartments}>
+                          <Tooltip text={ui.unlinkApartments}>
                             <button
                               onClick={handleSaveMerge}
                               className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border transition-all bg-blue-600 text-white hover:bg-blue-700"
@@ -1527,7 +1260,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                           </Tooltip>
                         )}
                       </div>
-                      <p className="text-xs text-gray-400 mt-1.5">{ui.linkMutualHint}</p>
                     </div>
                   </div>
                 )}
