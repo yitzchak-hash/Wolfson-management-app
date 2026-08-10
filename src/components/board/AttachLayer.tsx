@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Unlink } from 'lucide-react';
+import { X, Unlink, Settings2 } from 'lucide-react';
 import { CanvasElement } from '../../types';
 import { ClipArtNode } from './BoardNodes';
 
@@ -198,77 +198,155 @@ export function AnchorHints({ host, active }: { host: HostBox | null; active: An
  * first appearance so you can see which way it points.
  */
 export const ArrowLayer = React.memo(function ArrowLayer({
-  elements, hosts, onSelect,
+  elements, hosts, selectedIds, onSelect, onDelete, onSettings,
 }: {
   elements: CanvasElement[];
   hosts: Map<string, HostBox>;
+  selectedIds?: Set<string>;
   onSelect?: (el: CanvasElement) => void;
+  onDelete?: (id: string) => void;
+  onSettings?: (el: CanvasElement, at: { x: number; y: number }) => void;
 }) {
+  const [hover, setHover] = React.useState<string | null>(null);
   const arrows = elements.filter(el => el.type === 'arrow' && el.fromId && el.toId);
   if (arrows.length === 0) return null;
 
   return (
-    <svg className="absolute inset-0 pointer-events-none" style={{ overflow: 'visible', zIndex: 21 }}>
-      <defs>
-        {arrows.map(el => (
-          <marker key={`m-${el.id}`} id={`head-${el.id}`} viewBox="0 0 10 10"
-            refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-            <path d="M0,0 L10,5 L0,10 z" fill={el.color || '#1e3a5f'} />
-          </marker>
-        ))}
-      </defs>
+    <>
+      <svg className="absolute inset-0" style={{ overflow: 'visible', zIndex: 21, pointerEvents: 'none' }}>
+        <defs>
+          {arrows.map(el => (
+            <marker key={`m-${el.id}`} id={`head-${el.id}`} viewBox="0 0 10 10"
+              refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill={el.color || '#1e3a5f'} />
+            </marker>
+          ))}
+        </defs>
+        {arrows.map(el => {
+          const a = hosts.get(el.fromId!);
+          const b = hosts.get(el.toId!);
+          if (!a || !b) return null;
+
+          const g = arrowGeometry(a, b);
+          const lit = hover === el.id || selectedIds?.has(el.id);
+
+          return (
+            <g key={el.id} className="board-arrow" style={{ pointerEvents: 'stroke' }}
+              onPointerEnter={() => setHover(el.id)}
+              onPointerLeave={() => setHover(h => (h === el.id ? null : h))}
+              onPointerDown={e => { e.stopPropagation(); onSelect?.(el); }}>
+              {/* A fat invisible line so it can be hit without hairline aim. */}
+              <path d={g.d} fill="none" stroke="transparent" strokeWidth={18} />
+
+              {/* Which two things this joins.
+                  A curve leaving one tile and arriving at another told you the
+                  direction and not much else — with several arrows crossing, the
+                  ends were guesswork. Hovering rings both. */}
+              {lit && (
+                <>
+                  <rect x={a.x - 3} y={a.y - 3} width={a.w + 6} height={a.h + 6} rx={12}
+                    fill="none" stroke={el.color || '#1e3a5f'} strokeWidth={2}
+                    strokeDasharray="6 5" opacity={0.65} />
+                  <rect x={b.x - 3} y={b.y - 3} width={b.w + 6} height={b.h + 6} rx={12}
+                    fill="none" stroke={el.color || '#1e3a5f'} strokeWidth={2}
+                    strokeDasharray="6 5" opacity={0.65} />
+                  <circle cx={g.from.x} cy={g.from.y} r={5}
+                    fill="#fff" stroke={el.color || '#1e3a5f'} strokeWidth={2.5} />
+                </>
+              )}
+
+              <path
+                d={g.d}
+                fill="none"
+                stroke={el.color || '#1e3a5f'}
+                strokeWidth={(el.strokeWidth ?? 2.5) * (lit ? 1.4 : 1)}
+                strokeLinecap="round"
+                strokeDasharray={
+                  el.nib === 'dashed' ? '9 7' : el.nib === 'dotted' ? '0.1 8' : undefined}
+                markerEnd={`url(#head-${el.id})`}
+              />
+              {el.text && (
+                <text x={g.cx} y={g.cy - 6} textAnchor="middle"
+                  style={{ fontSize: 11, fontWeight: 700, fill: el.color || '#1e3a5f', paintOrder: 'stroke' }}
+                  stroke="#fff" strokeWidth={3.5}>
+                  {el.text}
+                </text>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+
+      {/* The two buttons, in HTML rather than SVG so they are ordinary buttons
+          with ordinary hit areas. They sit at the midpoint of whichever arrow is
+          under the pointer. */}
       {arrows.map(el => {
         const a = hosts.get(el.fromId!);
         const b = hosts.get(el.toId!);
         if (!a || !b) return null;
-
-        // Leave from the edge facing the other one, so the line never starts
-        // underneath the tile it is coming out of.
-        const ac = { x: a.x + a.w / 2, y: a.y + a.h / 2 };
-        const bc = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
-        const dx = bc.x - ac.x, dy = bc.y - ac.y;
-        const horizontal = Math.abs(dx) > Math.abs(dy);
-        const from = horizontal
-          ? { x: ac.x + Math.sign(dx) * (a.w / 2 + 4), y: ac.y }
-          : { x: ac.x, y: ac.y + Math.sign(dy) * (a.h / 2 + 4) };
-        const to = horizontal
-          ? { x: bc.x - Math.sign(dx) * (b.w / 2 + 10), y: bc.y }
-          : { x: bc.x, y: bc.y - Math.sign(dy) * (b.h / 2 + 10) };
-
-        // A shallow arc, bowed perpendicular to the run.
-        const mx = (from.x + to.x) / 2, my = (from.y + to.y) / 2;
-        const len = Math.hypot(to.x - from.x, to.y - from.y) || 1;
-        const bow = Math.min(46, len * 0.16);
-        const cx = mx + (horizontal ? 0 : bow);
-        const cy = my + (horizontal ? -bow : 0);
-        const d = `M ${from.x} ${from.y} Q ${cx} ${cy} ${to.x} ${to.y}`;
-
+        if (hover !== el.id && !selectedIds?.has(el.id)) return null;
+        const g = arrowGeometry(a, b);
         return (
-          <g key={el.id} className="board-arrow" style={{ pointerEvents: 'stroke' }}
-            onPointerDown={e => { e.stopPropagation(); onSelect?.(el); }}>
-            {/* A fat invisible line so it can be clicked without hairline aim. */}
-            <path d={d} fill="none" stroke="transparent" strokeWidth={14} />
-            <path
-              d={d}
-              fill="none"
-              stroke={el.color || '#1e3a5f'}
-              strokeWidth={el.strokeWidth ?? 2.5}
-              strokeLinecap="round"
-              markerEnd={`url(#head-${el.id})`}
-            />
-            {el.text && (
-              <text x={cx} y={cy - 6} textAnchor="middle"
-                style={{ fontSize: 11, fontWeight: 700, fill: el.color || '#1e3a5f', paintOrder: 'stroke' }}
-                stroke="#fff" strokeWidth={3.5}>
-                {el.text}
-              </text>
-            )}
-          </g>
+          <div
+            key={`ctl-${el.id}`}
+            className="absolute flex items-center gap-1"
+            style={{ left: g.cx, top: g.cy, transform: 'translate(-50%,-50%)', zIndex: 25 }}
+            onPointerEnter={() => setHover(el.id)}
+            onPointerLeave={() => setHover(h => (h === el.id ? null : h))}
+          >
+            <button
+              data-el-action
+              title="Arrow settings — thickness, style, colour"
+              onPointerDown={e => e.stopPropagation()}
+              onClick={e => {
+                e.stopPropagation();
+                onSettings?.(el, { x: e.clientX, y: e.clientY });
+              }}
+              className="w-6 h-6 rounded-full bg-white shadow-md border border-gray-200 flex items-center justify-center text-gray-500 hover:text-[#1e3a5f]"
+            >
+              <Settings2 size={12} />
+            </button>
+            <button
+              data-el-action
+              title="Remove this arrow"
+              onPointerDown={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); onDelete?.(el.id); }}
+              className="w-6 h-6 rounded-full bg-white shadow-md border border-gray-200 flex items-center justify-center text-gray-400 hover:text-red-500"
+            >
+              <X size={12} />
+            </button>
+          </div>
         );
       })}
-    </svg>
+    </>
   );
 });
+
+/**
+ * Where an arrow runs, from two host boxes.
+ *
+ * Pulled out of the renderer so the line, its label and its hover controls all
+ * agree on the same midpoint — three separate calculations would drift.
+ */
+function arrowGeometry(a: HostBox, b: HostBox) {
+  const ac = { x: a.x + a.w / 2, y: a.y + a.h / 2 };
+  const bc = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+  const dx = bc.x - ac.x, dy = bc.y - ac.y;
+  const horizontal = Math.abs(dx) > Math.abs(dy);
+  const from = horizontal
+    ? { x: ac.x + Math.sign(dx) * (a.w / 2 + 4), y: ac.y }
+    : { x: ac.x, y: ac.y + Math.sign(dy) * (a.h / 2 + 4) };
+  const to = horizontal
+    ? { x: bc.x - Math.sign(dx) * (b.w / 2 + 10), y: bc.y }
+    : { x: bc.x, y: bc.y - Math.sign(dy) * (b.h / 2 + 10) };
+
+  const mx = (from.x + to.x) / 2, my = (from.y + to.y) / 2;
+  const len = Math.hypot(to.x - from.x, to.y - from.y) || 1;
+  const bow = Math.min(46, len * 0.16);
+  const cx = mx + (horizontal ? 0 : bow);
+  const cy = my + (horizontal ? -bow : 0);
+  return { from, to, cx, cy, d: `M ${from.x} ${from.y} Q ${cx} ${cy} ${to.x} ${to.y}` };
+}
 
 /**
  * The moment an arrow is being drawn: one end anchored, the other on the cursor.

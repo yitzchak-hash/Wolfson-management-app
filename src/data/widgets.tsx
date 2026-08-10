@@ -5,12 +5,13 @@ import {
   AlertTriangle, HardHat, CalendarDays, Camera, Briefcase, Activity,
   CircleDashed, Archive, StickyNote, Copy, Check, Filter, CalendarCheck,
   Calculator, Ruler, Target, Users, GitCommitHorizontal, TimerReset,
-  ArrowRightLeft, ListFilter, Search, Sparkles, Timer, Sticker, Type, FolderPlus,
+  ArrowRightLeft, ListFilter, Search, Sparkles, Timer, Sticker, Type, FolderPlus, Building,
 } from 'lucide-react';
 import {
   Apartment, CanvasElement, Stage, ContractorAssignment, Contractor,
-  ContractorPhoto, ActivityLog, BIN_KINDS, BIN_META,
+  ContractorPhoto, ActivityLog, BIN_KINDS, BIN_META, isCountableApartment,
 } from '../types';
+import { useStore } from './store';
 import { describeActivity } from './activityText';
 import { ClipArtNode, ART_KINDS, ArtKind } from '../components/board/BoardNodes';
 
@@ -60,6 +61,14 @@ export interface WidgetDef {
   id: string;
   name: string;
   category: WidgetCategory;
+  /**
+   * How near the front of its group this sits.
+   *
+   * Lower is earlier. Without it the shelf is in whatever order the file was
+   * written, so the pieces reached for twenty times a day — tape, the note pad,
+   * a banner, a section box — sat below things nobody has ever placed.
+   */
+  rank?: number;
   blurb: string;
   icon: React.ElementType;
   w: number;
@@ -155,7 +164,7 @@ const ART_PIECES: WidgetDef[] = ([
 export const WIDGETS: WidgetDef[] = [
   // ── Live ──────────────────────────────────────────────────────────────────
   {
-    id: 'kpi', name: 'Number', category: 'live', icon: Gauge, w: 175, h: 105,
+    id: 'kpi', rank: 1, name: 'Number', category: 'live', icon: Gauge, w: 175, h: 105,
     blurb: 'One live figure — open tasks, overdue, jobs on the board. Never stale.',
     data: { metric: 'openTasks' },
     render: (el, c) => {
@@ -177,7 +186,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'stage-legend', name: 'Stage legend', category: 'live', icon: BarChart3, w: 210, h: 175,
+    id: 'stage-legend', rank: 4, name: 'Stage legend', category: 'live', icon: BarChart3, w: 210, h: 175,
     blurb: 'Every stage with a live count, in the stage colours.',
     render: (_el, c) => (
       <Frame title="Stages" icon={BarChart3}>
@@ -198,7 +207,7 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
   {
-    id: 'overdue-list', name: 'Running late', category: 'live', icon: AlertTriangle, w: 235, h: 175,
+    id: 'overdue-list', rank: 2, name: 'Running late', category: 'live', icon: AlertTriangle, w: 235, h: 175,
     blurb: 'Every task past its date, worst first. The one list worth a wall.',
     render: (_el, c) => {
       const late = c.assignments.filter(overdueOf)
@@ -225,7 +234,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'contractor-load', name: 'Contractor', category: 'live', icon: HardHat, w: 200, h: 110,
+    id: 'contractor-load', rank: 6, name: 'Contractor', category: 'live', icon: HardHat, w: 200, h: 110,
     blurb: 'One contractor and how much they already have open.',
     data: {},
     render: (el, c) => {
@@ -270,7 +279,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'recent-photos', name: 'Latest photos', category: 'live', icon: Camera, w: 235, h: 150,
+    id: 'recent-photos', rank: 7, name: 'Latest photos', category: 'live', icon: Camera, w: 235, h: 150,
     blurb: 'The newest pictures back from site.',
     render: (_el, c) => {
       const recent = [...c.photos]
@@ -384,7 +393,7 @@ export const WIDGETS: WidgetDef[] = [
 
   // ── Planning ──────────────────────────────────────────────────────────────
   {
-    id: 'checklist', name: 'Checklist', category: 'plan', icon: ListChecks, w: 215, h: 185,
+    id: 'checklist', rank: 1, name: 'Checklist', category: 'plan', icon: ListChecks, w: 215, h: 185,
     blurb: 'Tickable list. For the things the app does not model.',
     data: { title: 'Checklist', items: [{ t: 'First item', done: false }] },
     render: (el, c) => {
@@ -414,7 +423,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'tally', name: 'Tally counter', category: 'plan', icon: Hash, w: 165, h: 115,
+    id: 'tally', rank: 4, name: 'Tally counter', category: 'plan', icon: Hash, w: 165, h: 115,
     blurb: 'Tap to count. Units delivered, floors done, whatever you are counting.',
     data: { title: 'Count', n: 0 },
     render: (el, c) => (
@@ -434,7 +443,7 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
   {
-    id: 'progress-bar', name: 'Progress bar', category: 'plan', icon: BarChart3, w: 215, h: 95,
+    id: 'progress-bar', rank: 5, name: 'Progress bar', category: 'plan', icon: BarChart3, w: 215, h: 95,
     blurb: 'A percentage you set by hand, for anything the data cannot know.',
     data: { title: 'Progress', pct: 40 },
     render: (el, c) => (
@@ -456,7 +465,7 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
   {
-    id: 'table', name: 'Small table', category: 'plan', icon: Table2, w: 280, h: 165,
+    id: 'table', rank: 8, name: 'Small table', category: 'plan', icon: Table2, w: 280, h: 165,
     blurb: 'A few rows and columns, edited in place.',
     data: { title: 'Table', rows: [['', ''], ['', '']] },
     render: (el, c) => {
@@ -491,7 +500,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'order-list', name: 'Order tracker', category: 'plan', icon: ShoppingCart, w: 240, h: 185,
+    id: 'order-list', rank: 7, name: 'Order tracker', category: 'plan', icon: ShoppingCart, w: 240, h: 185,
     blurb: 'Equipment on order: needed → ordered → arrived. Tap to advance.',
     data: { title: 'On order', items: [{ t: 'Condenser 5t', s: 0 }] },
     render: (el, c) => {
@@ -525,7 +534,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'week-planner', name: 'Week planner', category: 'plan', icon: CalendarRange, w: 400, h: 175,
+    id: 'week-planner', rank: 2, name: 'Week planner', category: 'plan', icon: CalendarRange, w: 400, h: 175,
     blurb: 'Monday to Sunday, free text under each. The wall version of a diary.',
     data: { cols: ['', '', '', '', '', '', ''] },
     render: (el, c) => {
@@ -549,7 +558,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'milestones', name: 'Key dates', category: 'plan', icon: Flag, w: 225, h: 165,
+    id: 'milestones', rank: 3, name: 'Key dates', category: 'plan', icon: Flag, w: 225, h: 165,
     blurb: 'Several dated milestones in one node, counting down together.',
     data: { items: [{ t: 'Handover', on: '' }] },
     render: (el, c) => {
@@ -589,7 +598,7 @@ export const WIDGETS: WidgetDef[] = [
 
   // ── Shortcuts ─────────────────────────────────────────────────────────────
   {
-    id: 'contact', name: 'Contact card', category: 'ref', icon: User2, w: 200, h: 115,
+    id: 'contact', rank: 1, name: 'Contact card', category: 'ref', icon: User2, w: 200, h: 115,
     blurb: 'A name and number, tap to call. For the crane firm, the super, the inspector.',
     data: { name: 'Name', role: '', phone: '' },
     render: (el, c) => (
@@ -612,7 +621,7 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
   {
-    id: 'link', name: 'Link tile', category: 'ref', icon: Link2, w: 185, h: 90,
+    id: 'link', rank: 2, name: 'Link tile', category: 'ref', icon: Link2, w: 185, h: 90,
     blurb: 'A labelled shortcut to anything — a sheet, a supplier, a portal.',
     data: { label: 'Open', url: '' },
     render: (el, c) => (
@@ -632,7 +641,7 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
   {
-    id: 'address', name: 'Address', category: 'ref', icon: MapPin, w: 200, h: 100,
+    id: 'address', rank: 3, name: 'Address', category: 'ref', icon: MapPin, w: 200, h: 100,
     blurb: 'A site address that opens straight into Maps.',
     data: { text: '' },
     render: (el, c) => (
@@ -651,7 +660,7 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
   {
-    id: 'lined-note', name: 'Lined pad', category: 'ref', icon: StickyNote, w: 215, h: 190,
+    id: 'lined-note', rank: 4, name: 'Lined pad', category: 'ref', icon: StickyNote, w: 215, h: 190,
     blurb: 'A proper writing pad — more room than a sticky, and it looks like paper.',
     data: { text: '' },
     render: (el, c) => (
@@ -703,7 +712,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'due-today', name: 'Due today', category: 'live', icon: CalendarCheck, w: 230, h: 165,
+    id: 'due-today', rank: 3, name: 'Due today', category: 'live', icon: CalendarCheck, w: 230, h: 165,
     blurb: 'Only what is due today. The morning list.',
     render: (_el, c) => {
       const list = c.assignments.filter(a => !a.completedAt && a.dueDate === today());
@@ -728,7 +737,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'job-list', name: 'Job list', category: 'live', icon: Filter, w: 235, h: 195,
+    id: 'job-list', rank: 5, name: 'Job list', category: 'live', icon: Filter, w: 235, h: 195,
     blurb: 'A live list of the jobs at one stage. Click any to open it.',
     data: {},
     render: (el, c) => {
@@ -843,7 +852,7 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'team-today', name: 'On site today', category: 'plan', icon: Users, w: 215, h: 175,
+    id: 'team-today', rank: 6, name: 'On site today', category: 'plan', icon: Users, w: 215, h: 175,
     blurb: 'Who is where today. The question the office is asked most.',
     data: { rows: [{ who: '', where: '' }] },
     render: (el, c) => {
@@ -990,7 +999,7 @@ export const WIDGETS: WidgetDef[] = [
   ...ART_PIECES,
 
   {
-    id: 'w-title', name: 'Heading', category: 'visual', icon: Type, w: 280, h: 48,
+    id: 'w-title', rank: 1, name: 'Heading', category: 'visual', icon: Type, w: 280, h: 48,
     blurb: 'A heading to label a column or a section. Full type controls, and it can be pinned to the top.',
     data: {},
     render: (el, c) => (
@@ -1007,6 +1016,22 @@ export const WIDGETS: WidgetDef[] = [
   },
 
   /**
+   * How another workspace is doing, on this board.
+   *
+   * The one widget that deliberately looks OUTSIDE the workspace it sits in.
+   * Everything else on a job board reads the job board; this reads Wolfson or
+   * Netiv, so the office can keep an eye on a building project without leaving
+   * the board they work on.
+   */
+  {
+    id: 'project-glance', rank: 8, name: 'Another workspace', category: 'live',
+    icon: Building, w: 250, h: 165,
+    blurb: 'A live summary of one of your other workspaces — its stages, its counts, its progress.',
+    data: {},
+    render: (el, c) => <ProjectGlance el={el} ctx={c} />,
+  },
+
+  /**
    * A group, from the shelf.
    *
    * The four that ship with the board — Done, Ready, Archive, Trash — are
@@ -1020,7 +1045,7 @@ export const WIDGETS: WidgetDef[] = [
    * widget chrome and none of the drop-target behaviour.
    */
   {
-    id: 'add-bin', name: 'Group', category: 'plan', icon: FolderPlus, w: 178, h: 92,
+    id: 'add-bin', rank: 1, name: 'Group', category: 'plan', icon: FolderPlus, w: 178, h: 92,
     blurb: 'A place to file jobs — like Done or Archive, but yours. Give it a name, a colour, '
       + 'and optionally a stage so filing a job here also moves it to that stage.',
     data: {},
@@ -1038,12 +1063,12 @@ export const WIDGETS: WidgetDef[] = [
 
   // ── Look & feel ───────────────────────────────────────────────────────────
   {
-    id: 'clock', name: 'Wall clock', category: 'visual', icon: Clock3, w: 190, h: 110,
+    id: 'clock', rank: 6, name: 'Wall clock', category: 'visual', icon: Clock3, w: 190, h: 110,
     blurb: 'Time and date, big enough to read across the office.',
     render: () => <ClockWidget />,
   },
   {
-    id: 'banner', name: 'Banner', category: 'visual', icon: Megaphone, w: 340, h: 62,
+    id: 'banner', rank: 2, name: 'Banner', category: 'visual', icon: Megaphone, w: 340, h: 62,
     blurb: 'A bold ribbon across a section of the board.',
     data: { text: 'THIS WEEK' },
     render: (el, c) => (
@@ -1056,7 +1081,7 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
   {
-    id: 'photo', name: 'Photo', category: 'visual', icon: ImageIcon, w: 215, h: 160,
+    id: 'photo', rank: 3, name: 'Photo', category: 'visual', icon: ImageIcon, w: 215, h: 160,
     blurb: 'Pin a picture to the board by its link.',
     data: { url: '' },
     render: (el, c) => (
@@ -1073,6 +1098,94 @@ export const WIDGETS: WidgetDef[] = [
   },
 ];
 
+
+/**
+ * A live look at a different workspace.
+ *
+ * Reads that workspace's own cached data rather than the one you are in, which
+ * is the whole point — and it says plainly when the cache is all it has, because
+ * only the workspace you are actually in syncs live.
+ */
+function ProjectGlance({ el, ctx }: { el: CanvasElement; ctx: WidgetCtx }) {
+  const pid = (el.data as Record<string, unknown> | undefined)?.projectId as string | undefined;
+  const { projects, currentProjectId, apartments, stages: allStages } = useStore();
+  const p = projects.find(x => x.id === pid);
+
+  // The workspace you are IN is live; any other is read from what this machine
+  // last stored for it.
+  const live = pid === currentProjectId;
+  const snap = React.useMemo(() => {
+    if (live) {
+      return {
+        apts: apartments.filter(isCountableApartment),
+        stages: allStages.filter(st => st.active && (pid === 'general' ? st.projectId === 'general' : !st.projectId)),
+      };
+    }
+    try {
+      const raw = localStorage.getItem(`${pid}_app_data`);
+      if (!raw) return null;
+      const d = JSON.parse(raw) as { apartments?: Apartment[]; stages?: Stage[] };
+      return {
+        apts: (d.apartments ?? []).filter(isCountableApartment),
+        stages: (d.stages ?? allStages).filter(st => st.active),
+      };
+    } catch { return null; }
+  }, [pid, live, apartments, allStages]);
+
+  if (!p) {
+    return (
+      <Frame title="Another workspace" icon={Building}>
+        <span className="text-[10px] text-gray-400">Pick a workspace in its settings</span>
+      </Frame>
+    );
+  }
+  if (!snap) {
+    return (
+      <Frame title={p.name} icon={Building} tone={p.color}>
+        <span className="text-[10px] text-gray-400">
+          Nothing stored for {p.shortName ?? p.name} on this machine yet — open it once.
+        </span>
+      </Frame>
+    );
+  }
+
+  const total = snap.apts.length;
+  const started = snap.apts.filter(a => a.currentStageId).length;
+  const pct = total ? Math.round((started / total) * 100) : 0;
+
+  return (
+    <Frame title={p.name} icon={Building} tone={p.color}>
+      <div className="h-full flex flex-col gap-1.5">
+        <div className="flex items-baseline gap-1.5">
+          <span className="font-black tabular-nums" style={{ fontSize: 26, color: p.color }}>{started}</span>
+          <span className="text-[11px] text-gray-400">of {total} started</span>
+          <span className="ml-auto text-[11px] font-bold" style={{ color: p.color }}>{pct}%</span>
+        </div>
+        <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden flex-shrink-0">
+          <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: p.color }} />
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto pr-1 flex flex-col gap-0.5">
+          {snap.stages.slice(0, 8).map(st => {
+            const n = snap.apts.filter(a => a.currentStageId === st.id).length;
+            if (!n) return null;
+            return (
+              <div key={st.id} className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: st.color }} />
+                <span className="text-[10px] text-gray-600 truncate flex-1">{st.name}</span>
+                <span className="text-[10px] font-bold tabular-nums" style={{ color: st.color }}>{n}</span>
+              </div>
+            );
+          })}
+        </div>
+        {!live && (
+          <span className="text-[8.5px] text-gray-300 flex-shrink-0">
+            as this machine last saw it
+          </span>
+        )}
+      </div>
+    </Frame>
+  );
+}
 
 /**
  * Every contractor with a one-tap copy of their portal link.

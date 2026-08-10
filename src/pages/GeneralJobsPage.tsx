@@ -221,6 +221,8 @@ export function GeneralJobsPage() {
   const [settingsEl, setSettingsEl] = useState<string | null>(null);
   /** While a piece of clip art is being dragged: what it is over, and where it would land. */
   const [attachHint, setAttachHint] = useState<{ hostId: string; anchor: Anchor } | null>(null);
+  /** Which arrow's style panel is open, and where. */
+  const [arrowStyle, setArrowStyle] = useState<{ id: string; x: number; y: number } | null>(null);
   const [editingEl, setEditingEl] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
 
@@ -472,8 +474,37 @@ export function GeneralJobsPage() {
   };
 
   /** Drops a widget from the store, seeded with its own default state. */
+  /**
+   * Where a widget lands.
+   *
+   * `freeSpot` looks for a gap from the top-left of the WORLD, which on a board
+   * you have panned across is somewhere you cannot see — so a widget appeared to
+   * do nothing. It goes in the middle of what you are looking at, nudged if
+   * something is already there.
+   */
+  function viewCentreSpot(w: number, h: number) {
+    const vp = viewportRef.current;
+    if (!vp) return freeSpot(w, h);
+    const c = toWorld(
+      vp.getBoundingClientRect().left + vp.clientWidth / 2,
+      vp.getBoundingClientRect().top + vp.clientHeight / 2,
+    );
+    let x = Math.max(0, Math.round(c.x - w / 2));
+    let y = Math.max(0, Math.round(c.y - h / 2));
+    const taken = [
+      ...canvasElements.filter(e => (e.board ?? '') === activeBoardView).map(e => ({ x: e.x, y: e.y, w: e.w, h: e.h })),
+      ...jobs.map((j, i) => ({ ...jobPos(j, i), w: TILE_W, h: TILE_H })),
+    ];
+    for (let n = 0; n < 24; n++) {
+      const clash = taken.some(t => x < t.x + t.w && x + w > t.x && y < t.y + t.h && y + h > t.y);
+      if (!clash) break;
+      x += 28; y += 24;
+    }
+    return { x, y };
+  }
+
   function placeWidget(def: WidgetDef) {
-    const at = freeSpot(def.w, def.h);
+    const at = viewCentreSpot(def.w, def.h);
     // Clip art is a first-class node type, not a widget wrapper — that is what
     // lets it stick to a job and travel with it.
     const isArt = def.id.startsWith('art-');
@@ -486,7 +517,6 @@ export function GeneralJobsPage() {
         x: Math.round(at.x), y: Math.round(at.y), w: def.w, h: def.h,
         text: 'New group', color: '#7c3aed',
       });
-      setStoreOpen(false);
       setTimeout(() => setSettingsEl(id), 0);   // straight into naming it
       return;
     }
@@ -497,7 +527,6 @@ export function GeneralJobsPage() {
         w: def.w, h: def.h, text: '', color: '#0f172a',
         fontSize: 30, fontWeight: 800, align: 'left',
       });
-      setStoreOpen(false);
       // Opened on the next tick, not in this click. Mounting the editor's
       // backdrop under a pointer that is still finishing its click closes it
       // again immediately.
@@ -518,7 +547,8 @@ export function GeneralJobsPage() {
       color: isArt ? '#dc2626' : '#ffffff',
       data: isArt ? {} : (def.data ? JSON.parse(JSON.stringify(def.data)) : {}),
     });
-    setStoreOpen(false);
+    // The store STAYS OPEN. Furnishing a board meant reopening it for every
+    // single piece.
     setToast(`${def.name} added`);
   }
 
@@ -2500,8 +2530,14 @@ export function GeneralJobsPage() {
                 />
               </svg>
             )}
-            <ArrowLayer elements={canvasElements} hosts={hostBoxes}
-              onSelect={el => setSelectedElIds(new Set([el.id]))} />
+            <ArrowLayer
+              elements={canvasElements}
+              hosts={hostBoxes}
+              selectedIds={selectedElIds}
+              onSelect={el => setSelectedElIds(new Set([el.id]))}
+              onDelete={id => { deleteCanvasElement(id); setToast('Arrow removed'); }}
+              onSettings={(el, at) => setArrowStyle({ id: el.id, x: at.x, y: at.y })}
+            />
             <AttachedArtLayer
               elements={canvasElements}
               hosts={hostBoxes}
@@ -3220,6 +3256,61 @@ export function GeneralJobsPage() {
             onClose={() => setSettingsEl(null)}
             onDelete={id => deleteCanvasElement(id)}
           />
+        );
+      })()}
+
+      {/* An arrow's own look — thickness, style, colour — reached from the arrow
+          rather than from a menu three levels away. */}
+      {arrowStyle && (() => {
+        const el = canvasElements.find(e => e.id === arrowStyle.id);
+        if (!el) return null;
+        const set = (patch: Partial<CanvasElement>) => updateCanvasElement(el.id, patch);
+        return (
+          <>
+            <div className="fixed inset-0 z-[88]" onClick={() => setArrowStyle(null)} />
+            <div className="fixed z-[89] bg-white rounded-xl shadow-2xl border border-gray-100 p-3"
+              style={{
+                left: Math.min(arrowStyle.x, window.innerWidth - 250),
+                top: Math.min(arrowStyle.y + 12, window.innerHeight - 230),
+                width: 234,
+              }}>
+              <div className="text-[10px] font-extrabold tracking-wide text-gray-400 mb-2">ARROW</div>
+
+              <label className="block text-[11px] font-semibold text-gray-500 mb-1">Thickness</label>
+              <div className="flex items-center gap-2 mb-3">
+                <input type="range" min={1} max={10} step={0.5} value={el.strokeWidth ?? 2.5}
+                  onChange={e => set({ strokeWidth: Number(e.target.value) })}
+                  className="flex-1 accent-[#1e3a5f]" />
+                <span className="text-[11px] font-bold tabular-nums w-6">{el.strokeWidth ?? 2.5}</span>
+              </div>
+
+              <label className="block text-[11px] font-semibold text-gray-500 mb-1">Style</label>
+              <div className="grid grid-cols-3 gap-1 mb-3">
+                {([['round', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']] as const).map(([nib, label]) => (
+                  <button key={nib} onClick={() => set({ nib })}
+                    className="py-1.5 rounded-lg text-[11px] font-semibold border transition-colors"
+                    style={(el.nib ?? 'round') === nib
+                      ? { backgroundColor: '#1e3a5f', color: '#fff', borderColor: '#1e3a5f' }
+                      : { backgroundColor: '#fff', color: '#64748b', borderColor: '#e2e8f0' }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              <label className="block text-[11px] font-semibold text-gray-500 mb-1">Colour</label>
+              <div className="flex flex-wrap gap-1.5">
+                {['#1e3a5f', '#dc2626', '#ea6b13', '#16a34a', '#0d9488', '#7c3aed', '#db2777', '#64748b'].map(col => (
+                  <button key={col} onClick={() => set({ color: col })} title={col}
+                    className="w-[22px] h-[22px] rounded-lg transition-transform"
+                    style={{
+                      backgroundColor: col,
+                      border: (el.color || '#1e3a5f') === col ? '2px solid #0f172a' : '1px solid rgba(15,23,42,.14)',
+                      transform: (el.color || '#1e3a5f') === col ? 'scale(1.12)' : undefined,
+                    }} />
+                ))}
+              </div>
+            </div>
+          </>
         );
       })()}
 

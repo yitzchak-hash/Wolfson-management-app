@@ -286,7 +286,7 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId }: {
     const spot = at ?? freeSpot(def.w, def.h);
     const isArt = def.id.startsWith('art-');
     const id = 'CE-' + Math.random().toString(36).slice(2, 9);
-    if (def.id === 'add-bin') { setStoreOpen(false); return; }   // no groups inside a group
+    if (def.id === 'add-bin') return;   // no groups inside a group
     addCanvasElement({
       id,
       ...(isArt
@@ -299,7 +299,7 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId }: {
       text: '', color: isArt ? '#dc2626' : def.id === 'w-title' ? '#0f172a' : '#ffffff',
       data: isArt ? {} : (def.data ? JSON.parse(JSON.stringify(def.data)) : {}),
     });
-    setStoreOpen(false);
+    // Stays open, as on the main board.
   }
 
   function addSimple(type: 'note' | 'box', at?: { x: number; y: number }) {
