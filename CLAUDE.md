@@ -808,3 +808,89 @@ it stops reaching into the minimap.
   subfolder**.
 - The TV can mark up a plan and only that; `askWho` locks it until somebody
   picks a name.
+
+---
+
+# v2 — the 116-item round
+
+## The rota (`src/components/board/RotaWidget.tsx`)
+People down the left, **Sunday to Thursday** across, weeks stacked, each week with its own dated
+header. A cell is a **LIST of entries**, each either a linked job or free words — the paper sheet has
+both in the same cell ("Pardes 8 am", "Davidian??"), so neither can be second-class.
+
+Dropping a job on a cell **references** it; the job stays on the board and can be on two people's rows
+at once. `src/data/rotaDrop.ts` is the bridge: each mounted rota registers a probe answering "is a cell
+of mine under this SCREEN point?", because a client rect already has the board's pan and zoom in it.
+The board drags in world coordinates and the rota is CSS grid — neither re-derives the other's maths.
+
+**The drop gesture needs Select mode.** The board's default tool is Pan (settled earlier), where a drag
+from a tile moves the board.
+
+`personColor(name, chosen?)` in `types/index.ts` gives everyone a stable colour derived from their name
+unless one is set. `Contractor.color` / `User.color` are set by clicking the avatar in app settings.
+
+## Plan drawing — the one-fill rule
+`src/components/plans/paintStroke.ts` holds `paintStroke()`, lifted out of PlanAnnotator because it is
+pure and therefore testable against real pixels.
+
+A freehand stroke is **ONE path**: a quad per segment plus a disc per point, all subpaths of one path,
+filled once with nonzero. Per-segment stroking caused both drawing faults — a segment shorter than its
+own round cap renders as a dot (beading), and every `stroke()` is a separate composite (darkening at
+any opacity below 1). Grouping into runs is NOT enough; a genuinely varying width still gives many fills.
+**The discs must wind the same way as the quads** or nonzero cancels and the line comes out dashed.
+`api/plan-annotate.js` emits identical geometry. Change one, change both.
+
+Measured: highlighter darkness spread along a band 98 → 0, marker at 55% opacity 55 → 0, screen and
+stamped PDF agreeing exactly.
+
+Also: two erasers (`eraser` cuts a freehand stroke and keeps both halves; `eraser-object` takes the
+whole mark), neither with colour or opacity. Flipping the Samsung pen switches to the highlighter —
+`NibWatch` in `penInput.ts` LEARNS this panel's two contact sizes and refuses to answer until it has
+seen both. The balloon IS the text box (`bubbleTextBox` + `fitText` are shared by screen and PDF so the
+words cannot jump). The wheel always zooms, towards the pointer; two fingers pinch.
+
+## Shared widgets
+- `MiniJob` (`components/board/MiniJob.tsx`) — the one row used everywhere a job is listed: stage dot,
+  name, open-task count, Drive light. Used by Running late, Due today, Job list, New this week, Find a job.
+- `DashWidgets.tsx` — `ProjectMini`, `BoardMini`, `CalendarMini`. They live outside `widgets.tsx`
+  because each needs another workspace's data or the router, and `WidgetCtx` is scoped to one
+  workspace on purpose.
+- `CanvasElement.outline` / `outlineWidth` — any node can wear an outline, drawn as its border so no
+  size changes. "None" must stay reachable.
+
+## The dashboard is a board
+`DASHBOARD_BOARD = '__dashboard'`. Its widgets are ordinary `CanvasElement`s carrying that board id, so
+they persist, sync, export and import with **no new store points**. Laid out on a 12-column grid
+(`el.w / 100` = span), not a free canvas, because a dashboard must reflow.
+
+## The counting rule, restated
+`isCountableApartment()` is the single answer to "is this a real unit", and **nothing may add to it**.
+Two places had invented their own and disagreed with the Dashboard:
+- Analytics filtered `floor > 0 || !/^A\d/` — a Wolfson guess that broke the moment a ground-floor slot
+  was named.
+- The Tasks page filtered `floor > 0` and grouped by building, so on the Job Board (every job at floor 0,
+  no buildings) its apartment picker was empty.
+
+**Task totals must be scoped too.** `liveAssignments` = assignments whose apartment still counts.
+Otherwise a job filed into Done or Trash leaves the unit count and keeps its tasks in the task count.
+
+## Boards belong to people
+`BoardView.ownerId` + `share: Record<userId, 'edit'|'view'>`. `boardAccess(v, userId, isAdmin)` is the
+single answer; admin and owner always get `edit`. Legacy `userIds` is read as "these can edit, empty
+means everyone" and is never written again. `share: {}` means **private**, not public.
+
+A view-only board is enforced where a change can START — drag, keyboard, right-click, toolbar — not at
+each action. A press behaves as in Pan mode: drag moves the board, a click opens the job.
+
+## The wallboard
+Views left, logo centred on a white plate, full screen + a corner X, zoom as −/+, and a pen that
+unlocks **only the wallboard's own furniture** (never sticky — component state, so a reload is
+read-only again). `BoardSetting.tvBoard` picks which board it shows, admin-only, and clears `tvView`
+because a saved rectangle describes the old board. `tvDomain` gives the short link.
+
+The job screen draws the plan through `<PlanAnnotator embedded readOnly>` — a Drive preview iframe
+frames every sheet in a black surround that cannot be turned off.
+
+## Panels must close on Escape
+The widget store and the node settings did not. A full-screen backdrop you have not noticed swallows
+every other click on the board.
