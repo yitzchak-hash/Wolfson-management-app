@@ -1,4 +1,26 @@
 import React, { useMemo } from 'react';
+
+/**
+ * Re-alpha a colour that may be hex or rgba.
+ *
+ * Section boxes shipped with `rgba(...,0.45)` fills and the code re-derived
+ * shades by string-replacing "0.45", which broke the moment anybody picked a
+ * different colour.
+ */
+function withAlpha(color: string, alpha = 0.45): string {
+  const a = Math.max(0, Math.min(1, alpha));
+  const rgba = /^rgba?\(([^)]+)\)$/i.exec(color.trim());
+  if (rgba) {
+    const [r, g, b] = rgba[1].split(',').map(v => parseFloat(v));
+    return `rgba(${r}, ${g}, ${b}, ${a})`;
+  }
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim());
+  if (hex) {
+    const h = hex[1].length === 3 ? hex[1].split('').map(c => c + c).join('') : hex[1];
+    return `rgba(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)}, ${a})`;
+  }
+  return color;
+}
 import { MapPin, ClipboardList, Trash2, Palette, Pencil, X, ThumbsUp, ThumbsDown, Ghost,
   Archive, CheckCircle2, PlayCircle, FolderOpen } from 'lucide-react';
 import { Apartment, CanvasElement, Stage, BinKind, BIN_META, binKeyOf, binLabelOf } from '../../types';
@@ -366,7 +388,7 @@ export const BoardNode = React.memo(function BoardNode({
   const borderColor = isSelected ? '#4aa8d8'
     : isBin ? (binHot ? el.color : '#cbd5e1')
     : isWidget ? '#e2e8f0'
-    : el.type === 'box' ? el.color.replace('0.45', '0.8')
+    : el.type === 'box' ? withAlpha(el.color, (el.boxOpacity ?? 0.45) + 0.35)
     : 'rgba(0,0,0,0.1)';
 
   const surface: React.CSSProperties = (plain || el.type === 'title')
@@ -377,7 +399,7 @@ export const BoardNode = React.memo(function BoardNode({
           // Was hardcoded white, so the colour picker wrote a value no widget
           // ever read — pick a colour, nothing happens, on all 47 of them.
           : isWidget ? (el.color || '#ffffff')
-          : el.type === 'box' ? el.color
+          : el.type === 'box' ? withAlpha(el.color, el.boxOpacity)
           : (el.color || '#ffffff'),
         borderStyle: isBin ? 'dashed' : 'solid',
         borderWidth: isBin ? 2 : 1,
@@ -402,39 +424,34 @@ export const BoardNode = React.memo(function BoardNode({
         outline: isSelected && !isDragging ? '2px solid rgba(74,168,216,0.5)' : undefined,
         outlineOffset: '2px',
         touchAction: 'none',
-        zIndex: el.type === 'box' ? 1 : isBin ? 4 : 5,
+        // An explicit layer wins; otherwise the type decides, as it always has.
+        zIndex: el.z ?? (el.type === 'box' ? 1 : isBin ? 4 : 5),
       }}
     >
       {/* Node actions — always on when selected, on hover otherwise. Bins have
           no colour picker and can never be deleted. */}
+      {/* ONE button, not three or four.
+          Colour, text and everything else already live in the settings panel,
+          so three buttons in a 22px strip were three ways to the same place —
+          and each was an 18px target, which is why they were so hard to hit.
+          28px, with the delete kept separate because it is the one that cannot
+          be undone by pressing it again. */}
       {!plain && (
         <div className={`absolute top-1.5 right-1.5 flex gap-1 z-10 transition-opacity ${
             isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'}`}
           style={{ pointerEvents: 'auto' }}>
           <button data-el-action
-            onClick={e => { e.stopPropagation(); H.elColor(e, el.id); }}
-            className="p-1 rounded-md bg-white/70 hover:bg-white text-gray-500 hover:text-gray-700 transition-all">
-            <Palette size={11} />
-          </button>
-          <button data-el-action
             title="Settings"
             onClick={e => { e.stopPropagation(); H.elSettings(el); }}
-            className="p-1 rounded-md bg-white/70 hover:bg-white text-gray-500 hover:text-gray-700 transition-all">
-            <Settings2 size={11} />
+            className="w-7 h-7 rounded-lg bg-white/85 hover:bg-white text-gray-500 hover:text-gray-800 transition-all flex items-center justify-center shadow-sm">
+            <Settings2 size={14} />
           </button>
-          {(el.type === 'note' || el.type === 'box') && (
-            <button data-el-action
-              title="Edit the text"
-              onClick={e => { e.stopPropagation(); H.elEdit(el); }}
-              className="p-1 rounded-md bg-white/70 hover:bg-white text-gray-500 hover:text-gray-700 transition-all">
-              <Pencil size={11} />
-            </button>
-          )}
           {!isBin && (
             <button data-el-action
+              title="Remove"
               onClick={e => { e.stopPropagation(); H.elDelete(el.id); }}
-              className="p-1 rounded-md bg-white/70 hover:bg-red-100 text-gray-400 hover:text-red-500 transition-all">
-              <X size={11} />
+              className="w-7 h-7 rounded-lg bg-white/85 hover:bg-red-50 text-gray-400 hover:text-red-500 transition-all flex items-center justify-center shadow-sm">
+              <X size={14} />
             </button>
           )}
         </div>
@@ -445,10 +462,10 @@ export const BoardNode = React.memo(function BoardNode({
         <button data-el-action
           onClick={e => { e.stopPropagation(); H.elPatch(el.id, { showOnTv: el.showOnTv === false ? undefined : false }); }}
           title={el.showOnTv === false ? 'Hidden from TV' : 'Showing on TV'}
-          className={`absolute bottom-1.5 right-1.5 p-1 rounded-md transition-all z-10 ${
+          className={`absolute bottom-1.5 right-1.5 w-7 h-7 rounded-lg flex items-center justify-center bg-white/70 transition-all z-10 ${
             isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'}`}
           style={{ color: el.showOnTv === false ? '#dc2626' : '#94a3b8' }}>
-          <TvIcon size={11} hidden={el.showOnTv === false} />
+          <TvIcon size={13} hidden={el.showOnTv === false} />
         </button>
       )}
 
@@ -508,14 +525,15 @@ export const BoardNode = React.memo(function BoardNode({
           style={{ paddingTop: el.type === 'box' ? '8px' : '32px', zIndex: 20 }}
         />
       ) : (
+        el.type === 'box' ? null : (
         <div
-          className={`${el.type === 'box' ? 'pt-2 px-3' : 'pt-8 px-3'} text-gray-700 leading-snug whitespace-pre-wrap break-words`}
+          className="pt-8 px-3 text-gray-700 leading-snug whitespace-pre-wrap break-words"
           style={{
             maxHeight: '100%', overflow: 'hidden',
             // A note had no way to change its own type at all. It uses the same
             // controls the heading always had, so one set covers every text node.
             fontSize: el.fontSize ?? 14,
-            fontWeight: el.fontWeight ?? (el.type === 'box' ? 600 : 400),
+            fontWeight: el.fontWeight ?? 400,
             textAlign: el.align ?? 'left',
             fontStyle: el.italic ? 'italic' : undefined,
             textDecoration: el.underline ? 'underline' : undefined,
@@ -523,11 +541,21 @@ export const BoardNode = React.memo(function BoardNode({
         >
           {el.text || <span className="italic text-gray-400">Double-click to edit</span>}
         </div>
+        )
       )}
 
-      {el.type === 'box' && !isEditing && (
-        <div className="absolute top-0 left-0 right-0 px-3 py-1.5 font-semibold text-sm text-gray-700 rounded-t-xl cursor-grab"
-          style={{ backgroundColor: el.color.replace('0.45', '0.7') }}>
+      {/* The box's name lives in its header bar and NOWHERE else. It used to be
+          drawn here AND in the body, so every section box showed its own name
+          twice — once small inside, once on the bar. */}
+      {el.type === 'box' && !isEditing && el.text && (
+        <div className="absolute top-0 left-0 right-0 px-3 py-1.5 rounded-t-xl cursor-grab truncate"
+          style={{
+            backgroundColor: withAlpha(el.color, (el.boxOpacity ?? 0.45) + 0.25),
+            fontSize: el.fontSize ?? 14,
+            fontWeight: el.fontWeight ?? 600,
+            textAlign: el.align ?? 'left',
+            color: '#334155',
+          }}>
           {el.text}
         </div>
       )}
@@ -560,7 +588,7 @@ export const BoardNode = React.memo(function BoardNode({
           onPointerDown={e => H.resizeDown(e, el)}
           onPointerMove={H.resizeMove}
           onPointerUp={H.resizeUp}
-          className={`absolute bottom-0.5 right-0.5 w-3.5 h-3.5 cursor-se-resize transition-opacity z-10 ${
+          className={`absolute -bottom-0.5 -right-0.5 w-5 h-5 cursor-se-resize transition-opacity z-10 ${
             isSelected ? 'opacity-60' : 'opacity-0 group-hover:opacity-60'}`}
           style={{ borderRight: '2px solid currentColor', borderBottom: '2px solid currentColor',
                    borderRadius: '0 0 4px 0', color: '#64748b' }}

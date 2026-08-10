@@ -59,14 +59,16 @@ export function Sidebar() {
             to={to}
             title={label}
             className={({ isActive }) =>
-              `pick flex flex-col items-center justify-center w-12 h-12 rounded-xl text-xs gap-1 ${isActive ? 'pick-on' : ''}`}
+              // 52 rather than 48: a 20px icon, a label and the gap between
+              // them did not fit in 48, so the fill's edge ran through the word.
+              `pick flex flex-col items-center justify-center w-[52px] h-[52px] rounded-xl text-xs gap-1 ${isActive ? 'pick-on' : ''}`}
             style={({ isActive }) => ({
               ['--pick-fill' as string]: accent,
               color: isActive ? '#ffffff' : (lightTheme ? '#9ca3af' : '#6b7280'),
             })}
           >
             <Icon size={20} />
-            <span className="text-[9px] leading-none font-medium text-center px-0.5">{label}</span>
+            <span className="text-[9px] leading-[1.1] font-medium text-center px-0.5">{label}</span>
           </NavLink>
         ))}
       </aside>

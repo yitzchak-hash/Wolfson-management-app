@@ -3,7 +3,7 @@ import { X, Trash2, Upload, Check, Plus } from 'lucide-react';
 import { useStore } from '../../data/store';
 import { CanvasElement, Stage, binLabelOf, isBuiltInBin } from '../../types';
 import { WIDGET_BY_ID } from '../../data/widgets';
-import { WidgetField, WIDGET_FIELDS, ART_FIELDS, TEXT_STYLE_FIELDS } from '../../data/widgetFields';
+import { WidgetField, WIDGET_FIELDS, ART_FIELDS, BOX_FIELDS, TEXT_STYLE_FIELDS } from '../../data/widgetFields';
 import { ART_KINDS, ArtKind } from './BoardNodes';
 import { ANCHORS, anchorOf } from './AttachLayer';
 
@@ -50,9 +50,10 @@ export function NodeSettings({ el, onClose, onDelete }: {
   const fields: WidgetField[] = useMemo(() => {
     if (el.type === 'widget' && el.widget) return WIDGET_FIELDS[el.widget] ?? [];
     if (el.type === 'clipart') return ART_FIELDS;
-    if (el.type === 'note' || el.type === 'box') {
+    if (el.type === 'box') return BOX_FIELDS;
+    if (el.type === 'note') {
       return [
-        { key: 'text', label: el.type === 'box' ? 'Section name' : 'Note', kind: 'longtext', scope: 'element' },
+        { key: 'text', label: 'Note', kind: 'longtext', scope: 'element' },
         ...TEXT_STYLE_FIELDS,
       ];
     }
@@ -416,12 +417,16 @@ function Field({ field, value, onChange, stages, jobs, contractors }: {
   }
 
   if (f.kind === 'percent') {
-    const n = Number(str) || 0;
+    // boxOpacity is stored 0..1 because that is what CSS wants; the slider
+    // speaks in whole percent because that is what a person wants.
+    const asFraction = f.key === 'boxOpacity';
+    const raw = str === '' ? (asFraction ? 0.45 : 0) : Number(str);
+    const n = asFraction ? Math.round(raw * 100) : (raw || 0);
     return (
       <Row label={f.label} hint={f.hint}>
         <div className="flex items-center gap-2">
           <input type="range" min={0} max={100} value={n}
-            onChange={e => onChange(Number(e.target.value))}
+            onChange={e => onChange(asFraction ? Number(e.target.value) / 100 : Number(e.target.value))}
             className="flex-1 accent-[#1e3a5f]" />
           <span className="text-[12px] font-bold tabular-nums w-9 text-right">{n}%</span>
         </div>

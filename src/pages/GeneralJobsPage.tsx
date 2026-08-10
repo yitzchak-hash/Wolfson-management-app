@@ -4,7 +4,7 @@ import {
   Copy, StickyNote, Square, Palette, Pencil, X, AlertTriangle,
   Ghost, ThumbsUp, ThumbsDown, ClipboardPaste, LayoutGrid, Columns3, Archive, CheckCircle2, PlayCircle,
   Image as ImageIcon, ImageOff, History, MoveUpRight, Unlink, FileText, Search, FolderPlus, Printer,
-  Settings2 as Settings,
+  Settings2 as Settings, BringToFront, SendToBack, ChevronUp, ChevronDown,
 } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 import { useStore } from '../data/store';
@@ -259,6 +259,12 @@ export function GeneralJobsPage() {
   /** True while the view is gliding to a search result. */
   const [flying, setFlying] = useState(false);
   const zoomHold = useRef<number | undefined>(undefined);
+  /** The wheel listener is registered once, so it reads the tool through a ref. */
+  const toolRef = useRef<BoardTool>('select');
+  const copyRef = useRef<() => void>(() => {});
+  const pasteRef = useRef<() => boolean>(() => false);
+  /** What Ctrl+C put down: whole node records, not text. */
+  const boardClip = useRef<{ els: CanvasElement[]; jobs: string[] }>({ els: [], jobs: [] });
   /** Armed arrow: the first end is chosen, waiting for the second. */
   const [arrowFrom, setArrowFrom] = useState<string | null>(null);
   const [arrowTip, setArrowTip] = useState<{ x: number; y: number } | null>(null);
@@ -405,6 +411,65 @@ export function GeneralJobsPage() {
 
   freeSpotRef.current = freeSpot;
   boardRef.current = activeBoardView;
+  toolRef.current = tool;
+
+  copyRef.current = () => {
+    const els = canvasElements.filter(el => selectedElIds.has(el.id) && el.type !== 'bin');
+    const jobIds = [...selectedJobIds];
+    if (!els.length && !jobIds.length) return;
+    boardClip.current = { els: els.map(e => ({ ...e })), jobs: jobIds };
+    setToast(`Copied ${els.length + jobIds.length} item${els.length + jobIds.length === 1 ? '' : 's'}`);
+  };
+
+  pasteRef.current = () => {
+    const { els, jobs: jobIds } = boardClip.current;
+    if (!els.length && !jobIds.length) return false;
+
+    // Offset so the copy is visibly a copy rather than sitting exactly on top.
+    const OFF = 26;
+    const newElIds = new Set<string>();
+    els.forEach(el => {
+      const id = 'CE-' + Math.random().toString(36).slice(2, 9);
+      newElIds.add(id);
+      addCanvasElement({
+        ...el,
+        id,
+        // A pasted piece of clip art lands on the board rather than still
+        // attached to whatever the original was stuck to.
+        attachedTo: undefined, attachAnchor: undefined, attachAt: undefined,
+        ...(boardRef.current ? { board: boardRef.current } : { board: undefined }),
+        x: Math.round(el.x + OFF), y: Math.round(el.y + OFF),
+      });
+    });
+
+    const newJobIds = new Set<string>();
+    if (jobIds.length && currentUser) {
+      jobIds.forEach(jid => {
+        const src = apartments.find(a => a.id === jid);
+        if (!src) return;
+        const idx = jobs.findIndex(j => j.id === jid);
+        const base = idx >= 0 ? jobPos(src, idx) : { x: src.canvasX ?? 40, y: src.canvasY ?? 40 };
+        const id = genId('G');
+        const now = new Date().toISOString();
+        addApartment({
+          ...src, id,
+          displayName: src.displayName ? `${src.displayName} (copy)` : '',
+          canvasX: base.x + OFF, canvasY: base.y + OFF,
+          ghosts: undefined,
+          createdAt: now, updatedAt: now,
+          updatedBy: currentUser.id, updatedByName: currentUser.name,
+        });
+        newJobIds.add(id);
+      });
+    }
+
+    // The new items are what you are now working on — otherwise a paste is
+    // followed by hunting for what you just made.
+    setSelectedElIds(newElIds);
+    setSelectedJobIds(newJobIds);
+    setToast(`Pasted ${newElIds.size + newJobIds.size} item${newElIds.size + newJobIds.size === 1 ? '' : 's'}`);
+    return true;
+  };
 
   /** Drops a widget from the store, seeded with its own default state. */
   function placeWidget(def: WidgetDef) {
@@ -1184,6 +1249,34 @@ export function GeneralJobsPage() {
     setCtxMenu(null);
   }
 
+  /**
+   * Layering, the way Google Docs calls it: Arrange.
+   *
+   * Board nodes stacked purely by type — boxes behind, everything else in front
+   * — which is a good default and no help at all when two notes overlap and the
+   * wrong one is on top. `z` is only written when somebody makes a choice, so
+   * nothing that exists moves.
+   */
+  function arrange(ids: string[], how: 'front' | 'back' | 'up' | 'down') {
+    const zs = canvasElements
+      .filter(e => !e.board || e.board === activeBoardView)
+      .map(e => e.z ?? (e.type === 'box' ? 1 : e.type === 'bin' ? 4 : 5));
+    const top = Math.max(5, ...zs), bottom = Math.min(1, ...zs);
+    ids.forEach(id => {
+      const el = canvasElements.find(e => e.id === id);
+      if (!el) return;
+      const cur = el.z ?? (el.type === 'box' ? 1 : el.type === 'bin' ? 4 : 5);
+      const next = how === 'front' ? top + 1
+        : how === 'back' ? bottom - 1
+        : how === 'up' ? cur + 1
+        : cur - 1;
+      updateCanvasElement(id, { z: next });
+    });
+    setToast(how === 'front' ? 'Brought to the front'
+      : how === 'back' ? 'Sent to the back'
+      : how === 'up' ? 'Moved forward' : 'Moved back');
+  }
+
   function handleDuplicateJobs(ids: string[]) {
     const now = new Date().toISOString();
     ids.forEach((id, idx) => {
@@ -1247,6 +1340,34 @@ export function GeneralJobsPage() {
         return;
       }
       if (e.key === 'Delete' || e.key === 'Backspace') deleteRef.current();
+
+      /**
+       * Copy and paste on the board.
+       *
+       * The clipboard already had a paste-INTENT reader — it looks at what is on
+       * the system clipboard and offers to turn a Drive link into a job. That is
+       * a different thing from copying the tiles you have selected, which simply
+       * did not exist: Ctrl+C did nothing and Ctrl+V fell through to the intent
+       * reader, so duplicating three notes meant duplicating them one at a time.
+       *
+       * Kept in our own clipboard rather than the system one, because a board
+       * node is a structure and flattening it to text to read it back would lose
+       * everything that makes it worth copying.
+       */
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'c' || e.key === 'C')) {
+        copyRef.current();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'v' || e.key === 'V')) {
+        if (pasteRef.current()) e.preventDefault();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'd' || e.key === 'D')) {
+        e.preventDefault();
+        copyRef.current();
+        pasteRef.current();
+        return;
+      }
       if (e.key === 'Escape') {
         setSelectedJobIds(new Set()); setSelectedElIds(new Set());
         setCtxMenu(null); setColorPicker(null);
@@ -1704,11 +1825,20 @@ export function GeneralJobsPage() {
       const inner = (e.target as HTMLElement | null)?.closest?.('.board-rail, [data-wheel]');
       if (inner && inner.scrollHeight > inner.clientHeight + 1) return;
 
-      // Ctrl/Cmd + wheel zooms, and so does holding the left button while you
-      // scroll — the second is an ADDITION, for mice where the modifier is
-      // awkward. Both anchor on the cursor.
+      /**
+       * The tool decides what the wheel does.
+       *
+       * PAN: the wheel zooms — you are already moving the board by dragging, so
+       * the wheel is free for the other axis of movement.
+       * SELECT: the wheel scrolls up and down — you are working on things in
+       * place, and scrolling past them is what you want.
+       *
+       * Ctrl/Cmd and holding the left button still force a zoom in either mode,
+       * so zoom is never more than a modifier away. Every path anchors on the
+       * cursor.
+       */
       const held = leftDown.current || (e.buttons & 1) === 1;
-      if (e.ctrlKey || e.metaKey || held) {
+      if (e.ctrlKey || e.metaKey || held || toolRef.current === 'pan') {
         e.preventDefault();
         if (held) {
           zoomingWithButton.current = true;
@@ -2630,6 +2760,27 @@ export function GeneralJobsPage() {
               </>
             ) : (
               <>
+                {/* Arrange, the way Google Docs names it. Two overlapping notes
+                    and no way to say which is on top was the gap. */}
+                <div className="px-4 pt-1.5 pb-1 text-[10px] font-extrabold tracking-wide text-gray-400">
+                  ARRANGE
+                </div>
+                <div className="grid grid-cols-2 gap-0.5 px-2 pb-1">
+                  {([
+                    ['front', 'Bring to front', BringToFront],
+                    ['back', 'Send to back', SendToBack],
+                    ['up', 'Forward', ChevronUp],
+                    ['down', 'Backward', ChevronDown],
+                  ] as const).map(([how, label, Icon]) => (
+                    <button key={how}
+                      onClick={() => { arrange(ctxMenu.ids, how); setCtxMenu(null); }}
+                      className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[12px] text-gray-700 hover:bg-gray-50">
+                      <Icon size={13} className="text-gray-400" /> {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="h-px bg-gray-100 my-1" />
+
                 {/* Settings first — for a widget or a group there is no text to
                     edit, and this menu item used to call the same dead editor
                     the pencil did. */}

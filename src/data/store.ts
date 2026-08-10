@@ -363,6 +363,10 @@ interface AppState {
   addBoardView: (v: BoardView) => void;
   updateBoardView: (id: string, changes: Partial<BoardView>) => void;
   deleteBoardView: (id: string) => void;
+  /** The order the workspace tiles sit in along the top, by project id. */
+  projectOrder: string[];
+  setProjectOrder: (ids: string[]) => void;
+
   /** '' is the workspace's original board. */
   activeBoardView: string;
   setActiveBoardView: (id: string) => void;
@@ -950,6 +954,19 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   /**
+   * The order of the workspace tiles.
+   *
+   * Shared rather than per-machine: the office talks about "the third one
+   * along", so it should be the third one along on everybody's screen.
+   */
+  projectOrder: (stored?.projectOrder as string[] | null) ?? [],
+  setProjectOrder: (ids) => {
+    set({ projectOrder: ids });
+    fsSet('settings', 'app', { projectOrder: ids });
+    persist(get);
+  },
+
+  /**
    * Which board is showing — on THIS machine, deliberately.
    *
    * Somebody choosing to look at the installation board should not move
@@ -1443,6 +1460,7 @@ export const useStore = create<AppState>((set, get) => ({
       planPins: state.planPins,
       planAnnotations: state.planAnnotations,
       boardViews: state.boardViews,
+      projectOrder: state.projectOrder,
       dashboardWidgetOrder: state.dashboardWidgetOrder,
       dashboardHiddenWidgets: state.dashboardHiddenWidgets,
       // The importer has always READ these two from the top level; the exporter
@@ -1494,6 +1512,7 @@ export const useStore = create<AppState>((set, get) => ({
         planPins: data.planPins ?? state.planPins,
         planAnnotations: data.planAnnotations ?? state.planAnnotations,
         boardViews: data.boardViews ?? state.boardViews,
+        projectOrder: data.projectOrder ?? state.projectOrder,
         projectColors: data.projectColors ?? state.projectColors,
         backupLogs: data.backupLogs ?? state.backupLogs,
         ...(data.customProjects ? {
@@ -1870,6 +1889,7 @@ export const useStore = create<AppState>((set, get) => ({
         ...(appSettings.mainUiStrings        ? { mainUiStrings: mergeFreshMainUi(appSettings.mainUiStrings as Partial<MainUiStrings>) } : {}),
         ...(appSettings.contractorSheetLinks ? { contractorSheetLinks: appSettings.contractorSheetLinks as Record<string, string> } : {}),
         ...(appSettings.boardViews ? { boardViews: appSettings.boardViews as BoardView[] } : {}),
+        ...(appSettings.projectOrder ? { projectOrder: appSettings.projectOrder as string[] } : {}),
         ...(appSettings.boardSettings ? { boardSettings: appSettings.boardSettings as Record<string, BoardSetting> } : {}),
         ...(appSettings.customProjects ? {
           customProjects: appSettings.customProjects as Project[],
@@ -2051,6 +2071,7 @@ export const useStore = create<AppState>((set, get) => ({
           ...(appS.contractorSheetLinks ? { contractorSheetLinks: appS.contractorSheetLinks as Record<string, string> } : {}),
           ...(appS.boardSettings ? { boardSettings: appS.boardSettings as Record<string, BoardSetting> } : {}),
           ...(appS.boardViews ? { boardViews: appS.boardViews as BoardView[] } : {}),
+          ...(appS.projectOrder ? { projectOrder: appS.projectOrder as string[] } : {}),
           ...(appS.customProjects ? {
             customProjects: appS.customProjects as Project[],
             projects: [...DEFAULT_PROJECTS, ...(appS.customProjects as Project[])],
@@ -2181,6 +2202,7 @@ function persistNow(get: () => AppState) {
     planPins: state.planPins,
     planAnnotations: state.planAnnotations,
     boardViews: state.boardViews,
+    projectOrder: state.projectOrder,
     projectColors: state.projectColors,
     customProjects: state.customProjects,
   };

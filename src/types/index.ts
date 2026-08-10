@@ -387,6 +387,17 @@ export interface CanvasElement {
   thumbsUp?: number;
   thumbsDown?: number;
   /**
+   * Where it sits in the stack.
+   *
+   * Absent means "wherever its type puts it" — a section box behind, a note in
+   * front — which is the right default and what every existing record has.
+   * Setting it makes that choice win, so a box can be brought over a note when
+   * somebody deliberately wants it there.
+   */
+  z?: number;
+  /** Section boxes only: how see-through the fill is. */
+  boxOpacity?: number;
+  /**
    * Clip art can ATTACH to a job or another node: a pin stuck through its
    * corner, a clip on its edge. The art then follows whatever it is stuck to,
    * because that is what being stuck to something means.

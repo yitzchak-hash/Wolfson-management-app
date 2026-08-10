@@ -37,9 +37,33 @@ function TzviAirLogo() {
 
 export function Header() {
   const { currentUser, logout, lightTheme, setLightTheme, firebaseSyncError, mainUiStrings: s,
-          projects, currentProjectId, setCurrentProject } = useStore();
+          projects, currentProjectId, setCurrentProject,
+          projectOrder, setProjectOrder } = useStore();
+  /** Which tile is being dragged along the row. */
+  const [dragId, setDragId] = useState<string | null>(null);
   const navigate = useNavigate();
   const [searchOpen, setSearchOpen] = useState(false);
+
+  /**
+   * The tiles sit in whatever order the office decided.
+   *
+   * Any workspace made after the order was last saved falls in at the end
+   * rather than disappearing, which is what a naive `sort by index` would do to
+   * a project the order has never heard of.
+   */
+  const ordered = React.useMemo(() => {
+    if (!projectOrder.length) return projects;
+    const rank = new Map(projectOrder.map((id, i) => [id, i]));
+    return [...projects].sort((a, b) =>
+      (rank.get(a.id) ?? 999) - (rank.get(b.id) ?? 999));
+  }, [projects, projectOrder]);
+
+  function reorder(from: string, to: string) {
+    if (from === to) return;
+    const ids = ordered.map(p => p.id).filter(id => id !== from);
+    ids.splice(ids.indexOf(to), 0, from);
+    setProjectOrder(ids);
+  }
 
   function handlePickProject(id: string) {
     setCurrentProject(id);
@@ -72,15 +96,20 @@ export function Header() {
         <TzviAirLogo />
         <div className="hidden md:block w-px h-10" style={{ backgroundColor: lightTheme ? '#e5e7eb' : 'rgba(255,255,255,0.2)' }} />
         <div className="flex items-center gap-1 md:gap-2 min-w-0">
-          {projects.map(p => (
+          {ordered.map(p => (
             <Tooltip key={p.id} text={p.name}>
               <button
+                draggable
+                onDragStart={() => setDragId(p.id)}
+                onDragOver={e => e.preventDefault()}
+                onDrop={() => { if (dragId) reorder(dragId, p.id); setDragId(null); }}
+                onDragEnd={() => setDragId(null)}
                 onClick={() => handlePickProject(p.id)}
-                className="rounded-lg p-0.5 transition-all focus:outline-none flex items-center gap-1.5 pr-2"
+                className="rounded-lg p-0.5 transition-all focus:outline-none flex items-center gap-1.5 pr-2 cursor-grab active:cursor-grabbing"
                 style={currentProjectId === p.id
                   ? { boxShadow: `0 0 0 2px ${p.color}`, opacity: 1,
                       backgroundColor: lightTheme ? `${p.color}14` : 'rgba(255,255,255,0.08)' }
-                  : { opacity: 0.4 }}
+                  : { opacity: dragId === p.id ? 0.75 : 0.4 }}
               >
                 <img src={p.logoPath} alt={p.name} className="h-7 md:h-9 w-auto rounded" style={{ objectFit: 'contain' }} />
                 {currentProjectId === p.id && (

@@ -217,6 +217,14 @@ for (const [id, fields] of Object.entries(WIDGET_FIELDS)) {
 /**
  * Clip art shares one set of settings — it is all the same kind of thing.
  */
+/** A section box: transparency, and the type controls. No style presets. */
+export const BOX_FIELDS: WidgetField[] = [
+  { key: 'text', label: 'Section name', kind: 'text', scope: 'element',
+    placeholder: 'Leave blank for no header' },
+  { key: 'boxOpacity', label: 'See-through', kind: 'percent', scope: 'element' },
+  ...TEXT_STYLE_FIELDS,
+];
+
 export const ART_FIELDS: WidgetField[] = [
   { key: 'size', label: 'Size', kind: 'number', scope: 'element', min: 24, max: 320,
     hint: 'Or drag the corner. Attached art scales with whatever it is stuck to.' },

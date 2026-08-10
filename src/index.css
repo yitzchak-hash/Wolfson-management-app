@@ -167,8 +167,11 @@
 .pick::before {
   content: '';
   position: absolute;
-  inset: 0;
-  border-radius: inherit;
+  /* A hair PROUD of the item, not flush with it. Flush meant the fill's edge
+     landed exactly on the label's descenders and read as the word being cut
+     off by the highlight. */
+  inset: -3px;
+  border-radius: 14px;
   background: var(--pick-fill, #1e3a5f);
   transform: scale(.72);
   opacity: 0;
