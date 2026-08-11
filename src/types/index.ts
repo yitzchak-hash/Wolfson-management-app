@@ -486,6 +486,8 @@ export interface CanvasElement {
    */
   outline?: string;
   outlineWidth?: number;
+  /** When it was placed — drives the "just added" dot, and nothing else. */
+  addedAt?: string;
   /**
    * Clip art can ATTACH to a job or another node: a pin stuck through its
    * corner, a clip on its edge. The art then follows whatever it is stuck to,

@@ -34,11 +34,19 @@ export const TOOL_LABELS: Record<string, string> = {
   pen: 'Pen', highlighter: 'Mark', voice: 'Voice', export: 'Save',
 };
 
+/**
+ * Select and Pan are gone.
+ *
+ * They were two modes for what is really one set of habits, and having to know
+ * which one you were in before you knew what a drag would do was the thing
+ * making the board hard to use. There is one scheme now: a click selects, a
+ * double click opens, a drag on something moves it, a drag on empty board pans,
+ * Ctrl-drag lassoes, and the wheel always zooms to the pointer.
+ *
+ * The pen and the highlighter stay as modes, because a pen genuinely is one —
+ * while it is armed a press on a tile draws instead of dragging.
+ */
 const TOOLS: ToolDef[][] = [
-  [
-    { id: 'select', icon: MousePointer2, label: 'Select', tip: 'Select' },
-    { id: 'pan',    icon: Hand,          label: 'Pan',    tip: 'Pan · space-drag' },
-  ],
   [
     { id: 'job',   icon: Plus,        label: 'Job',   tip: 'New job' },
     { id: 'note',  icon: StickyNote,  label: 'Note',  tip: 'Sticky note' },

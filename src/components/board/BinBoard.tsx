@@ -198,11 +198,12 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId }: {
    */
   const live = useRef<Record<string, (...a: unknown[]) => unknown>>({});
   const H = useRef<BoardHandlers>({
-    jobDown: () => {}, jobMove: () => {}, jobUp: () => {}, jobMenu: () => {},
+    jobDown: () => {}, jobMove: () => {}, jobUp: () => {}, jobMenu: () => {}, jobOpen: () => {},
     jobDelete: () => {}, jobTv: () => {}, jobThumbs: () => {}, jobThumbsDown: () => {},
     elDown: (e, el) => live.current.elDown(e, el),
     elMove: e => live.current.elMove(e),
     elUp: el => live.current.elUp(el),
+    elSeen: () => {},
     elMenu: (e, el) => live.current.elMenu(e, el),
     elEdit: el => live.current.elEdit(el),
     elSettings: el => live.current.elSettings(el),

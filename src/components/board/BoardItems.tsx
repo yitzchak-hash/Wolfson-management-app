@@ -48,6 +48,8 @@ export interface BoardHandlers {
   jobMove: (e: React.PointerEvent) => void;
   jobUp: (e: React.PointerEvent, job: Apartment) => void;
   jobMenu: (e: React.MouseEvent, job: Apartment) => void;
+  /** Double-click opens it — a single click only selects. */
+  jobOpen: (job: Apartment) => void;
   jobDelete: (ids: string[]) => void;
   jobTv: (job: Apartment) => void;
   jobThumbs: (id: string, delta: number) => void;
@@ -63,6 +65,8 @@ export interface BoardHandlers {
   elUp: (el: CanvasElement) => void;
   elMenu: (e: React.MouseEvent, el: CanvasElement) => void;
   elEdit: (el: CanvasElement) => void;
+  /** Clear the "just added" dot. */
+  elSeen: (el: CanvasElement) => void;
   /** Opens the node's real settings panel — what the pencil should always have done. */
   elSettings: (el: CanvasElement) => void;
   elDelete: (id: string) => void;
@@ -126,6 +130,7 @@ export const JobTile = React.memo(function JobTile({
       onPointerMove={isGhost ? H.ghostMove! : H.jobMove}
       onPointerUp={e => (isGhost ? H.ghostUp!(e, job) : H.jobUp(e, job))}
       onContextMenu={e => (isGhost ? H.ghostMenu!(e, job, ghostIndex!) : H.jobMenu(e, job))}
+      onDoubleClick={() => H.jobOpen(job)}
       data-node-id={job.id}
       className={`absolute rounded-xl border px-3 pb-3 pt-[22px] group select-none ${
         isDragging ? 'shadow-2xl cursor-grabbing' :
@@ -359,6 +364,14 @@ export const BoardNode = React.memo(function BoardNode({
   const isBin = el.type === 'bin';
   const plain = el.type === 'clipart';
   const isWidget = el.type === 'widget';
+  /**
+   * A blue dot for the first while after something is placed.
+   *
+   * Adding three things to a busy board and then having to work out which three
+   * they were is a small, repeated annoyance. It fades on its own after an hour,
+   * and clicking it clears it immediately.
+   */
+  const isNew = !!el.addedAt && Date.now() - new Date(el.addedAt).getTime() < 3_600_000;
 
   /**
    * A widget that can actually save what you do to it.
@@ -429,6 +442,7 @@ export const BoardNode = React.memo(function BoardNode({
       onContextMenu={e => H.elMenu(e, el)}
       onDoubleClick={() => { if (!plain) H.elEdit(el); }}
       data-node-id={el.id}
+      title={isWidget ? 'Drag the strip at the top to move it' : undefined}
       className={`group absolute rounded-xl select-none ${plain || isBin ? '' : 'shadow-md'} ${
         isDragging ? 'cursor-grabbing' : 'cursor-grab'
       }`}
@@ -595,18 +609,65 @@ export const BoardNode = React.memo(function BoardNode({
         </span>
       )}
 
-      {/* EVERY node resizes. A note you cannot make bigger for a longer note,
-          or a pin you cannot make smaller, is the odd one out for no reason. */}
-      {el.type !== 'stroke' && (
-        <div data-el-action
-          onPointerDown={e => H.resizeDown(e, el)}
-          onPointerMove={H.resizeMove}
-          onPointerUp={H.resizeUp}
-          className={`absolute -bottom-0.5 -right-0.5 w-5 h-5 cursor-se-resize transition-opacity z-10 ${
-            isSelected ? 'opacity-60' : 'opacity-0 group-hover:opacity-60'}`}
-          style={{ borderRight: '2px solid currentColor', borderBottom: '2px solid currentColor',
-                   borderRadius: '0 0 4px 0', color: '#64748b' }}
+      {/* A widget is mostly controls, and every control swallows the press
+          before the node sees it — so a widget could have almost no grabbable
+          surface. This strip along the top is always draggable, whatever is
+          underneath it. */}
+      {isWidget && !plain && (
+        <div
+          className={`absolute top-0 left-0 right-0 h-3 z-[6] rounded-t-xl transition-opacity ${
+            isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+          style={{ cursor: 'grab', background:
+            'linear-gradient(180deg, rgba(74,168,216,.18), rgba(74,168,216,0))' }}
+          title="Drag to move"
         />
+      )}
+
+      {/* Newly placed, and not yet looked at. Clears when you click it. */}
+      {isNew && (
+        <button
+          data-el-action
+          // On pointerdown, not click: the node starts a drag on pointerdown,
+          // and a click that turns into even a tiny drag never fires.
+          onPointerDown={e => { e.stopPropagation(); e.preventDefault(); H.elSeen(el); }}
+          title="Added just now — click to clear"
+          className="absolute -top-1 -left-1 z-[7] w-2.5 h-2.5 rounded-full"
+          style={{ backgroundColor: '#4aa8d8', boxShadow: '0 0 0 3px rgba(74,168,216,.25)' }}
+        />
+      )}
+
+      {/* EVERY node resizes, from the corner OR either edge.
+          The corner was 20px and a mouse-sized target; on a touch panel it is
+          most of a fingertip, and a widget that is nearly all controls left
+          almost nothing else to aim at. It is 26 now, with a strip down the
+          right and along the bottom so the whole edge works. */}
+      {el.type !== 'stroke' && (
+        <>
+          <div data-el-action data-resize
+            onPointerDown={e => H.resizeDown(e, el)}
+            onPointerMove={H.resizeMove}
+            onPointerUp={H.resizeUp}
+            className={`absolute right-0 top-3 bottom-6 w-2 cursor-ew-resize z-10 transition-opacity ${
+              isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+          />
+          <div data-el-action data-resize
+            onPointerDown={e => H.resizeDown(e, el)}
+            onPointerMove={H.resizeMove}
+            onPointerUp={H.resizeUp}
+            className={`absolute bottom-0 left-3 right-6 h-2 cursor-ns-resize z-10 transition-opacity ${
+              isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+          />
+          <div data-el-action data-resize
+            onPointerDown={e => H.resizeDown(e, el)}
+            onPointerMove={H.resizeMove}
+            onPointerUp={H.resizeUp}
+            className={`absolute -bottom-0.5 -right-0.5 cursor-se-resize transition-opacity z-10 ${
+              isSelected ? 'opacity-70' : 'opacity-0 group-hover:opacity-70'}`}
+            style={{ width: 26, height: 26,
+                     borderRight: '2px solid currentColor', borderBottom: '2px solid currentColor',
+                     borderRadius: '0 0 5px 0', color: '#64748b' }}
+          />
+        </>
       )}
     </div>
   );

@@ -349,6 +349,21 @@ export function GeneralJobsPage() {
    */
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  /**
+   * The live zoom and pan, for handlers that must compute both together.
+   *
+   * Zooming to a point sets the zoom AND the pan from the same pair of old
+   * values. Doing that by nesting setPan inside a setZoom updater looks tidy
+   * and is wrong: React is free to run an updater more than once, and in
+   * development it deliberately does — so the pan correction was applied twice
+   * and the point under the cursor slid away by exactly the amount it was meant
+   * to stay still. Reading the current values from refs keeps the calculation
+   * pure and the updaters side-effect free.
+   */
+  const zoomRef = useRef(1);
+  const panRef2 = useRef({ x: 0, y: 0 });
+  zoomRef.current = zoom;
+  panRef2.current = pan;
   /** Live viewport size — the board surface is sized against it. */
   const [vp, setVp] = useState({ w: 0, h: 0 });
   useEffect(() => {
@@ -363,7 +378,12 @@ export function GeneralJobsPage() {
     return () => ro.disconnect();
   }, []);
   const [spaceHeld, setSpaceHeld] = useState(false);
-  const [tool, setTool] = useState<BoardTool>('pan');
+  /**
+   * The neutral state. Pan and Select as separate modes are gone — a drag on
+   * empty board pans, a drag on a thing moves it, Ctrl-drag lassoes — so this
+   * only ever holds a drawing tool or 'select', which means "nothing armed".
+   */
+  const [tool, setTool] = useState<BoardTool>('select');
   const [boardSettingsOpen, setBoardSettingsOpen] = useState(false);
 
   /**
@@ -396,6 +416,7 @@ export function GeneralJobsPage() {
       ? { x: at.x - size.w / 2, y: at.y - size.h / 2 }
       : freeSpotRef.current(size.w, size.h);
     addCanvasElement({
+      addedAt: new Date().toISOString(),
       id: 'CE-' + Math.random().toString(36).slice(2, 9),
       type: kind,
       // Whichever board is open is the board it lands on.
@@ -473,6 +494,7 @@ export function GeneralJobsPage() {
       const id = 'CE-' + Math.random().toString(36).slice(2, 9);
       newElIds.add(id);
       addCanvasElement({
+        addedAt: new Date().toISOString(),
         ...el,
         id,
         // A pasted piece of clip art lands on the board rather than still
@@ -552,6 +574,7 @@ export function GeneralJobsPage() {
     if (def.id === 'add-bin') {
       const id = 'CE-bin-' + Math.random().toString(36).slice(2, 8);
       addCanvasElement({
+        addedAt: new Date().toISOString(),
         id, type: 'bin',
         x: Math.round(at.x), y: Math.round(at.y), w: def.w, h: def.h,
         text: 'New group', color: '#7c3aed',
@@ -562,6 +585,7 @@ export function GeneralJobsPage() {
     if (def.id === 'w-title') {
       const id = 'CE-' + Math.random().toString(36).slice(2, 9);
       addCanvasElement({
+        addedAt: new Date().toISOString(),
         id, type: 'title', x: Math.round(at.x), y: Math.round(at.y),
         w: def.w, h: def.h, text: '', color: '#0f172a',
         fontSize: 30, fontWeight: 800, align: 'left',
@@ -573,6 +597,7 @@ export function GeneralJobsPage() {
       return;
     }
     addCanvasElement({
+      addedAt: new Date().toISOString(),
       id: 'CE-' + Math.random().toString(36).slice(2, 9),
       ...(isArt
         ? { type: 'clipart' as const, art: def.id.slice(4) as ArtKind }
@@ -597,6 +622,7 @@ export function GeneralJobsPage() {
       const at = freeSpotRef.current(NODE_DEFAULT_SIZE.title.w, NODE_DEFAULT_SIZE.title.h);
       const id = 'CE-' + Math.random().toString(36).slice(2, 9);
       addCanvasElement({
+        addedAt: new Date().toISOString(),
         id, type: 'title', x: Math.round(at.x), y: Math.round(at.y),
         w: NODE_DEFAULT_SIZE.title.w, h: NODE_DEFAULT_SIZE.title.h,
         text: '', color: '#0f172a', fontSize: 30, fontWeight: 800, align: 'left',
@@ -639,18 +665,26 @@ export function GeneralJobsPage() {
   const zoomAt = useCallback((clientX: number, clientY: number, dir: 1 | -1) => {
     const r = viewportRef.current?.getBoundingClientRect();
     if (!r) return;
-    setZoom(prevZoom => {
-      const i = ZOOM_STEPS.findIndex(z => Math.abs(z - prevZoom) < 0.001);
-      const next = ZOOM_STEPS[Math.min(ZOOM_STEPS.length - 1, Math.max(0,
-        (i === -1 ? ZOOM_STEPS.indexOf(1) : i) + dir))];
-      if (next === prevZoom) return prevZoom;
-      const cx = clientX - r.left, cy = clientY - r.top;
-      setPan(prevPan => clampPanRef.current({
-        x: cx - (cx - prevPan.x) * (next / prevZoom),
-        y: cy - (cy - prevPan.y) * (next / prevZoom),
-      }));
-      return next;
-    });
+    const prevZoom = zoomRef.current;
+    const prevPan = panRef2.current;
+
+    const i = ZOOM_STEPS.findIndex(z => Math.abs(z - prevZoom) < 0.001);
+    const next = ZOOM_STEPS[Math.min(ZOOM_STEPS.length - 1, Math.max(0,
+      (i === -1 ? ZOOM_STEPS.indexOf(1) : i) + dir))];
+    if (next === prevZoom) return;
+
+    // The world point under the cursor stays under the cursor: solve the
+    // transform for the pan that keeps it fixed at the new scale.
+    const cx = clientX - r.left, cy = clientY - r.top;
+    const nextPan = clampPanRef.current({
+      x: cx - (cx - prevPan.x) * (next / prevZoom),
+      y: cy - (cy - prevPan.y) * (next / prevZoom),
+    }, next);
+
+    zoomRef.current = next;
+    panRef2.current = nextPan;
+    setZoom(next);
+    setPan(nextPan);
   }, []);
   // The field follows the zoom unless it is being typed in.
   useEffect(() => { setZoomField(String(Math.round(zoom * 100))); }, [zoom]);
@@ -679,6 +713,8 @@ export function GeneralJobsPage() {
     jobMove: e => live.current.jobMove(e),
     jobUp: (e, j) => live.current.jobUp(e, j),
     jobMenu: (e, j) => live.current.jobMenu(e, j),
+    jobOpen: j => live.current.jobOpen(j),
+    elSeen: el => live.current.elSeen(el),
     jobDelete: ids => live.current.jobDelete(ids),
     jobTv: j => live.current.jobTv(j),
     jobThumbs: (id, d) => live.current.jobThumbs(id, d),
@@ -715,7 +751,9 @@ export function GeneralJobsPage() {
    * which looks like the app has broken rather than like the edge of a board.
    * When the board is smaller than the screen it simply pins to the left/top.
    */
-  const clampPanRef = useRef<(p: { x: number; y: number }) => { x: number; y: number }>(p => p);
+  const clampPanRef = useRef<
+    (p: { x: number; y: number }, atZoom?: number) => { x: number; y: number }
+  >(p => p);
   const editInputRef = useRef<HTMLTextAreaElement>(null);
 
   /**
@@ -738,6 +776,8 @@ export function GeneralJobsPage() {
       BIN_KINDS.forEach((kind, i) => {
         if (have.has(kind)) return;
         addCanvasElement({
+          // No "just added" dot on these: they are seeded fixtures that appear
+          // on a first-run board on their own, not things anybody put there.
           id: `CE-bin-${kind}`,
           type: 'bin',
           binKind: kind,
@@ -1063,6 +1103,7 @@ export function GeneralJobsPage() {
     const at = freeSpot(size.w, size.h);
     const id = 'CE-bin-' + Math.random().toString(36).slice(2, 8);
     addCanvasElement({
+      addedAt: new Date().toISOString(),
       id, type: 'bin',
       x: Math.round(at.x), y: Math.round(at.y), w: size.w, h: size.h,
       text: 'New group',
@@ -1119,6 +1160,7 @@ export function GeneralJobsPage() {
   function finishArrow(toId: string) {
     if (!arrowFrom || arrowFrom === toId) { setArrowFrom(null); return; }
     addCanvasElement({
+      addedAt: new Date().toISOString(),
       id: genId('CE'),
       type: 'arrow',
       fromId: arrowFrom,
@@ -1436,7 +1478,10 @@ export function GeneralJobsPage() {
     ids.forEach(id => {
       const orig = canvasElements.find(e => e.id === id);
       if (!orig) return;
-      addCanvasElement({ ...orig, id: genId('CE'), x: orig.x + 25, y: orig.y + 25 });
+      addCanvasElement({
+        ...orig, id: genId('CE'), x: orig.x + 25, y: orig.y + 25,
+        addedAt: new Date().toISOString(),
+      });
     });
     setSelectedElIds(new Set());
     setCtxMenu(null);
@@ -1660,7 +1705,17 @@ export function GeneralJobsPage() {
         });
       }
     } else if (drag.ids.length === 1 && drag.ids[0] === job.id) {
-      setSelectedJobIds(new Set()); setSelectedJob(job);
+      /**
+       * A click that never moved SELECTS. It used to open the job.
+       *
+       * Opening on a single click means every mis-aimed press throws a window
+       * over the board, and it leaves no gesture at all for "I mean this one" —
+       * which is what you need before moving several, colouring one, or
+       * right-clicking. Double-click opens, which is what a double-click means
+       * everywhere else.
+       */
+      setSelectedJobIds(new Set([job.id]));
+      setSelectedElIds(new Set());
     }
     setDrag(null);
     setHoverBin(null);
@@ -1882,7 +1937,8 @@ export function GeneralJobsPage() {
      * flips whichever is current, so the other one is always one modifier away
      * and neither tool ever traps you.
      */
-    const wantsLasso = tool === 'select' ? !(e.ctrlKey || e.metaKey) : (e.ctrlKey || e.metaKey);
+    // Ctrl/Cmd draws a selection box; a plain drag on empty board pans.
+    const wantsLasso = e.ctrlKey || e.metaKey;
     if (wantsLasso) {
       setLasso({ sx: x, sy: y, ex: x, ey: y });
     } else {
@@ -1983,32 +2039,28 @@ export function GeneralJobsPage() {
       if (inner && inner.scrollHeight > inner.clientHeight + 1) return;
 
       /**
-       * The tool decides what the wheel does.
+       * The wheel ALWAYS zooms, and always towards the pointer.
        *
-       * PAN: the wheel zooms — you are already moving the board by dragging, so
-       * the wheel is free for the other axis of movement.
-       * SELECT: the wheel scrolls up and down — you are working on things in
-       * place, and scrolling past them is what you want.
-       *
-       * Ctrl/Cmd and holding the left button still force a zoom in either mode,
-       * so zoom is never more than a modifier away. Every path anchors on the
-       * cursor.
+       * It used to depend on which of two modes you were in, which meant the
+       * same gesture did two different things depending on a button you might
+       * not have noticed you had pressed. One rule is easier to hold in your
+       * head than two, and shift+wheel still slides sideways for anyone who
+       * wants to move without changing scale.
        */
       const held = leftDown.current || (e.buttons & 1) === 1;
-      if (e.ctrlKey || e.metaKey || held || toolRef.current === 'pan') {
-        e.preventDefault();
-        if (held) {
-          zoomingWithButton.current = true;
-          clearTimeout(zoomHold.current);
-          zoomHold.current = window.setTimeout(() => { zoomingWithButton.current = false; }, 260);
-        }
-        zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1 : -1);
+      e.preventDefault();
+
+      if (e.shiftKey) {
+        setPan(p => clampPanRef.current({ x: p.x - e.deltaY - e.deltaX, y: p.y }));
         return;
       }
-      e.preventDefault();
-      setPan(p => clampPanRef.current(e.shiftKey
-        ? { x: p.x - e.deltaY - e.deltaX, y: p.y }
-        : { x: p.x - e.deltaX, y: p.y - e.deltaY }));
+
+      if (held) {
+        zoomingWithButton.current = true;
+        clearTimeout(zoomHold.current);
+        zoomHold.current = window.setTimeout(() => { zoomingWithButton.current = false; }, 260);
+      }
+      zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1 : -1);
     };
     vp.addEventListener('wheel', onWheel, { passive: false });
     return () => {
@@ -2151,8 +2203,18 @@ export function GeneralJobsPage() {
     setZoom(step);
     setPan(p => clampPanRef.current(p));
   }
-  clampPanRef.current = (p) => {
-    const w = maxX * zoom, h = maxY * zoom;
+  /**
+   * Keep the view over the board — at a GIVEN zoom.
+   *
+   * The zoom has to be passed in, because zooming sets the pan and the zoom
+   * together: this closure captures the zoom from the last render, so clamping
+   * a freshly-computed pan against it measured the world at the OLD size and
+   * pulled the anchor point off the cursor. That is why zoom drifted instead of
+   * landing where you pointed.
+   */
+  clampPanRef.current = (p, atZoom) => {
+    const z = atZoom ?? zoom;
+    const w = maxX * z, h = maxY * z;
     return {
       x: w <= vp.w ? Math.max(0, Math.min(p.x, vp.w - w)) : Math.min(0, Math.max(p.x, vp.w - w)),
       y: h <= vp.h ? Math.max(0, Math.min(p.y, vp.h - h)) : Math.min(0, Math.max(p.y, vp.h - h)),
@@ -2253,14 +2315,25 @@ export function GeneralJobsPage() {
     contentX = Math.max(contentX, el.x + el.w);
     contentY = Math.max(contentY, el.y + el.h);
   });
+  /**
+   * The board is exactly as big as what is on it, plus room to put the next
+   * thing down.
+   *
+   * It used to include a term derived from the current pan, so panning right
+   * grew the world, which allowed more panning, which grew it again — an empty
+   * board scrolled for miles and the minimap drew a mostly-empty field. The
+   * size now comes from the content alone, with one screen as the floor, so an
+   * empty board is one screen and it grows as you push a tile into a corner.
+   */
   const step = (n: number) => Math.ceil(n / 400) * 400;
-  const maxX = Math.max(step(contentX + EDGE_PAD), step((vp.w - pan.x) / zoom + 200), 1200);
-  const maxY = Math.max(step(contentY + EDGE_PAD), step((vp.h - pan.y) / zoom + 200), 800);
+  const maxX = Math.max(step(contentX + EDGE_PAD), 1200);
+  const maxY = Math.max(step(contentY + EDGE_PAD), 800);
 
   openJobRef.current = (id: string) => { const j = jobs.find(x => x.id === id); if (j) setSelectedJob(j); };
   live.current = {
     jobDown: onJobPointerDown, jobMove: onJobPointerMove, jobUp: onJobPointerUp,
-    jobMenu: onJobContextMenu, jobDelete: handleDeleteJobs,
+    jobMenu: onJobContextMenu, jobOpen: (j: Apartment) => setSelectedJob(j), jobDelete: handleDeleteJobs,
+    elSeen: (el: CanvasElement) => updateCanvasElement(el.id, { addedAt: undefined }),
     jobTv: (j: Apartment) => { if (currentUser) updateApartment(j.id, { showOnTv: j.showOnTv === false }, currentUser); },
     jobThumbs: (id: string, d: number) => bumpThumbs('job', [id], d),
     ghostDown: onGhostPointerDown,
@@ -2407,17 +2480,14 @@ export function GeneralJobsPage() {
       <div
         hidden={viewMode === 'stages'}
         ref={viewportRef}
-        className={`flex-1 min-h-0 relative overflow-hidden ${tool === 'pan' ? 'board-pan' : ''}`}
+        className="flex-1 min-h-0 relative overflow-hidden board-pan"
         style={{
-          // In pan mode the hand is the default, but it flips to an arrow the
-          // instant the pointer is over a tile — because a click there still
-          // opens the job, and the cursor should say so.
+          // A hand over empty board, because a drag there pans. Over a tile the
+          // node's own class flips it to a grab, since a drag there moves the
+          // tile — the cursor says which of the two you are about to get.
           cursor: panning ? 'grabbing'
-            : drawMode ? 'crosshair'
-            : arrowFrom ? 'crosshair'
-            : spaceHeld ? 'grab'
-            : tool === 'pan' ? 'grab'
-            : 'default',
+            : drawMode || arrowFrom ? 'crosshair'
+            : 'grab',
           touchAction: 'none',
         }}
         onPointerDown={onViewportPointerDown}

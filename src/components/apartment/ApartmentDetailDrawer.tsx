@@ -148,6 +148,25 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     contractorPhotos, updateContractorPhoto, planAnnotations, stageNotes, planPins } = useStore();
   const isGeneralProject = currentProjectId === 'general';
   const backendConfigured = isUploadBackendConfigured();
+
+  /**
+   * Escape closes the job window.
+   *
+   * It never did, which meant the one full-screen thing on the board could only
+   * be dismissed by aiming at its × — and while it was open it swallowed every
+   * click on the board behind it. A field gets the first Escape, so backing out
+   * of a typo does not shut the whole window.
+   */
+  useEffect(() => {
+    function key(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      const t = e.target as HTMLElement | null;
+      if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) { t.blur(); return; }
+      onClose();
+    }
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, [onClose]);
   const officeFileRef = useRef<HTMLInputElement>(null);
   const taskEditFileRef = useRef<HTMLInputElement>(null);
 
