@@ -874,6 +874,19 @@ interface NameProposal {
   kind: 'fill' | 'replace';
 }
 
+/**
+ * The presentation link as something a browser can actually open.
+ *
+ * The link is shown without a scheme on purpose — `rsilink.tv/tv` is what you
+ * want to read out to somebody holding a remote. But a bare domain in an
+ * `href` is a RELATIVE path, so the Open button would have gone to
+ * `/app-settings/rsilink.tv/tv` and landed nowhere. The scheme goes back on
+ * for the click and stays off on the screen.
+ */
+function openableTvLink(shown: string): string {
+  return /^https?:\/\//i.test(shown) ? shown : `https://${shown}`;
+}
+
 // ─── TV presentation (app-wide) ───────────────────────────────────────────────
 function TvPresentationSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
   const [copied, setCopied] = useState(false);
@@ -903,9 +916,10 @@ function TvPresentationSettings({ onToast }: { onToast: (msg: string, type?: 'su
           className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#1e3a5f] text-white text-sm font-medium hover:bg-[#16304f]">
           {copied ? <Check size={14} /> : <Copy size={14} />} Copy
         </button>
-        <a href={url} target="_blank" rel="noopener noreferrer"
-          className="flex items-center px-2.5 py-2 rounded-lg border border-gray-200 text-gray-500 hover:text-[#4aa8d8] hover:border-[#4aa8d8]">
-          <ExternalLink size={14} />
+        <a href={openableTvLink(url)} target="_blank" rel="noopener noreferrer"
+          title="Open the wall display in a new tab"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:text-[#4aa8d8] hover:border-[#4aa8d8]">
+          <ExternalLink size={14} /> Open
         </a>
       </div>
 
@@ -1520,6 +1534,15 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
           style={{ background: 'linear-gradient(135deg, #1e3a5f, #2d5a8e)' }}>
           Copy
         </button>
+        {/* Copying is for sending to the panel; this is for looking at it here,
+            which is what you want the moment after changing any of the settings
+            below. */}
+        <a href={openableTvLink(link)} target="_blank" rel="noopener noreferrer"
+          title="Open the wall display in a new tab"
+          className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-gray-200 text-sm
+                     font-semibold text-gray-600 hover:text-[#4aa8d8] hover:border-[#4aa8d8]">
+          <ExternalLink size={14} /> Open
+        </a>
       </div>
 
       {/* Which board. */}

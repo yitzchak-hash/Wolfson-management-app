@@ -1197,6 +1197,36 @@ export function PlanAnnotator({
   );
 
   /**
+   * The number this sketch will be filed as, claimed ONCE and then held.
+   *
+   * `nextVersion` is derived from the saved list, so the instant the working
+   * sketch is kept, it counts one higher. Reading it inside the autosave meant
+   * every save changed the very value the save depended on: keep → the list
+   * grows → `nextVersion` moves → the callback is a new function → the effect
+   * fires again → keep again, for ever. React gave up with "maximum update
+   * depth exceeded" and took the whole app down with it, on the first mark.
+   *
+   * The number is claimed when the sketch first reaches the store and held
+   * until the sketch is finished with, so nothing downstream of a save can
+   * feed back into it. `nextVersion` is read through a ref for the same
+   * reason — it must not be a dependency of anything that saves.
+   */
+  const sketchVersion = useRef<number | null>(null);
+  const nextVersionRef = useRef(nextVersion);
+  nextVersionRef.current = nextVersion;
+
+  const claimVersion = useCallback(() => {
+    if (sketchVersion.current == null) sketchVersion.current = nextVersionRef.current;
+    return sketchVersion.current;
+  }, []);
+
+  /** Begin a fresh working sketch: new record, new number. */
+  const startNewSketch = useCallback(() => {
+    versionIdRef.current = null;
+    sketchVersion.current = null;
+  }, []);
+
+  /**
    * One version per sketch, updated in place — not one per mark.
    *
    * A version per mark would give a list of two hundred, of which only the last
@@ -1206,11 +1236,11 @@ export function PlanAnnotator({
   const keepLocally = useCallback(() => {
     if (locked || !strokes.length) return;
     const id = versionIdRef.current
-      ?? `PA-${planFileId.slice(0, 8)}-${nextVersion}-${Date.now().toString(36)}`;
+      ?? `PA-${planFileId.slice(0, 8)}-${claimVersion()}-${Date.now().toString(36)}`;
     versionIdRef.current = id;
     savePlanAnnotation({
       id, apartmentId, planFileId, planName,
-      version: nextVersion,
+      version: claimVersion(),
       strokes,
       pageCount: doc?.numPages ?? 1,
       createdAt: new Date().toISOString(),
@@ -1218,7 +1248,7 @@ export function PlanAnnotator({
       basedOn,
     });
     setSaveState('local');
-  }, [locked, strokes, planFileId, nextVersion, apartmentId, planName, doc, who, authorName, basedOn, savePlanAnnotation]);
+  }, [locked, strokes, planFileId, claimVersion, apartmentId, planName, doc, who, authorName, basedOn, savePlanAnnotation]);
 
   const pushToDrive = useCallback(async () => {
     if (pushingRef.current || locked || !strokes.length) return;
@@ -1230,7 +1260,7 @@ export function PlanAnnotator({
         planFileId,
         parentFolderId: plansFolderId || parentFolderId!,
         strokes: strokesForDrive(),
-        version: nextVersion,
+        version: claimVersion(),
         jobName: apartmentLabel,
         author: who || authorName,
       });
@@ -1246,7 +1276,7 @@ export function PlanAnnotator({
       pushingRef.current = false;
     }
   }, [locked, strokes.length, backendReady, plansFolderId, parentFolderId, planFileId,
-      strokesForDrive, nextVersion, apartmentLabel, who, authorName, updatePlanAnnotation]);
+      strokesForDrive, claimVersion, apartmentLabel, who, authorName, updatePlanAnnotation]);
 
   // Every change: keep it here now, and set the clock running for Drive.
   useEffect(() => {
@@ -1348,6 +1378,9 @@ export function PlanAnnotator({
   // ---- versions ----------------------------------------------------------
 
   function loadVersion(v: PlanAnnotation, continueIt: boolean) {
+    // Whatever happens next is a NEW sketch — carrying on from version 3 makes
+    // version 4, it does not write back over 3.
+    startNewSketch();
     setStrokes(v.strokes ?? []);
     setRedo([]);
     setBasedOn(continueIt ? v.version : undefined);
@@ -1363,6 +1396,7 @@ export function PlanAnnotator({
     // the marks are already in the list on the left. The question is only
     // whether you meant to start again.
     if (strokes.length && !window.confirm('Start a fresh sketch? What is on the plan now stays in the version list.')) return;
+    startNewSketch();
     setStrokes([]); setRedo([]); setBasedOn(undefined); setDirty(false);
   }
 
@@ -1393,12 +1427,12 @@ export function PlanAnnotator({
         // main folder is only the fallback.
         parentFolderId: plansFolderId || parentFolderId,
         strokes: strokes.map(({ id: _id, ...rest }) => rest), // ids are ours, not the PDF's
-        version: nextVersion,
+        version: claimVersion(),
         jobName: apartmentLabel,
         author: who || authorName,
       });
       storeVersion(out.fileId, out.webViewLink);
-      onToast?.(`Version ${nextVersion} filed in Drive under “Annotated Plans”.`);
+      onToast?.(`Version ${claimVersion()} filed in Drive under “Annotated Plans”.`);
     } catch (err) {
       storeVersion();
       onToast?.(`Saved here, but Drive refused it: ${err instanceof Error ? err.message : String(err)}`, 'error');
@@ -1408,10 +1442,16 @@ export function PlanAnnotator({
   }
 
   function storeVersion(driveFileId?: string, driveUrl?: string) {
+    // The SAME record the autosave has been keeping, not a second copy of it.
+    // Pressing Save used to mint a fresh id and a fresh number, so a sketch
+    // that had already been kept once appeared twice in the version list.
+    const id = versionIdRef.current
+      ?? `PA-${planFileId.slice(0, 8)}-${claimVersion()}-${Date.now().toString(36)}`;
+    versionIdRef.current = id;
     savePlanAnnotation({
-      id: `PA-${planFileId.slice(0, 8)}-${nextVersion}-${Date.now().toString(36)}`,
+      id,
       apartmentId, planFileId, planName,
-      version: nextVersion,
+      version: claimVersion(),
       strokes,
       pageCount: doc?.numPages ?? 1,
       createdAt: new Date().toISOString(),
