@@ -8,7 +8,6 @@ import { DashboardPage } from './pages/DashboardPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ActivityLogPage } from './pages/ActivityLogPage';
-import { AnalyticsDashboard } from './pages/AnalyticsDashboard';
 import { ContractorPortal } from './pages/ContractorPortal';
 import { TasksPage } from './pages/TasksPage';
 import { GeneralJobsPage } from './pages/GeneralJobsPage';
@@ -48,7 +47,9 @@ export default function App() {
           {/* Per-project calendar (sidebar); /calendar stays the all-workspace one */}
           <Route path="project-calendar" element={<ProjectCalendarPage />} />
           <Route path="jobs" element={<GeneralJobsPage />} />
-          <Route path="analytics" element={<AnalyticsDashboard />} />
+          {/* Analytics folded into the Dashboard — one page, nothing lost.
+              The old address still works so a bookmark does not 404. */}
+          <Route path="analytics" element={<Navigate to="/dashboard" replace />} />
           <Route path="reports" element={<ReportsPage />} />
           <Route path="activity" element={<ActivityLogPage />} />
           <Route path="settings" element={<SettingsPage scope="project" />} />

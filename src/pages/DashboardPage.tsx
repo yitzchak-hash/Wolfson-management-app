@@ -8,7 +8,7 @@ import {
   CalendarDays, Plus, Pencil, Trash2, ArrowLeft, ArrowRight,
 } from 'lucide-react';
 import {
-  getStageName, isCountableApartment, CanvasElement, DASHBOARD_BOARD,
+  getStageName, isCountableApartment, CanvasElement, DASHBOARD_BOARD, personColor,
 } from '../types';
 import { WidgetStore } from '../components/board/WidgetStore';
 import { NodeSettings } from '../components/board/NodeSettings';
@@ -17,7 +17,20 @@ import { printSheet, printEsc } from '../data/printing';
 
 type ModalKind = 'changes' | 'notes' | 'overdue' | 'pending' | 'completedToday' | null;
 
-const DEFAULT_WIDGET_ORDER = ['apt-stats', 'task-stats', 'stage-progress', 'building-progress', 'activity'];
+/**
+ * Analytics folded in here.
+ *
+ * The two pages overlapped in four places and each of those collapses to the
+ * better of the two: the clickable summary cards beat Analytics' plain numbers,
+ * Analytics' stage table beat the Dashboard's bare bars because it carried the
+ * counts as well, building progress merges, and there is one activity list.
+ * The three things only Analytics had — the weekly output charts and the
+ * contractor load — come across whole. Nothing is dropped.
+ */
+const DEFAULT_WIDGET_ORDER = [
+  'apt-stats', 'task-stats', 'stage-progress', 'velocity',
+  'building-progress', 'contractor-load', 'activity',
+];
 
 export function DashboardPage() {
   const {
@@ -196,7 +209,7 @@ export function DashboardPage() {
 
   // --- Customize mode ---
   function enterCustomize() {
-    const order = dashboardWidgetOrder.length > 0 ? [...dashboardWidgetOrder] : [...DEFAULT_WIDGET_ORDER];
+    const order = [...mergedOrder];
     const hidden = [...dashboardHiddenWidgets];
     // Ensure any widget not in order or hidden is still present
     for (const id of DEFAULT_WIDGET_ORDER) {
@@ -243,12 +256,30 @@ export function DashboardPage() {
       case 'stage-progress': return s.progressByStage;
       case 'building-progress': return s.progressByBuilding;
       case 'activity': return s.recentActivity;
+      case 'velocity': return s.stageCompletionsWeek ?? 'Work finished each week';
+      case 'contractor-load': return s.contractorTasksSection ?? 'Contractor load';
       default: return id;
     }
   }
 
   // Which order/hidden to use for rendering
-  const activeOrder = isCustomizing ? localOrder : (dashboardWidgetOrder.length > 0 ? dashboardWidgetOrder : DEFAULT_WIDGET_ORDER);
+  /**
+   * A saved order must not hide sections added later.
+   *
+   * Everyone who has ever opened this page has an order stored, and it names
+   * the sections that existed the day it was saved. Using it as-is meant the
+   * two sections folded in from Analytics would never appear for a single
+   * existing user — they would simply not be in anybody's list. Anything in the
+   * defaults but missing from the saved order is appended, unless it has been
+   * deliberately hidden. Same rule as mergeFreshMainUi, same reason.
+   */
+  const savedOrder = dashboardWidgetOrder.length > 0 ? dashboardWidgetOrder : DEFAULT_WIDGET_ORDER;
+  const mergedOrder = useMemo(() => {
+    const missing = DEFAULT_WIDGET_ORDER.filter(id => !savedOrder.includes(id));
+    return missing.length ? [...savedOrder, ...missing] : savedOrder;
+  }, [savedOrder]);
+
+  const activeOrder = isCustomizing ? localOrder : mergedOrder;
   const activeHidden = isCustomizing ? localHidden : dashboardHiddenWidgets;
 
   // Ensure all widgets are accounted for even if state is stale
@@ -388,6 +419,98 @@ export function DashboardPage() {
           </div>
         );
 
+      /**
+       * Both of these came from Analytics, which no longer exists as a page.
+       * They are drawn from the same scoped data as everything else here, so a
+       * job filed into Done cannot show up in one and not the other.
+       */
+      case 'velocity': {
+        const weeks = Array.from({ length: 8 }, (_, i) => {
+          const end = new Date();
+          end.setDate(end.getDate() - (7 - i) * 7);
+          const wStart = new Date(end); wStart.setDate(wStart.getDate() - wStart.getDay());
+          const wEnd = new Date(wStart); wEnd.setDate(wEnd.getDate() + 7);
+          const a = wStart.toISOString(), b = wEnd.toISOString();
+          return {
+            label: format(wStart, 'MMM d'),
+            tasks: liveAssignments.filter(x => x.completedAt && x.completedAt >= a && x.completedAt < b).length,
+            stages: apartments.filter(isCountableApartment).reduce((n, ap) => n + Object.values(ap.stageDates ?? {})
+              .filter(d => d >= a && d < b).length, 0),
+          };
+        });
+        const top = Math.max(1, ...weeks.map(w => Math.max(w.tasks, w.stages)));
+        return (
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <h2 className="font-semibold text-gray-800 mb-1">Work finished each week</h2>
+            <p className="text-xs text-gray-400 mb-4">
+              Stages reached and tasks completed, the last eight weeks.
+            </p>
+            <div className="flex items-end gap-3 h-40">
+              {weeks.map(w => (
+                <div key={w.label} className="flex-1 flex flex-col items-center gap-1 min-w-0">
+                  <div className="w-full flex items-end justify-center gap-1 flex-1">
+                    <div className="w-1/2 rounded-t transition-all" title={`${w.stages} stages`}
+                      style={{ height: `${(w.stages / top) * 100}%`, backgroundColor: '#4aa8d8', minHeight: 2 }} />
+                    <div className="w-1/2 rounded-t transition-all" title={`${w.tasks} tasks`}
+                      style={{ height: `${(w.tasks / top) * 100}%`, backgroundColor: '#16a34a', minHeight: 2 }} />
+                  </div>
+                  <span className="text-[10px] text-gray-400 truncate w-full text-center">{w.label}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-4 mt-3 text-xs text-gray-500">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: '#4aa8d8' }} /> stages reached
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: '#16a34a' }} /> tasks done
+              </span>
+            </div>
+          </div>
+        );
+      }
+
+      case 'contractor-load': {
+        const rows = contractors.filter(c => c.active).map(c => {
+          const mine = liveAssignments.filter(a => a.contractorId === c.id);
+          return {
+            c,
+            open: mine.filter(a => !a.completedAt).length,
+            done: mine.filter(a => a.completedAt).length,
+            late: mine.filter(a => !a.completedAt && a.dueDate && a.dueDate < today).length,
+          };
+        }).sort((a, b) => b.open - a.open);
+        const top = Math.max(1, ...rows.map(r => r.open + r.done));
+        return (
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <h2 className="font-semibold text-gray-800 mb-4">Contractor load</h2>
+            {rows.length === 0 ? (
+              <p className="text-gray-400 text-sm text-center py-4">No contractors yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {rows.map(({ c, open, done, late }) => (
+                  <div key={c.id}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: personColor(c.name, c.color) }} />
+                      <span className="text-sm text-gray-700 flex-1 truncate">{c.name}</span>
+                      {late > 0 && (
+                        <span className="text-xs font-bold text-red-600 tabular-nums">{late} late</span>
+                      )}
+                      <span className="text-sm font-medium text-gray-800 tabular-nums">{open}</span>
+                    </div>
+                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden flex">
+                      <div style={{ width: `${(open / top) * 100}%`, backgroundColor: '#4aa8d8' }} />
+                      <div style={{ width: `${(done / top) * 100}%`, backgroundColor: '#cbd5e1' }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      }
+
       case 'activity':
         return (
           <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -431,7 +554,10 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    /* Full width. It was a 1152px column down the middle of a 2560px office
+       monitor, which on a page whose whole job is showing a lot at once is the
+       one layout that cannot. */
+    <div className="p-5 xl:p-6 w-full">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">{s.pageDashboard}</h1>

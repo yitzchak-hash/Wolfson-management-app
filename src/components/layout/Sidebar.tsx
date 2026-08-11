@@ -29,7 +29,6 @@ function useNavItems() {
     { to: '/dashboard',        icon: LayoutDashboard, label: s.navDashboard },
     { to: '/project-calendar', icon: CalendarDays,    label: s.navCalendar },
     { to: '/tasks',            icon: ClipboardList,   label: s.navTasks },
-    { to: '/analytics',        icon: TrendingUp,      label: s.navAnalytics },
     { to: '/reports',          icon: FileText,        label: s.navReports },
     { to: '/activity',         icon: Activity,        label: s.navActivity },
     { to: '/settings',         icon: Settings,        label: s.navProjectSettings },
