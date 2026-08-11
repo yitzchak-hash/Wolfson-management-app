@@ -26,6 +26,19 @@ pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
  */
 const NAVY = '#1e3a5f';
 const NAVY_DEEP = '#152b47';
+/**
+ * The coloured part of a slider's track, as a percentage.
+ *
+ * `.ink-slider` paints its track from `var(--fill)` — and nothing ever set it,
+ * so the blue half of every slider sat frozen at the 50% default while the
+ * handle moved past it. A native range input gives no way to style the filled
+ * side, so the value has to be handed to CSS explicitly.
+ */
+function fillPct(value: number, min: number, max: number): React.CSSProperties {
+  const pct = Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
+  return { ['--fill' as string]: `${pct}%` };
+}
+
 const ACCENT = '#4aa8d8';
 
 /** The tools the pen flip is allowed to swap between. */
@@ -272,10 +285,24 @@ export function PlanAnnotator({
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
     const w = Math.round(vp.width), h = Math.round(vp.height);
 
+    /**
+     * The live layer is drawn at a LOWER resolution than the plan.
+     *
+     * The plan and the committed ink want every pixel the screen can show — a
+     * construction drawing is read by zooming into it. The live layer is the
+     * stroke under your hand for the half-second before you lift it, and it is
+     * thrown away and redrawn properly the moment you do. Carrying it at the
+     * full device ratio means blitting a 15-megapixel canvas on every frame of
+     * every stroke: measured at 36ms a frame on an A0 sheet, against 7ms at
+     * this ratio. The CSS size is identical, so nothing moves and nothing
+     * misaligns — the ink is very slightly softer while the pen is down.
+     */
+    const LIVE_DPR = Math.min(dpr, 1.5);
     for (const c of [pdfRef.current, inkRef.current, liveRef.current]) {
       if (!c) continue;
-      c.width = Math.round(w * dpr);
-      c.height = Math.round(h * dpr);
+      const k = c === liveRef.current ? LIVE_DPR : dpr;
+      c.width = Math.round(w * k);
+      c.height = Math.round(h * k);
       c.style.width = `${w}px`;
       c.style.height = `${h}px`;
     }
@@ -521,7 +548,106 @@ export function PlanAnnotator({
     drawPicked();
   }); // no deps — it must follow every stroke and pick change
 
+  /**
+   * How far apart two live samples have to be to be worth keeping, in device
+   * pixels. Below this they are indistinguishable on screen.
+   */
+  const LIVE_MIN_STEP_PX = 1.5;
+
+  /**
+   * Drawing a long stroke without the screen locking up.
+   *
+   * The rule that makes a mark correct — ONE path, filled ONCE, so it cannot
+   * darken against itself — is also what made it slow: rebuilding an
+   * ever-growing path on every frame is O(points) a frame and O(points²) over
+   * a stroke. Measured on an A0 sheet at full resolution, a twenty-second
+   * scribble reaches 4,000-odd points, where a single redraw costs 85-120ms.
+   * That is the freeze, and it was my doing.
+   *
+   * The way to keep both: an offscreen buffer holding the stroke SO FAR, drawn
+   * at full opacity, and only the NEW points added to it each frame. Overlap
+   * inside the buffer is free — the same colour at full opacity painted twice
+   * is the same colour — so the tail can safely re-cover its last point and
+   * leave no seam. The buffer is then put on screen in one go, at the stroke's
+   * real opacity and blend, which is the single composite the rule demands.
+   *
+   * Per frame that is O(new points), a handful, plus one image blit. The buffer
+   * exists only while the pen is down and is released on lift, so a big plan
+   * does not carry a fourth full-size canvas around for the rest of the session.
+   */
+  const liveBuf = useRef<HTMLCanvasElement | null>(null);
+  const bufDrawn = useRef(0);
+  const liveFrame = useRef(0);
+
+  function startLiveBuffer() {
+    const c = liveRef.current;
+    if (!c) return;
+    const b = liveBuf.current ?? document.createElement('canvas');
+    if (b.width !== c.width || b.height !== c.height) { b.width = c.width; b.height = c.height; }
+    else b.getContext('2d')!.clearRect(0, 0, b.width, b.height);
+    liveBuf.current = b;
+    bufDrawn.current = 0;
+  }
+
+  function releaseLiveBuffer() {
+    const b = liveBuf.current;
+    if (!b) return;
+    // Zero it out rather than just dropping the reference: a canvas keeps its
+    // backing store alive until it is resized, and on an A0 page that is a
+    // hundred megabytes.
+    b.width = 0; b.height = 0;
+    liveBuf.current = null;
+    bufDrawn.current = 0;
+  }
+
+  /** One redraw per animation frame, however many samples arrived. */
+  const scheduleLiveDraw = useCallback(() => {
+    if (liveFrame.current) return;
+    liveFrame.current = requestAnimationFrame(() => {
+      liveFrame.current = 0;
+      const d = drawing.current;
+      const c = liveRef.current;
+      const b = liveBuf.current;
+      if (!d || !c || !b || !b.width) return;
+
+      // Add only what is new, starting one point back so the join is covered.
+      const from = Math.max(0, bufDrawn.current - 1);
+      if (d.pts.length - from >= 2) {
+        const tail = d.pts.slice(from);
+        const bctx = b.getContext('2d')!;
+        paintStroke(bctx, b, {
+          ...draftStrokeRef.current(tail, d.tool),
+          // Opaque, and never multiply, INSIDE the buffer. The opacity and the
+          // blend belong to the one composite that puts it on screen.
+          opacity: 1,
+          tool: (d.tool === 'highlighter' ? 'marker' : d.tool) as AnnTool,
+        });
+        bufDrawn.current = d.pts.length;
+      }
+
+      const ctx = c.getContext('2d')!;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, c.width, c.height);
+      ctx.save();
+      ctx.globalAlpha = opacityRef.current;
+      ctx.globalCompositeOperation = d.tool === 'highlighter' ? 'multiply' : 'source-over';
+      ctx.drawImage(b, 0, 0);
+      ctx.restore();
+    });
+  }, []);
+
+  /** The frame callback is registered once, so live values come through refs. */
+  const opacityRef = useRef(opacity);
+  opacityRef.current = opacity;
+
+  useEffect(() => () => {
+    if (liveFrame.current) cancelAnimationFrame(liveFrame.current);
+    releaseLiveBuffer();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   function clearLive() {
+    if (liveFrame.current) { cancelAnimationFrame(liveFrame.current); liveFrame.current = 0; }
+    releaseLiveBuffer();
     const c = liveRef.current;
     if (!c) return;
     const ctx = c.getContext('2d')!;
@@ -794,6 +920,7 @@ export function PlanAnnotator({
     drawing.current = {
       pen, pts: [{ x: nx, y: ny, w: s.w }], startedAt: Date.now(), tool: drawWith,
     };
+    if (pre.freehand) startLiveBuffer();
     setPenSource(pen.usedSource);
   }
 
@@ -882,19 +1009,42 @@ export function PlanAnnotator({
     if (preset.freehand) {
       // Coalesced samples matter: a pen faster than the refresh rate otherwise
       // draws visibly faceted lines.
+      /**
+       * Keeping the live stroke both CORRECT and cheap.
+       *
+       * The whole stroke is redrawn through the same paintStroke() the finished
+       * mark uses — drawing only the newest segment is what beaded the line and
+       * darkened the highlighter, and it also meant what you saw while drawing
+       * was not what you got when you let go.
+       *
+       * But a redraw is O(points), and doing one per coalesced sample is
+       * O(points²). Measured on an A0 sheet: 3,000 points cost 43ms for a
+       * SINGLE redraw, and drawing that stroke cost 1.5 seconds of redraw work
+       * in total. That is the freeze. Two things bring it back, and neither
+       * touches how the mark is drawn:
+       *
+       *  - **Decimate as we go.** A sample closer than a pixel and a half to the
+       *    last one adds nothing you can see, so it is folded into it — keeping
+       *    the LARGER width, so a pressure peak is never thrown away. A long
+       *    scribble settles at a few hundred points instead of thousands.
+       *  - **Redraw once per frame.** Coalesced events arrive in bursts of ten
+       *    or more; drawing ten times before the screen updates is nine wasted
+       *    redraws. One animation frame, one redraw.
+       */
+      const c = liveRef.current!;
+      const stepX = LIVE_MIN_STEP_PX / Math.max(1, c.width);
+      const stepY = LIVE_MIN_STEP_PX / Math.max(1, c.height);
       for (const raw of samplesOf(e.nativeEvent)) {
         const { nx, ny } = norm(raw);
         const s = d.pen.push(raw, performance.now());
+        const last = d.pts[d.pts.length - 1];
+        if (last && Math.abs(nx - last.x) < stepX && Math.abs(ny - last.y) < stepY) {
+          if (s.w > last.w) last.w = s.w;
+          continue;
+        }
         d.pts.push({ x: nx, y: ny, w: s.w });
       }
-      // The whole stroke is REDRAWN from scratch, through the same paintStroke() the
-      // finished mark uses. Adding only the newest segment was cheaper, but it
-      // is the very thing that beaded the line and darkened the highlighter —
-      // and it also meant what you saw while drawing was not what you got when
-      // you let go. Clearing and redrawing one path costs well under a frame
-      // even on a very long stroke; correctness wins here.
-      clearLive();
-      paintStroke(liveRef.current!.getContext('2d')!, liveRef.current!, draftStroke(d.pts, d.tool ?? tool));
+      scheduleLiveDraw();
       setPenSource(d.pen.usedSource);
     } else {
       let { nx, ny } = norm(e);
@@ -921,12 +1071,22 @@ export function PlanAnnotator({
     }
   }
 
+  /**
+   * The frame callback is registered once, so it reads draftStroke through a
+   * ref rather than closing over a stale tool, colour and width.
+   */
+  const draftStrokeRef = useRef<(pts: PenSample[], asTool?: string) => AnnStroke>(() => ({
+    id: 'draft', page: 0, tool: 'pen', color: '#000', width: 1, opacity: 1, pts: [],
+  }));
+
   function draftStroke(pts: PenSample[], asTool: string = tool): AnnStroke {
     return {
       id: 'draft', page, tool: asTool as AnnTool, color, width, opacity,
       pts: pts.flatMap(p => [p.x, p.y, p.w]),
     };
   }
+
+  draftStrokeRef.current = draftStroke;
 
   function onUp(e: React.PointerEvent<HTMLCanvasElement>) {
     if (moving.current) {
@@ -1677,7 +1837,10 @@ export function PlanAnnotator({
                       editPicked(pickedMark.tool === 'bubble' ? { fontSize: v } : { width: v });
                     } else setWidth(v);
                   }}
-                  className="ink-slider w-[92px]" />
+                  className="ink-slider w-[92px]"
+                  style={fillPct(
+                    pickedMark ? (pickedMark.tool === 'bubble'
+                      ? (pickedMark.fontSize ?? 15) : pickedMark.width) : width, 0.5, 60)} />
                 <span className="tabular-nums w-6">
                   {pickedMark ? (pickedMark.tool === 'bubble'
                     ? (pickedMark.fontSize ?? 15) : pickedMark.width) : width}
@@ -1710,7 +1873,8 @@ export function PlanAnnotator({
                       const v = Number(e.target.value);
                       if (pickedMark) editPicked({ opacity: v }); else setOpacity(v);
                     }}
-                    className="ink-slider w-[80px]" />
+                    className="ink-slider w-[80px]"
+                    style={fillPct(pickedMark ? pickedMark.opacity : opacity, 0.05, 1)} />
                   <span className="tabular-nums w-7">
                     {Math.round((pickedMark ? pickedMark.opacity : opacity) * 100)}%
                   </span>

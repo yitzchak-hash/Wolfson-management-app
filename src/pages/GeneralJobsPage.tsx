@@ -1509,11 +1509,20 @@ export function GeneralJobsPage() {
     // Pan mode: dragging FROM a tile moves the board, not the tile. A plain
     // click still opens the job, which is why the cursor flips to an arrow
     // whenever the pointer is over one.
-    // On a board you can only look at, a press behaves exactly as it does in
-    // Pan mode: dragging moves the BOARD and a click that never moved opens the
-    // job. Opening it on pointerdown instead — which is what this did first —
-    // meant every attempted drag left the job window sitting over the board.
-    if ((tool === 'pan' || viewOnlyBoard) && !e.ctrlKey && !e.metaKey) {
+    /**
+     * A drag from a tile ALWAYS moves the tile.
+     *
+     * Pan mode used to take a press on a tile as a press on the board, so
+     * dragging a job moved the whole board underneath it — which meant the one
+     * gesture everybody tries first did the one thing they did not mean, and it
+     * made dropping a job onto the rota impossible without first finding the
+     * Select button. The board still pans from anywhere it is not covered by a
+     * tile, and from space-drag and middle-drag.
+     *
+     * A board you can only LOOK at is the exception: there, a press behaves as
+     * it did, because there is nothing to move.
+     */
+    if (viewOnlyBoard && !e.ctrlKey && !e.metaKey) {
       panRef.current = { px: e.clientX, py: e.clientY, ox: pan.x, oy: pan.y };
       setPanning(true);
       panFromJob.current = job;
