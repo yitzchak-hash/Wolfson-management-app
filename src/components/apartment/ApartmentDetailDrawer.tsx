@@ -7,7 +7,7 @@ import { StageNotesSection } from './StageNotesSection';
 import { ActivitySection } from './ActivitySection';
 import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, findAllPlansPdfsViaBackend, findPlanSetViaBackend, PlanEntry, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, extractFolderId, driveThumbUrl, listAllPhotosViaBackend, getFolderNameViaBackend, familyNameFromFolderName, DrivePhotoItem, DriveFile, FolderHealth, checkFolderHealthViaBackend } from '../../data/driveApi';
 import { Tooltip } from '../ui/Tooltip';
-import { DriveStatus } from '../ui/DriveStatus';
+import { DriveStatus, driveStateOf } from '../ui/DriveStatus';
 import { LinkField } from '../ui/LinkField';
 import { printSheet, printEsc } from '../../data/printing';
 import { PlanPinOverlay } from './PlanPinOverlay';
@@ -148,6 +148,19 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     contractorPhotos, updateContractorPhoto, planAnnotations, stageNotes, planPins } = useStore();
   const isGeneralProject = currentProjectId === 'general';
   const backendConfigured = isUploadBackendConfigured();
+
+  /**
+   * The Drive light, on the Drive button.
+   *
+   * The same three states the tiles show, derived from the record alone so it
+   * costs nothing: a folder and a plan, a folder only, or neither.
+   */
+  const driveState = apartment ? driveStateOf(apartment) : 'none';
+  const driveLight = driveState === 'ready' ? '#4ade80'
+    : driveState === 'partial' ? '#fbbf24' : 'rgba(255,255,255,.35)';
+  const driveTip = driveState === 'ready' ? 'Folder linked, plan found'
+    : driveState === 'partial' ? 'Folder linked, no plan chosen yet'
+    : 'No Drive folder linked';
 
   /**
    * Escape closes the job window.
@@ -773,6 +786,52 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               </span>
             )}
 
+            {/* The name, and then the three things you do WITH this job.
+                They used to float at the top right, a long way from the thing
+                they act on and next to the close button, which is the one
+                place a mis-click is expensive. */}
+            <span className="font-bold text-[15px] truncate min-w-0 ml-1">
+              {apartment.displayName?.trim() || apartment.apartmentNumber || ui.jobLabel}
+            </span>
+
+            <span className="flex items-center gap-1 flex-shrink-0 ml-1">
+              {apartment.driveLink ? (
+                <Tooltip text={driveTip}>
+                  <a href={apartment.driveLink} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20
+                               transition-colors text-[11.5px] font-semibold">
+                    {/* The light lives ON the button now, so one control answers
+                        both "is there a folder" and "is it set up". */}
+                    <span className="w-2 h-2 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: driveLight }} />
+                    Drive
+                  </a>
+                </Tooltip>
+              ) : (
+                <Tooltip text="No Drive folder linked yet">
+                  <span className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/5
+                                   text-[11.5px] font-semibold text-white/40">
+                    <span className="w-2 h-2 rounded-full bg-white/30" />
+                    Drive
+                  </span>
+                </Tooltip>
+              )}
+              {apartment.zohoLink && (
+                <Tooltip text="Open in Zoho">
+                  <a href={apartment.zohoLink} target="_blank" rel="noopener noreferrer"
+                    className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 transition-colors
+                               text-[11.5px] font-semibold">Zoho</a>
+                </Tooltip>
+              )}
+              <Tooltip text="Print a job sheet">
+                <button onClick={printJobSheet}
+                  className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 transition-colors
+                             text-[11.5px] font-semibold flex items-center gap-1.5">
+                  <Printer size={13} /> Print
+                </button>
+              </Tooltip>
+            </span>
+
             {/* Live contractor progress — opens the sheet-backed panel */}
             {!isGeneralProject && (
               <Tooltip text={ui.contractorStatusTitle}>
@@ -793,17 +852,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               </Tooltip>
             )}
                     </div>
-          {/* The same light the tiles carry, so the answer to "is this job set
-              up in Drive" is the same shape wherever you are looking. */}
-          <Tooltip text="Google Drive" side="left">
-            <span className="mr-1"><DriveStatus job={apartment} size="panel" /></span>
-          </Tooltip>
-          <Tooltip text="Print a job sheet" side="left">
-            <button onClick={printJobSheet}
-              className="p-1.5 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0">
-              <Printer size={17} />
-            </button>
-          </Tooltip>
           <Tooltip text={ui.cancel} side="left">
             <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0">
               <X size={20} />
@@ -1766,12 +1814,49 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         {planPaneOn && (
           <div className="flex flex-col min-h-0 border-l border-gray-200"
             style={{ flex: '1 1 54%', backgroundColor: '#f8fafc' }}>
-            <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-200 flex-shrink-0 bg-white">
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-200 flex-shrink-0 bg-white flex-wrap">
               <BookOpen size={13} className="text-[#1e3a5f]" />
-              <span className="text-[12px] font-bold text-gray-800 truncate">
-                {planSet.plans.find(p => p.id === (shownPlanId ?? detectedPdfId))?.name?.replace(/\.pdf$/i, '')
-                  ?? ui.engineeringPlans}
-              </span>
+
+              {/* Every plan in the folder as a chip, the one you are looking at
+                  filled in — the same row the building projects have. With one
+                  plan it stays a plain title; with several, switching between
+                  them is one tap instead of a trip to the folder. */}
+              {planSet.plans.length > 1 ? (
+                <span className="flex items-center gap-1 flex-wrap min-w-0">
+                  {planSet.plans.map(p => {
+                    const on = p.id === (shownPlanId ?? detectedPdfId);
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => {
+                          setShownPlanId(p.id);
+                          // The chosen plan is the one the contractor sees, so
+                          // it is written down rather than held on screen.
+                          if (currentUser) {
+                            updateApartment(apartment.id,
+                              { plansPdfLink: `https://drive.google.com/file/d/${p.id}/view` },
+                              currentUser);
+                          }
+                        }}
+                        title={p.name}
+                        className="px-2 py-0.5 rounded-full text-[11px] font-bold truncate max-w-[150px]
+                                   transition-colors"
+                        style={on
+                          ? { backgroundColor: '#1e3a5f', color: '#fff' }
+                          : { backgroundColor: '#eef2f7', color: '#475569' }}
+                      >
+                        {p.name.replace(/\.pdf$/i, '')}
+                      </button>
+                    );
+                  })}
+                </span>
+              ) : (
+                <span className="text-[12px] font-bold text-gray-800 truncate">
+                  {planSet.plans.find(p => p.id === (shownPlanId ?? detectedPdfId))?.name?.replace(/\.pdf$/i, '')
+                    ?? ui.engineeringPlans}
+                </span>
+              )}
+
               <span className="flex-1" />
               <Tooltip text="Mark up this plan" side="left">
                 <button onClick={() => setAnnotating('draw')}

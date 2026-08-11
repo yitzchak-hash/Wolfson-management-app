@@ -109,10 +109,16 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
   'project-mini': [
     {
       key: 'projectId', label: 'Which workspace', kind: 'project',
-      hint: 'Place one per workspace and the whole company fits on one screen.',
+      hint: 'Wolfson or Netiv — the ones with buildings. Place one per workspace '
+        + 'and the whole company fits on one screen.',
     },
   ],
-  'board-mini': [title()],
+  'board-mini': [
+    title(),
+    // The board itself is chosen on the widget — a picker sitting on the thing
+    // is easier to find than one behind a pencil, and it has to be answered
+    // before anything renders anyway.
+  ],
   'calendar-mini': [title()],
   'week-ahead': [title()],
   'recent-photos': [

@@ -1197,20 +1197,25 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
   {
-    id: 'project-mini', rank: 1, name: 'Workspace at a glance', category: 'live',
+    id: 'project-mini', rank: 1, name: 'Building progress', category: 'live',
     icon: Building, w: 250, h: 165,
-    blurb: 'The building diagram in miniature, in its stage colours. Pick which workspace — '
-      + 'put three side by side and the whole company is on one screen.',
+    blurb: 'The building diagram in miniature, every unit in its stage colour. Pick which '
+      + 'workspace — put three side by side and the whole company is on one screen.',
     data: {},
     render: (el, c) => (
       <ProjectMini projectId={String(d(el).projectId || '')} onOpen={c.openProject} />
     ),
   },
   {
-    id: 'board-mini', rank: 2, name: 'Job board', category: 'live', icon: Briefcase, w: 300, h: 190,
-    blurb: 'A readable thumbnail of the board, laid out where the jobs actually are. '
-      + 'Click a tile to open the job.',
-    render: (_el, c) => <BoardMini jobs={c.jobs} stages={c.stages} onOpen={c.openJob} />,
+    id: 'board-mini', rank: 2, name: "Someone's board", category: 'live', icon: Briefcase,
+    w: 380, h: 260,
+    blurb: 'A live miniature of a board you choose — yours, the main one, or any shared with you. '
+      + 'Scroll to zoom inside it, drag to move around, double-click a job to open it.',
+    data: {},
+    render: (el, c) => (
+      <BoardMini el={el} jobs={c.jobs} stages={c.stages} onOpen={c.openJob}
+        update={c.update} readOnly={c.readOnly} />
+    ),
   },
   {
     id: 'calendar-mini', rank: 3, name: 'Calendar', category: 'live', icon: CalendarDays, w: 220, h: 185,

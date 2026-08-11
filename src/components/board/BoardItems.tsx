@@ -26,6 +26,13 @@ import { MapPin, ClipboardList, Trash2, Palette, Pencil, X, ThumbsUp, ThumbsDown
 import { Apartment, CanvasElement, Stage, BinKind, BIN_META, binKeyOf, binLabelOf } from '../../types';
 import { Settings2 } from 'lucide-react';
 import { DriveIcon, ZohoIcon, PlanIcon, TvIcon } from '../ui/BrandIcons';
+import { extractFileId, driveDownloadUrl } from '../../data/driveApi';
+
+/** A Drive file link turned into a direct download, when we can read its id. */
+function planDownloadUrl(link: string): string {
+  const id = extractFileId(link);
+  return id ? driveDownloadUrl(id) : link;
+}
 import { DriveStatus } from '../ui/DriveStatus';
 import { CountdownNode, StopwatchNode, ClipArtNode, VoiceMemoNode } from './BoardNodes';
 import { renderWidget, WidgetCtx, WIDGET_BY_ID } from '../../data/widgets';
@@ -237,8 +244,13 @@ export const JobTile = React.memo(function JobTile({
           </a>
         )}
         {job.plansPdfLink && (
-          <a data-no-drag title={labels.plans}
-            href={job.plansPdfLink}
+          /* This DOWNLOADS the plan rather than opening Drive's viewer.
+             From the board the question is "give me the drawing", not "show me
+             where it lives" — and the viewer is one more tap from the job
+             window anyway. Drive's export URL is a plain link, so this stays a
+             real anchor that a middle-click and a long-press both understand. */
+          <a data-no-drag title={`${labels.plans} — download`}
+            href={planDownloadUrl(job.plansPdfLink)}
             target="_blank" rel="noopener noreferrer"
             onClick={e => e.stopPropagation()}
             className="w-6 h-6 rounded-md bg-gray-50 border border-gray-200 flex items-center justify-center hover:border-gray-300 transition-colors text-gray-600"
