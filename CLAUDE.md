@@ -813,21 +813,48 @@ it stops reaching into the minimap.
 
 # v2 — the 116-item round
 
-## The rota (`src/components/board/RotaWidget.tsx`)
-People down the left, **Sunday to Thursday** across, weeks stacked, each week with its own dated
-header. A cell is a **LIST of entries**, each either a linked job or free words — the paper sheet has
-both in the same cell ("Pardes 8 am", "Davidian??"), so neither can be second-class.
+## The planner (`src/components/board/PlannerWidget.tsx`)
+Formerly `RotaWidget.tsx`, now deleted. People down the left, **Sunday to Thursday** across, weeks
+stacked, each week with its own dated header. A cell is a **LIST of entries**, each either a linked job
+or free words — the paper sheet has both in the same cell ("Pardes 8 am", "Davidian??"), so neither can
+be second-class. Companion files: `PlannerDialogs.tsx` (task / remove / take-off) and
+`ScheduleWindow.tsx` (every planned job in one scrollable window).
 
 Dropping a job on a cell **references** it; the job stays on the board and can be on two people's rows
-at once. `src/data/rotaDrop.ts` is the bridge: each mounted rota registers a probe answering "is a cell
-of mine under this SCREEN point?", because a client rect already has the board's pan and zoom in it.
-The board drags in world coordinates and the rota is CSS grid — neither re-derives the other's maths.
+at once. `src/data/rotaDrop.ts` is the bridge: each mounted planner registers a probe answering "is a
+cell of mine under this SCREEN point?", because a client rect already has the board's pan and zoom in
+it. The board drags in world coordinates and the planner is CSS grid — neither re-derives the other's
+maths.
 
 **The drop gesture needs Select mode.** The board's default tool is Pan (settled earlier), where a drag
 from a tile moves the board.
 
 `personColor(name, chosen?)` in `types/index.ts` gives everyone a stable colour derived from their name
 unless one is set. `Contractor.color` / `User.color` are set by clicking the avatar in app settings.
+
+### Taking somebody off
+`takeOffPlanner(data, personId, from)` · `putBackOnPlanner(data, personId)` · `slotsFrom(...)` are pure
+functions on `PlannerData`, driven from the people picker in `NodeSettings`. Nothing is destroyed:
+slots from the cut-off onward move into `offKept` and come back exactly as they were.
+
+- **From a date, they stay in `people`.** The dialog promises the rest of that week draws greyed, and
+  the widget draws that from `offFrom` — which it only consults for somebody it is still being asked to
+  render a row for. Removing them from the list makes the row vanish on the spot. Only "everything,
+  back to the start" takes the row away.
+- **The row list and the slots must move in ONE `updateCanvasElement`.** The generic field writer
+  spreads the `data` captured by that render, so a second write with the people array puts the
+  pre-take-off data straight back and the whole operation silently undoes itself.
+- **Their freed jobs are gathered into a labelled section box, never filed into a bin.** A binned job
+  drops out of `isCountableApartment()` and therefore out of every total in the app — far more than
+  "came off a rota" should ever mean.
+
+## Node action buttons live ABOVE the node, not in its corner
+The settings / remove / TV strip on a board node floats above the top edge (`bottom: 100%`). It used to
+sit in the node's top-right corner, on top of whatever the widget drew there — the planner's "Today"
+and "next week" were covered by Settings and Remove, so reaching for next week deleted the planner.
+The strip is still a child of the node, so the hover that reveals it survives the pointer moving onto
+it. `scratchpad/overlap.mjs` walks every control on every node kind and asserts
+`document.elementFromPoint` at its centre is the control itself — run it after touching node chrome.
 
 ## Plan drawing — the one-fill rule
 `src/components/plans/paintStroke.ts` holds `paintStroke()`, lifted out of PlanAnnotator because it is

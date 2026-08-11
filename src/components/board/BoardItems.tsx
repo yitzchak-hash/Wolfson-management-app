@@ -476,37 +476,39 @@ export const BoardNode = React.memo(function BoardNode({
           and each was an 18px target, which is why they were so hard to hit.
           28px, with the delete kept separate because it is the one that cannot
           be undone by pressing it again. */}
+      {/* ABOVE the node, not inside it.
+          These sat in the top-right corner over the widget's own content, and a
+          widget with its own controls there lost them the moment you hovered —
+          the planner's "next week" was covered by Remove, so reaching for the
+          next week deleted the planner. A floating strip above the top edge
+          cannot cover anything, and because it is still a child of the node the
+          hover that reveals it also survives the pointer moving onto it. */}
       {!plain && (
-        <div className={`absolute top-1.5 right-1.5 flex gap-1 z-10 transition-opacity ${
+        <div className={`absolute right-0 flex gap-1 z-20 transition-opacity ${
             isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'}`}
-          style={{ pointerEvents: 'auto' }}>
+          style={{ bottom: '100%', marginBottom: 4, pointerEvents: 'auto' }}>
+          <button data-el-action
+            onClick={e => { e.stopPropagation(); H.elPatch(el.id, { showOnTv: el.showOnTv === false ? undefined : false }); }}
+            title={el.showOnTv === false ? 'Hidden from TV' : 'Showing on TV'}
+            className="w-7 h-7 rounded-lg bg-white/95 hover:bg-white flex items-center justify-center shadow-sm border border-gray-100"
+            style={{ color: el.showOnTv === false ? '#dc2626' : '#94a3b8' }}>
+            <TvIcon size={13} hidden={el.showOnTv === false} />
+          </button>
           <button data-el-action
             title="Settings"
             onClick={e => { e.stopPropagation(); H.elSettings(el); }}
-            className="w-7 h-7 rounded-lg bg-white/85 hover:bg-white text-gray-500 hover:text-gray-800 transition-all flex items-center justify-center shadow-sm">
+            className="w-7 h-7 rounded-lg bg-white/95 hover:bg-white text-gray-500 hover:text-gray-800 transition-all flex items-center justify-center shadow-sm border border-gray-100">
             <Settings2 size={14} />
           </button>
           {!isBin && (
             <button data-el-action
               title="Remove"
               onClick={e => { e.stopPropagation(); H.elDelete(el.id); }}
-              className="w-7 h-7 rounded-lg bg-white/85 hover:bg-red-50 text-gray-400 hover:text-red-500 transition-all flex items-center justify-center shadow-sm">
+              className="w-7 h-7 rounded-lg bg-white/95 hover:bg-red-50 text-gray-400 hover:text-red-500 transition-all flex items-center justify-center shadow-sm border border-gray-100">
               <X size={14} />
             </button>
           )}
         </div>
-      )}
-
-      {/* Wallboard visibility — every node carries the same switch. */}
-      {!plain && (
-        <button data-el-action
-          onClick={e => { e.stopPropagation(); H.elPatch(el.id, { showOnTv: el.showOnTv === false ? undefined : false }); }}
-          title={el.showOnTv === false ? 'Hidden from TV' : 'Showing on TV'}
-          className={`absolute bottom-1.5 right-1.5 w-7 h-7 rounded-lg flex items-center justify-center bg-white/70 transition-all z-10 ${
-            isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'}`}
-          style={{ color: el.showOnTv === false ? '#dc2626' : '#94a3b8' }}>
-          <TvIcon size={13} hidden={el.showOnTv === false} />
-        </button>
       )}
 
       {/* ── Type-specific content ── */}

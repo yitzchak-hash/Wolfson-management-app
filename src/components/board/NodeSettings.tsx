@@ -5,6 +5,10 @@ import { CanvasElement, Stage, binLabelOf, isBuiltInBin, personColor } from '../
 import { WIDGET_BY_ID } from '../../data/widgets';
 import { WidgetField, WIDGET_FIELDS, ART_FIELDS, BOX_FIELDS, TEXT_STYLE_FIELDS, OUTLINE_FIELDS } from '../../data/widgetFields';
 import { ART_KINDS, ArtKind } from './BoardNodes';
+import {
+  PlannerData, takeOffPlanner, putBackOnPlanner, slotsFrom, personOf, iso as plannerIso,
+} from './PlannerWidget';
+import { PlannerOffDialog, OffScope } from './PlannerDialogs';
 import { ANCHORS, anchorOf } from './AttachLayer';
 
 /**
@@ -157,6 +161,7 @@ export function NodeSettings({ el, onClose, onDelete }: {
           {fields.map(f => (
             <Field
               key={`${f.scope ?? 'data'}.${f.key}`}
+              el={el}
               field={f}
               value={readField(f)}
               onChange={v => writeField(f, v)}
@@ -513,11 +518,96 @@ function JobsField({ label, hint, value, onChange, jobs }: {
  * the rows come out in the order chosen here — so picking somebody appends them
  * and there are arrows to move a row up or down.
  */
-function PeopleField({ label, hint, value, onChange }: {
+function PeopleField({ el, label, hint, value, onChange }: {
+  el: CanvasElement;
   label: string; hint?: string; value: string[]; onChange: (v: string[]) => void;
 }) {
   const contractors = useStore(st => st.contractors);
   const users = useStore(st => st.users);
+  const apartments = useStore(st => st.apartments);
+  const currentUser = useStore(st => st.currentUser);
+  const updateApartment = useStore(st => st.updateApartment);
+  const updateCanvasElement = useStore(st => st.updateCanvasElement);
+  const addCanvasElement = useStore(st => st.addCanvasElement);
+  const canvasElements = useStore(st => st.canvasElements);
+
+  /** Who is being taken off, waiting on the from-when answer. */
+  const [offering, setOffering] = useState<{ id: string; name: string } | null>(null);
+
+  const data = (el.data ?? {}) as PlannerData;
+
+  /**
+   * Take them off, and put their jobs somewhere you can see them.
+   *
+   * The jobs are NOT filed into a group: filing takes a job out of every count
+   * in the app, which is a much bigger thing than coming off a rota and would
+   * quietly change the unit totals. They are gathered into a labelled section
+   * box on the board instead — still on the board, still counted, and obvious.
+   */
+  function takeOff(personId: string, scope: OffScope, date?: string) {
+    const from = scope === 'all' ? '0000-01-01'
+      : scope === 'date' ? (date ?? plannerIso(new Date()))
+      : plannerIso(new Date());
+
+    const { data: next, freed } = takeOffPlanner(data, personId, from);
+    const name = personOf(personId, contractors, users).name;
+
+    if (freed.length && currentUser) {
+      // Below everything already placed, so a pile never lands on the board.
+      let lowest = 0;
+      for (const j of apartments) if (typeof j.canvasY === 'number') lowest = Math.max(lowest, j.canvasY + 132);
+      for (const n of canvasElements) if (!n.board) lowest = Math.max(lowest, n.y + n.h);
+
+      const perRow = Math.min(4, Math.max(1, freed.length));
+      const boxW = perRow * (215 + 18) + 18;
+      const rows = Math.ceil(freed.length / perRow);
+      const top = lowest + 60;
+
+      addCanvasElement({
+        id: `CE-${Math.random().toString(36).slice(2, 9)}`,
+        type: 'box',
+        x: 40, y: top,
+        w: boxW, h: rows * (132 + 18) + 54,
+        text: `${name} — off the planner`,
+        color: '#fef3c7',
+        addedAt: new Date().toISOString(),
+      });
+
+      freed.forEach((jobId, i) => {
+        updateApartment(jobId, {
+          canvasX: 40 + 18 + (i % perRow) * (215 + 18),
+          canvasY: top + 40 + Math.floor(i / perRow) * (132 + 18),
+        }, currentUser);
+      });
+    }
+
+    /**
+     * The row list and the slots move in ONE write.
+     *
+     * `onChange` for this field spreads the `data` object captured by this
+     * render, so calling it after a separate `updateCanvasElement` puts the
+     * pre-take-off data straight back and the whole thing silently undoes
+     * itself. Writing both at once is the only version that survives.
+     *
+     * They STAY in the list when they are coming off from a date: the dialog
+     * promises the rest of that week stays visible and greyed, and the widget
+     * draws that from `offFrom` — but only for somebody it is still being asked
+     * to draw a row for. Only "everything, back to the start" takes the row
+     * away, because then there is no week left to show.
+     */
+    const people = scope === 'all' ? value.filter(x => x !== personId) : value;
+    updateCanvasElement(el.id, { data: { ...next, people } as Record<string, unknown> });
+    setOffering(null);
+  }
+
+  /** Putting somebody back restores every slot they had. */
+  function putBack(personId: string) {
+    const restored = (data.offFrom?.[personId] || data.offKept?.[personId])
+      ? putBackOnPlanner(data, personId)
+      : data;
+    const people = value.includes(personId) ? value : [...value, personId];
+    updateCanvasElement(el.id, { data: { ...restored, people } as Record<string, unknown> });
+  }
 
   const choices = [
     ...contractors.filter(c => c.active).map(c => ({
@@ -543,23 +633,55 @@ function PeopleField({ label, hint, value, onChange }: {
         {value.map((id, i) => {
           const c = choices.find(x => x.id === id);
           const name = c?.name ?? (id.startsWith('n:') ? id.slice(2) : 'Someone who has gone');
+          const offOn = data.offFrom?.[id];
           return (
-            <div key={id} className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-gray-200">
+            <div key={id} className="flex items-center gap-1.5 px-2 py-1 rounded-lg border"
+              style={{ borderColor: offOn ? '#fcd9d5' : '#e5e7eb', backgroundColor: offOn ? '#fff8f7' : undefined }}>
               <span className="w-2 h-2 rounded-full flex-shrink-0"
-                style={{ backgroundColor: c?.color ?? personColor(name) }} />
-              <span className="flex-1 min-w-0 truncate text-[12px] text-gray-700">{name}</span>
-              <button onClick={() => move(i, -1)} disabled={i === 0} title="Up"
-                className="p-0.5 text-gray-300 hover:text-gray-600 disabled:opacity-30">
-                <ChevronUp size={13} />
-              </button>
-              <button onClick={() => move(i, 1)} disabled={i === value.length - 1} title="Down"
-                className="p-0.5 text-gray-300 hover:text-gray-600 disabled:opacity-30">
-                <ChevronDown size={13} />
-              </button>
-              <button onClick={() => onChange(value.filter(x => x !== id))} title="Take off the rota"
-                className="p-0.5 text-gray-300 hover:text-red-500">
-                <X size={12} />
-              </button>
+                style={{ backgroundColor: c?.color ?? personColor(name), opacity: offOn ? 0.4 : 1 }} />
+              <span className="flex-1 min-w-0">
+                <span className="block truncate text-[12px]"
+                  style={{ color: offOn ? '#94a3b8' : '#374151' }}>{name}</span>
+                {offOn && (
+                  <span className="block text-[10px] text-[#b4342a]">
+                    coming off {new Date(`${offOn}T00:00:00`).toLocaleDateString(undefined,
+                      { day: 'numeric', month: 'short' })} — the rest of that week stays greyed
+                  </span>
+                )}
+              </span>
+              {!offOn && (
+                <>
+                  <button onClick={() => move(i, -1)} disabled={i === 0} title="Up"
+                    className="p-0.5 text-gray-300 hover:text-gray-600 disabled:opacity-30">
+                    <ChevronUp size={13} />
+                  </button>
+                  <button onClick={() => move(i, 1)} disabled={i === value.length - 1} title="Down"
+                    className="p-0.5 text-gray-300 hover:text-gray-600 disabled:opacity-30">
+                    <ChevronDown size={13} />
+                  </button>
+                </>
+              )}
+              {offOn ? (
+                <button onClick={() => putBack(id)} title="Put them back on"
+                  className="px-1.5 py-0.5 rounded-md text-[10.5px] font-bold text-[#1e3a5f] border border-[#1e3a5f]/25 hover:bg-[#1e3a5f]/5">
+                  Put back
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    // Somebody with nothing in a slot just comes off; the dialog
+                    // exists for the case where taking them off would move work.
+                    if (slotsFrom(data, id, '0000-01-01') === 0) {
+                      onChange(value.filter(x => x !== id));
+                    } else {
+                      setOffering({ id, name });
+                    }
+                  }}
+                  title="Take off the planner"
+                  className="p-0.5 text-gray-300 hover:text-red-500">
+                  <X size={12} />
+                </button>
+              )}
             </div>
           );
         })}
@@ -567,12 +689,15 @@ function PeopleField({ label, hint, value, onChange }: {
         {unused.length > 0 && (
           <select
             value=""
-            onChange={e => { if (e.target.value) onChange([...value, e.target.value]); }}
+            onChange={e => { if (e.target.value) putBack(e.target.value); }}
             className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 text-[12.5px] bg-white outline-none"
           >
             <option value="">+ add somebody…</option>
             {unused.map(c => (
-              <option key={c.id} value={c.id}>{c.name} · {c.kind}</option>
+              <option key={c.id} value={c.id}>
+                {c.name} · {c.kind}
+                {data.offKept?.[c.id] ? ' · was on here, days kept' : ''}
+              </option>
             ))}
           </select>
         )}
@@ -582,12 +707,31 @@ function PeopleField({ label, hint, value, onChange }: {
             No contractors or staff yet — add them in app settings first.
           </p>
         )}
+
+        {Object.keys(data.offKept ?? {}).length > 0 && (
+          <p className="text-[10.5px] text-gray-400 leading-snug">
+            Somebody taken off keeps their days. Adding them back puts every job
+            in the slot it came from.
+          </p>
+        )}
       </div>
+
+      {offering && (
+        <PlannerOffDialog
+          name={offering.name}
+          jobCount={slotsFrom(data, offering.id, '0000-01-01')}
+          onCancel={() => setOffering(null)}
+          onDone={(scope, date) => takeOff(offering.id, scope, date)}
+        />
+      )}
     </Row>
   );
 }
 
-function Field({ field, value, onChange, stages, jobs, contractors }: {
+function Field({ el, field, value, onChange, stages, jobs, contractors }: {
+  /** The node being edited. The people picker writes through to it, because
+      taking somebody off the planner has to move that person's jobs. */
+  el: CanvasElement;
   field: WidgetField;
   value: unknown;
   onChange: (v: unknown) => void;
@@ -649,8 +793,8 @@ function Field({ field, value, onChange, stages, jobs, contractors }: {
   }
 
   if (f.kind === 'people') {
-    return <PeopleField label={f.label} hint={f.hint} value={Array.isArray(value) ? value as string[] : []}
-      onChange={onChange} />;
+    return <PeopleField el={el} label={f.label} hint={f.hint}
+      value={Array.isArray(value) ? value as string[] : []} onChange={onChange} />;
   }
 
   if (f.kind === 'percent') {

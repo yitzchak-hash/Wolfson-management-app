@@ -100,6 +100,73 @@ const num = (v: unknown, fallback: number, lo: number, hi: number) => {
   return Number.isFinite(n) && n > 0 ? Math.max(lo, Math.min(hi, Math.round(n))) : fallback;
 };
 
+/**
+ * Taking somebody off the planner, and putting them back.
+ *
+ * Kept here, beside the data it edits, rather than in the settings panel that
+ * happens to call it — the rules are about what a planner means, not about a
+ * form.
+ *
+ * Nothing is destroyed. Their filled-in days from the cut-off onward are moved
+ * out of `cells` and into `offKept`, so putting them back puts every job in the
+ * slot it came from. Days already worked keep their jobs, because that is the
+ * record of who was where and rubbing it out would be a lie.
+ *
+ * `offFrom` is what makes the rest of the cut week draw greyed rather than
+ * simply vanish: the week is already planned around them, so it stays visible
+ * and unavailable, and the week after does not draw the row at all.
+ */
+export function takeOffPlanner(
+  data: PlannerData, personId: string, from: string,
+): { data: PlannerData; freed: string[] } {
+  const cells = { ...(data.cells ?? {}) };
+  const kept: Record<string, PlannerEntry[]> = { ...(data.offKept?.[personId] ?? {}) };
+  const freed: string[] = [];
+
+  for (const key of Object.keys(cells)) {
+    const [person, day] = key.split('|');
+    if (person !== personId || day < from) continue;
+    kept[key] = cells[key];
+    for (const e of cells[key]) if (e.jobId) freed.push(e.jobId);
+    delete cells[key];
+  }
+
+  return {
+    data: {
+      ...data,
+      cells,
+      offFrom: { ...(data.offFrom ?? {}), [personId]: from },
+      offKept: { ...(data.offKept ?? {}), [personId]: kept },
+    },
+    freed: [...new Set(freed)],
+  };
+}
+
+/** Putting them back restores every slot they had. */
+export function putBackOnPlanner(data: PlannerData, personId: string): PlannerData {
+  const kept = data.offKept?.[personId] ?? {};
+  const offFrom = { ...(data.offFrom ?? {}) };
+  const offKept = { ...(data.offKept ?? {}) };
+  delete offFrom[personId];
+  delete offKept[personId];
+  return {
+    ...data,
+    cells: { ...(data.cells ?? {}), ...kept },
+    offFrom,
+    offKept,
+  };
+}
+
+/** How many jobs a person has in slots from a date onward. */
+export function slotsFrom(data: PlannerData, personId: string, from: string): number {
+  let n = 0;
+  for (const [key, entries] of Object.entries(data.cells ?? {})) {
+    const [person, day] = key.split('|');
+    if (person === personId && day >= from) n += entries.filter(e => e.jobId).length;
+  }
+  return n;
+}
+
 /** What a drop is waiting on an answer about. */
 export interface PendingDrop {
   elId: string;
