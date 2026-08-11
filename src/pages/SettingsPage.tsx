@@ -6,6 +6,10 @@ import {
   Languages, Clock, RotateCcw, Wifi, WifiOff, Loader, Database, RefreshCw, CloudUpload, Search, BookOpen, ExternalLink, AlertTriangle, Tv,
 } from 'lucide-react';
 import { isFirebaseConfigured, db, fsSet, fsGetAll } from '../data/firebase';
+import { TvDashboard } from '../components/board/TvDashboard';
+import { WidgetStore } from '../components/board/WidgetStore';
+import { TV_ALLOWED } from '../data/tvWidgets';
+import { TV_DASH_BOARD } from '../types';
 import type { BoardAccess } from '../types';
 import { personColor, projectColor, BoardView, Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency, getStageName, Apartment, isCountableApartment } from '../types';
 import { Tooltip } from '../components/ui/Tooltip';
@@ -1421,6 +1425,7 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
   const {
     boardSettings, setTvSetting, apartments, canvasElements, stages,
     boardViews, currentProjectId, currentUser, users,
+    contractorAssignments, contractors, contractorPhotos, activityLogs, addCanvasElement,
   } = useStore();
   const tv = boardSettings.__tv ?? {};
 
@@ -1433,6 +1438,29 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
    */
   const isAdmin = (currentUser?.role ?? '').toLowerCase().includes('admin');
   const tvBoard = tv.tvBoard ?? '';
+
+  // ── The live wall dashboard, edited in place ──
+  const [tvStore, setTvStore] = useState(false);
+  const [tvArrange, setTvArrange] = useState(false);
+  const tvWidgetCount = canvasElements.filter(
+    e => e.board === TV_DASH_BOARD && e.type === 'widget').length;
+  // The preview pane is wide and short, so it is always the landscape layout —
+  // the wall's own orientation decides its own.
+  const tvShape = {
+    orientation: 'landscape' as const, width: 1200, height: 420, ratio: 0.35, narrow: false,
+  };
+  const tvCtx = useMemo(() => ({
+    jobs: apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed && !a.boardBin),
+    stages,
+    assignments: contractorAssignments,
+    contractors, users,
+    photos: contractorPhotos,
+    logs: activityLogs,
+    update: () => {},
+    openJob: () => {},
+    readOnly: !tvArrange,
+  }), [apartments, stages, contractorAssignments, contractors, users, contractorPhotos,
+       activityLogs, tvArrange]);
   const boardsHere = boardViews.filter(v => v.projectId === currentProjectId);
   const chosen = boardsHere.find(v => v.id === tvBoard);
 
@@ -1524,6 +1552,61 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
           </option>
         ))}
       </select>
+
+      {/* ── The wall's dashboard, live and editable right here ──────────────
+          Not a list of buttons describing it: the real thing, drawn by the same
+          component the wall uses, with the same handles. What you drag here is
+          what is on the wall, because it IS what is on the wall — the layout is
+          one set of records, not a description of one. */}
+      <label className="block text-xs font-semibold text-gray-600 mb-1">The dashboard screen</label>
+      <p className="text-[11px] text-gray-400 mb-2 leading-snug">
+        This is the wall's dashboard as it is right now. Add, move, resize and
+        remove here and the wall follows — it is the same board, not a copy.
+      </p>
+      <div className="mb-2 flex flex-wrap gap-2">
+        <button
+          onClick={() => setTvStore(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold text-white"
+          style={{ backgroundColor: '#4aa8d8' }}>
+          <Plus size={14} /> Add a widget
+        </button>
+        <button
+          onClick={() => setTvArrange(v => !v)}
+          className="px-3 py-1.5 rounded-xl text-sm font-semibold border transition-colors"
+          style={tvArrange
+            ? { backgroundColor: '#1e3a5f', color: '#fff', borderColor: '#1e3a5f' }
+            : { backgroundColor: '#fff', color: '#475569', borderColor: '#e2e8f0' }}>
+          {tvArrange ? 'Done arranging' : 'Arrange'}
+        </button>
+        <span className="flex-1" />
+        <span className="text-[11px] text-gray-400 self-center">
+          {tvWidgetCount} on the wall
+        </span>
+      </div>
+      <div className="rounded-2xl border border-gray-200 overflow-hidden mb-5 bg-slate-100"
+        style={{ height: 420 }}>
+        <div className="w-full h-full flex flex-col">
+          <TvDashboard ctx={tvCtx} shape={tvShape} scale={0.85} editing={tvArrange}
+            onSpawn={() => setTvStore(true)} />
+        </div>
+      </div>
+      {tvStore && (
+        <WidgetStore
+          only={TV_ALLOWED}
+          onPick={def => {
+            addCanvasElement({
+              id: `CE-${Math.random().toString(36).slice(2, 9)}`,
+              type: 'widget', widget: def.id, board: TV_DASH_BOARD,
+              x: 0, y: 0, w: def.w, h: def.h, z: Date.now(),
+              text: '', color: '#ffffff',
+              addedAt: new Date().toISOString(),
+              data: def.data ? JSON.parse(JSON.stringify(def.data)) : {},
+            });
+            onToast(`${def.name} added to the wall`);
+          }}
+          onClose={() => setTvStore(false)}
+        />
+      )}
 
       {/* Aim the TV at part of the board. */}
       <label className="block text-xs font-semibold text-gray-600 mb-1">What the TV shows</label>

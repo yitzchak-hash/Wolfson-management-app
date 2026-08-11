@@ -22,9 +22,17 @@ const CARD_W = 226, CARD_H = 150;
  * All three are the same mistake: treating the store as a dialog that produces
  * one answer, rather than as a drawer you work out of.
  */
-export function WidgetStore({ onPick, onClose }: {
+export function WidgetStore({ onPick, onClose, only }: {
   onPick: (def: WidgetDef) => void;
   onClose: () => void;
+  /**
+   * Narrow the shelf to a set of ids.
+   *
+   * The wall screen uses this: a calculator or a note pad makes no sense on a
+   * display nobody touches, and offering them there is offering something that
+   * cannot work.
+   */
+  only?: Set<string>;
 }) {
   const [q, setQ] = useState('');
   const [cat, setCat] = useState<WidgetCategory | 'all'>('all');
@@ -62,9 +70,12 @@ export function WidgetStore({ onPick, onClose }: {
 
   const matches = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return WIDGETS.filter(w =>
-      !needle || w.name.toLowerCase().includes(needle) || w.blurb.toLowerCase().includes(needle));
-  }, [q]);
+    return WIDGETS
+      .filter(w => !only || only.has(w.id))
+      .filter(w => !needle
+        || w.name.toLowerCase().includes(needle)
+        || w.blurb.toLowerCase().includes(needle));
+  }, [q, only]);
 
   /** A row per group, each in its own order of usefulness. */
   const groups = useMemo(() => (['live', 'plan', 'ref', 'visual'] as WidgetCategory[])
@@ -129,7 +140,7 @@ export function WidgetStore({ onPick, onClose }: {
             <input
               ref={searchRef}
               autoFocus value={q} onChange={e => setQ(e.target.value)}
-              placeholder={`Search ${WIDGETS.length} widgets — a number, a list, a note, a picture…`}
+              placeholder={`Search ${only ? matches.length : WIDGETS.length} widgets — a number, a list, a note, a picture…`}
               className="flex-1 min-w-0 bg-transparent outline-none text-white text-[16px] placeholder:text-white/45"
             />
             {q && (

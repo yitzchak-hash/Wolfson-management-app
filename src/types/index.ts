@@ -239,6 +239,16 @@ export const MAIN_BOARD = '';
  */
 export const DASHBOARD_BOARD = '__dashboard';
 
+/**
+ * The wallboard's dashboard is a board too, for exactly the same reason.
+ *
+ * Its widgets are CanvasElements on this reserved board id, so arranging it,
+ * saving it and getting it onto every device is machinery that already exists
+ * and is already tested. It also means the settings screen can show the REAL
+ * thing and edit it in place, rather than a list of buttons describing it.
+ */
+export const TV_DASH_BOARD = '__tvdash';
+
 export function boardsForUser(views: BoardView[], projectId: string, userId: string, isAdmin: boolean) {
   return views.filter(v => v.projectId === projectId && boardAccess(v, userId, isAdmin) !== null);
 }

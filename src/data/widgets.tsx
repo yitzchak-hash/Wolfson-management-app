@@ -18,6 +18,7 @@ import { describeActivity } from './activityText';
 import { ClipArtNode, ART_KINDS, ArtKind } from '../components/board/BoardNodes';
 import { MiniJob } from '../components/board/MiniJob';
 import { ProjectMini, BoardMini, CalendarMini } from '../components/board/DashWidgets';
+import { TV_WIDGETS } from './tvWidgets';
 import { PlannerWidget, PlannerData, PlannerEntry } from '../components/board/PlannerWidget';
 
 /**
@@ -1876,6 +1877,15 @@ export function withSampleData(ctx: WidgetCtx): WidgetCtx {
   };
 }
 
+
+/**
+ * The wall widgets join the same registry.
+ *
+ * Registered here rather than inside the array so tvWidgets.tsx can import
+ * WidgetCtx and WidgetDef from this file without the two importing each other
+ * in a circle.
+ */
+WIDGETS.push(...TV_WIDGETS);
 
 export const WIDGET_BY_ID = new Map(WIDGETS.map(w => [w.id, w]));
 

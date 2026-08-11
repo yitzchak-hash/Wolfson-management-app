@@ -1,12 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useStore, loadAllProjectsTaskData } from '../data/store';
-import { Apartment, CanvasElement, isCountableApartment, BIN_META, getStageName } from '../types';
+import { Apartment, CanvasElement, isCountableApartment, BIN_META, getStageName, TV_DASH_BOARD } from '../types';
 import { DriveIcon, ZohoIcon, PlanIcon } from '../components/ui/BrandIcons';
 import { getBoardTheme } from '../data/boardThemes';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
 import { CountdownNode, StopwatchNode, ClipArtNode, StrokeLayer } from '../components/board/BoardNodes';
-import { renderWidget } from '../data/widgets';
+import { renderWidget, WidgetCtx } from '../data/widgets';
+import { TV_ALLOWED } from '../data/tvWidgets';
+import { TvDashboard } from '../components/board/TvDashboard';
+import { useOrientation } from '../data/useOrientation';
 import { WidgetStore } from '../components/board/WidgetStore';
 import { extractFileId } from '../data/driveApi';
 import { PenLine, Maximize, Minimize, Pencil, X as CloseIcon, Plus } from 'lucide-react';
@@ -36,7 +39,7 @@ export function TvPresentationPage() {
   const {
     projects, apartments, stages, contractorAssignments, contractorPhotos, canvasElements,
     boardSettings, currentProjectId, setCurrentProject, startFirebaseSync, firebaseListening,
-    users, contractors, addCanvasElement, updateCanvasElement,
+    users, contractors, activityLogs, addCanvasElement, updateCanvasElement,
   } = useStore();
 
   /**
@@ -179,6 +182,12 @@ export function TvPresentationPage() {
    * which is the behaviour you want on a screen nobody logs out of.
    */
   const [editing, setEditing] = useState(false);
+
+  /**
+   * The panel turns. Everything below reads this rather than the window
+   * directly, so one rule decides how every view lays itself out.
+   */
+  const shape = useOrientation();
   /** Which stages the building diagram is narrowed to. Empty = all of them. */
   const [stageFilter, setStageFilter] = useState<string[]>([]);
   /** A group opened by tapping it — read-only, like everything else here. */
@@ -264,6 +273,25 @@ export function TvPresentationPage() {
     window.addEventListener('pointerup', up);
   }
 
+  /** One context for every widget on the wall — live figures, nothing editable. */
+  const wallCtx: WidgetCtx = useMemo(() => ({
+    jobs: apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed && !a.boardBin),
+    stages,
+    assignments: contractorAssignments,
+    contractors, users,
+    photos: contractorPhotos,
+    logs: activityLogs,
+    update: () => {},                       // bound per element inside TvDashboard
+    openJob: (id: string) => {
+      const j = apartments.find(a => a.id === id);
+      if (j) { setPhotoAt(0); setOpenJob(j); }
+    },
+    // A widget on the wall shows live figures and cannot be typed into. Only
+    // the pen unlocks arranging, and that moves cards rather than editing them.
+    readOnly: !editing,
+  }), [apartments, stages, contractorAssignments, contractors, users, contractorPhotos,
+       activityLogs, editing]);
+
   const theme = getBoardTheme(boardSettings[currentProjectId]?.themeId);
 
   const stageOf = (a: Apartment) => stages.find(s => s.id === a.currentStageId) ?? null;
@@ -285,9 +313,19 @@ export function TvPresentationPage() {
    * the MIDDLE where a room reads it, and the controls that get used once a
    * week sit on the right. Every control is a touch target, not a hover.
    */
+  /**
+   * The bar is WHITE.
+   *
+   * The logo is drawn for a light background, and on navy it came out washed
+   * out from any distance — and a dark strip across the top of an otherwise
+   * light screen is the one thing in the room that draws the eye for no reason.
+   * Inverting it puts the mark on the ground it was made for and turns the
+   * buttons into navy on white, which reads further across a room.
+   */
   const barBtn = 'flex items-center gap-2 rounded-full font-bold transition-colors';
-  const off = { backgroundColor: 'rgba(255,255,255,.12)', color: '#cbd5e1' };
-  const on = { backgroundColor: '#fff', color: '#1e3a5f' };
+  const off = { backgroundColor: '#eef2f7', color: '#475569' };
+  const on = { backgroundColor: '#1e3a5f', color: '#fff' };
+  const portrait = shape.orientation === 'portrait';
 
   /**
    * The way out of full screen, for a finger.
@@ -309,8 +347,10 @@ export function TvPresentationPage() {
   ) : null;
 
   const bar = (
-    <div className="relative flex items-center gap-2 px-4 py-2.5 bg-[#1e3a5f] text-white flex-shrink-0"
-      style={{ fontSize: 15 * Math.min(scale, 1.6) }}>
+    <div
+      className={`relative flex items-center gap-2 px-4 py-2.5 bg-white text-slate-700 flex-shrink-0
+                  ${portrait ? 'flex-wrap justify-center' : ''}`}
+      style={{ fontSize: 15 * Math.min(scale, 1.6), borderBottom: '2px solid #e2e8f0' }}>
 
       {/* Views, on the left. */}
       {projects.map(p => (
@@ -327,7 +367,7 @@ export function TvPresentationPage() {
         {t('Dashboard', 'לוח בקרה')}
       </button>
 
-      <span className="w-px h-6 mx-1" style={{ backgroundColor: 'rgba(255,255,255,.18)' }} />
+      <span className="w-px h-6 mx-1" style={{ backgroundColor: '#e2e8f0' }} />
 
       {/* Full screen, and the way back out — beside the views, as asked. */}
       <button onClick={toggleFull} title={t('Full screen', 'מסך מלא')}
@@ -357,22 +397,24 @@ export function TvPresentationPage() {
       </button>
 
       {/* The company mark, large, in the middle of the room's eyeline.
-          On a white plate: the logo is drawn for a light background and on the
-          navy bar it came out washed out and unreadable from any distance. */}
-      <div className="absolute left-1/2 -translate-x-1/2 flex items-center pointer-events-none">
-        <span className="rounded-xl px-4 py-1.5 flex items-center"
-          style={{ backgroundColor: '#fff', boxShadow: '0 2px 10px rgba(0,0,0,.18)' }}>
+          In portrait it sits IN the flow instead of centred absolutely — a
+          1080-wide bar has no middle to spare, and an absolutely centred logo
+          simply lands on top of the buttons. */}
+      {portrait ? (
+        <img src="/tzviair-logo.png" alt="TzviAir" className="object-contain order-first w-full"
+          style={{ height: 44 * Math.min(scale, 1.8) }} />
+      ) : (
+        <div className="absolute left-1/2 -translate-x-1/2 flex items-center pointer-events-none">
           <img src="/tzviair-logo.png" alt="TzviAir"
-            style={{ height: 46 * Math.min(scale, 1.8) }}
-            className="object-contain" />
-        </span>
-      </div>
+            style={{ height: 46 * Math.min(scale, 1.8) }} className="object-contain" />
+        </div>
+      )}
 
       <span className="flex-1" />
 
       {overdue > 0 && (
         <span className="px-3 py-1.5 rounded-full font-bold"
-          style={{ backgroundColor: 'rgba(239,68,68,.22)', color: '#fca5a5' }}>
+          style={{ backgroundColor: '#fdecea', color: '#b4342a' }}>
           {overdue} {t('overdue', 'באיחור')}
         </span>
       )}
@@ -382,13 +424,13 @@ export function TvPresentationPage() {
         {(['en', 'he'] as const).map(l => (
           <button key={l} onClick={() => setLang(l)}
             className="px-3 py-1.5 font-bold transition-colors"
-            style={lang === l ? on : { color: '#cbd5e1' }}>
+            style={lang === l ? on : { color: '#64748b' }}>
             {l === 'en' ? 'EN' : 'עב'}
           </button>
         ))}
       </div>
 
-      <span className="font-bold tabular-nums">
+      <span className="font-bold tabular-nums text-slate-600 whitespace-nowrap">
         {now.toLocaleDateString(isRtl ? 'he-IL' : undefined, { weekday: 'short', day: 'numeric', month: 'short' })} · {now.toLocaleTimeString(isRtl ? 'he-IL' : undefined, { hour: '2-digit', minute: '2-digit' })}
       </span>
     </div>
@@ -436,8 +478,15 @@ export function TvPresentationPage() {
           * stage, the links, the outstanding work — is a section of its own
           * underneath, rather than being scattered across three cards.
           */}
+        {/* Turned on its side, the plan goes on TOP and the rest below it —
+            side by side in a 1080-wide window leaves the drawing a sliver. */}
         <div className="flex-1 grid gap-3 p-3 min-h-0"
-          style={{ gridTemplateColumns: '1.9fr 1fr', fontSize: 15 * Math.min(scale, 1.6) }}>
+          style={{
+            ...(shape.orientation === 'portrait'
+              ? { gridTemplateRows: '1.6fr 1fr', gridTemplateColumns: '1fr' }
+              : { gridTemplateColumns: '1.9fr 1fr' }),
+            fontSize: 15 * Math.min(scale, 1.6),
+          }}>
 
           <div className="relative bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col min-h-0">
             <div className="px-3 py-2 font-extrabold border-b border-gray-200 flex items-center gap-2 flex-shrink-0">
@@ -491,7 +540,8 @@ export function TvPresentationPage() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 min-h-0">
+          <div className={`gap-3 min-h-0 ${shape.orientation === 'portrait'
+            ? 'grid grid-cols-2' : 'flex flex-col'}`}>
             {/* One photo, large, with the folder a tap away. */}
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col"
               style={{ flex: '1.5 1 0%', minHeight: 0 }}>
@@ -626,138 +676,48 @@ export function TvPresentationPage() {
   // ── Company dashboard ──
   if (view === 'dashboard') {
     /**
-     * The numbers on the wall.
+     * The wall's dashboard is a BOARD, arranged in app settings.
      *
-     * Two things were wrong. Every workspace was read from its own cache,
-     * including the one that is actually loaded and live — so the workspace you
-     * were looking at could be minutes out of date on the very screen showing
-     * it. And the overdue figure counted every task in every workspace,
-     * including tasks on jobs filed into Done or Trash and tasks pointing at
-     * apartments that no longer exist, which is the same fault the office
-     * dashboard had.
-     *
-     * The active workspace is overlaid with live state, and every task figure
-     * is scoped to jobs that still count — the same isCountableApartment() rule
-     * that decides the unit totals, so the two can never disagree.
+     * It used to be three fixed cards computed here, which meant "make it
+     * mind-blowing" would have been a rewrite of this function every time
+     * somebody wanted a different figure on the wall. Now it holds whatever has
+     * been put on it, out of the same shelf the office dashboard uses — and it
+     * reflows for a panel turned on its side, because a Flip screen does that.
      */
-    const totals = projects.map(p => {
-      const cached = allProjects.find(x => x.projectId === p.id);
-      const isLive = p.id === currentProjectId;
-      const apts = (isLive ? apartments : (cached?.apartments ?? [])).filter(isCountableApartment);
-      const live = new Set(apts.map(a => a.id));
-      const tasks = (isLive ? contractorAssignments : (cached?.assignments ?? []))
-        .filter(a => live.has(a.apartmentId));
-      const today = new Date().toISOString().slice(0, 10);
-      const staged = apts.filter(a => a.currentStageId).length;
-      return {
-        p, isLive,
-        units: apts.length,
-        started: staged,
-        notStarted: apts.length - staged,
-        pct: apts.length ? Math.round((staged / apts.length) * 100) : 0,
-        open: tasks.filter(a => !a.completedAt).length,
-        late: tasks.filter(a => !a.completedAt && a.dueDate && a.dueDate < today).length,
-        doneToday: tasks.filter(a => a.completedAt && a.completedAt.startsWith(today)).length,
-      };
-    });
-    const lateAll = totals.reduce((n, x) => n + x.late, 0);
-
     return (
-      <div ref={frameRef} dir={isRtl ? 'rtl' : 'ltr'} className="h-screen w-screen flex flex-col bg-slate-100 overflow-hidden">
+      <div ref={frameRef} dir={isRtl ? 'rtl' : 'ltr'}
+        className="h-screen w-screen flex flex-col bg-slate-100 overflow-hidden">
         {bar}
         {exitFull}
-        <div className="flex-1 grid gap-3 p-4 min-h-0 overflow-auto"
-          style={{
-            fontSize: 15 * Math.min(scale, 1.6),
-            gridTemplateColumns: `repeat(${Math.min(3, Math.max(1, totals.length))}, minmax(0, 1fr))`,
-          }}>
-
-          {/* A workspace is not one number. Each card carries what somebody
-              standing at the wall would otherwise have to ask about: how much
-              there is, how much has started, what is late and what finished
-              today, and how it is spread across the stages. */}
-          {totals.map(x => (
-            <button
-              key={x.p.id}
-              onClick={() => { setView(x.p.id); setOpenJob(null); }}
-              className="bg-white rounded-2xl border border-gray-200 p-5 text-left flex flex-col min-h-0
-                         hover:border-[#4aa8d8] transition-colors"
-            >
-              <div className="flex items-center gap-2 mb-3">
-                <span className="w-3 h-3 rounded-full" style={{ backgroundColor: x.p.color }} />
-                <span className="font-extrabold truncate" style={{ color: x.p.color }}>{x.p.name}</span>
-                {x.isLive && (
-                  <span className="ml-auto px-2 py-0.5 rounded-full font-bold"
-                    style={{ fontSize: '.6em', backgroundColor: '#dcfce7', color: '#15803d' }}>
-                    {t('live', 'חי')}
-                  </span>
-                )}
-              </div>
-
-              <div className="flex items-end gap-4 mb-3">
-                <span>
-                  <span className="font-black leading-none block" style={{ fontSize: '2.6em', color: x.p.color }}>
-                    {x.units}
-                  </span>
-                  <span className="text-gray-400" style={{ fontSize: '.75em' }}>{t('units', 'יחידות')}</span>
-                </span>
-                <span>
-                  <span className="font-black leading-none block text-slate-700" style={{ fontSize: '1.5em' }}>
-                    {x.pct}%
-                  </span>
-                  <span className="text-gray-400" style={{ fontSize: '.75em' }}>{t('started', 'התחילו')}</span>
-                </span>
-              </div>
-
-              <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden mb-3">
-                <div className="h-full rounded-full" style={{ width: `${x.pct}%`, backgroundColor: x.p.color }} />
-              </div>
-
-              <div className="grid grid-cols-3 gap-2 mb-3">
-                {[
-                  [x.open, t('open', 'פתוחות'), '#0369a1'],
-                  [x.late, t('late', 'באיחור'), x.late ? '#dc2626' : '#94a3b8'],
-                  [x.doneToday, t('done today', 'הושלמו היום'), '#15803d'],
-                ].map(([n, label, colour], i) => (
-                  <span key={i} className="rounded-xl bg-slate-50 px-2 py-1.5">
-                    <span className="font-black block leading-none" style={{ fontSize: '1.35em', color: colour as string }}>
-                      {n as number}
-                    </span>
-                    <span className="text-gray-400 block truncate" style={{ fontSize: '.68em' }}>{label as string}</span>
-                  </span>
-                ))}
-              </div>
-
-              {/* How it is spread — only for the workspace whose stages are
-                  loaded; another workspace's stage list is not in memory. */}
-              {x.isLive && (
-                <div className="flex-1 min-h-0 overflow-hidden">
-                  {stages.filter(st => st.active).slice(0, 6).map(st => {
-                    const n = apartments.filter(a => isCountableApartment(a) && a.currentStageId === st.id).length;
-                    if (!n) return null;
-                    return (
-                      <div key={st.id} className="flex items-center gap-2 mb-1">
-                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: st.color }} />
-                        <span className="flex-1 min-w-0 truncate text-gray-500" style={{ fontSize: '.75em' }}>
-                          {getStageName(st, isRtl)}
-                        </span>
-                        <b className="tabular-nums text-slate-700" style={{ fontSize: '.8em' }}>{n}</b>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </button>
-          ))}
-
-          {lateAll > 0 && (
-            <div className="rounded-2xl p-5 flex flex-col justify-center col-span-full"
-              style={{ backgroundColor: '#fee2e2', border: '1px solid #fecaca' }}>
-              <div className="font-black leading-none text-red-600" style={{ fontSize: '2.4em' }}>{lateAll}</div>
-              <div className="text-red-500 mt-1">{t('tasks overdue across every workspace', 'משימות באיחור בכל סביבות העבודה')}</div>
-            </div>
-          )}
-        </div>
+        <TvDashboard ctx={wallCtx} shape={shape} scale={scale} editing={editing}
+          onSpawn={editing ? () => setTvStoreOpen(true) : undefined} />
+        {editing && (
+          <button
+            onClick={() => setTvStoreOpen(true)}
+            className="absolute bottom-5 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2
+                       px-5 py-3 rounded-full font-bold text-white shadow-2xl"
+            style={{ backgroundColor: '#f59e0b', fontSize: 15 * Math.min(scale, 1.6) }}
+          >
+            <Plus size={18} /> {t('Add a widget', 'הוספת רכיב')}
+          </button>
+        )}
+        {tvStoreOpen && (
+          <WidgetStore
+            only={TV_ALLOWED}
+            onPick={def => {
+              addCanvasElement({
+                id: `CE-${Math.random().toString(36).slice(2, 9)}`,
+                type: 'widget', widget: def.id, board: TV_DASH_BOARD,
+                x: 0, y: 0, w: def.w, h: def.h,
+                z: Date.now(),
+                text: '', color: '#ffffff',
+                addedAt: new Date().toISOString(),
+                data: def.data ? JSON.parse(JSON.stringify(def.data)) : {},
+              });
+            }}
+            onClose={() => setTvStoreOpen(false)}
+          />
+        )}
       </div>
     );
   }
