@@ -848,6 +848,25 @@ slots from the cut-off onward move into `offKept` and come back exactly as they 
   drops out of `isCountableApartment()` and therefore out of every total in the app — far more than
   "came off a rota" should ever mean.
 
+## Contractor links must not depend on where you are standing
+`src/data/portalLink.ts` — `portalLink(token, domain)` · `bareDomain()` · `looksLikePreviewHost()`.
+
+A contractor link was built from `window.location.origin`, so it carried whatever address the office
+happened to be on when they pressed Copy. That is right on the live site and silently wrong on a
+preview build: **production deploys from the repo's default branch (`claude/blissful-cray-spTFY`) to
+`wolfson-management-app.vercel.app`; every other branch only ever produces PREVIEW deployments**, and a
+preview sits behind Vercel's own sign-in. So a link copied while using the v2 branch asks the
+contractor to log in to Vercel, and 404s once that build is superseded.
+
+`BoardSetting.portalDomain` (in the reserved app-wide `__tv` bag, so it inherits persist/sync/backup
+with no new state key) names the live address. Set it and a link is the same link whoever copies it.
+Settings → Contractors shows the resolved link and warns when it is being copied off a preview host.
+
+`looksLikePreviewHost()` requires a DIGIT in the hash segment — without it the pattern read
+"management" in `wolfson-management-app.vercel.app` as a build hash and called the live site a preview.
+`scratchpad/portal.mjs` imports the real helper rather than restating the rule; the first version of
+that test carried its own copy of the regex and only the copy got fixed.
+
 ## Node action buttons live ABOVE the node, not in its corner
 The settings / remove / TV strip on a board node floats above the top edge (`bottom: 100%`). It used to
 sit in the node's top-right corner, on top of whatever the widget drew there — the planner's "Today"

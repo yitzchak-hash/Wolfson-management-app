@@ -81,6 +81,21 @@ export interface BoardSetting {
    */
   tvDomain?: string;
   /**
+   * The address contractor portal links are handed out on.
+   *
+   * A contractor link used to be built from whatever address the office
+   * happened to be looking at when they pressed Copy. That is fine while
+   * everybody is on the live site and silently wrong the moment somebody is on
+   * a preview build: the link carries the preview address, and a preview sits
+   * behind Vercel's own sign-in, so the contractor is asked to log in to an
+   * account they will never have. Old preview addresses stop existing
+   * altogether, which is the 404.
+   *
+   * Set this to the live address and a link is the same link no matter who
+   * copies it or where they are standing. Blank keeps the old behaviour.
+   */
+  portalDomain?: string;
+  /**
    * Which board the wallboard shows. Empty is the workspace's main board.
    * Set by the top-level admin in app settings — never on the TV, which has no
    * keyboard and is read-only by design.

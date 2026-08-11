@@ -10,6 +10,7 @@ import { TvDashboard } from '../components/board/TvDashboard';
 import { WidgetStore } from '../components/board/WidgetStore';
 import { TV_ALLOWED } from '../data/tvWidgets';
 import { TV_DASH_BOARD } from '../types';
+import { portalLink, bareDomain, looksLikePreviewHost } from '../data/portalLink';
 import type { BoardAccess } from '../types';
 import { personColor, projectColor, BoardView, Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency, getStageName, Apartment, isCountableApartment } from '../types';
 import { Tooltip } from '../components/ui/Tooltip';
@@ -522,7 +523,10 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
   const { contractors, addContractor, updateContractor, deleteContractor, mainUiStrings: s } = useStore();
   const [form, setForm] = useState({ name: '', email: '', category: 'ac' as ContractorCategory });
 
-  const portalBase = `${window.location.origin}/c/`;
+  const portalDomain = useStore(st => (st.boardSettings.__tv ?? {}).portalDomain);
+  const setTvSetting = useStore(st => st.setTvSetting);
+  const portalBase = portalLink('', portalDomain).replace(/[^/]*$/, '');
+  const onPreview = !bareDomain(portalDomain) && looksLikePreviewHost();
   const grouped = (['drywall', 'ac', 'general'] as ContractorCategory[]).map(cat => ({
     cat, items: contractors.filter(c => c.category === cat),
   }));
@@ -538,6 +542,46 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
 
   return (
     <div className="space-y-6">
+      {/* Where the links point.
+          This exists because a contractor link was built from whatever address
+          the office was on when they pressed Copy — so working on a preview
+          build handed contractors a preview link, which asks them to sign in
+          to Vercel, and 404s once that build is superseded. */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4">
+        <label className="block text-xs font-semibold text-gray-600 mb-1">
+          Address contractor links use
+        </label>
+        <p className="text-[11px] text-gray-400 mb-2 leading-snug">
+          The address of the live site. Fill this in and every contractor link is the same link,
+          whoever copies it and whichever build they happen to be looking at. Leave it blank to use
+          the address you are on right now.
+        </p>
+        <input
+          value={portalDomain ?? ''}
+          onChange={e => setTvSetting('portalDomain', e.target.value)}
+          onBlur={() => onToast(bareDomain(portalDomain)
+            ? `Contractor links now start ${portalBase}`
+            : 'Contractor links will use whatever address you are on')}
+          placeholder={window.location.hostname}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono
+                     focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+        />
+        <p className="text-[11px] text-gray-400 mt-2">
+          Links look like <span className="font-mono">{portalBase}…</span>
+        </p>
+        {onPreview && (
+          <div className="mt-3 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg
+                          px-3 py-2 flex items-start gap-2">
+            <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" />
+            <span>
+              You are on a <strong>preview build</strong> ({window.location.hostname}), not the live
+              site. Links copied now will ask contractors to sign in to Vercel, and will stop working
+              when this build is replaced. Put the live address in the box above.
+            </span>
+          </div>
+        )}
+      </div>
+
       {grouped.map(({ cat, items }) => (
         <div key={cat}>
           <div className="flex items-center gap-2 mb-3">

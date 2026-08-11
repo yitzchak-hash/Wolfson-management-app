@@ -13,6 +13,7 @@ import {
   ContractorPhoto, ActivityLog, BIN_KINDS, BIN_META, isCountableApartment, personColor,
   User,
 } from '../types';
+import { portalLink } from './portalLink';
 import { useStore } from './store';
 import { describeActivity } from './activityText';
 import { ClipArtNode, ART_KINDS, ArtKind } from '../components/board/BoardNodes';
@@ -1418,10 +1419,13 @@ function ContractorLinks({ contractors, assignments }: {
   contractors: Contractor[]; assignments: ContractorAssignment[];
 }) {
   const [copied, setCopied] = useState<string | null>(null);
+  const portalDomain = useStore(st => (st.boardSettings.__tv ?? {}).portalDomain);
   const active = contractors.filter(c => c.active);
 
   function copy(c: Contractor) {
-    const url = `${window.location.origin}/c/${c.token}`;
+    // Through the same helper as settings, so the board widget can never hand
+    // out a different address from the one settings promises.
+    const url = portalLink(c.token, portalDomain);
     navigator.clipboard?.writeText(url).then(() => {
       setCopied(c.id);
       setTimeout(() => setCopied(null), 1600);
