@@ -9,6 +9,9 @@ import {
 import { Navigate } from 'react-router-dom';
 import { useStore } from '../data/store';
 import { rotaCellAt, setRotaHover, anyRota, RotaHit } from '../data/rotaDrop';
+import { PlannerEntry, personOf } from '../components/board/PlannerWidget';
+import { PlannerTaskDialog, PlannerRemoveDialog } from '../components/board/PlannerDialogs';
+import { ScheduleWindow } from '../components/board/ScheduleWindow';
 import { boardAccess } from '../types';
 import { Apartment, CanvasElement, BinKind, BIN_KINDS, BIN_META, binKeyOf, binLabelOf, isBuiltInBin, getStageName } from '../types';
 import { printTable, printDot } from '../data/printing';
@@ -193,6 +196,7 @@ export function GeneralJobsPage() {
     contractorPhotos,
     contractors,
     users,
+    deleteContractorAssignment,
     activityLogs,
     boardLayouts,
     saveBoardLayout,
@@ -236,6 +240,13 @@ export function GeneralJobsPage() {
   const [jobZoho, setJobZoho] = useState('');
   const [jobDrive, setJobDrive] = useState('');
   const [toast, setToast] = useState<string | null>(null);
+  /** A drop waiting on the "make it a task?" answer. */
+  const [plannerDrop, setPlannerDrop] = useState<{ cell: RotaHit; job: Apartment } | null>(null);
+  /** A slot being emptied that has a task behind it. */
+  const [plannerRemove, setPlannerRemove] =
+    useState<{ entry: PlannerEntry; done: (alsoDelete: boolean) => void } | null>(null);
+  /** The whole schedule, opened from a planner. */
+  const [scheduleFor, setScheduleFor] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ ids: string[]; taskCount: number } | null>(null);
 
   const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set());
@@ -973,21 +984,48 @@ export function GeneralJobsPage() {
    * board, and taking it back out of a cell (the × on the chip) leaves the job
    * exactly where it was.
    */
-  function dropOnRota(cell: RotaHit, ids: string[]) {
+  /**
+   * Dropping a job onto a planner slot.
+   *
+   * The job STAYS ON THE BOARD — it snaps into the slot rather than moving into
+   * it. A planner entry is a reference, not a relocation: the same job can be on
+   * two people's rows on two days without being duplicated or taken off the
+   * board, and taking it back out leaves the job exactly where it was.
+   *
+   * A slot holds as many as the day really holds. Nothing is ever squeezed to
+   * fit; the row grows instead.
+   */
+  function placeOnPlanner(cell: RotaHit, ids: string[], taskId?: string) {
     setRotaHover(null);
     const el = canvasElements.find(c => c.id === cell.elId);
     if (!el) return;
     const data = (el.data ?? {}) as Record<string, unknown>;
-    const cells = { ...((data.cells ?? {}) as Record<string, { id: string; jobId?: string }[]>) };
+    const cells = { ...((data.cells ?? {}) as Record<string, PlannerEntry[]>) };
     const key = `${cell.person}|${cell.day}`;
     const already = cells[key] ?? [];
     const fresh = ids
       .filter(id => !already.some(e => e.jobId === id))
-      .map(id => ({ id: `R-${Math.random().toString(36).slice(2, 8)}`, jobId: id }));
+      .map(id => ({ id: `R-${Math.random().toString(36).slice(2, 8)}`, jobId: id, taskId }));
     if (!fresh.length) return;
     cells[key] = [...already, ...fresh];
     updateCanvasElement(el.id, { data: { ...data, cells } });
-    setToast(fresh.length === 1 ? 'Put on the rota' : `${fresh.length} jobs put on the rota`);
+    setToast(fresh.length === 1 ? 'Put on the planner' : `${fresh.length} jobs put on the planner`);
+  }
+
+  /**
+   * Either place it, or ask first.
+   *
+   * The question is worth asking because most of a task is already known at
+   * this moment — the job, the day, the date and the person — so the form is
+   * three-quarters filled in before it opens. It is a setting because a planner
+   * used purely as a whiteboard should not interrogate every drop.
+   */
+  function dropOnRota(cell: RotaHit, ids: string[]) {
+    const el = canvasElements.find(c => c.id === cell.elId);
+    const ask = !!(el?.data as Record<string, unknown> | undefined)?.askOnDrop;
+    const job = ids.length === 1 ? apartments.find(a => a.id === ids[0]) : undefined;
+    if (ask && job) { setRotaHover(null); setPlannerDrop({ cell, job }); return; }
+    placeOnPlanner(cell, ids);
   }
 
   /** Files a job into a group, with the Done celebration when that is the one. */
@@ -3538,6 +3576,69 @@ export function GeneralJobsPage() {
           onToast={msg => setToast(msg)}
         />
       )}
+
+      {/* ── The planner's three windows ─────────────────────────────────── */}
+      {plannerDrop && (() => {
+        const el = canvasElements.find(c => c.id === plannerDrop.cell.elId);
+        const who = personOf(plannerDrop.cell.person, contractors, users);
+        return (
+          <PlannerTaskDialog
+            job={plannerDrop.job}
+            person={who}
+            dayIso={plannerDrop.cell.day}
+            stages={allStages.filter(st => st.projectId === 'general')}
+            contractors={contractors}
+            onCancel={() => setPlannerDrop(null)}
+            onDone={taskId => {
+              placeOnPlanner(plannerDrop.cell, [plannerDrop.job.id], taskId);
+              setPlannerDrop(null);
+              if (taskId) setToast('On the planner, and a task added');
+            }}
+          />
+        );
+      })()}
+
+      {plannerRemove && (
+        <PlannerRemoveDialog
+          jobName={apartments.find(a => a.id === plannerRemove.entry.jobId)?.displayName || 'this job'}
+          taskName={contractorAssignments.find(a => a.id === plannerRemove.entry.taskId)?.taskDescription
+            || 'the task on it'}
+          onCancel={() => setPlannerRemove(null)}
+          onDone={alsoDelete => {
+            if (alsoDelete && plannerRemove.entry.taskId) {
+              deleteContractorAssignment(plannerRemove.entry.taskId);
+            }
+            plannerRemove.done(alsoDelete);
+            setPlannerRemove(null);
+          }}
+        />
+      )}
+
+      {scheduleFor && (() => {
+        const el = canvasElements.find(c => c.id === scheduleFor);
+        if (!el) return null;
+        return (
+          <ScheduleWindow
+            el={el}
+            jobs={jobs}
+            contractors={contractors}
+            users={users}
+            stages={allStages.filter(st => st.projectId === 'general')}
+            onClose={() => setScheduleFor(null)}
+            onOpenJob={id => {
+              const j = apartments.find(a => a.id === id);
+              if (j) { setScheduleFor(null); setSelectedJob(j); }
+            }}
+            onRemove={(cellKey, entryId) => {
+              const data = (el.data ?? {}) as Record<string, unknown>;
+              const cells = { ...((data.cells ?? {}) as Record<string, PlannerEntry[]>) };
+              const left = (cells[cellKey] ?? []).filter(e => e.id !== entryId);
+              if (left.length) cells[cellKey] = left; else delete cells[cellKey];
+              updateCanvasElement(el.id, { data: { ...data, cells } });
+            }}
+          />
+        );
+      })()}
 
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
 

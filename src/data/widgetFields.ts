@@ -171,7 +171,12 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
     {
       key: 'people', label: 'Who is on it', kind: 'people',
       hint: 'Contractors and office staff. Drag the handles to reorder the rows; '
-        + 'each person keeps their own colour.',
+        + 'each person keeps their own colour. Taking somebody off asks from when.',
+    },
+    {
+      key: 'mode', label: 'Show', kind: 'select',
+      options: [{ value: 'week', label: 'One week' }, { value: 'month', label: 'A whole month' }],
+      hint: 'The arrows step a week in week view and a month in month view.',
     },
     {
       key: 'span', label: 'Days across', kind: 'select',
@@ -182,15 +187,37 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
       ],
     },
     {
-      key: 'weeks', label: 'Weeks stacked', kind: 'number', min: 1, max: 6,
-      hint: 'One for a single week; four or five makes it a month.',
+      key: 'weekStart', label: 'Week starts on', kind: 'select',
+      options: [{ value: '0', label: 'Sunday' }, { value: '1', label: 'Monday' }],
     },
-    { key: 'textSize', label: 'Text size', kind: 'number', min: 7, max: 20 },
-    { key: 'dayNameSize', label: 'Day-name size', kind: 'number', min: 7, max: 22 },
+    {
+      key: 'hebrew', label: 'Hebrew date', kind: 'select',
+      options: [{ value: '1', label: 'Show it' }, { value: '', label: 'Hide it' }],
+      hint: 'Under the English date in every day header.',
+    },
+    {
+      key: 'holJewish', label: 'Jewish holidays', kind: 'select',
+      options: [{ value: '1', label: 'Show them' }, { value: '', label: 'Hide them' }],
+    },
+    {
+      key: 'holIsraeli', label: 'Israeli national days', kind: 'select',
+      options: [{ value: '1', label: 'Show them' }, { value: '', label: 'Hide them' }],
+    },
+    {
+      key: 'holSecular', label: 'English / secular holidays', kind: 'select',
+      options: [{ value: '', label: 'Hide them' }, { value: '1', label: 'Show them' }],
+    },
+    {
+      key: 'askOnDrop', label: 'Ask when a job is dropped in', kind: 'select',
+      options: [{ value: '1', label: 'Offer to make a task' }, { value: '', label: 'Just place it' }],
+      hint: 'The stage is the only thing to choose — the day, date and person are already known.',
+    },
+    { key: 'textSize', label: 'Text size', kind: 'number', min: 7, max: 26 },
+    { key: 'dayNameSize', label: 'Day-name size', kind: 'number', min: 7, max: 28 },
     { key: 'bold', label: 'Bold text', kind: 'select',
       options: [{ value: '', label: 'Normal' }, { value: '1', label: 'Bold' }] },
-    { key: 'start', label: 'Starting week', kind: 'datetime',
-      hint: 'The Sunday the top week begins on. The arrows on the rota move it too.' },
+    { key: 'start', label: 'Anchored on', kind: 'datetime',
+      hint: 'The week or month the view opens at. The arrows move it too.' },
   ],
   milestones: [title()],
   calculator: [title('Label')],

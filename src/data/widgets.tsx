@@ -18,7 +18,7 @@ import { describeActivity } from './activityText';
 import { ClipArtNode, ART_KINDS, ArtKind } from '../components/board/BoardNodes';
 import { MiniJob } from '../components/board/MiniJob';
 import { ProjectMini, BoardMini, CalendarMini } from '../components/board/DashWidgets';
-import { RotaWidget, RotaData } from '../components/board/RotaWidget';
+import { PlannerWidget, PlannerData, PlannerEntry } from '../components/board/PlannerWidget';
 
 /**
  * The widget store.
@@ -62,6 +62,10 @@ export interface WidgetCtx {
   openJob: (id: string) => void;
   /** Switch to another workspace. Only the dashboard supplies this. */
   openProject?: (id: string) => void;
+  /** Open the whole schedule in a window. Only the board supplies this. */
+  showAllScheduled?: (plannerId: string) => void;
+  /** Ask what to do with the task behind a planner slot being emptied. */
+  askRemoveTask?: (entry: PlannerEntry, done: (alsoDelete: boolean) => void) => void;
   /** The TV passes this: widgets render, but nothing can be changed. */
   readOnly?: boolean;
 }
@@ -578,20 +582,32 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'rota', rank: 1, name: 'Rota', category: 'plan', icon: CalendarDays, w: 720, h: 300,
-    blurb: 'People down the left, Sunday to Thursday across the top, weeks stacked. '
-      + 'Drag a job onto a cell, or just type into it.',
-    data: { weeks: 2, span: 5, people: [], cells: {}, textSize: 10, dayNameSize: 10 },
+    /**
+     * The id stays 'rota' so every planner already on a board keeps its people
+     * and its filled-in days. Only the name and the component changed.
+     */
+    id: 'rota', rank: 1, name: 'Planner', category: 'plan', icon: CalendarDays, w: 760, h: 340,
+    blurb: 'People down the left, days across, a slot at every crossing. Drag a job onto a day, '
+      + 'or just type into it. Hebrew dates and holidays optional.',
+    data: {
+      mode: 'week', span: 5, weekStart: 0, people: [], cells: {},
+      hebrew: true, holidays: { jewish: true, israeli: true }, askOnDrop: true,
+      textSize: 11, dayNameSize: 11,
+    },
     render: (el, c) => (
-      <RotaWidget
+      <PlannerWidget
         el={el}
-        data={(el.data ?? {}) as RotaData}
+        data={(el.data ?? {}) as PlannerData}
         jobs={c.jobs}
         contractors={c.contractors}
         users={c.users}
+        assignments={c.assignments}
+        stages={c.stages}
         readOnly={c.readOnly}
         update={c.update}
         openJob={c.openJob}
+        onShowAll={c.showAllScheduled ? () => c.showAllScheduled!(el.id) : undefined}
+        onRemoveTask={c.askRemoveTask}
       />
     ),
   },
