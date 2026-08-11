@@ -70,6 +70,17 @@ export interface WidgetCtx {
   askRemoveTask?: (entry: PlannerEntry, done: (alsoDelete: boolean) => void) => void;
   /** The TV passes this: widgets render, but nothing can be changed. */
   readOnly?: boolean;
+  /**
+   * The board's own nodes, for the widgets that read another widget.
+   *
+   * "Out today" and "Tomorrow" answer from whatever planner is on the board,
+   * which they normally take straight from the store. On the widget shelf
+   * there is no board, so they drew their "nothing on for that day" message —
+   * indistinguishable from working correctly on a quiet day, and useless as a
+   * preview. When this is set it is used instead of the store, which is how
+   * the shelf hands them a sample planner.
+   */
+  boardElements?: CanvasElement[];
 }
 
 export interface WidgetDef {
@@ -1818,12 +1829,26 @@ const SAMPLE_JOBS: Apartment[] = [
 ].map(j => ({ ...j, buildingId: 'G', isUnnamed: false, createdAt: new Date(Date.now() - 2 * 86_400_000).toISOString() })) as unknown as Apartment[];
 
 const day = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+/** The same day counted locally — the planner's convention. */
+const localDay = (n: number) => {
+  const d = new Date(Date.now() + n * 86_400_000);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+};
 const SAMPLE_TASKS: ContractorAssignment[] = [
   { id: 't1', apartmentId: 'j1', contractorId: 'k1', taskDescription: 'Hang the units', dueDate: day(-6) },
   { id: 't2', apartmentId: 'j3', contractorId: 'k2', taskDescription: 'Duct run', dueDate: day(-2) },
   { id: 't3', apartmentId: 'j2', contractorId: 'k1', taskDescription: 'Grilles', dueDate: day(0) },
   { id: 't4', apartmentId: 'j4', contractorId: 'k3', taskDescription: 'Commissioning', dueDate: day(2) },
   { id: 't5', apartmentId: 'j5', contractorId: 'k2', taskDescription: 'Thermostats', dueDate: day(4) },
+] as unknown as ContractorAssignment[];
+
+/** Work already finished, spread across this week, for the bar chart. */
+const SAMPLE_DONE: ContractorAssignment[] = [
+  { id: 'td1', apartmentId: 'j1', contractorId: 'k1', taskDescription: 'First fix', completed: true, completedAt: `${localDay(-1)}T09:10:00.000Z` },
+  { id: 'td2', apartmentId: 'j2', contractorId: 'k2', taskDescription: 'Drops', completed: true, completedAt: `${localDay(-1)}T14:20:00.000Z` },
+  { id: 'td3', apartmentId: 'j3', contractorId: 'k1', taskDescription: 'Grilles', completed: true, completedAt: `${localDay(-2)}T11:00:00.000Z` },
+  { id: 'td4', apartmentId: 'j4', contractorId: 'k3', taskDescription: 'Snagging', completed: true, completedAt: `${localDay(-3)}T16:40:00.000Z` },
+  { id: 'td5', apartmentId: 'j5', contractorId: 'k2', taskDescription: 'Thermostats', completed: true, completedAt: `${localDay(0)}T08:05:00.000Z` },
 ] as unknown as ContractorAssignment[];
 
 const SAMPLE_CONTRACTORS: Contractor[] = [
@@ -1858,25 +1883,111 @@ const shot = (a: string, b: string, roof: string) =>
        <circle cx="96" cy="24" r="10" fill="#ffffff" opacity=".55"/>
      </svg>`);
 
+/**
+ * Sample photos, each ATTACHED TO A TASK.
+ *
+ * The photo wall groups pictures under the job they came from, which it works
+ * out photo → assignment → apartment. Sample photos with no `assignmentId`
+ * belong to no job, so every one of them was dropped and the wall previewed as
+ * "No photos yet" — a widget that looked broken on the shelf.
+ */
 const SAMPLE_PHOTOS: ContractorPhoto[] = [
-  { id: 'p1', dataUrl: shot('#bfdbfe', '#cbd5e1', '#64748b'), uploadedAt: new Date(Date.now() - 3_600_000).toISOString() },
-  { id: 'p2', dataUrl: shot('#bbf7d0', '#d1d5db', '#475569'), uploadedAt: new Date(Date.now() - 9_000_000).toISOString() },
-  { id: 'p3', dataUrl: shot('#fde68a', '#e2e8f0', '#78716c'), uploadedAt: new Date(Date.now() - 26_000_000).toISOString() },
-  { id: 'p4', dataUrl: shot('#fecaca', '#cbd5e1', '#57534e'), uploadedAt: new Date(Date.now() - 51_000_000).toISOString() },
-  { id: 'p5', dataUrl: shot('#ddd6fe', '#d1d5db', '#52525b'), uploadedAt: new Date(Date.now() - 76_000_000).toISOString() },
-  { id: 'p6', dataUrl: shot('#a5f3fc', '#e5e7eb', '#3f3f46'), uploadedAt: new Date(Date.now() - 99_000_000).toISOString() },
+  { id: 'p1', assignmentId: 't1', dataUrl: shot('#bfdbfe', '#cbd5e1', '#64748b'), uploadedAt: new Date(Date.now() - 3_600_000).toISOString() },
+  { id: 'p2', assignmentId: 't1', dataUrl: shot('#bbf7d0', '#d1d5db', '#475569'), uploadedAt: new Date(Date.now() - 9_000_000).toISOString() },
+  { id: 'p3', assignmentId: 't2', dataUrl: shot('#fde68a', '#e2e8f0', '#78716c'), uploadedAt: new Date(Date.now() - 26_000_000).toISOString() },
+  { id: 'p4', assignmentId: 't2', dataUrl: shot('#fecaca', '#cbd5e1', '#57534e'), uploadedAt: new Date(Date.now() - 51_000_000).toISOString() },
+  { id: 'p5', assignmentId: 't3', dataUrl: shot('#ddd6fe', '#d1d5db', '#52525b'), uploadedAt: new Date(Date.now() - 76_000_000).toISOString() },
+  { id: 'p6', assignmentId: 't4', dataUrl: shot('#a5f3fc', '#e5e7eb', '#3f3f46'), uploadedAt: new Date(Date.now() - 99_000_000).toISOString() },
 ] as unknown as ContractorPhoto[];
+
+/**
+ * A planner with somebody on it, for the two wall widgets that read one.
+ *
+ * "Out today" and "Tomorrow" draw from whatever planner is on the board. On
+ * the shelf there is no board, so both previewed as "Nothing on the planner
+ * for that day" — which is exactly what they say when they are working
+ * correctly and there is nothing on, so the shelf could not tell you what
+ * they were for.
+ */
+function samplePlanner(jobs: Apartment[], people: Contractor[]): CanvasElement {
+  // Built from whatever the preview ENDED UP with, not from the sample ids.
+  // A machine with two real contractors and three real jobs keeps them, and a
+  // planner naming `k1` and `j1` then resolved to nothing — so the card read
+  // "Someone · a job" three times over, which looks like a fault.
+  const who = people.slice(0, 3).map(p => `c:${p.id}`);
+  const what = jobs.slice(0, 5).map(j => j.id);
+  const at = (p: number, dayOffset: number) => `${who[p % who.length]}|${localDay(dayOffset)}`;
+  const cells: Record<string, { id: string; jobId?: string; text?: string }[]> = {};
+  if (who.length && what.length) {
+    cells[at(0, 0)] = [{ id: 's1', jobId: what[0] }];
+    cells[at(1, 0)] = [{ id: 's2', jobId: what[1 % what.length] }, { id: 's3', text: 'Pardes 8 am' }];
+    if (who.length > 2) cells[at(2, 0)] = [{ id: 's4', jobId: what[2 % what.length] }];
+    cells[at(0, 1)] = [{ id: 's5', jobId: what[3 % what.length] }];
+    cells[at(1, 1)] = [{ id: 's6', jobId: what[4 % what.length] }];
+  }
+  return {
+    id: 'CE-sample-planner', type: 'widget', widget: 'rota',
+    x: 0, y: 0, w: 900, h: 460, text: '', color: '#ffffff',
+    // Local dates, because that is what the planner writes and what the two
+    // wall widgets look up. `day()` above is UTC and is only right for due
+    // dates, which are compared against other UTC strings.
+    data: { title: 'Planner', people: who, cells },
+  } as unknown as CanvasElement;
+}
 
 /** Real data where there is any, samples where there is not — field by field. */
 export function withSampleData(ctx: WidgetCtx): WidgetCtx {
+  const jobs = ctx.jobs.length ? ctx.jobs : SAMPLE_JOBS;
+  const contractors = ctx.contractors.length ? ctx.contractors : SAMPLE_CONTRACTORS;
+
+  /**
+   * Sample rows are re-pointed at whatever is REALLY there.
+   *
+   * Each field falls back on its own, so a machine with three real jobs and no
+   * tasks kept the real jobs and took the sample tasks — which name `j1`, a
+   * job that does not exist here. Every widget that looks a task's job up then
+   * printed "a job", which reads as a fault rather than as a sample. Spreading
+   * them round the real ids costs nothing and makes the shelf tell the truth.
+   */
+  const repoint = <T extends ContractorAssignment>(rows: T[]): T[] => rows.map((a, i) => ({
+    ...a,
+    apartmentId: jobs.length ? jobs[i % jobs.length].id : a.apartmentId,
+    contractorId: contractors.length ? contractors[i % contractors.length].id : a.contractorId,
+  }));
+
+  const assignments = ctx.assignments.length ? ctx.assignments : repoint(SAMPLE_TASKS);
+
+  /**
+   * Photos only stand in when the JOBS and TASKS they hang off are samples
+   * too. Real photos are found through their task to their job; sample photos
+   * point at sample tasks, so mixing the two gives pictures belonging to
+   * nothing and a photo wall that draws nothing.
+   */
+  const realChain = ctx.photos.length && ctx.assignments.length && ctx.jobs.length;
+  const photos = realChain ? ctx.photos : SAMPLE_PHOTOS;
+
+  const hasPlanner = (ctx.boardElements ?? []).some(e => e.widget === 'rota');
+
+  /**
+   * A week's worth of finished work, when nothing has actually been finished.
+   *
+   * The bar chart counts `completedAt`, and no sample task carried one — so
+   * the preview was seven empty bars. These are EXTRA rows rather than flags
+   * on the existing ones, because marking the overdue samples done would empty
+   * the "running late" preview instead.
+   */
+  const anyDone = assignments.some(a => a.completedAt);
+  const withDone = anyDone ? assignments : [...assignments, ...repoint(SAMPLE_DONE)];
+
   return {
     ...ctx,
-    jobs: ctx.jobs.length ? ctx.jobs : SAMPLE_JOBS,
+    jobs, contractors, photos,
+    assignments: withDone,
     stages: ctx.stages.length ? ctx.stages : SAMPLE_STAGES,
-    assignments: ctx.assignments.length ? ctx.assignments : SAMPLE_TASKS,
-    contractors: ctx.contractors.length ? ctx.contractors : SAMPLE_CONTRACTORS,
     logs: ctx.logs.length ? ctx.logs : SAMPLE_LOGS,
-    photos: ctx.photos.length ? ctx.photos : SAMPLE_PHOTOS,
+    boardElements: hasPlanner
+      ? ctx.boardElements
+      : [...(ctx.boardElements ?? []), samplePlanner(jobs, contractors)],
     readOnly: true,
   };
 }

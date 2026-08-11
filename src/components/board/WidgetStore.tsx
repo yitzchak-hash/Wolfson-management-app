@@ -4,10 +4,21 @@ import { useStore } from '../../data/store';
 import {
   WIDGETS, CATEGORY_LABEL, WidgetCategory, WidgetDef, WidgetCtx, withSampleData,
 } from '../../data/widgets';
-import { CanvasElement } from '../../types';
+import { CanvasElement, MAIN_BOARD, Project } from '../../types';
 import { WIDGET_PREVIEW, WIDGET_PREVIEW_COLOR } from '../../data/widgetFields';
 
-const CARD_W = 226, CARD_H = 150;
+/**
+ * Big enough to read the widget, not the label.
+ *
+ * The median widget is 235×165. In a 226×150 card everything was being scaled
+ * DOWN — you were shopping from thumbnails of the thing rather than the thing,
+ * and a shelf of 73 unreadable stamps is a shelf you cannot choose from. At
+ * 340×240 the median draws at about 1.4× instead, so a widget in the store is
+ * the size it will be on the board and then some.
+ *
+ * Four across a wide panel rather than six. Fewer, larger, legible.
+ */
+const CARD_W = 340, CARD_H = 240;
 
 /**
  * The shelf.
@@ -22,6 +33,27 @@ const CARD_W = 226, CARD_H = 150;
  * All three are the same mistake: treating the store as a dialog that produces
  * one answer, rather than as a drawer you work out of.
  */
+/**
+ * A workspace to show off "Another workspace" with.
+ *
+ * Not the one you are already looking at, since the whole point of the widget
+ * is the other ones — but only one this machine can actually draw. A workspace
+ * reads from what this browser last stored for it, so on a machine that has
+ * never opened Netiv the card would preview as "Nothing stored for Netiv on
+ * this machine", which is honest on the board and no use at all on a shelf.
+ * The current workspace is the last resort: always live, always drawable.
+ */
+function otherIdForPreview(projects: Project[], currentId: string): string {
+  const drawable = (id: string) => {
+    try {
+      const raw = localStorage.getItem(`${id}_app_data`);
+      return !!raw && (JSON.parse(raw).apartments ?? []).length > 0;
+    } catch { return false; }
+  };
+  const others = projects.filter(p => p.id !== currentId);
+  return others.find(p => drawable(p.id))?.id ?? currentId;
+}
+
 export function WidgetStore({ onPick, onClose, only }: {
   onPick: (def: WidgetDef) => void;
   onClose: () => void;
@@ -42,7 +74,7 @@ export function WidgetStore({ onPick, onClose, only }: {
 
   const {
     apartments, stages, contractorAssignments, contractors, contractorPhotos, activityLogs, users,
-    projects, currentProjectId,
+    projects, currentProjectId, canvasElements,
   } = useStore();
 
   /**
@@ -54,10 +86,32 @@ export function WidgetStore({ onPick, onClose, only }: {
     jobs: apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed && !a.boardBin),
     stages, assignments: contractorAssignments, contractors, users,
     photos: contractorPhotos, logs: activityLogs,
+    boardElements: canvasElements,
     update: () => {}, openJob: () => {}, readOnly: true,
-  }), [apartments, stages, contractorAssignments, contractors, contractorPhotos, activityLogs]);
+  }), [apartments, stages, contractorAssignments, contractors, contractorPhotos, activityLogs,
+       users, canvasElements]);
 
   const shownCtx = useMemo(() => withSampleData(previewCtx), [previewCtx]);
+
+  /**
+   * The two widgets that draw nothing until they are told what to show.
+   *
+   * "Someone's board" and "Another workspace" both open with a picker, which
+   * is right on the board and useless on the shelf: a card showing an empty
+   * dropdown tells you nothing about what the widget is. Only the shelf knows
+   * which workspaces exist, so only the shelf can answer this — the widgets
+   * themselves stay unopinionated.
+   */
+  const pickedForPreview = useMemo(() => {
+    const other = otherIdForPreview(projects, currentProjectId);
+    return {
+      'board-mini': { projectId: currentProjectId, boardId: MAIN_BOARD },
+      'project-glance': { projectId: other },
+      // The building diagram needs a workspace that HAS buildings — showing it
+      // against the job board draws an empty frame.
+      'project-mini': { projectId: other },
+    } as Record<string, Record<string, unknown>>;
+  }, [projects, currentProjectId]);
 
   // Escape closes it. The store deliberately STAYS OPEN after each placement so
   // you can take three things in a row, which makes having a way out that does
@@ -140,7 +194,7 @@ export function WidgetStore({ onPick, onClose, only }: {
             <input
               ref={searchRef}
               autoFocus value={q} onChange={e => setQ(e.target.value)}
-              placeholder={`Search ${only ? matches.length : WIDGETS.length} widgets — a number, a list, a note, a picture…`}
+              placeholder="Search widgets"
               className="flex-1 min-w-0 bg-transparent outline-none text-white text-[16px] placeholder:text-white/45"
             />
             {q && (
@@ -177,13 +231,17 @@ export function WidgetStore({ onPick, onClose, only }: {
 
           {groups.map(({ c, items }) => (
             <div key={c} className="mb-7">
-              <div className="flex items-baseline gap-2 mb-3">
-                <h3 className="text-[15px] font-extrabold text-gray-900">{CATEGORY_LABEL[c]}</h3>
-                <span className="text-[12px] text-gray-400">{items.length}</span>
-              </div>
+              {/* Only when everything is shown. Filtered to one group, the
+                  heading repeats the chip that is already lit above it. */}
+              {cat === 'all' && (
+                <h3 className="text-[13px] font-extrabold text-gray-500 uppercase tracking-wide mb-3">
+                  {CATEGORY_LABEL[c]}
+                </h3>
+              )}
               <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${CARD_W}px, 1fr))` }}>
                 {items.map(w => (
-                  <WidgetCard key={w.id} def={w} ctx={shownCtx} onPick={take} taken={taken[w.id] ?? 0} />
+                  <WidgetCard key={w.id} def={w} ctx={shownCtx} onPick={take}
+                    taken={taken[w.id] ?? 0} picked={pickedForPreview[w.id]} />
                 ))}
               </div>
             </div>
@@ -191,11 +249,9 @@ export function WidgetStore({ onPick, onClose, only }: {
 
           {cat === 'all' && !q.trim() && otherWorkspaces.length > 0 && (
             <div className="mb-4">
-              <h3 className="text-[15px] font-extrabold text-gray-900 mb-1">From your other workspaces</h3>
-              <p className="text-[12.5px] text-gray-500 mb-3" style={{ maxWidth: '70ch' }}>
-                A live piece of another workspace, on this board. It keeps reading that
-                workspace's own data, so it stays right without anybody maintaining it.
-              </p>
+              <h3 className="text-[13px] font-extrabold text-gray-500 uppercase tracking-wide mb-3">
+                From your other workspaces
+              </h3>
               <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${CARD_W}px, 1fr))` }}>
                 {otherWorkspaces.map(p => (
                   <button
@@ -204,20 +260,31 @@ export function WidgetStore({ onPick, onClose, only }: {
                       const def = WIDGETS.find(w => w.id === 'project-glance');
                       if (def) take({ ...def, data: { ...(def.data ?? {}), projectId: p.id } });
                     }}
-                    className="text-left rounded-xl border border-gray-200 overflow-hidden hover:border-[#4aa8d8] hover:shadow-md transition-all"
+                    className="group text-left rounded-xl border border-gray-200 overflow-hidden
+                               hover:border-[#4aa8d8] hover:shadow-md transition-all flex flex-col"
                   >
-                    <div className="flex items-center gap-2 px-3 py-2.5"
-                      style={{ backgroundColor: `${p.color}14`, borderBottom: `2px solid ${p.color}` }}>
-                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: p.color }} />
-                      <span className="font-bold text-[13px] text-gray-900 truncate">{p.name}</span>
+                    <div className="relative flex-1 flex flex-col items-center justify-center gap-2"
+                      style={{ height: CARD_H, backgroundColor: `${p.color}0e` }}>
+                      <span className="w-14 h-14 rounded-2xl flex items-center justify-center text-[22px] font-extrabold text-white"
+                        style={{ backgroundColor: p.color }}>
+                        {(p.shortName ?? p.name).slice(0, 2).toUpperCase()}
+                      </span>
+                      <span className="font-bold text-[15px] text-gray-900">{p.name}</span>
+                      <div className="absolute inset-x-0 bottom-0 p-3 pt-8 opacity-0 group-hover:opacity-100
+                                      transition-opacity pointer-events-none"
+                        style={{ background: 'linear-gradient(transparent, rgba(15,23,42,.86) 42%)' }}>
+                        <p className="text-[12px] leading-snug text-white/90">
+                          That workspace's stages, counts and progress, live on this board.
+                        </p>
+                        <span className="mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold text-white"
+                          style={{ backgroundColor: '#4aa8d8' }}>
+                          <Plus size={11} /> Add to the board
+                        </span>
+                      </div>
                     </div>
-                    <div className="p-3">
-                      <div className="text-[11px] text-gray-500">
-                        Stages, counts and progress for {p.shortName ?? p.name}, live.
-                      </div>
-                      <div className="mt-2 flex items-center gap-1 text-[11px] font-bold" style={{ color: p.color }}>
-                        <Plus size={11} /> Add to this board
-                      </div>
+                    <div className="px-3 py-2 flex items-center gap-2 border-t border-gray-100">
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
+                      <span className="font-bold text-[13px] text-gray-900 truncate">How {p.shortName ?? p.name} is doing</span>
                     </div>
                   </button>
                 ))}
@@ -241,14 +308,19 @@ export function WidgetStore({ onPick, onClose, only }: {
  * placed widget starts with and is correctly empty — reusing it for the preview
  * is what made half the shelf blank.
  */
-function WidgetCard({ def, ctx, onPick, taken }: {
+function WidgetCard({ def, ctx, onPick, taken, picked }: {
   def: WidgetDef; ctx: WidgetCtx; onPick: (d: WidgetDef) => void; taken: number;
+  /** A choice the shelf makes on the widget's behalf, for preview only. */
+  picked?: Record<string, unknown>;
 }) {
   const Icon = def.icon;
   const isArt = def.id.startsWith('art-');
 
   const contain = Math.min((CARD_W - 16) / def.w, (CARD_H - 16) / def.h);
-  const k = isArt ? Math.min(contain, 1.5) : Math.min((CARD_W - 10) / def.w, 1.5);
+  // 2.4 rather than 1.5. The cap exists so a 30px pin does not become a poster,
+  // but at 1.5 the small widgets — a clock, a counter, a single figure — were
+  // still islands in a big empty card.
+  const k = isArt ? Math.min(contain, 2.4) : Math.min((CARD_W - 12) / def.w, 2.4);
   const drawnW = def.w * k, drawnH = def.h * k;
 
   const preview: CanvasElement = {
@@ -264,6 +336,7 @@ function WidgetCard({ def, ctx, onPick, taken }: {
     data: {
       ...(def.data ? JSON.parse(JSON.stringify(def.data)) : {}),
       ...(WIDGET_PREVIEW[def.id] ?? {}),
+      ...(picked ?? {}),
     },
   };
 
@@ -309,22 +382,35 @@ function WidgetCard({ def, ctx, onPick, taken }: {
 
         {/* Taken this visit — so placing five reads as five. */}
         {taken > 0 && (
-          <span className="absolute left-1.5 top-1.5 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
+          <span className="absolute left-2 top-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
             style={{ backgroundColor: '#16a34a' }}>
             <Check size={10} /> {taken > 1 ? `${taken} added` : 'added'}
           </span>
         )}
-        <span className="absolute right-1.5 bottom-1.5 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity"
-          style={{ backgroundColor: '#1e3a5f' }}>
-          <Plus size={10} /> Add
-        </span>
-      </div>
-      <div className="p-2.5 flex-1 border-t border-gray-100">
-        <div className="flex items-center gap-1.5 mb-0.5">
-          <Icon size={13} className="text-[#1e3a5f] flex-shrink-0" />
-          <span className="font-bold text-[12px] text-gray-900">{def.name}</span>
+
+        {/* What it is, only for the one you are looking at.
+            Seventy-three descriptions on screen at once is not seventy-three
+            times as much help as one — it is a wall of grey text you read past
+            to get to the pictures. The words are still here, they just wait to
+            be asked. */}
+        <div
+          className="absolute inset-x-0 bottom-0 p-3 pt-8 opacity-0 group-hover:opacity-100
+                     transition-opacity pointer-events-none"
+          style={{ background: 'linear-gradient(transparent, rgba(15,23,42,.86) 42%)' }}
+        >
+          <p className="text-[12px] leading-snug text-white/90" style={{ textWrap: 'pretty' }}>
+            {def.blurb}
+          </p>
+          <span className="mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold text-white"
+            style={{ backgroundColor: '#4aa8d8' }}>
+            <Plus size={11} /> Add to the board
+          </span>
         </div>
-        <p className="text-[10px] text-gray-500 leading-snug">{def.blurb}</p>
+      </div>
+
+      <div className="px-3 py-2 flex items-center gap-2 border-t border-gray-100">
+        <Icon size={14} className="text-[#1e3a5f] flex-shrink-0" />
+        <span className="font-bold text-[13px] text-gray-900 truncate">{def.name}</span>
       </div>
     </div>
   );

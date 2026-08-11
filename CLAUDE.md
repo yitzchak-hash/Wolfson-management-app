@@ -619,6 +619,41 @@ lets it attach.
 
 `withSampleData(ctx)` fills in only the fields that are genuinely empty, so store
 previews show something on a new board and your own data as soon as there is any.
+Three rules it must keep, each of which was broken and showed as a preview that
+looked like a fault rather than a sample:
+- **Sample rows are re-pointed at whatever is really there.** Each field falls
+  back on its own, so a machine with real jobs and no tasks kept the real jobs
+  and took sample tasks naming `j1` — and every widget that resolves a task's
+  job printed "a job". `repoint()` spreads them round the real ids.
+- **The sample planner is built from the resolved jobs and people**, not from
+  sample ids, for the same reason. `WidgetCtx.boardElements` exists so
+  `Out today` / `Tomorrow` can read a planner on the shelf, where there is no
+  board; they fall back to the store everywhere else.
+- **Photos only stand in when jobs and tasks are samples too** — a real photo is
+  found through its task to its job, so mixing gives pictures belonging to
+  nothing and a photo wall that draws nothing.
+
+## The widget shelf shows the widget, not a description of it
+Cards are **340×240** and the scale cap is 2.4. The median widget is 235×165, so
+the old 226×150 card scaled almost everything DOWN — you were shopping from
+thumbnails of the thing rather than the thing. Four across a wide panel, not six.
+
+Only the NAME is on a card at rest; the blurb and the Add button live in an
+overlay that appears on hover. Seventy-three descriptions on screen at once is
+not seventy-three times the help — it is a wall of grey text you read past to
+reach the pictures.
+
+`pickedForPreview` supplies the choice for the widgets that open with a picker
+(`board-mini`, `project-glance`, `project-mini`). Only the shelf knows which
+workspaces exist, and it prefers one this machine has a stored snapshot for — a
+card reading "Nothing stored for Netiv on this machine" is honest on a board and
+useless on a shelf. `scratchpad/store-empty.mjs` lists every preview drawing an
+empty state; only the clip art should appear there, because it has no text.
+
+`todayIso()` in `tvWidgets.tsx` must use the planner's `iso()`. It was
+`toISOString().slice(0,10)` — the UTC date — while the planner writes local
+dates, so in Israel every night between midnight and 2 or 3am the wall asked for
+yesterday's row and showed the wrong people.
 
 ## Project layout joins
 

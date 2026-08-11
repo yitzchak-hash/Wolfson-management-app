@@ -27,7 +27,16 @@ import { PlannerData, personOf, iso } from '../components/board/PlannerWidget';
  */
 
 const d = (el: CanvasElement) => (el.data ?? {}) as Record<string, unknown>;
-const todayIso = () => new Date().toISOString().slice(0, 10);
+/**
+ * Today, the way the PLANNER counts days.
+ *
+ * This used to be `toISOString().slice(0, 10)`, which is the date in UTC. The
+ * planner writes its cell keys with local dates, so in Israel every day
+ * between midnight and 2 or 3 in the morning the wall asked for yesterday's
+ * row and showed the wrong people. One helper for both, so they cannot
+ * disagree again.
+ */
+const todayIso = () => iso(new Date());
 
 /** A wall card: a quiet label, then the thing itself. */
 function Card({ label, tone, children, right }: {
@@ -78,9 +87,10 @@ function plannerRows(canvasElements: CanvasElement[], dayIso: string) {
 function WhoIsOut({ c, dayIso, label, tone }: {
   c: WidgetCtx; dayIso: string; label: string; tone?: string;
 }) {
-  const canvasElements = useStore(st => st.canvasElements);
+  const storeElements = useStore(st => st.canvasElements);
   const users = useStore(st => st.users);
-  const rows = plannerRows(canvasElements, dayIso);
+  // The shelf hands over a sample planner; everywhere else this is the board.
+  const rows = plannerRows(c.boardElements ?? storeElements, dayIso);
 
   return (
     <Card label={label} tone={tone}>
