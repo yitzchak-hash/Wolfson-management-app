@@ -9,6 +9,7 @@ import { ReportsPage } from './pages/ReportsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ActivityLogPage } from './pages/ActivityLogPage';
 import { ContractorPortal } from './pages/ContractorPortal';
+import { TvViewPage } from './pages/TvViewPage';
 import { TasksPage } from './pages/TasksPage';
 import { GeneralJobsPage } from './pages/GeneralJobsPage';
 import { GlobalCalendarPage } from './pages/GlobalCalendarPage';
@@ -52,6 +53,8 @@ export default function App() {
           <Route path="analytics" element={<Navigate to="/dashboard" replace />} />
           <Route path="reports" element={<ReportsPage />} />
           <Route path="activity" element={<ActivityLogPage />} />
+          {/* What the TV sees, and where the wall is arranged — from a PC. */}
+          <Route path="tv-view" element={<TvViewPage />} />
           <Route path="settings" element={<SettingsPage scope="project" />} />
           <Route path="app-settings" element={<SettingsPage scope="app" />} />
         </Route>

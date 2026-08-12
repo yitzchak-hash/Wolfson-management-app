@@ -944,12 +944,9 @@ function TvPresentationSettings({ onToast }: { onToast: (msg: string, type?: 'su
     <div className="bg-white border border-gray-200 rounded-xl p-5">
       <div className="flex items-center gap-2 mb-2">
         <Tv size={18} className="text-[#1e3a5f]" />
-        <h2 className="font-semibold text-gray-800">TV Presentation</h2>
+        <h2 className="font-semibold text-gray-800"
+          title="Open this on the office panel and press full screen.">TV link</h2>
       </div>
-      <p className="text-sm text-gray-500 mb-3">
-        Open this link on the office TV and press full screen. It shows the live board, lets you switch
-        between projects, and opens a job with its plan and latest photos.
-      </p>
 
       <div className="flex gap-2 mb-3">
         <input readOnly value={url}
@@ -967,14 +964,7 @@ function TvPresentationSettings({ onToast }: { onToast: (msg: string, type?: 'su
         </a>
       </div>
 
-      <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-3 flex items-start gap-2">
-        <Shield size={13} className="flex-shrink-0 mt-0.5" />
-        <span>
-          <strong>Always read-only.</strong> The TV can look, switch project and open a job — it can never
-          change anything. All edits happen from a PC on the normal link, so nothing on the wall panel can
-          be moved by accident.
-        </span>
-      </div>
+      
 
       <div className="text-xs text-gray-500 leading-relaxed">
         <strong className="text-gray-700">Size:</strong> adjusts itself to the screen automatically —
@@ -1545,30 +1535,18 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-5">
-      <h2 className="font-semibold text-gray-800 mb-1 flex items-center gap-2">
-        <Tv size={18} className="text-[#4aa8d8]" /> TV Presentation
+      {/* The read-only paragraph is gone, and so is the short-domain box.
+          The wall is read-only whether or not a sentence says so, and the link
+          is whatever the link is. Anything genuinely worth saying is a tooltip
+          on the control it is about. */}
+      <h2 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+        <Tv size={18} className="text-[#4aa8d8]" /> TV
       </h2>
-      <p className="text-xs text-gray-500 mb-4">
-        The wall display is always read-only — it can look, switch project and open a plan in Drive,
-        but it can never change anything. Every edit happens from a PC on the normal link.
-      </p>
 
-      <label className="block text-xs font-semibold text-gray-600 mb-1">Your own short domain</label>
-      <p className="text-[11px] text-gray-400 mb-2 leading-snug">
-        Optional. Point a short domain at this app — <span className="font-mono">rsilink.tv</span> is
-        the one you had in mind — and the link below becomes short enough to type on a
-        television with a remote. Leave it blank to use this deployment’s own address.
-      </p>
-      <input
-        value={tv.tvDomain ?? ''}
-        onChange={e => setTvSetting('tvDomain', e.target.value)}
-        onBlur={() => onToast(domain ? `The TV link is now ${link}` : 'Using this deployment’s address')}
-        placeholder="rsilink.tv"
-        className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm mb-4 font-mono
-                   focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
-      />
-
-      <label className="block text-xs font-semibold text-gray-600 mb-1">Presentation link</label>
+      <label className="block text-xs font-semibold text-gray-600 mb-1"
+        title="Open this on the panel and press full screen.">
+        TV link
+      </label>
       <div className="flex gap-2 mb-4">
         <input readOnly value={link}
           className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm bg-gray-50 text-gray-600" />
@@ -1590,13 +1568,12 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
       </div>
 
       {/* Which board. */}
-      <label className="block text-xs font-semibold text-gray-600 mb-1">Which board the TV shows</label>
-      <p className="text-[11px] text-gray-400 mb-2 leading-snug">
-        {isAdmin
-          ? 'Set once, for the whole office. The region and the size below are measured against '
-            + 'whichever board you pick here, so choose it first.'
-          : `Set by an administrator. The wall is showing ${chosen ? `“${chosen.name}”` : 'the main board'}.`}
-      </p>
+      <label className="block text-xs font-semibold text-gray-600 mb-1 mt-5"
+        title={isAdmin
+          ? 'Set once for the whole office. The region and size below are measured against this board.'
+          : 'An administrator sets this.'}>
+        Which board the TV shows
+      </label>
       <select
         value={tvBoard}
         disabled={!isAdmin}
@@ -1706,18 +1683,13 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
           </button>
         ))}
       </div>
-      <p className="text-[11px] text-gray-400 -mt-3 mb-4">
-        The TV has its own EN / עב toggle as well; this only decides how it opens.
-      </p>
 
-      <label className="block text-xs font-semibold text-gray-600 mb-1">
-        Default display size · {Math.round(boost * 100)}%
+
+      <label className="block text-xs font-semibold text-gray-600 mb-1 mt-4"
+        title="The panel measures its own screen and picks a readable size; this only nudges it.">
+        Display size · {Math.round(boost * 100)}%
       </label>
-      <p className="text-[11px] text-gray-400 mb-2 leading-snug">
-        The TV measures its own screen and picks a readable size on its own — this is only a nudge on
-        top of that, so one setting works whatever panel it is plugged into. Leave it at 100% unless the
-        board is hard to read from where people actually stand.
-      </p>
+
       <div className="flex items-center gap-3">
         <span className="text-[11px] text-gray-400">Smaller</span>
         <input type="range" min={0.6} max={2} step={0.05} value={boost}
@@ -1732,14 +1704,11 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
           The panel is driven with a finger and a fat passive pen, and buttons
           laid out for a mouse are missed as often as hit. Making them reachable
           should not mean magnifying the board. */}
-      <label className="block text-xs font-semibold text-gray-600 mt-5 mb-1">
-        Button size on the TV
+      <label className="block text-xs font-semibold text-gray-600 mt-5 mb-1"
+        title="How big the buttons and tool rails are on the panel — the markup tools especially. The board's own size is the setting above.">
+        Button size
       </label>
-      <p className="text-[11px] text-gray-400 mb-2 leading-snug">
-        How big the buttons and tool rails are on the panel — the plan markup tools especially, which
-        are the ones anybody actually taps. This does not change the size of the board itself. There is
-        the same control on the panel, so somebody standing at it can change their mind.
-      </p>
+
       <div className="flex items-center gap-1.5 flex-wrap">
         {([[1, 'Normal'], [1.25, 'Big'], [1.5, 'Bigger'], [1.8, 'Huge'], [2.2, 'Giant']] as const)
           .map(([v, label]) => {

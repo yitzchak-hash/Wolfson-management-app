@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
-  Building2, LayoutDashboard, FileText, Settings, Activity,
+  Building2, LayoutDashboard, FileText, Settings, Activity, Tv,
   TrendingUp, ClipboardList, Briefcase, CalendarDays, MoreHorizontal,
 } from 'lucide-react';
 import { useStore } from '../../data/store';
@@ -32,6 +32,14 @@ function useNavItems() {
     { to: '/reports',          icon: FileText,        label: s.navReports },
     { to: '/activity',         icon: Activity,        label: s.navActivity },
     { to: '/settings',         icon: Settings,        label: s.navProjectSettings },
+    /**
+     * What the TV sees, from a computer.
+     *
+     * After a divider, because it is not another page of this workspace — it
+     * is a look at a different screen, and arranging what goes on that screen
+     * happens there rather than in a settings form.
+     */
+    { to: '/tv-view', icon: Tv, label: 'TV', divider: true },
   ];
 }
 
@@ -52,9 +60,13 @@ export function Sidebar() {
           borderRight: lightTheme ? '1px solid #e5e7eb' : 'none',
         }}
       >
-        {navItems.map(({ to, icon: Icon, label }) => (
+        {navItems.map(({ to, icon: Icon, label, divider }) => (
+          <React.Fragment key={to}>
+          {divider && (
+            <span className="my-1.5 h-px w-8"
+              style={{ backgroundColor: lightTheme ? '#e2e8f0' : 'rgba(255,255,255,.16)' }} />
+          )}
           <NavLink
-            key={to}
             to={to}
             title={label}
             className={({ isActive }) =>
@@ -69,6 +81,7 @@ export function Sidebar() {
             <Icon size={20} />
             <span className="text-[9px] leading-[1.1] font-medium text-center px-0.5">{label}</span>
           </NavLink>
+          </React.Fragment>
         ))}
       </aside>
     </div>

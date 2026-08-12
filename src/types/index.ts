@@ -89,6 +89,9 @@ export interface BoardSetting {
    * usually wants 1.4 or 1.7.
    */
   tvTouchScale?: number;
+  /** The panel's shape and what it is driven at, for laying the wall out. */
+  tvShape?: string;
+  tvRes?: string;
   /**
    * The address contractor portal links are handed out on.
    *
