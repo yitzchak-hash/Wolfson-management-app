@@ -39,7 +39,7 @@ export function TvPresentationPage() {
   const {
     projects, apartments, stages, contractorAssignments, contractorPhotos, canvasElements,
     boardSettings, currentProjectId, setCurrentProject, startFirebaseSync, firebaseListening,
-    users, contractors, activityLogs, addCanvasElement, updateCanvasElement,
+    users, contractors, activityLogs, addCanvasElement, updateCanvasElement, setTvSetting,
   } = useStore();
 
   /**
@@ -129,6 +129,36 @@ export function TvPresentationPage() {
     p.set('scale', String(Number(b.toFixed(2))));
     setParams(p, { replace: true });
   };
+  /**
+   * How big the CONTROLS are, as opposed to how big the board is.
+   *
+   * A wall panel is driven with a finger and a fat passive pen, and buttons
+   * laid out for a mouse are missed as often as hit. This is deliberately a
+   * separate number from the zoom above: making the buttons reachable should
+   * not mean magnifying the board, and vice versa. It is stored with the other
+   * wall settings, so a panel keeps its size across a reload, and can also be
+   * forced per-screen with ?touch= for a panel that wants something different
+   * from the rest.
+   */
+  const touchParam = Number(params.get('touch'));
+  const touchScale = Number.isFinite(touchParam) && touchParam > 0
+    ? touchParam
+    : (tvSettings.tvTouchScale ?? 1);
+  const setTouchScale = (v: number) => {
+    const p = new URLSearchParams(params);
+    p.set('touch', String(Number(v.toFixed(2))));
+    setParams(p, { replace: true });
+    setTvSetting('tvTouchScale', v);
+  };
+  const TOUCH_STEPS = [1, 1.25, 1.5, 1.8, 2.2];
+  const TOUCH_LABEL: Record<string, [string, string]> = {
+    '1': ['Normal', 'רגיל'],
+    '1.25': ['Big', 'גדול'],
+    '1.5': ['Bigger', 'גדול יותר'],
+    '1.8': ['Huge', 'ענק'],
+    '2.2': ['Giant', 'עצום'],
+  };
+
   /** The wallboard's single writable action: marking up a plan. */
   const [markUp, setMarkUp] = useState(false);
 
@@ -388,6 +418,28 @@ export function TvPresentationPage() {
           title={t('Bigger', 'גדול')} className="px-3 py-1.5 font-black">+</button>
       </div>
 
+      {/* Button size — a different thing from the zoom beside it.
+          The zoom magnifies what is ON the board; this makes the CONTROLS
+          bigger, for a panel driven with a finger and a fat pen. Tapping steps
+          through the sizes rather than opening a menu: one control, one tap,
+          and the effect is visible immediately in the button you just hit. */}
+      <button
+        onClick={() => {
+          const i = TOUCH_STEPS.findIndex(v => Math.abs(v - touchScale) < 0.02);
+          setTouchScale(TOUCH_STEPS[(i + 1) % TOUCH_STEPS.length] ?? 1);
+        }}
+        title={t('How big the buttons are — for fingers and the pen',
+                 'גודל הכפתורים — למגע ולעט')}
+        className={`${barBtn} px-3 py-1.5 flex items-center gap-1.5`}
+        style={touchScale > 1.02 ? { backgroundColor: '#1e3a5f', color: '#fff' } : off}>
+        <span className="font-black leading-none" style={{ fontSize: '1.15em' }}>A</span>
+        <span className="font-black leading-none" style={{ fontSize: '.8em' }}>a</span>
+        <span className="font-bold" style={{ fontSize: '.8em' }}>
+          {t(TOUCH_LABEL[String(touchScale)]?.[0] ?? `${Math.round(touchScale * 100)}%`,
+             TOUCH_LABEL[String(touchScale)]?.[1] ?? `${Math.round(touchScale * 100)}%`)}
+        </span>
+      </button>
+
       {/* Edit mode. Off by default and never sticky — see the note on `editing`. */}
       <button onClick={() => setEditing(v => !v)}
         title={t('Arrange the wallboard', 'סידור לוח הקיר')}
@@ -457,6 +509,7 @@ export function TvPresentationPage() {
               driveFolderUrl={openJob.driveLink}
               authorName=""
               askWho
+              touchScale={touchScale}
               people={users.filter(u => u.active !== false).map(u => u.name)}
               onClose={() => setMarkUp(false)}
             />
@@ -529,6 +582,7 @@ export function TvPresentationPage() {
                     apartmentLabel={openJob.displayName || openJob.apartmentNumber || 'Job'}
                     driveFolderUrl={openJob.driveLink}
                     authorName=""
+                    touchScale={touchScale}
                     onClose={() => { /* it is part of the page here */ }}
                   />
                 </Suspense>

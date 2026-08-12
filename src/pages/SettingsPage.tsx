@@ -1727,6 +1727,34 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
         <button onClick={() => setTvSetting('tvScale', 1)}
           className="text-[11px] font-bold text-[#1e3a5f] whitespace-nowrap">Automatic</button>
       </div>
+
+      {/* Button size — a different setting from the one above, on purpose.
+          The panel is driven with a finger and a fat passive pen, and buttons
+          laid out for a mouse are missed as often as hit. Making them reachable
+          should not mean magnifying the board. */}
+      <label className="block text-xs font-semibold text-gray-600 mt-5 mb-1">
+        Button size on the TV
+      </label>
+      <p className="text-[11px] text-gray-400 mb-2 leading-snug">
+        How big the buttons and tool rails are on the panel — the plan markup tools especially, which
+        are the ones anybody actually taps. This does not change the size of the board itself. There is
+        the same control on the panel, so somebody standing at it can change their mind.
+      </p>
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {([[1, 'Normal'], [1.25, 'Big'], [1.5, 'Bigger'], [1.8, 'Huge'], [2.2, 'Giant']] as const)
+          .map(([v, label]) => {
+            const on = Math.abs((tv.tvTouchScale ?? 1) - v) < 0.02;
+            return (
+              <button key={v} onClick={() => setTvSetting('tvTouchScale', v)}
+                className="px-3 py-2 rounded-xl text-[12px] font-bold border transition-colors"
+                style={on
+                  ? { backgroundColor: '#1e3a5f', color: '#fff', borderColor: '#1e3a5f' }
+                  : { backgroundColor: '#fff', color: '#475569', borderColor: '#e2e8f0' }}>
+                {label}
+              </button>
+            );
+          })}
+      </div>
     </div>
   );
 }

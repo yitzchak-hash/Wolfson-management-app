@@ -103,6 +103,7 @@ export interface PlanChoice {
 export function PlanAnnotator({
   planFileId, planName, apartmentId, apartmentLabel, driveFolderUrl, plansFolderId,
   authorName, readOnly = false, askWho = false, people = [], plans = [], embedded = false,
+  touchScale = 1,
   onClose, onToast, onPickPlan, onStartMarkup,
 }: {
   planFileId: string;
@@ -135,6 +136,16 @@ export function PlanAnnotator({
    */
   askWho?: boolean;
   people?: string[];
+  /**
+   * How big the controls are, 1 being the desk size.
+   *
+   * The wall panel is driven with a finger and a fat passive pen, and a rail
+   * laid out for a mouse is a miss more often than a hit. Everything in the
+   * chrome — rail width, button size, icons, labels, the top bar — is a
+   * multiple of this, so one number moves all of it together and nothing can
+   * be left behind at the old size.
+   */
+  touchScale?: number;
   /** Every plan on this job: the originals, and the markups made from them. */
   plans?: PlanChoice[];
   onClose: () => void;
@@ -223,6 +234,28 @@ export function PlanAnnotator({
 
   const preset = toolById(tool);
   const backendReady = isUploadBackendConfigured();
+
+  /**
+   * Every control size, from the one factor.
+   *
+   * Written as helpers rather than sprinkled multiplications so that adding a
+   * button later means reaching for `ui.btn` and `ui.icon`, and it comes out
+   * the right size on the wall without anybody remembering to think about it.
+   */
+  const ts = Math.max(1, Math.min(2.2, touchScale || 1));
+  const ui = useMemo(() => ({
+    on: ts > 1.02,
+    rail: Math.round(62 * ts),
+    btn: Math.round(50 * ts),
+    padY: Math.round(6 * ts),
+    icon: Math.round(16 * ts),
+    smallIcon: Math.round(14 * ts),
+    label: +(8.5 * ts).toFixed(1),
+    text: +(12 * ts).toFixed(1),
+    gap: Math.round(4 * ts),
+    /** Padding for the top-bar buttons, which are shaped by class not size. */
+    barPad: `${Math.round(6 * ts)}px ${Math.round(9 * ts)}px`,
+  }), [ts]);
 
   /**
    * Read-only until somebody says who they are.
@@ -1611,8 +1644,16 @@ export function PlanAnnotator({
       className={embedded ? 'absolute inset-0 flex flex-col' : 'fixed inset-0 z-[150] flex flex-col'}
       style={{ backgroundColor: embedded ? '#ffffff' : NAVY_DEEP }}
     >
-      {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 flex-shrink-0" style={{ backgroundColor: NAVY }}>
+      {/* Header.
+          The row is scaled as a whole with `zoom` rather than by re-sizing a
+          dozen buttons one at a time: `zoom` grows the LAYOUT, so the hit boxes
+          grow with the pixels — unlike a transform, which would leave every
+          button catching taps where it used to be. It wraps rather than
+          overflows, and at the desk size it is not applied at all, so nothing
+          about the existing screen moves by a pixel. The tool rail is sized
+          explicitly instead, because it also has to scroll. */}
+      <div className="flex items-center gap-2 px-3 py-2 flex-shrink-0 flex-wrap"
+        style={{ backgroundColor: NAVY, ...(ui.on ? { zoom: ts } : {}) }}>
         <Layers size={16} className="text-[#4aa8d8] flex-shrink-0" />
         <div className="min-w-0">
           <div className="text-[13px] font-bold text-white truncate">{planName || 'Plan'}</div>
@@ -1742,20 +1783,21 @@ export function PlanAnnotator({
       <div className="flex-1 min-h-0 flex">
         {/* Tool rail */}
         {!locked && (
-          <div className="w-[62px] flex-shrink-0 flex flex-col items-center gap-1 py-2 overflow-y-auto board-rail"
-            style={{ backgroundColor: NAVY }}>
+          <div className="flex-shrink-0 flex flex-col items-center gap-1 py-2 overflow-y-auto board-rail"
+            style={{ backgroundColor: NAVY, width: ui.rail }}>
             {TOOLS.map(t => {
               const Icon = ICONS[t.id] ?? Pen;
               const on = tool === t.id;
               return (
                 <button key={t.id} onClick={() => pick(t.id)} title={`${t.label} — ${t.hint}`}
-                  className="w-[50px] py-1.5 rounded-xl flex flex-col items-center gap-0.5 transition-colors"
+                  className="rounded-xl flex flex-col items-center transition-colors"
                   style={{
+                    width: ui.btn, paddingTop: ui.padY, paddingBottom: ui.padY, gap: 2,
                     backgroundColor: on ? ACCENT : 'transparent',
                     color: on ? '#fff' : 'rgba(255,255,255,.62)',
                   }}>
-                  <Icon size={16} />
-                  <span className="text-[8.5px] font-semibold leading-none">{t.label}</span>
+                  <Icon size={ui.icon} />
+                  <span className="font-semibold leading-none" style={{ fontSize: ui.label }}>{t.label}</span>
                 </button>
               );
             })}
@@ -1763,25 +1805,34 @@ export function PlanAnnotator({
             {/* "Pan", not "Move" — Move is the tool that picks marks up, and two
                 buttons with the same word is a coin toss. */}
             <button onClick={() => pick('pan')} title="Pan — scroll around the plan without drawing"
-              className="w-[50px] py-1.5 rounded-xl flex flex-col items-center gap-0.5"
-              style={{ backgroundColor: tool === 'pan' ? ACCENT : 'transparent', color: tool === 'pan' ? '#fff' : 'rgba(255,255,255,.62)' }}>
-              <Hand size={16} /><span className="text-[8.5px] font-semibold leading-none">Pan</span>
+              className="rounded-xl flex flex-col items-center"
+              style={{ width: ui.btn, paddingTop: ui.padY, paddingBottom: ui.padY, gap: 2,
+                       backgroundColor: tool === 'pan' ? ACCENT : 'transparent',
+                       color: tool === 'pan' ? '#fff' : 'rgba(255,255,255,.62)' }}>
+              <Hand size={ui.icon} />
+              <span className="font-semibold leading-none" style={{ fontSize: ui.label }}>Pan</span>
             </button>
             <button onClick={undo} disabled={!strokes.length} title="Undo (Ctrl+Z)"
-              className="w-[50px] py-1.5 rounded-xl flex flex-col items-center gap-0.5 text-white/60 disabled:opacity-25 hover:bg-white/10">
-              <Undo2 size={15} /><span className="text-[8.5px] font-semibold leading-none">Undo</span>
+              className="rounded-xl flex flex-col items-center text-white/60 disabled:opacity-25 hover:bg-white/10"
+              style={{ width: ui.btn, paddingTop: ui.padY, paddingBottom: ui.padY, gap: 2 }}>
+              <Undo2 size={ui.smallIcon} />
+              <span className="font-semibold leading-none" style={{ fontSize: ui.label }}>Undo</span>
             </button>
             <button onClick={redoOne} disabled={!redo.length} title="Redo (Ctrl+Shift+Z)"
-              className="w-[50px] py-1.5 rounded-xl flex flex-col items-center gap-0.5 text-white/60 disabled:opacity-25 hover:bg-white/10">
-              <Redo2 size={15} /><span className="text-[8.5px] font-semibold leading-none">Redo</span>
+              className="rounded-xl flex flex-col items-center text-white/60 disabled:opacity-25 hover:bg-white/10"
+              style={{ width: ui.btn, paddingTop: ui.padY, paddingBottom: ui.padY, gap: 2 }}>
+              <Redo2 size={ui.smallIcon} />
+              <span className="font-semibold leading-none" style={{ fontSize: ui.label }}>Redo</span>
             </button>
             {/* Clear takes THIS PAGE. New starts a fresh sketch. They both used
                 to call newSketch, so on a multi-page set there was no way to
                 wipe one sheet, and two buttons did the same thing. */}
             <button onClick={clearPage} disabled={!strokes.some(s => s.page === page)}
               title="Rub out every mark on this page"
-              className="w-[50px] py-1.5 rounded-xl flex flex-col items-center gap-0.5 text-white/60 disabled:opacity-25 hover:bg-white/10">
-              <Trash2 size={15} /><span className="text-[8.5px] font-semibold leading-none">Clear</span>
+              className="rounded-xl flex flex-col items-center text-white/60 disabled:opacity-25 hover:bg-white/10"
+              style={{ width: ui.btn, paddingTop: ui.padY, paddingBottom: ui.padY, gap: 2 }}>
+              <Trash2 size={ui.smallIcon} />
+              <span className="font-semibold leading-none" style={{ fontSize: ui.label }}>Clear</span>
             </button>
 
             {/* ── Saved versions, on the rail ──
@@ -1791,8 +1842,10 @@ export function PlanAnnotator({
             <div className="w-8 h-px my-1.5" style={{ backgroundColor: 'rgba(255,255,255,.16)' }} />
 
             <button onClick={newSketch} title="Start a fresh sketch on this plan"
-              className="w-[50px] py-1.5 rounded-xl flex flex-col items-center gap-0.5 text-white/70 hover:bg-white/10">
-              <Plus size={15} /><span className="text-[8.5px] font-semibold leading-none">New</span>
+              className="rounded-xl flex flex-col items-center text-white/70 hover:bg-white/10"
+              style={{ width: ui.btn, paddingTop: ui.padY, paddingBottom: ui.padY, gap: 2 }}>
+              <Plus size={ui.smallIcon} />
+              <span className="font-semibold leading-none" style={{ fontSize: ui.label }}>New</span>
             </button>
 
             {versions.map(v => {
@@ -1804,13 +1857,14 @@ export function PlanAnnotator({
                   title={`Version ${v.version} — ${v.createdBy || 'the office'}, `
                     + `${new Date(v.createdAt).toLocaleString()}`
                     + `${v.driveUrl ? ' · in Drive' : ' · not in Drive yet'}`}
-                  className="w-[50px] py-1.5 rounded-xl flex flex-col items-center gap-0.5 transition-colors relative"
+                  className="rounded-xl flex flex-col items-center gap-0.5 transition-colors relative"
                   style={{
+                    width: ui.btn, paddingTop: ui.padY, paddingBottom: ui.padY,
                     backgroundColor: showing ? 'rgba(255,255,255,.12)' : 'transparent',
                     color: 'rgba(255,255,255,.72)',
                   }}
                 >
-                  <span className="text-[13px] font-black leading-none">v{v.version}</span>
+                  <span className="font-black leading-none" style={{ fontSize: ui.text }}>v{v.version}</span>
                   <span className="text-[7.5px] leading-none opacity-70">
                     {new Date(v.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
                   </span>
@@ -1826,8 +1880,9 @@ export function PlanAnnotator({
         {/* Stage */}
         <div className="flex-1 min-w-0 flex flex-col">
           {!locked && (
+            // Scaled as a row, same reasoning as the header.
             <div className="flex items-center gap-2 px-3 py-1.5 flex-wrap flex-shrink-0"
-              style={{ backgroundColor: 'rgba(255,255,255,.04)' }}>
+              style={{ backgroundColor: 'rgba(255,255,255,.04)', ...(ui.on ? { zoom: ts } : {}) }}>
               {/* An eraser has no colour and no see-through: it is not ink.
                   Showing the controls implied it was, and setting one did
                   nothing. Width it does have — that is how much it takes. */}
@@ -1937,7 +1992,11 @@ export function PlanAnnotator({
             </div>
           )}
 
-          <div ref={stageRef} className="flex-1 min-h-0 overflow-auto p-4 flex items-start justify-center">
+          {/* `pan-x pan-y`, never `auto` — see the live canvas below. A pinch
+              that starts on the margin rather than on the sheet has to reach
+              the same handler, or it zooms the page instead. */}
+          <div ref={stageRef} className="flex-1 min-h-0 overflow-auto p-4 flex items-start justify-center"
+            style={{ touchAction: 'pan-x pan-y' }}>
             {loadErr ? (
               <div className="text-center text-gray-300 text-[13px] mt-16 max-w-md">
                 <p className="font-semibold mb-1">This plan would not open.</p>
@@ -1996,7 +2055,16 @@ export function PlanAnnotator({
                     // The pen must not scroll the page while it draws, and the
                     // palm must not either — without this the Samsung screen
                     // pans instead of drawing.
-                    touchAction: locked || tool === 'pan' ? 'auto' : 'none',
+                    //
+                    // `pan-x pan-y` rather than `auto` when there is nothing to
+                    // draw: one finger still scrolls the plan, but the BROWSER
+                    // is told it may not pinch, which is what leaves the
+                    // gesture free for the handler that zooms the plan. On
+                    // `auto` a real touch panel starts its own page zoom the
+                    // moment the second finger lands and sends a touchcancel,
+                    // so on the wallboard — read-only, every gesture a finger —
+                    // pinching zoomed the whole page instead of the drawing.
+                    touchAction: locked || tool === 'pan' ? 'pan-x pan-y' : 'none',
                     // With a nib ghost on screen the cursor itself gets out of
                     // the way — two crosshairs is one too many.
                     cursor: locked || tool === 'pan' ? 'grab'

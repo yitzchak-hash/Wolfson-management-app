@@ -81,6 +81,15 @@ export interface BoardSetting {
    */
   tvDomain?: string;
   /**
+   * How big the CONTROLS are on the wall panel — buttons, tool rails, icons.
+   *
+   * Separate from `tvScale`, which sizes the board's content. A wall panel is
+   * driven with a finger and a fat-tipped pen, and a 50px tool button laid out
+   * for a mouse is a miss more often than a hit. 1 is the desk size; the panel
+   * usually wants 1.4 or 1.7.
+   */
+  tvTouchScale?: number;
+  /**
    * The address contractor portal links are handed out on.
    *
    * A contractor link used to be built from whatever address the office
