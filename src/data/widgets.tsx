@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Gauge, ListChecks, Hash, BarChart3, Table2, ShoppingCart, CalendarRange,
   Flag, User2, Link2, MapPin, Clock3, Megaphone, Image as ImageIcon,
@@ -6,7 +6,7 @@ import {
   CircleDashed, Archive, StickyNote, Copy, Check, Filter, CalendarCheck,
   Calculator, Ruler, Target, Users, GitCommitHorizontal, TimerReset,
   ArrowRightLeft, ListFilter, Search, Sparkles, Timer, Sticker, Type, FolderPlus, Building,
-  Minus, MessageSquareQuote, Palette,
+  Minus, MessageSquareQuote, Palette, X,
 } from 'lucide-react';
 import {
   Apartment, CanvasElement, Stage, ContractorAssignment, Contractor,
@@ -15,6 +15,7 @@ import {
 } from '../types';
 import { portalLink } from './portalLink';
 import { useStore } from './store';
+import { soundScore } from './hebrewSearch';
 import { describeActivity } from './activityText';
 import { ClipArtNode, ART_KINDS, ArtKind } from '../components/board/BoardNodes';
 import { MiniJob } from '../components/board/MiniJob';
@@ -1135,6 +1136,22 @@ export const WIDGETS: WidgetDef[] = [
 
   {
     /**
+     * Find a job by a name nobody can spell, in a language nobody typed.
+     *
+     * The office types Hebrew, the plans are in English, and half the families
+     * exist in both — so this matches on how a name SOUNDS rather than how it
+     * is written. "Artzi" finds ארצי, ארצי finds "Artzi", and "Arzi" finds
+     * both. Big enough to actually use, and a result opens the job.
+     */
+    id: 'job-find', rank: 3, name: 'Find a job', category: 'live', icon: Search,
+    w: 340, h: 300,
+    blurb: 'Search every job by name, number or address. Finds Hebrew names when you type '
+      + 'English and the other way round, and copes with a spelling that is nearly right.',
+    data: {},
+    render: (el, c) => <JobFinder el={el} ctx={c} />,
+  },
+  {
+    /**
      * The sticky pad, with its cork board behind it.
      *
      * The Note button on the rail makes one of these; it is registered here as
@@ -1394,9 +1411,13 @@ function ProjectGlance({ el, ctx }: { el: CanvasElement; ctx: WidgetCtx }) {
   }
   if (!snap) {
     return (
+      /* A dash, not an explanation. The card knows nothing about this
+         workspace yet; saying so in a sentence puts an apology on the board
+         where a figure belongs. The reason lives in the tooltip. */
       <Frame title={p.name} icon={Building} tone={p.color}>
-        <span className="text-[10px] text-gray-400">
-          Nothing stored for {p.shortName ?? p.name} on this machine yet — open it once.
+        <span className="text-[22px] font-black text-gray-300"
+          title={`Open ${p.shortName ?? p.name} once and its figures appear here.`}>
+          —
         </span>
       </Frame>
     );
@@ -2030,4 +2051,79 @@ export function renderWidget(el: CanvasElement, ctx: WidgetCtx): React.ReactNode
   const def = el.widget ? WIDGET_BY_ID.get(el.widget) : undefined;
   if (!def) return <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-400">Unknown widget</div>;
   return def.render(el, ctx);
+}
+
+/**
+ * Find a job, by a name spelled however it came out.
+ *
+ * Three ways of matching, in order of confidence: the text as typed, the name
+ * as it SOUNDS (which is what crosses the language), and the apartment number
+ * or address. A row is the shared MiniJob, so a result reads exactly like a
+ * job reads everywhere else, and clicking one opens it.
+ */
+function JobFinder({ el, ctx }: { el: CanvasElement; ctx: WidgetCtx }) {
+  const [q, setQ] = useState('');
+  const size = Number((el.data as Record<string, unknown> | undefined)?.textSize) || 12;
+
+  const hits = useMemo(() => {
+    const needle = q.trim();
+    if (needle.length < 1) return [];
+    const plain = needle.toLowerCase();
+    return ctx.jobs
+      .map(j => {
+        const name = j.displayName?.trim() ?? '';
+        const written = `${name} ${j.apartmentNumber ?? ''} ${j.address ?? ''}`.toLowerCase();
+        // Typed-as-written beats sounds-alike, so an exact search is never
+        // pushed down the list by a phonetic near-miss.
+        const literal = written.includes(plain) ? 1.5 : 0;
+        const heard = Math.max(soundScore(needle, name), soundScore(needle, j.address ?? ''));
+        return { job: j, score: Math.max(literal, heard) };
+      })
+      .filter(r => r.score > 0.55)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 40);
+  }, [q, ctx.jobs]);
+
+  return (
+    <div className="w-full h-full flex flex-col overflow-hidden">
+      <div className="flex items-center gap-1.5 px-2 pt-2 pb-1.5 flex-shrink-0">
+        <Search size={13} className="text-gray-400 flex-shrink-0" />
+        <input
+          data-no-drag data-el-action data-job-find
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          placeholder="Name, number or address"
+          className="flex-1 min-w-0 outline-none bg-transparent text-slate-700 placeholder:text-slate-400"
+          style={{ fontSize: size }}
+        />
+        {q && (
+          <button data-no-drag data-el-action onClick={() => setQ('')}
+            className="text-gray-300 hover:text-gray-600"><X size={12} /></button>
+        )}
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-y-auto px-1 pb-1" data-no-drag data-wheel>
+        {!q.trim() && (
+          <p className="px-2 py-3 text-gray-400" style={{ fontSize: size - 1 }}>
+            {ctx.jobs.length} jobs. Type a family name in either language.
+          </p>
+        )}
+        {q.trim() && hits.length === 0 && (
+          <p className="px-2 py-3 text-gray-400" style={{ fontSize: size - 1 }}>
+            Nothing close to “{q.trim()}”.
+          </p>
+        )}
+        {hits.map(({ job }: { job: Apartment }) => (
+          <MiniJob
+            key={job.id}
+            job={job}
+            stages={ctx.stages}
+            assignments={ctx.assignments}
+            onOpen={ctx.openJob}
+            size={size}
+          />
+        ))}
+      </div>
+    </div>
+  );
 }
