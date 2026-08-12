@@ -659,7 +659,54 @@ export interface PlanEntry {
   name: string;
   kind: 'original' | 'annotated';
   modifiedTime?: string;
+  /**
+   * A photograph is a plan too.
+   *
+   * Plenty of what the office marks up is a phone picture of a riser or a
+   * scanned sketch, not a PDF out of a CAD package. Everything downstream is
+   * the same — the same tools, the same versions — except that an image has no
+   * layers of its own, so the layer switches are simply not offered.
+   */
+  isImage?: boolean;
 }
+
+/** A folder in the job's Drive, for the plan chooser's own browser. */
+export interface DriveFolder { id: string; name: string }
+
+/** Every folder under the job's Drive link, one level down, for the picker. */
+export async function listFoldersViaBackend(driveLink: string): Promise<DriveFolder[]> {
+  const folderId = extractFolderId(driveLink);
+  if (!folderId) return [];
+  try {
+    const files = await listFolderViaBackend(folderId);
+    return files
+      .filter(f => f.mimeType === FOLDER_MIME)
+      .map(f => ({ id: f.id, name: f.name }));
+  } catch {
+    return [];
+  }
+}
+
+/** Everything markable in one folder: PDFs and pictures alike. */
+export async function listMarkableViaBackend(folderId: string): Promise<PlanEntry[]> {
+  try {
+    const files = await listFolderViaBackend(folderId);
+    return files
+      .filter(f => markable(f))
+      .map(f => ({
+        id: f.id, name: f.name, kind: 'original' as const,
+        isImage: isImageFile(f),
+      }));
+  } catch {
+    return [];
+  }
+}
+
+const isImageFile = (f: { name: string; mimeType: string }) =>
+  /^image\//i.test(f.mimeType) || /\.(png|jpe?g|webp|gif|bmp|heic)$/i.test(f.name);
+const isPdfFile = (f: { name: string; mimeType: string }) =>
+  /pdf/i.test(f.mimeType) || /\.pdf$/i.test(f.name);
+const markable = (f: { name: string; mimeType: string }) => isPdfFile(f) || isImageFile(f);
 
 /**
  * Everything the chip row needs, from the job's own Drive link.
@@ -688,14 +735,15 @@ export async function listPlansViaBackend(plansFolderId: string): Promise<{
   plans: PlanEntry[];
   annotatedFolderId: string | null;
 }> {
-  const isPdf = (f: DriveFile) => /pdf/i.test(f.mimeType) || /\.pdf$/i.test(f.name);
   const out: PlanEntry[] = [];
   let annotatedFolderId: string | null = null;
 
   try {
     const top = await listFolderViaBackend(plansFolderId);
     for (const f of top) {
-      if (isPdf(f)) out.push({ id: f.id, name: f.name, kind: 'original' });
+      // Pictures as well as PDFs: a phone photo of a riser is a plan somebody
+      // wants to draw on just as much as a drawing out of AutoCAD.
+      if (markable(f)) out.push({ id: f.id, name: f.name, kind: 'original', isImage: isImageFile(f) });
     }
     const sub = top.find(f =>
       f.mimeType === 'application/vnd.google-apps.folder'
@@ -704,7 +752,7 @@ export async function listPlansViaBackend(plansFolderId: string): Promise<{
       annotatedFolderId = sub.id;
       const inner = await listFolderViaBackend(sub.id);
       for (const f of inner) {
-        if (isPdf(f)) out.push({ id: f.id, name: f.name, kind: 'annotated' });
+        if (markable(f)) out.push({ id: f.id, name: f.name, kind: 'annotated', isImage: isImageFile(f) });
       }
     }
   } catch { /* the chips just stay as they were */ }

@@ -17,6 +17,7 @@ import { PenStroke, PenSample, NibWatch, samplesOf, simplify, nearSegment } from
 import { TOOLS, toolById, INK_COLORS, HIGHLIGHT_COLORS, rememberColor } from './annotTools';
 import { InkPicker } from './InkPicker';
 import { paintStroke, bubbleTextBox, REF, LINE } from './paintStroke';
+import { PlanPicker } from './PlanPicker';
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -64,6 +65,35 @@ interface PdfPage {
   cleanup?(): void;
 }
 interface PdfDoc { numPages: number; getPage(n: number): Promise<PdfPage> }
+
+/**
+ * A picture, wearing a one-page document's clothes.
+ *
+ * The studio talks to pdf.js through a very small surface — numPages, getPage,
+ * getViewport, render — so a photograph only has to answer the same four
+ * questions to be marked up by exactly the same tools. Nothing downstream
+ * learns the difference.
+ */
+function imageAsDoc(bmp: ImageBitmap): PdfDoc {
+  const page: PdfPage = {
+    getViewport: ({ scale }: { scale: number }) => ({
+      width: bmp.width * scale, height: bmp.height * scale, scale,
+    }),
+    render(o: unknown) {
+      const { canvasContext, viewport } = o as {
+        canvasContext: CanvasRenderingContext2D;
+        viewport: { width: number; height: number };
+      };
+      let cancelled = false;
+      const promise = (async () => {
+        if (cancelled) return;
+        canvasContext.drawImage(bmp, 0, 0, viewport.width, viewport.height);
+      })();
+      return { promise, cancel() { cancelled = true; } };
+    },
+  } as unknown as PdfPage;
+  return { numPages: 1, getPage: async () => page };
+}
 
 /** Only the bits of pdf.js's optional-content config this needs. */
 interface OcConfig {
@@ -122,6 +152,8 @@ export interface PlanChoice {
   name: string;
   /** Originals come from the plans folder; markups from its Annotated Plans subfolder. */
   kind: 'original' | 'annotated';
+  /** A picture rather than a PDF: no layers, everything else the same. */
+  isImage?: boolean;
 }
 
 export function PlanAnnotator({
@@ -218,6 +250,15 @@ export function PlanAnnotator({
   /** Which of the PDF's own layers are switched on. */
   const [layers, setLayers] = useState<{ id: string; name: string; on: boolean }[]>([]);
   const [showLayers, setShowLayers] = useState(false);
+  /**
+   * A picture rather than a PDF.
+   *
+   * Everything else is the same — the same tools, the same versions, the same
+   * saving — but an image has no optional-content groups, so the layer
+   * switches are switched off rather than offered and found empty.
+   */
+  const [loadedIsImage, setLoadedIsImage] = useState(false);
+  const isImagePlan = loadedIsImage || !!plans.find(p => p.id === planFileId)?.isImage;
   const [showDownload, setShowDownload] = useState(false);
   const [showPlans, setShowPlans] = useState(false);
   /** On the wallboard: who is drawing. Empty means nobody has said yet. */
@@ -312,7 +353,26 @@ export function PlanAnnotator({
     setDoc(null); setLoadErr('');
     setGot({ bytes: 0, total: null });
     fetchPlanBytes(planFileId, (bytes, total) => { if (!dead) setGot({ bytes, total }); })
-      .then(buf => pdfjs.getDocument({ data: new Uint8Array(buf) }).promise)
+      .then(async buf => {
+        /**
+         * A picture is drawn as a one-page document.
+         *
+         * pdf.js is given PDFs; an image is decoded and wrapped in the same
+         * shape — one page, a viewport, a render onto the canvas — so
+         * everything downstream (the ink layers, the zoom, the versions, the
+         * saving) works on a photograph without knowing it is one.
+         */
+        const bytes = new Uint8Array(buf);
+        // The FILE says whether it is a picture, not a list it might not be
+        // in: a plan chosen out of another folder never appears in `plans`, so
+        // asking that list left the layer switches offered on a photograph.
+        const isPdf = bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46;
+        if (!dead) setLoadedIsImage(!isPdf);
+        if (isPdf) return pdfjs.getDocument({ data: bytes }).promise as unknown as PdfDoc;
+        const blob = new Blob([bytes]);
+        const bmp = await createImageBitmap(blob);
+        return imageAsDoc(bmp);
+      })
       .then(d => { if (!dead) { setDoc(d as unknown as PdfDoc); setPage(0); } })
       .catch(e => { if (!dead) setLoadErr(e instanceof Error ? e.message : String(e)); });
     return () => { dead = true; };
@@ -1766,16 +1826,20 @@ export function PlanAnnotator({
             className="p-1.5 rounded-lg hover:bg-white/10"><Maximize2 size={13} /></button>
         </div>
 
-        {plans.length > 1 && (
-          <button onClick={() => setShowPlans(true)}
-            title="Switch between the original plans and the marked-up ones"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold text-white/85 hover:bg-white/10">
-            <ChevronsUpDown size={13} /> Plans
-          </button>
-        )}
+        {/* Always offered, not only when there are two.
+            The chooser is how you reach ANOTHER FOLDER, so hiding it when the
+            plans folder happened to hold one file hid the way out of it. */}
+        <button data-open-plans onClick={() => setShowPlans(true)}
+          title="Choose a plan — or another folder in this job's Drive"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold text-white/85 hover:bg-white/10">
+          <ChevronsUpDown size={13} /> Plans
+        </button>
 
         <button onClick={() => setShowLayers(v => !v)}
-          title="Show or hide the plan's own layers"
+          disabled={isImagePlan}
+          title={isImagePlan
+            ? 'A picture has no layers of its own'
+            : "Show or hide the plan's own layers"}
           className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold ${
             showLayers ? 'bg-white/15 text-white' : 'text-white/85 hover:bg-white/10'}`}>
           <Layers2 size={13} /> Layers
@@ -2341,40 +2405,20 @@ export function PlanAnnotator({
       )}
 
       {/* Which plan — the originals, then the markups made from them. */}
-      {showPlans && plans.length > 0 && (
-        <>
-          <div className="fixed inset-0 z-[158]" onClick={() => setShowPlans(false)} />
-          <div className="fixed z-[159] rounded-2xl overflow-hidden bg-white"
-            style={{ left: '50%', top: 56, transform: 'translateX(-50%)', width: 'min(460px,92vw)',
-                     maxHeight: '70vh', boxShadow: '0 20px 48px -10px rgba(15,23,42,.4)' }}>
-            <div className="px-3 py-2 text-[12px] font-bold text-white" style={{ backgroundColor: NAVY }}>
-              Plans on this job
-            </div>
-            <div className="p-2 overflow-y-auto" style={{ maxHeight: '60vh' }}>
-              {(['original', 'annotated'] as const).map(kind => {
-                const rows = plans.filter(p => p.kind === kind);
-                if (!rows.length) return null;
-                return (
-                  <div key={kind} className="mb-2">
-                    <div className="px-2 py-1 text-[9.5px] font-extrabold tracking-wide text-gray-400">
-                      {kind === 'original' ? 'ORIGINALS' : 'MARKED UP'}
-                    </div>
-                    {rows.map(p => (
-                      <button key={p.id}
-                        onClick={() => { onPickPlan?.(p); setShowPlans(false); }}
-                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 text-left">
-                        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                          style={{ backgroundColor: p.id === planFileId ? ACCENT : '#cbd5e1' }} />
-                        <span className="text-[12px] text-gray-700 truncate flex-1">{p.name}</span>
-                        {p.id === planFileId && <Check size={12} style={{ color: ACCENT }} />}
-                      </button>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </>
+      {/* Which plan, out of which folder. The chooser opens on Engineered
+          Plans and can walk the rest of the job's Drive from there. */}
+      {showPlans && (
+        <PlanPicker
+          driveLink={driveFolderUrl}
+          plansFolderId={plansFolderId}
+          plans={plans}
+          current={planFileId}
+          onPick={(p, _folder, stayOpen) => {
+            onPickPlan?.(p);
+            if (!stayOpen) setShowPlans(false);
+          }}
+          onClose={() => setShowPlans(false)}
+        />
       )}
 
       {/* The wallboard asks who is drawing before it lets anyone draw. */}
