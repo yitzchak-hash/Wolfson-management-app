@@ -721,6 +721,63 @@ export interface Contractor {
   createdAt: string;
 }
 
+/**
+ * Somebody on the payroll.
+ *
+ * Deliberately its own list, separate from `users` (who log in to the admin)
+ * and from `contractors` (who are given work through the portal). The three
+ * overlap on paper and not at all in what they are for: a labourer who taps in
+ * every morning has no login and takes no assignments, and an office manager
+ * clocks in without ever appearing on a job. Folding any two together would
+ * mean one list where two thirds of every row is blank.
+ */
+export interface Employee {
+  id: string;
+  name: string;
+  nameHe?: string;
+  /** Free text — "Installer", "Office", "Driver". Only ever displayed. */
+  role?: string;
+  /** Their colour on the tap-in board. Falls back to one derived from the name. */
+  color?: string;
+  active: boolean;
+  /** Where they sit on the board, so the wall panel can be arranged by hand. */
+  sortOrder?: number;
+  createdAt: string;
+}
+
+/**
+ * One tap. Not a shift — a shift is derived by pairing these.
+ *
+ * `day` is the LOCAL calendar day the punch belongs to, stored alongside the
+ * instant rather than worked out from it, because a punch just before midnight
+ * has to stay on the day the person was working.
+ */
+export interface TimePunch {
+  id: string;
+  employeeId: string;
+  /** yyyy-mm-dd, local. */
+  day: string;
+  /** ISO instant. */
+  at: string;
+  kind: 'in' | 'out';
+  /** Written by the app to close off a day somebody forgot to finish. */
+  auto?: boolean;
+  /** 'board', 'auto', or whoever corrected it by hand. */
+  source?: string;
+  note?: string;
+}
+
+export interface TimeClockSettings {
+  /** When a day is assumed to have started, for somebody who forgot to tap in. */
+  dayStart: string;
+  /** When a forgotten day gets closed off. */
+  dayEnd: string;
+  /** Unpaid break deducted from any day with time on it. */
+  breakMinutes: number;
+  /** Round each day to the nearest N minutes. 0 leaves it exact. */
+  roundMinutes: number;
+}
+
 export interface TaskAttachment {
   id: string;
   filename: string;

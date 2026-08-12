@@ -264,6 +264,13 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
     { key: 'rows', label: 'Down', kind: 'number', min: 3, max: 20 },
   ],
   celebrate: [title(), { key: 'label', label: 'What the button says', kind: 'text' }],
+  'tap-in': [
+    title(),
+    {
+      key: 'cols', label: 'Tiles across', kind: 'number', min: 1, max: 6,
+      hint: 'Three suits a portrait wall panel; six suits a wide one.',
+    },
+  ],
   'btu-hp': [
     title(),
     {
@@ -643,6 +650,7 @@ export const WIDGET_PREVIEW: Record<string, Record<string, unknown>> = {
   'streak-flame': {},
   celebrate: {},
   'btu-hp': { unit: 'btu', value: '24000' },
+  'tap-in': { cols: 3 },
   'before-after': {},
 };
 

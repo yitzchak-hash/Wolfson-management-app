@@ -1,11 +1,13 @@
 import React from 'react';
 import {
   Globe2, Flame, Images, Rows3, Trophy, Disc3, Grid3x3, PartyPopper, Calculator,
+  Fingerprint,
 } from 'lucide-react';
 import { WidgetDef } from './widgets';
 import { WorldClocks, ShabbatClock } from '../components/board/TimeWidgets';
 import { BeforeAfter, SplitFlap, CrewRace } from '../components/board/TactileWidgets';
 import { StreakFlame, SpinWheel, BubbleWrap, Celebrate, BtuHp } from '../components/board/DelightWidgets';
+import { TapInBoard } from '../components/board/TapInBoard';
 
 /**
  * The widgets whose render is a real component rather than a few lines.
@@ -77,6 +79,13 @@ export const MORE_WIDGETS: WidgetDef[] = [
     blurb: 'A button that throws confetti. For when a building tops out.',
     data: { label: '🎉 Nice one' },
     render: (el, c) => <Celebrate el={el} c={c} />,
+  },
+  {
+    id: 'tap-in', rank: 3, name: 'Tap in', category: 'live',
+    icon: Fingerprint, w: 300, h: 200,
+    blurb: 'Big name tiles people press on arrival. Lit tiles are who is here right now.',
+    data: { cols: 3 },
+    render: (el, c) => <TapInBoard el={el} c={c} />,
   },
   {
     id: 'btu-hp', rank: 18, name: 'BTU and horsepower', category: 'plan',

@@ -9,6 +9,7 @@ import { isFirebaseConfigured, db, fsSet, fsGetAll } from '../data/firebase';
 import { TvDashboard } from '../components/board/TvDashboard';
 import { WidgetStore } from '../components/board/WidgetStore';
 import { TV_ALLOWED } from '../data/tvWidgets';
+import { TimeClockTab } from '../components/settings/TimeClockTab';
 import { TV_DASH_BOARD } from '../types';
 import { portalLink, bareDomain, looksLikePreviewHost } from '../data/portalLink';
 import type { BoardAccess } from '../types';
@@ -31,7 +32,7 @@ function ratioOfShape(id?: string): number {
   return w > 0 && h > 0 ? w / h : 16 / 9;
 }
 
-type Tab = 'stages' | 'users' | 'contractors' | 'app' | 'language' | 'buildings' | 'sheet' | 'tv' | 'workspaces';
+type Tab = 'stages' | 'users' | 'contractors' | 'timeclock' | 'app' | 'language' | 'buildings' | 'sheet' | 'tv' | 'workspaces';
 
 /**
  * Settings are split in two, and the split is deliberate:
@@ -48,7 +49,7 @@ type Tab = 'stages' | 'users' | 'contractors' | 'app' | 'language' | 'buildings'
 export type SettingsScope = 'project' | 'app';
 
 const PROJECT_TABS: Tab[] = ['stages', 'buildings', 'sheet'];
-const APP_TABS: Tab[] = ['workspaces', 'users', 'contractors', 'tv', 'app', 'language'];
+const APP_TABS: Tab[] = ['workspaces', 'users', 'contractors', 'timeclock', 'tv', 'app', 'language'];
 
 const PRESET_COLORS = [
   '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16',
@@ -79,6 +80,7 @@ export function SettingsPage({ scope = 'project' }: { scope?: SettingsScope }) {
     stages: s.settingsStages,
     users: s.settingsUsers,
     contractors: s.settingsContractors,
+    timeclock: 'Time clock',
     app: s.settingsApp,
     language: s.settingsLanguage,
     buildings: s.settingsBuildings,
@@ -151,6 +153,9 @@ export function SettingsPage({ scope = 'project' }: { scope?: SettingsScope }) {
       )}
       {activeTab === 'contractors' && (
         <ContractorsTab onToast={showToast} />
+      )}
+      {activeTab === 'timeclock' && (
+        <TimeClockTab onToast={showToast} />
       )}
       {activeTab === 'workspaces' && (
         <NewWorkspace onToast={showToast} />

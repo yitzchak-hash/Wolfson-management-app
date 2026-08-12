@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BoardSetting, BoardSettingKey, BoardLayout, PlanPin, PlanAnnotation, BoardView } from '../types';
+import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BoardSetting, BoardSettingKey, BoardLayout, PlanPin, PlanAnnotation, BoardView, Employee, TimePunch, TimeClockSettings } from '../types';
 
 // Always merge stored mainUiStrings ON TOP of the fresh preset so code-added keys
 // are never missing even when localStorage has an older saved version.
@@ -12,6 +12,7 @@ import {
   buildDefaultApartments, buildNetivApartments, buildGroundFirstFloorSlots, migrateNetivApartments, DATA_VERSION,
 } from './initialData';
 import { fsSet, fsDelete, fsBatchSet, fsGetAll, fsListen, isFirebaseConfigured, db, projectCollection } from './firebase';
+import { DEFAULT_TIME_CLOCK, resolvePunch } from './timeClock';
 
 const WOLFSON_STORAGE_KEY = 'wolfson_app_data';
 const VERSION_KEY = 'wolfson_app_version';
@@ -222,6 +223,28 @@ interface AppState {
   lightTheme: boolean;
   setLightTheme: (v: boolean) => void;
 
+  /**
+   * The payroll list and the taps against it.
+   *
+   * GLOBAL, like users and contractors: somebody works for the company, not
+   * for a workspace, and a month's timesheet must not change depending on
+   * which project happens to be open. Both collections are therefore bare in
+   * Firestore, never wrapped in projectCollection().
+   */
+  employees: Employee[];
+  timePunches: TimePunch[];
+  timeClock: TimeClockSettings;
+  addEmployee: (e: Omit<Employee, 'id' | 'createdAt'>) => Employee;
+  updateEmployee: (id: string, changes: Partial<Employee>) => void;
+  deleteEmployee: (id: string) => void;
+  /** Tap in or out. Returns what was written, in words, for the toast. */
+  punchClock: (employeeId: string, kind: 'in' | 'out', source?: string) => string;
+  /** Add or correct a punch by hand, from the settings screen. */
+  addPunch: (p: Omit<TimePunch, 'id'>) => void;
+  updatePunch: (id: string, changes: Partial<TimePunch>) => void;
+  deletePunch: (id: string) => void;
+  setTimeClock: (changes: Partial<TimeClockSettings>) => void;
+
   // Contractors
   contractors: Contractor[];
   contractorAssignments: ContractorAssignment[];
@@ -420,6 +443,9 @@ export const useStore = create<AppState>((set, get) => ({
   generalNoteVersions: (stored?.generalNoteVersions as GeneralNoteVersion[] | null) ?? [],
   activityLogs: (stored?.activityLogs as ActivityLog[] | null) ?? [],
   contractors: (stored?.contractors as Contractor[] | null) ?? [],
+  employees: (stored?.employees as Employee[] | null) ?? [],
+  timePunches: (stored?.timePunches as TimePunch[] | null) ?? [],
+  timeClock: { ...DEFAULT_TIME_CLOCK, ...((stored?.timeClock as Partial<TimeClockSettings> | null) ?? {}) },
   contractorAssignments: (stored?.contractorAssignments as ContractorAssignment[] | null) ?? [],
   contractorNotes: (stored?.contractorNotes as ContractorNote[] | null) ?? [],
   contractorPhotos: (stored?.contractorPhotos as ContractorPhoto[] | null) ?? [],
@@ -477,6 +503,11 @@ export const useStore = create<AppState>((set, get) => ({
       users: state.users,
       stages: state.stages,
       contractors: state.contractors,
+      // Employees and their taps belong to the company, not to a workspace —
+      // switching project must not empty the timesheet.
+      employees: state.employees,
+      timePunches: state.timePunches,
+      timeClock: state.timeClock,
       autoBackup: state.autoBackup,
       backupFrequency: state.backupFrequency,
       backupDriveFolderLink: state.backupDriveFolderLink,
@@ -1267,6 +1298,91 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   // ─── Contractor actions ────────────────────────────────────────────────────
+  addEmployee: (fields) => {
+    const e: Employee = {
+      ...fields,
+      id: generateId(),
+      createdAt: new Date().toISOString(),
+    };
+    set(state => ({ employees: [...state.employees, e] }));
+    persist(get);
+    fsSet('employees', e.id, e);
+    return e;
+  },
+
+  updateEmployee: (id, changes) => {
+    set(state => ({ employees: state.employees.map(e => e.id === id ? { ...e, ...changes } : e) }));
+    persist(get);
+    const updated = get().employees.find(e => e.id === id);
+    if (updated) fsSet('employees', id, updated);
+  },
+
+  /**
+   * Removing somebody takes their taps with them.
+   *
+   * The alternative — orphaned punches nothing can name — would quietly
+   * inflate nothing and be impossible to audit. Somebody who has LEFT should
+   * be marked inactive instead, which keeps every hour they ever worked; this
+   * is for a row entered by mistake.
+   */
+  deleteEmployee: (id) => {
+    const doomed = get().timePunches.filter(p => p.employeeId === id);
+    set(state => ({
+      employees: state.employees.filter(e => e.id !== id),
+      timePunches: state.timePunches.filter(p => p.employeeId !== id),
+    }));
+    persist(get);
+    fsDelete('employees', id);
+    doomed.forEach(p => fsDelete('timePunches', p.id));
+  },
+
+  /**
+   * A tap on the board.
+   *
+   * The decision about WHAT to write lives in `resolvePunch`, which is pure and
+   * tested on its own: a forgotten clock-out from an earlier day gets closed at
+   * that day's end, and a clock-out with no clock-in gets a start written at the
+   * normal start time. Both are marked so the month's report can flag them
+   * rather than quietly inventing hours.
+   */
+  punchClock: (employeeId, kind, source = 'board') => {
+    const state = get();
+    const plan = resolvePunch(state.timePunches, employeeId, kind, new Date(), state.timeClock, source);
+    if (!plan.writes.length) return plan.message;
+    const made: TimePunch[] = plan.writes.map(w => ({ ...w, id: generateId() }));
+    set(st => ({ timePunches: [...st.timePunches, ...made] }));
+    persist(get);
+    made.forEach(pch => fsSet('timePunches', pch.id, pch));
+    return plan.message;
+  },
+
+  addPunch: (fields) => {
+    const pch: TimePunch = { ...fields, id: generateId() };
+    set(state => ({ timePunches: [...state.timePunches, pch] }));
+    persist(get);
+    fsSet('timePunches', pch.id, pch);
+  },
+
+  updatePunch: (id, changes) => {
+    set(state => ({ timePunches: state.timePunches.map(p => p.id === id ? { ...p, ...changes } : p) }));
+    persist(get);
+    const updated = get().timePunches.find(p => p.id === id);
+    if (updated) fsSet('timePunches', id, updated);
+  },
+
+  deletePunch: (id) => {
+    set(state => ({ timePunches: state.timePunches.filter(p => p.id !== id) }));
+    persist(get);
+    fsDelete('timePunches', id);
+  },
+
+  setTimeClock: (changes) => {
+    const next = { ...get().timeClock, ...changes };
+    set({ timeClock: next });
+    persist(get);
+    fsSet('settings', 'app', { timeClock: next });
+  },
+
   addContractor: (fields) => {
     const c: Contractor = {
       ...fields,
@@ -1465,6 +1581,10 @@ export const useStore = create<AppState>((set, get) => ({
       generalNoteVersions: state.generalNoteVersions,
       activityLogs: state.activityLogs,
       contractors: state.contractors,
+      // Wages. Top level, next to apartments — the importer reads it there.
+      employees: state.employees,
+      timePunches: state.timePunches,
+      timeClock: state.timeClock,
       contractorAssignments: state.contractorAssignments,
       contractorNotes: state.contractorNotes,
       contractorPhotos: state.contractorPhotos,
@@ -1518,6 +1638,11 @@ export const useStore = create<AppState>((set, get) => ({
         generalNoteVersions: data.generalNoteVersions ?? [],
         activityLogs: data.activityLogs ?? [],
         contractors: data.contractors ?? [],
+        // Current state as the fallback, never [] — restoring an older backup
+        // must not be able to delete a month of clock-ins.
+        employees: data.employees ?? state.employees,
+        timePunches: data.timePunches ?? state.timePunches,
+        timeClock: { ...DEFAULT_TIME_CLOCK, ...(data.timeClock ?? state.timeClock) },
         contractorAssignments: data.contractorAssignments ?? [],
         contractorNotes: data.contractorNotes ?? [],
         contractorPhotos: data.contractorPhotos ?? [],
@@ -1790,11 +1915,18 @@ export const useStore = create<AppState>((set, get) => ({
       state.canvasElements.length > 0
         ? fsBatchSet(pc('canvasElements'), state.canvasElements.map(e => ({ id: e.id, data: e })))
         : Promise.resolve(),
+      state.employees.length > 0
+        ? fsBatchSet('employees', state.employees.map(e => ({ id: e.id, data: e })))
+        : Promise.resolve(),
+      state.timePunches.length > 0
+        ? fsBatchSet('timePunches', state.timePunches.map(pch => ({ id: pch.id, data: pch })))
+        : Promise.resolve(),
       fsSet('settings', 'app', {
         autoBackup: state.autoBackup, backupFrequency: state.backupFrequency,
         backupDriveFolderLink: state.backupDriveFolderLink,
         contractorUiStrings: state.contractorUiStrings,
         mainUiStrings: state.mainUiStrings,
+        timeClock: state.timeClock,
       }),
     ]);
   },
@@ -1824,6 +1956,7 @@ export const useStore = create<AppState>((set, get) => ({
       fbApts, fbStageNotes, fbStages, fbUsers, fbLogs,
       fbContractors, fbAssignments, fbNotes, fbPhotos, fbOfficeFiles, fbSettings,
       fbStageNoteVersions, fbGeneralNoteVersions, fbCanvasElements, fbPlanPins, fbPlanAnnotations,
+      fbEmployees, fbPunches,
     ] = await Promise.all([
       fsGetAll(col('apartments')),
       fsGetAll(col('stageNotes')),
@@ -1841,6 +1974,9 @@ export const useStore = create<AppState>((set, get) => ({
       fsGetAll(col('canvasElements')),
       fsGetAll(col('planPins')),
       fsGetAll(col('planAnnotations')),
+      // Bare, in every workspace: the payroll is company-wide.
+      fsGetAll('employees'),
+      fsGetAll('timePunches'),
     ]);
 
     // Only PROJECT-scoped signals decide whether this project has already been seeded.
@@ -1902,6 +2038,8 @@ export const useStore = create<AppState>((set, get) => ({
         canvasElements:        fbCanvasElements.length > 0 ? (fbCanvasElements as unknown as CanvasElement[]) : state.canvasElements,
         planPins:              fbPlanPins.length > 0 ? (fbPlanPins as unknown as PlanPin[]) : state.planPins,
         planAnnotations:       fbPlanAnnotations.length > 0 ? (fbPlanAnnotations as unknown as PlanAnnotation[]) : state.planAnnotations,
+        employees:             fbEmployees.length > 0 ? (fbEmployees as unknown as Employee[]) : state.employees,
+        timePunches:           fbPunches.length > 0 ? (fbPunches as unknown as TimePunch[]) : state.timePunches,
         ...(appSettings.backupFrequency      ? { backupFrequency:      appSettings.backupFrequency as BackupFrequency }      : {}),
         ...(appSettings.backupDriveFolderLink !== undefined ? { backupDriveFolderLink: appSettings.backupDriveFolderLink as string } : {}),
         ...(appSettings.contractorUiStrings  ? { contractorUiStrings:  appSettings.contractorUiStrings as ContractorUiStrings } : {}),
@@ -1911,6 +2049,7 @@ export const useStore = create<AppState>((set, get) => ({
         ...(appSettings.boardViews ? { boardViews: appSettings.boardViews as BoardView[] } : {}),
         ...(appSettings.projectOrder ? { projectOrder: appSettings.projectOrder as string[] } : {}),
         ...(appSettings.boardSettings ? { boardSettings: appSettings.boardSettings as Record<string, BoardSetting> } : {}),
+        ...(appSettings.timeClock ? { timeClock: { ...DEFAULT_TIME_CLOCK, ...(appSettings.timeClock as Partial<TimeClockSettings>) } } : {}),
         ...(appSettings.customProjects ? {
           customProjects: appSettings.customProjects as Project[],
           projects: [...DEFAULT_PROJECTS, ...(appSettings.customProjects as Project[])],
@@ -1985,12 +2124,19 @@ export const useStore = create<AppState>((set, get) => ({
         state.planAnnotations.length > 0
           ? fsBatchSet(col('planAnnotations'), state.planAnnotations.map(a => ({ id: a.id, data: a })))
           : Promise.resolve(),
+        state.employees.length > 0
+          ? fsBatchSet('employees', state.employees.map(e => ({ id: e.id, data: e })))
+          : Promise.resolve(),
+        state.timePunches.length > 0
+          ? fsBatchSet('timePunches', state.timePunches.map(pch => ({ id: pch.id, data: pch })))
+          : Promise.resolve(),
         fsSet('settings', 'app', {
           autoBackup:            state.autoBackup,
           backupFrequency:       state.backupFrequency,
           backupDriveFolderLink: state.backupDriveFolderLink,
           contractorUiStrings:   state.contractorUiStrings,
           mainUiStrings:         state.mainUiStrings,
+          timeClock:             state.timeClock,
         }),
       ]);
     }
@@ -2028,6 +2174,15 @@ export const useStore = create<AppState>((set, get) => ({
       }),
       fsListen('contractors', (docs) => {
         if (docs.length > 0) { set({ contractors: docs as unknown as Contractor[] }); persist(get); }
+      }),
+      // Bare, like every other global collection. A tap on the wall panel has
+      // to show up on the office machine within the second, which is the whole
+      // reason the board is worth having.
+      fsListen('employees', (docs) => {
+        if (docs.length > 0) { set({ employees: docs as unknown as Employee[] }); persist(get); }
+      }),
+      fsListen('timePunches', (docs) => {
+        if (docs.length > 0) { set({ timePunches: docs as unknown as TimePunch[] }); persist(get); }
       }),
       fsListen(col('contractorAssignments'), (docs) => {
         const localA = get().contractorAssignments;
@@ -2090,6 +2245,7 @@ export const useStore = create<AppState>((set, get) => ({
           ...(appS.mainUiStrings        ? { mainUiStrings: mergeFreshMainUi(appS.mainUiStrings as Partial<MainUiStrings>) } : {}),
           ...(appS.contractorSheetLinks ? { contractorSheetLinks: appS.contractorSheetLinks as Record<string, string> } : {}),
           ...(appS.boardSettings ? { boardSettings: appS.boardSettings as Record<string, BoardSetting> } : {}),
+          ...(appS.timeClock ? { timeClock: { ...DEFAULT_TIME_CLOCK, ...(appS.timeClock as Partial<TimeClockSettings>) } } : {}),
           ...(appS.boardViews ? { boardViews: appS.boardViews as BoardView[] } : {}),
           ...(appS.projectOrder ? { projectOrder: appS.projectOrder as string[] } : {}),
           ...(appS.customProjects ? {
@@ -2197,6 +2353,9 @@ function persistNow(get: () => AppState) {
     stageNoteVersions: state.stageNoteVersions.slice(0, 200),
     activityLogs: state.activityLogs.slice(0, 200),
     contractors: state.contractors,
+    employees: state.employees,
+    timePunches: state.timePunches,
+    timeClock: state.timeClock,
     contractorAssignments: state.contractorAssignments,
     contractorNotes: state.contractorNotes,
     contractorPhotos: photosLean,
