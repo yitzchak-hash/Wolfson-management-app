@@ -271,6 +271,33 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
       hint: 'Three suits a portrait wall panel; six suits a wide one.',
     },
   ],
+  'job-map': [
+    title(),
+    {
+      key: 'tiles', label: 'Map tiles', kind: 'url',
+      placeholder: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+      hint: 'Leave blank for OpenStreetMap. Point it at a paid tile provider here if the '
+        + 'office ever outgrows the free one — the address needs {z}, {x} and {y} in it.',
+    },
+  ],
+  weather: [
+    title(),
+    {
+      key: 'placeId', label: 'Where', kind: 'select',
+      options: [
+        { value: 'jerusalem', label: 'Jerusalem' },
+        { value: 'haifa', label: 'Haifa' },
+        { value: 'telaviv', label: 'Tel Aviv' },
+        { value: 'beersheva', label: "Be'er Sheva" },
+        { value: 'netanya', label: 'Netanya' },
+        { value: 'modiin', label: "Modi'in" },
+        { value: 'ashdod', label: 'Ashdod' },
+        { value: 'bneibrak', label: 'Bnei Brak' },
+        { value: 'kiryatgat', label: 'Kiryat Gat' },
+        { value: 'beitshemesh', label: 'Beit Shemesh' },
+      ],
+    },
+  ],
   'btu-hp': [
     title(),
     {
@@ -651,6 +678,43 @@ export const WIDGET_PREVIEW: Record<string, Record<string, unknown>> = {
   celebrate: {},
   'btu-hp': { unit: 'btu', value: '24000' },
   'tap-in': { cols: 3 },
+  /**
+   * A pre-filled geocode cache, so the card draws placed pins instantly.
+   *
+   * Without it the shelf fires a real lookup for every sample address — slow,
+   * rate-limited, and pointless — and until it answers, every job is drawn
+   * loose in the middle of the country with a warning on it, which is the
+   * widget's fault state, not its picture. These coordinates match the sample
+   * addresses in widgets.tsx.
+   */
+  'job-map': {
+    geo: {
+      '14 Ben Gurion': { lat: 32.0853, lon: 34.7818 },
+      '3 Herzl': { lat: 32.0648, lon: 34.7726 },
+      '88 Dizengoff': { lat: 32.0785, lon: 34.7745 },
+      '5 Rothschild': { lat: 32.0632, lon: 34.7702 },
+      '21 Allenby': { lat: 32.0684, lon: 34.7690 },
+      '9 Bialik': { lat: 32.0705, lon: 34.7742 },
+      '2 Weizmann': { lat: 32.0870, lon: 34.7938 },
+    },
+    view: { center: { lat: 32.0740, lon: 34.7790 }, zoom: 13 },
+  },
+  // A real forecast, captured once. The shelf has no business making a network
+  // call, and a card sitting on "loading…" previews nothing.
+  weather: {
+    placeId: 'telaviv',
+    sample: {
+      now: { temp: 32, code: 0, wind: 10, humidity: 56 },
+      days: [
+        { date: sampleDay(0), code: 2, hi: 34, lo: 25, rain: 0 },
+        { date: sampleDay(1), code: 45, hi: 32, lo: 25, rain: 0 },
+        { date: sampleDay(2), code: 2, hi: 33, lo: 25, rain: 10 },
+        { date: sampleDay(3), code: 3, hi: 33, lo: 25, rain: 35 },
+        { date: sampleDay(4), code: 61, hi: 29, lo: 23, rain: 70 },
+      ],
+      at: 0,
+    },
+  },
   'before-after': {},
 };
 
@@ -665,6 +729,12 @@ export const WIDGET_PREVIEW_COLOR: Record<string, string> = {
   banner: '#1e3a5f',
   'w-title': '#0f172a',
 };
+
+/** A local yyyy-mm-dd, for the sample forecast's day labels. */
+function sampleDay(n: number) {
+  const d = new Date(Date.now() + n * 86_400_000);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+}
 
 function iso(daysFromNow: number) {
   return new Date(Date.now() + daysFromNow * 86_400_000).toISOString().slice(0, 10);

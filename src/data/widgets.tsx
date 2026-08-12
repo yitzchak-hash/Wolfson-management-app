@@ -11,7 +11,7 @@ import {
 import {
   Apartment, CanvasElement, Stage, ContractorAssignment, Contractor,
   ContractorPhoto, ActivityLog, BIN_KINDS, BIN_META, isCountableApartment, personColor,
-  User, ContractorNote, PlanPin,
+  User, ContractorNote, PlanPin, Employee, TimePunch,
 } from '../types';
 import { portalLink } from './portalLink';
 import { useStore } from './store';
@@ -75,6 +75,16 @@ export interface WidgetCtx {
    */
   notes?: ContractorNote[];
   planPins?: PlanPin[];
+  /**
+   * The payroll list and its taps.
+   *
+   * Same reason as the two above: the tap-in board reads them from the store,
+   * which is right on a real board and useless on the shelf — a store card
+   * that says "nobody on the list yet" is honest and tells a shopper nothing
+   * about what the widget is.
+   */
+  employees?: Employee[];
+  punches?: TimePunch[];
   /** Writes back into the element — used by the interactive widgets. */
   update: (patch: Partial<CanvasElement>) => void;
   openJob: (id: string) => void;
@@ -2041,6 +2051,25 @@ const SAMPLE_NOTES = [
     authorType: 'contractor', authorId: 'k1', authorName: 'Avi Drywall', createdAt: ago(1) },
 ] as unknown as ContractorNote[];
 
+/** Three people and a morning's taps, so the tap-in board has something to be. */
+const SAMPLE_EMPLOYEES = [
+  { id: 'w1', name: 'Yaakov', role: 'Installer', active: true, sortOrder: 0, createdAt: '' },
+  { id: 'w2', name: 'Igor', role: 'Installer', active: true, sortOrder: 1, createdAt: '' },
+  { id: 'w3', name: 'Dina', role: 'Office', active: true, sortOrder: 2, createdAt: '' },
+  { id: 'w4', name: 'Moshe', role: 'Driver', active: true, sortOrder: 3, createdAt: '' },
+] as unknown as Employee[];
+
+const SAMPLE_PUNCHES = (() => {
+  const day = localDay(0);
+  const at = (h: number, m: number) => {
+    const d = new Date(); d.setHours(h, m, 0, 0); return d.toISOString();
+  };
+  return [
+    { id: 'tp1', employeeId: 'w1', day, at: at(7, 12), kind: 'in' },
+    { id: 'tp2', employeeId: 'w2', day, at: at(7, 58), kind: 'in' },
+  ] as unknown as TimePunch[];
+})();
+
 /** Real data where there is any, samples where there is not — field by field. */
 export function withSampleData(ctx: WidgetCtx): WidgetCtx {
   const jobs = ctx.jobs.length ? ctx.jobs : SAMPLE_JOBS;
@@ -2093,6 +2122,8 @@ export function withSampleData(ctx: WidgetCtx): WidgetCtx {
     logs: ctx.logs.length ? ctx.logs : SAMPLE_LOGS,
     planPins: ctx.planPins?.length ? ctx.planPins : SAMPLE_PINS,
     notes: ctx.notes?.length ? ctx.notes : SAMPLE_NOTES,
+    employees: ctx.employees?.length ? ctx.employees : SAMPLE_EMPLOYEES,
+    punches: ctx.punches?.length ? ctx.punches : SAMPLE_PUNCHES,
     boardElements: hasPlanner
       ? ctx.boardElements
       : [...(ctx.boardElements ?? []), samplePlanner(jobs, contractors)],

@@ -21,8 +21,12 @@ export function TapInBoard({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   // The lit tiles are a clock reading, so the board has to keep up on its own.
   useTick(true, 30_000);
   const data = d(el);
-  const employees = useStore(s => s.employees);
-  const punches = useStore(s => s.timePunches);
+  // The store on a real board; the shelf hands over a sample so the card shows
+  // a board with people on it rather than its own empty state.
+  const storeEmployees = useStore(s => s.employees);
+  const storePunches = useStore(s => s.timePunches);
+  const employees = c.employees?.length ? c.employees : storeEmployees;
+  const punches = c.employees?.length ? (c.punches ?? []) : storePunches;
   const punchClock = useStore(s => s.punchClock);
   const [flash, setFlash] = useState<{ id: string; text: string } | null>(null);
 

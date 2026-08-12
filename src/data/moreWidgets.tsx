@@ -1,13 +1,15 @@
 import React from 'react';
 import {
   Globe2, Flame, Images, Rows3, Trophy, Disc3, Grid3x3, PartyPopper, Calculator,
-  Fingerprint,
+  Fingerprint, Map as MapIcon, CloudSun,
 } from 'lucide-react';
 import { WidgetDef } from './widgets';
 import { WorldClocks, ShabbatClock } from '../components/board/TimeWidgets';
 import { BeforeAfter, SplitFlap, CrewRace } from '../components/board/TactileWidgets';
 import { StreakFlame, SpinWheel, BubbleWrap, Celebrate, BtuHp } from '../components/board/DelightWidgets';
 import { TapInBoard } from '../components/board/TapInBoard';
+import { MapWidget } from '../components/board/MapWidget';
+import { WeatherWidget } from '../components/board/WeatherWidget';
 
 /**
  * The widgets whose render is a real component rather than a few lines.
@@ -86,6 +88,20 @@ export const MORE_WIDGETS: WidgetDef[] = [
     blurb: 'Big name tiles people press on arrival. Lit tiles are who is here right now.',
     data: { cols: 3 },
     render: (el, c) => <TapInBoard el={el} c={c} />,
+  },
+  {
+    id: 'job-map', rank: 5, name: 'Map', category: 'live',
+    icon: MapIcon, w: 340, h: 260,
+    blurb: 'A real street map with every job on it, placed from the address already typed on the job.',
+    data: {},
+    render: (el, c) => <MapWidget el={el} c={c} />,
+  },
+  {
+    id: 'weather', rank: 19, name: 'Weather', category: 'live',
+    icon: CloudSun, w: 250, h: 130,
+    blurb: 'Five days for the site. The one widget that uses the internet — rain decides the week.',
+    data: { placeId: 'telaviv' },
+    render: (el, c) => <WeatherWidget el={el} c={c} />,
   },
   {
     id: 'btu-hp', rank: 18, name: 'BTU and horsepower', category: 'plan',

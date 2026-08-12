@@ -975,3 +975,134 @@ frames every sheet in a black surround that cannot be turned off.
 ## Panels must close on Escape
 The widget store and the node settings did not. A full-screen backdrop you have not noticed swallows
 every other click on the board.
+
+---
+
+# v2 — twenty-two more widgets, and the time clock
+
+## Where widgets live now
+`widgets.tsx` got long, so the registry is assembled from four files and pushed
+together at the bottom of it (same trick as `TV_WIDGETS`, same reason — they
+import `Frame` and the data helpers from it):
+
+| file | what is in it |
+|---|---|
+| `widgets.tsx` | the original set, `WidgetCtx`, `Frame`/`Big`/`d`/`today`/`overdueOf`/`useTick`, sample data |
+| `tvWidgets.tsx` | the wall set |
+| `insightWidgets.tsx` | the nine that find what is NOT happening |
+| `moreWidgets.tsx` | registrations for everything whose render is a real component |
+
+Components sit in `src/components/board/`: `TimeWidgets`, `TactileWidgets`,
+`DelightWidgets`, `TapInBoard`, `MapWidget`, `WeatherWidget`.
+
+**Adding a widget is still three places**: the registry entry, `WIDGET_FIELDS`,
+and `WIDGET_PREVIEW`. A card with no preview entry draws its own empty state,
+which on a shelf is indistinguishable from broken.
+
+## The nine that look for absence
+`no-date` · `gone-quiet` · `nobody-booked` · `backlog-trend` · `open-snags` ·
+`no-plan` · `floor-by-floor` · `duplicates` · `skipped-stage`.
+
+Every other live widget counts what IS happening. These find what is not, which
+is what goes wrong quietly because there is no list it appears on. Two rules
+they must keep:
+- **Task lists go through `liveAssignments(c)`**, not `c.assignments`. A job
+  filed into Done or Trash leaves every unit total via `isCountableApartment`,
+  and its tasks have to leave the chasing lists with it.
+- **`skipped-stage` reads the change log, never the current stage.** A job at
+  stage 5 tells you nothing about whether it passed through 3.
+
+`WidgetCtx` grew `notes`, `planPins`, `employees` and `punches`, all optional —
+a widget treats absent as "read the store", which is what makes the shelf able
+to hand over samples.
+
+## Sun and Shabbat (`src/data/sun.ts`)
+NOAA's **full** solar-position method, not the short form. The short form is out
+by up to three minutes, which is fine for a sun dial and not for candle
+lighting — and the error is not evenly signed, so it can be late, which is the
+direction that matters. Nightfall is the sun **8.5° down**, computed with the
+same machinery at a different zenith, never a fixed offset from sunset.
+Candles round DOWN to the minute and havdalah rounds UP: half a minute of
+uncertainty must never fall on the side that says there is more time than there
+is.
+
+Checked against **Hebcal** — what the office would otherwise read off a printed
+sheet — four cities, five dates across the year: everything within 64 seconds,
+candle lighting and havdalah to the minute. Do not re-test this against
+sunrise-sunset.org; it sits about two minutes off both Hebcal and Open-Meteo
+and will fail correct code.
+
+## The time clock (`src/data/timeClock.ts` + `TimeClockTab`)
+`Employee` and `TimePunch` are **global**, like users and contractors —
+somebody works for the company, not for a workspace. Bare Firestore
+collections; `timeClock` settings live in `settings/app`.
+
+**A shift is never stored.** It is derived by pairing an employee's punches, so
+the totals can never disagree with the taps that made them.
+
+`resolvePunch` is the whole feature and is pure:
+- an open shift from an EARLIER day closes at that day's `dayEnd`, never at
+  "now" — that would credit somebody with sleeping on site;
+- a clock-out with no clock-in writes a start at `dayStart`, so the day is paid
+  rather than lost;
+- a second clock-in on one day is refused as the mistake it is.
+
+Everything the app writes itself carries `auto: true`, and the month's report
+shades it and says so. **The app never quietly invents hours.**
+
+A day is corrected by being **rewritten whole** — every punch on it removed and
+replaced — not patched, because a day with three clock-ins on it is exactly
+what somebody is there to clean up.
+
+## `src/data/xlsx.ts` — a real .xlsx, no dependency
+A ZIP of XML, written by hand: one CRC32 table, stored (uncompressed) entries,
+inline strings, one bold style. A CSV is not Excel — one sheet, no widths, no
+header, and Excel's import guesser turning `08:30` into a time and a Hebrew
+name into mojibake.
+
+Two traps already paid for: the DOS date must be a **valid** date (all-zero
+means month 0 day 0 and LibreOffice refuses the archive), and `styles.xml`
+needs a named `Normal` cellStyle or readers warn. Verified by writing a file
+and reading it back with openpyxl — Hebrew, ampersands and angle brackets all
+survive.
+
+## The map (`MapWidget` + `src/data/geocode.ts` + `api/geocode.js`)
+A hand-written slippy map: a grid of 256px tiles addressed by z/x/y, plus
+Mercator. No mapping library — the hard part would have been escaping the
+board's drag system, not the maths.
+
+- **Positions come from the `address` already typed on a job.** Nothing new to
+  fill in. A job with no address still appears — scattered deterministically
+  around the middle of the country with a **red exclamation**, named after
+  whoever is assigned to it, so a missing address is visible as a gap.
+- `scatterAround` is seeded from the record's id: a marker that moves every
+  render reads as a fault.
+- Geocoding goes through **`api/geocode.js`** because the geocoder demands an
+  identifying User-Agent and a browser cannot set one. That route is
+  deliberately NOT key-guarded — it holds no secret, and locking it would break
+  the map on any deployment without the key. One request a second, queued.
+- Results cache into the node's own `data.geo`, which syncs — so one machine
+  doing the lookups spares the others.
+- **`data-wheel-own`** is a new board opt-out meaning "hands off the wheel
+  entirely". The older `data-wheel` means "I am a scroller" and is only
+  honoured while there is somewhere left to scroll; the map has no overflow at
+  all, so that test never matched and the board zoomed itself instead.
+- Pointer capture goes on the MAP, never on `e.target` — capturing on the
+  target meant a drag begun on a pin was delivered to that pin until release,
+  counted as a click, and opened the job. Panning opened things at random.
+- The wheel is bound **natively with `{ passive: false }`**. React registers
+  wheel passively, so `preventDefault` in an `onWheel` prop does nothing but
+  log a warning.
+
+## Weather
+The only widget that uses the internet, and it earns it: rain decides the week.
+Open-Meteo, direct, no key and nothing to hide. `data.sample` lets the shelf
+hand it a canned forecast — the store has no business making network calls, and
+a card stuck on "loading…" previews nothing.
+
+## Testing note for this container
+The headless browser here **cannot reach the internet** — every request is
+ERR_CONNECTION_RESET with or without the egress proxy, and the proxy logs no
+relay attempt. Tiles, the geocoder and the forecast are all reachable with
+curl from the same machine, so harnesses stub exactly those responses with
+`page.route` and let everything else run for real.

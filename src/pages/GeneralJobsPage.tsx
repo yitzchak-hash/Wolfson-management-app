@@ -2152,6 +2152,18 @@ export function GeneralJobsPage() {
     window.addEventListener('pointerup', up);
     window.addEventListener('pointercancel', up);
     const onWheel = (e: WheelEvent) => {
+      /**
+       * A widget that OWNS the wheel outright, scrollable or not.
+       *
+       * `data-wheel` says "I am a scroller, give me the wheel while I still
+       * have somewhere to go". That is the right rule for a list and the wrong
+       * one for the map, which is not a scroller at all — it has no overflow,
+       * so the scroller test never matched and the board zoomed itself instead
+       * of the map. This says "hands off entirely", and is the only thing that
+       * suits a widget whose whole job is to interpret a wheel its own way.
+       */
+      if ((e.target as Element | null)?.closest?.('[data-wheel-own]')) return;
+
       // Anything with its own scroll — the toolbar rail, a list inside a widget —
       // keeps its wheel. Swallowing it board-wide meant a rail taller than the
       // screen could not be scrolled at all.
