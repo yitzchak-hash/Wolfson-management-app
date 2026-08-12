@@ -571,7 +571,7 @@ export function PlannerWidget({
                             if (node && state !== 'ending') cellRefs.current.set(key, node);
                             else cellRefs.current.delete(key);
                           }}
-                          className="group/cell p-0.5 flex flex-col gap-0.5 transition-colors"
+                          className="group/cell p-0.5 flex flex-col gap-0.5 transition-colors items-stretch"
                           style={{
                             // A slot is a rectangle a job card fits in, and it
                             // grows by whole cards — never by squeezing them.
@@ -731,7 +731,13 @@ function PlannerCard({
       const d = drag.current;
       drag.current = null;
       (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
-      if (!d?.live) return;
+      if (!d?.live) {
+        // A press that never travelled IS a click, and a click opens the job —
+        // the same thing it does anywhere else. Done here rather than in a
+        // separate onClick so there is one path, not two that must agree.
+        if (!(e.target as HTMLElement).closest('a,[data-card-action]')) onOpen();
+        return;
+      }
       const target = rotaCellAt(e.clientX, e.clientY);
       setRotaHover(null);
       if (target) onDragTo!(target, e.ctrlKey || e.metaKey);
@@ -753,23 +759,26 @@ function PlannerCard({
     return (
       <div
         {...dragHandlers}
-        className="group/en rounded-md px-1.5 py-1 min-w-0 planner-card"
+        // The board's node handler takes the pointer on pointerdown so it can
+        // start dragging the notebook; without these the card never saw the
+        // press at all, so clicking one did nothing and dragging one moved the
+        // whole widget.
+        data-no-drag data-el-action
+        className="group/en rounded-md px-1.5 py-1 min-w-0 planner-card flex-1 flex flex-col justify-center"
         style={{
           backgroundColor: tint(color, 0.16), border: '1px solid rgba(15,23,42,.07)',
-          cursor: readOnly ? undefined : 'grab', touchAction: 'none',
+          cursor: readOnly ? undefined : 'pointer', touchAction: 'none',
         }}
-        title="Drag to another day · hold Ctrl to leave a copy here"
+        title="Click to open · drag to another day · hold Ctrl to leave a copy"
       >
         <div className="flex items-start gap-1 min-w-0">
           <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1"
             style={{ backgroundColor: stage?.color ?? '#cbd5e1' }}
             title={stage ? stage.name : 'Not started'} />
-          <button
-            data-no-drag data-el-action
-            onDoubleClick={onOpen}
+          <span
             className="flex-1 min-w-0 text-left"
             style={{ fontSize: size, fontWeight: bold ? 800 : 700, color: '#1e293b' }}
-            title={job ? 'Double-click to open' : 'This job is no longer on the board'}
+            title={job ? undefined : 'This job is no longer on the board'}
           >
             <span className="block truncate">
               {job ? (job.displayName?.trim() || job.address?.trim() || 'Job') : '(job removed)'}
@@ -780,7 +789,7 @@ function PlannerCard({
                 {[entry.text, stage?.name, job?.address].filter(Boolean).join(' · ')}
               </span>
             )}
-          </button>
+          </span>
 
           {/* What the tile carries, carried here too. */}
           <span className="flex items-center gap-0.5 flex-shrink-0">

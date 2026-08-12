@@ -2490,7 +2490,18 @@ export function GeneralJobsPage() {
   const maxX = Math.max(step(contentX + EDGE_PAD), 1200);
   const maxY = Math.max(step(contentY + EDGE_PAD), 800);
 
-  openJobRef.current = (id: string) => { const j = jobs.find(x => x.id === id); if (j) setSelectedJob(j); };
+  /**
+   * Open a job by id — from ANY list, including ones the board is not drawing.
+   *
+   * `jobs` is what the board draws, and a job living in a weekly notebook is
+   * deliberately not in it. Looking the id up there meant a card in the
+   * notebook could not be opened at all: the job it named was, by definition,
+   * excluded from the list being searched.
+   */
+  openJobRef.current = (id: string) => {
+    const j = apartments.find(x => x.id === id);
+    if (j) setSelectedJob(j);
+  };
   live.current = {
     jobDown: onJobPointerDown, jobMove: onJobPointerMove, jobUp: onJobPointerUp,
     jobMenu: onJobContextMenu, jobOpen: (j: Apartment) => setSelectedJob(j), jobDelete: handleDeleteJobs,
