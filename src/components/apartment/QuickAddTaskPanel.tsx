@@ -1,8 +1,11 @@
 import React, { useState, useRef } from 'react';
-import { X, Plus, CheckCircle2, Clock, CalendarDays, ArrowRight, User2, Paperclip, FileText, X as XIcon, AlertTriangle, Pencil, Save, ZoomIn } from 'lucide-react';
-import { Apartment, User, ContractorCategory, TaskAttachment, getStageName } from '../../types';
+import { X, Plus, CheckCircle2, Clock, CalendarDays, ArrowRight, User2, Paperclip, FileText, X as XIcon, AlertTriangle, Pencil, Save, ZoomIn, Loader2, Copy, Check } from 'lucide-react';
+import {
+  Apartment, User, ContractorCategory, TaskAttachment, ContractorAssignment, getStageName,
+} from '../../types';
 import { useStore } from '../../data/store';
 import { contractorLoad, loadTooltip, loadColor } from '../../data/contractorLoad';
+import { taskShareText, copyTaskShare } from '../../data/taskShare';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import { findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, isUploadBackendConfigured, extractFolderId } from '../../data/driveApi';
 
@@ -19,7 +22,9 @@ interface Props {
 
 export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: Props) {
   const { stages, contractors, contractorAssignments, updateContractorAssignment,
-    addContractorAssignment, updateApartment, currentProjectId } = useStore();
+    addContractorAssignment, updateApartment, currentProjectId, projects } = useStore();
+  /** The workspace's name, so a pasted message says which site it is about. */
+  const projectLabel = projects.find(p => p.id === currentProjectId)?.name;
   const s = useStore(state => state.mainUiStrings);
 
   function getDueBadge(dueDate: string | null) {
@@ -54,6 +59,17 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
   const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  /**
+   * Saving, and then what was saved.
+   *
+   * A task used to vanish the instant it was made, with a toast that was gone
+   * before you read it — so there was no moment at which the thing you had
+   * just created existed on screen. `saved` holds it: a confirmation, and the
+   * one button people actually want next, which is telling the contractor.
+   */
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState<ContractorAssignment | null>(null);
+  const [copied, setCopied] = useState(false);
   const [attProgress, setAttProgress] = useState<Record<string, number>>({});
   const [previewAtt, setPreviewAtt] = useState<TaskAttachment | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -142,7 +158,10 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
       }
     }
 
-    addContractorAssignment({
+    setSaving(true);
+    const made: ContractorAssignment = {
+      id: '',
+      createdAt: new Date().toISOString(),
       contractorId,
       apartmentId: apartment.id,
       buildingId: apartment.buildingId,
@@ -154,7 +173,8 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
       createdByName: currentUser.name,
       ...(finalAttachments.length ? { attachments: finalAttachments } : {}),
       ...(priority ? { priority: priority as import('../../types').TaskPriority } : {}),
-    });
+    } as ContractorAssignment;
+    addContractorAssignment(made);
     if (stageId && stageId !== apartment.currentStageId) {
       updateApartment(apartment.id, { currentStageId: stageId }, currentUser);
     }
@@ -165,6 +185,8 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
     setAttachments([]);
     setAttachmentFiles([]);
     setAttProgress({});
+    setSaving(false);
+    setSaved(made);
     onToast(s.taskAdded);
   }
 
@@ -593,12 +615,57 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                   </div>
 
                   <button
+                    data-create-task
                     onClick={handleAdd}
-                    disabled={!contractorId || !task.trim() || !apartment.driveLink || uploading}
+                    disabled={!contractorId || !task.trim() || !apartment.driveLink || uploading || saving}
                     className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] disabled:opacity-40 transition-colors"
                   >
-                    <Plus size={15} /> {uploading ? s.uploadingLabel : s.createTask}
+                    {uploading || saving
+                      ? <Loader2 size={15} className="animate-spin" />
+                      : <Plus size={15} />}
+                    {uploading ? s.uploadingLabel : saving ? 'Saving…' : s.createTask}
                   </button>
+
+                  {/* What was just made, and the thing you do next with it.
+                      A task used to vanish the moment it was created, so there
+                      was no point at which it existed on screen — and telling
+                      the contractor meant retyping the address, the date and
+                      the plan link into WhatsApp by hand. */}
+                  {saved && (
+                    <div data-task-saved
+                      className="mt-3 rounded-xl border p-3"
+                      style={{ borderColor: '#bbf7d0', backgroundColor: '#f0fdf4' }}>
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <CheckCircle2 size={14} className="text-green-600" />
+                        <span className="text-[12.5px] font-bold text-green-800">
+                          Sent to {contractors.find(c => c.id === saved.contractorId)?.name ?? 'them'}
+                        </span>
+                      </div>
+                      <button
+                        data-copy-task
+                        onClick={async () => {
+                          const ok = await copyTaskShare(taskShareText({
+                            task: saved,
+                            apartment,
+                            contractor: contractors.find(c => c.id === saved.contractorId),
+                            stage: sortedStages.find(st => st.id === saved.stageId),
+                            projectName: projectLabel,
+                            isRtl: !!s.isRtl,
+                          }));
+                          setCopied(ok);
+                          onToast(ok ? 'Copied — paste it into WhatsApp'
+                                     : 'Could not copy — press Ctrl+C');
+                          if (ok) setTimeout(() => setCopied(false), 2400);
+                        }}
+                        className="w-full flex items-center justify-center gap-2 py-2 rounded-lg
+                                   text-[12.5px] font-bold text-white transition-colors"
+                        style={{ backgroundColor: copied ? '#16a34a' : '#25D366' }}
+                      >
+                        {copied ? <Check size={14} /> : <Copy size={14} />}
+                        {copied ? 'Copied' : 'Copy the details to send'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
