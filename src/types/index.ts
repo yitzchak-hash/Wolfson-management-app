@@ -413,6 +413,22 @@ export interface Apartment {
    */
   ghosts?: { x: number; y: number }[];
   /**
+   * The job LIVES in a weekly notebook, not on the board.
+   *
+   * Dropping a job on a day moves it in: the board stops drawing it and the
+   * square holds it. Putting it in a second square makes a ghost — the same
+   * record appearing again, exactly like a ghost on the board — so one job can
+   * be on two people's rows or two days without ever becoming two jobs.
+   *
+   * It is NOT a bin. A binned job drops out of every total in the app; a
+   * scheduled one must not, or the unit and task counts would fall every time
+   * the office planned some work. `isCountableApartment` deliberately ignores
+   * this field.
+   *
+   * Emptying the last square puts the job back on the board where it was.
+   */
+  inNotebook?: string;
+  /**
    * Thumbs-up count. Right-click adds one, clicking the badge takes one back.
    * A count rather than a flag because several people share one board.
    */

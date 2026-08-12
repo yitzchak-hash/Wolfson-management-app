@@ -797,7 +797,15 @@ export function GeneralJobsPage() {
   const stageMap = new Map(stages.map(st => [st.id, st]));
   // Jobs in a bin (Done / Ready / Archive / Trash) live in their own window,
   // not on the main board. Nothing is deleted — they are only moved.
-  const jobs = apartments.filter(a => !a.isUnnamed && a.buildingId === 'G' && !a.boardBin);
+  /**
+   * What the board draws.
+   *
+   * A job that has been moved into a weekly notebook is not on the board any
+   * more — it is in the notebook, which is where you go to look at it. It is
+   * still a job in every total, unlike a binned one; it has just moved house.
+   */
+  const jobs = apartments.filter(a =>
+    !a.isUnnamed && a.buildingId === 'G' && !a.boardBin && !a.inNotebook);
 
   /**
    * A node belongs to exactly one surface.
@@ -1039,17 +1047,52 @@ export function GeneralJobsPage() {
     setRotaHover(null);
     const el = canvasElements.find(c => c.id === cell.elId);
     if (!el) return;
+    // Which of these were already living in a notebook — so the message can say
+    // "another day" rather than "moved in" for a job that never left.
+    const inNotebookAlready = new Set(
+      ids.filter(id => apartments.find(a => a.id === id)?.inNotebook));
     const data = (el.data ?? {}) as Record<string, unknown>;
     const cells = { ...((data.cells ?? {}) as Record<string, PlannerEntry[]>) };
     const key = `${cell.person}|${cell.day}`;
     const already = cells[key] ?? [];
+
+    /**
+     * A repeat is a GHOST, not a refusal.
+     *
+     * Dropping a job that is already somewhere in the notebook used to be
+     * silently ignored, which made it impossible to put one job on two
+     * people's rows. It is the same record appearing twice — exactly like a
+     * ghost on the board — so it stays one job in every total.
+     *
+     * Only a repeat in the SAME square is pointless, and that is all that is
+     * filtered out here.
+     */
     const fresh = ids
       .filter(id => !already.some(e => e.jobId === id))
       .map(id => ({ id: `R-${Math.random().toString(36).slice(2, 8)}`, jobId: id, taskId }));
     if (!fresh.length) return;
     cells[key] = [...already, ...fresh];
     updateCanvasElement(el.id, { data: { ...data, cells } });
-    setToast(fresh.length === 1 ? 'Put on the planner' : `${fresh.length} jobs put on the planner`);
+
+    /**
+     * The job MOVES IN: the board stops drawing it and the square holds it.
+     *
+     * It is not binned. A binned job drops out of every total in the app;
+     * a scheduled one must not, or the unit and task counts would fall every
+     * time the office planned some work. Its board position is left alone, so
+     * taking it out of the last square puts it back where it was.
+     */
+    if (currentUser) {
+      for (const { jobId } of fresh) {
+        const j = apartments.find(a => a.id === jobId);
+        if (j && j.inNotebook !== el.id) updateApartment(jobId!, { inNotebook: el.id }, currentUser);
+      }
+    }
+
+    const ghosting = fresh.filter(f => inNotebookAlready.has(f.jobId!)).length;
+    setToast(ghosting
+      ? (fresh.length === 1 ? 'Another day for the same job' : `${fresh.length} more days`)
+      : (fresh.length === 1 ? 'Moved into the notebook' : `${fresh.length} jobs moved into the notebook`));
   }
 
   /**
@@ -2048,6 +2091,26 @@ export function GeneralJobsPage() {
        * wants to move without changing scale.
        */
       const held = leftDown.current || (e.buttons & 1) === 1;
+
+      /**
+       * A widget that scrolls keeps its own wheel.
+       *
+       * This listener is on the viewport and native, so it runs BEFORE any
+       * handler inside a widget and its preventDefault stops the browser
+       * scrolling anything at all — which is why the weekly notebook could not
+       * be wheeled through even though it was plainly a scrollable list.
+       * Anything marked as its own scroller is left alone, and only when it
+       * actually has somewhere to go in that direction: at the top or bottom
+       * of the list the wheel goes back to being the board's.
+       */
+      const scroller = (e.target as Element | null)?.closest?.('[data-wheel]') as HTMLElement | null;
+      if (scroller) {
+        const room = scroller.scrollHeight - scroller.clientHeight;
+        const atTop = scroller.scrollTop <= 0;
+        const atEnd = scroller.scrollTop >= room - 1;
+        if (room > 0 && !((atTop && e.deltaY < 0) || (atEnd && e.deltaY > 0))) return;
+      }
+
       e.preventDefault();
 
       if (e.shiftKey) {
@@ -2276,6 +2339,21 @@ export function GeneralJobsPage() {
    * Stable between renders unless the underlying data really changed — so a
    * drag, which only moves local state, cannot re-render every live widget.
    */
+  /**
+   * Through a ref, so the widget context stays stable.
+   *
+   * The context is memoised and handed to every widget on the board; putting a
+   * closure over `currentUser` straight into it would rebuild the context — and
+   * therefore re-render every widget — on changes that have nothing to do with
+   * any of them.
+   */
+  const leaveNotebookRef = useRef((_id: string) => {});
+  leaveNotebookRef.current = (id: string) => {
+    if (!currentUser) return;
+    updateApartment(id, { inNotebook: undefined }, currentUser);
+    setToast('Back on the board');
+  };
+
   const widgetCtx: WidgetCtx = useMemo(() => ({
     jobs: apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed),
     stages: allStages.filter(st => st.projectId === 'general'),
@@ -2286,7 +2364,12 @@ export function GeneralJobsPage() {
     logs: activityLogs,
     update: () => {},
     openJob: (id: string) => openJobRef.current(id),
-  }), [apartments, allStages, contractorAssignments, contractors, contractorPhotos, activityLogs]);
+    boardElements: canvasElements,
+    // A job whose last square in the notebook was emptied comes back to the
+    // board, at the position it never lost.
+    leaveNotebook: (id: string) => leaveNotebookRef.current(id),
+  }), [apartments, allStages, contractorAssignments, contractors, contractorPhotos, activityLogs,
+       users, canvasElements]);
 
   // ── Canvas size ───────────────────────────────────────────────────
   /**

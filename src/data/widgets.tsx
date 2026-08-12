@@ -68,6 +68,8 @@ export interface WidgetCtx {
   showAllScheduled?: (plannerId: string) => void;
   /** Ask what to do with the task behind a planner slot being emptied. */
   askRemoveTask?: (entry: PlannerEntry, done: (alsoDelete: boolean) => void) => void;
+  /** A job's last square in the notebook was emptied — put it back on the board. */
+  leaveNotebook?: (jobId: string) => void;
   /** The TV passes this: widgets render, but nothing can be changed. */
   readOnly?: boolean;
   /**
@@ -599,11 +601,11 @@ export const WIDGETS: WidgetDef[] = [
      * The id stays 'rota' so every planner already on a board keeps its people
      * and its filled-in days. Only the name and the component changed.
      */
-    id: 'rota', rank: 1, name: 'Planner', category: 'plan', icon: CalendarDays, w: 760, h: 340,
-    blurb: 'People down the left, days across, a slot at every crossing. Drag a job onto a day, '
-      + 'or just type into it. Hebrew dates and holidays optional.',
+    id: 'rota', rank: 1, name: 'Weekly notebook', category: 'plan', icon: CalendarDays, w: 760, h: 340,
+    blurb: 'People down the left, days across. Drag a job onto a day and it moves in; drop it on a '
+      + 'second day for a ghost of the same job. Add weeks above and below as you go.',
     data: {
-      mode: 'week', span: 5, weekStart: 0, people: [], cells: {},
+      span: 5, weekStart: 0, people: [], cells: {}, weekCount: 1,
       hebrew: true, holidays: { jewish: true, israeli: true }, askOnDrop: true,
       textSize: 11, dayNameSize: 11,
     },
@@ -621,6 +623,7 @@ export const WIDGETS: WidgetDef[] = [
         openJob={c.openJob}
         onShowAll={c.showAllScheduled ? () => c.showAllScheduled!(el.id) : undefined}
         onRemoveTask={c.askRemoveTask}
+        onLeaveNotebook={c.leaveNotebook}
       />
     ),
   },
