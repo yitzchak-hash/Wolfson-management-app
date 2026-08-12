@@ -123,6 +123,12 @@
    A tile edited in the last few seconds glows softly, so a change arriving
    from someone else's machine is noticed instead of silently appearing. */
 .live-change-pulse { animation: liveChangePulse 2.2s ease-in-out infinite; }
+/* A streak that is running should look like it is running. */
+@keyframes streakPulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.12); }
+}
+
 @keyframes liveChangePulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(74, 168, 216, 0); }
   50%      { box-shadow: 0 0 0 5px rgba(74, 168, 216, 0.28); }

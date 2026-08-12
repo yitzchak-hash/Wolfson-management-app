@@ -182,6 +182,103 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
   duplicates: [title(), limit()],
   'skipped-stage': [title(), limit()],
 
+  // ── Time, tactile and the cheerful ones ────────────────────────────────
+  'world-clocks': [
+    title(),
+    {
+      key: 'cities', label: 'Cities', kind: 'text',
+      hint: 'Comma-separated: il, ny, la, tor, lon, ant, par, ber, mil, ist, mos, '
+        + 'dub, mum, bkk, sha, hk, tok, syd, jnb, sao. Any IANA zone name works too.',
+      placeholder: 'il, ny, lon, sha',
+    },
+    { key: 'workStart', label: 'Their day starts at', kind: 'number', min: 0, max: 23 },
+    { key: 'workEnd', label: 'Their day ends at', kind: 'number', min: 1, max: 24 },
+  ],
+  'shabbat-clock': [
+    title(),
+    {
+      key: 'placeId', label: 'Where', kind: 'select',
+      options: [
+        { value: 'jerusalem', label: 'Jerusalem' },
+        { value: 'haifa', label: 'Haifa' },
+        { value: 'telaviv', label: 'Tel Aviv' },
+        { value: 'beersheva', label: "Be'er Sheva" },
+        { value: 'netanya', label: 'Netanya' },
+        { value: 'modiin', label: "Modi'in" },
+        { value: 'ashdod', label: 'Ashdod' },
+        { value: 'bneibrak', label: 'Bnei Brak' },
+        { value: 'kiryatgat', label: 'Kiryat Gat' },
+        { value: 'beitshemesh', label: 'Beit Shemesh' },
+      ],
+    },
+    {
+      key: 'candleMinutes', label: 'Candles, minutes before sunset', kind: 'number', min: 0, max: 90,
+      hint: 'Jerusalem keeps 40 and Haifa 30 by custom; the rest of the country is 20. '
+        + 'Leave blank to follow the city.',
+    },
+    {
+      key: 'vanBuffer', label: 'Last van leaves, minutes before candles', kind: 'number', min: 0, max: 480,
+      hint: 'The number the office actually argues about on a Friday.',
+    },
+  ],
+  'before-after': [
+    title(),
+    { key: 'jobId', label: 'Which job', kind: 'job', allowNone: 'Whichever has the most photos' },
+    { key: 'beforeUrl', label: 'Before picture', kind: 'image' },
+    { key: 'afterUrl', label: 'After picture', kind: 'image' },
+  ],
+  'split-flap': [
+    title(),
+    {
+      key: 'source', label: 'What it shows', kind: 'select',
+      options: [
+        { value: 'text', label: 'Words I type' },
+        { value: 'openTasks', label: 'Open tasks' },
+        { value: 'overdue', label: 'Overdue tasks' },
+        { value: 'jobs', label: 'Jobs on the board' },
+        { value: 'dueToday', label: 'Due today' },
+      ],
+    },
+    { key: 'text', label: 'The words', kind: 'text', hint: 'Up to 24 characters. Letters, digits and . , : - / only.' },
+    { key: 'size', label: 'Flap size', kind: 'number', min: 10, max: 90 },
+  ],
+  'crew-race': [
+    title(),
+    { key: 'days', label: 'Counting the last… (days)', kind: 'number', min: 1, max: 90 },
+    {
+      key: 'target', label: 'Finish line', kind: 'number', min: 0, max: 500,
+      hint: 'Leave at nought and the leader is the finish line.',
+    },
+  ],
+  'streak-flame': [title()],
+  'spin-wheel': [
+    title(),
+    {
+      key: 'names', label: 'Names on the wheel', kind: 'text',
+      hint: 'Comma-separated. Leave blank to use your contractors.',
+    },
+  ],
+  'bubble-wrap': [
+    title(),
+    { key: 'cols', label: 'Across', kind: 'number', min: 4, max: 20 },
+    { key: 'rows', label: 'Down', kind: 'number', min: 3, max: 20 },
+  ],
+  celebrate: [title(), { key: 'label', label: 'What the button says', kind: 'text' }],
+  'btu-hp': [
+    title(),
+    {
+      key: 'unit', label: 'What you type in', kind: 'select',
+      options: [
+        { value: 'btu', label: 'BTU/hr' },
+        { value: 'hpTrade', label: 'HP (unit size)' },
+        { value: 'hpMech', label: 'HP (mechanical)' },
+        { value: 'ton', label: 'Tons' },
+        { value: 'kw', label: 'kW' },
+      ],
+    },
+    { key: 'value', label: 'Value', kind: 'text' },
+  ],
+
   // ── Planning ───────────────────────────────────────────────────────────
   checklist: [title()],
   tally: [
@@ -536,6 +633,17 @@ export const WIDGET_PREVIEW: Record<string, Record<string, unknown>> = {
   'no-plan': {},
   duplicates: {},
   'skipped-stage': {},
+  'world-clocks': { cities: ['il', 'ny', 'lon', 'sha'] },
+  'shabbat-clock': { placeId: 'telaviv', vanBuffer: 90 },
+  'split-flap': { source: 'text', text: 'TZVIAIR', size: 20 },
+  'crew-race': { days: 30 },
+  // Half a sheet already popped, so a shopper can see both states at once.
+  'bubble-wrap': { cols: 10, rows: 6, popped: [1, 2, 5, 9, 11, 14, 20, 21, 22, 30, 33, 41, 44, 47, 52] },
+  'spin-wheel': {},
+  'streak-flame': {},
+  celebrate: {},
+  'btu-hp': { unit: 'btu', value: '24000' },
+  'before-after': {},
 };
 
 /**

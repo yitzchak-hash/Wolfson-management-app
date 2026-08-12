@@ -22,6 +22,7 @@ import { MiniJob } from '../components/board/MiniJob';
 import { ProjectMini, BoardMini, CalendarMini } from '../components/board/DashWidgets';
 import { TV_WIDGETS } from './tvWidgets';
 import { INSIGHT_WIDGETS } from './insightWidgets';
+import { MORE_WIDGETS } from './moreWidgets';
 import { PlannerWidget, PlannerData, PlannerEntry } from '../components/board/PlannerWidget';
 import { StickyNoteWidget } from '../components/board/StickyNoteWidget';
 import { ActivitySentence } from '../components/ui/ActivitySentence';
@@ -1690,7 +1691,7 @@ function splitMs(ms: number) {
   };
 }
 
-function useTick(on = true, everyMs = 1000) {
+export function useTick(on = true, everyMs = 1000) {
   const [, set] = useState(0);
   useEffect(() => {
     if (!on) return;
@@ -2115,6 +2116,7 @@ WIDGETS.push(...TV_WIDGETS);
  * after the array rather than inside it.
  */
 WIDGETS.push(...INSIGHT_WIDGETS);
+WIDGETS.push(...MORE_WIDGETS);
 
 export const WIDGET_BY_ID = new Map(WIDGETS.map(w => [w.id, w]));
 
