@@ -5,6 +5,7 @@ import {
   Plus, Minus, Maximize2, Loader2, Pen, Pencil, Highlighter, Eraser, Minus as LineIcon,
   ArrowUpRight, Square, Circle, Type, Hand, Layers, FileDown, Check, ExternalLink,
   MessageSquare, Move, Layers2, ChevronsUpDown, User as UserIcon,
+  Monitor, ArrowRight, RotateCcw,
 } from 'lucide-react';
 import './pdfCompat';   // must come before pdf.js
 import * as pdfjs from 'pdfjs-dist';
@@ -1316,9 +1317,28 @@ export function PlanAnnotator({
     if (!dirty || locked || !strokes.length) return;
     keepLocally();
     clearTimeout(idleTimer.current);
+    setDriveIn(Math.round(DRIVE_IDLE_MS / 1000));
     idleTimer.current = window.setTimeout(() => { void pushToDrive(); }, DRIVE_IDLE_MS);
     return () => clearTimeout(idleTimer.current);
   }, [strokes, dirty, locked, keepLocally, pushToDrive]);
+
+  /**
+   * The seconds still to go before Drive gets it.
+   *
+   * Shown as a number inside the arrow rather than described in words: the
+   * question somebody actually has, standing over a plan they have just marked
+   * up, is "how long until this is safe", and a count answers it without
+   * anybody reading a sentence.
+   */
+  const [driveIn, setDriveIn] = useState(0);
+  /** Reset asks first; closing before Drive has it asks too. */
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmClose, setConfirmClose] = useState(false);
+  useEffect(() => {
+    if (saveState !== 'local' || driveIn <= 0) return;
+    const t = window.setInterval(() => setDriveIn(n => Math.max(0, n - 1)), 1000);
+    return () => clearInterval(t);
+  }, [saveState, driveIn]);
 
   /**
    * Leaving before Drive has it.
@@ -1378,6 +1398,10 @@ export function PlanAnnotator({
       // every time you glance at a plan is the kind of prompt people learn to
       // dismiss without reading, and the markup is still here when you return.
       if (e.key === 'Escape') {
+        // A question on top owns the key. Without this, one Escape dismissed
+        // the question AND closed the studio behind it — so backing out of
+        // "rub every mark off?" threw you out of the plan as well.
+        if (confirmReset || confirmClose) return;
         if (textDraft) setTextDraft(null);
         else if (showPalette) setShowPalette(false);
         else if (showLayers) setShowLayers(false);
@@ -1719,31 +1743,35 @@ export function PlanAnnotator({
             it happening — otherwise you are trusting something invisible with a
             drawing you just spent ten minutes on. Three honest states: kept on
             this machine, on its way to Drive, and safely in Drive. */}
-        {!locked && saveState !== 'clean' && (
-          <span
-            title={{
-              local: 'Your marks are kept on this machine. Drive gets them in a moment.',
-              sending: 'Filing a PDF copy in Drive now.',
-              sent: 'Filed in Drive.',
-              failed: 'Drive would not take it. Your marks are still kept here — press Save to try again.',
-            }[saveState]}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold"
-            style={{
-              backgroundColor: saveState === 'failed' ? 'rgba(239,68,68,.16)' : 'rgba(255,255,255,.08)',
-              color: saveState === 'failed' ? '#fca5a5'
-                : saveState === 'sent' ? '#86efac' : 'rgba(255,255,255,.75)',
-            }}
-          >
-            {saveState === 'sending'
-              ? <Loader2 size={13} className="animate-spin" />
-              : saveState === 'sent' ? <Check size={13} />
-              : saveState === 'failed' ? <AlertTriangle size={13} />
-              : <HardDrive size={13} />}
-            {{
-              local: 'Saved here', sending: 'Sending to Drive',
-              sent: 'Safe in Drive', failed: 'Drive failed',
-            }[saveState]}
+        {/* Undo, redo and reset, up here where they are looked for.
+            They were only on the tool rail, which is where you go to change
+            what you are drawing with — not where you go to take something
+            back. Reset asks first, because it is the one that cannot be
+            undone by pressing it again. */}
+        {!locked && (
+          <span className="flex items-center gap-0.5 mr-1">
+            <button data-top-undo onClick={undo} disabled={!strokes.length} title="Undo (Ctrl+Z)"
+              className="p-1.5 rounded-lg text-white/80 hover:bg-white/10 disabled:opacity-30">
+              <Undo2 size={ui.smallIcon} />
+            </button>
+            <button data-top-redo onClick={redoOne} disabled={!redo.length} title="Redo (Ctrl+Shift+Z)"
+              className="p-1.5 rounded-lg text-white/80 hover:bg-white/10 disabled:opacity-30">
+              <Redo2 size={ui.smallIcon} />
+            </button>
+            <button data-top-reset onClick={() => setConfirmReset(true)} disabled={!strokes.length}
+              title="Take every mark off this plan"
+              className="p-1.5 rounded-lg text-white/80 hover:bg-red-500/25 disabled:opacity-30">
+              <RotateCcw size={ui.smallIcon} />
+            </button>
           </span>
+        )}
+
+        {!locked && saveState !== 'clean' && (
+          <SaveTrip
+            state={saveState}
+            secondsLeft={driveIn}
+            onSendNow={() => { clearTimeout(idleTimer.current); void pushToDrive(); }}
+          />
         )}
 
         {!locked && (
@@ -1775,7 +1803,16 @@ export function PlanAnnotator({
             <UserIcon size={13} /> {who}
           </button>
         )}
-        <button onClick={onClose} title="Close" className="p-1.5 rounded-lg text-white/70 hover:bg-white/10">
+        {/* Closing before Drive has it asks. There is a window of a few seconds
+            where the markup is safe on this machine but not yet filed, and
+            walking away inside it is the one way to lose the drawing. */}
+        <button data-close-studio
+          onClick={() => {
+            const risky = !locked && strokes.length > 0
+              && (saveState === 'local' || saveState === 'failed');
+            if (risky) setConfirmClose(true); else onClose();
+          }}
+          title="Close" className="p-1.5 rounded-lg text-white/70 hover:bg-white/10">
           <X size={17} />
         </button>
       </div>
@@ -2290,6 +2327,44 @@ export function PlanAnnotator({
         </>
       )}
 
+      {/* Reset: the one action pressing again cannot undo. */}
+      {confirmReset && (
+        <AskFirst
+          title="Take every mark off this plan?"
+          body={`${strokes.length} mark${strokes.length === 1 ? '' : 's'} will be rubbed out. `
+            + 'Versions already filed are not touched — this is only what is on the plan now.'}
+          confirm="Rub them all out"
+          danger
+          onCancel={() => setConfirmReset(false)}
+          onConfirm={() => {
+            setConfirmReset(false);
+            setStrokes([]);
+            setRedo([]);
+            setDirty(true);
+          }}
+        />
+      )}
+
+      {/* Leaving before Drive has it. */}
+      {confirmClose && (
+        <AskFirst
+          title="Drive does not have this yet"
+          body={driveIn > 0
+            ? `It goes automatically in ${driveIn} second${driveIn === 1 ? '' : 's'}. It is already kept on this computer.`
+            : 'It is kept on this computer, but the Drive copy has not gone yet.'}
+          confirm="Send it now, then close"
+          second="Close anyway"
+          onCancel={() => setConfirmClose(false)}
+          onSecond={() => { setConfirmClose(false); onClose(); }}
+          onConfirm={async () => {
+            setConfirmClose(false);
+            clearTimeout(idleTimer.current);
+            await pushToDrive();
+            onClose();
+          }}
+        />
+      )}
+
       {/* The nib, at the size it will actually draw. A crosshair tells you where
           but never how big, which is the thing you are choosing. */}
       {showNib && nibAt && !showPalette && (
@@ -2304,5 +2379,141 @@ export function PlanAnnotator({
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Where the markup has got to, as a journey rather than a sentence.
+ *
+ * A computer, an arrow with the seconds left inside it, and a Drive. When the
+ * count runs out the arrow travels and only the Drive and a tick remain. It is
+ * three symbols because the thing being reported is a position — here, on the
+ * way, arrived — and a position reads faster as a picture than as the words
+ * "Saved here" followed some seconds later by "Safe in Drive".
+ *
+ * The Drive is a BUTTON: pressing it sends the markup now rather than waiting
+ * out the count, which is what somebody about to walk away from the panel
+ * wants.
+ */
+function SaveTrip({ state, secondsLeft, onSendNow }: {
+  state: 'clean' | 'local' | 'sending' | 'sent' | 'failed';
+  secondsLeft: number;
+  onSendNow: () => void;
+}) {
+  const failed = state === 'failed';
+  const flying = state === 'sending';
+
+  if (state === 'sent') {
+    return (
+      <span data-save-state="sent" title="Filed in Drive"
+        className="flex items-center gap-1 px-2 py-1.5 rounded-lg"
+        style={{ backgroundColor: 'rgba(74,222,128,.14)', color: '#86efac' }}>
+        <HardDrive size={15} />
+        <Check size={12} />
+      </span>
+    );
+  }
+
+  return (
+    <span
+      data-save-state={state}
+      className="flex items-center gap-1 px-2 py-1.5 rounded-lg"
+      style={{
+        backgroundColor: failed ? 'rgba(239,68,68,.16)' : 'rgba(255,255,255,.08)',
+        color: failed ? '#fca5a5' : 'rgba(255,255,255,.78)',
+      }}
+      title={failed
+        ? 'Drive would not take it. Your marks are kept here — press the Drive to try again.'
+        : 'Kept on this computer. Press the Drive to send it now.'}
+    >
+      <Monitor size={13} />
+      <span className="relative flex items-center justify-center" style={{ width: 34, height: 16 }}>
+        <span className={flying ? 'save-fly' : ''} style={{ display: 'flex' }}>
+          <ArrowRight size={13} />
+        </span>
+        {!flying && !failed && secondsLeft > 0 && (
+          <span data-save-count
+            className="absolute inset-0 flex items-center justify-center text-[10px] font-bold tabular-nums">
+            {secondsLeft}
+          </span>
+        )}
+      </span>
+      <button
+        data-save-now
+        onClick={onSendNow}
+        title="Send it to Drive now"
+        className="rounded p-0.5 hover:bg-white/15 transition-colors"
+      >
+        {failed ? <AlertTriangle size={14} /> : <HardDrive size={14} />}
+      </button>
+    </span>
+  );
+}
+
+
+/**
+ * A question with a way out, in the studio's own colours.
+ *
+ * Used for the two things that cannot be taken back by doing them again:
+ * rubbing every mark off, and walking away before Drive has the drawing.
+ * `second` is the "do it without me" option — offered, never default.
+ */
+function AskFirst({ title, body, confirm, second, danger, onCancel, onConfirm, onSecond }: {
+  title: string; body: string; confirm: string; second?: string; danger?: boolean;
+  onCancel: () => void; onConfirm: () => void; onSecond?: () => void;
+}) {
+  /**
+   * The question owns Escape, and nothing behind it hears the key.
+   *
+   * Capture phase and `stopImmediatePropagation`, because the studio AND the
+   * job window behind it both close on Escape — so one press on the question
+   * used to dismiss it, close the plan, and close the job, leaving you back on
+   * the board wondering what you had pressed.
+   */
+  useEffect(() => {
+    function key(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      onCancel();
+    }
+    window.addEventListener('keydown', key, true);
+    return () => window.removeEventListener('keydown', key, true);
+  }, [onCancel]);
+
+  return (
+    <>
+      <div className="fixed inset-0 z-[160]" style={{ backgroundColor: 'rgba(9,14,22,.6)' }}
+        onClick={onCancel} />
+      <div data-ask-first
+        className="fixed z-[161] rounded-2xl shadow-2xl overflow-hidden"
+        style={{
+          left: '50%', top: '50%', transform: 'translate(-50%,-50%)',
+          width: 'min(420px, 92vw)', backgroundColor: '#fff',
+        }}>
+        <div className="px-5 py-3 font-bold text-[14px] text-white"
+          style={{ backgroundColor: danger ? '#b4342a' : NAVY }}>
+          {title}
+        </div>
+        <p className="px-5 py-4 text-[13px] text-slate-600 m-0 leading-snug">{body}</p>
+        <div className="flex justify-end gap-2 px-5 pb-4">
+          <button onClick={onCancel}
+            className="px-3 py-1.5 rounded-lg border border-gray-200 text-[12.5px] font-semibold text-gray-600">
+            Cancel
+          </button>
+          {second && onSecond && (
+            <button data-ask-second onClick={onSecond}
+              className="px-3 py-1.5 rounded-lg border border-gray-200 text-[12.5px] font-semibold text-gray-600">
+              {second}
+            </button>
+          )}
+          <button data-ask-confirm onClick={onConfirm}
+            className="px-3 py-1.5 rounded-lg text-[12.5px] font-bold text-white"
+            style={{ backgroundColor: danger ? '#b4342a' : ACCENT }}>
+            {confirm}
+          </button>
+        </div>
+      </div>
+    </>
   );
 }

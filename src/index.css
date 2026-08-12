@@ -320,3 +320,11 @@
   transform-origin: top center;
   animation: note-fold 0.42s cubic-bezier(0.4, 0, 0.7, 1) forwards;
 }
+
+/* The arrow's trip to Drive, played once when the count runs out. */
+@keyframes save-fly {
+  0%   { transform: translateX(-6px); opacity: .35; }
+  55%  { transform: translateX(4px);  opacity: 1; }
+  100% { transform: translateX(10px); opacity: .35; }
+}
+.save-fly { animation: save-fly .9s ease-in-out infinite; }
