@@ -18,7 +18,7 @@ export interface Region { x: number; y: number; w: number; h: number }
  * numbers. No second coordinate system to keep in step.
  */
 export function BoardRegionPicker({
-  jobs, elements, stages, value, onChange, width = 420, height = 240,
+  jobs, elements, stages, value, onChange, width = 420, height = 240, screenRatio = 16 / 9,
 }: {
   jobs: Apartment[];
   elements: CanvasElement[];
@@ -27,6 +27,15 @@ export function BoardRegionPicker({
   onChange: (r: Region | undefined) => void;
   width?: number;
   height?: number;
+  /**
+   * The panel's shape, so the box can say whether what it takes in will fit.
+   *
+   * A region that is not the screen's shape gets letterboxed on the wall — the
+   * board is shown smaller than it needed to be, with bars. Rather than warning
+   * about that in a sentence nobody reads, the box itself goes green when it
+   * matches and red when it does not, and snaps to the shape when it is close.
+   */
+  screenRatio?: number;
 }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ mode: 'move' | 'resize'; px: number; py: number; start: Region } | null>(null);
@@ -108,11 +117,24 @@ export function BoardRegionPicker({
       });
     }
   }
+  /** Within this much of the screen's shape counts as meaning to match it. */
+  const SNAP = 0.06;
+  const ratioOf = (r: Region) => r.w / Math.max(1, r.h);
+  const fits = (r: Region) => Math.abs(ratioOf(r) - screenRatio) / screenRatio <= SNAP;
+
   function up() {
-    if (dragRef.current && live) onChange({
-      x: Math.round(live.x), y: Math.round(live.y),
-      w: Math.round(live.w), h: Math.round(live.h),
-    });
+    if (dragRef.current && live) {
+      // Close enough to the screen's shape is taken to MEAN the screen's
+      // shape: the height is pulled to match the width, so what the wall shows
+      // fills it instead of sitting in bars.
+      const snapped = fits(live)
+        ? { ...live, h: Math.min(world.h - live.y, Math.round(live.w / screenRatio)) }
+        : live;
+      onChange({
+        x: Math.round(snapped.x), y: Math.round(snapped.y),
+        w: Math.round(snapped.w), h: Math.round(snapped.h),
+      });
+    }
     dragRef.current = null;
     setLive(null);
   }
@@ -174,18 +196,23 @@ export function BoardRegionPicker({
           style={{
             left: region.x * k, top: region.y * k,
             width: region.w * k, height: region.h * k,
-            border: '2px solid #4aa8d8',
-            boxShadow: '0 0 0 1px rgba(255,255,255,.7)',
+            // Green when what it takes in is the screen's shape, red when it is
+            // not. No sentence: the colour IS the message, and it is live while
+            // you drag rather than after you let go.
+            border: `2px solid ${fits(region) ? '#16a34a' : '#dc2626'}`,
+            boxShadow: `0 0 0 1px rgba(255,255,255,.7), 0 0 0 4px ${fits(region) ? 'rgba(22,163,74,.16)' : 'rgba(220,38,38,.14)'}`,
             borderRadius: 3,
           }}
+          data-region-fits={fits(region) ? 'yes' : 'no'}
         >
-          <span className="absolute -top-0.5 left-1 text-[8.5px] font-black text-[#1e3a5f] bg-white/85 px-1 rounded">
+          <span className="absolute -top-0.5 left-1 text-[8.5px] font-black bg-white/85 px-1 rounded"
+            style={{ color: fits(region) ? '#15803d' : '#b91c1c' }}>
             ON THE TV
           </span>
           <div
             onPointerDown={down('resize')}
             className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-sm cursor-se-resize"
-            style={{ backgroundColor: '#4aa8d8', border: '2px solid #fff' }}
+            style={{ backgroundColor: fits(region) ? '#16a34a' : '#dc2626', border: '2px solid #fff' }}
           />
         </div>
       </div>

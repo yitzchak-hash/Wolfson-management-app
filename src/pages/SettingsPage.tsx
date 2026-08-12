@@ -25,6 +25,12 @@ import { fetchContractorSheet } from '../data/sheetApi';
 import { ProjectBuilder } from '../components/settings/ProjectBuilder';
 import { ProjectLayout, layoutToApartments, newSlot, joinSlots, areNeighbours } from '../data/projectLayout';
 
+/** The shape the wall is set to, as a number. Defaults to 16:9. */
+function ratioOfShape(id?: string): number {
+  const [w, h] = (id ?? '16:9').split(':').map(Number);
+  return w > 0 && h > 0 ? w / h : 16 / 9;
+}
+
 type Tab = 'stages' | 'users' | 'contractors' | 'app' | 'language' | 'buildings' | 'sheet' | 'tv' | 'workspaces';
 
 /**
@@ -1664,6 +1670,7 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
           elements={boardThings}
           stages={stages}
           value={tv.tvView}
+          screenRatio={ratioOfShape(tv.tvShape)}
           width={560}
           height={330}
           onChange={r => { setTvSetting('tvView', r); onToast(r ? 'TV view updated' : 'TV shows the whole board'); }}

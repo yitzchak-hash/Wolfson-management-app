@@ -21,6 +21,7 @@ import { Toast } from '../components/ui/Toast';
 import { DriveIcon, ZohoIcon, PlanIcon, TvIcon } from '../components/ui/BrandIcons';
 import { BoardToolbar, BoardControlsPanel, BoardTool } from '../components/board/BoardToolbar';
 import { BOARD_THEMES, getBoardTheme, surfaceAtZoom } from '../data/boardThemes';
+import { snapBox, Guide } from '../data/snapping';
 import { MiniMap } from '../components/board/MiniMap';
 import { BinBoard } from '../components/board/BinBoard';
 import { BoardSearch, BoardHit } from '../components/board/BoardSearch';
@@ -268,6 +269,13 @@ export function GeneralJobsPage() {
   const [ghostDrag, setGhostDrag] = useState<GhostDrag | null>(null);
   const [openBin, setOpenBin] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  /** Shade the slice of the board the wall is showing. */
+  const [showTvRegion, setShowTvRegion] = useState(false);
+
+
+  // Subscribed, not read once: `getState()` at render time would show the
+  // region as it was when the page mounted and never notice it changing.
+  const tvRegion = useStore(st => (st.boardSettings.__tv ?? {}).tvView);
   /** A job the search sent us to: pulsed once the view lands on it. */
   const [searchHit, setSearchHit] = useState<string | null>(null);
   /** Which bin the pointer is currently over mid-drag, so it can light up. */
@@ -332,6 +340,24 @@ export function GeneralJobsPage() {
   const boardSettings = useStore(st => st.boardSettings);
   const setBoardSetting = useStore(st => st.setBoardSetting);
   const projectBoard = boardSettings[currentProjectId] ?? {};
+  /**
+   * Lining things up, and the lines that say why.
+   *
+   * Off unless asked for: a board is a place to put things roughly where they
+   * belong, and a magnet nobody switched on is a fight. `guides` is cleared on
+   * every pointer-up, so a line can never be left on screen describing a drag
+   * that finished.
+   */
+  const snapOn = projectBoard.snapToGrid ?? false;
+  const [guides, setGuides] = useState<Guide[]>([]);
+  const snapTargetsRef = useRef((exceptId: string) => [] as { x: number; y: number; w: number; h: number }[]);
+  snapTargetsRef.current = (exceptId: string) => [
+    ...jobs.filter(j => j.id !== exceptId).map((j, i) => ({ ...jobPos(j, i), w: TILE_W, h: TILE_H })),
+    ...canvasElements
+      .filter(el => el.id !== exceptId && (el.board ?? '') === (boardRef.current ?? ''))
+      .map(el => ({ x: el.x, y: el.y, w: el.w, h: el.h })),
+  ];
+
   const theme = getBoardTheme(projectBoard.themeId);
   const showControls = projectBoard.showControls ?? false;
   const viewMode = projectBoard.viewMode ?? 'canvas';
@@ -1728,14 +1754,36 @@ export function GeneralJobsPage() {
     }
     if (!drag || drag.kind !== 'job') return;
     const w0 = toWorld(e.clientX, e.clientY);
-    const dx = w0.x - drag.grabX;
-    const dy = w0.y - drag.grabY;
+    let dx = w0.x - drag.grabX;
+    let dy = w0.y - drag.grabY;
+
+    /**
+     * Line it up with what is already there.
+     *
+     * Only while a single tile is being moved: with several selected there is
+     * no one box to line up, and pulling the group by whichever member happened
+     * to be nearest something would rearrange the rest behind your back. The
+     * tolerance is divided by the zoom so the pull is the same size on screen
+     * however far in or out you are.
+     */
+    if (snapOn && drag.ids.length === 1 && drag.starts.get(drag.ids[0])) {
+      const id = drag.ids[0];
+      const me = drag.starts.get(id);
+      const box = { x: (me?.x ?? 0) + dx, y: (me?.y ?? 0) + dy, w: TILE_W, h: TILE_H };
+      const others = snapTargetsRef.current(id);
+      const snapped = snapBox(box, others, 7 / Math.max(0.2, zoom));
+      dx += snapped.x - box.x;
+      dy += snapped.y - box.y;
+      setGuides(snapped.guides);
+    }
+
     setDrag({ ...drag, dx, dy, moved: drag.moved || Math.abs(dx) > 4 || Math.abs(dy) > 4 });
     setHoverBin(binAt(w0.x, w0.y)?.id ?? null);
     setRotaHover(anyRota() ? rotaCellAt(e.clientX, e.clientY) : null);
   }
 
   function onJobPointerUp(e: React.PointerEvent, job: Apartment) {
+    setGuides([]);
     if (panRef.current && panFromJob.current) {
       // A press that never moved is a click, so the job still opens.
       const moved = Math.abs(e.clientX - panRef.current.px) > 4
@@ -2524,6 +2572,22 @@ export function GeneralJobsPage() {
             <Search size={15} /> <span className="hidden md:inline">Find</span>
           </button>
 
+          {/* What the TV is showing, shaded onto the board.
+              The region is chosen on a small map in settings, which tells you
+              the numbers but not what they mean out on the real board — this
+              lays the answer over the actual work. */}
+          <button
+            data-show-tv
+            onClick={() => setShowTvRegion(v => !v)}
+            title="Shade the part of the board the TV is showing"
+            className="flex items-center gap-1.5 px-2.5 md:px-3 py-2 rounded-xl text-sm font-medium border transition-colors"
+            style={showTvRegion
+              ? { backgroundColor: 'rgba(22,163,74,.12)', borderColor: '#16a34a', color: '#15803d' }
+              : { borderColor: '#e5e7eb', color: '#4b5563' }}
+          >
+            <TvIcon size={15} /> <span className="hidden md:inline">TV</span>
+          </button>
+
           {/* Zoom, where it can be reached without hunting the corner. The
               percentage is typeable — "150" is faster than five clicks. */}
           <div className="hidden sm:flex items-center rounded-xl border border-gray-200 overflow-hidden">
@@ -2775,6 +2839,54 @@ export function GeneralJobsPage() {
             }));
           }}
         />
+
+        {/* What the TV is showing, laid over the real board.
+            Inside the world layer, so it pans and zooms with the work — a
+            rectangle drawn in screen space would drift off the jobs it is
+            supposed to be describing the moment anybody moved. */}
+        {showTvRegion && tvRegion && (
+          <div
+            data-tv-overlay
+            className="absolute pointer-events-none"
+            style={{
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+              transformOrigin: '0 0',
+              left: 0, top: 0, width: 1, height: 1,
+              zIndex: 40,
+            }}
+          >
+            <div className="absolute"
+              style={{
+                left: tvRegion.x, top: tvRegion.y, width: tvRegion.w, height: tvRegion.h,
+                backgroundColor: 'rgba(22,163,74,.14)',
+                border: '2px solid rgba(22,163,74,.85)',
+                borderRadius: 4,
+              }}>
+              <span className="absolute -top-6 left-0 px-2 py-0.5 rounded-md text-[11px] font-bold text-white whitespace-nowrap"
+                style={{ backgroundColor: '#16a34a' }}>
+                On the TV
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* The lines that explain a snap, while it is happening. */}
+        {guides.length > 0 && (
+          <div className="absolute pointer-events-none"
+            style={{
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+              transformOrigin: '0 0', left: 0, top: 0, width: 1, height: 1, zIndex: 45,
+            }}>
+            {guides.map((g, i) => (
+              <div key={i} data-snap-guide className="absolute"
+                style={g.axis === 'x'
+                  ? { left: g.at, top: g.from, width: 1 / zoom, height: g.to - g.from,
+                      backgroundColor: '#e11d48' }
+                  : { left: g.from, top: g.at, height: 1 / zoom, width: g.to - g.from,
+                      backgroundColor: '#e11d48' }} />
+            ))}
+          </div>
+        )}
 
         {/* The paper, drawn in SCREEN space under everything.
             It used to live inside the world, so it was scaled with it: at 25%
