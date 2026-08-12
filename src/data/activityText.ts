@@ -38,10 +38,27 @@ export function activitySubject(log: ActivityLog, apartments: Apartment[]): stri
   return 'a job';
 }
 
+/**
+ * One run of the sentence.
+ *
+ * The line is built as pieces rather than one string so the job's name can be
+ * drawn as something you can press. "Moved Artzi to Piping" is only half an
+ * answer — the next thing anybody does is go and look at Artzi, and a feed
+ * that names a job without letting you open it makes you go and find it by
+ * hand. `jobId` is only set when the record still exists, so a link can never
+ * lead nowhere.
+ */
+export interface ActivityPart {
+  text: string;
+  jobId?: string;
+}
+
 export interface ActivityLine {
   who: string;
-  /** e.g. "moved Artzi, Avital to Piping" */
+  /** e.g. "moved Artzi, Avital to Piping" — the same sentence, flattened. */
   what: string;
+  /** The same sentence in pieces, so the job's name can be a link. */
+  parts: ActivityPart[];
   /** "just now", "12m ago", "3h ago" */
   when: string;
 }
@@ -54,21 +71,29 @@ export function describeActivity(
   const subject = activitySubject(log, apartments);
   const field = FIELD_LABEL[log.fieldChanged] ?? log.fieldChanged ?? 'something';
 
-  let what: string;
+  // Only a job that is still on the books gets a link. A deleted one keeps its
+  // name in the sentence — the history is the point — but pressing it would
+  // open an empty drawer, so it stays plain text.
+  const exists = !!log.apartmentId && apartments.some(a => a.id === log.apartmentId);
+  const job = (): ActivityPart => (
+    exists ? { text: subject, jobId: log.apartmentId } : { text: subject }
+  );
+
+  let parts: ActivityPart[];
   if (log.fieldChanged === 'currentStageId') {
-    what = log.newValue && log.newValue !== 'Not started'
-      ? `moved ${subject} to ${log.newValue}`
-      : `cleared the stage on ${subject}`;
+    parts = log.newValue && log.newValue !== 'Not started'
+      ? [{ text: 'moved ' }, job(), { text: ` to ${log.newValue}` }]
+      : [{ text: 'cleared the stage on ' }, job()];
   } else if (log.fieldChanged === 'task') {
-    what = `changed a task on ${subject}`;
+    parts = [{ text: 'changed a task on ' }, job()];
   } else if (log.actionType === 'create') {
-    what = `added ${subject}`;
+    parts = [{ text: 'added ' }, job()];
   } else if (log.actionType === 'delete') {
-    what = `deleted ${subject}`;
+    parts = [{ text: 'deleted ' }, job()];
   } else if (log.newValue && log.newValue.length <= 28 && !isInternalId(log.newValue)) {
-    what = `set the ${field} on ${subject} to ${log.newValue}`;
+    parts = [{ text: `set the ${field} on ` }, job(), { text: ` to ${log.newValue}` }];
   } else {
-    what = `updated the ${field} on ${subject}`;
+    parts = [{ text: `updated the ${field} on ` }, job()];
   }
 
   const mins = Math.max(0, Math.round((now - new Date(log.createdAt).getTime()) / 60_000));
@@ -77,5 +102,10 @@ export function describeActivity(
     : mins < 1440 ? `${Math.floor(mins / 60)}h ago`
     : `${Math.floor(mins / 1440)}d ago`;
 
-  return { who: log.userName || 'Someone', what, when };
+  return {
+    who: log.userName || 'Someone',
+    what: parts.map(p => p.text).join(''),
+    parts,
+    when,
+  };
 }

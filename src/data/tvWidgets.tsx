@@ -12,6 +12,7 @@ import { useStore, loadAllProjectsTaskData, loadProjectSnapshot } from './store'
 import { hebrewLabel, holidaysOn } from './hebrewDates';
 import { PlannerData, personOf, iso } from '../components/board/PlannerWidget';
 import { describeActivity } from './activityText';
+import { ActivitySentence } from '../components/ui/ActivitySentence';
 
 /**
  * The widgets built for the wall.
@@ -325,9 +326,11 @@ export const TV_WIDGETS: WidgetDef[] = [
                   `currentStageId`, which tells a room nothing. This is the SAME
                   describer the board's own feed uses — one wording, so the two
                   screens can never narrate the same event differently. */}
-              <span className="text-[13px] text-slate-500 truncate flex-1">
-                {describeActivity(l, c.jobs).what}
-              </span>
+              <ActivitySentence
+                className="text-[13px] text-slate-500 truncate flex-1"
+                parts={describeActivity(l, c.jobs).parts}
+                onOpen={c.openJob}
+              />
               <span className="text-[11px] text-slate-300 tabular-nums flex-shrink-0">
                 {new Date(l.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
               </span>

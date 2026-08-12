@@ -155,6 +155,33 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
   ],
   'job-search': [title()],
 
+  // ── The ones that look for what is NOT happening ───────────────────────
+  'no-date': [title(), limit()],
+  'gone-quiet': [
+    title(),
+    {
+      key: 'days', label: 'Quiet for at least… (days)', kind: 'number', min: 1, max: 60,
+      hint: 'Counted from the day the task was handed out.',
+    },
+  ],
+  'nobody-booked': [title(), limit()],
+  'backlog-trend': [
+    title(),
+    { key: 'weeks', label: 'How many weeks', kind: 'number', min: 3, max: 16 },
+  ],
+  'open-snags': [title(), limit()],
+  'no-plan': [title(), limit()],
+  'floor-by-floor': [
+    title(),
+    {
+      key: 'buildingId', label: 'Which building', kind: 'text', allowNone: 'All of them',
+      placeholder: 'A1, A2, B1…',
+      hint: 'Leave blank to stack every building together.',
+    },
+  ],
+  duplicates: [title(), limit()],
+  'skipped-stage': [title(), limit()],
+
   // ── Planning ───────────────────────────────────────────────────────────
   checklist: [title()],
   tally: [
@@ -497,6 +524,18 @@ export const WIDGET_PREVIEW: Record<string, Record<string, unknown>> = {
   'contractor-load': { contractorId: 'k2' },
   kpi2: {},
   'recent-jobs': { days: 7 },
+  // The store draws these against the sample jobs and tasks, so a card shows
+  // the shape of the answer rather than an empty "nothing outstanding" — which
+  // on a shelf is indistinguishable from a widget that does not work.
+  'gone-quiet': { days: 0 },
+  'backlog-trend': { weeks: 8 },
+  'floor-by-floor': {},
+  'no-date': {},
+  'nobody-booked': {},
+  'open-snags': {},
+  'no-plan': {},
+  duplicates: {},
+  'skipped-stage': {},
 };
 
 /**

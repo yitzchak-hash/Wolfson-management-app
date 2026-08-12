@@ -11,7 +11,7 @@ import {
 import {
   Apartment, CanvasElement, Stage, ContractorAssignment, Contractor,
   ContractorPhoto, ActivityLog, BIN_KINDS, BIN_META, isCountableApartment, personColor,
-  User,
+  User, ContractorNote, PlanPin,
 } from '../types';
 import { portalLink } from './portalLink';
 import { useStore } from './store';
@@ -21,8 +21,10 @@ import { ClipArtNode, ART_KINDS, ArtKind } from '../components/board/BoardNodes'
 import { MiniJob } from '../components/board/MiniJob';
 import { ProjectMini, BoardMini, CalendarMini } from '../components/board/DashWidgets';
 import { TV_WIDGETS } from './tvWidgets';
+import { INSIGHT_WIDGETS } from './insightWidgets';
 import { PlannerWidget, PlannerData, PlannerEntry } from '../components/board/PlannerWidget';
 import { StickyNoteWidget } from '../components/board/StickyNoteWidget';
+import { ActivitySentence } from '../components/ui/ActivitySentence';
 
 /**
  * The widget store.
@@ -61,6 +63,17 @@ export interface WidgetCtx {
   users: User[];
   photos: ContractorPhoto[];
   logs: ActivityLog[];
+  /**
+   * What the site has said back, and what is still outstanding on a plan.
+   *
+   * Both were already in the store and neither reached a widget, which is why
+   * "has anybody heard from this contractor?" and "what snags are still open?"
+   * had no answer on the board. Optional so the eight places that build a
+   * context did not all have to change at once — a widget that needs them
+   * treats absent as empty.
+   */
+  notes?: ContractorNote[];
+  planPins?: PlanPin[];
   /** Writes back into the element — used by the interactive widgets. */
   update: (patch: Partial<CanvasElement>) => void;
   openJob: (id: string) => void;
@@ -112,10 +125,10 @@ export interface WidgetDef {
 
 // ─── Shared pieces ───────────────────────────────────────────────────────────
 
-const d = (el: CanvasElement) => (el.data ?? {}) as Record<string, any>;
-const today = () => new Date().toISOString().slice(0, 10);
+export const d = (el: CanvasElement) => (el.data ?? {}) as Record<string, any>;
+export const today = () => new Date().toISOString().slice(0, 10);
 
-function Frame({ title, icon: Icon, children, tone }: {
+export function Frame({ title, icon: Icon, children, tone }: {
   title: string; icon?: React.ElementType; children: React.ReactNode; tone?: string;
 }) {
   return (
@@ -130,7 +143,7 @@ function Frame({ title, icon: Icon, children, tone }: {
   );
 }
 
-function Big({ value, sub, color }: { value: React.ReactNode; sub?: string; color?: string }) {
+export function Big({ value, sub, color }: { value: React.ReactNode; sub?: string; color?: string }) {
   return (
     <div className="h-full flex flex-col justify-center">
       <div className="font-black leading-none tabular-nums" style={{ fontSize: 34, color: color ?? '#0f172a' }}>
@@ -161,7 +174,7 @@ function Line({ value, onChange, placeholder, className, readOnly }: {
   );
 }
 
-const overdueOf = (a: ContractorAssignment) => !a.completedAt && !!a.dueDate && a.dueDate < today();
+export const overdueOf = (a: ContractorAssignment) => !a.completedAt && !!a.dueDate && a.dueDate < today();
 
 /**
  * The clip-art shelf.
@@ -362,10 +375,15 @@ export const WIDGETS: WidgetDef[] = [
       <Frame title="What changed" icon={Activity}>
         <div className="flex flex-col gap-1 h-full overflow-y-auto pr-1">
           {c.logs.slice(0, 8).map(l => {
-            const { who, what, when } = describeActivity(l, c.jobs);
+            const { who, parts, when } = describeActivity(l, c.jobs);
             return (
               <div key={l.id} className="text-[10px] leading-tight">
-                <span className="text-gray-700"><b className="text-gray-900">{who}</b> {what}</span>
+                <span className="text-gray-700">
+                  <b className="text-gray-900">{who}</b>{' '}
+                  {/* Not gated on `readOnly`: opening a job is not editing it,
+                      and a view-only board is explicitly allowed to open one. */}
+                  <ActivitySentence parts={parts} onOpen={c.openJob} />
+                </span>
                 <span className="text-gray-400"> · {when}</span>
               </div>
             );
@@ -1861,13 +1879,25 @@ const SAMPLE_STAGES: Stage[] = [
   { id: 'x4', name: 'Start-up', color: '#16a34a', order: 4, active: true, description: '', createdAt: '', updatedAt: '' },
 ] as unknown as Stage[];
 
+/**
+ * Stand-in jobs.
+ *
+ * They carry a FLOOR, which they did not, because "Floor by floor" reads one —
+ * and a widget whose whole subject is missing from the sample previews as
+ * "this workspace has no floors", which on a shelf reads as broken rather than
+ * as empty. `j8` is deliberately started but unbooked and `j7` is deliberately
+ * a near-miss of `j1`, so "Nobody's booked" and "Possible duplicates" each have
+ * exactly one honest row to draw.
+ */
 const SAMPLE_JOBS: Apartment[] = [
-  { id: 'j1', displayName: 'Artzi, Avital', address: '14 Ben Gurion', currentStageId: 'x2' },
-  { id: 'j2', displayName: 'Cohen, Miriam', address: '3 Herzl', currentStageId: 'x3' },
-  { id: 'j3', displayName: 'Levi, Yosef', address: '88 Dizengoff', currentStageId: 'x1' },
-  { id: 'j4', displayName: 'Mizrahi, Dana', address: '5 Rothschild', currentStageId: 'x4' },
-  { id: 'j5', displayName: 'Peretz, Eli', address: '21 Allenby', currentStageId: 'x2' },
-  { id: 'j6', displayName: 'Shapiro, Ruth', address: '9 Bialik', currentStageId: 'x3', boardBin: 'done' },
+  { id: 'j1', displayName: 'Artzi, Avital', address: '14 Ben Gurion', currentStageId: 'x2', floor: 3 },
+  { id: 'j2', displayName: 'Cohen, Miriam', address: '3 Herzl', currentStageId: 'x3', floor: 3 },
+  { id: 'j3', displayName: 'Levi, Yosef', address: '88 Dizengoff', currentStageId: 'x1', floor: 4 },
+  { id: 'j4', displayName: 'Mizrahi, Dana', address: '5 Rothschild', currentStageId: 'x4', floor: 4 },
+  { id: 'j5', displayName: 'Peretz, Eli', address: '21 Allenby', currentStageId: 'x2', floor: 5 },
+  { id: 'j6', displayName: 'Shapiro, Ruth', address: '9 Bialik', currentStageId: 'x3', boardBin: 'done', floor: 5 },
+  { id: 'j7', displayName: 'Arzi, Avital', address: '14 Ben Gurion', currentStageId: 'x2', floor: 6 },
+  { id: 'j8', displayName: 'Goodhardt, Nechama', address: '2 Weizmann', currentStageId: 'x1', floor: 6 },
 ].map(j => ({ ...j, buildingId: 'G', isUnnamed: false, createdAt: new Date(Date.now() - 2 * 86_400_000).toISOString() })) as unknown as Apartment[];
 
 const day = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
@@ -1876,21 +1906,26 @@ const localDay = (n: number) => {
   const d = new Date(Date.now() + n * 86_400_000);
   return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
 };
+const ago = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString();
 const SAMPLE_TASKS: ContractorAssignment[] = [
-  { id: 't1', apartmentId: 'j1', contractorId: 'k1', taskDescription: 'Hang the units', dueDate: day(-6) },
-  { id: 't2', apartmentId: 'j3', contractorId: 'k2', taskDescription: 'Duct run', dueDate: day(-2) },
-  { id: 't3', apartmentId: 'j2', contractorId: 'k1', taskDescription: 'Grilles', dueDate: day(0) },
-  { id: 't4', apartmentId: 'j4', contractorId: 'k3', taskDescription: 'Commissioning', dueDate: day(2) },
-  { id: 't5', apartmentId: 'j5', contractorId: 'k2', taskDescription: 'Thermostats', dueDate: day(4) },
+  { id: 't1', apartmentId: 'j1', contractorId: 'k1', taskDescription: 'Hang the units', dueDate: day(-6), createdAt: ago(11) },
+  { id: 't2', apartmentId: 'j3', contractorId: 'k2', taskDescription: 'Duct run', dueDate: day(-2), createdAt: ago(9) },
+  { id: 't3', apartmentId: 'j2', contractorId: 'k1', taskDescription: 'Grilles', dueDate: day(0), createdAt: ago(4) },
+  { id: 't4', apartmentId: 'j4', contractorId: 'k3', taskDescription: 'Commissioning', dueDate: day(2), createdAt: ago(3) },
+  { id: 't5', apartmentId: 'j5', contractorId: 'k2', taskDescription: 'Thermostats', dueDate: day(4), createdAt: ago(12) },
+  // Deliberately dateless. Every other list keys off a due date, so these two
+  // are invisible everywhere except the widget written to find them.
+  { id: 't6', apartmentId: 'j2', contractorId: 'k3', taskDescription: 'Chase the lift booking', dueDate: null, createdAt: ago(16) },
+  { id: 't7', apartmentId: 'j3', contractorId: 'k1', taskDescription: 'Order the grilles', dueDate: null, createdAt: ago(6) },
 ] as unknown as ContractorAssignment[];
 
 /** Work already finished, spread across this week, for the bar chart. */
 const SAMPLE_DONE: ContractorAssignment[] = [
-  { id: 'td1', apartmentId: 'j1', contractorId: 'k1', taskDescription: 'First fix', completed: true, completedAt: `${localDay(-1)}T09:10:00.000Z` },
-  { id: 'td2', apartmentId: 'j2', contractorId: 'k2', taskDescription: 'Drops', completed: true, completedAt: `${localDay(-1)}T14:20:00.000Z` },
-  { id: 'td3', apartmentId: 'j3', contractorId: 'k1', taskDescription: 'Grilles', completed: true, completedAt: `${localDay(-2)}T11:00:00.000Z` },
-  { id: 'td4', apartmentId: 'j4', contractorId: 'k3', taskDescription: 'Snagging', completed: true, completedAt: `${localDay(-3)}T16:40:00.000Z` },
-  { id: 'td5', apartmentId: 'j5', contractorId: 'k2', taskDescription: 'Thermostats', completed: true, completedAt: `${localDay(0)}T08:05:00.000Z` },
+  { createdAt: ago(6), id: 'td1', apartmentId: 'j1', contractorId: 'k1', taskDescription: 'First fix', completed: true, completedAt: `${localDay(-1)}T09:10:00.000Z` },
+  { createdAt: ago(6), id: 'td2', apartmentId: 'j2', contractorId: 'k2', taskDescription: 'Drops', completed: true, completedAt: `${localDay(-1)}T14:20:00.000Z` },
+  { createdAt: ago(7), id: 'td3', apartmentId: 'j3', contractorId: 'k1', taskDescription: 'Grilles', completed: true, completedAt: `${localDay(-2)}T11:00:00.000Z` },
+  { createdAt: ago(8), id: 'td4', apartmentId: 'j4', contractorId: 'k3', taskDescription: 'Snagging', completed: true, completedAt: `${localDay(-3)}T16:40:00.000Z` },
+  { createdAt: ago(5), id: 'td5', apartmentId: 'j5', contractorId: 'k2', taskDescription: 'Thermostats', completed: true, completedAt: `${localDay(0)}T08:05:00.000Z` },
 ] as unknown as ContractorAssignment[];
 
 const SAMPLE_CONTRACTORS: Contractor[] = [
@@ -1906,6 +1941,15 @@ const SAMPLE_LOGS: ActivityLog[] = [
   { id: 'g2', userName: 'Yitzchak', apartmentId: 'j4', apartmentNumber: 'Mizrahi, Dana', actionType: 'update',
     fieldChanged: 'address', previousValue: '', newValue: '5 Rothschild',
     createdAt: new Date(Date.now() - 95 * 60_000).toISOString() },
+  // Two moves on the same job, the second jumping two stages ahead — which is
+  // what "Skipped a stage" reads. One move on its own can never show a skip,
+  // because there is nothing to have skipped FROM.
+  { id: 'g3', userName: 'Esther', apartmentId: 'j2', apartmentNumber: 'Cohen, Miriam', actionType: 'update',
+    fieldChanged: 'currentStageId', previousValue: '', newValue: 'Survey',
+    createdAt: new Date(Date.now() - 9 * 86_400_000).toISOString() },
+  { id: 'g4', userName: 'Yitzchak', apartmentId: 'j2', apartmentNumber: 'Cohen, Miriam', actionType: 'update',
+    fieldChanged: 'currentStageId', previousValue: 'Survey', newValue: 'Start-up',
+    createdAt: new Date(Date.now() - 2 * 86_400_000).toISOString() },
 ] as unknown as ActivityLog[];
 
 /**
@@ -1977,6 +2021,25 @@ function samplePlanner(jobs: Apartment[], people: Contractor[]): CanvasElement {
   } as unknown as CanvasElement;
 }
 
+/**
+ * Snags and a word back from site.
+ *
+ * Neither had a sample, so "Open snags" and "Gone quiet" both previewed as
+ * their own success message — "no snags outstanding", "everyone has checked
+ * in" — which is exactly what they say when they work and there is nothing to
+ * report, and therefore tells a shopper nothing about what they do.
+ */
+const SAMPLE_PINS = [
+  { id: 'pin1', apartmentId: 'j1', xPct: 32, yPct: 41, text: 'Grille clashes with the beam', createdAt: ago(4), createdBy: 'Esther' },
+  { id: 'pin2', apartmentId: 'j1', xPct: 68, yPct: 22, text: 'Condensate run not shown', createdAt: ago(3), createdBy: 'Esther' },
+  { id: 'pin3', apartmentId: 'j3', xPct: 51, yPct: 74, text: 'Access panel too small', createdAt: ago(2), createdBy: 'Yitzchak' },
+] as unknown as PlanPin[];
+
+const SAMPLE_NOTES = [
+  { id: 'n1', assignmentId: 't3', apartmentId: 'j2', contractorId: 'k1', text: 'Grilles fitted, waiting on the trims.',
+    authorType: 'contractor', authorId: 'k1', authorName: 'Avi Drywall', createdAt: ago(1) },
+] as unknown as ContractorNote[];
+
 /** Real data where there is any, samples where there is not — field by field. */
 export function withSampleData(ctx: WidgetCtx): WidgetCtx {
   const jobs = ctx.jobs.length ? ctx.jobs : SAMPLE_JOBS;
@@ -2027,6 +2090,8 @@ export function withSampleData(ctx: WidgetCtx): WidgetCtx {
     assignments: withDone,
     stages: ctx.stages.length ? ctx.stages : SAMPLE_STAGES,
     logs: ctx.logs.length ? ctx.logs : SAMPLE_LOGS,
+    planPins: ctx.planPins?.length ? ctx.planPins : SAMPLE_PINS,
+    notes: ctx.notes?.length ? ctx.notes : SAMPLE_NOTES,
     boardElements: hasPlanner
       ? ctx.boardElements
       : [...(ctx.boardElements ?? []), samplePlanner(jobs, contractors)],
@@ -2043,6 +2108,13 @@ export function withSampleData(ctx: WidgetCtx): WidgetCtx {
  * in a circle.
  */
 WIDGETS.push(...TV_WIDGETS);
+
+/**
+ * And the ones that look for what is NOT happening. Same reason, same place:
+ * they import Frame and the data helpers from here, so the push has to be
+ * after the array rather than inside it.
+ */
+WIDGETS.push(...INSIGHT_WIDGETS);
 
 export const WIDGET_BY_ID = new Map(WIDGETS.map(w => [w.id, w]));
 
