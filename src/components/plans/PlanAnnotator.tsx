@@ -68,8 +68,31 @@ interface PdfDoc { numPages: number; getPage(n: number): Promise<PdfPage> }
 /** Only the bits of pdf.js's optional-content config this needs. */
 interface OcConfig {
   getOrder?(): unknown[];
+  getGroups?(): Record<string, { name?: string }> | undefined;
   getGroup?(id: string): { name?: string } | undefined;
   setVisibility?(id: string, on: boolean): void;
+}
+
+/**
+ * Every layer id in a plan's optional-content order.
+ *
+ * `getOrder()` is a TREE, not a list: a group of layers appears as
+ * `{ name, order: [...] }` with the ids nested inside it. Keeping only the
+ * top-level strings therefore found nothing at all on any plan whose layers
+ * were grouped under a heading — which is most plans out of a CAD package, and
+ * exactly the ones somebody wants the layer switches for.
+ */
+function flattenOrder(order: unknown[]): string[] {
+  const out: string[] = [];
+  const walk = (rows: unknown[]) => {
+    for (const row of rows) {
+      if (typeof row === 'string') { out.push(row); continue; }
+      const nested = (row as { order?: unknown[] } | null)?.order;
+      if (Array.isArray(nested)) walk(nested);
+    }
+  };
+  walk(order);
+  return out;
 }
 
 /**
@@ -488,13 +511,42 @@ export function PlanAnnotator({
       try {
         const cfg = await (doc as unknown as { getOptionalContentConfig(): Promise<OcConfig> })
           .getOptionalContentConfig();
-        const order = (cfg.getOrder?.() ?? []).filter((x): x is string => typeof x === 'string');
-        const rows = order.map(id => ({ id, name: cfg.getGroup?.(id)?.name ?? 'Layer', on: true }));
+        // The order first, flattened; then every group the document declares,
+        // in case the order is missing or names a subset. A plan that HAS
+        // layers must never show none.
+        const ids = flattenOrder(cfg.getOrder?.() ?? []);
+        const all = cfg.getGroups?.() ?? {};
+        for (const id of Object.keys(all)) if (!ids.includes(id)) ids.push(id);
+        const rows = ids.map(id => ({
+          id,
+          name: cfg.getGroup?.(id)?.name ?? all[id]?.name ?? 'Layer',
+          on: true,
+        }));
         if (!dead) { ocRef.current = cfg; setLayers(rows); }
       } catch { if (!dead) setLayers([]); }
     })();
     return () => { dead = true; };
   }, [doc]);
+
+  /**
+   * Your marks, grouped into a layer per colour.
+   *
+   * Newest first, by when that colour was last used — the pass you are in the
+   * middle of belongs at the top, and the numbering counts up from the oldest
+   * so "layer 1" is where the markup started.
+   */
+  const [hiddenInk, setHiddenInk] = useState<Set<string>>(new Set());
+  const inkLayers = useMemo(() => {
+    const by = new Map<string, { colour: string; count: number; last: number }>();
+    strokes.forEach((st, i) => {
+      const key = (st.color ?? '#000').toLowerCase();
+      const row = by.get(key) ?? { colour: key, count: 0, last: -1 };
+      row.count += 1;
+      row.last = Math.max(row.last, i);
+      by.set(key, row);
+    });
+    return [...by.values()].sort((a, b) => b.last - a.last);
+  }, [strokes]);
 
   function toggleLayer(id: string) {
     const cfg = ocRef.current;
@@ -521,12 +573,16 @@ export function PlanAnnotator({
     ctx.clearRect(0, 0, c.width, c.height);
     for (const s of strokes) {
       if (s.page !== page) continue;
+      // A colour switched off in the layers panel is not drawn. It is still
+      // there — hiding a layer is a way of looking, not a way of deleting —
+      // so it saves, prints and stamps exactly as before.
+      if (hiddenInk.has((s.color ?? '#000').toLowerCase())) continue;
       // The balloon being typed into draws EMPTY: its words are in the text box
       // sitting on top of it, and drawing them here as well shows them twice,
       // half a pixel apart, which reads as a rendering fault.
       paintStroke(ctx, c, s.id === textDraft?.forId ? { ...s, text: '' } : s);
     }
-  }, [strokes, page, textDraft?.forId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [strokes, page, hiddenInk, textDraft?.forId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { redrawInk(); }, [redrawInk]);
 
@@ -2184,10 +2240,50 @@ export function PlanAnnotator({
               background: '#fff', boxShadow: '0 20px 48px -10px rgba(15,23,42,.4)',
             }}>
             <div className="px-3 py-2 text-[12px] font-bold text-white" style={{ backgroundColor: NAVY }}>
-              Layers on this plan
+              Layers
             </div>
             <div className="p-2 overflow-y-auto" style={{ maxHeight: '48vh' }}>
-              {layers.length === 0 && (
+              {/* YOUR marks, one layer per colour, newest first.
+                  Somebody marking a plan up works in passes — the red ones are
+                  the problems, the green ones are the answers — so a colour is
+                  already a layer in every way except being switchable. Ordered
+                  by when each colour was last touched, so the pass you are in
+                  the middle of is at the top. */}
+              {inkLayers.length > 0 && (
+                <>
+                  <div className="px-2 pt-1 pb-1.5 text-[9.5px] font-extrabold tracking-wide text-gray-400">
+                    YOUR MARKS
+                  </div>
+                  {inkLayers.map((l, i) => (
+                    <button key={l.colour} data-ink-layer={l.colour}
+                      onClick={() => setHiddenInk(h => {
+                        const next = new Set(h);
+                        if (next.has(l.colour)) next.delete(l.colour); else next.add(l.colour);
+                        return next;
+                      })}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 text-left">
+                      <span className="w-[15px] h-[15px] rounded flex items-center justify-center flex-shrink-0"
+                        style={!hiddenInk.has(l.colour)
+                          ? { backgroundColor: NAVY, color: '#fff' }
+                          : { border: '1.5px solid #cbd5e1' }}>
+                        {!hiddenInk.has(l.colour) && <Check size={10} />}
+                      </span>
+                      <span className="w-3.5 h-3.5 rounded-sm flex-shrink-0 border border-black/10"
+                        style={{ backgroundColor: l.colour }} />
+                      <span className="text-[12px] text-gray-700 truncate flex-1">
+                        Layer {inkLayers.length - i}
+                      </span>
+                      <span className="text-[10.5px] text-gray-400 tabular-nums">{l.count}</span>
+                    </button>
+                  ))}
+                  {layers.length > 0 && (
+                    <div className="px-2 pt-2.5 pb-1.5 text-[9.5px] font-extrabold tracking-wide text-gray-400">
+                      ON THE PLAN
+                    </div>
+                  )}
+                </>
+              )}
+              {layers.length === 0 && inkLayers.length === 0 && (
                 <p className="px-2 py-3 text-[11.5px] text-gray-500 leading-snug">
                   This plan has no layers of its own — it was flattened when it was issued.
                   Your markup still saves as its own layer.
