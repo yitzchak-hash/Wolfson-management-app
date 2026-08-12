@@ -300,3 +300,23 @@
     opacity: 0;
   }
 }
+/* The page-fold animation the "new note" corner plays.
+   Copied exactly from the finance app's globals.css. */
+@keyframes note-fold {
+  0% {
+    transform: perspective(700px) rotateX(0deg) translateY(0);
+    opacity: 1;
+  }
+  55% {
+    transform: perspective(700px) rotateX(62deg) translateY(-14%);
+    opacity: 0.85;
+  }
+  100% {
+    transform: perspective(700px) rotateX(96deg) translateY(-42%);
+    opacity: 0;
+  }
+}
+.note-fold {
+  transform-origin: top center;
+  animation: note-fold 0.42s cubic-bezier(0.4, 0, 0.7, 1) forwards;
+}

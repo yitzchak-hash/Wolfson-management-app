@@ -636,8 +636,26 @@ export function GeneralJobsPage() {
     // Pen and highlighter are modes, not one-shot actions.
     if (next === 'pen' || next === 'highlighter' || next === 'pan' || next === 'select') { setTool(next); return; }
 
+    /**
+     * Note now makes the sticky PAD.
+     *
+     * A pad rather than a single coloured square: many notes on a cork board
+     * behind it, a corner that folds up into a fresh page, bold, bullets and
+     * tick-boxes. Elements already on boards keep `type: 'note'` and draw
+     * exactly as they did, so nothing anybody has written moves.
+     */
+    if (next === 'note') {
+      dropNode('widget', undefined, {
+        widget: 'sticky-pad', w: 260, h: 300,
+        color: 'transparent', text: '',
+        data: { notes: [], openId: undefined },
+      });
+      setTool('select');
+      return;
+    }
+
     const creators: Record<string, CanvasElement['type']> = {
-      note: 'note', box: 'box', title: 'title',
+      box: 'box', title: 'title',
       countdown: 'countdown', stopwatch: 'stopwatch', voice: 'voice',
     };
     const kind = creators[next];
@@ -1600,16 +1618,27 @@ export function GeneralJobsPage() {
   }, []);
 
   // ── Canvas element creation ───────────────────────────────────────
+  /**
+   * The Note button now makes the sticky PAD.
+   *
+   * A pad rather than a single square of colour: it holds many notes on a cork
+   * board behind it, the corner folds up into a fresh page, and it has bold,
+   * bullets and tick-boxes. Elements already on boards keep `type: 'note'` and
+   * still draw exactly as they did — nothing anybody has written moves.
+   */
   function addNote() {
     const el: CanvasElement = {
       id: genId('CE'),
-      type: 'note',
+      type: 'widget',
+      widget: 'sticky-pad',
       x: GAP + Math.random() * 200,
       y: GAP + Math.random() * 150,
-      w: 165,
-      h: 150,
-      text: 'Note',
-      color: NOTE_PALETTE[0],
+      w: 260,
+      h: 300,
+      text: '',
+      color: 'transparent',
+      addedAt: new Date().toISOString(),
+      data: { notes: [], openId: undefined },
     };
     addCanvasElement(el);
   }
@@ -2365,6 +2394,7 @@ export function GeneralJobsPage() {
     update: () => {},
     openJob: (id: string) => openJobRef.current(id),
     boardElements: canvasElements,
+    isRtl: !!s.isRtl,
     // A job whose last square in the notebook was emptied comes back to the
     // board, at the position it never lost.
     leaveNotebook: (id: string) => leaveNotebookRef.current(id),

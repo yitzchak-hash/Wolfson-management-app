@@ -21,6 +21,7 @@ import { MiniJob } from '../components/board/MiniJob';
 import { ProjectMini, BoardMini, CalendarMini } from '../components/board/DashWidgets';
 import { TV_WIDGETS } from './tvWidgets';
 import { PlannerWidget, PlannerData, PlannerEntry } from '../components/board/PlannerWidget';
+import { StickyNoteWidget } from '../components/board/StickyNoteWidget';
 
 /**
  * The widget store.
@@ -70,6 +71,8 @@ export interface WidgetCtx {
   askRemoveTask?: (entry: PlannerEntry, done: (alsoDelete: boolean) => void) => void;
   /** A job's last square in the notebook was emptied — put it back on the board. */
   leaveNotebook?: (jobId: string) => void;
+  /** Hebrew, so a widget that writes its own words can turn round. */
+  isRtl?: boolean;
   /** The TV passes this: widgets render, but nothing can be changed. */
   readOnly?: boolean;
   /**
@@ -1130,6 +1133,21 @@ export const WIDGETS: WidgetDef[] = [
    */
   ...ART_PIECES,
 
+  {
+    /**
+     * The sticky pad, with its cork board behind it.
+     *
+     * The Note button on the rail makes one of these; it is registered here as
+     * well so it can be found in the store and put on any board, including the
+     * dashboard and the wall.
+     */
+    id: 'sticky-pad', rank: 1, name: 'Sticky notes', category: 'visual', icon: StickyNote,
+    w: 260, h: 300,
+    blurb: 'A pad of sticky notes with a cork board behind it. Bold, bullets and tick-boxes, '
+      + 'six colours, and a corner that folds up into a fresh page.',
+    data: { notes: [], openId: undefined },
+    render: (el, c) => <StickyNoteWidget el={el} readOnly={c.readOnly} isRtl={c.isRtl} update={c.update} />,
+  },
   {
     id: 'w-title', rank: 1, name: 'Heading', category: 'visual', icon: Type, w: 280, h: 48,
     blurb: 'A heading to label a column or a section. Full type controls, and it can be pinned to the top.',
