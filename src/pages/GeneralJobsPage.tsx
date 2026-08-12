@@ -20,7 +20,7 @@ import { QuickAddTaskPanel } from '../components/apartment/QuickAddTaskPanel';
 import { Toast } from '../components/ui/Toast';
 import { DriveIcon, ZohoIcon, PlanIcon, TvIcon } from '../components/ui/BrandIcons';
 import { BoardToolbar, BoardControlsPanel, BoardTool } from '../components/board/BoardToolbar';
-import { BOARD_THEMES, getBoardTheme } from '../data/boardThemes';
+import { BOARD_THEMES, getBoardTheme, surfaceAtZoom } from '../data/boardThemes';
 import { MiniMap } from '../components/board/MiniMap';
 import { BinBoard } from '../components/board/BinBoard';
 import { BoardSearch, BoardHit } from '../components/board/BoardSearch';
@@ -2663,6 +2663,21 @@ export function GeneralJobsPage() {
           }}
         />
 
+        {/* The paper, drawn in SCREEN space under everything.
+            It used to live inside the world, so it was scaled with it: at 25%
+            a 22px dot grid landed 5px apart and turned to fog, and further out
+            there was nothing at all — the board stopped feeling like a board
+            exactly when being lost was easiest. Here the spacing is stepped by
+            powers of two to stay legible at any zoom, and offset by the pan so
+            it still travels with the work. */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            backgroundColor: (theme.surface as { backgroundColor?: string }).backgroundColor,
+            ...surfaceAtZoom(theme.surface, zoom, pan),
+          }}
+        />
+
         <div
           className="absolute top-0 left-0"
           style={{
@@ -2685,8 +2700,9 @@ export function GeneralJobsPage() {
             className="relative"
             style={{
               width: maxX, height: maxY,
-              ...theme.surface,
-                            userSelect: 'none',
+              // The paper is painted by the screen-space layer above; painting
+              // it here as well would show a second, zoomed copy through it.
+              userSelect: 'none',
             }}
             onPointerDown={onCanvasPointerDown}
             onPointerMove={onCanvasPointerMove}

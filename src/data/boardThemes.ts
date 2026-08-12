@@ -34,17 +34,95 @@ export interface BoardTheme {
   frame?: React.CSSProperties;
 }
 
-const dots = (c: string, size = 22) => ({
+/**
+ * The RULE for a repeating surface, kept alongside the CSS.
+ *
+ * The pattern used to be painted inside the zoomed world, so at 25% a 22px dot
+ * grid landed 5px apart and turned to mush, and further out it disappeared
+ * altogether — the board stopped looking like a board exactly when you most
+ * needed to know where you were. Keeping the rule (rather than only the CSS it
+ * produced) means the pattern can be regenerated at whatever spacing suits the
+ * current zoom, which is what every serious node editor does.
+ */
+export type SurfaceTile =
+  | { kind: 'dots'; colour: string; size: number }
+  | { kind: 'grid'; major: string; minor: string; m: number; n: number };
+
+/** Surfaces carry their rule on the side; textures without one are unchanged. */
+export interface TiledSurface extends React.CSSProperties {
+  tile?: SurfaceTile;
+}
+
+const dots = (c: string, size = 22): TiledSurface => ({
   backgroundImage: `radial-gradient(circle, ${c} 1px, transparent 1px)`,
   backgroundSize: `${size}px ${size}px`,
+  tile: { kind: 'dots', colour: c, size },
 });
 
-const grid = (major: string, minor: string, m = 70, n = 14) => ({
+const grid = (major: string, minor: string, m = 70, n = 14): TiledSurface => ({
   backgroundImage:
     `linear-gradient(${major} 1px, transparent 1px),linear-gradient(90deg, ${major} 1px, transparent 1px),` +
     `linear-gradient(${minor} 1px, transparent 1px),linear-gradient(90deg, ${minor} 1px, transparent 1px)`,
   backgroundSize: `${m}px ${m}px, ${m}px ${m}px, ${n}px ${n}px, ${n}px ${n}px`,
+  tile: { kind: 'grid', major, minor, m, n },
 });
+
+/**
+ * The surface as it should be painted on SCREEN at this zoom.
+ *
+ * The spacing is stepped by powers of two until it lands in a comfortable band
+ * — so zooming out makes the squares smaller and smaller and then, rather than
+ * vanishing, they step up to the next size and start again. The board is
+ * always legibly a board, at 10% or at 300%.
+ *
+ * `pan` shifts the pattern so it travels with the world. CSS repeats it, so no
+ * modulo is needed here: a background position of −4000px paints identically
+ * to one of −4000 mod size.
+ */
+const COMFY_MIN = 13;   // below this, dots merge and lines turn to fog
+const COMFY_MAX = 60;   // above this, the field reads as stripes rather than paper
+
+export function surfaceAtZoom(
+  surface: TiledSurface,
+  zoom: number,
+  pan: { x: number; y: number },
+): React.CSSProperties {
+  const tile = surface.tile;
+  const { tile: _drop, backgroundColor: _bg, ...rest } = surface;
+  if (!tile || !Number.isFinite(zoom) || zoom <= 0) return rest;
+
+  /** Multiply or divide by two until one tile is a comfortable size on screen. */
+  const step = (base: number) => {
+    let n = base * zoom;
+    if (n <= 0) return base;
+    while (n < COMFY_MIN) n *= 2;
+    while (n > COMFY_MAX) n /= 2;
+    return n;
+  };
+
+  if (tile.kind === 'dots') {
+    const s = step(tile.size);
+    return {
+      backgroundImage: `radial-gradient(circle, ${tile.colour} 1px, transparent 1px)`,
+      backgroundSize: `${s}px ${s}px`,
+      backgroundPosition: `${pan.x}px ${pan.y}px`,
+    };
+  }
+
+  // The two scales are stepped TOGETHER, from the minor one, so the major
+  // lines stay a whole number of minor squares apart however far out you are.
+  const ratio = Math.max(2, Math.round(tile.m / tile.n));
+  const minor = step(tile.n);
+  const major = minor * ratio;
+  return {
+    backgroundImage:
+      `linear-gradient(${tile.major} 1px, transparent 1px),linear-gradient(90deg, ${tile.major} 1px, transparent 1px),` +
+      `linear-gradient(${tile.minor} 1px, transparent 1px),linear-gradient(90deg, ${tile.minor} 1px, transparent 1px)`,
+    backgroundSize: `${major}px ${major}px, ${major}px ${major}px, ${minor}px ${minor}px, ${minor}px ${minor}px`,
+    backgroundPosition:
+      `${pan.x}px ${pan.y}px, ${pan.x}px ${pan.y}px, ${pan.x}px ${pan.y}px, ${pan.x}px ${pan.y}px`,
+  };
+}
 
 export const BOARD_THEMES: BoardTheme[] = [
   {
