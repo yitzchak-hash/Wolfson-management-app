@@ -413,3 +413,29 @@ html, body {
     opacity: 0;
   }
 }
+
+/* ── Scrollbars a finger can actually grab ────────────────────────────────────
+   On a touch screen the browser's overlay scrollbars are a few pixels of
+   decoration you cannot hold. Where hover does not exist, every scroller's
+   bar takes real space (14px) with a padded thumb — slim to look at, wide to
+   touch, because the border is transparent but still part of the hit area. */
+@media (any-hover: none) {
+  *::-webkit-scrollbar { width: 14px; height: 14px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb {
+    background: rgba(100, 116, 139, .45);
+    border-radius: 999px;
+    border: 4px solid transparent;
+    background-clip: padding-box;
+    min-height: 44px;
+  }
+  * { scrollbar-width: auto; }
+}
+
+/* The weekly notebook's scroller. `scrollbar-gutter: stable` reserves the
+   bar's lane INSIDE the box, so the widget's rounded border no longer sits on
+   top of the thumb's last pixels. */
+.planner-scroll {
+  scrollbar-gutter: stable;
+  padding-inline-end: 2px;
+}
