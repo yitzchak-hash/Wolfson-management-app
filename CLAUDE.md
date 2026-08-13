@@ -1292,3 +1292,56 @@ degraded mode.
 literal: `${` inside one is TypeScript interpolation, and the first version
 silently turned half the shell script into JavaScript. It uses plain `$VAR` and
 python3 for percent-decoding rather than any brace expansion.
+
+
+---
+
+# v2 — the iPad
+
+## Palm rejection (`src/data/pencil.ts`)
+**Once a pen has been seen, fingers are ignored for a moment.** Not "ignore the second contact" — that
+only covers the pen touching down first, and a hand settles before the nib does about half the time, so
+the palm claimed the stroke and the NIB was turned away as the second contact. A pen coming down also
+**retrospectively disowns** a touch that began within `PALM_LOOKBACK`, which the simple version cannot
+cover at all.
+
+`PEN_WINDOW` 700ms · `PALM_LOOKBACK` 400ms. `notePointer(e, now)` takes `now` as a parameter, because a
+palm rule tested against the wall clock is a rule tested once — `scratchpad/pencil.mjs` drives eight
+explicit timelines. "Never" is `-Infinity`, **not 0**: 0 is also a valid timestamp, and with it the very
+first finger on a fresh page was rejected as a palm. Real clocks are large enough that this never bit in
+the app, which is exactly why it needed a test with its own timeline.
+
+Wired into `PlanAnnotator` at pointerdown AND pointermove — a palm dragging across the glass must not
+extend the pen's stroke either.
+
+## A finger has no double-click
+The board's only way of opening a job was a double-click, and two quick taps do not reliably reach the
+page as one — iOS reserves the gesture for zooming. **On a tablet a job could not be opened at all.**
+
+The touch rule is the iOS one: tap to pick it out, tap the picked one to open. Same for a board node
+(second tap edits). `wasPicked` is a **ref recorded in pointerDOWN**, because the very next line picks
+the job — asking on pointerup always answers yes, which opened on the first tap and left no gesture for
+"I mean this one". Nothing about the mouse changes.
+
+## Hover-only controls do not exist on a touch screen
+17 of them, measured. `@media (any-hover: none)` in `index.css` shows every `group-hover:opacity-100`
+outright. Keyed off what the device can DO, never off "is this an iPad" — a touchscreen laptop has the
+same problem and an iPad with a trackpad does not. Safari's sticky `:hover` after a tap is why this
+looked like it half-worked: you had to tap the thing to discover there was a button on it, and tapping
+the thing did something else.
+
+Consequence: a delete that was revealed by hovering is now always visible, so **anything destructive
+newly exposed this way must confirm** (the saved-report delete does).
+
+Also under that query: `-webkit-touch-callout` and the tap highlight off — a long press in this app
+always means "open the menu for this", never "select this text". Plus `overscroll-behavior: none` so
+the whole app does not rubber-band, `viewport-fit=cover`, and `env(safe-area-inset-bottom)` under the
+mobile nav and the board overview. `maximum-scale` is deliberately NOT set: pinch-zooming the page is
+somebody's accessibility setting, not a bug.
+
+## Harness note
+`scratchpad/ipad.mjs` runs two device profiles. Chromium's `Emulation.setEmitTouchEventsForMouse` with
+`configuration: 'mobile'` genuinely reports `any-hover: none`, so the rule is live rather than
+simulated. **Wait before measuring opacity** — several of these controls carry `transition-all`, and
+reading in the same tick returns the value the transition is starting FROM, which reads as "these were
+never hover-gated" and is the test measuring its own impatience.

@@ -211,6 +211,10 @@ export function ReportsPage() {
                       <button
                         onClick={e => {
                           e.stopPropagation();
+                          // Asked for, because on a touch screen this button is
+                          // always visible rather than revealed by hovering —
+                          // a stray tap beside a report name should not lose it.
+                          if (!window.confirm(`Delete the report “${r.name}”?`)) return;
                           deleteReport(r.id);
                           if (r.id === def.id) { setDef(newReport('jobs')); setDirty(false); }
                         }}

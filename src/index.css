@@ -12,6 +12,56 @@
   }
 }
 
+/* ── Tablets, and the iPad in particular ──────────────────────────────────────
+   Everything here is keyed off what the device can DO rather than what it
+   claims to be: `any-hover: none` asks the question that actually matters —
+   is there any pointer here that can hover — so a touchscreen laptop is covered
+   and an iPad with a trackpad attached is not.                              */
+
+@media (any-hover: none) {
+  /*
+     A control that only appears on hover is, on a touch screen, a control that
+     does not exist. Every reveal-on-hover affordance in the app is shown
+     outright instead. Safari does emit a sticky :hover after a tap, which is
+     why this looked like it half-worked — you had to tap the thing to find out
+     there was a button on it, and tapping the thing did something else.
+  */
+  .group-hover\:opacity-100 {
+    opacity: 1 !important;
+  }
+
+  /*
+     Long-pressing anything in the app means "open the menu for it", never
+     "select this text" or "share this image", and iOS offers both by default.
+  */
+  * {
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/*
+   Rubber-band scrolling.
+
+   On iPadOS, dragging past the end of the page bounces the WHOLE app, which on
+   a board that is already handling its own pan reads as the layout coming
+   loose. Panels keep their own scrolling; only the document is pinned.
+*/
+html, body {
+  overscroll-behavior: none;
+}
+
+/*
+   Room for the home indicator.
+
+   Anything pinned to the bottom of the screen sits under it otherwise — on a
+   phone that is the navigation bar, on an iPad the toolbar and the board's
+   overview. `env()` is 0 everywhere else, so this costs nothing on a desktop.
+*/
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 @layer utilities {
   .scrollbar-thin {
     scrollbar-width: thin;

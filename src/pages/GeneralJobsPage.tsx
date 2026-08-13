@@ -39,7 +39,7 @@ import {
 } from '../components/board/AttachLayer';
 import { renderWidget, WidgetDef, WidgetCtx } from '../data/widgets';
 import { JobTile, BoardNode, BoardHandlers } from '../components/board/BoardItems';
-import { useTouchGestures } from '../hooks/useTouchGestures';
+import { useTouchGestures, isFingerTouch } from '../hooks/useTouchGestures';
 import { detectPasteIntent, fieldForIntent, canCreateFromIntent, PasteIntent } from '../data/pasteIntent';
 import { StrokeNib, nibDash } from '../components/board/BoardNodes';
 import { exportBoardPng, exportBoardPdf } from '../data/boardExport';
@@ -255,6 +255,8 @@ export function GeneralJobsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<{ ids: string[]; taskCount: number } | null>(null);
 
   const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set());
+  /** Whether the pressed job was already the picked one — see onJobPointerDown. */
+  const wasPicked = useRef(false);
   const [selectedElIds, setSelectedElIds] = useState<Set<string>>(new Set());
   const [drag, setDrag] = useState<DragState | null>(null);
   const [resize, setResize] = useState<ResizeState | null>(null);
@@ -790,7 +792,7 @@ export function GeneralJobsPage() {
     ghostMenu: (e, j, gi) => live.current.ghostMenu(e, j, gi),
     elDown: (e, el) => live.current.elDown(e, el),
     elMove: e => live.current.elMove(e),
-    elUp: el => live.current.elUp(el),
+    elUp: (el, e) => live.current.elUp(el, e),
     elMenu: (e, el) => live.current.elMenu(e, el),
     elEdit: el => live.current.elEdit(el),
     elSettings: el => live.current.elSettings(el),
@@ -1795,6 +1797,15 @@ export function GeneralJobsPage() {
     const idsToMove = selectedJobIds.has(job.id) && selectedJobIds.size > 1
       ? [...selectedJobIds]
       : [job.id];
+    /**
+     * Was it ALREADY the picked one before this press?
+     *
+     * Recorded here because the very next line picks it, so asking the same
+     * question on pointerup always answers yes — which made the touch rule
+     * below open a job on the first tap and left no gesture for "I mean this
+     * one" at all.
+     */
+    wasPicked.current = selectedJobIds.has(job.id) && selectedJobIds.size === 1;
     if (!selectedJobIds.has(job.id)) { setSelectedJobIds(new Set([job.id])); setSelectedElIds(new Set()); }
 
     const starts = new Map<string, { x: number; y: number }>();
@@ -1915,9 +1926,23 @@ export function GeneralJobsPage() {
        * which is what you need before moving several, colouring one, or
        * right-clicking. Double-click opens, which is what a double-click means
        * everywhere else.
+       *
+       * A FINGER has no double-click. Two quick taps do not reliably reach the
+       * page as one — iOS reserves the gesture for zooming and only sometimes
+       * synthesises `dblclick` from it — so on a tablet the board's only way of
+       * opening a job did not exist and a job could not be opened at all.
+       *
+       * The touch equivalent is the iOS one: tap to pick it out, tap the
+       * already-picked one to open it. Nothing about the mouse changes, and the
+       * "I mean this one" gesture the rule above exists to protect survives —
+       * it is simply the FIRST tap rather than the only click.
        */
-      setSelectedJobIds(new Set([job.id]));
-      setSelectedElIds(new Set());
+      if (isFingerTouch(e) && wasPicked.current) {
+        setSelectedJob(job);
+      } else {
+        setSelectedJobIds(new Set([job.id]));
+        setSelectedElIds(new Set());
+      }
     }
     setDrag(null);
     setHoverBin(null);
@@ -1998,7 +2023,7 @@ export function GeneralJobsPage() {
     return best;
   }
 
-  function onElPointerUp(el: CanvasElement) {
+  function onElPointerUp(el: CanvasElement, e?: React.PointerEvent) {
     if (!drag || drag.kind !== 'element') return;
 
     // Clip art dropped on top of something STICKS to it, and from then on has
@@ -2045,6 +2070,14 @@ export function GeneralJobsPage() {
       // A press that never became a drag is a click, so the bin opens. Deciding
       // it here rather than with an onClick is what lets a bin be dragged at all.
       setOpenBin(el.binKind);
+    } else if (
+      // The same rule the job tiles use: a finger has no double-click, so
+      // tapping an already-picked node is what opens it for editing.
+      e && isFingerTouch(e) && !drag.moved
+      && drag.ids.length === 1 && drag.ids[0] === el.id
+      && selectedElIds.has(el.id) && selectedElIds.size === 1
+    ) {
+      startEdit(el);
     }
     setDrag(null);
     setAttachHint(null);

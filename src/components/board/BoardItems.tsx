@@ -69,7 +69,8 @@ export interface BoardHandlers {
 
   elDown: (e: React.PointerEvent, el: CanvasElement) => void;
   elMove: (e: React.PointerEvent) => void;
-  elUp: (el: CanvasElement) => void;
+  /** The event is passed so a tap can be told apart from a click. */
+  elUp: (el: CanvasElement, e?: React.PointerEvent) => void;
   elMenu: (e: React.MouseEvent, el: CanvasElement) => void;
   elEdit: (el: CanvasElement) => void;
   /** Clear the "just added" dot. */
@@ -462,7 +463,7 @@ export const BoardNode = React.memo(function BoardNode({
     <div
       onPointerDown={e => H.elDown(e, el)}
       onPointerMove={H.elMove}
-      onPointerUp={() => H.elUp(el)}
+      onPointerUp={e => H.elUp(el, e)}
       onContextMenu={e => H.elMenu(e, el)}
       onDoubleClick={() => { if (!plain) H.elEdit(el); }}
       data-node-id={el.id}

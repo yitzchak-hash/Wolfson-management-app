@@ -79,8 +79,10 @@ export const MiniMap = React.memo(function MiniMap({
 
   return (
     <div
-      className="absolute bottom-3 right-3 z-30 rounded-lg border border-gray-200 bg-white/95 shadow-sm overflow-hidden cursor-pointer"
-      style={{ width: W, height: H }}
+      className="absolute right-3 z-30 rounded-lg border border-gray-200 bg-white/95 shadow-sm overflow-hidden cursor-pointer"
+      /* Clear of the iPad's home indicator, which otherwise sits across the
+         overview's bottom edge. env() is 0 on every other device. */
+      style={{ width: W, height: H, bottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
       onPointerDown={jump}
       onPointerMove={e => { if (e.buttons === 1) jump(e); }}
       title="Board overview — click to jump"

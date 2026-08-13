@@ -16,6 +16,7 @@ import { fetchPlanBytes, stampPlanToDrive, extractFolderId, isUploadBackendConfi
 import { PenStroke, PenSample, NibWatch, samplesOf, simplify, nearSegment } from './penInput';
 import { TOOLS, toolById, INK_COLORS, HIGHLIGHT_COLORS, rememberColor } from './annotTools';
 import { InkPicker } from './InkPicker';
+import { notePointer, isPalm, isPen, touchWasPalm } from '../../data/pencil';
 import { paintStroke, bubbleTextBox, REF, LINE } from './paintStroke';
 import { PlanPicker } from './PlanPicker';
 
@@ -1018,6 +1019,25 @@ export function PlanAnnotator({
 
   function onDown(e: React.PointerEvent<HTMLCanvasElement>) {
     if (locked || tool === 'pan') return;
+
+    /**
+     * The hand holding the pencil.
+     *
+     * Resting a palm on the glass is how people write, so it arrives on nearly
+     * every stroke — and about half the time it lands FIRST, which is exactly
+     * the case the old "ignore the second contact" rule could not cover: the
+     * palm claimed the stroke and the nib was then turned away as the second
+     * contact. A pen coming down now disowns a touch that began moments ago,
+     * and a finger is ignored outright while a pen is in play.
+     */
+    notePointer(e.nativeEvent);
+    if (isPalm(e.nativeEvent)) return;
+    if (isPen(e.nativeEvent) && drawing.current && touchWasPalm()) {
+      drawing.current = null;
+      releaseLiveBuffer();
+      clearLive();
+    }
+
     const { nx: dnx, ny: dny } = norm(e);
 
     // The move tool picks something up rather than laying something down.
@@ -1112,6 +1132,10 @@ export function PlanAnnotator({
   }
 
   function onMove(e: React.PointerEvent<HTMLCanvasElement>) {
+    // A palm dragging across the glass must not extend the pen's stroke.
+    notePointer(e.nativeEvent);
+    if (isPalm(e.nativeEvent)) return;
+
     // The nib follows the pointer whatever else is happening, so the width is
     // chosen by looking at it rather than by drawing a test line.
     if (showNib) setNibAt({ x: e.clientX, y: e.clientY });

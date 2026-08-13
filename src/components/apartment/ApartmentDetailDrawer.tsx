@@ -826,8 +826,10 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               )}
               <Tooltip text="Print a job sheet">
                 <button onClick={printJobSheet}
-                  className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 transition-colors
-                             text-[11.5px] font-semibold flex items-center gap-1.5">
+                  /* min-h so a finger has something to hit: at py-1 this was
+                     25px tall, and a 25px target on a tablet is a coin flip. */
+                  className="px-2.5 py-1 min-h-[32px] rounded-lg bg-white/10 hover:bg-white/20
+                             transition-colors text-[11.5px] font-semibold flex items-center gap-1.5">
                   <Printer size={13} /> Print
                 </button>
               </Tooltip>
@@ -1032,7 +1034,10 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     <button
                       type="button"
                       onClick={() => officeFileRef.current?.click()}
-                      className="flex items-center gap-1 text-xs text-gray-400 hover:text-[#1e3a5f] transition-colors"
+                      /* A bare text row is only as tall as its text — 16px, and
+                         unhittable with a finger. The padding is the target. */
+                      className="flex items-center gap-1 px-1.5 py-1.5 -mx-1.5 min-h-[32px] rounded-lg
+                                 text-xs text-gray-400 hover:text-[#1e3a5f] hover:bg-gray-50 transition-colors"
                     >
                       <Paperclip size={11} /> {ui.attachFiles}
                     </button>
