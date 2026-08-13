@@ -263,10 +263,44 @@ export function PlannerWidget({
    * configured after it behave the same.
    */
   const d = data as PlannerData & Record<string, unknown>;
+  /**
+   * '1'/'0' from the settings panel, booleans from older seeds, missing means
+   * the default. The old Hide value was '' — which is also what an untouched
+   * select displays — so the panel showed Hide while the default showed them,
+   * and the toggle read as broken.
+   */
+  const flag = (v: unknown, dflt: boolean): boolean =>
+    v === '1' || v === true ? true : v === '0' || v === '' || v === false ? false : dflt;
   const holidayKinds = {
-    jewish:  'holJewish'  in d ? !!d.holJewish  : (data.holidays?.jewish ?? true),
-    israeli: 'holIsraeli' in d ? !!d.holIsraeli : (data.holidays?.israeli ?? true),
-    secular: 'holSecular' in d ? !!d.holSecular : (data.holidays?.secular ?? false),
+    jewish:  flag(d.holJewish,  data.holidays?.jewish ?? true),
+    israeli: flag(d.holIsraeli, data.holidays?.israeli ?? true),
+    secular: flag(d.holSecular, data.holidays?.secular ?? false),
+  };
+  const hebrewOn = flag(d.hebrew, false);
+
+  /**
+   * The trade dividers.
+   *
+   * Rows are grouped by what the person IS — drywall, AC, general, office,
+   * free names — keeping each group's own order, with a subtle labeled line
+   * between groups. Every visual property is a setting because the office
+   * asked for exactly that; the defaults are deliberately quiet.
+   */
+  const divOn = (d.divOn ?? 'show') !== 'hide';
+  const divStyle = {
+    thick: Math.max(1, Math.min(6, Number(d.divThick) || 1)),
+    color: typeof d.divColor === 'string' && d.divColor ? d.divColor : '#e2e8f0',
+    textSize: Math.max(6, Math.min(14, Number(d.divTextSize) || 8)),
+    weight: Number(d.divWeight) || 600,
+    textColor: typeof d.divTextColor === 'string' && d.divTextColor ? d.divTextColor : '#94a3b8',
+  };
+  const categoryOf = (pid: string): string => {
+    if (pid.startsWith('c:')) {
+      const c = contractors.find(x => x.id === pid.slice(2));
+      return c ? ({ drywall: 'Drywall', ac: 'AC', general: 'General' }[c.category] ?? 'General') : 'General';
+    }
+    if (pid.startsWith('u:')) return 'Office';
+    return 'Others';
   };
 
   const anchor = useMemo(
@@ -575,7 +609,7 @@ export function PlannerWidget({
                       <div className="font-bold truncate"
                         style={{ fontSize: daySize, color: isToday ? '#0369a1' : '#64748b' }}>
                         {span > 5 ? SHORT_DAYS[dt.getDay()] : DAY_NAMES[dt.getDay()]}
-                        {data.hebrew && (
+                        {hebrewOn && (
                           <span className="font-normal" style={{ color: '#94a3b8' }}> · {hebrewLabel(dt)}</span>
                         )}
                       </div>
@@ -591,10 +625,40 @@ export function PlannerWidget({
                 })}
               </div>
 
-              {people.filter(pid => rowVisible(pid, days)).map(pid => {
+              {(() => {
+                const visible = people.filter(pid => rowVisible(pid, days));
+                if (!divOn) return visible.map(pid => ({ pid, divider: null as string | null }));
+                // Group by trade, keeping each group's own order; a divider
+                // only ever sits BETWEEN groups, and only when there are two.
+                const order: string[] = [];
+                const byCat = new Map<string, string[]>();
+                visible.forEach(pid => {
+                  const cat = categoryOf(pid);
+                  if (!byCat.has(cat)) { byCat.set(cat, []); order.push(cat); }
+                  byCat.get(cat)!.push(pid);
+                });
+                if (order.length < 2) return visible.map(pid => ({ pid, divider: null as string | null }));
+                const rows: { pid: string; divider: string | null }[] = [];
+                order.forEach((cat, gi) => {
+                  byCat.get(cat)!.forEach((pid, i) => {
+                    rows.push({ pid, divider: gi > 0 && i === 0 ? cat : null });
+                  });
+                });
+                return rows;
+              })().map(({ pid, divider }) => {
                 const person = personOf(pid, contractors, users);
                 return (
-                  <div key={pid} className="grid gap-px mb-px" style={{ gridTemplateColumns: cols }}>
+                  <React.Fragment key={pid}>
+                  {divider && (
+                    <div className="flex items-center gap-1.5 py-0.5 select-none" aria-hidden="true">
+                      <span className="uppercase tracking-wider flex-shrink-0"
+                        style={{ fontSize: divStyle.textSize, fontWeight: divStyle.weight, color: divStyle.textColor }}>
+                        {divider}
+                      </span>
+                      <span className="flex-1" style={{ height: divStyle.thick, backgroundColor: divStyle.color }} />
+                    </div>
+                  )}
+                  <div className="grid gap-px mb-px" style={{ gridTemplateColumns: cols }}>
                     <div className="flex items-start gap-1 px-1 py-1 rounded-l-md min-w-0"
                       style={{ backgroundColor: tint(person.color, 0.10) }}>
                       <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1"
@@ -667,6 +731,7 @@ export function PlannerWidget({
                       );
                     })}
                   </div>
+                  </React.Fragment>
                 );
               })}
             </div>

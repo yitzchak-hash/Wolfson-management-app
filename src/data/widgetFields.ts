@@ -365,11 +365,6 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
         + 'each person keeps their own colour. Taking somebody off asks from when.',
     },
     {
-      key: 'mode', label: 'Show', kind: 'select', group: 'People and days',
-      options: [{ value: 'week', label: 'One week' }, { value: 'month', label: 'A whole month' }],
-      hint: 'The arrows step a week in week view and a month in month view.',
-    },
-    {
       key: 'span', label: 'Days across', kind: 'select', group: 'People and days',
       options: [
         { value: '5', label: 'Sunday to Thursday' },
@@ -382,22 +377,44 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
       options: [{ value: '0', label: 'Sunday' }, { value: '1', label: 'Monday' }],
     },
     {
+      /**
+       * Explicit '1'/'0', never ''.
+       *
+       * The old Hide value was the empty string, which is also what an
+       * untouched select reads as — so the panel showed "Hide" while the
+       * default actually showed them, and the toggle read as broken. The
+       * default option now comes first so an untouched select DISPLAYS the
+       * truth.
+       */
       key: 'hebrew', label: 'Hebrew date', kind: 'select', group: 'Dates and holidays',
-      options: [{ value: '1', label: 'Show it' }, { value: '', label: 'Hide it' }],
+      options: [{ value: '0', label: 'Hide it' }, { value: '1', label: 'Show it' }],
       hint: 'Under the English date in every day header.',
     },
     {
       key: 'holJewish', label: 'Jewish holidays', kind: 'select', group: 'Dates and holidays',
-      options: [{ value: '1', label: 'Show them' }, { value: '', label: 'Hide them' }],
+      options: [{ value: '1', label: 'Show them' }, { value: '0', label: 'Hide them' }],
     },
     {
       key: 'holIsraeli', label: 'Israeli national days', kind: 'select', group: 'Dates and holidays',
-      options: [{ value: '1', label: 'Show them' }, { value: '', label: 'Hide them' }],
+      options: [{ value: '1', label: 'Show them' }, { value: '0', label: 'Hide them' }],
     },
     {
       key: 'holSecular', label: 'English / secular holidays', kind: 'select', group: 'Dates and holidays',
       options: [{ value: '', label: 'Hide them' }, { value: '1', label: 'Show them' }],
     },
+    {
+      key: 'divOn', label: 'Divider between trades', kind: 'select', group: 'Category dividers',
+      options: [{ value: 'show', label: 'Show it' }, { value: 'hide', label: 'Hide it' }],
+      hint: 'A subtle labeled line between drywall, AC, general and office rows.',
+    },
+    { key: 'divThick', label: 'Line thickness', kind: 'number', group: 'Category dividers', min: 1, max: 6 },
+    { key: 'divColor', label: 'Line colour', kind: 'colour', group: 'Category dividers' },
+    { key: 'divTextSize', label: 'Label size', kind: 'number', group: 'Category dividers', min: 6, max: 14 },
+    {
+      key: 'divWeight', label: 'Label weight', kind: 'select', group: 'Category dividers',
+      options: [{ value: '400', label: 'Light' }, { value: '600', label: 'Medium' }, { value: '800', label: 'Bold' }],
+    },
+    { key: 'divTextColor', label: 'Label colour', kind: 'colour', group: 'Category dividers' },
     {
       key: 'askOnDrop', label: 'Ask when a job is dropped in', kind: 'select', group: 'Behaviour',
       options: [{ value: '1', label: 'Offer to make a task' }, { value: '', label: 'Just place it' }],
