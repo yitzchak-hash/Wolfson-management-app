@@ -421,7 +421,10 @@ export function PlannerWidget({
 
   return (
     <div className="w-full h-full flex flex-col overflow-hidden">
-      <div className="flex items-center gap-1.5 px-2 pt-1.5 pb-1 flex-shrink-0">
+      {/* The header row scrolls sideways rather than pushing its buttons off
+          the edge. Squeezed narrow, the month arrows and the show-all button
+          used to sit outside the node with nothing to reach them by. */}
+      <div className="flex items-center gap-1.5 px-2 pt-1.5 pb-1 flex-shrink-0 overflow-x-auto scrollbar-thin">
         <CalendarDays size={12} className="text-gray-400 flex-shrink-0" />
         <span className="font-extrabold tracking-wide text-gray-500 truncate"
           style={{ fontSize: Math.max(9, textSize - 1) }}>

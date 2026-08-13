@@ -149,7 +149,16 @@ export function Frame({ title, icon: Icon, children, tone }: {
         <span className="text-[9.5px] font-extrabold tracking-wide truncate"
           style={{ color: tone ?? '#64748b' }}>{title.toUpperCase()}</span>
       </div>
-      <div className="flex-1 min-h-0 overflow-hidden">{children}</div>
+      {/*
+        The body SCROLLS when it does not fit, rather than being cut off.
+
+        It used to be `overflow-hidden`, so shrinking a node quietly removed
+        whatever fell past the bottom edge — the calculator lost its clear key,
+        the converter lost its last unit, the month lost its last week. Nothing
+        on screen said anything was missing. `auto` means a widget that fits
+        shows no scrollbar at all and one that does not can still be read.
+      */}
+      <div className="flex-1 min-h-0 overflow-auto scrollbar-thin">{children}</div>
     </div>
   );
 }
@@ -1614,7 +1623,10 @@ function CalcWidget() {
         <div className="text-[10px] text-gray-400 truncate h-3.5">{expr || '\u00a0'}</div>
         <div className="text-[15px] font-black tabular-nums">{out || '0'}</div>
       </div>
-      <div className="grid grid-cols-4 gap-0.5 flex-1 min-h-0">
+      {/* The keypad scrolls rather than losing its bottom row. Squeezed to a
+          third of its size it is an awkward calculator, but it is still a
+          calculator — before this the clear key simply was not there. */}
+      <div className="grid grid-cols-4 gap-0.5 flex-1 min-h-0 overflow-auto scrollbar-thin">
         {KEYS.map(k => (
           <button key={k} data-no-drag data-el-action
             onClick={() => {

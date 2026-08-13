@@ -814,8 +814,30 @@ export function TvPresentationPage() {
             );
           })}
         </div>
-        <div className="flex-1 overflow-auto p-3">
-          <div style={{ transform: `scale(${scale})`, transformOrigin: isRtl ? 'top right' : 'top left', width: `${100 / scale}%` }}>
+        {/*
+          The scrolling happens INSIDE the scaled box, not outside it.
+
+          A sticky header positions itself against its nearest scrolling
+          ancestor, and its offsets are measured in that ancestor's coordinate
+          space. With the scroller on the outside and a `scale()` in between,
+          `top: 0` on the building label meant zero in the SCALED space — so
+          the moment the diagram was scrolled the building name detached from
+          the top and parked itself partway down the screen, further down the
+          bigger the wallboard's scale. On a 4K panel it sat near the middle.
+
+          Putting the scroller inside means the sticky element and the thing it
+          sticks to share one untransformed coordinate space, and the whole
+          result is scaled afterwards. The box is sized at 1/scale in both
+          directions so that scaling it lands exactly on the frame.
+        */}
+        <div className="flex-1 overflow-hidden p-3">
+          <div style={{
+            transform: `scale(${scale})`,
+            transformOrigin: isRtl ? 'top right' : 'top left',
+            width: `${100 / scale}%`,
+            height: `${100 / scale}%`,
+          }}>
+            <div className="h-full overflow-auto">
             <BuildingDiagram
               apartments={jobs}
               stages={stages}
@@ -827,6 +849,7 @@ export function TvPresentationPage() {
               showShinuiBadge
               compact
             />
+            </div>
           </div>
         </div>
       </div>

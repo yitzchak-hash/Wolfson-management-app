@@ -326,11 +326,23 @@ function WidgetSurface({ el, w, h, children }: {
   const bump = el.fontSize ? Math.max(0.4, Math.min(3, el.fontSize / 14)) : 1;
   const k = Math.max(0.34, Math.min(3, (w / Math.max(1, naturalW)) * bump));
 
+  /**
+   * The drawing width has to follow the CLAMP, not the natural size.
+   *
+   * Normally `w / k` is exactly the natural width and this changes nothing.
+   * But the scale is clamped at both ends, and once it is clamped the two stop
+   * agreeing: squeeze a node past a third of its natural width and the scale
+   * stops shrinking while the box keeps going, so the widget was still being
+   * drawn wider than the space it had and the right-hand edge fell off. Taking
+   * whichever is larger means the drawing always covers the box.
+   */
+  const innerW = Math.max(naturalW, w / k);
+
   return (
     <div className="w-full h-full overflow-hidden">
       <div
         style={{
-          width: naturalW,
+          width: innerW,
           height: h / k,
           transform: `scale(${k})`,
           transformOrigin: '0 0',

@@ -408,7 +408,7 @@ export function CalendarMini({ assignments, jobs }: {
         ))}
       </div>
 
-      <div className="grid grid-cols-7 gap-[2px] flex-1 min-h-0 content-start">
+      <div className="grid grid-cols-7 gap-[2px] flex-1 min-h-0 content-start overflow-auto scrollbar-thin">
         {Array.from({ length: lead }, (_, i) => <span key={`x${i}`} />)}
         {Array.from({ length: days }, (_, i) => {
           const n = i + 1;
