@@ -55,7 +55,14 @@ export const MiniMap = React.memo(function MiniMap({
   if (force === false) return null;
   if (!force && !needed) return null;
 
-  const stageColor = (id?: string | null) => stages.find(s => s.id === id)?.color ?? '#cbd5e1';
+  /**
+   * A job's stage colour, or the company navy when it has none.
+   *
+   * The fallback used to be a light grey, which on the overview was almost
+   * exactly the grey of a group box — so an unstaged job and an empty box were
+   * the same mark. Navy keeps a job reading as a job whatever stage it is at.
+   */
+  const stageColor = (id?: string | null) => stages.find(s => s.id === id)?.color ?? '#1e3a5f';
 
   // Visible world rect, derived from the same transform the board uses.
   const view = {
@@ -101,7 +108,18 @@ export const MiniMap = React.memo(function MiniMap({
           style={{
             left: el.x * scale, top: el.y * scale,
             width: Math.max(2, el.w * scale), height: Math.max(2, el.h * scale),
-            backgroundColor: el.type === 'box' ? 'rgba(148,163,184,.28)' : 'rgba(252,211,77,.7)',
+            /*
+              One colour per KIND, so the overview is readable at a glance:
+              a job is the blue of the app, a widget is violet, a group box is
+              the faint grey it is on the board, and a note keeps its yellow.
+              Everything used to be the same yellow as a note, so a board of
+              widgets and a board of stickies looked identical.
+            */
+            backgroundColor:
+              el.type === 'box' ? 'rgba(148,163,184,.28)'
+              : el.type === 'widget' ? 'rgba(124,58,237,.65)'
+              : el.type === 'bin' ? 'rgba(100,116,139,.45)'
+              : 'rgba(252,211,77,.75)',
           }} />
       ))}
       {jobs.map((j, i) => (

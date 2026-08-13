@@ -2865,7 +2865,15 @@ export function GeneralJobsPage() {
         <MiniMap
           force={projectBoard.showMinimap}
           jobs={jobs}
-          elements={canvasElements}
+          /*
+            The nodes on THIS board, not every node in the workspace.
+            It was handed the whole `canvasElements` list, so the overview drew
+            every widget from every named board and everything filed inside
+            every group — a crowd that was never on the board you were looking
+            at. Deleting one of yours left all of those still sitting there,
+            which reads exactly as "the map does not update".
+          */
+          elements={onThisBoard}
           stages={stages}
           worldW={maxX}
           worldH={maxY}
