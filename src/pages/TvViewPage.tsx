@@ -6,6 +6,7 @@ import { TvDashboard } from '../components/board/TvDashboard';
 import { WidgetStore } from '../components/board/WidgetStore';
 import { WidgetCtx } from '../data/widgets';
 import { TV_ALLOWED } from '../data/tvWidgets';
+import { nearestRatio } from '../data/dashRatios';
 import { bareDomain } from '../data/portalLink';
 
 /** A bare domain in an href is a relative path; the scheme goes back on. */
@@ -189,6 +190,9 @@ export function TvViewPage() {
         >
           <TvDashboard
             ctx={ctx}
+            // The mock-up shows the arrangement for the shape being mocked up,
+            // not for the browser window it is being mocked up in.
+            ratio={nearestRatio(shape.w, shape.h)}
             shape={{
               orientation: shape.w >= shape.h ? 'landscape' : 'portrait',
               width: box.w, height: box.h,

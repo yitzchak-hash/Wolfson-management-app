@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useStore } from '../data/store';
 import {
   Plus, Trash2, Save, Palette, ChevronUp, ChevronDown, Shield, Sun, Moon,
@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { isFirebaseConfigured, db, fsSet, fsGetAll } from '../data/firebase';
 import { TvDashboard } from '../components/board/TvDashboard';
+import { DASH_RATIOS, DEFAULT_DASH_RATIO, dashRatio } from '../data/dashRatios';
 import { WidgetStore } from '../components/board/WidgetStore';
 import { TV_ALLOWED } from '../data/tvWidgets';
 import { TimeClockTab } from '../components/settings/TimeClockTab';
@@ -57,6 +58,14 @@ const PRESET_COLORS = [
   '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#ec4899',
   '#f43f5e', '#64748b', '#0f172a', '#b8860b', '#1e3a5f',
 ];
+
+/** Fit a shape into the room available, capped so a tall panel stays on screen. */
+function tvPreviewBox(ratio: { w: number; h: number }, avail: number): React.CSSProperties {
+  const aspect = ratio.w / ratio.h;
+  const MAX_H = 520;
+  const w = Math.max(220, Math.min(avail, MAX_H * aspect));
+  return { width: Math.round(w), height: Math.round(w / aspect) };
+}
 
 const CAT_COLORS: Record<ContractorCategory, string> = { drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981' };
 
@@ -1501,12 +1510,45 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
   // ── The live wall dashboard, edited in place ──
   const [tvStore, setTvStore] = useState(false);
   const [tvArrange, setTvArrange] = useState(false);
-  const tvWidgetCount = canvasElements.filter(
-    e => e.board === TV_DASH_BOARD && e.type === 'widget').length;
-  // The preview pane is wide and short, so it is always the landscape layout —
-  // the wall's own orientation decides its own.
+  const tvWidgets = canvasElements.filter(e => e.board === TV_DASH_BOARD && e.type === 'widget');
+  const tvWidgetCount = tvWidgets.length;
+  /**
+   * Which screen the office is arranging FOR — asked, never guessed.
+   *
+   * The preview used to be laid out as whatever shape the settings pane
+   * happened to be: wide and short, and always landscape. So a wall panel
+   * mounted on its side was arranged on a screen nothing like it, and the
+   * result only became visible on the wall. Now the shape is chosen, the
+   * preview is drawn at that shape's real proportions, and each shape keeps
+   * its own sizes.
+   */
+  const [ratioKey, setRatioKey] = useState(DEFAULT_DASH_RATIO);
+  const ratio = dashRatio(ratioKey);
+  const arrangedHere = tvWidgets.filter(e => e.byRatio?.[ratioKey]).length;
+
+  /**
+   * The preview box, fitted to whatever room the settings column has.
+   *
+   * Computed rather than set in CSS: fixing the height and letting `max-width`
+   * clamp gives a box that is the right height and the wrong width, so a 16:9
+   * preview measured 1.47 wide instead of 1.78 — which is a preview of a
+   * screen nobody owns. Fitting to BOTH the available width and a sensible
+   * height is the only way a portrait shape and an ultrawide one can both be
+   * previewed truthfully in the same column.
+   */
+  const tvPreviewRef = useRef<HTMLDivElement>(null);
+  const [previewWidth, setPreviewWidth] = useState(700);
+  useEffect(() => {
+    const node = tvPreviewRef.current;
+    if (!node) return;
+    const ro = new ResizeObserver(() => setPreviewWidth(node.clientWidth - 24));
+    ro.observe(node);
+    setPreviewWidth(node.clientWidth - 24);
+    return () => ro.disconnect();
+  }, []);
   const tvShape = {
-    orientation: 'landscape' as const, width: 1200, height: 420, ratio: 0.35, narrow: false,
+    orientation: ratio.orientation, width: ratio.w, height: ratio.h,
+    ratio: ratio.h / ratio.w, narrow: false,
   };
   const tvCtx = useMemo(() => ({
     jobs: apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed && !a.boardBin),
@@ -1638,11 +1680,63 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
           {tvWidgetCount} on the wall
         </span>
       </div>
-      <div className="rounded-2xl border border-gray-200 overflow-hidden mb-5 bg-slate-100"
-        style={{ height: 420 }}>
-        <div className="w-full h-full flex flex-col">
-          <TvDashboard ctx={tvCtx} shape={tvShape} scale={0.85} editing={tvArrange}
-            onSpawn={() => setTvStore(true)} />
+      <div className="flex flex-wrap items-center gap-1.5 mb-2">
+        <span className="text-[11px] font-bold text-gray-500 mr-1">Arranging for</span>
+        {DASH_RATIOS.map(r => {
+          const on = r.key === ratioKey;
+          const own = tvWidgets.filter(e => e.byRatio?.[r.key]).length;
+          return (
+            <Tooltip key={r.key}
+              text={own
+                ? `${r.hint} — ${own} arranged for this shape.`
+                : `${r.hint} Not arranged yet, so it follows 16:9.`}>
+              <button
+                onClick={() => setRatioKey(r.key)}
+                className="px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors
+                           flex items-center gap-1"
+                style={on
+                  ? { backgroundColor: '#1e3a5f', color: '#fff', borderColor: '#1e3a5f' }
+                  : { backgroundColor: '#fff', color: '#475569', borderColor: '#e2e8f0' }}>
+                {r.label}
+                {own > 0 && (
+                  <span className="w-1.5 h-1.5 rounded-full"
+                    style={{ backgroundColor: on ? 'rgba(255,255,255,.85)' : '#16a34a' }} />
+                )}
+              </button>
+            </Tooltip>
+          );
+        })}
+        <span className="text-[10.5px] text-gray-400 ml-1">
+          {ratio.w} × {ratio.h} ·{' '}
+          {/*
+            Inheritance, said out loud.
+
+            A shape nobody has arranged follows 16:9 rather than opening
+            blank — which is what you want the first time you turn a panel on
+            its side. But it means a change to 16:9 moves it, and that is only
+            surprising if nothing says so. Once a shape has been arranged it is
+            its own, and 16:9 stops reaching it.
+          */}
+          {arrangedHere > 0
+            ? `${arrangedHere} of ${tvWidgetCount} arranged for this shape`
+            : ratioKey === DEFAULT_DASH_RATIO
+              ? 'the shape every other one starts from'
+              : 'following 16:9 until you move something here'}
+        </span>
+      </div>
+      {/*
+        The preview is drawn at the CHOSEN shape's proportions, letterboxed into
+        the settings pane. A portrait wall previewed in a wide box tells you
+        nothing about what the wall will look like.
+      */}
+      <div ref={tvPreviewRef}
+        className="mb-5 flex justify-center bg-slate-50 rounded-2xl py-3 border border-gray-100">
+        <div className="rounded-2xl border border-gray-200 overflow-hidden bg-slate-100"
+          style={tvPreviewBox(ratio, previewWidth)}>
+          <div className="w-full h-full flex flex-col">
+            <TvDashboard ctx={tvCtx} shape={tvShape} ratio={ratio} scale={0.7} editing={tvArrange}
+              onSpawn={() => setTvStore(true)} />
+          </div>
         </div>
       </div>
       {tvStore && (

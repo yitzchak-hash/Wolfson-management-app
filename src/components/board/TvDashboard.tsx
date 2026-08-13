@@ -4,6 +4,7 @@ import { CanvasElement, TV_DASH_BOARD } from '../../types';
 import { useStore } from '../../data/store';
 import { WidgetCtx, renderWidget, WIDGET_BY_ID } from '../../data/widgets';
 import { ScreenShape } from '../../data/useOrientation';
+import { DashRatio, placeOn, patchPlace, nearestRatio } from '../../data/dashRatios';
 
 /**
  * The wall's dashboard.
@@ -18,9 +19,17 @@ import { ScreenShape } from '../../data/useOrientation';
  * what makes "edit it in settings and it updates the wall" true rather than
  * approximately true: there is one layout, not a description of one.
  */
-export function TvDashboard({ ctx, shape, scale, editing, onSpawn }: {
+export function TvDashboard({ ctx, shape, scale, editing, onSpawn, ratio }: {
   ctx: WidgetCtx;
   shape: ScreenShape;
+  /**
+   * Which screen shape's arrangement to draw.
+   *
+   * The wall works this out from its own window; the settings preview is told
+   * explicitly, because a PC window is neither of the shapes the office is
+   * actually arranging for.
+   */
+  ratio?: DashRatio;
   /** The wall's display scale, so type and spacing grow with the panel. */
   scale: number;
   /** Arranging is on — show the handles. */
@@ -32,11 +41,13 @@ export function TvDashboard({ ctx, shape, scale, editing, onSpawn }: {
   const updateCanvasElement = useStore(st => st.updateCanvasElement);
   const deleteCanvasElement = useStore(st => st.deleteCanvasElement);
 
+  const shapeKey = (ratio ?? nearestRatio(shape.width, shape.height)).key;
+
   const widgets = useMemo(
     () => canvasElements
       .filter(e => e.board === TV_DASH_BOARD && e.type === 'widget')
-      .sort((a, b) => (a.z ?? 0) - (b.z ?? 0)),
-    [canvasElements],
+      .sort((a, b) => placeOn(a, shapeKey).z - placeOn(b, shapeKey).z),
+    [canvasElements, shapeKey],
   );
 
   /**
@@ -48,7 +59,7 @@ export function TvDashboard({ ctx, shape, scale, editing, onSpawn }: {
    * it just occupies two thirds of the width instead of a third, which is the
    * right answer when the screen is tall.
    */
-  const columns = shape.orientation === 'portrait' ? 6 : 12;
+  const columns = (ratio?.orientation ?? shape.orientation) === 'portrait' ? 6 : 12;
 
   function move(id: string, dir: -1 | 1) {
     const ids = widgets.map(w => w.id);
@@ -56,8 +67,11 @@ export function TvDashboard({ ctx, shape, scale, editing, onSpawn }: {
     const j = i + dir;
     if (i < 0 || j < 0 || j >= ids.length) return;
     const a = widgets[i], b = widgets[j];
-    updateCanvasElement(a.id, { z: b.z ?? j });
-    updateCanvasElement(b.id, { z: a.z ?? i });
+    // Reordering is per shape too: what reads best first across a wide screen
+    // is often not what should lead on a tall one.
+    const az = placeOn(a, shapeKey).z, bz = placeOn(b, shapeKey).z;
+    updateCanvasElement(a.id, patchPlace(a, shapeKey, { z: bz === az ? j : bz }));
+    updateCanvasElement(b.id, patchPlace(b, shapeKey, { z: bz === az ? i : az }));
   }
 
   if (widgets.length === 0) {
@@ -95,8 +109,9 @@ export function TvDashboard({ ctx, shape, scale, editing, onSpawn }: {
           columns={columns}
           scale={scale}
           editing={editing}
-          onSpan={n => updateCanvasElement(el.id, { w: n * 100 })}
-          onTall={n => updateCanvasElement(el.id, { h: n })}
+          shapeKey={shapeKey}
+          onSpan={n => updateCanvasElement(el.id, patchPlace(el, shapeKey, { w: n * 100 }))}
+          onTall={n => updateCanvasElement(el.id, patchPlace(el, shapeKey, { h: n }))}
           onMove={dir => move(el.id, dir)}
           onRemove={() => deleteCanvasElement(el.id)}
         />
@@ -105,12 +120,13 @@ export function TvDashboard({ ctx, shape, scale, editing, onSpawn }: {
   );
 }
 
-function TvCard({ el, ctx, columns, scale, editing, onSpan, onTall, onMove, onRemove }: {
+function TvCard({ el, ctx, columns, scale, editing, shapeKey, onSpan, onTall, onMove, onRemove }: {
   el: CanvasElement;
   ctx: WidgetCtx;
   columns: number;
   scale: number;
   editing: boolean;
+  shapeKey: string;
   onSpan: (cols: number) => void;
   onTall: (px: number) => void;
   onMove: (dir: -1 | 1) => void;
@@ -120,8 +136,9 @@ function TvCard({ el, ctx, columns, scale, editing, onSpan, onTall, onMove, onRe
   const updateCanvasElement = useStore(st => st.updateCanvasElement);
   const ref = useRef<HTMLDivElement>(null);
 
-  const span = Math.max(2, Math.min(columns, Math.round((el.w || 400) / 100)));
-  const height = Math.max(120, el.h || 200);
+  const place = placeOn(el, shapeKey);
+  const span = Math.max(2, Math.min(columns, Math.round((place.w || 400) / 100)));
+  const height = Math.max(120, place.h || 200);
 
   /**
    * The widget is drawn at its natural size and SCALED into the card.

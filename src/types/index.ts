@@ -512,6 +512,16 @@ export interface CanvasElement {
    * with its own notes, widgets and arrangement rather than just a list.
    */
   board?: string;
+  /**
+   * On the wall dashboard: a size and an order PER SCREEN SHAPE.
+   *
+   * A row of four cards that reads across a 16:9 television is four narrow
+   * columns on a panel turned on its side, and the office arranges the wall
+   * from a PC whose window is neither. `w`/`h`/`z` above stay the fallback, so
+   * every arrangement made before this is what each new shape starts from.
+   * Keyed by the shapes in `data/dashRatios.ts`.
+   */
+  byRatio?: Record<string, { w: number; h: number; z: number }>;
   /** voice: Firebase Storage download URL + its storage path, for deletion. */
   audioUrl?: string;
   audioPath?: string;
