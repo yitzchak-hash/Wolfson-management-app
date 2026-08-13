@@ -376,6 +376,14 @@ interface AppState {
   pendingFocus: FocusIntent | null;
   setPendingFocus: (f: FocusIntent | null) => void;
 
+  /**
+   * "This job is on the planner and just got a dated task" — the queued
+   * question. Session-only. Answered by answerPlannerAsk with one of the
+   * three confirmed choices.
+   */
+  plannerAsk: { widgetId: string; jobId: string; contractorId: string; dueDate: string } | null;
+  answerPlannerAsk: (choice: 'ghost' | 'skip' | 'move') => void;
+
   // Dashboard layout customization
   dashboardWidgetOrder: string[];
   dashboardHiddenWidgets: string[];
@@ -510,6 +518,7 @@ export const useStore = create<AppState>((set, get) => ({
   mainUiStrings: mergeFreshMainUi(stored?.mainUiStrings as Partial<MainUiStrings> | null),
   pendingOpenAptId: null,
   pendingFocus: null,
+  plannerAsk: null,
   dashboardWidgetOrder: (stored?.dashboardWidgetOrder as string[] | null) ?? ['apt-stats', 'task-stats', 'stage-progress', 'building-progress', 'activity'],
   dashboardHiddenWidgets: (stored?.dashboardHiddenWidgets as string[] | null) ?? [],
   boardSettings: (stored?.boardSettings as Record<string, BoardSetting> | null) ?? {},
@@ -530,6 +539,35 @@ export const useStore = create<AppState>((set, get) => ({
   },
   setPendingFocus: (f: FocusIntent | null) => {
     set({ pendingFocus: f });
+  },
+  answerPlannerAsk: (choice) => {
+    const st = get();
+    const ask = st.plannerAsk;
+    set({ plannerAsk: null });
+    if (!ask || choice === 'skip') return;
+
+    const el = st.canvasElements.find(x => x.id === ask.widgetId);
+    if (!el) return;
+    const data = (el.data ?? {}) as { cells?: Record<string, { id: string; jobId?: string; text?: string }[]> };
+    const cells = { ...(data.cells ?? {}) };
+
+    if (choice === 'move') {
+      // The job leaves wherever it was standing; the ghost below is its new home.
+      for (const key of Object.keys(cells)) {
+        const kept = cells[key].filter(en => en.jobId !== ask.jobId);
+        if (kept.length !== cells[key].length) {
+          if (kept.length) cells[key] = kept; else delete cells[key];
+        }
+      }
+    }
+
+    const key = `c:${ask.contractorId}|${ask.dueDate}`;
+    const landing = cells[key] ?? [];
+    // Never the same job twice in one square.
+    if (!landing.some(en => en.jobId === ask.jobId)) {
+      cells[key] = [...landing, { id: `R-${Math.random().toString(36).slice(2, 8)}`, jobId: ask.jobId }];
+    }
+    get().updateCanvasElement(el.id, { data: { ...(el.data ?? {}), cells } });
   },
   setDashboardLayout: (order: string[], hidden: string[]) => {
     set({ dashboardWidgetOrder: order, dashboardHiddenWidgets: hidden });
@@ -605,6 +643,7 @@ export const useStore = create<AppState>((set, get) => ({
       firebaseListening: false,
       pendingOpenAptId: null,
       pendingFocus: null,
+      plannerAsk: null,
       ...newProjectData,
       ...globalState,  // global settings always win
     });
@@ -1573,6 +1612,29 @@ export const useStore = create<AppState>((set, get) => ({
     const a: ContractorAssignment = { ...fields, id: generateId(), createdAt: new Date().toISOString() };
     set(state => ({ contractorAssignments: [...state.contractorAssignments, a] }));
     persist(get);
+
+    /**
+     * Is this job already on somebody's planner?
+     *
+     * If it is, and the new task carries a date, the office is asked what the
+     * planner should do about it — add a ghost of the job on the assignee's
+     * row at the due date, leave the planner alone, or move the existing
+     * entry (confirmed choice: ask every time). The question is queued here,
+     * next to the fact that raises it, and drawn by the admin layout;
+     * session-only, never persisted, and the worker portal never renders it.
+     */
+    if (a.dueDate && a.contractorId) {
+      const holder = get().canvasElements.find(el =>
+        el.type === 'widget' && el.widget === 'rota'
+        && Object.values(((el.data ?? {}) as { cells?: Record<string, { jobId?: string }[]> }).cells ?? {})
+          .some(list => list.some(en => en.jobId === a.apartmentId)));
+      if (holder) {
+        set({ plannerAsk: {
+          widgetId: holder.id, jobId: a.apartmentId,
+          contractorId: a.contractorId, dueDate: a.dueDate,
+        } });
+      }
+    }
     // Strip attachment dataUrls before Firestore (keep metadata only)
     const aForFs = { ...a, attachments: a.attachments?.map(att => ({ ...att, dataUrl: '' })) };
     fsSet(projectCollection(get().currentProjectId, 'contractorAssignments'), a.id, aForFs);

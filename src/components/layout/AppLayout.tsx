@@ -4,6 +4,7 @@ import { Header } from './Header';
 import { Sidebar, MobileNav } from './Sidebar';
 import { useStore } from '../../data/store';
 import { isFirebaseConfigured } from '../../data/firebase';
+import { PlannerAskModal } from '../board/PlannerAskModal';
 
 export function AppLayout() {
   const { startFirebaseSync, firebaseListening, mainUiStrings } = useStore();
@@ -44,6 +45,11 @@ export function AppLayout() {
       </div>
       {/* In the flow of the column, so it can never sit below the fold. */}
       <MobileNav />
+      {/* "This job is on the planner — what should the planner do about the
+          task you just saved?" Rendered here so the question reaches the
+          office from any page; the worker portal never mounts this layout,
+          so a worker is never asked about the office's planner. */}
+      <PlannerAskModal />
     </div>
   );
 }
