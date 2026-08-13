@@ -41,6 +41,9 @@ export const WORKER_PERMISSIONS: PermissionDef[] = [
   { key: 'selfAssign', label: 'Give themselves a task', group: 'Work',
     hint: 'For somebody who finds work on site and needs it recorded rather than remembered. '
       + 'It behaves like any other task — it takes photos and it shows in the office.' },
+  { key: 'assignOthers', label: 'Give tasks to other workers', group: 'Work',
+    hint: 'The worker picker appears in their add-a-task form. Without it a task they add is '
+      + 'always their own. A foreman handing out the morning, not a pair of hands.' },
 
   // ── The site ──────────────────────────────────────────────────────────────
   { key: 'seeDiagrams', label: 'See the building diagrams', group: 'The site',

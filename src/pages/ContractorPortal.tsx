@@ -327,6 +327,18 @@ export function ContractorPortal() {
   const [selfTask, setSelfTask] = useState(false);
   const [selfText, setSelfText] = useState('');
   const [selfApt, setSelfApt] = useState('');
+  /**
+   * The rest of the office's task form, field for field. Adding work from the
+   * site is the same act as adding it from the office, so it gets the same
+   * vocabulary: who it is for (only with the assign-others permission), when,
+   * at what stage, how urgent, and any photos of the problem.
+   */
+  const [selfFor, setSelfFor] = useState('');
+  const [selfDue, setSelfDue] = useState(() => new Date().toISOString().slice(0, 10));
+  const [selfStage, setSelfStage] = useState('');
+  const [selfPriority, setSelfPriority] = useState<'urgent' | 'normal' | 'low'>('normal');
+  const [selfFiles, setSelfFiles] = useState<{ id: string; filename: string; mimeType: string; dataUrl: string }[]>([]);
+  const selfFileRef = useRef<HTMLInputElement>(null);
   const [selectedAssignment, setSelectedAssignment] = useState<ContractorAssignment | null>(null);
   const [noteText, setNoteText] = useState('');
   const [noteAttachments, setNoteAttachments] = useState<{ dataUrl: string; filename: string; mimeType: string; driveFileId?: string; driveUrl?: string }[]>([]);
@@ -801,14 +813,16 @@ export function ContractorPortal() {
             the office, and it is closed the same way. Off unless the level
             allows it.
           */}
-          {perms.selfAssign && (
+          {(perms.selfAssign || perms.assignOthers) && (
             <div className="mb-4">
               {!selfTask ? (
                 <button onClick={() => setSelfTask(true)}
                   className="w-full py-2.5 rounded-xl border-2 border-dashed text-sm font-semibold
                              text-gray-500 hover:text-[#1e3a5f] hover:border-[#4aa8d8] transition-colors"
                   style={{ borderColor: '#d1d5db' }}>
-                  + {s.isRtl ? 'משימה לעצמי' : 'A job for myself'}
+                  + {perms.assignOthers
+                    ? (s.isRtl ? 'משימה חדשה' : 'A new task')
+                    : (s.isRtl ? 'משימה לעצמי' : 'A job for myself')}
                 </button>
               ) : (
                 <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
@@ -819,6 +833,24 @@ export function ContractorPortal() {
                     placeholder={s.isRtl ? 'מה צריך לעשות?' : 'What needs doing?'}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#4aa8d8]"
                   />
+
+                  {/* Only a worker ALLOWED to hand out work sees the picker —
+                      for everybody else a task they add is their own, and the
+                      field would only be a way to get it wrong. */}
+                  {perms.assignOthers && (
+                    <select
+                      value={selfFor || contractorId}
+                      onChange={e => setSelfFor(e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#4aa8d8]"
+                    >
+                      {contractors.filter(c => c.active).map(c => (
+                        <option key={c.id} value={c.id}>
+                          {c.id === contractorId ? (s.isRtl ? 'בשבילי — ' : 'For me — ') : ''}{c.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
                   <select
                     value={selfApt}
                     onChange={e => setSelfApt(e.target.value)}
@@ -826,9 +858,13 @@ export function ContractorPortal() {
                   >
                     <option value="">{s.isRtl ? 'איפה?' : 'Where?'}</option>
                     {/* Their own units first — that is where the work almost
-                        always is — then everything else if they can see it. */}
+                        always is — then everything else if they can see it.
+                        Somebody allowed to HAND OUT work gets the full list
+                        regardless: you cannot give a task without being able
+                        to say where it is. */}
                     {[...apartments]
-                      .filter(a => !a.isUnnamed && (perms.seeAllApartments || assignedAptIds.has(a.id)))
+                      .filter(a => !a.isUnnamed
+                        && (perms.seeAllApartments || perms.assignOthers || assignedAptIds.has(a.id)))
                       .sort((a, b) => Number(assignedAptIds.has(b.id)) - Number(assignedAptIds.has(a.id)))
                       .slice(0, 400)
                       .map(a => (
@@ -838,6 +874,67 @@ export function ContractorPortal() {
                         </option>
                       ))}
                   </select>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block">
+                      <span className="block text-[10px] font-bold text-gray-400 mb-0.5">
+                        {s.isRtl ? 'לְמָתַי' : 'Due'}
+                      </span>
+                      <input type="date" value={selfDue} onChange={e => setSelfDue(e.target.value)}
+                        className="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm outline-none focus:border-[#4aa8d8]" />
+                    </label>
+                    <label className="block">
+                      <span className="block text-[10px] font-bold text-gray-400 mb-0.5">
+                        {s.isRtl ? 'דחיפות' : 'Priority'}
+                      </span>
+                      <select value={selfPriority}
+                        onChange={e => setSelfPriority(e.target.value as 'urgent' | 'normal' | 'low')}
+                        className="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm outline-none focus:border-[#4aa8d8]">
+                        <option value="urgent">{s.isRtl ? 'דחוף' : 'Urgent'}</option>
+                        <option value="normal">{s.isRtl ? 'רגיל' : 'Normal'}</option>
+                        <option value="low">{s.isRtl ? 'נמוך' : 'Low'}</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <select value={selfStage} onChange={e => setSelfStage(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#4aa8d8]">
+                    <option value="">{s.isRtl ? 'שלב (לא חובה)' : 'Stage (optional)'}</option>
+                    {stages.filter(st => st.active).sort((a, b) => a.order - b.order).map(st => (
+                      <option key={st.id} value={st.id}>{s.isRtl && st.nameHe ? st.nameHe : st.name}</option>
+                    ))}
+                  </select>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button type="button" onClick={() => selfFileRef.current?.click()}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200
+                                 text-xs font-semibold text-gray-500 min-h-[32px]">
+                      📎 {s.isRtl ? 'צרף קבצים' : 'Attach'}
+                      {selfFiles.length > 0 && <span className="text-[#1e3a5f] font-bold">{selfFiles.length}</span>}
+                    </button>
+                    {selfFiles.map(f => (
+                      <span key={f.id} className="flex items-center gap-1 text-[10.5px] text-gray-500
+                                                  bg-gray-50 border border-gray-200 rounded-full px-2 py-1 max-w-[140px]">
+                        <span className="truncate">{f.filename}</span>
+                        <button onClick={() => setSelfFiles(prev => prev.filter(x => x.id !== f.id))}
+                          className="text-gray-300 hover:text-red-500">×</button>
+                      </span>
+                    ))}
+                    <input ref={selfFileRef} type="file" multiple accept="image/*,.pdf" className="hidden"
+                      onChange={e => {
+                        const files = [...(e.target.files ?? [])].slice(0, 5);
+                        files.forEach(file => {
+                          const r = new FileReader();
+                          r.onload = () => setSelfFiles(prev => [...prev, {
+                            id: `TA-${Math.random().toString(36).slice(2, 9)}`,
+                            filename: file.name, mimeType: file.type, dataUrl: String(r.result),
+                          }]);
+                          r.readAsDataURL(file);
+                        });
+                        e.target.value = '';
+                      }} />
+                  </div>
+
                   <div className="flex gap-2">
                     <button
                       disabled={!selfText.trim() || !selfApt}
@@ -845,32 +942,32 @@ export function ContractorPortal() {
                         const apt = apartments.find(a => a.id === selfApt);
                         if (!apt) return;
                         addContractorAssignment({
-                          contractorId,
+                          contractorId: (perms.assignOthers && selfFor) ? selfFor : contractorId,
                           apartmentId: apt.id,
                           buildingId: apt.buildingId,
                           taskDescription: selfText.trim(),
                           /**
-                           * Dated today, not left blank.
-                           *
-                           * The portal's list is filtered — today, tomorrow,
-                           * this week — so a task with no date lands outside
-                           * every filter and disappears the instant it is
-                           * written. Somebody who has just found a problem on
-                           * site means today.
+                           * Dated — never blank. The portal's list is filtered
+                           * by date, so a dateless task lands outside every
+                           * filter and disappears the instant it is written.
                            */
-                          dueDate: new Date().toISOString().slice(0, 10),
-                          stageId: apt.currentStageId ?? null,
+                          dueDate: selfDue || new Date().toISOString().slice(0, 10),
+                          stageId: selfStage || apt.currentStageId || null,
+                          priority: selfPriority,
+                          attachments: selfFiles.length ? selfFiles : undefined,
                           completedAt: null,
                           createdBy: contractorId,
                           createdByName: contractor!.name,
                         } as never);
                         setSelfText(''); setSelfApt(''); setSelfTask(false);
+                        setSelfFor(''); setSelfStage(''); setSelfPriority('normal'); setSelfFiles([]);
+                        setSelfDue(new Date().toISOString().slice(0, 10));
                       }}
                       className="flex-1 py-2 rounded-lg text-sm font-bold text-white disabled:opacity-40"
                       style={{ backgroundColor: '#1e3a5f' }}>
                       {s.isRtl ? 'הוספה' : 'Add it'}
                     </button>
-                    <button onClick={() => { setSelfTask(false); setSelfText(''); setSelfApt(''); }}
+                    <button onClick={() => { setSelfTask(false); setSelfText(''); setSelfApt(''); setSelfFiles([]); }}
                       className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-500 border border-gray-200">
                       {s.isRtl ? 'ביטול' : 'Cancel'}
                     </button>

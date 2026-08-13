@@ -762,6 +762,7 @@ export type ContractorCategory = 'drywall' | 'ac' | 'general';
  */
 export type WorkerPermission =
   | 'ownTasks' | 'completeTasks' | 'uploadPhotos' | 'addNotes' | 'selfAssign'
+  | 'assignOthers'
   | 'seeDiagrams' | 'seeAllApartments' | 'seePlans' | 'markUpPlans' | 'seeSnags'
   | 'allTasks' | 'seePlanner' | 'seeSchedule' | 'seeContacts' | 'switchProject';
 
