@@ -438,8 +438,22 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId }: {
               setMenu({ x: e.clientX, y: e.clientY, kind: 'canvas', ids: [], wx: p.x, wy: p.y });
             }}
           >
+            {/*
+              The surface never paints smaller than the window.
+
+              It was sized to the CONTENT's extent, so a group holding one job
+              painted a board a few hundred pixels wide and left the rest of
+              the window showing whatever was behind it — read as a stray
+              outline down the right-hand side and along the bottom. The extent
+              still drives how far it scrolls; the minimums only stop the paint
+              falling short of the frame.
+            */}
             <div data-bin-surface="1" className="relative"
-              style={{ width: extent.w, height: extent.h, ...theme.surface }}>
+              style={{
+                width: extent.w, height: extent.h,
+                minWidth: '100%', minHeight: '100%',
+                ...theme.surface,
+              }}>
               {items.length === 0 && nodes.length === 0 && (
                 <div className="absolute inset-0 flex items-center justify-center text-sm pointer-events-none"
                   style={{ color: theme.dark ? 'rgba(255,255,255,.55)' : 'rgba(15,23,42,.45)' }}>
