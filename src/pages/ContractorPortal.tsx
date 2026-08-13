@@ -10,6 +10,7 @@ import {
   Plus, Send, AlertCircle, X, Play, File as FileIcon, MapPin,
   BookOpen, Download, Paperclip, MessageSquare, CloudUpload,
   ChevronLeft, ChevronRight, Languages, History, PenLine, Printer,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
 import { permsOf } from '../data/workerLevels';
@@ -313,10 +314,25 @@ export function ContractorPortal() {
    * is written back; a pick made in the office arrives through the listener.
    */
   const [langOverride, setLangOverride] = useState<'en' | 'he' | null>(null);
+  const [scalePanel, setScalePanel] = useState(false);
   const lang = langOverride ?? workerNow?.lang ?? null;
   const s = lang === 'en' ? DEFAULT_CONTRACTOR_UI_STRINGS
            : lang === 'he' ? HEBREW_CONTRACTOR_UI_STRINGS
            : contractorUiStrings;
+  /**
+   * Text size, applied at the ROOT.
+   *
+   * Tailwind sizes and paddings are rem-based, so scaling the document's font
+   * size scales the whole portal proportionally — big text that still looks
+   * like the same app, exactly like a phone's OS-level font setting, rather
+   * than one field blown up out of a layout built for another size.
+   */
+  const textScale = workerNow?.textScale ?? 1;
+  useEffect(() => {
+    document.documentElement.style.fontSize = textScale === 1 ? '' : `${16 * textScale}px`;
+    return () => { document.documentElement.style.fontSize = ''; };
+  }, [textScale]);
+
   const setLang = (next: 'en' | 'he') => {
     setLangOverride(next);
     if (workerNow) updateContractor(workerNow.id, { lang: next });
@@ -732,18 +748,60 @@ export function ContractorPortal() {
             <Printer size={14} />
           </button>
 
-          {/* Language toggle — always visible */}
-          <button
-            // setLang, not setLangOverride: the choice is written back onto the
-            // worker so the office can see what language his portal is in, and
-            // change it for him when he rings up unable to read the screen.
-            onClick={() => setLang(s.isRtl ? 'en' : 'he')}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-white/25 text-white/80 hover:bg-white/10 active:bg-white/20 transition-colors text-xs font-bold tracking-wide"
-            title={s.isRtl ? 'Switch to English' : 'עבור לעברית'}
-          >
-            <Languages size={14} />
-            {s.isRtl ? 'EN' : 'עב'}
-          </button>
+          {/*
+            The language toggle shows only while nobody has chosen a language
+            for this worker. Once the office (or the worker) has set one, the
+            question is answered and the button would only be a way to undo it
+            by accident — what remains is the small settings gear.
+          */}
+          {!workerNow?.lang && (
+            <button
+              // setLang, not setLangOverride: the choice is written back onto the
+              // worker so the office can see what language his portal is in, and
+              // change it for him when he rings up unable to read the screen.
+              onClick={() => setLang(s.isRtl ? 'en' : 'he')}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-white/25 text-white/80 hover:bg-white/10 active:bg-white/20 transition-colors text-xs font-bold tracking-wide"
+              title={s.isRtl ? 'Switch to English' : 'עבור לעברית'}
+            >
+              <Languages size={14} />
+              {s.isRtl ? 'EN' : 'עב'}
+            </button>
+          )}
+
+          {/* Text size, for the worker who needs the screen LOUD. */}
+          <div className="relative">
+            <button
+              onClick={() => setScalePanel(v => !v)}
+              className="flex items-center px-2.5 py-1.5 rounded-lg border border-white/25 text-white/80 hover:bg-white/10 active:bg-white/20 transition-colors"
+              title={s.isRtl ? 'גודל טקסט' : 'Text size'}
+            >
+              <SettingsIcon size={14} />
+            </button>
+            {scalePanel && (
+              <div className="absolute top-full mt-1.5 z-[120] bg-white rounded-xl shadow-xl border border-gray-200 p-2 w-44"
+                style={s.isRtl ? { left: 0 } : { right: 0 }}>
+                <div className="text-[10px] font-bold text-gray-400 px-1.5 pb-1">
+                  {s.isRtl ? 'גודל הטקסט' : 'Text size'}
+                </div>
+                {([[1, s.isRtl ? 'רגיל' : 'Normal'],
+                   [1.15, s.isRtl ? 'גדול' : 'Large'],
+                   [1.3, s.isRtl ? 'גדול מאוד' : 'Extra large'],
+                   [1.5, s.isRtl ? 'ענק' : 'Huge']] as const).map(([v, label]) => (
+                  <button key={v}
+                    onClick={() => {
+                      if (workerNow) updateContractor(workerNow.id, { textScale: v === 1 ? undefined : v });
+                      setScalePanel(false);
+                    }}
+                    className={`w-full text-left px-2 py-1.5 rounded-lg text-gray-700 hover:bg-gray-50 flex items-center justify-between ${
+                      textScale === v ? 'bg-[#eef4fa] font-bold' : ''}`}
+                    style={{ fontSize: `${13 * v}px` }}>
+                    {label}
+                    {textScale === v && <span className="text-[#1e3a5f]">✓</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <span className="text-xs font-semibold px-2.5 py-1 rounded-full"
             style={{ backgroundColor: catColor + '22', color: catColor, border: `1px solid ${catColor}44` }}>
             {CATEGORY_LABELS[contractor.category]}

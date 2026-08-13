@@ -798,6 +798,12 @@ export interface Contractor {
   /** The language THEY chose in the portal, if they changed it. */
   lang?: 'en' | 'he';
   /**
+   * How big the portal's text is for THIS worker, as a multiplier (1 = normal).
+   * Synced like `lang`, and for the same reason: "I can't read the screen" is
+   * fixed by the office over the phone, not by a site visit.
+   */
+  textScale?: number;
+  /**
    * Photos are REQUIRED to close a task unless this is on. The requirement is
    * the default because a finished job with no evidence is what the photos
    * exist to prevent; this switch is for the worker whose work has nothing to
