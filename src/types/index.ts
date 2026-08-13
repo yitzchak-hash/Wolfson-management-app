@@ -298,6 +298,28 @@ export interface Building {
   displayOrder: number;
 }
 
+/**
+ * "Show me this" — carried across a navigation.
+ *
+ * Search could find nine kinds of thing and only knew how to show one of them.
+ * A stage went to the settings page, where the stage can be RENAMED but not
+ * seen; a worker went to the same place. Both answered a question nobody asked:
+ * you searched for a stage because you wanted the jobs at it.
+ *
+ * So a result no longer carries a route, it carries what it IS, and the page
+ * that can show that thing picks the intent up on arrival. Session-only — it is
+ * consumed on the next render and is never persisted, so it stays out of
+ * backups entirely.
+ */
+export type FocusIntent =
+  | { kind: 'apartment'; id: string }
+  | { kind: 'stage'; id: string }
+  | { kind: 'contractor'; id: string }
+  | { kind: 'task'; id: string; apartmentId: string }
+  | { kind: 'group'; id: string }
+  | { kind: 'node'; id: string }
+  | { kind: 'markup'; apartmentId: string };
+
 export interface Stage {
   id: string;
   name: string;

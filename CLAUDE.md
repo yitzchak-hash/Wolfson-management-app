@@ -768,6 +768,55 @@ Deliberately excluded from a backup, and why: `currentUser` / `currentProjectId`
 them would be wrong), `backupSnapshots` (in-session restore points — the export *is* the backup).
 
 **Add a state key → add it to persist + export (top level) + import, then re-run the audit.**
+The audit no longer carries a hand-written key list — it reads `AppState` itself and requires every
+key to be either checked or **explicitly excused with a reason**. The old list made the check useless
+in exactly the situation it exists for: forgetting backups also meant forgetting the list, so it passed.
+
+---
+
+# v2 — reports, and search that leads somewhere
+
+## `pendingFocus` — "show me this", across a navigation
+`FocusIntent` in `types/index.ts`; `pendingFocus` / `setPendingFocus` in the store. Session-only, never
+persisted, so it stays out of backups.
+
+Search could find nine kinds of thing and only knew how to show one. A stage went to `/settings` —
+where a stage can be RENAMED but not seen — and so did a worker. A result now carries **what it is**,
+not a route, and the arriving page acts on it: a stage becomes the diagram's stage filter (or the
+board's stage view), a worker becomes the task list filtered to them, a group opens, a board node is
+flown to via the board's own `goToHit` so there is only ever one flight path.
+
+**A page consumes ONLY the kinds it can show.** Clearing the intent first and checking the kind
+afterwards looks tidier and is wrong: the diagram is mounted when the search runs, so it swallowed the
+worker intent on the way to `/tasks`, which then arrived with nothing to do and drew an unfiltered
+list. Check the kind, then clear.
+
+## Reports (`src/data/reportModel.ts` + `ReportsPage`)
+A builder, not a table somebody wrote once. Four parts, the CRM shape: a **subject** (what one row IS),
+**fields** including ones reached across a join, **rules**, and a **grouping** — the grouping is what
+turns a list into an answer.
+
+- Subjects: Jobs · Tasks · Workers · Stage notes · Changes. `jobFields()` is written once and
+  re-pointed, so "Address" means the same thing and prints the same way from any of them.
+- **All the arithmetic is pure** — no store, no clock, no DOM. `today` is passed IN; a report that
+  computes "overdue" from `new Date()` cannot be tested and cannot be reproduced tomorrow. There is a
+  refresh button and the page says what date it is answering for.
+- Counting goes through `isCountableApartment` and `liveAssignments` and **nothing else**, or a report
+  and the dashboard disagree about how many jobs there are — both looking authoritative.
+- Operators follow the field's TYPE. An operator that cannot apply is worse than a missing one: it
+  silently returns nothing and reads as an empty report.
+- Totals are **opt-in** (`ReportField.sum`), not "is it a number". The stats strip cheerfully printed
+  "total floor: 12" — arithmetic that is correct, says nothing, and looks like a finding.
+- An unknown column key is DROPPED and an unknown rule is IGNORED. A saved report outlives the field
+  list; a blank column after an upgrade reads as missing data, and a rule matching nothing reads as an
+  empty workspace.
+- `savedReports: Record<projectId, ReportDef[]>` lives in `settings/app` — a report is a QUESTION, and
+  the answer differing per machine is worse than not saving it.
+- Out as CSV, a real `.xlsx` (via `src/data/xlsx.ts`), or print. Chart is bars drawn as divs; no
+  library, because axes and tooltips are the reason to reach for one and there are none here.
+
+Harnesses: `report` (engine, hand-worked numbers) · `reportui` (the controls reach the engine) ·
+`searchgo` (every result kind lands somewhere it can be seen).
 
 ---
 

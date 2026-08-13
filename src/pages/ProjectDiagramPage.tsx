@@ -13,7 +13,7 @@ import { Toast } from '../components/ui/Toast';
 type ClassFilter = 'all' | 'standard' | 'shinui';
 
 export function ProjectDiagramPage() {
-  const { apartments, stages, buildings, currentUser, bulkUpdateApartments, updateApartment, contractorAssignments, contractors, mainUiStrings: s, pendingOpenAptId, setPendingOpenAptId, currentProjectId, projects } = useStore();
+  const { apartments, stages, buildings, currentUser, bulkUpdateApartments, updateApartment, contractorAssignments, contractors, mainUiStrings: s, pendingOpenAptId, setPendingOpenAptId, pendingFocus, setPendingFocus, currentProjectId, projects } = useStore();
 
   const [selectedBuilding, setSelectedBuilding] = useState<BuildingId | 'all'>('all');
   const [activeStageIds, setActiveStageIds] = useState<string[]>([]);
@@ -35,6 +35,44 @@ export function ProjectDiagramPage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /**
+   * "Show me this", arriving from search.
+   *
+   * A stage becomes the diagram's own stage filter, which is what somebody who
+   * searched for a stage wanted to see — the units at it, laid out — rather
+   * than the row that renames it. A job or a note opens its drawer.
+   */
+  useEffect(() => {
+    const f = pendingFocus;
+    if (!f) return;
+
+    /**
+     * ONLY consume what this page can actually show.
+     *
+     * Clearing the intent first and checking the kind afterwards looks tidier
+     * and is wrong: this page is mounted when the search runs, so it ran first
+     * and swallowed a worker intent on its way to the task list — which then
+     * arrived with nothing to do and simply showed an unfiltered list. An
+     * intent nobody here handles is left alone for the page that can.
+     */
+    if (f.kind === 'stage') {
+      setPendingFocus(null);
+      setActiveStageIds([f.id]);
+      setSelectedBuilding('all');
+      setClassFilter('all');
+      setSearchQuery('');
+      return;
+    }
+    const id = f.kind === 'apartment' ? f.id
+      : f.kind === 'task' || f.kind === 'markup' ? f.apartmentId
+      : null;
+    if (!id) return;
+    setPendingFocus(null);
+    const apt = apartments.find(a => a.id === id);
+    if (apt) setSelectedApt(apt);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingFocus]);
 
   // Bulk update state
   const [bulkMode, setBulkMode] = useState(false);

@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import Fuse from 'fuse.js';
 import { useStore } from '../../data/store';
-import { aptLabel, binLabelOf, binKeyOf, CanvasElement } from '../../types';
+import { aptLabel, binLabelOf, binKeyOf, CanvasElement, FocusIntent } from '../../types';
 import { WIDGET_BY_ID } from '../../data/widgets';
 import { useNavigate } from 'react-router-dom';
 
@@ -15,9 +15,14 @@ interface SearchResult {
       | 'contractor' | 'stage' | 'board' | 'group' | 'markup';
   title: string;
   subtitle: string;
-  aptId?: string;
-  /** Where selecting it should take you, when it is not an apartment. */
-  goto?: string;
+  /**
+   * What this result IS, rather than where a route happens to live.
+   *
+   * Every result carries one. A stage used to carry `/settings`, which is where
+   * a stage is renamed and not where it is seen — so choosing it answered a
+   * question nobody had asked.
+   */
+  focus: FocusIntent;
 }
 
 interface GlobalSearchProps {
@@ -28,7 +33,7 @@ interface GlobalSearchProps {
 export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
   const {
     apartments, contractorAssignments, stageNotes, contractorNotes, contractors, stages,
-    canvasElements, planAnnotations, buildings, currentProjectId, setPendingOpenAptId,
+    canvasElements, planAnnotations, buildings, currentProjectId, setPendingFocus,
   } = useStore();
   const s = useStore(state => state.mainUiStrings);
   const [query, setQuery] = useState('');
@@ -59,7 +64,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         id: `apt-${a.id}`, type: 'apartment',
         title: `${a.buildingId} · Apt ${aptLabel(a)}`,
         subtitle: a.generalNotes.trim() ? a.generalNotes.slice(0, 80) : `Floor ${a.floor}`,
-        aptId: a.id,
+        focus: { kind: 'apartment', id: a.id },
       });
     });
 
@@ -72,7 +77,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         id: `task-${a.id}`, type: 'task',
         title: a.taskDescription.slice(0, 60),
         subtitle: `${a.buildingId} · Apt ${aptLabel(apt)} · ${contractor?.name ?? ''}`,
-        aptId: a.apartmentId,
+        focus: { kind: 'task', id: a.id, apartmentId: a.apartmentId },
       });
     });
 
@@ -85,7 +90,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         id: `note-${n.id}`, type: 'note',
         title: n.noteText.slice(0, 60),
         subtitle: `${apt?.buildingId} · Apt ${aptLabel(apt)} · ${stage?.name ?? ''}`,
-        aptId: n.apartmentId,
+        focus: { kind: 'apartment', id: n.apartmentId },
       });
     });
 
@@ -97,7 +102,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         id: `cnote-${n.id}`, type: 'contractor_note',
         title: n.text.slice(0, 60),
         subtitle: `${apt?.buildingId} · Apt ${aptLabel(apt)} · ${n.authorName}`,
-        aptId: n.apartmentId,
+        focus: { kind: 'apartment', id: n.apartmentId },
       });
     });
 
@@ -109,7 +114,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         id: `con-${c.id}`, type: 'contractor',
         title: c.name,
         subtitle: `${c.category} · ${open} open ${open === 1 ? 'task' : 'tasks'}`,
-        goto: '/app-settings',
+        focus: { kind: 'contractor', id: c.id },
       });
     });
 
@@ -121,7 +126,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         id: `stage-${st.id}`, type: 'stage',
         title: st.name,
         subtitle: `${n} ${n === 1 ? 'unit' : 'units'} at this stage`,
-        goto: '/settings',
+        focus: { kind: 'stage', id: st.id },
       });
     });
 
@@ -137,7 +142,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         id: `bin-${item.el.id}`, type: 'group',
         title: item.name,
         subtitle: `Group on the job board · ${n} ${n === 1 ? 'job' : 'jobs'}`,
-        goto: '/jobs',
+        focus: { kind: 'group', id: item.el.id },
       });
     });
 
@@ -157,7 +162,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         id: `node-${item.el.id}`, type: 'board',
         title: item.text.slice(0, 60) || item.kind,
         subtitle: `${item.kind} on the job board${bin ? ` · in ${binLabelOf(bin)}` : ''}`,
-        goto: '/jobs',
+        focus: { kind: 'node', id: item.el.id },
       });
     });
 
@@ -169,7 +174,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         id: `mark-${m.id}`, type: 'markup',
         title: `${m.planName ?? 'Plan'} — version ${m.version}`,
         subtitle: `${apt ? aptLabel(apt) : 'Job'} · marked up by ${m.createdBy || 'the office'}`,
-        aptId: m.apartmentId,
+        focus: { kind: 'markup', apartmentId: m.apartmentId },
       });
     });
 
@@ -178,21 +183,30 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
       canvasElements, planAnnotations]);
 
   /**
-   * Actually go there.
+   * Actually go and SHOW it.
    *
-   * This used to `navigate('/?apt=' + id)`. Nothing in the app has ever read
-   * that query parameter, and `/` redirects to the job board — so choosing a
-   * result closed the dialog and did nothing else. It goes through the same
-   * mechanism the dashboard uses instead.
+   * The page is chosen by what the thing is: a stage is seen on the board or
+   * the diagram, filtered to it; a worker is seen on the task list, filtered to
+   * them; a group is seen by opening it. The intent travels with the
+   * navigation and the arriving page consumes it, so neither end has to know
+   * anything about the other's internals.
    */
+  const board = currentProjectId === 'general';
+
   function handleSelect(result: SearchResult) {
     onClose();
-    if (result.aptId) {
-      setPendingOpenAptId(result.aptId);
-      navigate(currentProjectId === 'general' ? '/jobs' : '/project');
-      return;
+    setPendingFocus(result.focus);
+    switch (result.focus.kind) {
+      case 'contractor':
+        navigate('/tasks'); break;
+      case 'group':
+      case 'node':
+        navigate('/jobs'); break;
+      default:
+        // Apartments, tasks, notes, stages and markups all live on whichever
+        // surface this workspace uses to show its jobs.
+        navigate(board ? '/jobs' : '/project');
     }
-    if (result.goto) navigate(result.goto);
   }
 
   const TYPE_ICON: Record<SearchResult['type'], React.ReactNode> = {

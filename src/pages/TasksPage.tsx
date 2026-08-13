@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useStore } from '../data/store';
 import { contractorLoad } from '../data/contractorLoad';
 import {
@@ -27,6 +27,7 @@ export function TasksPage() {
     contractors, contractorAssignments, apartments, stages, buildings,
     addContractorAssignment, updateContractorAssignment, deleteContractorAssignment,
     updateApartment, currentUser, mainUiStrings: s, currentProjectId, projects,
+    pendingFocus, setPendingFocus,
   } = useStore();
   const projectName = projects.find(p => p.id === currentProjectId)?.name ?? 'Workspace';
 
@@ -73,6 +74,27 @@ export function TasksPage() {
   const addFileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const [editUploadProgress, setEditUploadProgress] = useState<number | null>(null);
+
+  /**
+   * "Show me this worker", arriving from search.
+   *
+   * Their tasks, filtered to them and with the panel open so the filter is
+   * visible — a list that has silently narrowed itself reads as missing data.
+   * Sending them to app settings instead, as this used to, showed the row that
+   * renames the worker and nothing about their work.
+   */
+  useEffect(() => {
+    const f = pendingFocus;
+    // Only what this page can show. Clearing first and checking the kind
+    // afterwards means every mounted page eats every intent, including the
+    // ones on their way somewhere else.
+    if (f?.kind !== 'contractor') return;
+    setPendingFocus(null);
+    setFilterContractorId(f.id);
+    setShowFilters(true);
+    setView('list');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingFocus]);
 
   async function compressImage(file: File): Promise<File> {
     if (!file.type.startsWith('image/')) return file;

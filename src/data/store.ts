@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BoardSetting, BoardSettingKey, BoardLayout, PlanPin, PlanAnnotation, BoardView, Employee, TimePunch, TimeClockSettings, WorkerLevel } from '../types';
+import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BoardSetting, BoardSettingKey, BoardLayout, PlanPin, PlanAnnotation, BoardView, Employee, TimePunch, TimeClockSettings, WorkerLevel, FocusIntent } from '../types';
+import { ReportDef } from './reportModel';
 
 // Always merge stored mainUiStrings ON TOP of the fresh preset so code-added keys
 // are never missing even when localStorage has an older saved version.
@@ -359,6 +360,13 @@ interface AppState {
   pendingOpenAptId: string | null;
   setPendingOpenAptId: (id: string | null) => void;
 
+  /**
+   * "Show me this", handed across a navigation. Session-only: never persisted,
+   * never synced, and consumed by the page that can show it.
+   */
+  pendingFocus: FocusIntent | null;
+  setPendingFocus: (f: FocusIntent | null) => void;
+
   // Dashboard layout customization
   dashboardWidgetOrder: string[];
   dashboardHiddenWidgets: string[];
@@ -415,6 +423,17 @@ interface AppState {
    * somebody appears in their picker on their own machine.
    */
   boardViews: BoardView[];
+
+  /**
+   * Saved reports, per workspace.
+   *
+   * In `settings/app` rather than a project collection so a report Esther
+   * builds is a report everybody has — a report is a QUESTION, and the answer
+   * being different on each machine is worse than not having it saved at all.
+   */
+  savedReports: Record<string, ReportDef[]>;
+  saveReport: (def: ReportDef) => void;
+  deleteReport: (id: string) => void;
   addBoardView: (v: BoardView) => void;
   updateBoardView: (id: string, changes: Partial<BoardView>) => void;
   deleteBoardView: (id: string) => void;
@@ -481,6 +500,7 @@ export const useStore = create<AppState>((set, get) => ({
   contractorUiStrings: (stored?.contractorUiStrings as ContractorUiStrings | null) ?? DEFAULT_CONTRACTOR_UI_STRINGS,
   mainUiStrings: mergeFreshMainUi(stored?.mainUiStrings as Partial<MainUiStrings> | null),
   pendingOpenAptId: null,
+  pendingFocus: null,
   dashboardWidgetOrder: (stored?.dashboardWidgetOrder as string[] | null) ?? ['apt-stats', 'task-stats', 'stage-progress', 'building-progress', 'activity'],
   dashboardHiddenWidgets: (stored?.dashboardHiddenWidgets as string[] | null) ?? [],
   boardSettings: (stored?.boardSettings as Record<string, BoardSetting> | null) ?? {},
@@ -498,6 +518,9 @@ export const useStore = create<AppState>((set, get) => ({
   lightTheme: localStorage.getItem(THEME_KEY) !== 'dark',
   setPendingOpenAptId: (id: string | null) => {
     set({ pendingOpenAptId: id });
+  },
+  setPendingFocus: (f: FocusIntent | null) => {
+    set({ pendingFocus: f });
   },
   setDashboardLayout: (order: string[], hidden: string[]) => {
     set({ dashboardWidgetOrder: order, dashboardHiddenWidgets: hidden });
@@ -572,6 +595,7 @@ export const useStore = create<AppState>((set, get) => ({
       currentProjectId: id,
       firebaseListening: false,
       pendingOpenAptId: null,
+      pendingFocus: null,
       ...newProjectData,
       ...globalState,  // global settings always win
     });
@@ -985,6 +1009,32 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   boardViews: (stored?.boardViews as BoardView[] | null) ?? [],
+
+  savedReports: (stored?.savedReports as Record<string, ReportDef[]> | null) ?? {},
+  saveReport: (def) => {
+    const st = get();
+    const pid = st.currentProjectId;
+    const mine = st.savedReports[pid] ?? [];
+    // Upsert by id, so editing a report does not leave the old one behind.
+    const next = mine.some(r => r.id === def.id)
+      ? mine.map(r => (r.id === def.id ? def : r))
+      : [...mine, def];
+    set({ savedReports: { ...st.savedReports, [pid]: next } });
+    fsSet('settings', 'app', { savedReports: get().savedReports });
+    persist(get);
+  },
+  deleteReport: (id) => {
+    const st = get();
+    const pid = st.currentProjectId;
+    set({
+      savedReports: {
+        ...st.savedReports,
+        [pid]: (st.savedReports[pid] ?? []).filter(r => r.id !== id),
+      },
+    });
+    fsSet('settings', 'app', { savedReports: get().savedReports });
+    persist(get);
+  },
   addBoardView: (v) => {
     set(state => ({ boardViews: [...state.boardViews, v] }));
     fsSet('settings', 'app', { boardViews: get().boardViews });
@@ -1653,6 +1703,7 @@ export const useStore = create<AppState>((set, get) => ({
       planPins: state.planPins,
       planAnnotations: state.planAnnotations,
       boardViews: state.boardViews,
+      savedReports: state.savedReports,
       projectOrder: state.projectOrder,
       dashboardWidgetOrder: state.dashboardWidgetOrder,
       dashboardHiddenWidgets: state.dashboardHiddenWidgets,
@@ -1711,6 +1762,7 @@ export const useStore = create<AppState>((set, get) => ({
         planPins: data.planPins ?? state.planPins,
         planAnnotations: data.planAnnotations ?? state.planAnnotations,
         boardViews: data.boardViews ?? state.boardViews,
+        savedReports: data.savedReports ?? state.savedReports,
         projectOrder: data.projectOrder ?? state.projectOrder,
         projectColors: data.projectColors ?? state.projectColors,
         backupLogs: data.backupLogs ?? state.backupLogs,
@@ -2104,6 +2156,7 @@ export const useStore = create<AppState>((set, get) => ({
         ...(appSettings.mainUiStrings        ? { mainUiStrings: mergeFreshMainUi(appSettings.mainUiStrings as Partial<MainUiStrings>) } : {}),
         ...(appSettings.contractorSheetLinks ? { contractorSheetLinks: appSettings.contractorSheetLinks as Record<string, string> } : {}),
         ...(appSettings.boardViews ? { boardViews: appSettings.boardViews as BoardView[] } : {}),
+        ...(appSettings.savedReports ? { savedReports: appSettings.savedReports as Record<string, ReportDef[]> } : {}),
         ...(appSettings.projectOrder ? { projectOrder: appSettings.projectOrder as string[] } : {}),
         ...(appSettings.boardSettings ? { boardSettings: appSettings.boardSettings as Record<string, BoardSetting> } : {}),
         ...(appSettings.timeClock ? { timeClock: { ...DEFAULT_TIME_CLOCK, ...(appSettings.timeClock as Partial<TimeClockSettings>) } } : {}),
@@ -2308,6 +2361,7 @@ export const useStore = create<AppState>((set, get) => ({
           ...(appS.boardSettings ? { boardSettings: appS.boardSettings as Record<string, BoardSetting> } : {}),
           ...(appS.timeClock ? { timeClock: { ...DEFAULT_TIME_CLOCK, ...(appS.timeClock as Partial<TimeClockSettings>) } } : {}),
           ...(appS.boardViews ? { boardViews: appS.boardViews as BoardView[] } : {}),
+          ...(appS.savedReports ? { savedReports: appS.savedReports as Record<string, ReportDef[]> } : {}),
           ...(appS.projectOrder ? { projectOrder: appS.projectOrder as string[] } : {}),
           ...(appS.customProjects ? {
             customProjects: appS.customProjects as Project[],
@@ -2443,6 +2497,7 @@ function persistNow(get: () => AppState) {
     planPins: state.planPins,
     planAnnotations: state.planAnnotations,
     boardViews: state.boardViews,
+    savedReports: state.savedReports,
     projectOrder: state.projectOrder,
     projectColors: state.projectColors,
     customProjects: state.customProjects,

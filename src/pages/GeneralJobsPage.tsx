@@ -205,6 +205,8 @@ export function GeneralJobsPage() {
     saveBoardLayout,
     restoreBoardLayout,
     deleteBoardLayout,
+    pendingFocus,
+    setPendingFocus,
   } = useStore();
 
   /**
@@ -1000,6 +1002,50 @@ export function GeneralJobsPage() {
     }, 780);
     setTimeout(() => setSearchHit(null), 2600);
   }
+
+  /**
+   * "Show me this", arriving from the app-wide search.
+   *
+   * Translated into the board's own hit and handed to `goToHit`, rather than
+   * given a second way of travelling — one flight path, so the board can never
+   * behave differently depending on which search box you used. A stage has no
+   * single place on a free canvas, so it switches to the stage view, where a
+   * stage IS a column.
+   */
+  useEffect(() => {
+    const f = pendingFocus;
+    if (!f) return;
+    // Only what this board can show — see the note in ProjectDiagramPage. An
+    // intent for somewhere else is left for the page that can act on it.
+    if (f.kind === 'contractor') return;
+    setPendingFocus(null);
+
+    if (f.kind === 'stage') {
+      setBoardSetting('viewMode', 'stages');
+      return;
+    }
+    if (f.kind === 'group') {
+      const bin = binNodes.find(b => b.id === f.id);
+      if (bin) setOpenBin(binKeyOf(bin));
+      return;
+    }
+    if (f.kind === 'node') {
+      const node = canvasElements.find(el => el.id === f.id);
+      if (!node) return;
+      const bin = node.board ? binNodes.find(b => binKeyOf(b) === node.board) ?? null : null;
+      goToHit({ kind: 'node', node, bin, title: node.text ?? '', why: 'search' });
+      return;
+    }
+    const jobId = f.kind === 'apartment' ? f.id
+      : f.kind === 'task' || f.kind === 'markup' ? f.apartmentId
+      : null;
+    if (!jobId) return;
+    const job = apartments.find(a => a.id === jobId);
+    if (!job) return;
+    const bin = job.boardBin ? binNodes.find(b => binKeyOf(b) === job.boardBin) ?? null : null;
+    goToHit({ kind: 'job', job, bin, title: job.displayName ?? '', why: 'search' });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingFocus]);
 
   // ── Ghosts ────────────────────────────────────────────────────────
   /**
