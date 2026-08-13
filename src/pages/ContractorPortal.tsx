@@ -345,6 +345,9 @@ export function ContractorPortal() {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ name: string; pct: number } | null>(null);
   const [completing, setCompleting] = useState(false);
+  /** The finished-task celebration, carrying the ready-to-paste office message. */
+  const [celebrate, setCelebrate] = useState<{ msg: string } | null>(null);
+  const [celebrateCopied, setCelebrateCopied] = useState(false);
   const [lightboxInfo, setLightboxInfo] = useState<{ photos: ContractorPhoto[]; index: number } | null>(null);
   const [uploadError, setUploadError] = useState('');
   const [mapFilter, setMapFilter] = useState<'yesterday' | 'today' | 'tomorrow' | 'week' | 'all'>('today');
@@ -607,7 +610,8 @@ export function ContractorPortal() {
 
   function handleComplete() {
     if (!selectedAssignment) return;
-    if (getMedia(selectedAssignment.id).length === 0) return;
+    // Photos gate this unless the office relaxed it for this worker.
+    if (getMedia(selectedAssignment.id).length === 0 && !contractor?.photosOptional) return;
     setShowCompleteConfirm(true);
   }
 
@@ -631,6 +635,32 @@ export function ContractorPortal() {
     setShowCompleteConfirm(false);
     setCompleting(true);
     setTimeout(() => setCompleting(false), 800);
+
+    /**
+     * The report back to the office, written FOR them.
+     *
+     * WhatsApp is how the site actually talks to the office, so the moment of
+     * finishing hands over a message ready to paste: what was done, where, by
+     * whom, and the links to the proof. Building it here — not on demand —
+     * means the photo list is exactly what existed at the moment of finishing.
+     */
+    const media = getMedia(selectedAssignment.id);
+    const links = media
+      .map(m => m.driveUrl || m.storageUrl)
+      .filter((u): u is string => !!u);
+    const he = !!s.isRtl;
+    const lines = [
+      he ? '✅ המשימה הושלמה!' : '✅ Task finished!',
+      `🏠 ${apt ? aptLabel(apt) : selectedAssignment.buildingId}${apt?.address ? ' — ' + apt.address : ''}`,
+      `🔧 ${selectedAssignment.taskDescription}`,
+      `👷 ${contractor!.name}`,
+      media.length
+        ? (he ? `📸 ${media.length} תמונות/קבצים:` : `📸 ${media.length} photo${media.length === 1 ? '' : 's'}/files:`)
+        : (he ? '📸 בלי תמונות' : '📸 No photos'),
+      ...links,
+      `🕒 ${new Date().toLocaleString(he ? 'he-IL' : 'en-GB')}`,
+    ];
+    setCelebrate({ msg: lines.join('\n') });
   }
 
   function handleUncomplete() {
@@ -1688,6 +1718,63 @@ export function ContractorPortal() {
           </>
         );
       })()}
+
+      {/*
+        The moment of finishing.
+
+        A small celebration, and — the useful half — the report to the office
+        already written: job, task, who, the photo links, the time. One press
+        copies it for WhatsApp. Dismissable anywhere, because the worker who
+        does not want it should not have to aim.
+      */}
+      {celebrate && (
+        <div className="fixed inset-0 z-[220] flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(15,23,42,.55)' }}
+          onClick={() => { setCelebrate(null); setCelebrateCopied(false); }}>
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5 text-center celebrate-pop"
+            onClick={e => e.stopPropagation()}>
+            <div className="celebrate-burst" aria-hidden="true">
+              {Array.from({ length: 12 }, (_, i) => <i key={i} style={{ ['--i' as string]: i }} />)}
+            </div>
+            <div className="text-5xl mb-1">🎉</div>
+            <h3 className="text-lg font-extrabold text-gray-900 mb-0.5">
+              {s.isRtl ? 'כל הכבוד!' : 'Nice work!'}
+            </h3>
+            <p className="text-xs text-gray-500 mb-3">
+              {s.isRtl ? 'העתיקו את ההודעה ושלחו למשרד' : 'Copy this message and send it back to the office'}
+            </p>
+            <div className="text-left rounded-xl border border-gray-200 bg-gray-50 p-3 mb-3 max-h-44 overflow-y-auto"
+              dir={s.isRtl ? 'rtl' : 'ltr'}>
+              <pre className="whitespace-pre-wrap break-words text-[11.5px] leading-relaxed text-gray-700 font-sans">
+                {celebrate.msg}
+              </pre>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  try { await navigator.clipboard.writeText(celebrate.msg); }
+                  catch {
+                    const ta = document.createElement('textarea');
+                    ta.value = celebrate.msg; ta.style.position = 'fixed'; ta.style.opacity = '0';
+                    document.body.appendChild(ta); ta.select();
+                    document.execCommand('copy'); document.body.removeChild(ta);
+                  }
+                  setCelebrateCopied(true);
+                }}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white"
+                style={{ background: celebrateCopied
+                  ? 'linear-gradient(135deg, #22c55e, #16a34a)'
+                  : 'linear-gradient(135deg, #1e3a5f, #2d4a6f)' }}>
+                {celebrateCopied ? (s.isRtl ? 'הועתק ✓' : 'Copied ✓') : (s.isRtl ? 'העתקת ההודעה' : 'Copy the message')}
+              </button>
+              <button onClick={() => { setCelebrate(null); setCelebrateCopied(false); }}
+                className="px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-500 border border-gray-200">
+                {s.isRtl ? 'סגירה' : 'Close'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Full-screen photo gallery lightbox */}
       {lightboxInfo && (
