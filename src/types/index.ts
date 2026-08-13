@@ -64,6 +64,18 @@ export interface BoardSetting {
   toolbar?: ToolbarSetup;
   themeId?: string;
   snapToGrid?: boolean;
+  /**
+   * Which sides the board is allowed to grow on.
+   *
+   * Absent means down and right only, which is how a board has always behaved.
+   * Growing UP or LEFT moves everything already on the board, so it is never
+   * silent: dragging a node hard against a locked edge asks first, and the
+   * answer can be kept as a standing permission for that side.
+   *
+   * The rule underneath all four: space only exists where something was
+   * actually put. Zooming out must never reveal room nobody asked for.
+   */
+  expand?: { top?: boolean; left?: boolean; right?: boolean; bottom?: boolean };
   showControls?: boolean;
   /** 'canvas' = the free board, 'stages' = the same jobs in stage columns. */
   viewMode?: 'canvas' | 'stages';

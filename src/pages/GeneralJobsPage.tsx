@@ -21,6 +21,7 @@ import { Toast } from '../components/ui/Toast';
 import { DriveIcon, ZohoIcon, PlanIcon, TvIcon } from '../components/ui/BrandIcons';
 import { BoardToolbar, BoardControlsPanel, BoardTool } from '../components/board/BoardToolbar';
 import { BOARD_THEMES, getBoardTheme, surfaceAtZoom } from '../data/boardThemes';
+import { allowed as sideAllowed, edgePushed, roomFor, shiftFor, shiftJobs, shiftNodes, Side } from '../data/boardExpand';
 import { snapBox, Guide } from '../data/snapping';
 import { MiniMap } from '../components/board/MiniMap';
 import { BinBoard } from '../components/board/BinBoard';
@@ -271,6 +272,13 @@ export function GeneralJobsPage() {
   const [searchOpen, setSearchOpen] = useState(false);
   /** Shade the slice of the board the wall is showing. */
   const [showTvRegion, setShowTvRegion] = useState(false);
+  /**
+   * Somebody has pushed a node against a locked edge and we are asking.
+   *
+   * Held rather than acted on, because making room moves everything already
+   * placed — it is not a thing to do behind somebody's back.
+   */
+  const [askRoom, setAskRoom] = useState<Side | null>(null);
 
 
   // Subscribed, not read once: `getState()` at render time would show the
@@ -734,10 +742,20 @@ export function GeneralJobsPage() {
   useEffect(() => { setZoomField(String(Math.round(zoom * 100))); }, [zoom]);
 
   /** Zoom from the middle of the view — what the header buttons use. */
+  /**
+   * The zoom buttons hold the TOP-LEFT still, not the centre.
+   *
+   * Zooming from the middle pulls everything inwards from all four sides, so
+   * the corner you organise from drifts every time you change scale. Anchoring
+   * the origin means your top-left stays exactly where it was and new room
+   * appears down and to the right, which is the direction the board grows in
+   * anyway. The wheel is left alone: it is an aimed gesture and keeping the
+   * point under the pointer still is what makes it feel right.
+   */
   const zoomCentre = useCallback((dir: 1 | -1) => {
     const r = viewportRef.current?.getBoundingClientRect();
     if (!r) return;
-    zoomAt(r.left + r.width / 2, r.top + r.height / 2, dir);
+    zoomAt(r.left, r.top, dir);
   }, [zoomAt]);
 
   const deleteRef = useRef<() => void>(() => {});
@@ -1810,6 +1828,23 @@ export function GeneralJobsPage() {
         fileInBin(drag.ids, binKeyOf(bin), bin);
         setSelectedJobIds(new Set());
       } else if (currentUser) {
+        /**
+         * Pushed against the top or left edge?
+         *
+         * The position is still clamped at the origin — nothing is ever stored
+         * as negative — but the intent is noticed, and the offer to make room
+         * is put up once the drop has landed.
+         */
+        let pushed: Side | null = null;
+        drag.ids.forEach(id => {
+          const st = drag.starts.get(id)!;
+          const rawX = Math.round(st.x + drag.dx);
+          const rawY = Math.round(st.y + drag.dy);
+          const side = edgePushed(rawX, rawY);
+          if (side && !sideAllowed(projectBoard.expand, side)) pushed = pushed ?? side;
+        });
+        if (pushed) setAskRoom(pushed);
+
         drag.ids.forEach(id => {
           const st = drag.starts.get(id)!;
           const x = Math.max(0, Math.round(st.x + drag.dx));
@@ -2558,6 +2593,44 @@ export function GeneralJobsPage() {
     binCount,
   };
 
+  /**
+   * Make room on one side by moving everything else away from it.
+   *
+   * The origin stays at 0,0 — see `boardExpand.ts` for why that matters — so
+   * "room above" is every job and node moving DOWN by a screenful. The view
+   * follows by the same amount, so the work stays under your eyes rather than
+   * appearing to jump.
+   */
+  function makeRoom(side: Side, remember: boolean) {
+    if (!currentUser) { setAskRoom(null); return; }
+    const vp = viewportRef.current;
+    const amount = roomFor(
+      side === 'top' ? (vp?.clientHeight ?? 800) : (vp?.clientWidth ?? 1200), zoom);
+    const shift = shiftFor(side, amount);
+
+    shiftJobs(jobs, shift, activeBoardView).forEach(({ id, x, y }) => {
+      const job = apartments.find(a => a.id === id);
+      if (activeBoardView) {
+        updateApartment(id, {
+          viewPos: { ...(job?.viewPos ?? {}), [activeBoardView]: { x, y } },
+        }, currentUser);
+      } else {
+        updateApartment(id, { canvasX: x, canvasY: y }, currentUser);
+      }
+    });
+    shiftNodes(onThisBoard, shift).forEach(({ id, x, y }) => updateCanvasElement(id, { x, y }));
+
+    setPan(p => clampPanRef.current({
+      x: p.x - shift.dx * zoom,
+      y: p.y - shift.dy * zoom,
+    }));
+    if (remember) {
+      setBoardSetting('expand', { ...(projectBoard.expand ?? {}), [side]: true });
+    }
+    setAskRoom(null);
+    setToast(side === 'top' ? 'Room made above' : 'Room made on the left');
+  }
+
   const totalSelected = selectedJobIds.size + selectedElIds.size;
 
   // ── Redirect guard ──
@@ -2781,6 +2854,35 @@ export function GeneralJobsPage() {
                 onChange={e => setBoardSetting('snapToGrid', e.target.checked)} />
               Snap to grid
             </label>
+
+            {/*
+              Which sides may grow.
+
+              Down and right are on because that is how the board has always
+              worked. Up and left move everything already placed, so they start
+              off and dragging a node against that edge asks — turning one on
+              here is the same as answering "and stop asking".
+            */}
+            <div className="mb-2">
+              <span className="block text-[10px] font-bold text-gray-500 mb-1">Let the board grow</span>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                {([
+                  ['top', 'Upwards'],
+                  ['bottom', 'Downwards'],
+                  ['left', 'To the left'],
+                  ['right', 'To the right'],
+                ] as const).map(([side, label]) => (
+                  <label key={side} className="flex items-center gap-1.5 text-[10px] text-gray-600">
+                    <input type="checkbox" className="rounded"
+                      checked={sideAllowed(projectBoard.expand, side)}
+                      onChange={e => setBoardSetting('expand', {
+                        ...(projectBoard.expand ?? {}), [side]: e.target.checked,
+                      })} />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
             <button
               onClick={() => { setLayoutPanel(true); setBoardSettingsOpen(false); }}
               className="w-full flex items-center gap-1.5 py-1.5 rounded-lg text-[10px] font-bold text-gray-600 border border-gray-200 hover:bg-gray-50 justify-center">
@@ -3850,6 +3952,40 @@ export function GeneralJobsPage() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Making room moves work somebody placed, so it asks. */}
+      {askRoom && (
+        <div className="fixed inset-0 z-[140] flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(15,23,42,.45)' }}
+          onClick={() => setAskRoom(null)}>
+          <div className="bg-white rounded-2xl p-5 w-full max-w-sm shadow-xl"
+            onClick={e => e.stopPropagation()}>
+            <h3 className="font-bold text-gray-900 mb-1">
+              {askRoom === 'top' ? 'Make room above?' : 'Make room on the left?'}
+            </h3>
+            <p className="text-xs text-gray-500 mb-4 leading-snug">
+              The board grows down and to the right. To gain space {askRoom === 'top' ? 'above' : 'to the left'},
+              everything already on it moves {askRoom === 'top' ? 'down' : 'right'} by a screenful — nothing is
+              lost and nothing changes size.
+            </p>
+            <div className="flex flex-col gap-2">
+              <button onClick={() => makeRoom(askRoom, false)}
+                className="w-full py-2 rounded-lg text-sm font-bold text-white"
+                style={{ backgroundColor: '#1e3a5f' }}>
+                Make room, just this once
+              </button>
+              <button onClick={() => makeRoom(askRoom, true)}
+                className="w-full py-2 rounded-lg text-sm font-semibold border border-gray-200 text-gray-700">
+                Make room and stop asking for this side
+              </button>
+              <button onClick={() => setAskRoom(null)}
+                className="w-full py-2 rounded-lg text-sm font-semibold text-gray-500">
+                Leave it
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Add Job modal ── */}
