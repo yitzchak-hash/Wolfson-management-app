@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Plus, X, CalendarDays, Maximize2 } from 'lucide-react';
 import {
   Apartment, CanvasElement, Contractor, User, ContractorAssignment, Stage, personColor,
+  aptLabel,
 } from '../../types';
 import { registerRota, onRotaHover, rotaCellAt, setRotaHover, RotaHit } from '../../data/rotaDrop';
 import { holidaysOn, hebrewLabel, Holiday } from '../../data/hebrewDates';
@@ -826,7 +827,10 @@ function PlannerCard({
             title={job ? undefined : 'This job is no longer on the board'}
           >
             <span className="block truncate">
-              {job ? (job.displayName?.trim() || job.address?.trim() || 'Job') : '(job removed)'}
+              {/* aptLabel, not displayName: a building-project apartment has a
+                  NUMBER and often no family name, and displayName-only drew
+                  every one of those as the word "Job". */}
+              {job ? (aptLabel(job) || job.address?.trim() || 'Job') : '(job removed)'}
             </span>
             {(stage || entry.text || job?.address) && (
               <span className="block truncate font-medium"
