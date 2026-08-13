@@ -14,7 +14,7 @@ import { ExternalLink, Pencil, Check, X, Link2 } from 'lucide-react';
  * information rather than clutter.
  */
 export function LinkField({
-  label, icon: Icon = Link2, value, onSave, placeholder, display, accent = '#1e3a5f', hint,
+  label, icon: Icon = Link2, value, onSave, placeholder, display, accent = '#1e3a5f', hint, actions,
 }: {
   label: string;
   icon?: React.ElementType;
@@ -25,6 +25,14 @@ export function LinkField({
   display?: string;
   accent?: string;
   hint?: React.ReactNode;
+  /**
+   * Extra buttons on the row itself, beside the pencil.
+   *
+   * For things that act on WHAT THE LINK POINTS AT rather than on the link —
+   * copying a Drive folder's local path, for one. Under the row they read as
+   * unrelated; on it they read as belonging to it.
+   */
+  actions?: React.ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -83,6 +91,7 @@ export function LinkField({
             </span>
             <ExternalLink size={13} className="flex-shrink-0 text-gray-300 group-hover:text-[#4aa8d8]" />
           </a>
+          {actions}
           <button onClick={() => setEditing(true)} title={`Change the ${label.toLowerCase()}`}
             className="w-9 h-9 rounded-lg border border-gray-200 text-gray-400 hover:text-[#1e3a5f] hover:border-[#1e3a5f] flex items-center justify-center transition-colors">
             <Pencil size={13} />

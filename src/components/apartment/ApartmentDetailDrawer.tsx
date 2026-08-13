@@ -1250,19 +1250,16 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                         .finally(() => setFetchingPdf(false));
                     }
                   }}
+                  /* On the row itself, beside the pencil — it acts on the
+                     folder the link points at, not on the link. */
+                  actions={<DriveDesktopPath driveLink={driveLink} onToast={onToast} />}
                   hint={
-                    <>
-                      <span className="flex items-center gap-1.5 text-[10.5px] text-gray-400">
-                        <DriveStatus job={apartment} />
-                        {driveLink
-                          ? (detectedPdfId ? 'Plans found' : fetchingPdf ? 'Looking for plans…' : 'No plans in this folder yet')
-                          : 'Nothing linked'}
-                      </span>
-                      {/* Directly under the folder link, because it IS that
-                          folder — just addressed the way the architect's own
-                          computer addresses it. */}
-                      <DriveDesktopPath driveLink={driveLink} onToast={onToast} />
-                    </>
+                    <span className="flex items-center gap-1.5 text-[10.5px] text-gray-400">
+                      <DriveStatus job={apartment} />
+                      {driveLink
+                        ? (detectedPdfId ? 'Plans found' : fetchingPdf ? 'Looking for plans…' : 'No plans in this folder yet')
+                        : 'Nothing linked'}
+                    </span>
                   }
                 />
 
@@ -1877,6 +1874,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   )}
                 </button>
               </Tooltip>
+              {/* The PLANS folder, not the job folder — an architect opening
+                  the drawing wants the folder the sheets are in. */}
+              {planSet.plansFolderId && (
+                <DriveDesktopPath driveLink={planSet.plansFolderId} onToast={onToast} />
+              )}
               <Tooltip text="Full screen" side="left">
                 <button onClick={() => setAnnotating('view')}
                   className="p-1 rounded-lg text-gray-400 hover:text-[#1e3a5f]"><Maximize2 size={13} /></button>

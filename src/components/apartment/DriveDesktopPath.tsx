@@ -1,180 +1,267 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { HardDrive, Check, Loader2, Settings2, X } from 'lucide-react';
+import { HardDrive, Check, Loader2, X, Download, FolderOpen } from 'lucide-react';
 import {
   folderPath, composeLocalPath, getDriveRoot, setDriveRoot, guessRoot, separatorFor,
 } from '../../data/drivePath';
+import {
+  guessPlatform, helperInstalled, setHelperInstalled, openUrl,
+  windowsInstaller, macInstaller, download,
+} from '../../data/tzviairHelper';
 
 /**
- * "Copy the folder path" — for opening the drawing in AutoCAD.
+ * The job's folder, on the architect's own machine — for opening the drawing.
  *
- * The architects work from files in the shared drive, mirrored onto their own
- * machines by Google Drive for desktop. Getting there from the app meant
- * hunting through Explorer, which is the slow half of opening a drawing.
+ * One small button on the Drive row. What it does depends on whether this
+ * machine has the helper:
  *
- * It COPIES rather than opens, and that is not a shortcut. A page served over
- * https cannot open File Explorer: a `file://` link, a scripted navigation and
- * window.open are all refused, and refused silently — no error is thrown and
- * nothing happens, so a button that tried would read as broken rather than as
- * restricted. Copying and pasting into Explorer's address bar works on every
- * machine, needs nothing installed, and cannot fail quietly.
+ *  · with it, the folder opens in File Explorer or Finder — one press;
+ *  · without it, the path goes on the clipboard to paste into the address bar.
  *
- * The first press on a machine that has not been told where Drive lives asks,
- * once, rather than sending the office to a settings page to find out why
- * nothing happened.
+ * The copy path is not a lesser fallback, it is the one that always works: a
+ * page served over https cannot open File Explorer by itself, and every
+ * attempt is refused silently. The helper exists precisely so the machine can
+ * volunteer to do what the page may not.
  */
-export function DriveDesktopPath({ driveLink, onToast }: {
+export function DriveDesktopPath({ driveLink, onToast, variant = 'icon', onDone }: {
   driveLink: string;
-  onToast?: (msg: string) => void;
+  onToast?: (msg: string, type?: 'success' | 'error') => void;
+  /**
+   * `icon` is the button that sits on the Drive row. `row` is the same thing
+   * as a line in a menu, where an unlabelled icon would be unreadable.
+   *
+   * One component rather than two, because the interesting half is not the
+   * button — it is resolving the path, choosing between opening and copying,
+   * and the settings panel behind it. Copying that would mean two places to
+   * fix the next time the helper changes.
+   */
+  variant?: 'icon' | 'row';
+  /** Lets a menu close itself once the press has been handled. */
+  onDone?: () => void;
 }) {
   const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState('');
-  const [asking, setAsking] = useState(false);
+  const [done, setDone] = useState(false);
+  const [panel, setPanel] = useState(false);
   const [root, setRoot] = useState(getDriveRoot);
-  const [failed, setFailed] = useState('');
+  const [hasHelper, setHasHelper] = useState(helperInstalled);
+  const [copied, setCopied] = useState('');
   const timer = useRef<number>(0);
 
   useEffect(() => () => clearTimeout(timer.current), []);
-
   if (!driveLink?.trim()) return null;
 
-  const copy = async (useRoot: string) => {
-    setBusy(true); setFailed('');
+  const platform = guessPlatform();
+
+  async function resolve(useRoot: string): Promise<string | null> {
+    const path = await folderPath(driveLink);
+    if (!path) { onToast?.('Could not work out where that folder sits in Drive.', 'error'); return null; }
+    return composeLocalPath(useRoot, path);
+  }
+
+  async function go(useRoot: string) {
+    setBusy(true);
     try {
-      const path = await folderPath(driveLink);
-      if (!path) {
-        setFailed('Could not work out where that folder sits in Drive.');
-        return;
+      const full = await resolve(useRoot);
+      if (!full) return;
+      if (hasHelper) {
+        // Handed to the machine's own handler. Nothing to await and nothing to
+        // catch: if no handler is registered the browser does nothing at all,
+        // which is why the copy stays one press away in the panel.
+        window.location.href = openUrl(full);
+        onToast?.('Opening the folder…');
+      } else {
+        try {
+          await navigator.clipboard.writeText(full);
+        } catch {
+          const ta = document.createElement('textarea');
+          ta.value = full; ta.style.position = 'fixed'; ta.style.opacity = '0';
+          document.body.appendChild(ta); ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        }
+        setCopied(full);
+        onToast?.('Folder path copied');
       }
-      const full = composeLocalPath(useRoot, path);
-      try {
-        await navigator.clipboard.writeText(full);
-      } catch {
-        // Same fallback as everywhere else in the app: a copy that silently
-        // does nothing is worse than one that asks for Ctrl+C.
-        const ta = document.createElement('textarea');
-        ta.value = full; ta.style.position = 'fixed'; ta.style.opacity = '0';
-        document.body.appendChild(ta); ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-      }
-      setCopied(full);
-      onToast?.('Folder path copied');
+      setDone(true);
+      onDone?.();
       clearTimeout(timer.current);
-      timer.current = window.setTimeout(() => setCopied(''), 12_000);
+      timer.current = window.setTimeout(() => setDone(false), 2500);
     } finally {
       setBusy(false);
     }
-  };
+  }
 
   const press = () => {
-    const have = getDriveRoot();
-    if (!have) { setAsking(true); return; }
-    copy(have);
+    if (!getDriveRoot()) { setPanel(true); return; }
+    go(getDriveRoot());
   };
+
+  const label = hasHelper ? 'Open the folder on this computer' : 'Copy the folder path';
 
   const guess = guessRoot();
   const sep = separatorFor(root || guess.value);
-  const pasteHint = sep === '\\'
-    ? 'Paste it into the address bar at the top of File Explorer and press Enter.'
-    : 'In Finder press Cmd+Shift+G, paste it in and press Enter.';
 
   return (
-    <div className="mt-1.5">
-      <button
-        type="button"
-        onClick={press}
-        disabled={busy}
-        title="Copy this job's folder as it appears on your computer, for opening the drawing in AutoCAD"
-        className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-500
-                   hover:text-[#1e3a5f] transition-colors disabled:opacity-50"
-      >
-        {busy ? <Loader2 size={12} className="animate-spin" />
-          : copied ? <Check size={12} className="text-green-600" />
-          : <HardDrive size={12} />}
-        {copied ? 'Path copied' : 'Copy folder path for AutoCAD'}
-      </button>
-
-      {copied && (
-        <div className="mt-1.5 rounded-lg border border-green-200 bg-green-50 px-2.5 py-2">
-          <div className="font-mono text-[10.5px] text-green-900 break-all leading-snug">{copied}</div>
-          <div className="text-[10px] text-green-700 mt-1">{pasteHint}</div>
-          <button
-            type="button"
-            onClick={() => { setAsking(true); setCopied(''); }}
-            className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-green-700">
-            <Settings2 size={10} /> wrong path? change where Drive is on this computer
-          </button>
-        </div>
+    <>
+      {variant === 'row' ? (
+        <button
+          type="button"
+          onClick={press}
+          onContextMenu={e => { e.preventDefault(); setPanel(true); }}
+          disabled={busy}
+          title="For opening the drawing in AutoCAD — right-click for settings"
+          className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50
+                     flex items-center gap-2.5 disabled:opacity-50"
+        >
+          {busy ? <Loader2 size={14} className="animate-spin text-gray-400" />
+            : done ? <Check size={14} className="text-green-600" />
+            : hasHelper ? <FolderOpen size={14} className="text-gray-400" />
+            : <HardDrive size={14} className="text-gray-400" />}
+          {done ? (hasHelper ? 'Opening…' : 'Copied') : label}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={press}
+          onContextMenu={e => { e.preventDefault(); setPanel(true); }}
+          disabled={busy}
+          title={hasHelper
+            ? "Open this job's folder on this computer, for AutoCAD — right-click for settings"
+            : "Copy this job's folder path, for AutoCAD — right-click for settings"}
+          className="w-9 h-9 rounded-lg border border-gray-200 text-gray-400 hover:text-[#1e3a5f]
+                     hover:border-[#1e3a5f] flex items-center justify-center transition-colors
+                     flex-shrink-0 disabled:opacity-50"
+        >
+          {busy ? <Loader2 size={13} className="animate-spin" />
+            : done ? <Check size={13} className="text-green-600" />
+            : hasHelper ? <FolderOpen size={13} />
+            : <HardDrive size={13} />}
+        </button>
       )}
 
-      {failed && (
-        <div className="mt-1.5 text-[10.5px] text-amber-700">{failed}</div>
-      )}
-
-      {asking && (
+      {panel && (
         <div className="fixed inset-0 z-[130] flex items-center justify-center p-4"
           style={{ backgroundColor: 'rgba(15,23,42,.45)' }}
-          onClick={() => setAsking(false)}>
-          <div className="bg-white rounded-2xl p-5 w-full max-w-md shadow-xl"
+          onClick={() => setPanel(false)}>
+          <div className="bg-white rounded-2xl p-5 w-full max-w-md shadow-xl max-h-[88vh] overflow-y-auto"
             onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-2 mb-1">
               <HardDrive size={17} className="text-[#1e3a5f]" />
-              <h3 className="font-bold text-gray-900">Where is Google Drive on this computer?</h3>
+              <h3 className="font-bold text-gray-900">Opening job folders on this computer</h3>
               <span className="flex-1" />
-              <button onClick={() => setAsking(false)} className="p-1 rounded hover:bg-gray-100">
+              <button onClick={() => setPanel(false)} className="p-1 rounded hover:bg-gray-100">
                 <X size={15} />
               </button>
             </div>
             {/*
-              Said plainly, because it is the one thing about this that
-              surprises people: the setting is not shared. Each architect is a
-              different Google user on their own machine, and on a Mac the path
-              contains their own address — one person's answer is wrong for
-              everybody else.
+              Said plainly, because it is what surprises people: this is not a
+              shared setting. Each architect is a different Google user on their
+              own machine, and on a Mac the path carries their own address, so
+              one person's answer is wrong for everybody else.
             */}
-            <p className="text-xs text-gray-500 mb-3 leading-snug">
-              This is asked once per computer and stays on this computer — everyone's is different.
-              Type the folder that contains <b>Shared drives</b> and <b>My Drive</b>.
+            <p className="text-xs text-gray-500 mb-4 leading-snug">
+              Both settings below are for <b>this computer only</b> — everyone's are different.
             </p>
 
+            <label className="block text-xs font-semibold text-gray-700 mb-1">
+              Where Google Drive is
+            </label>
             <input
-              autoFocus
               value={root}
               onChange={e => setRoot(e.target.value)}
-              onKeyDown={e => {
-                if (e.key !== 'Enter' || !root.trim()) return;
-                setDriveRoot(root); setAsking(false); copy(root.trim());
-              }}
+              onBlur={() => setDriveRoot(root)}
               placeholder={guess.value}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono
                          outline-none focus:border-[#4aa8d8]"
             />
-            <p className="text-[11px] text-gray-400 mt-1.5 leading-snug">{guess.note}</p>
+            <p className="text-[11px] text-gray-400 mt-1.5 mb-4 leading-snug">
+              The folder containing <b>Shared drives</b> and <b>My Drive</b>. {guess.note}
+            </p>
 
-            {!root.trim() && guess.value && (
+            <div className="rounded-xl border border-gray-200 p-3 mb-4">
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input type="checkbox" checked={hasHelper} className="mt-0.5"
+                  onChange={e => { setHasHelper(e.target.checked); setHelperInstalled(e.target.checked); }} />
+                <span>
+                  <span className="block text-xs font-semibold text-gray-700">
+                    The one-click helper is installed here
+                  </span>
+                  <span className="block text-[11px] text-gray-400 leading-snug">
+                    With it the button opens the folder outright. Without it, it copies the path for
+                    you to paste — which always works and needs nothing installed.
+                  </span>
+                </span>
+              </label>
+
               <button
-                onClick={() => setRoot(guess.value)}
-                className="mt-2 text-[11px] font-semibold text-[#4aa8d8]">
-                use {guess.value}
+                onClick={() => {
+                  const r = (root || getDriveRoot()).trim();
+                  if (!r) { onToast?.('Fill in where Drive is first.', 'error'); return; }
+                  setDriveRoot(r);
+                  if (platform === 'windows') {
+                    const { reg, cmd } = windowsInstaller(r);
+                    download('open-folder.cmd', cmd);
+                    setTimeout(() => download('tzviair-helper.reg', reg), 400);
+                    onToast?.('Two files downloaded — see the steps below');
+                  } else {
+                    download('install-tzviair.sh', macInstaller(r));
+                    onToast?.('Installer downloaded — see the steps below');
+                  }
+                }}
+                className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg
+                           text-xs font-bold text-white"
+                style={{ backgroundColor: '#1e3a5f' }}>
+                <Download size={13} /> Get the helper for {platform === 'windows' ? 'Windows' : 'this Mac'}
               </button>
+
+              <ol className="mt-2.5 text-[11px] text-gray-500 leading-snug list-decimal pl-4 space-y-0.5">
+                {platform === 'windows' ? (
+                  <>
+                    <li>Put <span className="font-mono">open-folder.cmd</span> in
+                      {' '}<span className="font-mono">C:\ProgramData\TzviAir\</span> (create the folder).</li>
+                    <li>Double-click <span className="font-mono">tzviair-helper.reg</span> and say yes.</li>
+                    <li>Tick the box above.</li>
+                  </>
+                ) : (
+                  <>
+                    <li>Open Terminal in your Downloads folder.</li>
+                    <li>Run <span className="font-mono">bash install-tzviair.sh</span></li>
+                    <li>Tick the box above.</li>
+                  </>
+                )}
+              </ol>
+              <p className="text-[10.5px] text-gray-400 mt-2 leading-snug">
+                It only ever opens a folder — never runs anything — and refuses any folder that is not
+                inside the Drive root above.
+              </p>
+            </div>
+
+            {copied && (
+              <div className="rounded-lg border border-green-200 bg-green-50 px-2.5 py-2 mb-3">
+                <div className="font-mono text-[10.5px] text-green-900 break-all leading-snug">{copied}</div>
+                <div className="text-[10px] text-green-700 mt-1">
+                  {sep === '\\'
+                    ? "Paste it into File Explorer's address bar."
+                    : 'In Finder press Cmd+Shift+G and paste it in.'}
+                </div>
+              </div>
             )}
 
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => setAsking(false)}
+            <div className="flex gap-2">
+              <button onClick={() => setPanel(false)}
                 className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm font-semibold text-gray-600">
-                Cancel
+                Close
               </button>
               <button
                 disabled={!root.trim()}
-                onClick={() => { setDriveRoot(root); setAsking(false); copy(root.trim()); }}
+                onClick={() => { setDriveRoot(root); go(root.trim()); }}
                 className="flex-1 px-3 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-40"
                 style={{ backgroundColor: '#1e3a5f' }}>
-                Save and copy
+                {hasHelper ? 'Open the folder' : 'Copy the path'}
               </button>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

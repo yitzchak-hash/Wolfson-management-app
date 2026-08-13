@@ -1190,12 +1190,19 @@ flush-on-unload, so drive the real UI instead.
 
 ## Opening a drawing in AutoCAD (`src/data/drivePath.ts` + `api/drive-path.js`)
 
-The button under the Drive folder row **copies a path**; it does not open one.
-That is not a shortcut taken — **a page served over https cannot open File
-Explorer**. A `file://` link, a scripted navigation and `window.open` are all
-refused by the browser, and refused SILENTLY: nothing throws and nothing moves,
-so a button that tried would read as broken rather than as restricted. Verified
-in Chromium against all three. Do not "fix" this by adding a `file://` link.
+A **36px icon on the Drive row itself**, beside the pencil — `LinkField` gained
+an `actions` slot for it. `DriveDesktopPath` takes `variant`: `icon` for that
+row, `row` for a worded line in a menu (an unlabelled icon in a menu is
+unreadable). It appears in three places: the drawer's Drive row, the tile
+right-click menu, and the plan pane's header — where it targets
+`planSet.plansFolderId`, because an architect opening a drawing wants the plans
+folder, not the job folder.
+
+**A page served over https cannot open File Explorer by itself.** A `file://`
+link, a scripted navigation and `window.open` are all refused by the browser,
+and refused SILENTLY: nothing throws and nothing moves, so a button that tried
+would read as broken rather than as restricted. Verified in Chromium against all
+three. Do not "fix" this by adding a `file://` link.
 
 The path has two halves:
 - **inside the drive** — the same on every machine, walked from the folder id
@@ -1213,6 +1220,26 @@ The path has two halves:
 what the office typed — asking somebody to get one of two spellings right for no
 reason is how a setting gets filled in wrongly.
 
-If a true one-click is ever wanted it needs a per-machine protocol handler
-(`tzviair://`), locked to paths under the Drive root. That was offered and not
-taken; copy-the-path needs nothing installed and cannot fail quietly.
+## The one-click helper (`src/data/tzviairHelper.ts`)
+
+Since the page may not open a folder, the MACHINE volunteers to: a registered
+URL scheme, which is exactly how Slack and Zoom open their desktop apps from a
+web page. `openUrl(path)` → `tzviair://open?path=…`.
+
+`windowsInstaller(root)` returns a `.reg` plus the `.cmd` it points at;
+`macInstaller(root)` returns a shell script that builds a tiny `.app` declaring
+the scheme. Both bake the Drive root in and **refuse any path outside it** —
+anything can address `tzviair://`, so a request is assumed hostile until
+checked. Neither ever RUNS anything: `explorer.exe <folder>` and `open <folder>`
+show a folder, they do not execute what is in it.
+
+Whether this machine has it is `tzviair_helper_installed` in **localStorage
+only**, alongside `drive_desktop_root` — both are per-machine and must never
+reach the synced store. Without the helper the button copies the path, which
+needs nothing installed and cannot fail quietly; that is the floor, not a
+degraded mode.
+
+`macInstaller` is built as a **line array joined with `\n`**, never a template
+literal: `${` inside one is TypeScript interpolation, and the first version
+silently turned half the shell script into JavaScript. It uses plain `$VAR` and
+python3 for percent-decoding rather than any brace expansion.

@@ -24,6 +24,7 @@ import { BOARD_THEMES, getBoardTheme, surfaceAtZoom } from '../data/boardThemes'
 import { allowed as sideAllowed, edgePushed, roomFor, shiftFor, shiftJobs, shiftNodes, Side } from '../data/boardExpand';
 import { snapBox, Guide } from '../data/snapping';
 import { MiniMap } from '../components/board/MiniMap';
+import { DriveDesktopPath } from '../components/apartment/DriveDesktopPath';
 import { BinBoard } from '../components/board/BinBoard';
 import { BoardSearch, BoardHit } from '../components/board/BoardSearch';
 import { NodeSettings } from '../components/board/NodeSettings';
@@ -3317,6 +3318,19 @@ export function GeneralJobsPage() {
                       <ImageIcon size={14} className="text-gray-400" /> Photo background
                     </button>
                   ) : null
+                )}
+
+                {/* Straight to the drawing, without opening the job first —
+                    the architects do this far more often than anything else
+                    in this menu. Only offered when there is a folder to open. */}
+                {ctxMenu.ids.length === 1
+                  && apartments.find(a => a.id === ctxMenu.ids[0])?.driveLink && (
+                  <DriveDesktopPath
+                    variant="row"
+                    driveLink={apartments.find(a => a.id === ctxMenu.ids[0])!.driveLink!}
+                    onToast={msg => setToast(msg)}
+                    onDone={() => setCtxMenu(null)}
+                  />
                 )}
 
                 <div className="h-px bg-gray-100 my-1" />
