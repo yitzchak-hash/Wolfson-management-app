@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BoardSetting, BoardSettingKey, BoardLayout, PlanPin, PlanAnnotation, BoardView, Employee, TimePunch, TimeClockSettings } from '../types';
+import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BoardSetting, BoardSettingKey, BoardLayout, PlanPin, PlanAnnotation, BoardView, Employee, TimePunch, TimeClockSettings, WorkerLevel } from '../types';
 
 // Always merge stored mainUiStrings ON TOP of the fresh preset so code-added keys
 // are never missing even when localStorage has an older saved version.
@@ -13,6 +13,7 @@ import {
 } from './initialData';
 import { fsSet, fsDelete, fsBatchSet, fsGetAll, fsListen, isFirebaseConfigured, db, projectCollection } from './firebase';
 import { DEFAULT_TIME_CLOCK, resolvePunch } from './timeClock';
+import { DEFAULT_WORKER_LEVELS } from './workerLevels';
 
 const WOLFSON_STORAGE_KEY = 'wolfson_app_data';
 const VERSION_KEY = 'wolfson_app_version';
@@ -245,6 +246,17 @@ interface AppState {
   deletePunch: (id: string) => void;
   setTimeClock: (changes: Partial<TimeClockSettings>) => void;
 
+  /**
+   * The saved permission sets workers are put on.
+   *
+   * Global and bare in Firestore, like users and contractors: a level is a kind
+   * of person, not a kind of person on one site.
+   */
+  workerLevels: WorkerLevel[];
+  addWorkerLevel: (l: Omit<WorkerLevel, 'id'>) => WorkerLevel;
+  updateWorkerLevel: (id: string, changes: Partial<WorkerLevel>) => void;
+  deleteWorkerLevel: (id: string) => void;
+
   // Contractors
   contractors: Contractor[];
   contractorAssignments: ContractorAssignment[];
@@ -443,6 +455,7 @@ export const useStore = create<AppState>((set, get) => ({
   generalNoteVersions: (stored?.generalNoteVersions as GeneralNoteVersion[] | null) ?? [],
   activityLogs: (stored?.activityLogs as ActivityLog[] | null) ?? [],
   contractors: (stored?.contractors as Contractor[] | null) ?? [],
+  workerLevels: (stored?.workerLevels as WorkerLevel[] | null) ?? DEFAULT_WORKER_LEVELS,
   employees: (stored?.employees as Employee[] | null) ?? [],
   timePunches: (stored?.timePunches as TimePunch[] | null) ?? [],
   timeClock: { ...DEFAULT_TIME_CLOCK, ...((stored?.timeClock as Partial<TimeClockSettings> | null) ?? {}) },
@@ -508,6 +521,7 @@ export const useStore = create<AppState>((set, get) => ({
       employees: state.employees,
       timePunches: state.timePunches,
       timeClock: state.timeClock,
+      workerLevels: state.workerLevels,
       autoBackup: state.autoBackup,
       backupFrequency: state.backupFrequency,
       backupDriveFolderLink: state.backupDriveFolderLink,
@@ -1298,6 +1312,44 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   // ─── Contractor actions ────────────────────────────────────────────────────
+  addWorkerLevel: (fields) => {
+    const l: WorkerLevel = { ...fields, id: 'lvl-' + generateId() };
+    set(state => ({ workerLevels: [...state.workerLevels, l] }));
+    persist(get);
+    fsSet('workerLevels', l.id, l);
+    return l;
+  },
+
+  updateWorkerLevel: (id, changes) => {
+    set(state => ({
+      workerLevels: state.workerLevels.map(l => (l.id === id ? { ...l, ...changes } : l)),
+    }));
+    persist(get);
+    const updated = get().workerLevels.find(l => l.id === id);
+    if (updated) fsSet('workerLevels', id, updated);
+  },
+
+  /**
+   * Removing a level moves everybody on it back to the starting one.
+   *
+   * A worker pointing at a level that no longer exists would fall through to
+   * no permissions at all, which is a portal that opens and shows nothing —
+   * indistinguishable from the app being broken.
+   */
+  deleteWorkerLevel: (id) => {
+    const level = get().workerLevels.find(l => l.id === id);
+    if (!level || level.builtIn) return;
+    const orphans = get().contractors.filter(c => c.levelId === id);
+    set(state => ({
+      workerLevels: state.workerLevels.filter(l => l.id !== id),
+      contractors: state.contractors.map(c =>
+        (c.levelId === id ? { ...c, levelId: DEFAULT_WORKER_LEVELS[0].id } : c)),
+    }));
+    persist(get);
+    fsDelete('workerLevels', id);
+    orphans.forEach(c => fsSet('contractors', c.id, { ...c, levelId: DEFAULT_WORKER_LEVELS[0].id }));
+  },
+
   addEmployee: (fields) => {
     const e: Employee = {
       ...fields,
@@ -1585,6 +1637,7 @@ export const useStore = create<AppState>((set, get) => ({
       employees: state.employees,
       timePunches: state.timePunches,
       timeClock: state.timeClock,
+      workerLevels: state.workerLevels,
       contractorAssignments: state.contractorAssignments,
       contractorNotes: state.contractorNotes,
       contractorPhotos: state.contractorPhotos,
@@ -1643,6 +1696,7 @@ export const useStore = create<AppState>((set, get) => ({
         employees: data.employees ?? state.employees,
         timePunches: data.timePunches ?? state.timePunches,
         timeClock: { ...DEFAULT_TIME_CLOCK, ...(data.timeClock ?? state.timeClock) },
+        workerLevels: data.workerLevels ?? state.workerLevels,
         contractorAssignments: data.contractorAssignments ?? [],
         contractorNotes: data.contractorNotes ?? [],
         contractorPhotos: data.contractorPhotos ?? [],
@@ -1921,6 +1975,7 @@ export const useStore = create<AppState>((set, get) => ({
       state.timePunches.length > 0
         ? fsBatchSet('timePunches', state.timePunches.map(pch => ({ id: pch.id, data: pch })))
         : Promise.resolve(),
+      fsBatchSet('workerLevels', state.workerLevels.map(l => ({ id: l.id, data: l }))),
       fsSet('settings', 'app', {
         autoBackup: state.autoBackup, backupFrequency: state.backupFrequency,
         backupDriveFolderLink: state.backupDriveFolderLink,
@@ -1956,7 +2011,7 @@ export const useStore = create<AppState>((set, get) => ({
       fbApts, fbStageNotes, fbStages, fbUsers, fbLogs,
       fbContractors, fbAssignments, fbNotes, fbPhotos, fbOfficeFiles, fbSettings,
       fbStageNoteVersions, fbGeneralNoteVersions, fbCanvasElements, fbPlanPins, fbPlanAnnotations,
-      fbEmployees, fbPunches,
+      fbEmployees, fbPunches, fbLevels,
     ] = await Promise.all([
       fsGetAll(col('apartments')),
       fsGetAll(col('stageNotes')),
@@ -1977,6 +2032,7 @@ export const useStore = create<AppState>((set, get) => ({
       // Bare, in every workspace: the payroll is company-wide.
       fsGetAll('employees'),
       fsGetAll('timePunches'),
+      fsGetAll('workerLevels'),
     ]);
 
     // Only PROJECT-scoped signals decide whether this project has already been seeded.
@@ -2040,6 +2096,7 @@ export const useStore = create<AppState>((set, get) => ({
         planAnnotations:       fbPlanAnnotations.length > 0 ? (fbPlanAnnotations as unknown as PlanAnnotation[]) : state.planAnnotations,
         employees:             fbEmployees.length > 0 ? (fbEmployees as unknown as Employee[]) : state.employees,
         timePunches:           fbPunches.length > 0 ? (fbPunches as unknown as TimePunch[]) : state.timePunches,
+        workerLevels:          fbLevels.length > 0 ? (fbLevels as unknown as WorkerLevel[]) : state.workerLevels,
         ...(appSettings.backupFrequency      ? { backupFrequency:      appSettings.backupFrequency as BackupFrequency }      : {}),
         ...(appSettings.backupDriveFolderLink !== undefined ? { backupDriveFolderLink: appSettings.backupDriveFolderLink as string } : {}),
         ...(appSettings.contractorUiStrings  ? { contractorUiStrings:  appSettings.contractorUiStrings as ContractorUiStrings } : {}),
@@ -2130,6 +2187,7 @@ export const useStore = create<AppState>((set, get) => ({
         state.timePunches.length > 0
           ? fsBatchSet('timePunches', state.timePunches.map(pch => ({ id: pch.id, data: pch })))
           : Promise.resolve(),
+        fsBatchSet('workerLevels', state.workerLevels.map(l => ({ id: l.id, data: l }))),
         fsSet('settings', 'app', {
           autoBackup:            state.autoBackup,
           backupFrequency:       state.backupFrequency,
@@ -2183,6 +2241,9 @@ export const useStore = create<AppState>((set, get) => ({
       }),
       fsListen('timePunches', (docs) => {
         if (docs.length > 0) { set({ timePunches: docs as unknown as TimePunch[] }); persist(get); }
+      }),
+      fsListen('workerLevels', (docs) => {
+        if (docs.length > 0) { set({ workerLevels: docs as unknown as WorkerLevel[] }); persist(get); }
       }),
       fsListen(col('contractorAssignments'), (docs) => {
         const localA = get().contractorAssignments;
@@ -2356,6 +2417,7 @@ function persistNow(get: () => AppState) {
     employees: state.employees,
     timePunches: state.timePunches,
     timeClock: state.timeClock,
+    workerLevels: state.workerLevels,
     contractorAssignments: state.contractorAssignments,
     contractorNotes: state.contractorNotes,
     contractorPhotos: photosLean,

@@ -20,6 +20,8 @@ import { Toast } from '../components/ui/Toast';
 import { BoardRegionPicker } from '../components/board/BoardRegionPicker';
 import { NewWorkspace } from '../components/settings/NewWorkspace';
 import { ToolbarEditor } from '../components/settings/ToolbarEditor';
+import { WorkerLevelsPanel, WorkerLevelPicker, WorkerPermissionOverrides } from '../components/settings/WorkerLevels';
+import { DEFAULT_NEW_WORKER_LEVEL, permsOf, overrideCount } from '../data/workerLevels';
 import { format } from 'date-fns';
 import { saveAs } from 'file-saver';
 import { extractFolderId, isUploadBackendConfigured, getFolderNameViaBackend, familyNameFromFolderName } from '../data/driveApi';
@@ -541,7 +543,21 @@ function CopyButton({ text }: { text: string }) {
 // ─── Contractors tab (add/manage contractor records only) ─────────────────────
 function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
   const { contractors, addContractor, updateContractor, deleteContractor, mainUiStrings: s } = useStore();
-  const [form, setForm] = useState({ name: '', email: '', category: 'ac' as ContractorCategory });
+  const workerLevels = useStore(st => st.workerLevels);
+  const [openPerms, setOpenPerms] = useState<string | null>(null);
+  /**
+   * A new worker starts on a level, and WHICH level is remembered.
+   *
+   * Nearly every worker added is the same kind as the last one, so making the
+   * office re-answer it every time is asking a question whose answer is
+   * already on screen.
+   */
+  const [form, setForm] = useState({
+    name: '', email: '', category: 'ac' as ContractorCategory,
+    levelId: DEFAULT_NEW_WORKER_LEVEL,
+  });
+  const WORKER_PERM_COUNT_ON = (c: Contractor) =>
+    Object.values(permsOf(c, workerLevels)).filter(Boolean).length;
 
   const portalDomain = useStore(st => (st.boardSettings.__tv ?? {}).portalDomain);
   const setTvSetting = useStore(st => st.setTvSetting);
@@ -555,52 +571,40 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
 
   function handleAdd() {
     if (!form.name.trim()) return;
-    addContractor({ name: form.name.trim(), email: form.email.trim(), category: form.category, active: true });
-    setForm({ name: '', email: '', category: 'ac' });
+    addContractor({
+      name: form.name.trim(), email: form.email.trim(), category: form.category,
+      levelId: form.levelId, active: true,
+    });
+    // The level stays; the name and email clear. Adding four contractors in a
+    // row should be four names, not four names and four levels.
+    setForm(f => ({ ...f, name: '', email: '' }));
     onToast(s.contractorAdded);
   }
 
   return (
     <div className="space-y-6">
-      {/* Where the links point.
-          This exists because a contractor link was built from whatever address
-          the office was on when they pressed Copy — so working on a preview
-          build handed contractors a preview link, which asks them to sign in
-          to Vercel, and 404s once that build is superseded. */}
-      <div className="bg-white border border-gray-200 rounded-xl p-4">
-        <label className="block text-xs font-semibold text-gray-600 mb-1">
-          Address contractor links use
-        </label>
-        <p className="text-[11px] text-gray-400 mb-2 leading-snug">
-          The address of the live site. Fill this in and every contractor link is the same link,
-          whoever copies it and whichever build they happen to be looking at. Leave it blank to use
-          the address you are on right now.
-        </p>
-        <input
-          value={portalDomain ?? ''}
-          onChange={e => setTvSetting('portalDomain', e.target.value)}
-          onBlur={() => onToast(bareDomain(portalDomain)
-            ? `Contractor links now start ${portalBase}`
-            : 'Contractor links will use whatever address you are on')}
-          placeholder={window.location.hostname}
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono
-                     focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
-        />
-        <p className="text-[11px] text-gray-400 mt-2">
-          Links look like <span className="font-mono">{portalBase}…</span>
-        </p>
-        {onPreview && (
-          <div className="mt-3 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg
-                          px-3 py-2 flex items-start gap-2">
-            <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" />
-            <span>
-              You are on a <strong>preview build</strong> ({window.location.hostname}), not the live
-              site. Links copied now will ask contractors to sign in to Vercel, and will stop working
-              when this build is replaced. Put the live address in the box above.
-            </span>
-          </div>
-        )}
-      </div>
+      {/*
+        The address box has moved to the TV tab, next to the other one.
+
+        It was the first thing on this screen and it is a once-a-deployment
+        setting — so it sat above the actual list of people every single time
+        anybody came here to add somebody. The WARNING stays, because it only
+        appears when it genuinely applies and it is about the links on this
+        page.
+      */}
+      {onPreview && (
+        <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl
+                        px-3 py-2.5 flex items-start gap-2">
+          <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" />
+          <span>
+            You are on a <strong>preview build</strong> ({window.location.hostname}), not the live
+            site. Links copied now will ask workers to sign in to Vercel, and will stop working when
+            this build is replaced. Put the live address in App settings → TV → worker link address.
+          </span>
+        </div>
+      )}
+
+      <WorkerLevelsPanel onToast={onToast} />
 
       {grouped.map(({ cat, items }) => (
         <div key={cat}>
@@ -616,7 +620,8 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
 
           <div className="space-y-2">
             {items.map(c => (
-              <div key={c.id} className="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-3">
+              <div key={c.id} className="bg-white border border-gray-200 rounded-xl p-4">
+              <div className="flex items-center gap-3">
                 {/* The avatar IS their rota colour. One colour per person,
                     picked here and carried everywhere they appear, rather than
                     a trade colour that makes four people look like one. */}
@@ -650,6 +655,29 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
                   </button>
                 </Tooltip>
               </div>
+
+              {/* The level is the answer for nine workers in ten, so it is on
+                  the row. The fifteen switches are one press away for the
+                  tenth, and stay shut otherwise. */}
+              <div className="flex items-center gap-2 mt-2.5 pt-2.5 border-t border-gray-100">
+                <span className="text-[11px] font-semibold text-gray-500">Level</span>
+                <WorkerLevelPicker worker={c} />
+                <button
+                  onClick={() => setOpenPerms(o => (o === c.id ? null : c.id))}
+                  className="text-[11px] font-semibold"
+                  style={{ color: overrideCount(c) ? '#b45309' : '#4aa8d8' }}>
+                  {openPerms === c.id ? 'hide the switches'
+                    : overrideCount(c)
+                      ? `${overrideCount(c)} changed just for ${c.name.split(' ')[0]}`
+                      : 'change one just for them'}
+                </button>
+                <span className="flex-1" />
+                <span className="text-[10.5px] text-gray-400">
+                  {WORKER_PERM_COUNT_ON(c)} of 15 on
+                </span>
+              </div>
+              {openPerms === c.id && <WorkerPermissionOverrides worker={c} />}
+              </div>
             ))}
           </div>
         </div>
@@ -670,6 +698,17 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
             <option value="drywall">{s.categoryDrywall}</option>
             <option value="general">{s.categoryGeneral}</option>
           </select>
+        </div>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-xs font-semibold text-gray-600">Starts on</span>
+          <select value={form.levelId}
+            onChange={e => setForm(f => ({ ...f, levelId: e.target.value }))}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30">
+            {workerLevels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
+          <span className="text-[11px] text-gray-400">
+            {workerLevels.find(l => l.id === form.levelId)?.description ?? ''}
+          </span>
         </div>
         <button onClick={handleAdd} disabled={!form.name.trim()}
           className="flex items-center gap-1.5 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] disabled:opacity-40 transition-colors">
@@ -1619,6 +1658,30 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
           <ExternalLink size={14} /> Open
         </a>
       </div>
+
+      {/*
+        The address workers' links use.
+
+        Here rather than on the Workers tab, because it is the same kind of
+        setting as the TV link above — set once when the site is deployed — and
+        on the Workers tab it sat above the list of people every single time
+        anybody went there to add somebody.
+      */}
+      <label className="block text-xs font-semibold text-gray-600 mb-1 mt-5"
+        title="The address of the live site, so every worker link is the same link whoever copies it.">
+        Worker link address
+      </label>
+      <input
+        value={(tv.portalDomain as string | undefined) ?? ''}
+        onChange={e => setTvSetting('portalDomain', e.target.value)}
+        placeholder={window.location.hostname}
+        className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono
+                   focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
+      <p className="text-[11px] text-gray-400 mt-1 mb-2">
+        Leave it blank to use whatever address you happen to be on. Filling it in means a link copied
+        from a preview build still points at the live site — which is the difference between a worker
+        opening their tasks and being asked to sign in to Vercel.
+      </p>
 
       {/* Which board. */}
       <label className="block text-xs font-semibold text-gray-600 mb-1 mt-5"

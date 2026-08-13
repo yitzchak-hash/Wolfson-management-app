@@ -719,11 +719,49 @@ export interface AppSettings {
 
 export type ContractorCategory = 'drywall' | 'ac' | 'general';
 
+/**
+ * The fifteen things a worker can be allowed to do.
+ *
+ * Kept as a union rather than a bag of booleans on the worker so that adding a
+ * sixteenth is one line here and one entry in `data/workerLevels.ts`, and every
+ * place that reads permissions keeps compiling.
+ */
+export type WorkerPermission =
+  | 'ownTasks' | 'completeTasks' | 'uploadPhotos' | 'addNotes' | 'selfAssign'
+  | 'seeDiagrams' | 'seeAllApartments' | 'seePlans' | 'markUpPlans' | 'seeSnags'
+  | 'allTasks' | 'seePlanner' | 'seeSchedule' | 'seeContacts' | 'switchProject';
+
+/**
+ * A saved set of those switches.
+ *
+ * Global, like users and contractors — a level describes a kind of person, not
+ * a kind of person on one site.
+ */
+export interface WorkerLevel {
+  id: string;
+  name: string;
+  nameHe?: string;
+  description?: string;
+  /** The three that ship. Editable; not deletable. */
+  builtIn?: boolean;
+  perms: Partial<Record<WorkerPermission, boolean>>;
+}
+
 export interface Contractor {
   id: string;
   name: string;
   email: string;
   category: ContractorCategory;
+  /**
+   * Which level this worker is on, and anything overridden just for them.
+   *
+   * Absent means the starting level, so every worker that existed before
+   * levels did carries on behaving as a contractor — which is what they were.
+   */
+  levelId?: string;
+  perms?: Partial<Record<WorkerPermission, boolean>>;
+  /** The language THEY chose in the portal, if they changed it. */
+  lang?: 'en' | 'he';
   /** Their colour on the rota. Falls back to one derived from the name. */
   color?: string;
   token: string; // 24-char random alphanumeric — used in shareable /c/:token URL
@@ -1675,7 +1713,7 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   edit: 'Edit',
   settingsStages: 'Stages',
   settingsUsers: 'Users',
-  settingsContractors: 'Contractors',
+  settingsContractors: 'Workers',
   settingsApp: 'App',
   settingsLanguage: 'Language',
   settingsBuildings: 'Buildings',
@@ -1688,8 +1726,8 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   noActivity: 'No recent activity.',
   noTasks: 'No tasks yet. Add a task to get started.',
   addTask: 'Add Task',
-  allContractors: 'All contractors',
-  selectContractor: 'Select contractor *',
+  allContractors: 'All workers',
+  selectContractor: 'Select worker *',
   selectApartment: 'Select apartment *',
   stageOptional: 'Stage (optional)',
   taskDescriptionPlaceholder: 'Task description *',
@@ -1768,14 +1806,14 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   residentialUnits: 'Residential units',
   workStarted: 'Work Started',
   notYetStarted: 'not yet started',
-  contractorsLabel: 'Contractors',
+  contractorsLabel: 'Workers',
   totalAssignments: 'total assignments',
   tasksCompletedLabel: 'Tasks Completed',
   pendingLabel: 'Pending',
   completedLabel: 'Completed',
   stageCompletionsWeek: 'Stage Completions / Week',
   tasksCompletedWeek: 'Tasks Completed / Week',
-  contractorTasksSection: 'Contractor Tasks',
+  contractorTasksSection: 'Worker tasks',
   noContractorAssignments: 'No contractor assignments yet.',
   // Activity Log
   activityLogPage: 'Activity Log',
@@ -1792,9 +1830,9 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   taskCompletedAction: 'Task completed',
   taskReopenedAction: 'Task re-opened',
   taskDeletedAction: 'Task deleted',
-  contractorUploadAction: 'Contractor upload',
-  contractorNoteAction: 'Contractor note',
-  contractorCompletedAction: 'Contractor completed',
+  contractorUploadAction: 'Worker upload',
+  contractorNoteAction: 'Worker note',
+  contractorCompletedAction: 'Worker completed',
   noLogsMatch: 'No activity logs match current filters',
   // Reports
   reportsPage: 'Reports',
@@ -1803,7 +1841,7 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   stageNotesColumns: 'Stage Notes Columns',
   requiredLabel: '(required)',
   includeTasks: 'Include Tasks',
-  includeTasksHint: '(adds Task 1–N columns: description, contractor, stage, due date, status, completion date)',
+  includeTasksHint: '(adds Task 1–N columns: description, worker, stage, due date, status, completion date)',
   filtersSection: 'Filters',
   searchApartment: 'Search apartment…',
   enterButton: 'Enter',
@@ -1826,12 +1864,12 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   nameField: 'Name *',
   roleField: 'Role',
   codeField: '6-digit code *',
-  addNewContractor: 'Add New Contractor',
+  addNewContractor: 'Add a worker',
   fullNameField: 'Full name *',
   emailField: 'Email address',
   copyLink: 'Copy link',
   copied: 'Copied!',
-  noContractors: 'No contractors in this category.',
+  noContractors: 'No workers in this category.',
   firebaseConnection: 'Firebase Connection',
   allSystemsGo: 'All systems go',
   connectionIssue: 'Connection issue',
@@ -1860,7 +1898,7 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   exportNow: 'Export Now',
   exportingLabel: 'Exporting…',
   manualBackup: 'Manual Backup',
-  manualBackupDesc: 'Export all data to a JSON file — apartments, stages, notes, contractors, photos, settings. Import to fully restore.',
+  manualBackupDesc: 'Export all data to a JSON file — apartments, stages, notes, workers, photos, settings. Import to fully restore.',
   exportJson: 'Export JSON',
   importJson: 'Import JSON',
   exportLogLabel: 'Export Log',
@@ -1898,13 +1936,13 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   linkMutualHint: 'Linking is mutual — both apartments show the connection.',
   noTasksAssigned: 'No tasks assigned to this apartment.',
   noPhotosYet: 'No photos yet',
-  photosDesc: 'Photos uploaded by contractors will appear here.',
+  photosDesc: 'Photos uploaded by workers will appear here.',
   noDriveLinked: 'No Drive folder linked',
   setDriveFolderHint: 'Set the Drive folder in Details → Settings to load photos.',
   driveBackendNotConfigured: 'Drive backend not configured',
   loadingPhotos: 'Loading photos from Drive…',
   stageChangedModal: 'Stage Changed',
-  assignTaskQuestion: 'Would you like to assign a contractor task for this stage?',
+  assignTaskQuestion: 'Would you like to assign a task for this stage?',
   noJustSave: 'No, just save',
   assignTaskBtn: 'Assign Task',
   unlinkApartments: 'Unlink Apartments',
@@ -1925,11 +1963,11 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   noteLabel: 'Note',
   fileLabel: 'file',
   filesLabel: 'files',
-  assignContractor: 'Assign Contractor',
+  assignContractor: 'Assign a worker',
   stageReached: 'Stage reached:',
   editHistory: 'Edit History',
   allContractorNotes: 'All Contractor Notes',
-  contractorNotesSection: 'Contractor Notes',
+  contractorNotesSection: 'Worker notes',
   attachFile: 'Attach file',
   // Quick Add / Bulk Add
   pendingBadge: 'pending',
@@ -1981,7 +2019,7 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   langFieldsMatch: 'fields match',
   langNoMatch: 'No fields match',
   adminUiLangSection: 'Admin UI Language',
-  contractorLangSection: 'Contractor Portal Language',
+  contractorLangSection: 'Worker portal language',
   saveAdminLang: 'Save Admin UI Language',
   saveLang: 'Save Language Settings',
   // Settings App chrome
@@ -2000,7 +2038,7 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   attachmentsLabel: 'Attachments',
   attachBtn: 'Attach',
   descriptionLabel: 'Description',
-  contractorLabel: 'Contractor',
+  contractorLabel: 'Worker',
   yesBtn: 'Yes',
   uploadingLabel: 'Uploading…',
   noneSelected: '— None —',
@@ -2012,7 +2050,7 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   stageNameSaved: 'Stage saved',
   stageNameAdded: 'Stage added',
   userAdded: 'User added',
-  contractorAdded: 'Contractor added',
+  contractorAdded: 'Worker added',
   deletedLabel: 'Deleted',
   restoredLabel: 'Restored',
   backupRestored: 'Backup restored successfully',
@@ -2022,7 +2060,7 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   themeAppliedDark: 'Dark theme applied',
   themeAppliedLight: 'Light theme applied',
   deleteStageConfirmMsg: 'Delete this stage?',
-  deleteContractorConfirmMsg: 'Delete this contractor?',
+  deleteContractorConfirmMsg: 'Remove this worker?',
   // QuickAdd / BulkAdd
   newTaskHeading: 'New Task',
   describeWorkPlaceholder: 'Describe the work to be done…',
@@ -2036,9 +2074,9 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   filesWillKeepLocal: "Files can't be uploaded to Drive for these apartments. They'll keep local copies instead.",
   noDriveAnyApt: 'None of the selected apartments have a Google Drive folder configured.',
   selectAptForDrive: "Choose which apartment's Drive folder will receive the uploaded files. All other apartments will keep a local copy.",
-  selectContractorPlaceholder: 'Select contractor…',
+  selectContractorPlaceholder: 'Select a worker…',
   taskDescRequired: 'Task description *',
-  contractorRequired: 'Contractor *',
+  contractorRequired: 'Worker *',
   // Settings Page — export/import modals
   exportSummaryTitle: 'Export Summary',
   importSuccessTitle: 'Import Successful',
@@ -2047,7 +2085,7 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   importRestoredNote: 'All data has been fully restored. This replaced the previous state.',
   summaryApartments: 'Apartments',
   summaryStages: 'Active stages',
-  summaryContractors: 'Active contractors',
+  summaryContractors: 'Active workers',
   summaryTasks: 'Tasks',
   summaryCompletedTasks: 'Completed tasks',
   summaryPhotos: 'Photos & files',
@@ -2111,7 +2149,7 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   colLastUpdated: 'Last Updated',
   colUpdatedBy: 'Updated By',
   colTaskDesc: 'Description',
-  colContractor: 'Contractor',
+  colContractor: 'Worker',
   colDueDate: 'Due Date',
   colStatus: 'Status',
   colCompleted: 'Completed',
@@ -2135,17 +2173,17 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   moreLabel: 'More',
   appSettingsTitle: 'App Settings',
   projectSettingsTitle: 'Project Settings',
-  linkedPairSeparateHint: 'Connected units — each tracked separately by the contractor',
+  linkedPairSeparateHint: 'Connected units — each tracked separately by the worker',
   markDone: 'Done',
   markProgress: 'In progress',
   markIssue: 'Issue',
   markNone: 'Not started',
-  contractorStatusTitle: 'Contractor Status',
+  contractorStatusTitle: 'Worker status',
   liveLabel: 'LIVE',
   loadingLabel: 'Loading…',
   sheetUnavailable: 'Sheet unavailable',
-  contractorSheetLabel: 'Contractor sheet',
-  noSheetConfigured: 'No contractor sheet linked',
+  contractorSheetLabel: 'Worker sheet',
+  noSheetConfigured: 'No worker sheet linked',
   noSheetConfiguredHint: 'Add the sheet link under Settings → App for this workspace.',
   aptNotInSheet: "This apartment isn't in the sheet",
   openSheet: 'Open sheet',
