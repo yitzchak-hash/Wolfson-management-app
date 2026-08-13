@@ -8,6 +8,7 @@ import { ActivitySection } from './ActivitySection';
 import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, findAllPlansPdfsViaBackend, findPlanSetViaBackend, PlanEntry, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, extractFolderId, driveThumbUrl, listAllPhotosViaBackend, getFolderNameViaBackend, familyNameFromFolderName, DrivePhotoItem, DriveFile, FolderHealth, checkFolderHealthViaBackend } from '../../data/driveApi';
 import { Tooltip } from '../ui/Tooltip';
 import { DriveStatus, driveStateOf } from '../ui/DriveStatus';
+import { DriveDesktopPath } from './DriveDesktopPath';
 import { LinkField } from '../ui/LinkField';
 import { printSheet, printEsc } from '../../data/printing';
 import { PlanPinOverlay } from './PlanPinOverlay';
@@ -1250,12 +1251,18 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     }
                   }}
                   hint={
-                    <span className="flex items-center gap-1.5 text-[10.5px] text-gray-400">
-                      <DriveStatus job={apartment} />
-                      {driveLink
-                        ? (detectedPdfId ? 'Plans found' : fetchingPdf ? 'Looking for plans…' : 'No plans in this folder yet')
-                        : 'Nothing linked'}
-                    </span>
+                    <>
+                      <span className="flex items-center gap-1.5 text-[10.5px] text-gray-400">
+                        <DriveStatus job={apartment} />
+                        {driveLink
+                          ? (detectedPdfId ? 'Plans found' : fetchingPdf ? 'Looking for plans…' : 'No plans in this folder yet')
+                          : 'Nothing linked'}
+                      </span>
+                      {/* Directly under the folder link, because it IS that
+                          folder — just addressed the way the architect's own
+                          computer addresses it. */}
+                      <DriveDesktopPath driveLink={driveLink} onToast={onToast} />
+                    </>
                   }
                 />
 

@@ -1187,3 +1187,32 @@ detector that counts the app's own chrome (the node action strip, the filter
 row, a map clipping its own tiles) reports the test's fault as the product's;
 and a hand-written localStorage patch is overwritten by the app's own
 flush-on-unload, so drive the real UI instead.
+
+## Opening a drawing in AutoCAD (`src/data/drivePath.ts` + `api/drive-path.js`)
+
+The button under the Drive folder row **copies a path**; it does not open one.
+That is not a shortcut taken — **a page served over https cannot open File
+Explorer**. A `file://` link, a scripted navigation and `window.open` are all
+refused by the browser, and refused SILENTLY: nothing throws and nothing moves,
+so a button that tried would read as broken rather than as restricted. Verified
+in Chromium against all three. Do not "fix" this by adding a `file://` link.
+
+The path has two halves:
+- **inside the drive** — the same on every machine, walked from the folder id
+  by `api/drive-path.js` (parents chain, bounded at 20, server-cached). The
+  shared drive's own root reports itself with the drive's id and must NOT
+  become a segment, or you get `Shared drives/TzviAir/TzviAir/…`.
+- **in front of it** — `G:` on Windows, or
+  `/Users/<them>/Library/CloudStorage/GoogleDrive-<their email>` on a Mac.
+  Different on every computer, so it lives in **localStorage only**
+  (`drive_desktop_root`) and is deliberately kept OUT of the synced store.
+  Syncing it would push one architect's path onto everybody else's machine,
+  where it is wrong. There is a test asserting it has not leaked.
+
+`Shared drives` / `My Drive` are inserted by `composeLocalPath`, not expected in
+what the office typed — asking somebody to get one of two spellings right for no
+reason is how a setting gets filled in wrongly.
+
+If a true one-click is ever wanted it needs a per-machine protocol handler
+(`tzviair://`), locked to paths under the Drive root. That was offered and not
+taken; copy-the-path needs nothing installed and cannot fail quietly.
