@@ -340,6 +340,8 @@ export function ContractorPortal() {
 
   const [activeTab, setActiveTab] = useState<'tasks' | 'map' | 'calendar' | 'planner'>('tasks');
   const [mapBuilding, setMapBuilding] = useState<string>('');
+  /** Which project the building map is showing — 'all' lists every diagram. */
+  const [mapProject, setMapProject] = useState<string>('all');
   const [selfTask, setSelfTask] = useState(false);
   const [selfText, setSelfText] = useState('');
   const [selfApt, setSelfApt] = useState('');
@@ -873,8 +875,9 @@ export function ContractorPortal() {
         )}
       </div>
 
-      {/* Shared filter bar — above both tabs */}
-      {activeTab !== 'planner' && (
+      {/* The day bar — above the task list. The map carries its own combined
+          row (projects · divider · days) so both filters read as one place. */}
+      {activeTab === 'tasks' && (
       <div className="bg-white border-b border-gray-100 px-3 py-2.5 flex gap-2 overflow-x-auto flex-shrink-0">
         {filterOptions.map(({ key, label, color }) => (
           <button
@@ -1204,6 +1207,19 @@ export function ContractorPortal() {
           ? apartments
           : apartments.filter(a => assignedAptIds.has(a.id));
 
+        /**
+         * The map's own filter row: projects first, a divider, then the days.
+         *
+         * Two filters that work AT THE SAME TIME — which site you are looking
+         * at, and which day's work is lit up on it. Only a worker allowed to
+         * switch workspaces sees the project bubbles at all; showing another
+         * project's diagram goes through the same setCurrentProject the wall
+         * uses, because each project's records live in their own collections.
+         */
+        const diagramProjects = perms.switchProject
+          ? myProjects.filter(p => p.id !== 'general')
+          : [];
+
         return (
           <div className="flex-1 overflow-auto bg-gray-100 pb-4">
             {here.length === 0 ? (
@@ -1214,7 +1230,44 @@ export function ContractorPortal() {
             ) : (
               <>
                 <div className="sticky top-0 z-20 bg-gray-100/95 backdrop-blur px-3 py-2
-                                flex gap-1.5 overflow-x-auto border-b border-gray-200">
+                                flex items-center gap-1.5 overflow-x-auto border-b border-gray-200">
+                  {diagramProjects.length > 1 && (
+                    <>
+                      <button onClick={() => setMapProject('all')}
+                        className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
+                        style={mapProject === 'all'
+                          ? { backgroundColor: '#1e3a5f', color: '#fff' }
+                          : { backgroundColor: '#fff', color: '#475569', border: '1px solid #e2e8f0' }}>
+                        {s.isRtl ? 'כל הפרויקטים' : 'All projects'}
+                      </button>
+                      {diagramProjects.map(p => (
+                        <button key={p.id}
+                          onClick={() => {
+                            setMapProject(p.id);
+                            if (p.id !== currentProjectId) { setCurrentProject(p.id); setMapBuilding(''); }
+                          }}
+                          className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
+                          style={mapProject === p.id
+                            ? { backgroundColor: '#1e3a5f', color: '#fff' }
+                            : { backgroundColor: '#fff', color: '#475569', border: '1px solid #e2e8f0' }}>
+                          {p.name}
+                        </button>
+                      ))}
+                      {/* The line between WHERE and WHEN. */}
+                      <span className="flex-shrink-0 w-px h-6 bg-gray-300 mx-1" aria-hidden="true" />
+                    </>
+                  )}
+                  {filterOptions.map(({ key, label, color }) => (
+                    <button key={key} onClick={() => setMapFilter(key)}
+                      className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
+                      style={mapFilter === key
+                        ? { backgroundColor: color, color: '#fff' }
+                        : { backgroundColor: '#fff', color: '#64748b', border: '1px solid #e2e8f0' }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="px-3 py-2 flex gap-1.5 overflow-x-auto">
                   {here.map(b => {
                     const mine = apartments.filter(a => a.buildingId === b && assignedAptIds.has(a.id)).length;
                     const on = b === shown;
