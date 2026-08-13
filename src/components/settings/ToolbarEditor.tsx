@@ -105,7 +105,7 @@ export function ToolbarEditor({ onToast }: { onToast: (m: string, t?: 'success' 
                       hidden: off ? (setup.hidden ?? []).filter(h => h !== id) : [...(setup.hidden ?? []), id],
                     })}
                     title={off ? 'Show it' : 'Hide it'}
-                    className="p-1 rounded text-gray-400 hover:text-gray-700"
+                    className="p-2.5 sm:p-1 rounded text-gray-400 hover:text-gray-700"
                   >
                     {off ? <EyeOff size={12} /> : <Eye size={12} />}
                   </button>

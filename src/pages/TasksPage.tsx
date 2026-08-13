@@ -681,7 +681,7 @@ export function TasksPage() {
                     <Tooltip text={a.completedAt ? s.markIncomplete : s.markComplete} side="right">
                       <button
                         onClick={() => updateContractorAssignment(a.id, { completedAt: a.completedAt ? null : new Date().toISOString() })}
-                        className="mt-0.5 flex-shrink-0"
+                        className="mt-0.5 flex-shrink-0 p-1.5 -m-1.5 sm:p-0 sm:m-0"
                       >
                         {a.completedAt
                           ? <CheckCircle2 size={20} className="text-green-500" />
@@ -778,7 +778,7 @@ export function TasksPage() {
                       <Tooltip text={isEditing ? s.cancel : s.editTask}>
                         <button
                           onClick={() => isEditing ? setEditingId(null) : startEdit(a)}
-                          className={`p-1.5 rounded-lg transition-colors ${isEditing ? 'bg-[#1e3a5f]/10 text-[#1e3a5f]' : 'text-gray-400 hover:bg-gray-100'}`}
+                          className={`p-2.5 sm:p-1.5 rounded-lg transition-colors ${isEditing ? 'bg-[#1e3a5f]/10 text-[#1e3a5f]' : 'text-gray-400 hover:bg-gray-100'}`}
                         >
                           <Edit2 size={14} />
                         </button>
@@ -786,7 +786,7 @@ export function TasksPage() {
                       <Tooltip text={s.deleteTask}>
                         <button
                           onClick={() => { if (confirm(s.deleteTaskConfirm)) { deleteContractorAssignment(a.id); onToast(s.taskDeleted); } }}
-                          className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600"
+                          className="p-2.5 sm:p-1.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600"
                         >
                           <Trash2 size={14} />
                         </button>

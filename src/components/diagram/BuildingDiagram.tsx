@@ -213,8 +213,17 @@ function AptCell({
           )}
         </>
       ) : apt?.isUnnamed && onNameUnnamed ? (
+        // The whole empty square is the button on a phone, and a small plus in
+        // the middle of it on a pointer device. Unlike the add-task corner
+        // there is nothing else in this cell to hit by mistake, so the target
+        // can simply be the cell.
         <button
-          className="w-5 h-5 rounded-full flex items-center justify-center transition-all hover:scale-110 active:scale-95 hover:bg-white/60"
+          // Explicit minimums rather than w-full: inside the cell's flex line
+          // "full" resolved to 20px, which is no better than the 21px button
+          // this was meant to replace. Measured at 20x30 before, 44x36 after.
+          className="min-w-[44px] min-h-[36px] sm:min-w-0 sm:min-h-0 sm:w-5 sm:h-5 rounded-full
+                     flex items-center justify-center
+                     transition-all hover:scale-110 active:scale-95 hover:bg-white/60"
           style={{ fontSize: '14px', fontWeight: 'bold', color: '#9ca3af', lineHeight: 1 }}
           onClick={e => { e.stopPropagation(); onNameUnnamed(); }}
           title="Name this space"
@@ -279,10 +288,20 @@ function AptCell({
         </div>
       )}
 
-      {/* Add-task "+" button */}
+      {/*
+        Add-task "+". Pointer devices only.
+
+        It is a 21-pixel target in the corner of a cell, and on a phone that
+        means every attempt to open the apartment is a coin flip between the
+        apartment and this — in both directions. There is no room to make it
+        bigger without covering the number, and a task can be added from inside
+        the apartment in one more tap, which is where a thumb should be doing
+        it anyway. `hidden sm:flex`, not a touch test: a small window on a
+        laptop has the same problem.
+      */}
       {!compact && onAddTask && apt && (
         <button
-          className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full flex items-center justify-center transition-all hover:scale-110 active:scale-95"
+          className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full hidden sm:flex items-center justify-center transition-all hover:scale-110 active:scale-95"
           style={{
             backgroundColor: 'rgba(255,255,255,0.42)',
             color: textColor,

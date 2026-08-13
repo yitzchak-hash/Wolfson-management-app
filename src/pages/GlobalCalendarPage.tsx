@@ -134,7 +134,8 @@ export function GlobalCalendarPage() {
           </select>
         </div>
         <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer pb-2">
-          <input type="checkbox" checked={showCompleted} onChange={e => setShowCompleted(e.target.checked)} className="rounded" />
+          <input type="checkbox" checked={showCompleted} onChange={e => setShowCompleted(e.target.checked)}
+            className="rounded w-5 h-5 sm:w-auto sm:h-auto" />
           {s.statusCompleted}
         </label>
         <span className="text-xs text-gray-400 pb-2 ml-auto">

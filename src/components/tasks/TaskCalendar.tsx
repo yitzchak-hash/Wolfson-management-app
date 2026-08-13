@@ -129,7 +129,7 @@ export function TaskCalendar({
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
         <button
           onClick={() => setMonth(m => subMonths(m, 1))}
-          className="p-1.5 rounded-lg text-gray-400 hover:text-[#1e3a5f] hover:bg-gray-100 transition-colors"
+          className="p-2.5 sm:p-1.5 rounded-lg text-gray-400 hover:text-[#1e3a5f] hover:bg-gray-100 transition-colors"
         >
           <ChevronLeft size={18} />
         </button>
@@ -144,14 +144,14 @@ export function TaskCalendar({
           <button
             onClick={printMonth}
             title="Print this month"
-            className="p-1 rounded-lg border border-gray-200 text-gray-400 hover:border-[#1e3a5f] hover:text-[#1e3a5f] transition-colors"
+            className="p-2.5 sm:p-1 rounded-lg border border-gray-200 text-gray-400 hover:border-[#1e3a5f] hover:text-[#1e3a5f] transition-colors"
           >
             <Printer size={13} />
           </button>
         </div>
         <button
           onClick={() => setMonth(m => addMonths(m, 1))}
-          className="p-1.5 rounded-lg text-gray-400 hover:text-[#1e3a5f] hover:bg-gray-100 transition-colors"
+          className="p-2.5 sm:p-1.5 rounded-lg text-gray-400 hover:text-[#1e3a5f] hover:bg-gray-100 transition-colors"
         >
           <ChevronRight size={18} />
         </button>

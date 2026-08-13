@@ -213,7 +213,7 @@ function ColorPickerWithPresets({ value, onChange }: ColorPickerProps) {
       <div className="grid grid-cols-10 gap-1">
         {PRESET_COLORS.map(c => (
           <button key={c} onClick={() => onChange(c)} title={c}
-            className="w-6 h-6 rounded-md transition-transform hover:scale-110 focus:outline-none"
+            className="w-9 h-9 sm:w-6 sm:h-6 rounded-md transition-transform hover:scale-110 focus:outline-none"
             style={{
               backgroundColor: c,
               border: value === c ? '2px solid white' : '1px solid rgba(0,0,0,0.1)',
@@ -323,10 +323,10 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
               <div className="flex items-center gap-3 p-3">
                 <div className="flex flex-col gap-0.5">
                   <Tooltip text={s.moveUp} side="left">
-                    <button onClick={() => moveStage(stage.id, -1)} disabled={i === 0} className="p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-20"><ChevronUp size={14} /></button>
+                    <button onClick={() => moveStage(stage.id, -1)} disabled={i === 0} className="p-2.5 sm:p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-20"><ChevronUp size={14} /></button>
                   </Tooltip>
                   <Tooltip text={s.moveDown} side="left">
-                    <button onClick={() => moveStage(stage.id, 1)} disabled={i === stages.length - 1} className="p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-20"><ChevronDown size={14} /></button>
+                    <button onClick={() => moveStage(stage.id, 1)} disabled={i === stages.length - 1} className="p-2.5 sm:p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-20"><ChevronDown size={14} /></button>
                   </Tooltip>
                 </div>
                 <Tooltip text={s.changeColor}>

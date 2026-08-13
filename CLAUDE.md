@@ -1106,3 +1106,84 @@ ERR_CONNECTION_RESET with or without the egress proxy, and the proxy logs no
 relay attempt. Tiles, the geocoder and the forecast are all reachable with
 curl from the same machine, so harnesses stub exactly those responses with
 `page.route` and let everything else run for real.
+
+---
+
+# v2 — workers, levels, the phone, and the rest of the list
+
+## Workers, not contractors — in words only
+Every string a person reads says **worker**. The storage still says contractor:
+`contractors`, `contractorAssignments`, the portal token, the Firestore
+collections. Renaming that is a migration across every device and every backup
+for no functional gain. **Do not "finish" the rename.**
+
+## Levels (`src/data/workerLevels.ts`)
+Fifteen switches; a `WorkerLevel` is a saved set of them. Three ship
+(`lvl-contractor`, `lvl-technician`, `lvl-manager`), all editable, none
+deletable. `permsOf(worker, levels)` is the single answer — level first, the
+worker's own `perms` on top.
+
+- Setting an override back to what the LEVEL says **removes** it rather than
+  freezing the value. Otherwise a worker accumulates fifteen personal answers
+  and silently stops following their level.
+- Deleting a level moves everybody on it back to the starting one; a worker
+  pointing at a level that does not exist would get no permissions at all,
+  which is a portal that opens and shows nothing.
+- `workerLevels` is GLOBAL and bare in Firestore, like users and contractors.
+
+## The portal is now three portals
+A tab the level does not allow is **not drawn**, never greyed. The planner is
+`readOnly` and not as a setting. The map shows **one building at a time** with
+the picker pinned. Both workspaces are reachable through `setCurrentProject`,
+counted from each project's own stored snapshot because only the open one is
+live. The portal **starts `startFirebaseSync()` itself** — it sits outside
+AppLayout.
+
+`Contractor.lang` is the worker's own language choice, settable from either end
+and synced, so "I can't read the screen" is a phone call rather than a visit.
+
+**A self-assigned task is dated TODAY, never left blank.** The portal's list is
+filtered by date, so a dateless task lands outside every filter and disappears
+the instant it is written.
+
+## Per-shape wall dashboards (`src/data/dashRatios.ts`)
+Six shapes; `CanvasElement.byRatio` holds a size and order per shape, with
+`w`/`h`/`z` as the fallback so an un-arranged shape inherits from 16:9 rather
+than opening blank — and the editor **says so**. The preview is fitted to both
+the available width and a height cap: fixing the height and letting `max-width`
+clamp gave a "16:9" preview measuring 1.47 across.
+
+## Widget bodies scroll, they do not clip
+`Frame` and the wall's `Card` are `overflow-auto`, not `overflow-hidden`.
+Shrinking a node used to delete content silently. `WidgetSurface` draws at
+`max(naturalW, w / k)` because the scale is clamped at a third and past that
+point the natural width and the box stop agreeing.
+
+## `data-wheel-own`
+"Hands off the wheel entirely." The older `data-wheel` means "I am a scroller"
+and is only honoured while there is somewhere left to scroll.
+
+## The wallboard's sticky header
+The scroller must be **inside** the `scale()`, not outside it. A sticky element
+measures its offsets in its scrolling ancestor's space, so with the transform
+in between `top: 0` meant zero in the SCALED space — measured 577px down at
+1.6×.
+
+## Phone
+`Sidebar` is `hidden md:flex` with a `MobileNav` in the column flow.
+Twelve routes measured at 390×844: no overflow, nothing unreachable, no tap
+target under 32px. The per-cell add-task "+" is `hidden sm:flex` — a 21px
+target in the corner of a cell makes opening the apartment a coin flip, and a
+task can be added from inside it.
+
+## The harnesses
+Scratchpad scripts driving real Chromium, run by hand — not CI. `mobile2` ·
+`phone` · `portal` · `workers` · `clip` · `allwidgets` · `backup-audit` ·
+`tapin` · `clock` · `sun` · `xlsxtest` · `ratio` · `notebook2` · `tiktok` ·
+`tvsticky` · `insight` · `newwidgets` · `map` · `share` · `overlap`.
+
+Two standing traps they have already fallen into, both worth remembering: a
+detector that counts the app's own chrome (the node action strip, the filter
+row, a map clipping its own tiles) reports the test's fault as the product's;
+and a hand-written localStorage patch is overwritten by the app's own
+flush-on-unload, so drive the real UI instead.

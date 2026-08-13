@@ -148,7 +148,7 @@ export function NewWorkspace({ onToast }: { onToast: (msg: string, type?: 'succe
                   {PRESET_COLORS.slice(0, 6).map(c => (
                     <button key={c} onClick={() => setProjectColor(p.id, c)}
                       title="Use this colour"
-                      className="w-4 h-4 rounded-full border transition-transform hover:scale-125"
+                      className="w-8 h-8 sm:w-4 sm:h-4 rounded-full border transition-transform hover:scale-125"
                       style={{ backgroundColor: c, borderColor: p.color === c ? '#1e3a5f' : 'rgba(0,0,0,.15)' }} />
                   ))}
                 </span>
