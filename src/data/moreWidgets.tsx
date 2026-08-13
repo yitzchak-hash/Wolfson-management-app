@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   Globe2, Flame, Images, Rows3, Trophy, Disc3, Grid3x3, PartyPopper, Calculator,
-  Fingerprint, Map as MapIcon, CloudSun,
+  Fingerprint, Map as MapIcon, CloudSun, Music2,
 } from 'lucide-react';
 import { WidgetDef } from './widgets';
 import { WorldClocks, ShabbatClock } from '../components/board/TimeWidgets';
@@ -10,6 +10,7 @@ import { StreakFlame, SpinWheel, BubbleWrap, Celebrate, BtuHp } from '../compone
 import { TapInBoard } from '../components/board/TapInBoard';
 import { MapWidget } from '../components/board/MapWidget';
 import { WeatherWidget } from '../components/board/WeatherWidget';
+import { TikTokWidget } from '../components/board/TikTokWidget';
 
 /**
  * The widgets whose render is a real component rather than a few lines.
@@ -102,6 +103,13 @@ export const MORE_WIDGETS: WidgetDef[] = [
     blurb: 'Five days for the site. The one widget that uses the internet — rain decides the week.',
     data: { placeId: 'telaviv' },
     render: (el, c) => <WeatherWidget el={el} c={c} />,
+  },
+  {
+    id: 'tiktok', rank: 29, name: 'TikTok reel', category: 'visual',
+    icon: Music2, w: 260, h: 400,
+    blurb: 'Paste a list of links and it plays through them. Shuffle, and move on by itself.',
+    data: { seconds: 30, auto: true },
+    render: (el, c) => <TikTokWidget el={el} c={c} />,
   },
   {
     id: 'btu-hp', rank: 18, name: 'BTU and horsepower', category: 'plan',

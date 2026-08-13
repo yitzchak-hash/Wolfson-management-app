@@ -71,6 +71,26 @@ export interface PlannerData {
   dayNameSize?: number;
   textSize?: number;
   bold?: boolean;
+  /**
+   * How the sheet looks.
+   *
+   * Every one of these was fixed in the code, which meant a notebook on a wall
+   * panel had a header a person could not read from where they stand and no
+   * way to change it. The dates in particular: the day NUMBER is what somebody
+   * scans for and it was the smallest thing on the row.
+   */
+  dateSize?: number;
+  nameSize?: number;
+  /** The background behind a normal working day. */
+  dayBg?: string;
+  /** Behind a day nobody is expected on site — a holiday, or the weekend. */
+  offBg?: string;
+  /** Behind today. */
+  todayBg?: string;
+  /** The empty squares people write in. */
+  cellBg?: string;
+  /** Row height, as a multiplier on the natural one. */
+  rowScale?: number;
 }
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -219,6 +239,20 @@ export function PlannerWidget({
   const weekStart = Number(data.weekStart) === 1 ? 1 : 0;
   const textSize = num(data.textSize, 11, 7, 26);
   const daySize = num(data.dayNameSize, 11, 7, 28);
+  /**
+   * The date is its own size, and it starts BIGGER than the day name.
+   *
+   * It used to be `daySize - 3` — the smallest type on the sheet — which is
+   * backwards: on a printed rota the number is what the eye goes to and the
+   * weekday is the label under it.
+   */
+  const dateSize = num(data.dateSize, Math.round(daySize * 1.15), 7, 34);
+  const nameSize = num(data.nameSize, textSize, 7, 30);
+  const dayBg = String(data.dayBg || '#f1f5f9');
+  const offBg = String(data.offBg || '#f5f3ff');
+  const todayBg = String(data.todayBg || '#e0f2fe');
+  const cellBg = String(data.cellBg || '#fbfcfd');
+  const rowScale = num(data.rowScale, 1, 0.6, 3);
   const cells = data.cells ?? {};
   const people = data.people ?? [];
   const offFrom = data.offFrom ?? {};
@@ -526,15 +560,23 @@ export function PlannerWidget({
                   return (
                     <div key={key} className="px-1 py-0.5 rounded-t-md leading-tight"
                       style={{
-                        backgroundColor: isToday ? '#e0f2fe' : off ? '#f5f3ff' : '#f1f5f9',
+                        backgroundColor: isToday ? todayBg : off ? offBg : dayBg,
                       }}>
-                      <div className="font-bold truncate"
-                        style={{ fontSize: daySize, color: isToday ? '#0369a1' : '#475569' }}>
-                        {span > 5 ? SHORT_DAYS[dt.getDay()] : DAY_NAMES[dt.getDay()]}
+                      {/* The NUMBER first and largest, the weekday under it —
+                          that is the order somebody reads a rota in. */}
+                      <div className="truncate tabular-nums font-black"
+                        style={{ fontSize: dateSize, color: isToday ? '#0369a1' : '#334155' }}>
+                        {dt.getDate()}
+                        <span className="font-normal" style={{ fontSize: Math.max(7, dateSize - 4), color: '#94a3b8' }}>
+                          {' '}{dt.toLocaleDateString(undefined, { month: 'short' })}
+                        </span>
                       </div>
-                      <div className="truncate tabular-nums" style={{ fontSize: Math.max(7, daySize - 3), color: '#94a3b8' }}>
-                        {dt.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
-                        {data.hebrew && <span> · {hebrewLabel(dt)}</span>}
+                      <div className="font-bold truncate"
+                        style={{ fontSize: daySize, color: isToday ? '#0369a1' : '#64748b' }}>
+                        {span > 5 ? SHORT_DAYS[dt.getDay()] : DAY_NAMES[dt.getDay()]}
+                        {data.hebrew && (
+                          <span className="font-normal" style={{ color: '#94a3b8' }}> · {hebrewLabel(dt)}</span>
+                        )}
                       </div>
                       {hols.length > 0 && (
                         <div className="truncate font-bold"
@@ -556,7 +598,7 @@ export function PlannerWidget({
                       style={{ backgroundColor: tint(person.color, 0.10) }}>
                       <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1"
                         style={{ backgroundColor: person.color }} />
-                      <span className="truncate font-bold" style={{ fontSize: textSize, color: '#334155' }}>
+                      <span className="truncate font-bold" style={{ fontSize: nameSize, color: '#334155' }}>
                         {person.name}
                       </span>
                     </div>
@@ -578,9 +620,9 @@ export function PlannerWidget({
                           style={{
                             // A slot is a rectangle a job card fits in, and it
                             // grows by whole cards — never by squeezing them.
-                            minHeight: SLOT_H,
+                            minHeight: SLOT_H * rowScale,
                             backgroundColor: lit ? '#dbeafe'
-                              : state === 'ending' ? '#f1f5f9' : '#fbfcfd',
+                              : state === 'ending' ? '#f1f5f9' : cellBg,
                             backgroundImage: state === 'ending'
                               ? 'repeating-linear-gradient(45deg,#e2e8f0 0 5px,transparent 5px 10px)'
                               : undefined,

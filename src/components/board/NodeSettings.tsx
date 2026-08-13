@@ -110,6 +110,19 @@ export function NodeSettings({ el, onClose, onDelete }: {
       : el.type === 'title' ? 'Heading'
       : 'Node');
 
+  /**
+   * The sections, in the order they were declared.
+   *
+   * Only one is open at a time: the panel is 400px wide and 82vh tall, and two
+   * open sections put the second one below the fold, where it reads as absent.
+   */
+  const groupNames = useMemo(() => {
+    const seen: string[] = [];
+    for (const f of fields) if (f.group && !seen.includes(f.group)) seen.push(f.group);
+    return seen;
+  }, [fields]);
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
+
   const data = (el.data ?? {}) as Record<string, unknown>;
 
   function setData(key: string, value: unknown) {
@@ -158,7 +171,14 @@ export function NodeSettings({ el, onClose, onDelete }: {
             </Row>
           )}
 
-          {fields.map(f => (
+          {/*
+            Ungrouped settings stay in plain sight; the rest fold away.
+
+            A widget with three settings should not have to be opened. The
+            planner has nineteen, and a flat list of nineteen is a wall you
+            have to read all of to find the one line you came for.
+          */}
+          {fields.filter(f => !f.group).map(f => (
             <Field
               key={`${f.scope ?? 'data'}.${f.key}`}
               el={el}
@@ -169,6 +189,26 @@ export function NodeSettings({ el, onClose, onDelete }: {
               jobs={jobs}
               contractors={contractors.filter(c => c.active)}
             />
+          ))}
+
+          {groupNames.map(name => (
+            <FieldGroup key={name} name={name}
+              open={openGroup === name}
+              onToggle={() => setOpenGroup(g => (g === name ? null : name))}
+              count={fields.filter(f => f.group === name).length}>
+              {fields.filter(f => f.group === name).map(f => (
+                <Field
+                  key={`${f.scope ?? 'data'}.${f.key}`}
+                  el={el}
+                  field={f}
+                  value={readField(f)}
+                  onChange={v => writeField(f, v)}
+                  stages={stages}
+                  jobs={jobs}
+                  contractors={contractors.filter(c => c.active)}
+                />
+              ))}
+            </FieldGroup>
           ))}
 
           {/* Colour is on every node, and until now it wrote a value that
@@ -345,6 +385,26 @@ export function NodeSettings({ el, onClose, onDelete }: {
 }
 
 // ── pieces ───────────────────────────────────────────────────────────────────
+
+/** One collapsible block of settings. */
+function FieldGroup({ name, count, open, onToggle, children }: {
+  name: string; count: number; open: boolean; onToggle: () => void; children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-gray-100 overflow-hidden">
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-gray-50 transition-colors"
+      >
+        <span className="text-[12px] font-bold text-gray-700 flex-1">{name}</span>
+        <span className="text-[10px] text-gray-400 tabular-nums">{count}</span>
+        <ChevronDown size={14} className="text-gray-400 transition-transform flex-shrink-0"
+          style={{ transform: open ? 'rotate(180deg)' : 'none' }} />
+      </button>
+      {open && <div className="px-3 pb-3 pt-0.5 space-y-3.5">{children}</div>}
+    </div>
+  );
+}
 
 function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (

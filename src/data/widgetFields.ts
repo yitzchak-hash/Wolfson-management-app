@@ -25,6 +25,15 @@ export interface WidgetField {
   label: string;
   kind: WidgetFieldKind;
   scope?: 'data' | 'element';        // default 'data'
+  /**
+   * Which collapsible section this belongs to.
+   *
+   * Optional, and absent means "always visible, at the top" — which is right
+   * for a widget with three settings. It exists for the ones that grew past
+   * about eight, where a flat list is a wall you have to read all of to find
+   * the one line you came for. The planner had nineteen.
+   */
+  group?: string;
   options?: { value: string; label: string }[];
   placeholder?: string;
   hint?: string;
@@ -298,6 +307,24 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
       ],
     },
   ],
+  tiktok: [
+    title(),
+    {
+      key: 'links', label: 'The links', kind: 'longtext',
+      placeholder: 'https://www.tiktok.com/@someone/video/1234567890123456789',
+      hint: 'Paste as many as you like — one per line, all in a row, or straight out of a '
+        + 'spreadsheet. Anything that is not a link is ignored, and duplicates are dropped.',
+    },
+    {
+      key: 'shuffle', label: 'Order', kind: 'select',
+      options: [{ value: '', label: 'The order I pasted them' }, { value: '1', label: 'Shuffled' }],
+    },
+    {
+      key: 'auto', label: 'Move on by itself', kind: 'select',
+      options: [{ value: '1', label: 'Yes' }, { value: '', label: 'Only when I press next' }],
+    },
+    { key: 'seconds', label: 'Seconds on each', kind: 'number', min: 5, max: 600 },
+  ],
   'btu-hp': [
     title(),
     {
@@ -333,17 +360,17 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
   rota: [
     title(),
     {
-      key: 'people', label: 'Who is on it', kind: 'people',
+      key: 'people', label: 'Who is on it', kind: 'people', group: 'People and days',
       hint: 'Contractors and office staff. Drag the handles to reorder the rows; '
         + 'each person keeps their own colour. Taking somebody off asks from when.',
     },
     {
-      key: 'mode', label: 'Show', kind: 'select',
+      key: 'mode', label: 'Show', kind: 'select', group: 'People and days',
       options: [{ value: 'week', label: 'One week' }, { value: 'month', label: 'A whole month' }],
       hint: 'The arrows step a week in week view and a month in month view.',
     },
     {
-      key: 'span', label: 'Days across', kind: 'select',
+      key: 'span', label: 'Days across', kind: 'select', group: 'People and days',
       options: [
         { value: '5', label: 'Sunday to Thursday' },
         { value: '6', label: 'Sunday to Friday' },
@@ -351,36 +378,53 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
       ],
     },
     {
-      key: 'weekStart', label: 'Week starts on', kind: 'select',
+      key: 'weekStart', label: 'Week starts on', kind: 'select', group: 'People and days',
       options: [{ value: '0', label: 'Sunday' }, { value: '1', label: 'Monday' }],
     },
     {
-      key: 'hebrew', label: 'Hebrew date', kind: 'select',
+      key: 'hebrew', label: 'Hebrew date', kind: 'select', group: 'Dates and holidays',
       options: [{ value: '1', label: 'Show it' }, { value: '', label: 'Hide it' }],
       hint: 'Under the English date in every day header.',
     },
     {
-      key: 'holJewish', label: 'Jewish holidays', kind: 'select',
+      key: 'holJewish', label: 'Jewish holidays', kind: 'select', group: 'Dates and holidays',
       options: [{ value: '1', label: 'Show them' }, { value: '', label: 'Hide them' }],
     },
     {
-      key: 'holIsraeli', label: 'Israeli national days', kind: 'select',
+      key: 'holIsraeli', label: 'Israeli national days', kind: 'select', group: 'Dates and holidays',
       options: [{ value: '1', label: 'Show them' }, { value: '', label: 'Hide them' }],
     },
     {
-      key: 'holSecular', label: 'English / secular holidays', kind: 'select',
+      key: 'holSecular', label: 'English / secular holidays', kind: 'select', group: 'Dates and holidays',
       options: [{ value: '', label: 'Hide them' }, { value: '1', label: 'Show them' }],
     },
     {
-      key: 'askOnDrop', label: 'Ask when a job is dropped in', kind: 'select',
+      key: 'askOnDrop', label: 'Ask when a job is dropped in', kind: 'select', group: 'Behaviour',
       options: [{ value: '1', label: 'Offer to make a task' }, { value: '', label: 'Just place it' }],
       hint: 'The stage is the only thing to choose — the day, date and person are already known.',
     },
-    { key: 'textSize', label: 'Text size', kind: 'number', min: 7, max: 26 },
-    { key: 'dayNameSize', label: 'Day-name size', kind: 'number', min: 7, max: 28 },
-    { key: 'bold', label: 'Bold text', kind: 'select',
+    // ── Type ──────────────────────────────────────────────────────────
+    { key: 'dateSize', label: 'Date size', kind: 'number', min: 7, max: 34, group: 'Type',
+      hint: 'The day number. It is the thing people scan for, so it starts bigger '
+        + 'than the weekday under it.' },
+    { key: 'dayNameSize', label: 'Weekday size', kind: 'number', min: 7, max: 28, group: 'Type' },
+    { key: 'nameSize', label: "People's names", kind: 'number', min: 7, max: 30, group: 'Type' },
+    { key: 'textSize', label: 'Everything else', kind: 'number', min: 7, max: 26, group: 'Type',
+      hint: 'The cards in the squares, and the header.' },
+    { key: 'bold', label: 'Bold text', kind: 'select', group: 'Type',
       options: [{ value: '', label: 'Normal' }, { value: '1', label: 'Bold' }] },
-    { key: 'start', label: 'Anchored on', kind: 'datetime',
+
+    // ── Colours ───────────────────────────────────────────────────────
+    { key: 'dayBg', label: 'Behind a working day', kind: 'colour', group: 'Colours' },
+    { key: 'offBg', label: 'Behind a day off', kind: 'colour', group: 'Colours',
+      hint: 'Holidays and anything marked as no work.' },
+    { key: 'todayBg', label: 'Behind today', kind: 'colour', group: 'Colours' },
+    { key: 'cellBg', label: 'The squares', kind: 'colour', group: 'Colours',
+      hint: 'The empty space people write in.' },
+    { key: 'rowScale', label: 'Row height', kind: 'number', min: 0.6, max: 3, group: 'Colours',
+      hint: '1 is normal. 1.5 gives half again as much room in every square.' },
+
+    { key: 'start', label: 'Anchored on', kind: 'datetime', group: 'Behaviour',
       hint: 'The week or month the view opens at. The arrows move it too.' },
   ],
   milestones: [title()],
@@ -687,6 +731,16 @@ export const WIDGET_PREVIEW: Record<string, Record<string, unknown>> = {
    * widget's fault state, not its picture. These coordinates match the sample
    * addresses in widgets.tsx.
    */
+  // Three real, long-standing TikTok links, so the card plays rather than
+  // showing its own paste box — which is what a shopper would otherwise see.
+  tiktok: {
+    links: [
+      'https://www.tiktok.com/@scout2015/video/6718335390845095173',
+      'https://www.tiktok.com/@tiktok/video/6807491984882765062',
+      'https://www.tiktok.com/@nasa/video/7016132198837275910',
+    ].join('\n'),
+    seconds: 20,
+  },
   'job-map': {
     geo: {
       '14 Ben Gurion': { lat: 32.0853, lon: 34.7818 },
