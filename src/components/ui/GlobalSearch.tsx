@@ -4,6 +4,7 @@ import {
   HardHat, Layers, FolderOpen, StickyNote, PenLine,
 } from 'lucide-react';
 import Fuse from 'fuse.js';
+import { queryVariants, skeleton } from '../../data/translit';
 import { useStore } from '../../data/store';
 import { aptLabel, binLabelOf, binKeyOf, CanvasElement, FocusIntent } from '../../types';
 import { WIDGET_BY_ID } from '../../data/widgets';
@@ -52,25 +53,64 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
   useEffect(() => {
     if (query.trim().length < 2) { setResults([]); return; }
 
-    const OPTS = { threshold: 0.35, ignoreLocation: true, minMatchCharLength: 2 };
+    /**
+     * One matcher for every category, and it forgives three things at once:
+     *
+     *  · misspelling — the threshold is loose enough that "tedet" still finds
+     *    "Tester";
+     *  · the other alphabet — every text is also indexed as its consonant
+     *    skeleton, so "shapira" finds "שפירא" and "ארצי" finds "Artzi";
+     *  · the wrong keyboard layout — the query is also tried as what the same
+     *    keys would have produced on the other layout.
+     *
+     * Plain-spelling matches rank first; the forgiving passes only add what
+     * spelling alone did not find.
+     */
+    const V = queryVariants(query);
+    function hunt<T>(items: T[], keys: string[], textOf: (t: T) => string, limit: number): T[] {
+      const f = new Fuse(items, { keys, threshold: 0.45, ignoreLocation: true, minMatchCharLength: 2 });
+      const rows = items.map(it => ({ it, s: skeleton(textOf(it)) })).filter(r => r.s.length >= 2);
+      const fs = new Fuse(rows, { keys: ['s'], threshold: 0.34, ignoreLocation: true, minMatchCharLength: 2 });
+      const out: T[] = [];
+      const seen = new Set<T>();
+      const take = (it: T) => { if (!seen.has(it)) { seen.add(it); out.push(it); } };
+      V.plain.forEach(q => f.search(q).forEach(r => take(r.item)));
+      V.skeletons.forEach(q => fs.search(q).forEach(r => take(r.item.it)));
+      return out.slice(0, limit);
+    }
+
     const found: SearchResult[] = [];
 
+    /**
+     * Trash is the one group search never offers — the user threw it away, and
+     * a result that goes nowhere is worse than no result (confirmed). Jobs in
+     * Done / Ready / Archive still appear, labeled with their group.
+     */
+    const bins = canvasElements.filter(el => el.type === 'bin');
+    const groupNameOf = (a: { boardBin?: string }): string | null => {
+      if (!a.boardBin) return null;
+      const el = bins.find(b => binKeyOf(b) === a.boardBin);
+      return el ? binLabelOf(el) : a.boardBin;
+    };
+    const searchableApts = apartments.filter(a => !a.isUnnamed && a.boardBin !== 'trash');
+    const trashed = new Set(apartments.filter(a => a.boardBin === 'trash').map(a => a.id));
+
     // Apartments
-    const aptFuse = new Fuse(apartments.filter(a => !a.isUnnamed), {
-      keys: ['displayName', 'apartmentNumber', 'generalNotes'], ...OPTS,
-    });
-    aptFuse.search(query).slice(0, 5).forEach(({ item: a }) => {
+    hunt(searchableApts, ['displayName', 'apartmentNumber', 'generalNotes'],
+      a => `${a.displayName} ${a.apartmentNumber}`, 5).forEach(a => {
+      const group = groupNameOf(a);
       found.push({
         id: `apt-${a.id}`, type: 'apartment',
         title: `${a.buildingId} · Apt ${aptLabel(a)}`,
-        subtitle: a.generalNotes.trim() ? a.generalNotes.slice(0, 80) : `Floor ${a.floor}`,
+        subtitle: group ? `In ${group}`
+          : a.generalNotes.trim() ? a.generalNotes.slice(0, 80) : `Floor ${a.floor}`,
         focus: { kind: 'apartment', id: a.id },
       });
     });
 
-    // Tasks
-    const taskFuse = new Fuse(contractorAssignments, { keys: ['taskDescription'], ...OPTS });
-    taskFuse.search(query).slice(0, 5).forEach(({ item: a }) => {
+    // Tasks — a task on a trashed job left every list; it leaves this one too.
+    hunt(contractorAssignments.filter(t => !trashed.has(t.apartmentId)),
+      ['taskDescription'], t => t.taskDescription, 5).forEach(a => {
       const apt = apartments.find(ap => ap.id === a.apartmentId);
       const contractor = contractors.find(c => c.id === a.contractorId);
       found.push({
@@ -82,8 +122,8 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
     });
 
     // Stage notes
-    const noteFuse = new Fuse(stageNotes, { keys: ['noteText'], ...OPTS });
-    noteFuse.search(query).slice(0, 5).forEach(({ item: n }) => {
+    hunt(stageNotes.filter(n => !trashed.has(n.apartmentId)),
+      ['noteText'], n => n.noteText, 5).forEach(n => {
       const apt = apartments.find(a => a.id === n.apartmentId);
       const stage = stages.find(st => st.id === n.stageId);
       found.push({
@@ -95,8 +135,8 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
     });
 
     // Contractor notes
-    const cnoteFuse = new Fuse(contractorNotes, { keys: ['text'], ...OPTS });
-    cnoteFuse.search(query).slice(0, 5).forEach(({ item: n }) => {
+    hunt(contractorNotes.filter(n => !trashed.has(n.apartmentId)),
+      ['text'], n => n.text, 5).forEach(n => {
       const apt = apartments.find(a => a.id === n.apartmentId);
       found.push({
         id: `cnote-${n.id}`, type: 'contractor_note',
@@ -106,9 +146,8 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
       });
     });
 
-    // ── Contractors ──
-    const conFuse = new Fuse(contractors.filter(c => c.active), { keys: ['name', 'email'], ...OPTS });
-    conFuse.search(query).slice(0, 4).forEach(({ item: c }) => {
+    // ── Workers ──
+    hunt(contractors.filter(c => c.active), ['name', 'email'], c => c.name, 4).forEach(c => {
       const open = contractorAssignments.filter(a => a.contractorId === c.id && !a.completedAt).length;
       found.push({
         id: `con-${c.id}`, type: 'contractor',
@@ -119,8 +158,8 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
     });
 
     // ── Stages ──
-    const stageFuse = new Fuse(stages.filter(st => st.active), { keys: ['name', 'nameHe', 'description'], ...OPTS });
-    stageFuse.search(query).slice(0, 4).forEach(({ item: st }) => {
+    hunt(stages.filter(st => st.active), ['name', 'nameHe', 'description'],
+      st => `${st.name} ${st.nameHe ?? ''}`, 4).forEach(st => {
       const n = apartments.filter(a => a.currentStageId === st.id).length;
       found.push({
         id: `stage-${st.id}`, type: 'stage',
@@ -131,12 +170,8 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
     });
 
     // ── Groups on the board, and everything placed on it ──
-    // "archive", "ready to start" and the like are things that exist and are
-    // visible on screen; a search that could not find them was answering the
-    // wrong question.
-    const bins = canvasElements.filter(el => el.type === 'bin');
-    const binFuse = new Fuse(bins.map(b => ({ el: b, name: binLabelOf(b) })), { keys: ['name'], ...OPTS });
-    binFuse.search(query).slice(0, 4).forEach(({ item }) => {
+    hunt(bins.map(b => ({ el: b, name: binLabelOf(b) })), ['name'], b => b.name, 4)
+      .forEach(item => {
       const n = apartments.filter(a => a.boardBin === binKeyOf(item.el)).length;
       found.push({
         id: `bin-${item.el.id}`, type: 'group',
@@ -155,8 +190,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         kind: el.widget ? (WIDGET_BY_ID.get(el.widget)?.name ?? 'Widget') : el.type,
       }))
       .filter(r => r.text);
-    const nodeFuse = new Fuse(nodeRows, { keys: ['text', 'kind'], ...OPTS });
-    nodeFuse.search(query).slice(0, 5).forEach(({ item }) => {
+    hunt(nodeRows, ['text', 'kind'], r => r.text, 5).forEach(item => {
       const bin = item.el.board ? bins.find(b => binKeyOf(b) === item.el.board) : undefined;
       found.push({
         id: `node-${item.el.id}`, type: 'board',
@@ -167,8 +201,8 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
     });
 
     // ── Marked-up plans ──
-    const markFuse = new Fuse(planAnnotations, { keys: ['planName', 'createdBy', 'note'], ...OPTS });
-    markFuse.search(query).slice(0, 4).forEach(({ item: m }) => {
+    hunt(planAnnotations.filter(m => !trashed.has(m.apartmentId)),
+      ['planName', 'createdBy', 'note'], m => m.planName ?? '', 4).forEach(m => {
       const apt = apartments.find(a => a.id === m.apartmentId);
       found.push({
         id: `mark-${m.id}`, type: 'markup',
