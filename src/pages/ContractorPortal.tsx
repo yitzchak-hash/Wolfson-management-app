@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { useStore } from '../data/store';
+import { useStore, loadAllProjectsTaskData } from '../data/store';
 import { ContractorAssignment, ContractorPhoto, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, getStageName, aptLabel } from '../types';
 import { PlanPinOverlay } from '../components/apartment/PlanPinOverlay';
 import { printTable, printDot } from '../data/printing';
@@ -12,6 +12,8 @@ import {
   ChevronLeft, ChevronRight, Languages, History, PenLine, Printer,
 } from 'lucide-react';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
+import { permsOf } from '../data/workerLevels';
+import { PlannerWidget } from '../components/board/PlannerWidget';
 import { TaskCalendar, CalendarEvent } from '../components/tasks/TaskCalendar';
 import {
   extractFileId, drivePreviewUrl, driveDownloadUrl, driveThumbUrl,
@@ -280,18 +282,51 @@ export function ContractorPortal() {
   const { token } = useParams<{ token: string }>();
   const {
     contractors, contractorAssignments, contractorNotes, contractorPhotos,
-    apartments, stages, stageNotes,
+    apartments, stages, stageNotes, buildings,
     addContractorNote, addContractorPhoto, deleteContractorPhoto,
-    updateContractorAssignment, addActivityLog,
+    updateContractorAssignment, addContractorAssignment, addActivityLog,
     contractorUiStrings, planAnnotations,
+    workerLevels, updateContractor, canvasElements, users,
+    projects, currentProjectId, setCurrentProject,
+    startFirebaseSync, firebaseListening,
   } = useStore();
 
-  const [langOverride, setLangOverride] = useState<'en' | 'he' | null>(null);
-  const s = langOverride === 'en' ? DEFAULT_CONTRACTOR_UI_STRINGS
-           : langOverride === 'he' ? HEBREW_CONTRACTOR_UI_STRINGS
-           : contractorUiStrings;
+  /**
+   * The portal sits outside AppLayout, so nothing else starts the listeners.
+   *
+   * Without this a worker's phone shows whatever happens to be in that
+   * browser's localStorage — which on a phone that has never opened the app is
+   * nothing at all, and reads as "your link is broken".
+   */
+  useEffect(() => {
+    if (!firebaseListening) startFirebaseSync();
+  }, [firebaseListening, startFirebaseSync]);
 
-  const [activeTab, setActiveTab] = useState<'tasks' | 'map' | 'calendar'>('tasks');
+  const workerNow = contractors.find(c => c.token === token) ?? null;
+
+  /**
+   * Language: chosen from either end, and the same choice on both.
+   *
+   * The worker's own pick is stored ON the worker, so the office sees what
+   * language his portal is in and can change it for him — which is what
+   * happens when somebody rings up unable to read the screen. A pick made here
+   * is written back; a pick made in the office arrives through the listener.
+   */
+  const [langOverride, setLangOverride] = useState<'en' | 'he' | null>(null);
+  const lang = langOverride ?? workerNow?.lang ?? null;
+  const s = lang === 'en' ? DEFAULT_CONTRACTOR_UI_STRINGS
+           : lang === 'he' ? HEBREW_CONTRACTOR_UI_STRINGS
+           : contractorUiStrings;
+  const setLang = (next: 'en' | 'he') => {
+    setLangOverride(next);
+    if (workerNow) updateContractor(workerNow.id, { lang: next });
+  };
+
+  const [activeTab, setActiveTab] = useState<'tasks' | 'map' | 'calendar' | 'planner'>('tasks');
+  const [mapBuilding, setMapBuilding] = useState<string>('');
+  const [selfTask, setSelfTask] = useState(false);
+  const [selfText, setSelfText] = useState('');
+  const [selfApt, setSelfApt] = useState('');
   const [selectedAssignment, setSelectedAssignment] = useState<ContractorAssignment | null>(null);
   const [noteText, setNoteText] = useState('');
   const [noteAttachments, setNoteAttachments] = useState<{ dataUrl: string; filename: string; mimeType: string; driveFileId?: string; driveUrl?: string }[]>([]);
@@ -308,6 +343,26 @@ export function ContractorPortal() {
   const noteAttachRef = useRef<HTMLInputElement>(null);
 
   const contractor = contractors.find(c => c.token === token && c.active) ?? null;
+  const perms = permsOf(contractor, workerLevels);
+
+  /**
+   * Which workspaces have work for this person.
+   *
+   * Read straight out of each project's own stored snapshot, because only the
+   * one that is open is live. Switching is the same call the wall makes — it
+   * loads that project's collections into this browser and nothing else.
+   */
+  const myProjects = useMemo(() => {
+    if (!contractor) return [];
+    return loadAllProjectsTaskData()
+      .map(p => ({
+        id: p.projectId,
+        name: projects.find(x => x.id === p.projectId)?.name ?? p.projectId,
+        open: p.assignments.filter(a => a.contractorId === contractor.id && !a.completedAt).length,
+        total: p.assignments.filter(a => a.contractorId === contractor.id).length,
+      }))
+      .filter(p => p.total > 0 || p.id === currentProjectId);
+  }, [contractor?.id, projects, currentProjectId, contractorAssignments]);
 
   if (!contractor) {
     return (
@@ -635,7 +690,10 @@ export function ContractorPortal() {
 
           {/* Language toggle — always visible */}
           <button
-            onClick={() => setLangOverride(s.isRtl ? 'en' : 'he')}
+            // setLang, not setLangOverride: the choice is written back onto the
+            // worker so the office can see what language his portal is in, and
+            // change it for him when he rings up unable to read the screen.
+            onClick={() => setLang(s.isRtl ? 'en' : 'he')}
             className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-white/25 text-white/80 hover:bg-white/10 active:bg-white/20 transition-colors text-xs font-bold tracking-wide"
             title={s.isRtl ? 'Switch to English' : 'עבור לעברית'}
           >
@@ -655,7 +713,31 @@ export function ContractorPortal() {
         </div>
       </header>
 
-      {/* Tab bar */}
+      {/*
+        Which workspace. Only shown to somebody who has work in more than one —
+        a subcontractor on one site should never see a switcher at all.
+      */}
+      {perms.switchProject && myProjects.length > 1 && (
+        <div className="flex bg-slate-50 border-b border-gray-200 flex-shrink-0 overflow-x-auto">
+          {myProjects.map(p => (
+            <button key={p.id}
+              onClick={() => { setCurrentProject(p.id); setMapBuilding(''); }}
+              className="px-4 py-2 text-xs font-bold whitespace-nowrap border-b-2 transition-colors"
+              style={p.id === currentProjectId
+                ? { color: '#1e3a5f', borderColor: '#1e3a5f' }
+                : { color: '#94a3b8', borderColor: 'transparent' }}>
+              {p.name}
+              {p.open > 0 && (
+                <span className="ml-1.5 px-1.5 rounded-full text-[10px] tabular-nums"
+                  style={{ backgroundColor: '#fde68a', color: '#92400e' }}>{p.open}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Tab bar. A tab this worker's level does not allow is not drawn — a
+          greyed-out tab is an invitation to ask why. */}
       <div className="flex bg-white border-b border-gray-200 flex-shrink-0">
         <button onClick={() => setActiveTab('tasks')}
           className={`flex-1 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
@@ -663,21 +745,34 @@ export function ContractorPortal() {
           }`}>
           <FileText size={15} /> {s.myTasks}
         </button>
-        <button onClick={() => setActiveTab('calendar')}
-          className={`flex-1 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
-            activeTab === 'calendar' ? 'text-[#1e3a5f] border-b-2 border-[#1e3a5f]' : 'text-gray-500'
-          }`}>
-          <CalendarDays size={15} /> {s.calendarTab}
-        </button>
-        <button onClick={() => setActiveTab('map')}
-          className={`flex-1 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
-            activeTab === 'map' ? 'text-[#1e3a5f] border-b-2 border-[#1e3a5f]' : 'text-gray-500'
-          }`}>
-          <MapPin size={15} /> {s.buildingMap}
-        </button>
+        {perms.seeSchedule && (
+          <button onClick={() => setActiveTab('calendar')}
+            className={`flex-1 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
+              activeTab === 'calendar' ? 'text-[#1e3a5f] border-b-2 border-[#1e3a5f]' : 'text-gray-500'
+            }`}>
+            <CalendarDays size={15} /> {s.calendarTab}
+          </button>
+        )}
+        {perms.seeDiagrams && (
+          <button onClick={() => setActiveTab('map')}
+            className={`flex-1 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
+              activeTab === 'map' ? 'text-[#1e3a5f] border-b-2 border-[#1e3a5f]' : 'text-gray-500'
+            }`}>
+            <MapPin size={15} /> {s.buildingMap}
+          </button>
+        )}
+        {perms.seePlanner && (
+          <button onClick={() => setActiveTab('planner')}
+            className={`flex-1 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
+              activeTab === 'planner' ? 'text-[#1e3a5f] border-b-2 border-[#1e3a5f]' : 'text-gray-500'
+            }`}>
+            <CalendarDays size={15} /> {s.isRtl ? 'לוח' : 'Planner'}
+          </button>
+        )}
       </div>
 
       {/* Shared filter bar — above both tabs */}
+      {activeTab !== 'planner' && (
       <div className="bg-white border-b border-gray-100 px-3 py-2.5 flex gap-2 overflow-x-auto flex-shrink-0">
         {filterOptions.map(({ key, label, color }) => (
           <button
@@ -692,10 +787,98 @@ export function ContractorPortal() {
           </button>
         ))}
       </div>
+      )}
 
       {/* Tasks tab */}
       {activeTab === 'tasks' && (
         <main className="flex-1 p-4 max-w-2xl mx-auto w-full">
+          {/*
+            Writing yourself a task.
+
+            For somebody who finds work on site — a damaged grille, a wall that
+            is not ready — and needs it recorded rather than remembered. It is
+            an ordinary task in every respect: it takes photos, it appears in
+            the office, and it is closed the same way. Off unless the level
+            allows it.
+          */}
+          {perms.selfAssign && (
+            <div className="mb-4">
+              {!selfTask ? (
+                <button onClick={() => setSelfTask(true)}
+                  className="w-full py-2.5 rounded-xl border-2 border-dashed text-sm font-semibold
+                             text-gray-500 hover:text-[#1e3a5f] hover:border-[#4aa8d8] transition-colors"
+                  style={{ borderColor: '#d1d5db' }}>
+                  + {s.isRtl ? 'משימה לעצמי' : 'A job for myself'}
+                </button>
+              ) : (
+                <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
+                  <input
+                    autoFocus
+                    value={selfText}
+                    onChange={e => setSelfText(e.target.value)}
+                    placeholder={s.isRtl ? 'מה צריך לעשות?' : 'What needs doing?'}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#4aa8d8]"
+                  />
+                  <select
+                    value={selfApt}
+                    onChange={e => setSelfApt(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#4aa8d8]"
+                  >
+                    <option value="">{s.isRtl ? 'איפה?' : 'Where?'}</option>
+                    {/* Their own units first — that is where the work almost
+                        always is — then everything else if they can see it. */}
+                    {[...apartments]
+                      .filter(a => !a.isUnnamed && (perms.seeAllApartments || assignedAptIds.has(a.id)))
+                      .sort((a, b) => Number(assignedAptIds.has(b.id)) - Number(assignedAptIds.has(a.id)))
+                      .slice(0, 400)
+                      .map(a => (
+                        <option key={a.id} value={a.id}>
+                          {assignedAptIds.has(a.id) ? '★ ' : ''}{aptLabel(a)}
+                          {a.buildingId !== 'G' ? ` · ${a.buildingId}` : ''}
+                        </option>
+                      ))}
+                  </select>
+                  <div className="flex gap-2">
+                    <button
+                      disabled={!selfText.trim() || !selfApt}
+                      onClick={() => {
+                        const apt = apartments.find(a => a.id === selfApt);
+                        if (!apt) return;
+                        addContractorAssignment({
+                          contractorId,
+                          apartmentId: apt.id,
+                          buildingId: apt.buildingId,
+                          taskDescription: selfText.trim(),
+                          /**
+                           * Dated today, not left blank.
+                           *
+                           * The portal's list is filtered — today, tomorrow,
+                           * this week — so a task with no date lands outside
+                           * every filter and disappears the instant it is
+                           * written. Somebody who has just found a problem on
+                           * site means today.
+                           */
+                          dueDate: new Date().toISOString().slice(0, 10),
+                          stageId: apt.currentStageId ?? null,
+                          completedAt: null,
+                          createdBy: contractorId,
+                          createdByName: contractor!.name,
+                        } as never);
+                        setSelfText(''); setSelfApt(''); setSelfTask(false);
+                      }}
+                      className="flex-1 py-2 rounded-lg text-sm font-bold text-white disabled:opacity-40"
+                      style={{ backgroundColor: '#1e3a5f' }}>
+                      {s.isRtl ? 'הוספה' : 'Add it'}
+                    </button>
+                    <button onClick={() => { setSelfTask(false); setSelfText(''); setSelfApt(''); }}
+                      className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-500 border border-gray-200">
+                      {s.isRtl ? 'ביטול' : 'Cancel'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           {assignments.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mb-4">
@@ -811,38 +994,111 @@ export function ContractorPortal() {
       })()}
 
       {/* Building Map tab */}
-      {activeTab === 'map' && (
-        <div className="flex-1 overflow-auto bg-gray-100 pb-4">
-          {assignedAptIds.size === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center px-6">
-              <MapPin size={32} className="text-gray-300 mb-3" />
-              <p className="text-gray-500 text-sm">{s.noApartmentsAssigned}</p>
-            </div>
-          ) : (
-            <>
-              <div className="px-4 pt-3 pb-1 flex items-center justify-end">
-                <span className="text-xs text-gray-400">
-                  {filteredAptIds.size} apt{filteredAptIds.size !== 1 ? 's' : ''}
-                </span>
+      {activeTab === 'map' && perms.seeDiagrams && (() => {
+        /**
+         * One building at a time, chosen by name.
+         *
+         * All five at once meant scrolling past four buildings to reach the
+         * one you are standing in, and the label of whichever you were looking
+         * at slid away as you went. Picking one keeps the diagram short enough
+         * that its own pinned header does the rest.
+         */
+        const here = buildings
+          .filter(b => apartments.some(a => a.buildingId === b.id))
+          .map(b => b.id);
+        const shown = here.includes(mapBuilding) ? mapBuilding : (here[0] ?? '');
+        // Somebody without "see every unit" gets only the units they have work
+        // in, so the diagram is their own job rather than the whole site.
+        const visible = perms.seeAllApartments
+          ? apartments
+          : apartments.filter(a => assignedAptIds.has(a.id));
+
+        return (
+          <div className="flex-1 overflow-auto bg-gray-100 pb-4">
+            {here.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-center px-6">
+                <MapPin size={32} className="text-gray-300 mb-3" />
+                <p className="text-gray-500 text-sm">{s.noApartmentsAssigned}</p>
               </div>
-              <p className="px-4 pb-1 text-xs text-gray-400">{s.mapHint}</p>
-              <BuildingDiagram
-                apartments={apartments}
-                stages={stages}
-                activeStageIds={[]}
-                classFilter="all"
-                searchQuery=""
-                selectedBuilding="all"
-                onApartmentClick={handleDiagramClick}
-                showShinuiBadge={false}
-                highlightedApartmentIds={filteredAptIds}
-                aptSubLabels={aptSubLabels}
-                compact
-              />
-            </>
-          )}
-        </div>
-      )}
+            ) : (
+              <>
+                <div className="sticky top-0 z-20 bg-gray-100/95 backdrop-blur px-3 py-2
+                                flex gap-1.5 overflow-x-auto border-b border-gray-200">
+                  {here.map(b => {
+                    const mine = apartments.filter(a => a.buildingId === b && assignedAptIds.has(a.id)).length;
+                    const on = b === shown;
+                    return (
+                      <button key={b} onClick={() => setMapBuilding(b)}
+                        className="flex-shrink-0 px-3.5 py-1.5 rounded-full text-sm font-bold transition-all"
+                        style={on
+                          ? { backgroundColor: '#1e3a5f', color: '#fff' }
+                          : { backgroundColor: '#fff', color: '#475569', border: '1px solid #e2e8f0' }}>
+                        {b}
+                        {mine > 0 && (
+                          <span className="ml-1.5 px-1.5 rounded-full text-[10px] tabular-nums"
+                            style={on
+                              ? { backgroundColor: 'rgba(255,255,255,.2)' }
+                              : { backgroundColor: '#fde68a', color: '#92400e' }}>{mine}</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                  <span className="flex-1" />
+                  <span className="text-xs text-gray-400 self-center flex-shrink-0 pr-1">
+                    {filteredAptIds.size} {s.isRtl ? 'דירות' : 'yours'}
+                  </span>
+                </div>
+                <p className="px-4 pt-2 pb-1 text-xs text-gray-400">{s.mapHint}</p>
+                <BuildingDiagram
+                  apartments={visible}
+                  stages={stages}
+                  activeStageIds={[]}
+                  classFilter="all"
+                  searchQuery=""
+                  selectedBuilding={shown as never}
+                  onApartmentClick={handleDiagramClick}
+                  showShinuiBadge={false}
+                  highlightedApartmentIds={filteredAptIds}
+                  aptSubLabels={aptSubLabels}
+                  compact
+                />
+              </>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* The planner, read-only always. */}
+      {activeTab === 'planner' && perms.seePlanner && (() => {
+        const sheet = canvasElements.find(e => e.type === 'widget' && e.widget === 'rota');
+        return (
+          <div className="flex-1 overflow-auto bg-gray-100 p-3">
+            {!sheet ? (
+              <p className="text-sm text-gray-400 text-center py-16">
+                {s.isRtl ? 'אין לוח משמרות עדיין.' : 'Nobody has made a planner yet.'}
+              </p>
+            ) : (
+              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden"
+                style={{ height: 'calc(100vh - 220px)', minHeight: 380 }}>
+                {/* readOnly, and not as a setting — a worker looking at the
+                    week must never be one mis-tap from rearranging it. */}
+                <PlannerWidget
+                  el={sheet}
+                  data={(sheet.data ?? {}) as never}
+                  jobs={apartments}
+                  contractors={contractors}
+                  users={users}
+                  stages={stages}
+                  assignments={contractorAssignments}
+                  update={() => {}}
+                  openJob={() => {}}
+                  readOnly
+                />
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Assignment detail bottom sheet */}
       {selectedAssignment && (() => {

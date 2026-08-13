@@ -662,6 +662,21 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
               <div className="flex items-center gap-2 mt-2.5 pt-2.5 border-t border-gray-100">
                 <span className="text-[11px] font-semibold text-gray-500">Level</span>
                 <WorkerLevelPicker worker={c} />
+                {/* The same language setting the worker sees in his own portal.
+                    Set here, it arrives on his phone through the listener; set
+                    there, it shows up here — which is what makes "he can't read
+                    the screen" a thirty-second phone call. */}
+                <select
+                  value={c.lang ?? ''}
+                  onChange={e => updateContractor(c.id,
+                    { lang: (e.target.value || undefined) as 'en' | 'he' | undefined })}
+                  title="The language his portal opens in"
+                  className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white outline-none
+                             focus:border-[#4aa8d8]">
+                  <option value="">Whatever the office is set to</option>
+                  <option value="en">English</option>
+                  <option value="he">עברית</option>
+                </select>
                 <button
                   onClick={() => setOpenPerms(o => (o === c.id ? null : c.id))}
                   className="text-[11px] font-semibold"
