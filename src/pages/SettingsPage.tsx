@@ -21,7 +21,7 @@ import { BoardRegionPicker } from '../components/board/BoardRegionPicker';
 import { NewWorkspace } from '../components/settings/NewWorkspace';
 import { ToolbarEditor } from '../components/settings/ToolbarEditor';
 import { WorkerLevelsPanel, WorkerLevelPicker, WorkerPermissionOverrides } from '../components/settings/WorkerLevels';
-import { DEFAULT_NEW_WORKER_LEVEL, permsOf, overrideCount } from '../data/workerLevels';
+import { DEFAULT_NEW_WORKER_LEVEL, permsOf, overrideCount, WORKER_PERMISSIONS } from '../data/workerLevels';
 import { format } from 'date-fns';
 import { saveAs } from 'file-saver';
 import { extractFolderId, isUploadBackendConfigured, getFolderNameViaBackend, familyNameFromFolderName } from '../data/driveApi';
@@ -677,6 +677,18 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
                   <option value="en">English</option>
                   <option value="he">עברית</option>
                 </select>
+                <Tooltip text={c.photosOptional
+                  ? 'This worker may finish a task without photos'
+                  : 'Photos are required before this worker can finish a task'}>
+                  <button
+                    onClick={() => updateContractor(c.id, { photosOptional: !c.photosOptional || undefined })}
+                    className={`text-[11px] font-semibold px-2 py-1 rounded-lg border ${
+                      c.photosOptional
+                        ? 'border-gray-200 text-gray-400'
+                        : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+                    {c.photosOptional ? 'photos optional' : 'photos required'}
+                  </button>
+                </Tooltip>
                 <button
                   onClick={() => setOpenPerms(o => (o === c.id ? null : c.id))}
                   className="text-[11px] font-semibold"
@@ -688,7 +700,7 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
                 </button>
                 <span className="flex-1" />
                 <span className="text-[10.5px] text-gray-400">
-                  {WORKER_PERM_COUNT_ON(c)} of 15 on
+                  {WORKER_PERM_COUNT_ON(c)} of {WORKER_PERMISSIONS.length} on
                 </span>
               </div>
               {openPerms === c.id && <WorkerPermissionOverrides worker={c} />}

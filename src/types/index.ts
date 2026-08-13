@@ -797,6 +797,13 @@ export interface Contractor {
   perms?: Partial<Record<WorkerPermission, boolean>>;
   /** The language THEY chose in the portal, if they changed it. */
   lang?: 'en' | 'he';
+  /**
+   * Photos are REQUIRED to close a task unless this is on. The requirement is
+   * the default because a finished job with no evidence is what the photos
+   * exist to prevent; this switch is for the worker whose work has nothing to
+   * photograph.
+   */
+  photosOptional?: boolean;
   /** Their colour on the rota. Falls back to one derived from the name. */
   color?: string;
   token: string; // 24-char random alphanumeric — used in shareable /c/:token URL

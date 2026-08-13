@@ -649,7 +649,9 @@ export function ContractorPortal() {
   const selNotes = selectedAssignment ? getNotes(selectedAssignment.id) : [];
   const selOfficeNotes = selNotes.filter(n => n.authorType === 'office');
   const selContractorNotes = selNotes.filter(n => n.authorType === 'contractor');
-  const canComplete = selMedia.length > 0 && !selectedAssignment?.completedAt;
+  // Photos gate completion unless the office relaxed it for this worker.
+  const canComplete = (selMedia.length > 0 || !!contractor?.photosOptional)
+    && !selectedAssignment?.completedAt;
 
   type FilterKey = 'yesterday' | 'today' | 'tomorrow' | 'week' | 'all';
   const filterOptions: { key: FilterKey; label: string; color: string }[] = [
