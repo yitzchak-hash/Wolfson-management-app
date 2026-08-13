@@ -22,6 +22,10 @@ import { NewWorkspace } from '../components/settings/NewWorkspace';
 import { ToolbarEditor } from '../components/settings/ToolbarEditor';
 import { WorkerLevelsPanel, WorkerLevelPicker, WorkerPermissionOverrides } from '../components/settings/WorkerLevels';
 import { DEFAULT_NEW_WORKER_LEVEL, permsOf, overrideCount, WORKER_PERMISSIONS } from '../data/workerLevels';
+import { getDriveRoot, setDriveRoot, guessRoot } from '../data/drivePath';
+import {
+  guessPlatform, helperInstalled, setHelperInstalled, windowsInstaller, macInstaller, download,
+} from '../data/tzviairHelper';
 import { format } from 'date-fns';
 import { saveAs } from 'file-saver';
 import { extractFolderId, isUploadBackendConfigured, getFolderNameViaBackend, familyNameFromFolderName } from '../data/driveApi';
@@ -1924,6 +1928,77 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
   );
 }
 
+/**
+ * Settings that live on THIS machine and never sync.
+ *
+ * Where Google Drive for desktop sits, and whether the one-click folder
+ * helper is installed. Both are per-computer facts — one architect's Drive
+ * path is wrong on everybody else's machine — so they are surfaced here, in
+ * one card that says so, instead of only behind a right-click on the Drive
+ * row.
+ */
+function ThisComputerCard({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
+  const [root, setRoot] = useState(getDriveRoot);
+  const [installed, setInstalled] = useState(helperInstalled);
+  const platform = guessPlatform();
+  const guess = guessRoot();
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5">
+      <div className="flex items-center gap-2 mb-1">
+        <HardDrive size={18} className="text-[#1e3a5f]" />
+        <h2 className="font-semibold text-gray-800">This computer</h2>
+      </div>
+      <p className="text-xs text-gray-400 mb-4">
+        These two are per-machine and never shared — everyone&apos;s Drive path is different.
+      </p>
+
+      <label className="block text-xs font-semibold text-gray-700 mb-1">Where Google Drive is</label>
+      <input
+        value={root}
+        onChange={e => setRoot(e.target.value)}
+        onBlur={() => { setDriveRoot(root); if (root.trim()) onToast('Saved for this computer'); }}
+        placeholder={guess.value}
+        className="w-full max-w-md border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono
+                   outline-none focus:border-[#4aa8d8]"
+      />
+      <p className="text-[11px] text-gray-400 mt-1 mb-4">{guess.note}</p>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          onClick={() => {
+            const r = (root || getDriveRoot()).trim();
+            if (!r) { onToast('Fill in where Drive is first.', 'error'); return; }
+            setDriveRoot(r);
+            if (platform === 'windows') {
+              const { reg, cmd } = windowsInstaller(r);
+              download('open-folder.cmd', cmd);
+              setTimeout(() => download('tzviair-helper.reg', reg), 400);
+              onToast('Two files downloaded — put the .cmd in C:\\ProgramData\\TzviAir\\, then run the .reg');
+            } else {
+              download('install-tzviair.sh', macInstaller(r));
+              onToast('Installer downloaded — run: bash install-tzviair.sh');
+            }
+          }}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold text-white"
+          style={{ backgroundColor: '#1e3a5f' }}>
+          <Download size={14} /> Download the folder helper
+        </button>
+        <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+          <input type="checkbox" checked={installed}
+            onChange={e => { setInstalled(e.target.checked); setHelperInstalled(e.target.checked); }} />
+          It is installed here
+        </label>
+      </div>
+      <p className="text-[11px] text-gray-400 mt-2">
+        With it installed, every folder button in the app OPENS the folder outright.
+        Without it, the buttons copy the path — which always works and needs nothing installed.
+        It only ever opens a folder, never runs anything, and refuses folders outside your Drive.
+      </p>
+    </div>
+  );
+}
+
 function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
   lightTheme: boolean; setLightTheme: (v: boolean) => void; onToast: (msg: string, type?: 'success' | 'error') => void;
 }) {
@@ -1957,6 +2032,8 @@ function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
           </button>
         </div>
       </div>
+
+      <ThisComputerCard onToast={onToast} />
 
       <TvPresentationSettings onToast={onToast} />
 
