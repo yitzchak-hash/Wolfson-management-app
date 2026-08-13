@@ -387,7 +387,17 @@ export function GeneralJobsPage() {
    * classic source of jitter and misplaced clicks, so there is exactly one
    * system here.
    */
-  const [zoom, setZoom] = useState(1);
+  /**
+   * The zoom the board OPENS at is a personal preference, kept per machine
+   * (localStorage) and per workspace. Synced through the store it would push
+   * one person's screen size onto everybody else's monitor, where it is wrong
+   * — the same rule as the Drive desktop root.
+   */
+  const defaultZoomKey = `board_default_zoom_${currentProjectId}`;
+  const [zoom, setZoom] = useState(() => {
+    const stored = Number(localStorage.getItem(defaultZoomKey));
+    return stored >= 0.25 && stored <= 3 ? stored : 1;
+  });
   const [pan, setPan] = useState({ x: 0, y: 0 });
   /**
    * The live zoom and pan, for handlers that must compute both together.
@@ -2935,6 +2945,39 @@ export function GeneralJobsPage() {
                 onChange={e => setBoardSetting('snapToGrid', e.target.checked)} />
               Snap to grid
             </label>
+
+            {/* Per machine on purpose — a synced default would push one
+                person's screen onto everybody else's monitor. */}
+            <div className="mb-2">
+              <span className="block text-[10px] font-bold text-gray-500 mb-1">
+                Opens at (this computer)
+              </span>
+              <div className="flex items-center gap-1.5">
+                <select
+                  value={String(Number(localStorage.getItem(defaultZoomKey)) || '')}
+                  onChange={e => {
+                    const v = e.target.value;
+                    if (v) localStorage.setItem(defaultZoomKey, v);
+                    else localStorage.removeItem(defaultZoomKey);
+                    if (v) { setZoom(Number(v)); setPan(pp => clampPanRef.current(pp, Number(v))); }
+                  }}
+                  className="flex-1 text-[10.5px] border border-gray-200 rounded-lg px-1.5 py-1 bg-white">
+                  <option value="">100% (the usual)</option>
+                  {[0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.25, 1.5, 2].map(z => (
+                    <option key={z} value={z}>{Math.round(z * 100)}%</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => {
+                    localStorage.setItem(defaultZoomKey, String(zoom));
+                    setToast(`The board will open at ${Math.round(zoom * 100)}%`);
+                  }}
+                  title="Save the current zoom as this computer's starting zoom"
+                  className="text-[9.5px] font-bold px-1.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:text-[#1e3a5f]">
+                  use now
+                </button>
+              </div>
+            </div>
 
             {/*
               Which sides may grow.
