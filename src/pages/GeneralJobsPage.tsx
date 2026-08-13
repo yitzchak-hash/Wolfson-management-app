@@ -2566,11 +2566,33 @@ export function GeneralJobsPage() {
   // renders whenever the workspace switched while this page was mounted.
   if (currentProjectId !== 'general') return <Navigate to="/project" replace />;
 
+  /**
+   * On the canvas the header FLOATS on the board; in stage view it does not.
+   *
+   * A solid white strip across the top cut the board off below it, so the
+   * controls read as a separate chrome bar rather than as tools sitting on the
+   * work. Floating it lets the paper run to the top of the window and puts the
+   * buttons on the board, the way a drawing program does.
+   *
+   * Stage view is an ordinary scrolling list of columns, and a floating bar
+   * over a list covers its first row — so there it stays in the flow.
+   */
+  const floatingHeader = viewMode !== 'stages';
+
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-gray-50">
+    <div className="flex-1 flex flex-col min-h-0 bg-gray-50 relative">
       {/* ── Header ── */}
-      <div className="flex items-center justify-between px-2 md:px-5 py-2 md:py-3 border-b border-gray-200 bg-white flex-shrink-0 gap-2">
-        <div className="flex items-center gap-2 md:gap-3 min-w-0">
+      <div className={`flex items-center justify-between px-2 md:px-5 py-2 md:py-3 flex-shrink-0 gap-2 ${
+        floatingHeader
+          // pointer-events-none on the strip, auto on the groups: the gaps
+          // between the buttons stay board, so a drag started in the middle of
+          // the bar pans rather than hitting an invisible wall.
+          ? 'absolute top-0 inset-x-0 z-30 pointer-events-none'
+          : 'border-b border-gray-200 bg-white'
+      }`}>
+        <div className={`flex items-center gap-2 md:gap-3 min-w-0 ${
+          floatingHeader ? 'pointer-events-auto rounded-2xl bg-white/75 backdrop-blur-sm px-2.5 py-1.5 shadow-sm' : ''
+        }`}>
           <Briefcase size={20} className="text-[#1e3a5f] flex-shrink-0" />
           {/* The title is the least informative thing here on a phone — the
               sidebar already says where you are — so it steps aside first. */}
@@ -2586,7 +2608,9 @@ export function GeneralJobsPage() {
         </div>
 
         {/* Tool buttons */}
-        <div className="flex items-center gap-2">
+        <div className={`flex items-center gap-2 ${
+          floatingHeader ? 'pointer-events-auto rounded-2xl bg-white/75 backdrop-blur-sm px-2 py-1 shadow-sm' : ''
+        }`}>
           <button
             onClick={() => setSearchOpen(true)}
             title="Find a job — including anything filed into a group (⌘F)"
