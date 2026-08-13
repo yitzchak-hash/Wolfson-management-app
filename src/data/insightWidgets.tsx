@@ -205,9 +205,9 @@ function OpenSnags({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
   for (const p of pins) byJob.set(p.apartmentId, [...(byJob.get(p.apartmentId) ?? []), p]);
 
   return (
-    <Frame title={`Open snags · ${pins.length}`} icon={MapPinned} tone="#d97706">
+    <Frame title={`Punch list · ${pins.length}`} icon={MapPinned} tone="#d97706">
       <Scroll>
-        {pins.length === 0 && <Empty good>No snags outstanding</Empty>}
+        {pins.length === 0 && <Empty good>Nothing on the punch list</Empty>}
         {[...byJob.entries()].slice(0, limit).map(([jobId, list]) => {
           const job = c.jobs.find(j => j.id === jobId);
           return (
@@ -215,8 +215,8 @@ function OpenSnags({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
               {job
                 ? <MiniJob job={job} stages={c.stages} assignments={c.assignments}
                     onOpen={c.openJob} rtl={c.isRtl}
-                    sub={`${list.length} open snag${list.length === 1 ? '' : 's'}`} />
-                : <span className="text-[10.5px] text-gray-400">{list.length} snags</span>}
+                    sub={`${list.length} open pin${list.length === 1 ? '' : 's'}`} />
+                : <span className="text-[10.5px] text-gray-400">{list.length} pins</span>}
               {list.slice(0, 2).map((p, i) => (
                 <div key={p.id} className="pl-4 text-[9.5px] text-gray-400 truncate">
                   {i + 1}. {p.text || 'no wording'}
@@ -362,7 +362,8 @@ export const INSIGHT_WIDGETS: WidgetDef[] = [
 
   // ── 8 · Open snags ────────────────────────────────────────────────────────
   {
-    id: 'open-snags', rank: 11, name: 'Open snags', category: 'live',
+    // The id keeps its old name — renaming it would orphan every placed copy.
+    id: 'open-snags', rank: 11, name: 'Punch list', category: 'live',
     icon: MapPinned, w: 240, h: 185,
     blurb: 'Every unresolved plan pin in the workspace, gathered by job.',
     data: {},

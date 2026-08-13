@@ -54,8 +54,8 @@ export const WORKER_PERMISSIONS: PermissionDef[] = [
     hint: 'The PDF for the unit they are working in.' },
   { key: 'markUpPlans', label: 'Mark up a plan', group: 'The site',
     hint: 'Draw on it and save a new version. Rare outside the office.' },
-  { key: 'seeSnags', label: 'See the snag pins', group: 'The site',
-    hint: 'The punch-list markers on the plan.' },
+  { key: 'seeSnags', label: 'See the punch-list pins', group: 'The site',
+    hint: 'The numbered defect markers drawn on the plan.' },
 
   // ── Everybody else's work ─────────────────────────────────────────────────
   { key: 'allTasks', label: "See everyone's tasks", group: 'Everyone else',
