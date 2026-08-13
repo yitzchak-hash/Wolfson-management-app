@@ -32,6 +32,7 @@ export interface ProjectTaskData {
   projectId: string;
   assignments: ContractorAssignment[];
   apartments: Apartment[];
+  stages: Stage[];
 }
 export function loadAllProjectsTaskData(): ProjectTaskData[] {
   return DEFAULT_PROJECTS.map(p => {
@@ -40,6 +41,9 @@ export function loadAllProjectsTaskData(): ProjectTaskData[] {
       projectId: p.id,
       assignments: (data?.contractorAssignments as ContractorAssignment[] | null) ?? [],
       apartments: (data?.apartments as Apartment[] | null) ?? [],
+      // Stages travel too, so the global calendar can colour a day by the
+      // task's stage rather than by whoever it happens to be assigned to.
+      stages: (data?.stages as Stage[] | null) ?? [],
     };
   });
 }

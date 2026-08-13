@@ -300,13 +300,17 @@ export function TasksPage() {
     .map(a => {
       const apt = apartments.find(ap => ap.id === a.apartmentId);
       const contractor = contractors.find(c => c.id === a.contractorId);
+      const stage = stages.find(st => st.id === a.stageId);
       return {
         id: a.id,
         date: a.dueDate!,
         title: a.taskDescription,
         subtitle: `${a.buildingId} · ${s.aptPrefix} ${aptLabel(apt)}`,
-        color: contractor ? CAT_COLORS[contractor.category] : '#6b7280',
+        // The day shows the STAGE's colour; the worker's trade colour is only
+        // the fallback for a task with no stage.
+        color: stage?.color ?? (contractor ? CAT_COLORS[contractor.category] : '#6b7280'),
         completed: !!a.completedAt,
+        node: stage ? { stageName: getStageName(stage, !!s.isRtl), stageColor: stage.color } : undefined,
         onClick: () => { setView('list'); startEdit(a); },
       };
     });

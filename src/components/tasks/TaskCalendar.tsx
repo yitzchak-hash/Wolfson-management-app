@@ -126,15 +126,16 @@ export function TaskCalendar({
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
       {/* Month navigation */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+      <div className="flex items-center justify-between gap-1 px-2 sm:px-4 py-2 sm:py-3 border-b border-gray-100">
         <button
           onClick={() => setMonth(m => subMonths(m, 1))}
           className="p-2.5 sm:p-1.5 rounded-lg text-gray-400 hover:text-[#1e3a5f] hover:bg-gray-100 transition-colors"
         >
           <ChevronLeft size={18} />
         </button>
-        <div className="flex items-center gap-3">
-          <h3 className="text-sm font-bold text-gray-800">{format(month, 'MMMM yyyy')}</h3>
+        <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
+          <h3 className="text-[13px] sm:text-sm font-bold text-gray-800 whitespace-nowrap truncate">
+            {format(month, 'MMMM yyyy')}</h3>
           <button
             onClick={() => setMonth(startOfMonth(new Date()))}
             className="text-xs px-2 py-1 rounded-lg border border-gray-200 text-gray-500 hover:border-[#1e3a5f] hover:text-[#1e3a5f] transition-colors"
@@ -176,12 +177,14 @@ export function TaskCalendar({
           return (
             <div
               key={idx}
-              className={`border-b border-r border-gray-50 p-1.5 flex flex-col gap-1 ${
+              className={`border-b border-r border-gray-50 p-0.5 sm:p-1.5 flex flex-col gap-0.5 sm:gap-1
+                overflow-hidden aspect-square sm:aspect-auto sm:min-h-[132px] ${
                 inMonth ? 'bg-white' : 'bg-gray-50/60'
               } ${idx % 7 === 6 ? 'border-r-0' : ''}`}
-              /* The week ROW grows to fit its busiest day rather than each cell
-                 scrolling internally — a day with one job shows it full size. */
-              style={{ minHeight: 132 }}
+              /* On a phone a seventh of the width is ~52px, and the old fixed
+                 132px height turned every day into a long-necked rectangle —
+                 SQUARES read as a calendar. From sm up the week row grows to
+                 fit its busiest day instead, so one job shows full size. */
             >
               <div className="flex items-center justify-center">
                 <span
@@ -210,7 +213,7 @@ export function TaskCalendar({
                       }`}
                       style={{
                         border: `${compact ? 2 : 3}px solid ${accent}`,
-                        padding: compact ? '2px 4px' : '4px 6px',
+                        padding: compact ? '1px 3px' : '3px 5px',
                       }}
                     >
                       <span className={`block font-bold truncate ${roomy ? 'text-[12px]' : compact ? 'text-[9px]' : 'text-[10.5px]'}`}

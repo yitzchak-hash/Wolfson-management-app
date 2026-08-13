@@ -1066,12 +1066,16 @@ export function ContractorPortal() {
           .filter(a => !!a.dueDate)
           .map(a => {
             const apt = getApt(a.apartmentId);
+            const st = stages.find(x => x.id === a.stageId);
             return {
               id: a.id,
               date: a.dueDate!,
               title: a.taskDescription,
               subtitle: apt ? aptLabel(apt) : a.buildingId,
-              color: catColor,
+              // The stage's colour inside the day; the trade colour only for
+              // a task with no stage.
+              color: st?.color ?? catColor,
+              node: st ? { stageName: st.name, stageColor: st.color } : undefined,
               completed: !!a.completedAt,
               onClick: () => setSelectedAssignment(a),
             };

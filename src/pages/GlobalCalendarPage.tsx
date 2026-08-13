@@ -78,12 +78,15 @@ export function GlobalCalendarPage() {
         if (!showCompleted && a.completedAt) continue;
         const apt = d.apartments.find(ap => ap.id === a.apartmentId);
         const contractor = contractors.find(c => c.id === a.contractorId);
+        const stage = (d.stages ?? []).find(st => st.id === a.stageId);
         out.push({
           id: `${d.projectId}:${a.id}`,
           date: a.dueDate,
           title: a.taskDescription,
           subtitle: `${projectName(d.projectId)} · ${apt ? aptLabel(apt) : a.buildingId}`,
-          color: contractor ? (CAT_COLORS[contractor.category] ?? '#6b7280') : '#6b7280',
+          // Stage colour first; the trade colour only when the task has none.
+          color: stage?.color ?? (contractor ? (CAT_COLORS[contractor.category] ?? '#6b7280') : '#6b7280'),
+          node: stage ? { stageName: stage.name, stageColor: stage.color } : undefined,
           completed: !!a.completedAt,
           onClick: () => {
             if (d.projectId !== currentProjectId) setCurrentProject(d.projectId);
