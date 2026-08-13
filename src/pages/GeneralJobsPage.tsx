@@ -25,6 +25,7 @@ import { allowed as sideAllowed, edgePushed, roomFor, shiftFor, shiftJobs, shift
 import { snapBox, Guide } from '../data/snapping';
 import { MiniMap } from '../components/board/MiniMap';
 import { DriveDesktopPath } from '../components/apartment/DriveDesktopPath';
+import { DeleteImpact } from '../components/ui/DeleteImpact';
 import { BinBoard } from '../components/board/BinBoard';
 import { BoardSearch, BoardHit } from '../components/board/BoardSearch';
 import { NodeSettings } from '../components/board/NodeSettings';
@@ -4249,12 +4250,7 @@ export function GeneralJobsPage() {
               <h2 className="text-lg font-bold text-gray-900 mb-2">
                 {deleteConfirm.ids.length === 1 ? s.deleteJobConfirm : `Delete ${deleteConfirm.ids.length} jobs?`}
               </h2>
-              {deleteConfirm.taskCount > 0 && (
-                <p className="text-sm text-gray-600 mb-1">
-                  <span className="font-semibold text-red-600">{deleteConfirm.taskCount} task{deleteConfirm.taskCount !== 1 ? 's' : ''}</span>{' '}
-                  and all associated notes will also be permanently deleted.
-                </p>
-              )}
+              <DeleteImpact aptIds={deleteConfirm.ids} />
               <p className="text-xs text-gray-400 mb-6">This cannot be undone.</p>
               <div className="flex gap-3 w-full">
                 <button

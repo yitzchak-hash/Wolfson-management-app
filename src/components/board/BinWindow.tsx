@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useDeleteImpactLine } from '../ui/DeleteImpact';
 import { X, Undo2, Trash2, Search } from 'lucide-react';
 import { useStore } from '../../data/store';
 import { Apartment, BIN_META, BinKind } from '../../types';
@@ -33,6 +34,9 @@ export function BinWindow({ bin, onClose, onOpenJob }: {
   const theme = getBoardTheme(boardSettings[currentProjectId]?.themeId);
   const [query, setQuery] = useState('');
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  // What the pending delete takes with it, said ON the button — this confirm
+  // has no room for a modal, but it must not have less truth than one.
+  const impactLine = useDeleteImpactLine(confirmId);
 
   const items = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -125,9 +129,10 @@ export function BinWindow({ bin, onClose, onOpenJob }: {
                         confirmId === a.id ? (
                           <button
                             onClick={() => { deleteApartment(a.id); setConfirmId(null); }}
+                            title={impactLine}
                             className="flex items-center gap-1 text-[11px] font-bold text-white bg-red-600 px-2 py-1 rounded-lg"
                           >
-                            <Trash2 size={11} /> Delete forever
+                            <Trash2 size={11} /> Delete forever{impactLine !== 'nothing else attached' ? ' — ' + impactLine : ''}
                           </button>
                         ) : (
                           <button

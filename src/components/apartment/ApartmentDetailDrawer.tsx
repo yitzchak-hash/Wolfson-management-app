@@ -9,6 +9,7 @@ import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBacken
 import { Tooltip } from '../ui/Tooltip';
 import { DriveStatus, driveStateOf } from '../ui/DriveStatus';
 import { DriveDesktopPath } from './DriveDesktopPath';
+import { DeleteImpact } from '../ui/DeleteImpact';
 import { LinkField } from '../ui/LinkField';
 import { printSheet, printEsc } from '../../data/printing';
 import { PlanPinOverlay } from './PlanPinOverlay';
@@ -717,12 +718,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 {isGeneralProject ? ui.deleteJobConfirm : `${ui.deleteApartmentLabel}?`}
               </h3>
               <p className="text-sm font-medium text-gray-700 mb-2">"{label}"</p>
-              {aptTaskCount > 0 && (
-                <p className="text-sm text-gray-600 mb-1">
-                  <span className="font-semibold text-red-600">{aptTaskCount} task{aptTaskCount !== 1 ? 's' : ''}</span>{' '}
-                  and all associated notes will also be permanently deleted.
-                </p>
-              )}
+              <DeleteImpact aptIds={[apartment.id]} />
               <p className="text-xs text-gray-400 mb-5">This cannot be undone.</p>
               <div className="flex gap-3">
                 <button

@@ -276,6 +276,11 @@ interface AppState {
   addApartment: (apt: Apartment) => void;
   /** PERMANENT, cascading. Only reachable from the Trash window. */
   deleteApartment: (id: string) => void;
+  /** Counts of everything a delete would take with it — for the warning. */
+  deletionImpact: (id: string) => {
+    tasks: number; photos: number; workerNotes: number;
+    stageNotes: number; pins: number; markups: number;
+  };
   /** Move a job into a board bin (or back to the board with null). Never destroys anything. */
   moveToBin: (id: string, bin: string | null) => void;
   /** Extra board position for the SAME job — one record, drawn twice. */
@@ -980,23 +985,53 @@ export const useStore = create<AppState>((set, get) => ({
     if (updated) fsSet(projectCollection(pid, 'apartments'), id, updated);
   },
 
+  /**
+   * What deleting this job takes with it — counted BEFORE the act, so every
+   * confirm dialog can say the same true thing. One source for the numbers,
+   * or the board's warning and the drawer's warning drift into two answers.
+   */
+  deletionImpact: (id) => {
+    const st = get();
+    const assignments = st.contractorAssignments.filter(a => a.apartmentId === id);
+    const aids = new Set(assignments.map(a => a.id));
+    return {
+      tasks: assignments.length,
+      photos: st.contractorPhotos.filter(p => aids.has(p.assignmentId)).length,
+      workerNotes: st.contractorNotes.filter(n => aids.has(n.assignmentId)).length,
+      stageNotes: st.stageNotes.filter(n => n.apartmentId === id && (n.noteText ?? '').trim()).length,
+      pins: st.planPins.filter(p => p.apartmentId === id).length,
+      markups: st.planAnnotations.filter(m => m.apartmentId === id).length,
+    };
+  },
+
   deleteApartment: (id) => {
     const state = get();
     const pid = state.currentProjectId;
 
-    // Collect all linked records to cascade-delete
+    // Collect all linked records to cascade-delete. EVERYTHING that points at
+    // the job goes with it: leaving orphans behind is how a count on one page
+    // disagrees with a count on another six months later.
     const linkedAssignments = state.contractorAssignments.filter(a => a.apartmentId === id);
     const linkedIds = new Set(linkedAssignments.map(a => a.id));
     const linkedNotes  = state.contractorNotes.filter(n => linkedIds.has(n.assignmentId));
     const linkedPhotos = state.contractorPhotos.filter(p => linkedIds.has(p.assignmentId));
     const linkedStageNotes = state.stageNotes.filter(n => n.apartmentId === id);
+    const linkedPins = state.planPins.filter(p => p.apartmentId === id);
+    const linkedMarkups = state.planAnnotations.filter(m => m.apartmentId === id);
+
+    // A merged partner keeps living — but its link must not point at a ghost.
+    const partnerId = state.apartments.find(a => a.id === id)?.mergedWith;
 
     set(st => ({
-      apartments:            st.apartments.filter(a => a.id !== id),
+      apartments: st.apartments
+        .filter(a => a.id !== id)
+        .map(a => (a.id === partnerId ? { ...a, mergedWith: undefined } : a)),
       contractorAssignments: st.contractorAssignments.filter(a => a.apartmentId !== id),
       contractorNotes:       st.contractorNotes.filter(n => !linkedIds.has(n.assignmentId)),
       contractorPhotos:      st.contractorPhotos.filter(p => !linkedIds.has(p.assignmentId)),
       stageNotes:            st.stageNotes.filter(n => n.apartmentId !== id),
+      planPins:              st.planPins.filter(p => p.apartmentId !== id),
+      planAnnotations:       st.planAnnotations.filter(m => m.apartmentId !== id),
     }));
     persist(get);
 
@@ -1006,6 +1041,12 @@ export const useStore = create<AppState>((set, get) => ({
     linkedNotes.forEach(n  => fsDelete(projectCollection(pid, 'contractorNotes'), n.id));
     linkedPhotos.forEach(p => fsDelete(projectCollection(pid, 'contractorPhotos'), p.id));
     linkedStageNotes.forEach(n => fsDelete(projectCollection(pid, 'stageNotes'), n.id));
+    linkedPins.forEach(p => fsDelete(projectCollection(pid, 'planPins'), p.id));
+    linkedMarkups.forEach(m => fsDelete(projectCollection(pid, 'planAnnotations'), m.id));
+    if (partnerId) {
+      const partner = get().apartments.find(a => a.id === partnerId);
+      if (partner) fsSet(projectCollection(pid, 'apartments'), partner.id, partner);
+    }
   },
 
   boardViews: (stored?.boardViews as BoardView[] | null) ?? [],

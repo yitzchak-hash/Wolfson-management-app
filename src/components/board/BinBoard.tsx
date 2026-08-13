@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState, useCallback, useEffect } from 'react';
+import { useDeleteImpactLine } from '../ui/DeleteImpact';
 import {
   X, Undo2, Trash2, Search, StickyNote, Square, LayoutGrid, Settings2, Plus,
 } from 'lucide-react';
@@ -57,6 +58,9 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId }: {
 
   const [query, setQuery] = useState('');
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  // What the pending delete takes with it, said ON the button — this confirm
+  // has no room for a modal, but it must not have less truth than one.
+  const impactLine = useDeleteImpactLine(confirmId);
   const [storeOpen, setStoreOpen] = useState(false);
   const [settingsId, setSettingsId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -537,8 +541,9 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId }: {
                       {bin.binKind === 'trash' && (
                         confirmId === a.id ? (
                           <button data-no-drag onClick={() => { deleteApartment(a.id); setConfirmId(null); }}
+                            title={impactLine}
                             className="flex items-center gap-1 text-[10px] font-bold text-white bg-red-600 px-1.5 py-0.5 rounded-md">
-                            <Trash2 size={10} /> Forever
+                            <Trash2 size={10} /> Forever{impactLine !== 'nothing else attached' ? ' — ' + impactLine : ''}
                           </button>
                         ) : (
                           <button data-no-drag onClick={() => setConfirmId(a.id)}
