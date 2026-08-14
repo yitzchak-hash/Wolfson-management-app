@@ -1889,13 +1889,29 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   className="p-1 rounded-lg text-gray-400 hover:text-gray-700"><ChevronRight size={15} /></button>
               </Tooltip>
             </div>
-            <iframe
-              src={drivePreviewUrl(shownPlanId ?? detectedPdfId!)}
-              title={ui.engineeringPlans}
-              className="flex-1 w-full"
-              style={{ border: 'none' }}
-              allow="autoplay"
-            />
+            {/*
+              The viewer and the punch-list pins, in one relatively-positioned
+              box. The overlay was imported and never mounted after the plan
+              pane moved here — so the office had NO way to place a pin, and
+              the portal was showing a punch list nobody could write. The Pin
+              button arms placing; a click on the plan drops a numbered pin;
+              the pin's note and done-state live in the planPins collection the
+              contractor's read-only copy draws from.
+            */}
+            <div className="relative flex-1 min-h-0">
+              <iframe
+                src={drivePreviewUrl(shownPlanId ?? detectedPdfId!)}
+                title={ui.engineeringPlans}
+                className="w-full h-full"
+                style={{ border: 'none' }}
+                allow="autoplay"
+              />
+              <PlanPinOverlay
+                apartmentId={apartment.id}
+                apartmentLabel={aptLabel(apartment)}
+                authorName={currentUser?.name ?? ''}
+              />
+            </div>
           </div>
         )}
         </div>
