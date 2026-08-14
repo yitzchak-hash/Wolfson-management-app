@@ -205,6 +205,21 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   /** Drive folder health, checked once when the Photos tab is opened. */
   const [folderHealth, setFolderHealth] = useState<FolderHealth | null>(null);
   const [checkingHealth, setCheckingHealth] = useState(false);
+
+  /**
+   * The deep folder check, on demand — does the service account actually
+   * reach the folder, is there a Photos subfolder, an Engineered Plans
+   * folder, a PDF inside it. One runner shared by the Drive row and the
+   * photos tab, so their answers can never disagree; the refresh at the end
+   * of the status simply runs it again.
+   */
+  async function runHealthCheck() {
+    if (!apartment?.driveLink) return;
+    setCheckingHealth(true);
+    setFolderHealth(await checkFolderHealthViaBackend(apartment.driveLink, apartment.plansPdfLink)
+      .catch(() => ({ mainFolderLinked: true, plansPdfLinked: !!apartment.plansPdfLink, mainFolderAccessible: false })));
+    setCheckingHealth(false);
+  }
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showContractorStatus, setShowContractorStatus] = useState(false);
   const [unmergeTarget, setUnmergeTarget] = useState<Apartment | null>(null);
@@ -1255,11 +1270,44 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                      folder the link points at, not on the link. */
                   actions={<DriveDesktopPath driveLink={driveLink} onToast={onToast} />}
                   hint={
-                    <span className="flex items-center gap-1.5 text-[10.5px] text-gray-400">
+                    <span className="flex items-center gap-1.5 text-[10.5px] text-gray-400 flex-wrap">
                       <DriveStatus job={apartment} />
                       {driveLink
                         ? (detectedPdfId ? 'Plans found' : fetchingPdf ? 'Looking for plans…' : 'No plans in this folder yet')
                         : 'Nothing linked'}
+                      {/* The deep status, back where it used to live — on the
+                          Drive row — with the refresh at the end of it. */}
+                      {driveLink && backendConfigured && (
+                        folderHealth === null ? (
+                          <button type="button" onClick={runHealthCheck} disabled={checkingHealth}
+                            className="font-bold text-[#4aa8d8] hover:underline disabled:opacity-50">
+                            {checkingHealth ? 'Checking…' : 'Status'}
+                          </button>
+                        ) : (() => {
+                          const issues: string[] = [];
+                          if (!folderHealth.mainFolderAccessible) issues.push('folder not reachable');
+                          else {
+                            if (!folderHealth.photosFolderFound) issues.push('no Photos folder');
+                            if (!folderHealth.plansFolderFound) issues.push('no Engineered Plans folder');
+                            else if (!folderHealth.plansPdfFound) issues.push('no plan PDF inside it');
+                          }
+                          const ok = issues.length === 0;
+                          return (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full font-bold"
+                              style={ok
+                                ? { backgroundColor: '#dcfce7', color: '#166534' }
+                                : { backgroundColor: '#fef3c7', color: '#92400e' }}>
+                              {ok ? 'Folder complete' : issues.join(' · ')}
+                              <button type="button" onClick={runHealthCheck} disabled={checkingHealth}
+                                title="Check it again"
+                                className="disabled:opacity-50"
+                                style={{ color: 'inherit' }}>
+                                <RefreshCw size={10} className={checkingHealth ? 'animate-spin' : ''} />
+                              </button>
+                            </span>
+                          );
+                        })()
+                      )}
                     </span>
                   }
                 />
@@ -1661,12 +1709,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 <div className="mb-3 flex items-center gap-2 text-[11px]">
                   {folderHealth === null ? (
                     <button
-                      onClick={async () => {
-                        setCheckingHealth(true);
-                        setFolderHealth(await checkFolderHealthViaBackend(apartment.driveLink, apartment.plansPdfLink)
-                          .catch(() => ({ mainFolderLinked: true, plansPdfLinked: !!apartment.plansPdfLink, mainFolderAccessible: false })));
-                        setCheckingHealth(false);
-                      }}
+                      onClick={runHealthCheck}
                       disabled={checkingHealth}
                       className="text-gray-400 hover:text-gray-600 font-semibold"
                     >
@@ -1691,6 +1734,10 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                       >
                         <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: ok ? '#16a34a' : '#d97706' }} />
                         {ok ? 'Drive folder complete' : issues.join(' · ')}
+                        <button type="button" onClick={runHealthCheck} disabled={checkingHealth}
+                          title="Check it again" className="disabled:opacity-50" style={{ color: 'inherit' }}>
+                          <RefreshCw size={11} className={checkingHealth ? 'animate-spin' : ''} />
+                        </button>
                       </span>
                     );
                   })()}
