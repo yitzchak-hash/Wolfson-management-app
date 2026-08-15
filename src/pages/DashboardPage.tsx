@@ -705,6 +705,7 @@ export function DashboardPage() {
 
       {storeOpen && (
         <WidgetStore
+          destLabel="the dashboard"
           onPick={def => {
             addCanvasElement({
               id: `CE-${Math.random().toString(36).slice(2, 9)}`,

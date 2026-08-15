@@ -21,6 +21,56 @@ import { WIDGET_PREVIEW, WIDGET_PREVIEW_COLOR } from '../../data/widgetFields';
 const CARD_W = 340, CARD_H = 240;
 
 /**
+ * The shelf's zoom, remembered per machine.
+ *
+ * Shopping for widgets is done with the eyes: some people want six small
+ * cards across, some want two big ones. The slider scales the card, and the
+ * preview inside scales with it because the card's box is what the preview
+ * is fitted to.
+ */
+const SIZE_KEY = 'widget_store_scale';
+
+/**
+ * Which widgets arrived RECENTLY, newest first.
+ *
+ * A hand-kept list rather than a timestamp on every entry: the registry has
+ * no dates, and what the office means by "new" is "the last couple of
+ * rounds", which is exactly what this is. Trim from the bottom as things stop
+ * being news.
+ */
+const RECENT: string[] = [
+  'open-snags', 'no-date', 'gone-quiet', 'nobody-booked', 'backlog-trend',
+  'no-plan', 'floor-by-floor', 'duplicates', 'skipped-stage',
+  'map', 'weather', 'tap-in', 'shabbat', 'world-clocks',
+  'btu-hp', 'streak', 'spin', 'bubble-wrap', 'celebrate', 'tiktok',
+];
+
+/**
+ * Finer shelves INSIDE the big categories, so 'Live' is not forty cards in
+ * one undifferentiated wall. A widget without an entry falls to the
+ * category's own tail — the map is a guide, not a cage.
+ */
+const SUBGROUP: Record<string, string> = {
+  kpi: 'Counts and numbers', 'count-by-stage': 'Counts and numbers',
+  'progress-ring': 'Counts and numbers', 'bin-counter': 'Counts and numbers',
+  'stage-legend': 'Counts and numbers', 'stage-funnel': 'Counts and numbers',
+  'overdue-list': 'Lists that chase', 'due-today': 'Lists that chase',
+  'job-list': 'Lists that chase', 'recent-jobs': 'Lists that chase',
+  'no-date': 'What is NOT happening', 'gone-quiet': 'What is NOT happening',
+  'nobody-booked': 'What is NOT happening', 'backlog-trend': 'What is NOT happening',
+  'open-snags': 'What is NOT happening', 'no-plan': 'What is NOT happening',
+  'floor-by-floor': 'What is NOT happening', duplicates: 'What is NOT happening',
+  'skipped-stage': 'What is NOT happening',
+  'contractor-load': 'People', 'team-today': 'People', 'tap-in': 'People',
+  'contractor-links': 'People',
+  'recent-photos': 'Photos', 'photo-review': 'Photos',
+  'activity-feed': 'The pulse', 'job-search': 'The pulse', 'job-find': 'The pulse',
+  'project-mini': 'Other workspaces', 'board-mini': 'Other workspaces',
+  'project-glance': 'Other workspaces', 'calendar-mini': 'Other workspaces',
+  map: 'Site and weather', weather: 'Site and weather',
+};
+
+/**
  * The shelf.
  *
  * Three things were wrong with it as a place to shop rather than as a list.
@@ -54,8 +104,12 @@ function otherIdForPreview(projects: Project[], currentId: string): string {
   return others.find(p => drawable(p.id))?.id ?? currentId;
 }
 
-export function WidgetStore({ onPick, onClose, only }: {
+export function WidgetStore({ onPick, onClose, only, destLabel = 'the board' }: {
   onPick: (def: WidgetDef) => void;
+  /** Where a taken widget lands — 'the board' or 'the dashboard'. The button
+      says so, because "Add to the board" pressed on the dashboard reads as
+      the wrong destination. */
+  destLabel?: string;
   onClose: () => void;
   /**
    * Narrow the shelf to a set of ids.
@@ -67,7 +121,13 @@ export function WidgetStore({ onPick, onClose, only }: {
   only?: Set<string>;
 }) {
   const [q, setQ] = useState('');
-  const [cat, setCat] = useState<WidgetCategory | 'all'>('all');
+  const [cat, setCat] = useState<WidgetCategory | 'all' | 'recent'>('all');
+  const [scale, setScale] = useState(() => {
+    const v = Number(localStorage.getItem(SIZE_KEY));
+    return v >= 0.7 && v <= 1.5 ? v : 1;
+  });
+  const pickScale = (v: number) => { setScale(v); localStorage.setItem(SIZE_KEY, String(v)); };
+  const [sort, setSort] = useState<'useful' | 'az' | 'new'>('useful');
   /** What you have taken this visit, so the shelf can say so. */
   const [taken, setTaken] = useState<Record<string, number>>({});
   const searchRef = useRef<HTMLInputElement>(null);
@@ -131,16 +191,37 @@ export function WidgetStore({ onPick, onClose, only }: {
         || w.blurb.toLowerCase().includes(needle));
   }, [q, only]);
 
-  /** A row per group, each in its own order of usefulness. */
-  const groups = useMemo(() => (['live', 'plan', 'ref', 'visual'] as WidgetCategory[])
-    .map(c => ({
-      c,
-      items: matches
-        .filter(w => w.category === c)
-        .sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99) || a.name.localeCompare(b.name)),
-    }))
-    .filter(g => g.items.length > 0 && (cat === 'all' || cat === g.c)),
-  [matches, cat]);
+  /** A row per group, each in the chosen order, split into finer shelves. */
+  const order = useMemo(() => {
+    const recentRank = new Map(RECENT.map((id, i) => [id, i]));
+    return (a: WidgetDef, b: WidgetDef) => {
+      if (sort === 'az') return a.name.localeCompare(b.name);
+      if (sort === 'new') {
+        const ra = recentRank.get(a.id) ?? 999, rb = recentRank.get(b.id) ?? 999;
+        return ra - rb || a.name.localeCompare(b.name);
+      }
+      return (a.rank ?? 99) - (b.rank ?? 99) || a.name.localeCompare(b.name);
+    };
+  }, [sort]);
+
+  const groups = useMemo(() => {
+    const pool = cat === 'recent' ? matches.filter(w => RECENT.includes(w.id)) : matches;
+    return (['live', 'plan', 'ref', 'visual'] as WidgetCategory[])
+      .map(c => {
+        const items = pool.filter(w => w.category === c).sort(order);
+        // The finer shelves: clusters in first-appearance order, unmapped last.
+        const shelves: { name: string; items: WidgetDef[] }[] = [];
+        for (const w of items) {
+          const name = SUBGROUP[w.id] ?? '';
+          let shelf = shelves.find(x => x.name === name);
+          if (!shelf) { shelf = { name, items: [] }; shelves.push(shelf); }
+          shelf.items.push(w);
+        }
+        shelves.sort((a, b) => (a.name === '' ? 1 : 0) - (b.name === '' ? 1 : 0));
+        return { c, items, shelves };
+      })
+      .filter(g => g.items.length > 0 && (cat === 'all' || cat === 'recent' || cat === g.c));
+  }, [matches, cat, order]);
 
   /**
    * Live pieces of the other workspaces.
@@ -203,20 +284,40 @@ export function WidgetStore({ onPick, onClose, only }: {
           </div>
 
           <div className="mt-3 flex items-center gap-2 flex-wrap">
-            {(['all', 'live', 'plan', 'ref', 'visual'] as const).map(c => {
+            {(['all', 'recent', 'live', 'plan', 'ref', 'visual'] as const).map(c => {
               const on = cat === c;
-              const n = c === 'all' ? matches.length : matches.filter(w => w.category === c).length;
+              const n = c === 'all' ? matches.length
+                : c === 'recent' ? matches.filter(w => RECENT.includes(w.id)).length
+                : matches.filter(w => w.category === c).length;
               return (
                 <button key={c} onClick={() => setCat(c)}
                   className="flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-bold transition-colors"
                   style={on
                     ? { backgroundColor: '#fff', color: '#1e3a5f' }
                     : { backgroundColor: 'rgba(255,255,255,.12)', color: 'rgba(255,255,255,.82)' }}>
-                  {c === 'all' ? 'Everything' : CATEGORY_LABEL[c]}
+                  {c === 'all' ? 'Everything' : c === 'recent' ? 'Recently added' : CATEGORY_LABEL[c]}
                   <span className="text-[11px] font-extrabold opacity-60">{n}</span>
                 </button>
               );
             })}
+            <span className="flex-1" />
+            <select value={sort} onChange={e => setSort(e.target.value as typeof sort)}
+              title="Sort the shelf"
+              className="text-[12px] font-bold rounded-lg px-2 py-1.5 outline-none"
+              style={{ backgroundColor: 'rgba(255,255,255,.12)', color: '#fff' }}>
+              <option value="useful" style={{ color: '#111' }}>Most useful first</option>
+              <option value="az" style={{ color: '#111' }}>A to Z</option>
+              <option value="new" style={{ color: '#111' }}>Newest first</option>
+            </select>
+            {/* The shelf's zoom: smaller for six-across shopping, bigger for a
+                good look. It scales the card, and the preview follows. */}
+            <label className="flex items-center gap-1.5" title="Preview size">
+              <span className="text-[10px] font-bold text-white/60">A</span>
+              <input type="range" min={0.7} max={1.5} step={0.1} value={scale}
+                onChange={e => pickScale(Number(e.target.value))}
+                className="w-24 accent-white" />
+              <span className="text-[14px] font-bold text-white/60">A</span>
+            </label>
           </div>
         </div>
 
@@ -229,21 +330,32 @@ export function WidgetStore({ onPick, onClose, only }: {
             </div>
           )}
 
-          {groups.map(({ c, items }) => (
+          {groups.map(({ c, shelves }) => (
             <div key={c} className="mb-7">
               {/* Only when everything is shown. Filtered to one group, the
                   heading repeats the chip that is already lit above it. */}
-              {cat === 'all' && (
+              {(cat === 'all' || cat === 'recent') && (
                 <h3 className="text-[13px] font-extrabold text-gray-500 uppercase tracking-wide mb-3">
                   {CATEGORY_LABEL[c]}
                 </h3>
               )}
-              <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${CARD_W}px, 1fr))` }}>
-                {items.map(w => (
-                  <WidgetCard key={w.id} def={w} ctx={shownCtx} onPick={take}
-                    taken={taken[w.id] ?? 0} picked={pickedForPreview[w.id]} />
-                ))}
-              </div>
+              {shelves.map(shelf => (
+                <div key={shelf.name || 'rest'} className="mb-4">
+                  {shelf.name && shelves.length > 1 && (
+                    <h4 className="text-[11px] font-bold text-gray-400 tracking-wide mb-2">
+                      {shelf.name}
+                    </h4>
+                  )}
+                  <div className="grid gap-3"
+                    style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${Math.round(CARD_W * scale)}px, 1fr))` }}>
+                    {shelf.items.map(w => (
+                      <WidgetCard key={w.id} def={w} ctx={shownCtx} onPick={take} scale={scale}
+                        destLabel={destLabel}
+                        taken={taken[w.id] ?? 0} picked={pickedForPreview[w.id]} />
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           ))}
 
@@ -278,7 +390,7 @@ export function WidgetStore({ onPick, onClose, only }: {
                         </p>
                         <span className="mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold text-white"
                           style={{ backgroundColor: '#4aa8d8' }}>
-                          <Plus size={11} /> Add to the board
+                          <Plus size={11} /> Add to {destLabel}
                         </span>
                       </div>
                     </div>
@@ -308,13 +420,17 @@ export function WidgetStore({ onPick, onClose, only }: {
  * placed widget starts with and is correctly empty — reusing it for the preview
  * is what made half the shelf blank.
  */
-function WidgetCard({ def, ctx, onPick, taken, picked }: {
+function WidgetCard({ def, ctx, onPick, taken, picked, scale = 1, destLabel = 'the board' }: {
   def: WidgetDef; ctx: WidgetCtx; onPick: (d: WidgetDef) => void; taken: number;
   /** A choice the shelf makes on the widget's behalf, for preview only. */
   picked?: Record<string, unknown>;
+  /** The shelf's zoom — the card grows and the preview grows with it. */
+  scale?: number;
+  destLabel?: string;
 }) {
   const Icon = def.icon;
   const isArt = def.id.startsWith('art-');
+  const CARD_W = 340 * scale, CARD_H = 240 * scale;
 
   const contain = Math.min((CARD_W - 16) / def.w, (CARD_H - 16) / def.h);
   // 2.4 rather than 1.5. The cap exists so a 30px pin does not become a poster,
@@ -403,7 +519,7 @@ function WidgetCard({ def, ctx, onPick, taken, picked }: {
           </p>
           <span className="mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold text-white"
             style={{ backgroundColor: '#4aa8d8' }}>
-            <Plus size={11} /> Add to the board
+            <Plus size={11} /> Add to {destLabel}
           </span>
         </div>
       </div>
