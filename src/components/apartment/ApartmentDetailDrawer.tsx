@@ -237,6 +237,27 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [shownPlanId, setShownPlanId] = useState<string | null>(null);
   /** The Drive folder's own title, so the link field can show it instead of a URL. */
   const [driveFolderName, setDriveFolderName] = useState('');
+  /**
+   * The plan pane is sized TO THE SHEET, not to whatever is left over.
+   *
+   * The Drive preview letterboxes the PDF inside its box, and the surround is
+   * black and cannot be turned off — so the only way to not see it is a box
+   * whose shape matches the page. Plans are A-series: portrait 1:√2 or
+   * landscape √2:1. The pane's width is derived from its height and the
+   * chosen orientation, remembered per machine (a preference of the eye, not
+   * of the data), and the fields keep a fixed readable column beside it.
+   */
+  const [planAspect, setPlanAspect] = useState<'portrait' | 'landscape'>(() =>
+    (localStorage.getItem('plan_pane_aspect') as 'portrait' | 'landscape') ?? 'landscape');
+  const pickAspect = (a: 'portrait' | 'landscape') => {
+    setPlanAspect(a);
+    localStorage.setItem('plan_pane_aspect', a);
+  };
+  const modalH = Math.min(980, window.innerHeight * 0.93);
+  const paneH = modalH - 56;                       // minus the navy header
+  const A4 = Math.SQRT2;
+  const planW = Math.round(planAspect === 'landscape' ? paneH * A4 : paneH / A4);
+
   /** The plan pane beside the fields — off when there is no plan to show. */
   const [planWanted, setPlanWanted] = useState(true);
   const [showHealthCheck, setShowHealthCheck] = useState(false);
@@ -776,7 +797,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           // Wide enough to hold the fields AND the plan side by side, but still
           // inset on every edge so it reads as a window over the board rather
           // than as a page you have navigated to.
-          width: planPaneOn ? 'min(1720px, 95vw)' : 'min(1020px, 94vw)',
+          width: planPaneOn ? `min(${560 + planW}px, 96vw)` : 'min(1020px, 94vw)',
           height: 'min(980px, 93vh)',
           transition: 'width 180ms ease',
         }}
@@ -876,7 +897,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         <div className="flex-1 min-h-0 flex">
         {/* ── Everything written down ── */}
         <div className="flex flex-col min-h-0 min-w-0"
-          style={{ flex: planPaneOn ? '0 0 46%' : '1 1 100%' }}>
+          style={{ flex: planPaneOn ? '0 0 560px' : '1 1 100%' }}>
 
         {/* Tabs */}
         <div className="flex border-b border-gray-200 flex-shrink-0 overflow-x-auto">
@@ -1922,6 +1943,19 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   )}
                 </button>
               </Tooltip>
+              {/* Which way the sheet faces. Wrong guess = black bars, so the
+                  choice is one press and remembered on this machine. */}
+              <span className="flex rounded-lg border border-gray-200 overflow-hidden mr-1">
+                {(['portrait', 'landscape'] as const).map(a => (
+                  <button key={a} onClick={() => pickAspect(a)}
+                    title={a === 'portrait' ? 'Portrait sheet' : 'Landscape sheet'}
+                    className="px-1.5 py-1 text-gray-400"
+                    style={planAspect === a ? { backgroundColor: '#1e3a5f', color: '#fff' } : undefined}>
+                    <span className="block border-2 border-current rounded-[2px]"
+                      style={a === 'portrait' ? { width: 8, height: 11 } : { width: 11, height: 8 }} />
+                  </button>
+                ))}
+              </span>
               {/* The PLANS folder, not the job folder — an architect opening
                   the drawing wants the folder the sheets are in. */}
               {planSet.plansFolderId && (
