@@ -129,6 +129,14 @@ interface DragState {
   dx: number;
   dy: number;
   moved: boolean;
+  /**
+   * When the drag FIRST pressed against a locked edge, or null while clear.
+   *
+   * The make-room question only fires after the tile has dwelt there — a slow,
+   * deliberate push. An aggressive fling that happens to end at the edge (like
+   * yanking a job out of a group window) must never raise it.
+   */
+  edgeSince?: number | null;
 }
 
 interface ResizeState {
@@ -1864,7 +1872,18 @@ export function GeneralJobsPage() {
       setGuides(snapped.guides);
     }
 
-    setDrag({ ...drag, dx, dy, moved: drag.moved || Math.abs(dx) > 4 || Math.abs(dy) > 4 });
+    // Is any dragged tile pressed against a locked edge right now?
+    let atEdge = false;
+    drag.ids.forEach(id => {
+      const st = drag.starts.get(id);
+      if (!st) return;
+      if (edgePushed(st.x + dx, st.y + dy)) atEdge = true;
+    });
+    setDrag({
+      ...drag, dx, dy,
+      moved: drag.moved || Math.abs(dx) > 4 || Math.abs(dy) > 4,
+      edgeSince: atEdge ? (drag.edgeSince ?? Date.now()) : null,
+    });
     setHoverBin(binAt(w0.x, w0.y)?.id ?? null);
     setRotaHover(anyRota() ? rotaCellAt(e.clientX, e.clientY) : null);
   }
@@ -1912,7 +1931,15 @@ export function GeneralJobsPage() {
           const side = edgePushed(rawX, rawY);
           if (side && !sideAllowed(projectBoard.expand, side)) pushed = pushed ?? side;
         });
-        if (pushed) setAskRoom(pushed);
+        /**
+         * Ask only after a DWELL at the edge — 350ms of standing there.
+         *
+         * A fling that ends at the edge is somebody moving fast, not somebody
+         * asking for room; the question popping up mid-flow read as the board
+         * expanding on its own.
+         */
+        const dwelt = drag.edgeSince != null && Date.now() - drag.edgeSince >= 350;
+        if (pushed && dwelt) setAskRoom(pushed);
 
         drag.ids.forEach(id => {
           const st = drag.starts.get(id)!;
@@ -3972,6 +3999,13 @@ export function GeneralJobsPage() {
             highlightJobId={searchHit}
             onClose={() => setOpenBin(null)}
             onOpenJob={j => setSelectedJob(j)}
+            onRestored={ids => {
+              // The landing is SEEN: close the window, pulse the returned job
+              // where it now stands on the board.
+              setOpenBin(null);
+              setSearchHit(ids[0]);
+              setTimeout(() => setSearchHit(null), 2600);
+            }}
           />
         );
       })()}

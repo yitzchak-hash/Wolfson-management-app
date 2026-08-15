@@ -38,12 +38,14 @@ const TILE_W = 190, TILE_H = 116;
  * The nodes on this board carry `board: <bin key>`, which is the only thing
  * separating them from the main board's nodes.
  */
-export function BinBoard({ bin, onClose, onOpenJob, highlightJobId }: {
+export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }: {
   bin: CanvasElement;
   onClose: () => void;
   onOpenJob: (job: Apartment) => void;
   /** A job arriving from search: pulsed so the eye lands on it. */
   highlightJobId?: string | null;
+  /** Jobs just dragged back out onto the board — the board pulses them in. */
+  onRestored?: (ids: string[]) => void;
 }) {
   const {
     apartments, stages, contractors, contractorAssignments, contractorPhotos, activityLogs, users,
@@ -70,7 +72,9 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId }: {
     { x: number; y: number; kind: 'canvas' | 'element' | 'job'; ids: string[]; wx?: number; wy?: number } | null>(null);
   const [drag, setDrag] = useState<
     { kind: 'job' | 'el'; ids: string[]; starts: Map<string, { x: number; y: number }>;
-      gx: number; gy: number; dx: number; dy: number; moved: boolean } | null>(null);
+      gx: number; gy: number; dx: number; dy: number; moved: boolean; out: boolean } | null>(null);
+  /** The window's outer frame — "out" is measured against THIS, not the scroller. */
+  const frameRef = useRef<HTMLDivElement>(null);
   const [resize, setResize] = useState<
     { id: string; startW: number; startH: number; startPX: number; startPY: number; dw: number; dh: number } | null>(null);
 
@@ -147,7 +151,7 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId }: {
     else items.forEach((a, i) => { if (ids.includes(a.id)) starts.set(a.id, jobPos(a, i)); });
 
     const p = toLocal(e);
-    setDrag({ kind, ids, starts, gx: p.x, gy: p.y, dx: 0, dy: 0, moved: false });
+    setDrag({ kind, ids, starts, gx: p.x, gy: p.y, dx: 0, dy: 0, moved: false, out: false });
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
 
@@ -155,11 +159,37 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId }: {
     if (!drag) return;
     const p = toLocal(e);
     const dx = p.x - drag.gx, dy = p.y - drag.gy;
-    setDrag({ ...drag, dx, dy, moved: drag.moved || Math.abs(dx) > 4 || Math.abs(dy) > 4 });
+    /**
+     * Past the window's edge with a job in hand means "back to the board".
+     *
+     * Measured against the window frame with a little margin, so grazing the
+     * border while arranging inside does not flicker the offer. Only jobs —
+     * a note dragged out of a group has nowhere meaningful to go.
+     */
+    let out = false;
+    if (drag.kind === 'job') {
+      const f = frameRef.current?.getBoundingClientRect();
+      if (f) {
+        const M = 14;
+        out = e.clientX < f.left - M || e.clientX > f.right + M
+           || e.clientY < f.top - M || e.clientY > f.bottom + M;
+      }
+    }
+    setDrag({ ...drag, dx, dy, out, moved: drag.moved || Math.abs(dx) > 4 || Math.abs(dy) > 4 });
   }
 
   function endDrag(job?: Apartment) {
     if (!drag) return;
+    if (drag.moved && drag.out && drag.kind === 'job') {
+      // Released outside the window: the job goes back to the main board, to
+      // exactly where it stood before it was filed — moveToBin(null) restores
+      // the old canvas position — and the board pulses it so the landing is
+      // seen rather than deduced.
+      drag.ids.forEach(id => moveToBin(id, null));
+      onRestored?.(drag.ids);
+      setDrag(null);
+      return;
+    }
     if (drag.moved) {
       drag.ids.forEach(id => {
         const st = drag.starts.get(id);
@@ -381,9 +411,23 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId }: {
   return (
     <>
       <div className="fixed inset-0 bg-black/45 z-[70]" onClick={onClose} />
+      {/* The offer, drawn OVER the backdrop while a job is held outside the
+          window: release here and it returns to the board. */}
+      {drag?.out && (
+        <div className="fixed inset-0 z-[75] pointer-events-none flex items-start justify-center pt-10">
+          <div className="px-4 py-2.5 rounded-full text-sm font-bold text-white shadow-2xl
+                          flex items-center gap-2 bin-window-in"
+            style={{ backgroundColor: '#16a34a' }}>
+            ↩ Release to put it back on the board
+          </div>
+        </div>
+      )}
       <div
+        ref={frameRef}
         className="fixed z-[80] flex flex-col bin-window-in"
         style={{
+          outline: drag?.out ? '3px dashed #16a34a' : undefined,
+          outlineOffset: 6,
           left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
           width: 'min(1080px, 95vw)', height: 'min(760px, 90vh)',
           ...(theme.frame ?? { padding: 0, borderRadius: 16, boxShadow: '0 18px 44px rgba(15,23,42,.3)' }),
