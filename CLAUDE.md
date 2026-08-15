@@ -1345,3 +1345,50 @@ somebody's accessibility setting, not a bug.
 simulated. **Wait before measuring opacity** — several of these controls carry `transition-all`, and
 reading in the same tick returns the value the transition is starting FROM, which reads as "these were
 never hover-gated" and is the test measuring its own impatience.
+
+
+---
+
+# v2 — the 31-item round (the last big list)
+
+## New rules that must not be broken
+- **Every update adds a What's New entry** (`src/data/whatsNew.tsx`): one dated entry, newest
+  first. The header sparkle wears a red dot until the newest date has been seen
+  (`whats_new_seen` in localStorage). The slides act out gestures with CSS vignettes — drawn,
+  never screenshotted, so they cannot rot.
+- **Every widget answers its pencil.** `WIDGET_FIELDS` carries a runtime floor
+  (`??= [title()]`) so a widget with no entry still opens a panel; the coverage check must be
+  RUNTIME (import the module), the static grep cannot see the floor.
+- **Every number opens its list.** `WidgetCtx.showList(title, jobIds)` — hosts draw
+  `WidgetListPopup` (MiniJob rows). The store shelf has no host, so it renders plain numbers.
+- **`settleDrop` on the board**: nothing lands under the floating header (its measured bottom,
+  in world coordinates), and locked edges keep a 10px lip. The make-room ask needs a 350ms
+  DWELL at the edge (`drag.edgeSince`) — a fling never asks.
+- **Search forgives** (`src/data/translit.ts`): consonant-skeleton matching Hebrew↔English,
+  wrong-keyboard-layout swap, threshold 0.45. Trash jobs never appear; Done/Ready/Archive
+  appear labeled. The digraph folding runs AGAIN after the vowel strip (Cohen/כהן).
+- **The planner asks** (`plannerAsk` in the store, `PlannerAskModal` in AppLayout): a dated
+  task on a planner job offers ghost / move / just-save. Admin layout only — the portal never
+  mounts it. Transient; excused in the backup audit.
+- **Palm rule, capture rule**: a press on a BUTTON inside a pointer-captured surface must skip
+  the capture (the map's corner buttons died because a captured release retargets the click to
+  the common ancestor).
+
+## New fields and settings
+- `Contractor.photosOptional` (photos required unless set), `Contractor.textScale` (portal
+  text size, synced like `lang`; the portal scales the ROOT font size so every rem follows).
+- Worker permission 16: `assignOthers` — reveals the contractor picker in the portal's task
+  form and unlocks the full unit list there.
+- The plan pane is sheet-shaped: width = height ÷/× √2, orientation chips remembered per
+  machine (`plan_pane_aspect`). Board default zoom per machine (`board_default_zoom_<pid>`).
+- `findPlanSetViaBackend` falls back to PDFs in the job folder ROOT when there is no
+  Engineered Plans subfolder — Job Board folders are often flat.
+- The map view is saved DEBOUNCED (800ms after rest), never per wheel tick; the previous
+  zoom's tiles stay underneath while new ones fade in; `loadedTileUrls` is module-level.
+- The dashboard edits like a home screen: move handle top-left (carry over a card to take its
+  slot; order is dense z rewritten whole), resize bottom-right only, snapping to whole columns
+  and 40px rows measured from the card's own rendered width.
+- The widget store: finer shelves (`SUBGROUP` map), `RECENT` hand-kept list backing the
+  Recently-added chip and Newest sort, size slider (`widget_store_scale`), `destLabel` prop
+  so the dashboard's button says where the widget lands.
+- Settings hints render as a ⓘ tooltip in the shared `Row` — never as inline explainer text.

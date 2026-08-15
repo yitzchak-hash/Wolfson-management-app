@@ -723,9 +723,25 @@ export async function findPlanSetViaBackend(driveLink: string): Promise<{
   try {
     const files = await listFolderViaBackend(folderId);
     const plansFolder = files.find(f => f.mimeType === FOLDER_MIME && isEngineeredPlansFolder(f.name));
-    if (!plansFolder) return { plansFolderId: null, plans: [] };
-    const { plans } = await listPlansViaBackend(plansFolder.id);
-    return { plansFolderId: plansFolder.id, plans };
+    if (plansFolder) {
+      const { plans } = await listPlansViaBackend(plansFolder.id);
+      return { plansFolderId: plansFolder.id, plans };
+    }
+    /**
+     * No Engineered Plans subfolder: fall back to the job folder itself.
+     *
+     * Job Board folders are often FLAT — the PDFs sit straight in the job's
+     * folder — and requiring the subfolder meant no chips, no folder to file a
+     * markup into, and 'why can't I select the plans' from anybody whose
+     * folders were organised that way. PDFs in the root become the plan set
+     * and markups file into an Annotated Plans child of the same folder.
+     */
+    const rootPdfs = files.filter(f => f.mimeType === 'application/pdf');
+    if (rootPdfs.length) {
+      const { plans } = await listPlansViaBackend(folderId);
+      return { plansFolderId: folderId, plans };
+    }
+    return { plansFolderId: null, plans: [] };
   } catch {
     return { plansFolderId: null, plans: [] };
   }
