@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { useStore, loadAllProjectsTaskData } from '../data/store';
 import { ContractorAssignment, ContractorPhoto, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, getStageName, aptLabel } from '../types';
 import { PlanPinOverlay } from '../components/apartment/PlanPinOverlay';
-import { printTable, printDot } from '../data/printing';
+import { printSheet, printEsc } from '../data/printing';
 import { format, isPast, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import {
   Camera, CheckCircle2, Clock, Building2, CalendarDays, FileText,
@@ -720,30 +720,81 @@ export function ContractorPortal() {
               want the day on paper — no signal in a stairwell, no battery
               anxiety on a site. */}
           <button
-            onClick={() => printTable(
-              `${contractor!.name} — tasks`,
-              [...assignments].sort((a, b) => (a.completedAt ? 1 : 0) - (b.completedAt ? 1 : 0)
-                || (a.dueDate ?? 'z').localeCompare(b.dueDate ?? 'z')),
-              [
-                { header: s.apartmentColumn, width: '110px', value: a => {
-                  const apt = apartments.find(x => x.id === a.apartmentId);
-                  return apt ? aptLabel(apt) : '—';
-                } },
-                { header: s.taskSingular, value: a => a.taskDescription || '—' },
-                { header: s.stageColumn, html: true, width: '120px', value: a => {
-                  const st = stages.find(x => x.id === a.stageId);
-                  return st ? printDot(st.color, getStageName(st, !!s.isRtl)) : '—';
-                } },
-                { header: s.duePrefix, width: '80px', value: a =>
-                  a.dueDate ? format(parseISO(a.dueDate), 'd MMM yyyy') : '—' },
-                { header: s.doneLabel, width: '54px', value: a => a.completedAt ? '✓' : '' },
-              ],
-              {
+            onClick={() => {
+              /**
+               * The day on paper, drawn as CARDS rather than a table.
+               *
+               * The paper goes in the van: what matters at arm's length is the
+               * job name big, the stage as a colour, the address, and whether
+               * it is late — the same reading order the portal itself uses.
+               * Grouped: overdue first, then today, then the rest, done last.
+               */
+              const e = printEsc;
+              const today = new Date().toISOString().slice(0, 10);
+              const groups: { label: string; tone: string; rows: typeof assignments }[] = [
+                { label: s.isRtl ? 'באיחור' : 'Overdue', tone: '#dc2626',
+                  rows: assignments.filter(a => !a.completedAt && a.dueDate && a.dueDate < today) },
+                { label: s.filterToday, tone: '#f97316',
+                  rows: assignments.filter(a => !a.completedAt && a.dueDate === today) },
+                { label: s.isRtl ? 'בהמשך' : 'Coming up', tone: '#1e3a5f',
+                  rows: assignments.filter(a => !a.completedAt && (!a.dueDate || a.dueDate > today)) },
+                { label: s.doneLabel, tone: '#16a34a',
+                  rows: assignments.filter(a => !!a.completedAt) },
+              ];
+              const card = (a: typeof assignments[0]) => {
+                const apt = apartments.find(x => x.id === a.apartmentId);
+                const st = stages.find(x => x.id === a.stageId);
+                const late = !a.completedAt && a.dueDate && a.dueDate < today;
+                return `<div class="card${a.completedAt ? ' done' : ''}"
+                    style="border-inline-start:6px solid ${e(st?.color ?? '#cbd5e1')}">
+                  <div class="row1">
+                    <span class="apt">${e(apt ? aptLabel(apt) : a.buildingId)}</span>
+                    ${a.dueDate ? `<span class="due${late ? ' late' : ''}">${
+                      e(format(parseISO(a.dueDate), 'd MMM'))}</span>` : ''}
+                    ${a.completedAt ? '<span class="tick">✓</span>' : ''}
+                  </div>
+                  ${apt?.address ? `<div class="addr">📍 ${e(apt.address)}</div>` : ''}
+                  <div class="task">${e(a.taskDescription || '—')}</div>
+                  ${st ? `<span class="stage" style="background:${e(st.color)}1f;color:${e(st.color)}">${
+                    e(getStageName(st, !!s.isRtl))}</span>` : ''}
+                </div>`;
+              };
+              const body = groups.filter(g => g.rows.length).map(g => `
+                <div class="grp">
+                  <div class="grpname" style="color:${g.tone}">
+                    ${e(g.label)} <span class="n">${g.rows.length}</span>
+                  </div>
+                  <div class="cards">${g.rows
+                    .sort((a, b) => (a.dueDate ?? 'z').localeCompare(b.dueDate ?? 'z'))
+                    .map(card).join('')}</div>
+                </div>`).join('');
+              printSheet(`${contractor!.name} — ${s.isRtl ? 'העבודה' : 'work'}`, body, {
                 rtl: !!s.isRtl,
-                subtitle: `${assignments.length} ${assignments.length === 1 ? s.taskSingular : s.taskPlural}`
+                subtitle: `${assignments.filter(a => !a.completedAt).length} ${s.isRtl ? 'פתוחות' : 'open'}`
                   + ` · ${assignments.filter(a => a.completedAt).length} ${s.doneLabel}`,
-              },
-            )}
+                css: `
+                  .grp { margin-bottom: 14px; }
+                  .grpname { font-size: 13px; font-weight: 800; letter-spacing: .04em;
+                             text-transform: uppercase; margin: 10px 0 6px; }
+                  .grpname .n { color: #94a3b8; font-weight: 700; }
+                  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+                  .card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 8px 10px;
+                          break-inside: avoid; }
+                  .card.done { opacity: .55; }
+                  .row1 { display: flex; align-items: baseline; gap: 8px; }
+                  .apt { font-size: 15px; font-weight: 800; }
+                  .due { margin-inline-start: auto; font-size: 11px; font-weight: 700;
+                         color: #475569; border: 1px solid #e2e8f0; border-radius: 999px;
+                         padding: 1px 8px; }
+                  .due.late { color: #dc2626; border-color: #fecaca; background: #fef2f2; }
+                  .tick { color: #16a34a; font-weight: 900; }
+                  .addr { font-size: 10.5px; color: #64748b; margin-top: 1px; }
+                  .task { font-size: 12px; margin-top: 4px; line-height: 1.35; }
+                  .stage { display: inline-block; margin-top: 5px; font-size: 9.5px;
+                           font-weight: 800; border-radius: 999px; padding: 2px 8px; }
+                `,
+              });
+            }}
             className="flex items-center px-2.5 py-1.5 rounded-lg border border-white/25 text-white/80 hover:bg-white/10 active:bg-white/20 transition-colors"
             title={s.printLabel}
           >
