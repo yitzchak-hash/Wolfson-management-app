@@ -270,6 +270,8 @@ export function GeneralJobsPage() {
   const wasPicked = useRef(false);
   const [selectedElIds, setSelectedElIds] = useState<Set<string>>(new Set());
   const [drag, setDrag] = useState<DragState | null>(null);
+  /** The floating header bar — its bottom edge is the drop ceiling. */
+  const headerBarRef = useRef<HTMLDivElement>(null);
   const [resize, setResize] = useState<ResizeState | null>(null);
   const [lasso, setLasso] = useState<LassoState | null>(null);
   const [ctxMenu, setCtxMenu] = useState<CtxMenu | null>(null);
@@ -1893,6 +1895,29 @@ export function GeneralJobsPage() {
     setRotaHover(overCell);
   }
 
+  /**
+   * Where a dropped node is allowed to SETTLE.
+   *
+   * Two rules, both about the top-left corner of the board:
+   *  · nothing lands under the floating header bar — an invisible line at its
+   *    bottom edge is the highest a node may sit in the current view;
+   *  · a locked edge is a wall with a LIP: instead of flush against 0, the
+   *    node stops a few pixels in, so it still reads as ON the board rather
+   *    than sliced by its rim.
+   */
+  const EDGE_LIP = 10;
+  function settleDrop(x: number, y: number): { x: number; y: number } {
+    let minY = EDGE_LIP;
+    const bar = headerBarRef.current;
+    const vp = viewportRef.current;
+    if (bar && vp && viewMode !== 'stages') {
+      const barBottom = bar.getBoundingClientRect().bottom - vp.getBoundingClientRect().top;
+      // The header's line, translated into world coordinates for THIS view.
+      minY = Math.max(minY, (barBottom + 6 - panRef2.current.y) / zoomRef.current);
+    }
+    return { x: Math.max(EDGE_LIP, Math.round(x)), y: Math.max(minY, Math.round(y)) };
+  }
+
   function onJobPointerUp(e: React.PointerEvent, job: Apartment) {
     setGuides([]);
     if (panRef.current && panFromJob.current) {
@@ -1948,8 +1973,7 @@ export function GeneralJobsPage() {
 
         drag.ids.forEach(id => {
           const st = drag.starts.get(id)!;
-          const x = Math.max(0, Math.round(st.x + drag.dx));
-          const y = Math.max(0, Math.round(st.y + drag.dy));
+          const { x, y } = settleDrop(st.x + drag.dx, st.y + drag.dy);
           if (activeBoardView) {
             const job = apartments.find(a => a.id === id);
             updateApartment(id, {
@@ -2107,7 +2131,8 @@ export function GeneralJobsPage() {
     if (drag.moved) {
       drag.ids.forEach(id => {
         const st = drag.starts.get(id)!;
-        updateCanvasElement(id, { x: Math.max(0, Math.round(st.x + drag.dx)), y: Math.max(0, Math.round(st.y + drag.dy)) });
+        const settled = settleDrop(st.x + drag.dx, st.y + drag.dy);
+        updateCanvasElement(id, settled);
       });
     } else if (el.type === 'bin' && el.binKind && drag.ids.length === 1 && drag.ids[0] === el.id) {
       // A press that never became a drag is a click, so the bin opens. Deciding
@@ -2778,7 +2803,7 @@ export function GeneralJobsPage() {
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-gray-50 relative">
       {/* ── Header ── */}
-      <div className={`flex items-center justify-between px-2 md:px-5 py-2 md:py-3 flex-shrink-0 gap-2 ${
+      <div ref={headerBarRef} className={`flex items-center justify-between px-2 md:px-5 py-2 md:py-3 flex-shrink-0 gap-2 ${
         floatingHeader
           // pointer-events-none on the strip, auto on the groups: the gaps
           // between the buttons stay board, so a drag started in the middle of
