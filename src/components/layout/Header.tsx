@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../data/store';
 import { Tooltip } from '../ui/Tooltip';
 import { ActivityTicker } from '../ui/ActivityTicker';
+import { WhatsNewButton } from '../ui/WhatsNew';
 import { GlobalSearch } from '../ui/GlobalSearch';
 import { subscribeCloudSync, isFirebaseConfigured } from '../../data/firebase';
 
@@ -143,6 +144,8 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-0.5 md:gap-2 flex-shrink-0">
+        {/* What the APP learned to do — left of what the office just did. */}
+        {currentUser && <WhatsNewButton />}
         {/* What just changed, and who did it — see ActivityTicker. */}
         {currentUser && <ActivityTicker light={lightTheme} />}
         <CloudSyncBadge light={lightTheme} />

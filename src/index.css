@@ -439,3 +439,83 @@ html, body {
   scrollbar-gutter: stable;
   padding-inline-end: 2px;
 }
+
+/* ── What's-new vignettes ─────────────────────────────────────────────────────
+   Small CSS scenes acting out a gesture — a tile carried to a slot, a finger
+   pressing, a pin dropping. Animated because the GESTURE is the lesson; drawn,
+   not screenshotted, so they cannot rot when the UI moves on.               */
+.wn-scene .wn-tile {
+  position: absolute; left: 12%; top: 34px;
+  width: 74px; height: 44px; border-radius: 8px;
+  background: #fff; border: 3px solid #b45309;
+  box-shadow: 0 2px 8px rgba(15,23,42,.12);
+}
+.wn-scene .wn-slot {
+  position: absolute; width: 74px; height: 44px; border-radius: 8px;
+  border: 2px dashed #94a3b8;
+}
+.wn-anim-drag { animation: wnDrag 2.2s ease-in-out infinite; }
+@keyframes wnDrag {
+  0%, 15%  { transform: none; }
+  55%, 80% { transform: translateX(190%) scale(1.04); box-shadow: 0 10px 22px rgba(15,23,42,.25); }
+  100%     { transform: translateX(190%); }
+}
+.wn-scene .wn-finger {
+  position: absolute; left: 52%; top: 44px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: rgba(30,58,95,.55);
+}
+.wn-anim-tap { animation: wnTap 1.6s ease-in-out infinite; }
+@keyframes wnTap {
+  0%, 30%  { transform: scale(1); box-shadow: none; }
+  45%      { transform: scale(.72); box-shadow: 0 0 0 10px rgba(30,58,95,.15); }
+  60%,100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(30,58,95,0); }
+}
+.wn-scene .wn-sheet {
+  position: absolute; left: 30%; top: 12px;
+  width: 40%; height: 88px; background: #fff;
+  border: 2px solid #cbd5e1; border-radius: 4px;
+}
+.wn-scene .wn-pin {
+  position: absolute; left: 47%; top: 0;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: #dc2626; color: #fff; font-size: 11px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+}
+.wn-anim-pin { animation: wnPin 1.8s cubic-bezier(.3,1.6,.5,1) infinite; }
+@keyframes wnPin {
+  0%, 12%  { transform: translateY(-24px); opacity: 0; }
+  40%, 85% { transform: translateY(38px); opacity: 1; }
+  100%     { transform: translateY(38px); opacity: 0; }
+}
+.wn-anim-zoom { animation: wnZoom 2.4s ease-in-out infinite; }
+@keyframes wnZoom {
+  0%, 20%  { transform: scale(.7); }
+  55%, 80% { transform: scale(1.25); }
+  100%     { transform: scale(.7); }
+}
+.wn-scene .wn-list { position: absolute; inset: 16px 20%; display: grid; gap: 8px; align-content: start; }
+.wn-scene .wn-row { height: 18px; border-radius: 6px; background: #fff; border: 1px solid #dbe4ee; }
+.wn-anim-row { animation: wnRow 1.9s ease-out infinite; }
+@keyframes wnRow {
+  0%       { transform: translateX(-14px); opacity: 0; }
+  25%, 85% { transform: none; opacity: 1; }
+  100%     { transform: none; opacity: 0; }
+}
+.wn-scene .wn-burst { position: absolute; inset: 0; }
+.wn-scene .wn-burst i {
+  position: absolute; left: 50%; top: 46%;
+  width: 6px; height: 6px; border-radius: 2px;
+  background: hsl(calc(var(--i) * 45), 85%, 55%);
+  animation: wnFly 1.7s ease-out infinite;
+  animation-delay: calc(var(--i) * 30ms);
+}
+@keyframes wnFly {
+  0%, 18% { transform: translate(-50%, -50%); opacity: 1; }
+  70%     { transform: translate(calc(-50% + (var(--i) - 3.5) * 24px), -46px); opacity: 0; }
+  100%    { opacity: 0; }
+}
+.wn-scene .wn-tick {
+  position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%);
+  font-size: 30px; font-weight: 900; color: #16a34a;
+}
