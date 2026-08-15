@@ -32,6 +32,7 @@ import { NodeSettings } from '../components/board/NodeSettings';
 import { BoardViewPicker } from '../components/board/BoardViewPicker';
 import { StageBoard } from '../components/board/StageBoard';
 import { WidgetStore } from '../components/board/WidgetStore';
+import { WidgetListPopup } from '../components/board/WidgetListPopup';
 import { WIDGETS } from '../data/widgets';
 import { TitleEditor } from '../components/board/TitleEditor';
 import {
@@ -272,6 +273,8 @@ export function GeneralJobsPage() {
   const [drag, setDrag] = useState<DragState | null>(null);
   /** The floating header bar — its bottom edge is the drop ceiling. */
   const headerBarRef = useRef<HTMLDivElement>(null);
+  /** A widget number clicked open: the list behind it. */
+  const [widgetList, setWidgetList] = useState<{ title: string; jobIds: string[] } | null>(null);
   const [resize, setResize] = useState<ResizeState | null>(null);
   const [lasso, setLasso] = useState<LassoState | null>(null);
   const [ctxMenu, setCtxMenu] = useState<CtxMenu | null>(null);
@@ -2641,6 +2644,8 @@ export function GeneralJobsPage() {
     // A job whose last square in the notebook was emptied comes back to the
     // board, at the position it never lost.
     leaveNotebook: (id: string) => leaveNotebookRef.current(id),
+    // Every widget figure opens the records it counted.
+    showList: (title: string, jobIds: string[]) => setWidgetList({ title, jobIds }),
   }), [apartments, allStages, contractorAssignments, contractors, contractorPhotos, activityLogs,
        users, canvasElements]);
 
@@ -4022,6 +4027,15 @@ export function GeneralJobsPage() {
       {storeOpen && <WidgetStore onPick={placeWidget} onClose={() => setStoreOpen(false)} />}
 
       {/* ── A group, opened as its own board ── */}
+      {widgetList && (
+        <WidgetListPopup
+          title={widgetList.title}
+          jobIds={widgetList.jobIds}
+          onOpenJob={id => openJobRef.current(id)}
+          onClose={() => setWidgetList(null)}
+        />
+      )}
+
       {openBin && (() => {
         const el = binNodes.find(b => binKeyOf(b) === openBin);
         if (!el) return null;

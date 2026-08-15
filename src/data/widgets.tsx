@@ -76,6 +76,15 @@ export interface WidgetCtx {
   notes?: ContractorNote[];
   planPins?: PlanPin[];
   /**
+   * "Show me the list behind this number."
+   *
+   * Every figure a widget draws should open the records it counted — a number
+   * you cannot look behind reads as a claim rather than a fact. The host draws
+   * the list (MiniJob rows, its own openJob); optional so the store's preview
+   * shelf, which has no board to open lists on, simply renders numbers.
+   */
+  showList?: (title: string, jobIds: string[]) => void;
+  /**
    * The payroll list and its taps.
    *
    * Same reason as the two above: the tap-in board reads them from the store,
@@ -243,9 +252,25 @@ export const WIDGETS: WidgetDef[] = [
         dueToday: [c.assignments.filter(a => !a.completedAt && a.dueDate === today()).length, 'due today', '#d97706'],
       };
       const [n, label, colour] = map[m] ?? map.openTasks;
+      // The jobs BEHIND the figure, for the click-through.
+      const jobsBehind: Record<string, () => string[]> = {
+        openTasks: () => [...new Set(c.assignments.filter(a => !a.completedAt).map(a => a.apartmentId))],
+        overdue: () => [...new Set(c.assignments.filter(overdueOf).map(a => a.apartmentId))],
+        jobs: () => c.jobs.map(j => j.id),
+        dueToday: () => [...new Set(c.assignments
+          .filter(a => !a.completedAt && a.dueDate === today()).map(a => a.apartmentId))],
+      };
       return (
         <Frame title={d(el).title || 'Live count'} icon={Gauge}>
-          <Big value={n} sub={label} color={colour} />
+          {c.showList ? (
+            <button data-no-drag data-el-action className="w-full text-left"
+              title="Show the list behind this number"
+              onClick={() => c.showList!(label, (jobsBehind[m] ?? jobsBehind.openTasks)())}>
+              <Big value={n} sub={label} color={colour} />
+            </button>
+          ) : (
+            <Big value={n} sub={label} color={colour} />
+          )}
         </Frame>
       );
     },
@@ -257,13 +282,19 @@ export const WIDGETS: WidgetDef[] = [
       <Frame title="Stages" icon={BarChart3}>
         <div className="flex flex-col gap-1 h-full overflow-y-auto pr-1">
           {c.stages.map(st => {
-            const n = c.jobs.filter(j => j.currentStageId === st.id).length;
+            const at = c.jobs.filter(j => j.currentStageId === st.id);
+            const Row = c.showList ? 'button' as const : 'div' as const;
             return (
-              <div key={st.id} className="flex items-center gap-1.5">
+              <Row key={st.id} className="flex items-center gap-1.5 text-left w-full"
+                {...(c.showList ? {
+                  'data-no-drag': true, 'data-el-action': true,
+                  title: `The ${at.length} at ${st.name}`,
+                  onClick: () => c.showList!(st.name, at.map(j => j.id)),
+                } : {})}>
                 <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: st.color }} />
                 <span className="text-[10.5px] text-gray-700 truncate flex-1">{st.name}</span>
-                <span className="text-[10.5px] font-bold tabular-nums" style={{ color: st.color }}>{n}</span>
-              </div>
+                <span className="text-[10.5px] font-bold tabular-nums" style={{ color: st.color }}>{at.length}</span>
+              </Row>
             );
           })}
           {c.stages.length === 0 && <span className="text-[10px] text-gray-400">No stages yet</span>}
@@ -911,11 +942,20 @@ export const WIDGETS: WidgetDef[] = [
       const st = c.stages.find(x => x.id === d(el).stageId) ?? c.stages[0];
       const only = (d(el).jobIds ?? []) as string[];
       const pool = only.length ? c.jobs.filter(j => only.includes(j.id)) : c.jobs;
-      const n = st ? pool.filter(j => j.currentStageId === st.id).length : 0;
+      const at = st ? pool.filter(j => j.currentStageId === st.id) : [];
+      const body = (
+        <Big value={at.length} sub={only.length ? `of ${pool.length} chosen jobs` : 'jobs at this stage'}
+          color={st?.color} />
+      );
       return (
         <Frame title={st?.name ?? 'Stage'} icon={Gauge} tone={st?.color}>
-          <Big value={n} sub={only.length ? `of ${pool.length} chosen jobs` : 'jobs at this stage'}
-            color={st?.color} />
+          {c.showList && st ? (
+            <button data-no-drag data-el-action className="w-full text-left"
+              title="Show these jobs"
+              onClick={() => c.showList!(st.name, at.map(j => j.id))}>
+              {body}
+            </button>
+          ) : body}
         </Frame>
       );
     },

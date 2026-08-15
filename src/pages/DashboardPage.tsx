@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useStore } from '../data/store';
+import { WidgetListPopup } from '../components/board/WidgetListPopup';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import {
@@ -15,7 +16,7 @@ import { NodeSettings } from '../components/board/NodeSettings';
 import { WidgetCtx, renderWidget as renderBoardWidget, WIDGET_BY_ID } from '../data/widgets';
 import { printSheet, printEsc } from '../data/printing';
 
-type ModalKind = 'changes' | 'notes' | 'overdue' | 'pending' | 'completedToday' | null;
+type ModalKind = 'changes' | 'notes' | 'total' | 'notStarted' | 'overdue' | 'pending' | 'completedToday' | null;
 
 /**
  * Analytics folded in here.
@@ -48,6 +49,8 @@ export function DashboardPage() {
     : allApartments;
   const navigate = useNavigate();
   const [modal, setModal] = useState<ModalKind>(null);
+  /** A widget number clicked open: the list behind it. */
+  const [widgetList, setWidgetList] = useState<{ title: string; jobIds: string[] } | null>(null);
   const [isCustomizing, setIsCustomizing] = useState(false);
   const [localOrder, setLocalOrder] = useState<string[]>([]);
   const [localHidden, setLocalHidden] = useState<string[]>([]);
@@ -109,6 +112,7 @@ export function DashboardPage() {
       setCurrentProject(id);
       navigate(id === 'general' ? '/jobs' : '/project');
     },
+    showList: (title: string, jobIds: string[]) => setWidgetList({ title, jobIds }),
   }), [apartments, sortedStages, liveAssignments, contractors, users,
        contractorPhotos, activityLogs, currentProjectId, navigate,
        setPendingOpenAptId, setCurrentProject]);
@@ -201,6 +205,8 @@ export function DashboardPage() {
   function getModalTitle() {
     if (modal === 'changes') return s.changes;
     if (modal === 'notes') return s.withNotes;
+    if (modal === 'total') return s.totalUnits;
+    if (modal === 'notStarted') return s.notStarted;
     if (modal === 'overdue') return s.overdueTasks;
     if (modal === 'pending') return s.pendingTasks;
     if (modal === 'completedToday') return s.completedToday;
@@ -290,8 +296,12 @@ export function DashboardPage() {
       case 'apt-stats':
         return (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <SummaryCard icon={<Building2 size={20} />} label={s.totalUnits} value={total} color="#1e3a5f" />
-            <SummaryCard icon={<Clock size={20} />} label={s.notStarted} value={notStarted} color="#6b7280" />
+            {/* EVERY number opens its list — a figure you cannot look behind
+                reads as a claim, not a fact. */}
+            <SummaryCard icon={<Building2 size={20} />} label={s.totalUnits} value={total} color="#1e3a5f"
+              onClick={() => setModal('total')} clickable />
+            <SummaryCard icon={<Clock size={20} />} label={s.notStarted} value={notStarted} color="#6b7280"
+              onClick={() => setModal('notStarted')} clickable />
             <SummaryCard
               icon={<AlertTriangle size={20} />}
               label={s.changes}
@@ -737,6 +747,16 @@ export function DashboardPage() {
       )}
 
       {/* Modal */}
+      {widgetList && (
+        <WidgetListPopup
+          title={widgetList.title}
+          jobIds={widgetList.jobIds}
+          onOpenJob={id => { setWidgetList(null); setPendingOpenAptId(id);
+            navigate(currentProjectId === 'general' ? '/jobs' : '/project'); }}
+          onClose={() => setWidgetList(null)}
+        />
+      )}
+
       {modal && (
         <div
           className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-2 sm:p-4"
@@ -757,10 +777,14 @@ export function DashboardPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto">
-              {(modal === 'changes' || modal === 'notes') && (() => {
+              {(modal === 'changes' || modal === 'notes' || modal === 'total' || modal === 'notStarted') && (() => {
                 const list = modal === 'changes'
                   ? apartments.filter(a => a.classification === 'shinui' && isCountableApartment(a))
-                  : apartments.filter(a => a.generalNotes.trim() && isCountableApartment(a));
+                  : modal === 'notes'
+                  ? apartments.filter(a => a.generalNotes.trim() && isCountableApartment(a))
+                  : modal === 'notStarted'
+                  ? apartments.filter(a => !a.currentStageId && isCountableApartment(a))
+                  : apartments.filter(isCountableApartment);
                 if (list.length === 0) {
                   return <div className="py-12 text-center text-gray-400 text-sm">No items</div>;
                 }
