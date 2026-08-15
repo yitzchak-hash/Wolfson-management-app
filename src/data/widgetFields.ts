@@ -127,6 +127,14 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
       hint: 'A1, A2, A3, B1 or B2 — one diagram instead of all of them side by side.',
     },
   ],
+  'project-glance': [
+    title(),
+    {
+      key: 'projectId', label: 'Which workspace', kind: 'project',
+      hint: 'The summary follows it live when it is the one you are in, and '
+        + 'from its last stored snapshot otherwise.',
+    },
+  ],
   'board-mini': [
     title(),
     // The board itself is chosen on the widget — a picker sitting on the thing
@@ -521,6 +529,25 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
     },
   ],
 };
+
+/**
+ * Every widget the store sells must answer its pencil with SOMETHING.
+ *
+ * A missing entry opened an empty settings panel, which reads as "the pencil
+ * is broken" — the same fault as the old startEdit bug wearing new clothes.
+ * The wall set and the few utility widgets take a title at minimum; anything
+ * needing more gets a real entry above. `??=` so a proper entry added later
+ * silently wins over this floor.
+ */
+for (const id of [
+  'job-find', 'sticky-pad', 'add-bin',
+  'tv-workspace', 'tv-out-today', 'tv-late', 'tv-week-done', 'tv-tomorrow',
+  'tv-stage-spread', 'tv-month', 'tv-photo', 'tv-photo-wall', 'tv-feed',
+  'tv-load', 'tv-waiting', 'tv-drive', 'tv-new', 'tv-done-today', 'tv-clock',
+]) {
+  WIDGET_FIELDS[id] ??= [title()];
+}
+
 
 /**
  * The type controls belong on anything that shows words.
