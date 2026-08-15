@@ -407,11 +407,28 @@ function FieldGroup({ name, count, open, onToggle, children }: {
 }
 
 function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  /**
+   * The hint is a TOOLTIP, not a paragraph.
+   *
+   * Every field used to print its explanation under itself, which turned a
+   * settings panel into a wall of grey text you read past to reach the
+   * controls. The label keeps a small ⓘ; hovering (or holding, on touch)
+   * shows the words. The explanation still exists — it just waits to be
+   * asked.
+   */
   return (
     <div>
-      <label className="block text-[10.5px] font-bold text-gray-500 mb-1">{label}</label>
+      <label className="flex items-center gap-1 text-[10.5px] font-bold text-gray-500 mb-1">
+        {label}
+        {hint && (
+          <span title={hint} aria-label={hint}
+            className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full
+                       bg-gray-100 text-gray-400 text-[9px] font-black cursor-help select-none">
+            i
+          </span>
+        )}
+      </label>
       {children}
-      {hint && <p className="text-[10px] text-gray-400 mt-1 leading-snug">{hint}</p>}
     </div>
   );
 }
@@ -889,9 +906,23 @@ function Field({ el, field, value, onChange, stages, jobs, contractors }: {
   if (f.kind === 'datetime') {
     return (
       <Row label={f.label} hint={f.hint}>
-        <input type="datetime-local" value={str.slice(0, 16)}
-          onChange={e => onChange(e.target.value ? new Date(e.target.value).toISOString() : undefined)}
-          className={box} />
+        <div className="flex items-center gap-1.5">
+          <input type="datetime-local" value={str.slice(0, 16)}
+            onChange={e => onChange(e.target.value ? new Date(e.target.value).toISOString() : undefined)}
+            className={`${box} flex-1`} />
+          {/*
+            An empty date field with no way to say "just use now" left the
+            widget looking unanchored. The Default button answers with the
+            obvious value; once a date is set it becomes a clear (back to the
+            default), so the field is never a dead end in either direction.
+          */}
+          <button type="button"
+            onClick={() => onChange(str ? undefined : new Date().toISOString())}
+            className="text-[10.5px] font-bold px-2 py-1.5 rounded-lg border border-gray-200
+                       text-gray-500 hover:text-[#1e3a5f] hover:border-[#4aa8d8] flex-shrink-0">
+            {str ? 'Clear' : 'Default'}
+          </button>
+        </div>
       </Row>
     );
   }
