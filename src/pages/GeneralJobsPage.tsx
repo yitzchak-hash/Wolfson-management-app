@@ -137,6 +137,8 @@ interface DragState {
    * yanking a job out of a group window) must never raise it.
    */
   edgeSince?: number | null;
+  /** The pointer is over a planner square or a group — the tile fades. */
+  overDrop?: boolean;
 }
 
 interface ResizeState {
@@ -1879,13 +1881,16 @@ export function GeneralJobsPage() {
       if (!st) return;
       if (edgePushed(st.x + dx, st.y + dy)) atEdge = true;
     });
+    const overBin = binAt(w0.x, w0.y);
+    const overCell = anyRota() ? rotaCellAt(e.clientX, e.clientY) : null;
     setDrag({
       ...drag, dx, dy,
       moved: drag.moved || Math.abs(dx) > 4 || Math.abs(dy) > 4,
       edgeSince: atEdge ? (drag.edgeSince ?? Date.now()) : null,
+      overDrop: !!overBin || !!overCell,
     });
-    setHoverBin(binAt(w0.x, w0.y)?.id ?? null);
-    setRotaHover(anyRota() ? rotaCellAt(e.clientX, e.clientY) : null);
+    setHoverBin(overBin?.id ?? null);
+    setRotaHover(overCell);
   }
 
   function onJobPointerUp(e: React.PointerEvent, job: Apartment) {
@@ -3387,6 +3392,8 @@ export function GeneralJobsPage() {
                   pendingTasks={pendingByJob.get(job.id) ?? 0}
                   isSelected={selectedJobIds.has(job.id)}
                   isDragging={drag?.kind === 'job' && drag.ids.includes(job.id) && drag.moved}
+                  translucent={drag?.kind === 'job' && drag.ids.includes(job.id) && drag.moved
+                    && !!drag.overDrop}
                   justChanged={!!changedAt && pulseNow - new Date(changedAt).getTime() < 25_000}
                   searchLit={searchHit === job.id}
                   fallbackBorder={(TILE_PALETTE.find(p => p.bg === job.tileColor) ?? TILE_PALETTE[0]).border}

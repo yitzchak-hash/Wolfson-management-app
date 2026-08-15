@@ -110,6 +110,11 @@ export interface JobTileProps {
   pendingTasks: number;
   isSelected: boolean;
   isDragging: boolean;
+  /**
+   * Held over a drop target — a planner square, a bin — so the tile goes
+   * see-through and the eye reads what is UNDER the hand instead.
+   */
+  translucent?: boolean;
   justChanged: boolean;
   searchLit: boolean;
   fallbackBorder: string;
@@ -129,7 +134,7 @@ export interface JobTileProps {
 
 export const JobTile = React.memo(function JobTile({
   job, index, x, y, w, h, stage, pendingTasks, isSelected, isDragging,
-  justChanged, searchLit, fallbackBorder, lastEdited, labels, H, ghostIndex,
+  justChanged, searchLit, fallbackBorder, lastEdited, labels, H, ghostIndex, translucent,
 }: JobTileProps) {
   const isGhost = ghostIndex !== undefined;
   return (
@@ -147,6 +152,8 @@ export const JobTile = React.memo(function JobTile({
       style={{
         left: x, top: y, width: w, height: h,
         touchAction: 'none',
+        opacity: translucent ? 0.45 : undefined,
+        transition: translucent !== undefined ? 'opacity 120ms ease' : undefined,
         // The stage colour is a THICK BORDER, never a fill. Flooding the tile
         // made the name, address and buttons unreadable at some stages; the
         // border carries the same information and leaves the content legible.

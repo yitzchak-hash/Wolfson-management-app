@@ -713,6 +713,11 @@ export function PlannerWidget({
                                 if (en.taskId && onRemoveTask) onRemoveTask(en, () => drop());
                                 else drop();
                               }}
+                              onDragOff={() => {
+                                const drop = () => setCell(key, entries.filter(x => x.id !== en.id));
+                                if (en.taskId && onRemoveTask) onRemoveTask(en, () => drop());
+                                else drop();
+                              }}
                               onDragTo={(target, copy) => moveEntry(key, en, target, copy)}
                             />
                           ))}
@@ -794,7 +799,7 @@ const SLOT_H = 58;
  * the job — the same rule as the board, so there is one habit to learn.
  */
 function PlannerCard({
-  entry, job, stages, assignments, color, size, bold, readOnly, onOpen, onText, onRemove, onDragTo,
+  entry, job, stages, assignments, color, size, bold, readOnly, onOpen, onText, onRemove, onDragOff, onDragTo,
 }: {
   entry: PlannerEntry;
   job?: Apartment;
@@ -807,6 +812,8 @@ function PlannerCard({
   onOpen: () => void;
   onText: (v: string) => void;
   onRemove: () => void;
+  /** Dropped outside the planner entirely — back to the board. */
+  onDragOff?: () => void;
   /** Dropped on another square. `copy` leaves this one where it is. */
   onDragTo?: (target: RotaHit, copy: boolean) => void;
 }) {
@@ -822,6 +829,7 @@ function PlannerCard({
    * square, because it is the same registry answering.
    */
   const drag = useRef<{ x: number; y: number; live: boolean } | null>(null);
+  const [held, setHeld] = useState(false);
   const dragHandlers = readOnly || !onDragTo ? {} : {
     onPointerDown: (e: React.PointerEvent) => {
       // NOT `closest('a,button')`: the job's name is itself a button, so that
@@ -836,11 +844,15 @@ function PlannerCard({
       if (!d) return;
       if (!d.live && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 4) return;
       d.live = true;
+      // Held and moving: the card goes see-through, so what is UNDER the hand
+      // — the square it will land in — is what the eye reads.
+      setHeld(true);
       setRotaHover(rotaCellAt(e.clientX, e.clientY));
     },
     onPointerUp: (e: React.PointerEvent) => {
       const d = drag.current;
       drag.current = null;
+      setHeld(false);
       (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
       if (!d?.live) {
         // A press that never travelled IS a click, and a click opens the job —
@@ -851,9 +863,18 @@ function PlannerCard({
       }
       const target = rotaCellAt(e.clientX, e.clientY);
       setRotaHover(null);
-      if (target) onDragTo!(target, e.ctrlKey || e.metaKey);
+      if (target) { onDragTo!(target, e.ctrlKey || e.metaKey); return; }
+      /**
+       * Released with no square under the hand: OFF the calendar.
+       *
+       * A job card dropped outside the planner goes back to the board — the
+       * same act as removing its last square, through the same onRemove path
+       * so the take-a-task-off question still fires when one is attached.
+       * Free words stay put: they have no board to return to.
+       */
+      if (entry.jobId && onDragOff) onDragOff();
     },
-    onPointerCancel: () => { drag.current = null; setRotaHover(null); },
+    onPointerCancel: () => { drag.current = null; setHeld(false); setRotaHover(null); },
   };
 
   if (entry.jobId) {
@@ -879,6 +900,9 @@ function PlannerCard({
         style={{
           backgroundColor: tint(color, 0.16), border: '1px solid rgba(15,23,42,.07)',
           cursor: readOnly ? undefined : 'pointer', touchAction: 'none',
+          // See-through while held, so the landing square shows through the hand.
+          opacity: held ? 0.45 : undefined,
+          transition: 'opacity 120ms ease',
         }}
         title="Click to open · drag to another day · hold Ctrl to leave a copy"
       >
