@@ -121,6 +121,11 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
       hint: 'Wolfson or Netiv — the ones with buildings. Place one per workspace '
         + 'and the whole company fits on one screen.',
     },
+    {
+      key: 'buildingId', label: 'Which building', kind: 'text',
+      placeholder: 'Blank shows every building',
+      hint: 'A1, A2, A3, B1 or B2 — one diagram instead of all of them side by side.',
+    },
   ],
   'board-mini': [
     title(),

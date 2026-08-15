@@ -1332,7 +1332,9 @@ export const WIDGETS: WidgetDef[] = [
       + 'workspace — put three side by side and the whole company is on one screen.',
     data: {},
     render: (el, c) => (
-      <ProjectMini projectId={String(d(el).projectId || '')} onOpen={c.openProject} />
+      <ProjectMini projectId={String(d(el).projectId || '')}
+        buildingId={String(d(el).buildingId || '') || undefined}
+        onOpen={c.openProject} />
     ),
   },
   {

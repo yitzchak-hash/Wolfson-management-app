@@ -27,8 +27,10 @@ import { useStore, loadProjectSnapshot } from '../../data/store';
  * same thing from a snapshot: one column per building, one cell per unit, each
  * cell in its stage colour.
  */
-export function ProjectMini({ projectId: chosen, onOpen }: {
+export function ProjectMini({ projectId: chosen, buildingId, onOpen }: {
   projectId: string;
+  /** One building only, or blank for all of them side by side. */
+  buildingId?: string;
   onOpen?: (projectId: string) => void;
 }) {
   const projects = useStore(st => st.projects);
@@ -54,7 +56,8 @@ export function ProjectMini({ projectId: chosen, onOpen }: {
   const project = projects.find(p => p.id === projectId);
   const tone = projectColor(projects, projectId);
 
-  const units = snap.apartments.filter(isCountableApartment);
+  const units = snap.apartments.filter(isCountableApartment)
+    .filter(a => !buildingId || a.buildingId === buildingId);
   const byBuilding = useMemo(() => {
     const m = new Map<string, Apartment[]>();
     for (const a of units) {
@@ -229,7 +232,12 @@ export function BoardMini({ el, jobs, stages, onOpen, update, readOnly }: {
           className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-[12px] bg-white outline-none"
         >
           <option value="">Which workspace…</option>
-          {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          {/* Only workspaces that HAVE a free board. The building projects
+              are diagrams, not boards — offering them here produced a picker
+              full of choices that could never draw anything. */}
+          {projects
+            .filter(p => p.id === 'general' || loadProjectSnapshot(p.id).buildings.length === 0)
+            .map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
 
         {chosenProject && (

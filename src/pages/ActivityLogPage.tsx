@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useStore } from '../data/store';
+import { activitySubject } from '../data/activityText';
 import { format } from 'date-fns';
 import { Activity } from 'lucide-react';
 
 export function ActivityLogPage() {
-  const { activityLogs, users, buildings, mainUiStrings: s } = useStore();
+  const { activityLogs, users, buildings, mainUiStrings: s , apartments } = useStore();
 
   const ACTION_TYPE_OPTIONS = [
     { value: 'all', label: s.allActions },
@@ -44,7 +45,18 @@ export function ActivityLogPage() {
   }
 
   function actionLabel(log: typeof activityLogs[0]): string {
-    const apt = `${s.aptPrefix} ${log.apartmentNumber} (${log.buildingId})`;
+    /**
+     * The best human name, never the raw stored value.
+     *
+     * Old logs on the Job Board carried the record's internal id in
+     * `apartmentNumber`, which printed as "Apt G-mf91xka (G)" — gibberish
+     * wearing the shape of a fact. `activitySubject` resolves the live record
+     * first and refuses internal ids.
+     */
+    const who = activitySubject(log, apartments);
+    const apt = log.buildingId === 'G'
+      ? who
+      : `${s.aptPrefix} ${who} (${log.buildingId})`;
     switch (log.actionType) {
       case 'task_created':
         return `${s.taskCreatedAction} on ${apt}: "${log.newValue}"`;
