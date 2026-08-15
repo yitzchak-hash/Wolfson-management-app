@@ -1,10 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Map as MapIcon, Crosshair, Loader2 } from 'lucide-react';
+import { Map as MapIcon, Crosshair, Loader2 , LocateFixed } from 'lucide-react';
 import { CanvasElement, isCountableApartment, personColor } from '../../types';
 import { Frame, d, WidgetCtx } from '../../data/widgets';
 import {
   LatLon, TILE, lonToX, latToY, xToLon, yToLat, fitBounds, scatterAround, geocodeAddress,
 } from '../../data/geocode';
+
+/** Tiles the browser has already shown once — they never fade in again. */
+const loadedTileUrls = new Set<string>();
 
 /**
  * A real street map, on the board.
@@ -59,6 +62,8 @@ export function MapWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   const [looking, setLooking] = useState(0);
 
   const [view, setView] = useState<{ center: LatLon; zoom: number } | null>(null);
+  /** The last geolocation fix, drawn as the blue dot. Session-only. */
+  const [myFix, setMyFix] = useState<LatLon | null>(null);
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   /**
    * Whether the gesture that just ended was a drag.
@@ -183,6 +188,30 @@ export function MapWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   const v = view ?? { center: ISRAEL, zoom: 7 };
   const z = Math.round(v.zoom);
 
+  /**
+   * What is already in the browser's hands.
+   *
+   * A tile that has loaded once never flashes again; a tile that failed is
+   * drawn as quiet grey rather than a broken-image icon. Module-level so the
+   * memory survives re-renders and even a re-mount of the widget.
+   */
+  const loadedTiles = loadedTileUrls;
+  const [, bumpTiles] = useState(0);
+
+  /**
+   * The OLD view, kept underneath while the new zoom's tiles arrive.
+   *
+   * Without this every zoom step was a white flash and the map read as
+   * broken. The previous layer is the tiles that were on screen, scaled and
+   * shifted to where they now belong, cleared shortly after the new ones have
+   * had their chance.
+   */
+  const [under, setUnder] = useState<{
+    tiles: { key: string; url: string; left: number; top: number }[];
+    scale: number; ox: number; oy: number;
+  } | null>(null);
+  const lastFrame = useRef<{ z: number; tiles: { key: string; url: string; left: number; top: number }[] } | null>(null);
+
   // The world pixel at the top-left corner of the box.
   const originX = lonToX(v.center.lon, z) - size.w / 2;
   const originY = latToY(v.center.lat, z) - size.h / 2;
@@ -208,6 +237,19 @@ export function MapWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
     return out;
   }, [z, originX, originY, size.w, size.h, tileUrl]);
 
+  // A zoom change: park the last frame underneath, scaled to the new world.
+  useEffect(() => {
+    const prev = lastFrame.current;
+    if (prev && prev.z !== z && prev.tiles.length) {
+      const scale = 2 ** (z - prev.z);
+      setUnder({ tiles: prev.tiles, scale, ox: 0, oy: 0 });
+      const t = setTimeout(() => setUnder(null), 600);
+      return () => clearTimeout(t);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [z]);
+  lastFrame.current = { z, tiles };
+
   const place = (at: LatLon) => ({
     left: lonToX(at.lon, z) - originX,
     top: latToY(at.lat, z) - originY,
@@ -231,8 +273,25 @@ export function MapWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
     const ny = latToY(worldLat, nz) - oy + size.h / 2;
     const next = { center: setCenterFromPixel(nx, ny), zoom: nz };
     setView(next);
-    if (!c.readOnly) c.update({ data: { ...d(el), view: next } });
+    saveViewSoon(next);
   };
+
+  /**
+   * The view is remembered 800ms after the hand STOPS.
+   *
+   * Writing on every wheel tick pushed the whole element through the store —
+   * and the store serialises the project — once per step, which is what made
+   * zooming feel like dragging a sled. The map stays local and instant; the
+   * store hears about it once, at rest.
+   */
+  const saveTimer = useRef<number>(0);
+  function saveViewSoon(next: { center: LatLon; zoom: number }) {
+    if (c.readOnly) return;
+    clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(() => {
+      c.update({ data: { ...d(el), view: next } });
+    }, 800);
+  }
 
   /**
    * The wheel is bound natively, not through React's `onWheel`.
@@ -277,6 +336,16 @@ export function MapWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
         className="relative w-full h-full rounded-md overflow-hidden select-none"
         style={{ backgroundColor: '#e8ecef', cursor: drag.current ? 'grabbing' : 'grab', touchAction: 'none' }}
         onPointerDown={e => {
+          /**
+           * A press on one of the map's own BUTTONS is not the start of a pan.
+           *
+           * Capturing the pointer here retargets the release to the map, and a
+           * click whose press and release land on different elements fires on
+           * their common ancestor — the map — so every corner button (+, −,
+           * location, fit) silently died the moment capture was taken. Leave
+           * buttons alone entirely.
+           */
+          if ((e.target as HTMLElement).closest('button')) return;
           // Captured on the MAP, never on `e.target`. Capturing on the target
           // meant a drag begun on a pin was delivered to that pin all the way
           // to the release, which then counted as a click on it and opened the
@@ -310,19 +379,45 @@ export function MapWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
           drag.current = null;
           // viewRef, not `view` — this closure was created before the pan and
           // would store the position the map STARTED from.
-          if (moved && !c.readOnly && viewRef.current) {
-            c.update({ data: { ...d(el), view: viewRef.current } });
-          }
+          if (moved && viewRef.current) saveViewSoon(viewRef.current);
         }}
       >
+        {/* The previous zoom's picture, scaled to the new world, so a zoom is
+            never a white flash. */}
+        {under && (
+          <div className="absolute inset-0 pointer-events-none"
+            style={{ transform: `scale(${under.scale})`, transformOrigin: `${size.w / 2}px ${size.h / 2}px` }}>
+            {under.tiles.map(t => (
+              <img key={'u' + t.key} src={t.url} alt="" draggable={false}
+                className="absolute" style={{ left: t.left, top: t.top, width: TILE, height: TILE }} />
+            ))}
+          </div>
+        )}
         {tiles.map(t => (
           <img
-            key={t.key} src={t.url} alt="" draggable={false} loading="lazy"
+            key={t.key} src={t.url} alt="" draggable={false}
+            onLoad={() => { if (!loadedTiles.has(t.url)) { loadedTiles.add(t.url); bumpTiles(n => n + 1); } }}
+            onError={e => { (e.target as HTMLImageElement).style.opacity = '0'; }}
             className="absolute pointer-events-none"
-            style={{ left: t.left, top: t.top, width: TILE, height: TILE }}
+            style={{
+              left: t.left, top: t.top, width: TILE, height: TILE,
+              opacity: loadedTiles.has(t.url) ? 1 : 0,
+              transition: 'opacity 180ms ease',
+            }}
           />
         ))}
 
+        {/* You, as the blue dot every map has taught everybody to read. */}
+        {myFix && (() => {
+          const p = place(myFix);
+          return (
+            <span className="absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+              style={{ left: p.left, top: p.top }}>
+              <span className="block w-3.5 h-3.5 rounded-full border-2 border-white"
+                style={{ backgroundColor: '#1e73e8', boxShadow: '0 0 0 4px rgba(30,115,232,.25)' }} />
+            </span>
+          );
+        })()}
         {markers.map(m => {
           const p = place(m.at);
           if (p.left < -60 || p.top < -60 || p.left > size.w + 60 || p.top > size.h + 60) return null;
@@ -365,6 +460,22 @@ export function MapWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
               {sym}
             </button>
           ))}
+          <button data-no-drag data-el-action
+            title="Where am I?"
+            onClick={ev => {
+              ev.stopPropagation();
+              // The browser asks the person; a refusal simply does nothing.
+              navigator.geolocation?.getCurrentPosition(pos => {
+                const at = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+                setMyFix(at);
+                const next = { center: at, zoom: Math.max(z, 15) };
+                setView(next);
+                saveViewSoon(next);
+              });
+            }}
+            className="w-5 h-5 rounded bg-white/90 shadow-sm flex items-center justify-center text-[#1e73e8]">
+            <LocateFixed size={11} />
+          </button>
           <button data-no-drag data-el-action
             title="Fit everything on the map"
             onClick={ev => {
