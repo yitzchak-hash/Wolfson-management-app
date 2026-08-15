@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { useStore } from '../data/store';
 import { WidgetListPopup } from '../components/board/WidgetListPopup';
 import { useNavigate } from 'react-router-dom';
@@ -6,7 +6,7 @@ import { format } from 'date-fns';
 import {
   Building2, AlertTriangle, CheckCircle2, Clock, FileText, ClipboardList,
   AlertCircle, X, ChevronRight, Settings2, ChevronUp, ChevronDown, EyeOff, Eye, Printer,
-  CalendarDays, Plus, Pencil, Trash2, ArrowLeft, ArrowRight,
+  CalendarDays, Plus, Pencil, Trash2, Move,
 } from 'lucide-react';
 import {
   getStageName, isCountableApartment, CanvasElement, DASHBOARD_BOARD, personColor,
@@ -117,18 +117,26 @@ export function DashboardPage() {
        contractorPhotos, activityLogs, currentProjectId, navigate,
        setPendingOpenAptId, setCurrentProject]);
 
-  /** Move a widget one place earlier or later in the grid. */
-  function moveDashWidget(id: string, dir: -1 | 1) {
+  /**
+   * Home-screen reordering: the dragged card takes the slot it is held over,
+   * and everything between shuffles one place — exactly what dragging an app
+   * icon does. Order lives in z; rewriting the whole sequence keeps the
+   * numbers dense so two half-swapped z values can never tie.
+   */
+  function placeDashWidget(id: string, overId: string) {
+    if (id === overId) return;
     const ids = dashWidgets.map(w => w.id);
-    const i = ids.indexOf(id);
-    const j = i + dir;
-    if (i < 0 || j < 0 || j >= ids.length) return;
-    // Order comes from the element list, so swapping means swapping the two
-    // elements' z — the one field the grid reads for sequence.
-    const a = dashWidgets[i], b = dashWidgets[j];
-    updateCanvasElement(a.id, { z: (b.z ?? j) });
-    updateCanvasElement(b.id, { z: (a.z ?? i) });
+    const from = ids.indexOf(id), to = ids.indexOf(overId);
+    if (from < 0 || to < 0) return;
+    ids.splice(to, 0, ...ids.splice(from, 1));
+    ids.forEach((wid, i) => {
+      const el = dashWidgets.find(w => w.id === wid);
+      if (el && (el.z ?? 0) !== i) updateCanvasElement(wid, { z: i });
+    });
   }
+
+  /** Live card rectangles, measured at drag time — the grid reflows under us. */
+  const dashRects = useRef(new Map<string, HTMLDivElement>());
 
 
   const overdueCount = liveAssignments.filter(a => !a.completedAt && a.dueDate && a.dueDate < today).length;
@@ -693,10 +701,10 @@ export function DashboardPage() {
                 el={el}
                 ctx={dashCtx}
                 arranging={arranging}
-                onSpan={(n: number) => updateCanvasElement(el.id, { w: n * 100 })}
+                registry={dashRects}
                 onSettings={() => setSettingsFor(el)}
                 onRemove={() => deleteCanvasElement(el.id)}
-                onMove={(dir: -1 | 1) => moveDashWidget(el.id, dir)}
+                onPlaceOver={overId => placeDashWidget(el.id, overId)}
               />
             ))}
           </div>
@@ -967,14 +975,15 @@ function SummaryCard({ icon, label, value, color, onClick, clickable }: {
  * between a laptop and a wall screen, and a widget pinned to 300px looks right
  * on exactly one of them.
  */
-function DashCard({ el, ctx, arranging, onSpan, onSettings, onRemove, onMove }: {
+function DashCard({ el, ctx, arranging, registry, onSettings, onRemove, onPlaceOver }: {
   el: CanvasElement;
   ctx: WidgetCtx;
   arranging: boolean;
-  onSpan: (cols: number) => void;
+  /** Every card registers its root here, so a drag can ask what it is over. */
+  registry: React.MutableRefObject<Map<string, HTMLDivElement>>;
   onSettings: () => void;
   onRemove: () => void;
-  onMove: (dir: -1 | 1) => void;
+  onPlaceOver: (overId: string) => void;
 }) {
   const def = el.widget ? WIDGET_BY_ID.get(el.widget) : undefined;
   const updateCanvasElement = useStore(st => st.updateCanvasElement);
@@ -988,20 +997,109 @@ function DashCard({ el, ctx, arranging, onSpan, onSettings, onRemove, onMove }: 
     [ctx, el.id, updateCanvasElement],
   );
 
+  /**
+   * Home-screen editing, two handles and nothing else:
+   *
+   *  · the MOVE handle at the top-left — hold it and carry the card; whichever
+   *    card you hold it over gives up its slot and the grid reflows live,
+   *    exactly like arranging apps;
+   *  · the RESIZE handle at the bottom-right — the only corner that resizes,
+   *    snapping to whole columns and 40px rows so cards line up with each
+   *    other by construction.
+   *
+   * Everything is committed as it happens (the reorder) or on release (the
+   * size), and the drag draws the card translated + lifted so the hand can
+   * see what it is holding.
+   */
+  const [lift, setLift] = useState<{ dx: number; dy: number } | null>(null);
+  const moveRef = useRef<{ x: number; y: number } | null>(null);
+  function moveDown(e: React.PointerEvent) {
+    e.preventDefault(); e.stopPropagation();
+    moveRef.current = { x: e.clientX, y: e.clientY };
+    setLift({ dx: 0, dy: 0 });
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+  function moveMove(e: React.PointerEvent) {
+    const st = moveRef.current;
+    if (!st) return;
+    setLift({ dx: e.clientX - st.x, dy: e.clientY - st.y });
+    // What is the hand over? Measured live, because the grid reflows under us.
+    for (const [id, node] of registry.current) {
+      if (id === el.id) continue;
+      const r = node.getBoundingClientRect();
+      if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+        onPlaceOver(id);
+        // The card we displaced moves; our translation stays anchored to the
+        // pointer, so re-baseline the grab point to avoid a visual jump.
+        moveRef.current = { x: e.clientX, y: e.clientY };
+        setLift({ dx: 0, dy: 0 });
+        break;
+      }
+    }
+  }
+  function moveUp() { moveRef.current = null; setLift(null); }
+
+  const sizeRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [preview, setPreview] = useState<{ span: number; h: number } | null>(null);
+  function sizeDown(e: React.PointerEvent) {
+    e.preventDefault(); e.stopPropagation();
+    sizeRef.current = { x: e.clientX, y: e.clientY, w: el.w || 300, h: el.h || 165 };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+  function sizeMove(e: React.PointerEvent) {
+    const st = sizeRef.current;
+    if (!st) return;
+    // A column is a twelfth of the grid; measured from our own card so the
+    // snap follows the real rendered width at any window size.
+    const node = registry.current.get(el.id);
+    const colPx = node ? node.getBoundingClientRect().width / span : 100;
+    const nextSpan = Math.max(2, Math.min(12, Math.round((st.w + (e.clientX - st.x)) / colPx)));
+    const nextH = Math.max(120, Math.min(720, Math.round((st.h + (e.clientY - st.y)) / 40) * 40));
+    setPreview({ span: nextSpan, h: nextH });
+  }
+  function sizeUp() {
+    const p = preview;
+    sizeRef.current = null;
+    setPreview(null);
+    if (p) updateCanvasElement(el.id, { w: p.span * 100, h: p.h });
+  }
+
+  const shownSpan = preview?.span ?? span;
+  const shownH = Math.max(120, preview?.h ?? (el.h || 165));
+
   return (
     <div
+      ref={node => { if (node) registry.current.set(el.id, node); else registry.current.delete(el.id); }}
       className="relative group bg-white rounded-xl border border-gray-200 overflow-hidden"
       style={{
-        gridColumn: `span ${span} / span ${span}`,
-        minHeight: Math.max(120, el.h || 165),
+        gridColumn: `span ${shownSpan} / span ${shownSpan}`,
+        minHeight: shownH,
+        transform: lift ? `translate(${lift.dx}px, ${lift.dy}px) scale(1.02)` : undefined,
+        boxShadow: lift ? '0 14px 34px rgba(15,23,42,.25)' : undefined,
+        zIndex: lift ? 30 : undefined,
+        transition: lift ? 'none' : 'box-shadow 150ms ease',
+        outline: preview ? '2px dashed #4aa8d8' : undefined,
         ...(el.outline ? { borderColor: el.outline, borderWidth: el.outlineWidth ?? 3 } : {}),
       }}
     >
-      <div className="w-full h-full" style={{ height: Math.max(120, el.h || 165) }}>
+      <div className="w-full h-full" style={{ height: shownH }}>
         {def ? renderBoardWidget(el, bound) : (
           <div className="p-3 text-xs text-gray-400">This widget is no longer available.</div>
         )}
       </div>
+
+      {/* The MOVE handle: top-left, like picking an app up by its corner. */}
+      <button
+        onPointerDown={moveDown} onPointerMove={moveMove}
+        onPointerUp={moveUp} onPointerCancel={moveUp}
+        title="Hold and drag to rearrange"
+        className={`absolute top-1.5 left-1.5 p-1 rounded-md bg-white/90 border border-gray-200
+                    text-gray-400 hover:text-[#1e3a5f] cursor-grab active:cursor-grabbing
+                    transition-opacity ${arranging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+        style={{ touchAction: 'none' }}
+      >
+        <Move size={12} />
+      </button>
 
       {/* The controls appear on hover, and stay out while you are just reading. */}
       <div className={`absolute top-1.5 right-1.5 flex items-center gap-1 transition-opacity ${
@@ -1017,25 +1115,23 @@ function DashCard({ el, ctx, arranging, onSpan, onSettings, onRemove, onMove }: 
         </button>
       </div>
 
-      {arranging && (
-        <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1 bg-white/95 rounded-lg
-                        border border-gray-200 px-1 py-0.5">
-          <button onClick={() => onMove(-1)} title="Earlier"
-            className="p-0.5 text-gray-400 hover:text-[#1e3a5f]"><ArrowLeft size={12} /></button>
-          <button onClick={() => onMove(1)} title="Later"
-            className="p-0.5 text-gray-400 hover:text-[#1e3a5f]"><ArrowRight size={12} /></button>
-          <span className="w-px h-3 bg-gray-200" />
-          <button onClick={() => onSpan(Math.max(2, span - 1))} title="Narrower"
-            className="px-1 text-[11px] font-bold text-gray-400 hover:text-[#1e3a5f]">−</button>
-          <span className="text-[10px] tabular-nums text-gray-400 w-6 text-center">{span}/12</span>
-          <button onClick={() => onSpan(Math.min(12, span + 1))} title="Wider"
-            className="px-1 text-[11px] font-bold text-gray-400 hover:text-[#1e3a5f]">+</button>
-          <span className="w-px h-3 bg-gray-200" />
-          <button onClick={() => updateCanvasElement(el.id, { h: Math.max(120, (el.h || 165) - 40) })}
-            title="Shorter" className="px-1 text-[11px] font-bold text-gray-400 hover:text-[#1e3a5f]">↑</button>
-          <button onClick={() => updateCanvasElement(el.id, { h: Math.min(720, (el.h || 165) + 40) })}
-            title="Taller" className="px-1 text-[11px] font-bold text-gray-400 hover:text-[#1e3a5f]">↓</button>
-        </div>
+      {/* The RESIZE handle: bottom-right, the only corner that resizes. */}
+      <button
+        onPointerDown={sizeDown} onPointerMove={sizeMove}
+        onPointerUp={sizeUp} onPointerCancel={sizeUp}
+        title="Drag to resize — snaps to the grid"
+        className={`absolute bottom-1 right-1 w-4 h-4 rounded-sm cursor-nwse-resize
+                    transition-opacity ${arranging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+        style={{
+          touchAction: 'none',
+          backgroundImage: 'linear-gradient(135deg, transparent 45%, #94a3b8 45%, #94a3b8 55%, transparent 55%, transparent 70%, #94a3b8 70%, #94a3b8 80%, transparent 80%)',
+        }}
+      />
+      {preview && (
+        <span className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold
+                         bg-[#1e3a5f] text-white tabular-nums">
+          {preview.span}/12 · {preview.h}px
+        </span>
       )}
     </div>
   );
