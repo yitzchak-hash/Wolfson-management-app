@@ -363,9 +363,7 @@ export function TasksPage() {
               more this way" — the print button looked like it was sliding
               under Add Task. `display: contents` from md up, so the desktop
               row has no box to mask. */}
-          <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-x-auto pr-1.5 md:pr-0 md:contents
-                          [mask-image:linear-gradient(to_right,black_calc(100%-14px),transparent)]
-                          md:[mask-image:none]">
+          <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-x-auto pr-1.5 md:pr-0 md:contents edge-fade">
             {/* The select is the one thing on the row that may give up width: it
                 shrinks to its floor before the row starts scrolling, so the
                 buttons beside it never squash into each other. The floor is

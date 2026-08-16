@@ -270,7 +270,7 @@ export function ProjectDiagramPage() {
         </div>
       </div>
 
-      <div className="flex flex-col h-full overflow-hidden print:h-auto print:overflow-visible">
+      <div className="short-scroll flex flex-col h-full overflow-hidden print:h-auto print:overflow-visible">
         {/*
           Phone bar. One building at a time behind big tabs, and the whole
           filter block folded into a single Filters button — the diagram used
@@ -480,7 +480,7 @@ export function ProjectDiagramPage() {
         </div>
 
         {/* Main diagram */}
-        <div className="flex-1 overflow-auto scrollbar-thin bg-gray-100 print:overflow-visible print:bg-white">
+        <div className="short-scroll-body flex-1 overflow-auto scrollbar-thin bg-gray-100 print:overflow-visible print:bg-white">
           <BuildingDiagram
             apartments={apartments}
             stages={stages}

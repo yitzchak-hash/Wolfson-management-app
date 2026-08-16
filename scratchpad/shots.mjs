@@ -2,25 +2,30 @@
 // REALISTIC data (family names and stages set) — see seed.mjs for why that
 // matters more than anything else in this file.
 import { chromium, devices } from 'playwright';
-import { realisticWolfson, applySeed } from './seed.mjs';
+import { realisticWolfson, applySeed, PORTAL_TOKEN } from './seed.mjs';
 
 const only = process.argv.slice(2);
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
-const blob = await realisticWolfson(browser);
+const blob = await realisticWolfson(browser, { hebrew: process.env.LANG_HE === '1' });
 
 // Landscape is not a special case of the phone — it is the phone rotated, and
 // the owner asked for it across the WHOLE app, not just the markup studio.
 // VIEW=landscape runs the identical sweep at 844x390.
 const LANDSCAPE = process.env.VIEW === 'landscape';
-const VW = LANDSCAPE ? 844 : 390;
+// W=360 is a common Android, 375 an iPhone SE/mini. Thirty pixels less than
+// the 390 everything was built against is exactly where a row that "just
+// fits" stops fitting, so the sweep has to be runnable at each.
+const W = Number(process.env.W) || 390;
+const HEBREW = process.env.LANG_HE === '1';
+const VW = LANDSCAPE ? 844 : W;
 const VH = LANDSCAPE ? 390 : 844;
-const TAG = LANDSCAPE ? 'land-' : '';
+const TAG = (LANDSCAPE ? 'land-' : W !== 390 ? `w${W}-` : '') + (HEBREW ? 'he-' : '');
 const ctx = await browser.newContext({
   viewport: { width: VW, height: VH },
   isMobile: true, hasTouch: true, deviceScaleFactor: 2,
   userAgent: devices['iPhone 13'].userAgent,
 });
-await applySeed(ctx, blob);
+await applySeed(ctx, blob, { hebrew: HEBREW });
 const page = await ctx.newPage();
 
 async function audit(label) {
@@ -112,5 +117,17 @@ await shot('pcalendar', '/project-calendar');
 await shot('reports', '/reports');
 await shot('settings', '/settings');
 await shot('appsettings', '/app-settings');
+
+// The worker portal — the one screen that genuinely lives on a phone, and the
+// one that had never been measured on one.
+await shot('portal', `/c/${PORTAL_TOKEN}`);
+await shot('portal-task', `/c/${PORTAL_TOKEN}`, async () => {
+  await page.locator('button, [role=button]').filter({ hasText: /concealed unit|registers|thermostats/i }).first().tap();
+  await page.waitForTimeout(900);
+});
+await shot('portal-map', `/c/${PORTAL_TOKEN}`, async () => {
+  await page.locator('button').filter({ hasText: /Building Map|מפת/i }).first().tap();
+  await page.waitForTimeout(1100);
+});
 
 await browser.close();

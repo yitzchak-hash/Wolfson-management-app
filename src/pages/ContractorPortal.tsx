@@ -99,13 +99,30 @@ function detectFileType(file: File): 'image' | 'video' | 'file' {
   return 'file';
 }
 
-function getDueBadge(dueDate: string | null): { text: string; cls: string } | null {
+/**
+ * The countdown badge on a task card — in the WORKER's language.
+ *
+ * This was a module-level function with "Overdue" / "Today" / "Tomorrow"
+ * written into it, which is the trap CLAUDE.md names: a constant outside a
+ * component cannot reach the translation store, so it silently keeps English.
+ * Every other word on the portal followed the worker's language and these four
+ * did not — on the one screen a Hebrew-speaking worker actually holds, and on
+ * the part of the card that tells him whether he is late.
+ *
+ * The strings are passed IN rather than the function being moved inside the
+ * component, because both call sites are already inside it and this keeps the
+ * arithmetic out of the render.
+ */
+function getDueBadge(
+  dueDate: string | null,
+  t: { overdue: string; today: string; tomorrow: string; days: string },
+): { text: string; cls: string } | null {
   if (!dueDate) return null;
   const days = differenceInCalendarDays(parseISO(dueDate), startOfDay(new Date()));
-  if (days < 0)  return { text: 'Overdue',   cls: 'text-red-600 bg-red-50 border-red-200' };
-  if (days === 0) return { text: 'Today',     cls: 'text-orange-600 bg-orange-50 border-orange-200' };
-  if (days === 1) return { text: 'Tomorrow',  cls: 'text-amber-700 bg-amber-50 border-amber-200' };
-  if (days <= 3)  return { text: `${days} days`, cls: 'text-yellow-700 bg-yellow-50 border-yellow-200' };
+  if (days < 0)  return { text: t.overdue,  cls: 'text-red-600 bg-red-50 border-red-200' };
+  if (days === 0) return { text: t.today,    cls: 'text-orange-600 bg-orange-50 border-orange-200' };
+  if (days === 1) return { text: t.tomorrow, cls: 'text-amber-700 bg-amber-50 border-amber-200' };
+  if (days <= 3)  return { text: `${days} ${t.days}`, cls: 'text-yellow-700 bg-yellow-50 border-yellow-200' };
   return null;
 }
 
@@ -321,6 +338,11 @@ export function ContractorPortal() {
   const s = lang === 'en' ? DEFAULT_CONTRACTOR_UI_STRINGS
            : lang === 'he' ? HEBREW_CONTRACTOR_UI_STRINGS
            : contractorUiStrings;
+  /** The four countdown words, in whatever language this worker reads. */
+  const dueWords = {
+    overdue: s.filterOverdue, today: s.filterToday,
+    tomorrow: s.filterTomorrow, days: s.daysLabel ?? (s.isRtl ? 'ימים' : 'days'),
+  };
   /**
    * Text size, applied at the ROOT.
    *
@@ -747,9 +769,18 @@ export function ContractorPortal() {
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#f0f4f8' }} dir={s.isRtl ? 'rtl' : 'ltr'}>
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-3 shadow-md flex-shrink-0" style={{ backgroundColor: '#0f1f35' }}>
-        <img src="/tzviair-logo.png" alt="TzviAir" style={{ height: '32px', filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.9)) drop-shadow(0 1px 3px rgba(0,0,0,0.7))' }} />
-        <div className="flex items-center gap-2.5">
+      {/* The right-hand group used to be five fixed-size things beside a
+          32px logo, which needed 408px of a 390px phone — the worker's own
+          name and his task count sat off the edge of the screen he uses all
+          day. It shrinks now: the group may give up width, the name lines
+          truncate rather than push, and the category pill (which repeats what
+          his work already tells him) steps aside on the narrowest screens. */}
+      <header className="flex items-center justify-between gap-2 px-3 md:px-4 py-3 shadow-md flex-shrink-0" style={{ backgroundColor: '#0f1f35' }}>
+        {/* Smaller on a phone. The logo is a wide mark that ate 150px of a
+            390px bar telling the worker whose app this is — which he knows —
+            while his own name two items along came out as "Moshe Aha…". */}
+        <img src="/tzviair-logo.png" alt="TzviAir" className="flex-shrink-0 h-6 md:h-8 w-auto" style={{ filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.9)) drop-shadow(0 1px 3px rgba(0,0,0,0.7))' }} />
+        <div className="flex items-center gap-1.5 md:gap-2.5 min-w-0">
           {/* A work list for the van. Contractors are the people most likely to
               want the day on paper — no signal in a stairwell, no battery
               anxiety on a site. */}
@@ -889,13 +920,13 @@ export function ContractorPortal() {
               </div>
             )}
           </div>
-          <span className="text-xs font-semibold px-2.5 py-1 rounded-full"
+          <span className="hidden sm:inline text-xs font-semibold px-2.5 py-1 rounded-full flex-shrink-0"
             style={{ backgroundColor: catColor + '22', color: catColor, border: `1px solid ${catColor}44` }}>
             {CATEGORY_LABELS[contractor.category]}
           </span>
-          <div className={s.isRtl ? 'text-left' : 'text-right'}>
-            <div className="text-white text-sm font-semibold">{contractor!.name}</div>
-            <div className="text-gray-400 text-xs">
+          <div className={`min-w-0 ${s.isRtl ? 'text-left' : 'text-right'}`}>
+            <div className="text-white text-sm font-semibold truncate">{contractor!.name}</div>
+            <div className="text-gray-400 text-xs truncate">
               {assignments.length} {assignments.length !== 1 ? s.taskPlural : s.taskSingular} · {assignments.filter(a => a.completedAt).length} {s.doneLabel}
             </div>
           </div>
@@ -963,7 +994,7 @@ export function ContractorPortal() {
       {/* The day bar — above the task list. The map carries its own combined
           row (projects · divider · days) so both filters read as one place. */}
       {activeTab === 'tasks' && (
-      <div className="bg-white border-b border-gray-100 px-3 py-2.5 flex gap-2 overflow-x-auto flex-shrink-0">
+      <div className="bg-white border-b border-gray-100 px-3 py-2.5 flex gap-2 overflow-x-auto flex-shrink-0 edge-fade">
         {filterOptions.map(({ key, label, color }) => (
           <button
             key={key}
@@ -1182,7 +1213,7 @@ export function ContractorPortal() {
                 const notes = getNotes(a.id);
                 const isOverdue = a.dueDate && !a.completedAt && isPast(parseISO(a.dueDate));
                 const isDone = !!a.completedAt;
-                const dueBadge = getDueBadge(a.dueDate);
+                const dueBadge = getDueBadge(a.dueDate, dueWords);
 
                 return (
                   <button key={a.id} onClick={() => { setSelectedAssignment(a); setShowHistory(false); }}
@@ -1435,7 +1466,7 @@ export function ContractorPortal() {
         const apt = getApt(a.apartmentId);
         const stage = getStage(a.stageId);
         const isOverdue = a.dueDate && !a.completedAt && isPast(parseISO(a.dueDate));
-        const dueBadge = getDueBadge(a.dueDate);
+        const dueBadge = getDueBadge(a.dueDate, dueWords);
         const plansPdfFileId = apt?.plansPdfLink ? extractFileId(apt.plansPdfLink) : null;
 
         return (

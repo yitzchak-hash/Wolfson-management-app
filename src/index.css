@@ -537,3 +537,47 @@ html, body {
  * root itself, since only the page knows it wants the full width.
  */
 main > * { min-width: 0; }
+
+/**
+ * A horizontal scroller that says so.
+ *
+ * A row of chips or buttons that scrolls sideways gets chopped at its
+ * boundary, and half a control reads as a broken control rather than as
+ * "there is more this way" — the task toolbar's print button looked like it
+ * was sliding underneath Add Task. Fading the last few pixels is the whole
+ * fix: the cut becomes a soft edge, which is the universal sign for more.
+ *
+ * Only below `md`. On a desktop these rows have room and never scroll, and a
+ * fade over a row that fits is a smudge for no reason.
+ */
+@media (max-width: 767px) {
+  .edge-fade {
+    -webkit-mask-image: linear-gradient(to right, black calc(100% - 14px), transparent);
+    mask-image: linear-gradient(to right, black calc(100% - 14px), transparent);
+  }
+  /* Mirrored, or the fade lands on the side you have already read. */
+  [dir="rtl"] .edge-fade {
+    -webkit-mask-image: linear-gradient(to left, black calc(100% - 14px), transparent);
+    mask-image: linear-gradient(to left, black calc(100% - 14px), transparent);
+  }
+}
+
+/**
+ * A phone lying on its side.
+ *
+ * The app decides desktop-vs-phone by WIDTH, so at 844x390 it lays out the
+ * desktop: sidebar, the full filter bar, the stage legend, the progress strip.
+ * All correct for the width — and all of it together is taller than 390px, so
+ * on a landscape phone the first apartment sat below the fold with nothing but
+ * chrome above it. Hiding controls would only move the problem, since the
+ * legend IS the stage filter on that layout.
+ *
+ * So the page stops being a fixed frame with an inner scroller and becomes one
+ * ordinary scrolling page: the bar scrolls away, and the diagram gets the
+ * whole screen after one flick. Keyed on HEIGHT, so a short desktop window
+ * behaves the same way and a tall one is untouched.
+ */
+@media (max-height: 560px) {
+  .short-scroll { height: auto !important; overflow: visible !important; }
+  .short-scroll .short-scroll-body { overflow: visible !important; flex: none !important; }
+}

@@ -1021,6 +1021,10 @@ export interface ContractorUiStrings {
   filterOverdue: string;
   filterToday: string;
   filterTomorrow: string;
+  /** "days", as in "3 days". Optional: these strings are user-edited and
+      stored, so an object written before this key existed must still type
+      -check — the portal falls back rather than rendering a blank badge. */
+  daysLabel?: string;
   filterYesterday: string;
   filterThisWeek: string;
   mapHint: string;
@@ -1075,6 +1079,7 @@ export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   filterOverdue: 'Overdue',
   filterToday: 'Today',
   filterTomorrow: 'Tomorrow',
+  daysLabel: 'days',
   filterYesterday: 'Yesterday',
   filterThisWeek: 'This Week',
   mapHint: 'Highlighted apartments are your assignments. Tap to open task.',
@@ -1127,6 +1132,7 @@ export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   filterOverdue: 'באיחור',
   filterToday: 'היום',
   filterTomorrow: 'מחר',
+  daysLabel: 'ימים',
   filterYesterday: 'אתמול',
   filterThisWeek: 'השבוע',
   mapHint: 'הדירות המודגשות הן המשימות שלך. הקש לפתיחה.',
