@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { MapPin, Check, X, Printer, Plus } from 'lucide-react';
+import { MapPin, Check, X, Printer, Plus, Trash2, RotateCcw } from 'lucide-react';
 import { useStore } from '../../data/store';
 import { PlanPin } from '../../types';
 
@@ -30,6 +30,8 @@ export function PlanPinOverlay({
   const [placing, setPlacing] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  const [savedFlash, setSavedFlash] = useState(false);
+  const [armDelete, setArmDelete] = useState(false);
 
   const pins = useMemo(
     () => planPins
@@ -112,8 +114,16 @@ export function PlanPinOverlay({
         {pins.map((p, i) => (
           <button
             key={p.id}
-            onClick={e => { e.stopPropagation(); setOpen(open === p.id ? null : p.id); setDraft(p.text); }}
-            title={p.text || `Item ${i + 1}`}
+            onClick={e => {
+              e.stopPropagation();
+              setOpen(open === p.id ? null : p.id);
+              setDraft(p.text);
+              setArmDelete(false);
+              setSavedFlash(false);
+            }}
+            title={p.resolvedAt
+              ? `Item ${i + 1} — closed by ${p.resolvedBy || 'Office'}`
+              : (p.text || `Item ${i + 1}`)}
             className="absolute -translate-x-1/2 -translate-y-full flex flex-col items-center"
             style={{ left: `${p.xPct}%`, top: `${p.yPct}%`, pointerEvents: 'auto' }}
           >
@@ -127,21 +137,43 @@ export function PlanPinOverlay({
           </button>
         ))}
 
-        {/* Note bubble for the selected pin. */}
+        {/* Note bubble for the selected pin.
+
+            The footer used to be two unlabeled icons: a ✓ that toggled done and
+            an ✗ that DELETED the pin — so "save my note" read as done-toggling
+            and "close this popup" destroyed the pin. Now: Save commits the text
+            and KEEPS the bubble open, "Mark as done" is its own labeled button
+            recording who closed it (shown as "Closed by X"), reopening is
+            explicit, and delete is a trash can that asks before it acts. */}
         {open && (() => {
           const p = pins.find(x => x.id === open);
           if (!p) return null;
+          const idx = pins.indexOf(p);
           return (
             <div
               onClick={e => e.stopPropagation()}
               className="absolute z-20 bg-white rounded-xl shadow-2xl border border-gray-200 p-2.5"
               style={{
-                left: `min(${p.xPct}%, calc(100% - 232px))`,
+                left: `min(${p.xPct}%, calc(100% - 264px))`,
                 top: `calc(${p.yPct}% + 8px)`,
-                width: 224,
+                width: 256,
                 pointerEvents: 'auto',
               }}
             >
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <span className="text-[10px] font-black text-[#1e3a5f]">#{idx + 1}</span>
+                <span className="text-[9.5px] text-gray-400 flex-1 truncate">
+                  {p.createdBy || 'Office'} · {new Date(p.createdAt).toLocaleDateString()}
+                </span>
+                <button
+                  onClick={() => setOpen(null)}
+                  title="Close"
+                  className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+
               {readOnly ? (
                 <p className="text-[12px] text-gray-700 whitespace-pre-wrap">{p.text || 'No note'}</p>
               ) : (
@@ -155,34 +187,73 @@ export function PlanPinOverlay({
                   className="w-full text-[12px] border border-gray-200 rounded-lg p-2 outline-none focus:ring-2 focus:ring-[#1e3a5f]/25 resize-none"
                 />
               )}
-              <div className="flex items-center gap-1.5 mt-1.5">
-                <span className="text-[9.5px] text-gray-400 flex-1 truncate">
-                  {p.createdBy || 'Office'} · {new Date(p.createdAt).toLocaleDateString()}
-                </span>
-                {!readOnly && (
-                  <>
+
+              {p.resolvedAt && (
+                <div className="flex items-center gap-1 mt-1 text-[10px] font-bold text-emerald-700">
+                  <Check size={11} />
+                  <span className="truncate">
+                    Closed by {p.resolvedBy || 'Office'} · {new Date(p.resolvedAt).toLocaleDateString()}
+                  </span>
+                </div>
+              )}
+
+              {!readOnly && (
+                <div className="flex items-center gap-1.5 mt-1.5">
+                  <button
+                    onClick={() => {
+                      updatePlanPin(p.id, { text: draft });
+                      setSavedFlash(true);
+                      setTimeout(() => setSavedFlash(false), 1400);
+                    }}
+                    title="Save the note — the bubble stays open"
+                    className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold border transition-colors ${
+                      savedFlash
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : 'bg-white text-[#1e3a5f] border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    <Check size={12} />
+                    {savedFlash ? 'Saved' : 'Save'}
+                  </button>
+                  {p.resolvedAt ? (
                     <button
-                      onClick={() => updatePlanPin(p.id, p.resolvedAt
-                        ? { resolvedAt: undefined, resolvedBy: undefined }
-                        : { resolvedAt: new Date().toISOString(), resolvedBy: authorName })}
-                      title={p.resolvedAt ? 'Reopen' : 'Mark done'}
-                      className="p-1 rounded-md text-gray-400 hover:text-emerald-600 hover:bg-emerald-50"
+                      onClick={() => updatePlanPin(p.id, { resolvedAt: undefined, resolvedBy: undefined })}
+                      title="Reopen this item"
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
                     >
-                      <Check size={13} />
+                      <RotateCcw size={11} />
+                      Reopen
                     </button>
+                  ) : (
                     <button
-                      onClick={() => { deletePlanPin(p.id); setOpen(null); }}
-                      title="Remove this pin"
-                      className="p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50"
+                      onClick={() => updatePlanPin(p.id, {
+                        text: draft,
+                        resolvedAt: new Date().toISOString(),
+                        resolvedBy: authorName,
+                      })}
+                      title="Close this item and record who closed it"
+                      className="px-2 py-1 rounded-lg text-[11px] font-bold bg-emerald-600 text-white hover:bg-emerald-700"
                     >
-                      <X size={13} />
+                      Mark as done
                     </button>
-                  </>
-                )}
-                {readOnly && (
-                  <button onClick={() => setOpen(null)} className="p-1 rounded-md text-gray-400"><X size={13} /></button>
-                )}
-              </div>
+                  )}
+                  <div className="flex-1" />
+                  <button
+                    onClick={() => {
+                      if (!armDelete) { setArmDelete(true); return; }
+                      deletePlanPin(p.id);
+                      setOpen(null);
+                      setArmDelete(false);
+                    }}
+                    title={armDelete ? 'Really remove this pin' : 'Remove this pin'}
+                    className={armDelete
+                      ? 'px-2 py-1 rounded-lg text-[11px] font-bold bg-red-600 text-white'
+                      : 'p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50'}
+                  >
+                    {armDelete ? 'Delete?' : <Trash2 size={13} />}
+                  </button>
+                </div>
+              )}
             </div>
           );
         })()}
