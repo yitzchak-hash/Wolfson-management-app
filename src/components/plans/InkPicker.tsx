@@ -79,9 +79,16 @@ export function InkPicker({ value, onChange, palette, onClose, anchor }: {
     <>
       <div className="fixed inset-0 z-[160]" onPointerDown={onClose} />
       <div
-        className="fixed z-[161] rounded-2xl overflow-hidden select-none"
+        // overflow-Y auto, not hidden: the panel is ~450px tall and a phone held
+        // in LANDSCAPE is only 390px, so the kept-colours shelf and the Done
+        // button fell off the bottom with no way to reach them. Capping to the
+        // viewport and letting it scroll keeps every control reachable in both
+        // orientations without changing how it looks on a desktop, where the
+        // cap is never the binding constraint.
+        className="fixed z-[161] rounded-2xl overflow-x-hidden overflow-y-auto select-none"
         style={{
           left, top, width: W,
+          maxHeight: 'calc(100dvh - 16px)',
           background: '#ffffff',
           border: '1px solid rgba(15,23,42,.08)',
           boxShadow: '0 20px 48px -10px rgba(15,23,42,.38)',

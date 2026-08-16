@@ -222,6 +222,25 @@ Module-level constants cannot access the translation store. Any constant that ou
 ### RTL
 `settings.isRtl` controls text direction. `dir="rtl"` is applied to the root layout when true.
 
+## Landscape is not a special case
+`VIEW=landscape node scratchpad/shots.mjs` runs the identical sweep at 844x390. Note 844px is
+PAST the `md` line, so a landscape phone gets the DESKTOP layout in a 390px-tall window — the
+drawer becomes the desktop modal (93vh) with the plan side pane instead of the phone's Plan
+tab, which is correct rather than a bug. Anything keyed to viewport HEIGHT is what to check:
+`InkPicker` is ~450px tall and lost its Done button off the bottom until it was capped to
+`calc(100dvh - 16px)` with `overflow-y:auto`.
+
+## A finger must be able to draw
+`scratchpad/pencil.mjs` drives `src/data/pencil.ts` through explicit timelines (the module
+takes `now` as a parameter for exactly this reason). The rule that matters on a phone: palm
+rejection only bites once a PEN has been seen, so with no stylus present every touch must
+pass. Get that backwards and the markup studio is silently dead on a phone with nothing
+thrown and nothing logged.
+
+**End-to-end markup on a real plan cannot be tested in this container** — there is no
+`.env.local`, so the Drive backend is unconfigured and no PDF can load. Layout, touch-action
+and the palm rule are covered; drawing on an actual sheet needs a real device.
+
 ## Voice memos
 `src/data/voiceMemo.ts` is the mechanism (`useVoiceRecorder`, `squash`, `storeVoiceMemo`);
 `src/components/ui/VoiceMemo.tsx` is only its face. A memo attaches as an ordinary audio FILE

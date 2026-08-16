@@ -8,8 +8,15 @@ const only = process.argv.slice(2);
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
 const blob = await realisticWolfson(browser);
 
+// Landscape is not a special case of the phone — it is the phone rotated, and
+// the owner asked for it across the WHOLE app, not just the markup studio.
+// VIEW=landscape runs the identical sweep at 844x390.
+const LANDSCAPE = process.env.VIEW === 'landscape';
+const VW = LANDSCAPE ? 844 : 390;
+const VH = LANDSCAPE ? 390 : 844;
+const TAG = LANDSCAPE ? 'land-' : '';
 const ctx = await browser.newContext({
-  viewport: { width: 390, height: 844 },
+  viewport: { width: VW, height: VH },
   isMobile: true, hasTouch: true, deviceScaleFactor: 2,
   userAgent: devices['iPhone 13'].userAgent,
 });
@@ -78,10 +85,10 @@ async function shot(name, url, prep) {
   await page.goto('http://localhost:5173' + url);
   await page.waitForTimeout(1600);
   if (prep) { try { await prep(); } catch (e) { console.log(`  prep failed on ${name}: ${e.message.split('\n')[0]}`); } }
-  await page.screenshot({ path: `scratchpad/shot-${name}.png` });
+  await page.screenshot({ path: `scratchpad/shot-${TAG}${name}.png` });
   const a = await audit(name);
   const bad = a.overflow.length + a.clipped.length;
-  console.log(`${bad === 0 ? 'OK  ' : 'FAIL'} ${name}  overflow=${a.overflow.length} clipped=${a.clipped.length}`);
+  console.log(`${bad === 0 ? 'OK  ' : 'FAIL'} ${TAG}${name}  overflow=${a.overflow.length} clipped=${a.clipped.length}`);
   a.overflow.slice(0, 5).forEach(o => console.log(`       > ${o.tag}.${o.cls} right=${o.right}`));
   a.clipped.slice(0, 6).forEach(o => console.log(`       ~ "${o.text}" ${o.w ?? o.h}`));
 }

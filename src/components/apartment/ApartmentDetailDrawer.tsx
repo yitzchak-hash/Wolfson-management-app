@@ -3,6 +3,7 @@ import { X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen
 import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel } from '../../types';
 import { useStore } from '../../data/store';
 import { usePhone } from '../../data/usePhone';
+import { VoiceRecorderButton } from '../ui/VoiceMemo';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import { StageNotesSection } from './StageNotesSection';
 import { ActivitySection } from './ActivitySection';
@@ -617,6 +618,49 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
 
   // Drive folders are named "Artzi, Avital - 1234 - …" — pull everything before the
   // first " -" into the family name whenever a new folder link is saved.
+  /**
+   * One route for anything attached to the office notes.
+   *
+   * Lifted out of the file input's onChange so a recorded voice memo takes the
+   * identical path — Drive when it is set up, base64 when it is not. Two copies
+   * of an upload ladder is how one of them quietly stops matching the other.
+   */
+  async function attachOfficeFile(file: File) {
+    if (!apartment || !currentUser) return;
+    const mainFolderId = apartment.driveLink ? extractFolderId(apartment.driveLink) : null;
+    if (backendConfigured && mainFolderId) {
+      try {
+        const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');
+        const notesFolderId = await findOrCreateFolderViaBackend(photosFolderId, 'Job Notes');
+        setOfficeUploadPct(0);
+        const { fileId, webViewLink } = await uploadFileViaResumableSession(
+          notesFolderId, file, pct => setOfficeUploadPct(pct));
+        setOfficeUploadPct(null);
+        await shareFileToDrive(fileId);
+        addOfficeNoteFile({
+          apartmentId: apartment.id, dataUrl: '', filename: file.name, mimeType: file.type,
+          uploadedBy: currentUser.id, uploadedByName: currentUser.name,
+          driveFileId: fileId, driveUrl: webViewLink,
+        });
+        return;
+      } catch {
+        setOfficeUploadPct(null);
+      }
+    }
+    await new Promise<void>(resolve => {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        addOfficeNoteFile({
+          apartmentId: apartment.id, dataUrl: ev.target?.result as string,
+          filename: file.name, mimeType: file.type,
+          uploadedBy: currentUser.id, uploadedByName: currentUser.name,
+        });
+        resolve();
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
   async function autoFillFamilyNameFromFolder(folderId: string) {
     if (isGeneralProject) return;
     const folderName = await getFolderNameViaBackend(folderId);
@@ -1283,6 +1327,16 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                       <Paperclip size={11} /> {ui.attachFiles}
                     </button>
                   </Tooltip>
+                  <VoiceRecorderButton
+                    compact
+                    title={ui.attachFiles}
+                    onRecorded={async memo => {
+                      const ext = memo.blob.type.includes('mp4') ? 'm4a' : 'webm';
+                      await attachOfficeFile(new File(
+                        [memo.blob], `voice-memo-${Date.now()}.${ext}`,
+                        { type: memo.blob.type || 'audio/webm' }));
+                    }}
+                  />
                 </div>
                 <textarea
                   value={generalNotes}
@@ -1334,48 +1388,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     const files = Array.from(e.target.files ?? []);
                     if (!files.length || !apartment) return;
                     if (officeFileRef.current) officeFileRef.current.value = '';
-
-                    for (const file of files) {
-                      const mainFolderId = apartment.driveLink ? extractFolderId(apartment.driveLink) : null;
-                      if (backendConfigured && mainFolderId) {
-                        try {
-                          const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');
-                          const notesFolderId = await findOrCreateFolderViaBackend(photosFolderId, 'Job Notes');
-                          setOfficeUploadPct(0);
-                          const { fileId, webViewLink } = await uploadFileViaResumableSession(notesFolderId, file, pct => setOfficeUploadPct(pct));
-                          setOfficeUploadPct(null);
-                          await shareFileToDrive(fileId);
-                          addOfficeNoteFile({
-                            apartmentId: apartment.id,
-                            dataUrl: '',
-                            filename: file.name,
-                            mimeType: file.type,
-                            uploadedBy: currentUser.id,
-                            uploadedByName: currentUser.name,
-                            driveFileId: fileId,
-                            driveUrl: webViewLink,
-                          });
-                          continue;
-                        } catch {
-                          setOfficeUploadPct(null);
-                        }
-                      }
-                      await new Promise<void>(resolve => {
-                        const reader = new FileReader();
-                        reader.onload = ev => {
-                          addOfficeNoteFile({
-                            apartmentId: apartment.id,
-                            dataUrl: ev.target?.result as string,
-                            filename: file.name,
-                            mimeType: file.type,
-                            uploadedBy: currentUser.id,
-                            uploadedByName: currentUser.name,
-                          });
-                          resolve();
-                        };
-                        reader.readAsDataURL(file);
-                      });
-                    }
+                    for (const file of files) await attachOfficeFile(file);
                     onToast(`${files.length} ${files.length === 1 ? ui.fileAttachedToast : ui.filesAttachedToast}`);
                   }}
                 />

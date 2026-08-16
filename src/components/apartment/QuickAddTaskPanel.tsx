@@ -4,6 +4,8 @@ import {
   Apartment, User, ContractorCategory, TaskAttachment, ContractorAssignment, getStageName,
 } from '../../types';
 import { useStore } from '../../data/store';
+import { VoiceRecorderButton } from '../ui/VoiceMemo';
+import { RecordedMemo } from '../../data/voiceMemo';
 import { contractorLoad, loadTooltip, loadColor } from '../../data/contractorLoad';
 import { taskShareText, copyTaskShare } from '../../data/taskShare';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
@@ -498,7 +500,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                   />
 
                   {/* Attachments row */}
-                  <div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <button
                       type="button"
                       onClick={() => attachRef.current?.click()}
@@ -506,6 +508,23 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                     >
                       <Paperclip size={12} /> {s.attachBtn}
                     </button>
+                    {/* A memo rides the same TaskAttachment shape as any file —
+                        it is audio, and the task already knows how to carry a
+                        file. Nothing new to persist, export or import. */}
+                    <VoiceRecorderButton
+                      compact
+                      onRecorded={(memo: RecordedMemo) => {
+                        const ext = memo.blob.type.includes('mp4') ? 'm4a' : 'webm';
+                        const reader = new FileReader();
+                        reader.onload = ev => setAttachments(prev => [...prev, {
+                          id: Math.random().toString(36).substr(2, 9),
+                          filename: `voice-memo-${Date.now()}.${ext}`,
+                          mimeType: memo.blob.type || 'audio/webm',
+                          dataUrl: ev.target?.result as string,
+                        }]);
+                        reader.readAsDataURL(memo.blob);
+                      }}
+                    />
                     <input
                       ref={attachRef}
                       type="file"
