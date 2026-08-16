@@ -100,7 +100,7 @@ export function GlobalCalendarPage() {
 
   return (
     <div className="p-6 w-full">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+      <h1 className="hidden md:flex text-2xl font-bold text-gray-900 mb-6 items-center gap-2">
         <CalendarDays size={24} className="text-[#1e3a5f]" />
         {s.globalCalendarTitle}
       </h1>

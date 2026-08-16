@@ -60,13 +60,18 @@ export function ProjectCalendarPage() {
   }, [contractorAssignments, apartments, contractors, stages, filterContractorId, showCompleted, navigate]);
 
   return (
-    <div className="p-6 w-full">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+    <div className="p-4 md:p-6 w-full">
+      {/* Two lines of 2xl heading — a third of a phone screen — to say a word
+          the lit-up Calendar tab at the bottom is already saying. The
+          workspace is named in the header chip too. Same rule as the task
+          list: the page's own title is desktop-only, and the month grid
+          starts at the top where it belongs. */}
+      <h1 className="hidden md:flex text-2xl font-bold text-gray-900 mb-6 items-center gap-2">
         <CalendarDays size={24} style={{ color: accent }} />
         {projectName} · {s.navCalendar}
       </h1>
 
-      <div className="flex flex-wrap items-end gap-3 mb-4">
+      <div className="flex flex-wrap items-end gap-2 md:gap-3 mb-3 md:mb-4">
         <div>
           <label className="text-xs font-medium text-gray-500 mb-1 block">{s.contractorLabel}</label>
           <select

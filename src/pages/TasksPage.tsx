@@ -358,14 +358,24 @@ export function TasksPage() {
             at all and the desktop row is exactly the wrapping flex line it has
             always been. */}
         <div className="flex items-center gap-1.5 md:gap-3 md:flex-wrap">
-          <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-x-auto md:contents">
+          {/* The right edge fades on a phone. A control chopped in half by a
+              scroller's boundary reads as a broken button, not as "there is
+              more this way" — the print button looked like it was sliding
+              under Add Task. `display: contents` from md up, so the desktop
+              row has no box to mask. */}
+          <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-x-auto pr-1.5 md:pr-0 md:contents
+                          [mask-image:linear-gradient(to_right,black_calc(100%-14px),transparent)]
+                          md:[mask-image:none]">
             {/* The select is the one thing on the row that may give up width: it
-                shrinks to the 96px floor before the row starts scrolling, so the
-                buttons beside it never squash into each other. */}
+                shrinks to its floor before the row starts scrolling, so the
+                buttons beside it never squash into each other. The floor is
+                112px because "All workers" needs 102 — at 96 it rendered as
+                "All worker", a word cut in half by a box that had almost
+                enough room. */}
             <select
               value={filterContractorId}
               onChange={e => setFilterContractorId(e.target.value)}
-              className="border border-gray-200 rounded-lg px-2 py-1.5 md:px-3 md:py-2 text-[12px] md:text-sm min-w-[96px] max-w-[40vw] md:max-w-none focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+              className="border border-gray-200 rounded-lg px-2 py-1.5 md:px-3 md:py-2 text-[12px] md:text-sm min-w-[112px] max-w-[44vw] md:max-w-none focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
             >
               <option value="">{s.allContractors}</option>
               {contractors.map(c => (
