@@ -1219,6 +1219,20 @@ in between `top: 0` meant zero in the SCALED space — measured 577px down at
 1.6×.
 
 ## Phone
+- **The buildings page is one building at a time on a phone.** `usePhone()` in
+  `ProjectDiagramPage` (matchMedia at Tailwind's md line, the same line the sidebar/MobileNav
+  swap on) resolves `selectedBuilding === 'all'` to the first building; big A1/A2/A3 tabs set
+  the normal `selectedBuilding` state so a desktop window keeps its all-buildings view. The
+  filter block collapses into ONE Filters button opening a bottom sheet (type, stage legend,
+  Changes badge, bulk update, print, clear); the desktop bar is `hidden md:block`, the phone
+  bar `md:hidden`. `BuildingDiagram` takes `phone?: boolean` — taller rows (normal 78 vs 68)
+  and larger type, threaded through getFloorRows/AptCell/both column components. Harness:
+  `scratchpad/mobdiagram.mjs` — assert with `>> visible=true`, the hidden desktop bar still
+  exists and counting it reports the test's fault as the product's.
+- **Phone preview pages**: `scratchpad/mobcapture.mjs` captures real rendered pages
+  (scripts stripped, images inlined) and `build-preview.mjs` wraps them in phone frames for
+  an artifact the owner reviews before/after changes.
+
 `Sidebar` is `hidden md:flex` with a `MobileNav` in the column flow.
 Twelve routes measured at 390×844: no overflow, nothing unreachable, no tap
 target under 32px. The per-cell add-task "+" is `hidden sm:flex` — a 21px

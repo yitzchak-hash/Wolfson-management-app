@@ -21,6 +21,8 @@ interface BuildingDiagramProps {
   onAddTask?: (apt: Apartment) => void;  // opens quick-add task panel
   aptCompletedData?: Map<string, boolean>; // aptId → true if all tasks complete
   compact?: boolean;
+  /** Larger rows and type for a one-building-at-a-time phone view. */
+  phone?: boolean;
   onNameUnnamed?: (apt: Apartment) => void; // opens naming dialog for unnamed slots
 }
 
@@ -51,9 +53,11 @@ interface FloorRowDef {
   height: number;
 }
 
-function getFloorRows(buildingId: BuildingId, compact = false): FloorRowDef[] {
+function getFloorRows(buildingId: BuildingId, compact = false, phone = false): FloorRowDef[] {
   const h = compact
     ? { roof: 16, wide: 36, normal: 36, basement: 30, lobby: 26, ground: 26 }
+    : phone
+    ? { roof: 22, wide: 78, normal: 78, basement: 64, lobby: 48, ground: 48 }
     : { roof: 26, wide: 68, normal: 68, basement: 58, lobby: 44, ground: 44 };
 
   const rows: FloorRowDef[] = [];
@@ -113,6 +117,7 @@ interface AptCellProps {
   onAddTask?: () => void;
   allTasksDone?: boolean;
   compact?: boolean;
+  phone?: boolean;
   onNameUnnamed?: () => void;
   /** 'connector' draws a link chip in the gap toward the partner on the right. */
   mergeLink?: 'connector' | 'badge' | null;
@@ -126,7 +131,7 @@ interface AptCellProps {
 function AptCell({
   apt, stage, isHighlighted, isDimmed, showShinuiBadge, onClick,
   isDuplex, rowFloorType, isMerged, mergedLabel, isBulkSelected, isContractorHighlighted,
-  aptSubLabel, taskInfo, nextStageName, onAddTask, allTasksDone, compact, onNameUnnamed,
+  aptSubLabel, taskInfo, nextStageName, onAddTask, allTasksDone, compact, phone, onNameUnnamed,
   mergeLink, extraStyle, isHoverGroup, onHover,
 }: AptCellProps) {
   const ui = useStore(state => state.mainUiStrings);
@@ -165,7 +170,7 @@ function AptCell({
     : hasStage ? `0 1px 3px ${borderColor}55`
     : '0 1px 2px rgba(0,0,0,0.06)';
 
-  const numFontSize = compact ? '9px' : mergedLabel ? '10px' : '11px';
+  const numFontSize = compact ? '9px' : phone ? (mergedLabel ? '12px' : '13.5px') : mergedLabel ? '10px' : '11px';
 
   // Pending task indicator: orange dot when has tasks but NOT all done
   const hasPendingTask = !!taskInfo && !allTasksDone;
@@ -206,7 +211,7 @@ function AptCell({
           {nameLabel && numberLabel && (
             <span
               className="w-full text-center leading-none block truncate px-0.5"
-              style={{ fontSize: compact ? '9.5px' : '12px', opacity: isDimmed ? 0.55 : 0.97, fontWeight: 600 }}
+              style={{ fontSize: compact ? '9.5px' : phone ? '13px' : '12px', opacity: isDimmed ? 0.55 : 0.97, fontWeight: 600 }}
             >
               {nameLabel}
             </span>
@@ -238,7 +243,7 @@ function AptCell({
       {!compact && displayLabel && (
         <span
           className="w-full text-center leading-none block truncate px-0.5"
-          style={{ fontSize: '9px', opacity: isDimmed ? 0.5 : (hasStage ? 0.9 : 0.45), fontStyle: hasStage ? 'normal' : 'italic' }}
+          style={{ fontSize: phone ? '10.5px' : '9px', opacity: isDimmed ? 0.5 : (hasStage ? 0.9 : 0.45), fontStyle: hasStage ? 'normal' : 'italic' }}
         >
           {hasStage ? stage!.name : ui.notStartedOption}
           {allTasksDone && <span style={{ color: isDimmed ? '#9ca3af' : '#22c55e', fontStyle: 'normal', marginLeft: '1px' }}>✓</span>}
@@ -249,7 +254,7 @@ function AptCell({
       {!compact && displayLabel && taskInfo && (
         <span
           className="w-full text-center leading-none block truncate px-0.5"
-          style={{ fontSize: '9px', opacity: isDimmed ? 0.4 : 0.9, color: isDimmed ? undefined : (allTasksDone ? '#22c55e' : '#f97316'), fontWeight: 600 }}
+          style={{ fontSize: phone ? '10.5px' : '9px', opacity: isDimmed ? 0.4 : 0.9, color: isDimmed ? undefined : (allTasksDone ? '#22c55e' : '#f97316'), fontWeight: 600 }}
         >
           {allTasksDone ? ui.doneIndicator : `⏳ ${taskInfo}`}
         </span>
@@ -371,7 +376,7 @@ function FourCellRow({
   hoverGroup, onHoverApt,
   isContractorHighlighted, isBulkSelected, getAptSubLabel, getTaskInfo, getNextStageName, getOnAddTask, getAllTasksDone,
   getOnNameUnnamed,
-  showShinuiBadge, onApartmentClick, rowFloorType, compact,
+  showShinuiBadge, onApartmentClick, rowFloorType, compact, phone,
 }: {
   aptNums: number[];
   getApt: (n: number) => Apartment | undefined;
@@ -395,6 +400,7 @@ function FourCellRow({
   onApartmentClick: (a: Apartment) => void;
   rowFloorType?: 'basement' | 'ground' | 'lobby';
   compact?: boolean;
+  phone?: boolean;
 }) {
   const gapClass = compact ? 'gap-1' : 'gap-2';
 
@@ -427,6 +433,7 @@ function FourCellRow({
               allTasksDone={getAllTasksDone?.(apt)}
               onNameUnnamed={getOnNameUnnamed?.(apt)}
               compact={compact}
+              phone={phone}
             />
           );
         })}
@@ -461,6 +468,7 @@ function FourCellRow({
               allTasksDone={getAllTasksDone?.(apt)}
               onNameUnnamed={getOnNameUnnamed?.(apt)}
               compact={compact}
+              phone={phone}
             />
           );
         })}
@@ -472,7 +480,7 @@ function FourCellRow({
 function BuildingColumn({
   buildingId, apartments, mergedLabels, stages, activeStageIds, classFilter, searchQuery,
   onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, aptSubLabels,
-  aptTaskData, nextStageLabels, onAddTask, aptCompletedData, compact, onNameUnnamed,
+  aptTaskData, nextStageLabels, onAddTask, aptCompletedData, compact, phone, onNameUnnamed,
   hoverGroup, onHoverApt,
 }: {
   buildingId: BuildingId;
@@ -492,6 +500,7 @@ function BuildingColumn({
   onAddTask?: (apt: Apartment) => void;
   aptCompletedData?: Map<string, boolean>;
   compact?: boolean;
+  phone?: boolean;
   onNameUnnamed?: (apt: Apartment) => void;
   hoverGroup?: Set<string> | null;
   onHoverApt?: (id: string | null) => void;
@@ -504,7 +513,7 @@ function BuildingColumn({
     return m;
   }, [apartments]);
 
-  const floorRows = getFloorRows(buildingId, compact);
+  const floorRows = getFloorRows(buildingId, compact, phone);
   const LABEL_W = compact ? 26 : 34;
   const padClass = compact ? 'p-0.5 gap-0.5' : 'p-1 gap-1';
 
@@ -671,6 +680,7 @@ function BuildingColumn({
                       undefined
                     }
                     compact={compact}
+                    phone={phone}
                   />
                 ) : (row.type === 'wide' || row.type === 'duplex') ? (
                   <>
@@ -699,6 +709,7 @@ function BuildingColumn({
                             onAddTask={getOnAddTask(apt)}
                             allTasksDone={getAllTasksDone(apt)}
                             compact={compact}
+                            phone={phone}
                           />
                         </React.Fragment>
                       );
@@ -718,7 +729,7 @@ function BuildingColumn({
 function NetivBuildingColumn({
   buildingId, apartments, mergedLabels, stages, activeStageIds, classFilter, searchQuery,
   onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, aptSubLabels,
-  aptTaskData, nextStageLabels, onAddTask, aptCompletedData, compact, onNameUnnamed,
+  aptTaskData, nextStageLabels, onAddTask, aptCompletedData, compact, phone, onNameUnnamed,
   hoverGroup, onHoverApt,
 }: {
   buildingId: BuildingId;
@@ -738,6 +749,7 @@ function NetivBuildingColumn({
   onAddTask?: (apt: Apartment) => void;
   aptCompletedData?: Map<string, boolean>;
   compact?: boolean;
+  phone?: boolean;
   onNameUnnamed?: (apt: Apartment) => void;
   hoverGroup?: Set<string> | null;
   onHoverApt?: (id: string | null) => void;
@@ -820,8 +832,8 @@ function NetivBuildingColumn({
     return () => onNameUnnamed(apt);
   }
 
-  const rowH = compact ? 36 : 64;
-  const roofH = compact ? 16 : 26;
+  const rowH = compact ? 36 : phone ? 74 : 64;
+  const roofH = compact ? 16 : phone ? 22 : 26;
   const LABEL_W = compact ? 26 : 34;
   const padClass = compact ? 'p-0.5 gap-0.5' : 'p-1 gap-1';
   const gapCls = compact ? 'gap-1' : 'gap-2';
@@ -888,6 +900,7 @@ function NetivBuildingColumn({
           allTasksDone={getAllDoneFn(apt)}
           onNameUnnamed={getOnNameFn(apt)}
           compact={compact}
+          phone={phone}
           isDuplex={false}
         />
       );
@@ -954,7 +967,7 @@ function NetivBuildingColumn({
 export function BuildingDiagram({
   apartments, stages, activeStageIds, classFilter, searchQuery, selectedBuilding,
   onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, aptSubLabels,
-  aptTaskData, nextStageLabels, onAddTask, aptCompletedData, compact, onNameUnnamed,
+  aptTaskData, nextStageLabels, onAddTask, aptCompletedData, compact, phone, onNameUnnamed,
 }: BuildingDiagramProps) {
   const { isRtl } = useStore(state => state.mainUiStrings);
   const buildings = useStore(state => state.buildings);
@@ -1003,7 +1016,8 @@ export function BuildingDiagram({
   }, [hoverAptId, apartments]);
 
   const gapClass = compact ? 'gap-3' : 'gap-5';
-  const padClass = compact ? 'p-3' : 'p-5';
+  // On the phone the single building IS the page — padding is room it cannot spare.
+  const padClass = compact ? 'p-3' : phone ? 'p-2 pb-8' : 'p-5';
 
   return (
     <div
@@ -1033,6 +1047,7 @@ export function BuildingDiagram({
           onAddTask,
           aptCompletedData,
           compact,
+          phone,
           onNameUnnamed,
           hoverGroup,
           onHoverApt: setHoverAptId,

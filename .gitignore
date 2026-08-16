@@ -6,3 +6,5 @@ dist/
 .claude/
 scratchpad/*.png
 scratchpad/*.log
+scratchpad/cap-*.html
+scratchpad/phone-preview.html

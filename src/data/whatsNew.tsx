@@ -95,6 +95,13 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'tap',
       },
       {
+        title: 'The buildings fit your phone',
+        body: 'On a phone the diagram shows one building at a time behind big A1 / A2 / A3 '
+          + 'tabs, with bigger cells and no sideways scrolling. All the filters moved into '
+          + 'one Filters button, so the building starts at the top of the screen.',
+        demo: 'tap',
+      },
+      {
         title: 'Closing a pin says who closed it',
         body: 'In a pin\'s note, Save keeps the bubble open, and Mark as done is its own '
           + 'button that records the name — so a pin the architect closes says so. '

@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { Search, X, ToggleLeft, CheckSquare, Printer, ChevronDown } from 'lucide-react';
+import { Search, X, ToggleLeft, CheckSquare, Printer, ChevronDown, SlidersHorizontal } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 import { Tooltip } from '../components/ui/Tooltip';
 import { useStore } from '../data/store';
@@ -12,9 +12,26 @@ import { Toast } from '../components/ui/Toast';
 
 type ClassFilter = 'all' | 'standard' | 'shinui';
 
+/**
+ * Matches Tailwind's md breakpoint — the same line the sidebar/MobileNav swap
+ * on, so "phone" here always agrees with what the chrome is doing.
+ */
+function usePhone(): boolean {
+  const [phone, setPhone] = useState(() => window.matchMedia('(max-width: 767px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const onChange = () => setPhone(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return phone;
+}
+
 export function ProjectDiagramPage() {
   const { apartments, stages, buildings, currentUser, bulkUpdateApartments, updateApartment, contractorAssignments, contractors, mainUiStrings: s, pendingOpenAptId, setPendingOpenAptId, pendingFocus, setPendingFocus, currentProjectId, projects } = useStore();
 
+  const isPhone = usePhone();
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedBuilding, setSelectedBuilding] = useState<BuildingId | 'all'>('all');
   const [activeStageIds, setActiveStageIds] = useState<string[]>([]);
   const [classFilter, setClassFilter] = useState<ClassFilter>('all');
@@ -124,6 +141,17 @@ export function ProjectDiagramPage() {
   }, [apartments, sortedStages]);
 
   if (currentProjectId === 'general') return <Navigate to="/jobs" replace />;
+
+  /**
+   * On a phone the diagram shows ONE building — 'all' resolves to the first.
+   * The stored selection is left alone, so going back to a desktop window
+   * restores the all-buildings view exactly as it was.
+   */
+  const phoneBuilding: BuildingId | 'all' =
+    selectedBuilding === 'all' ? (buildings[0]?.id ?? 'all') : selectedBuilding;
+  const effectiveBuilding = isPhone ? phoneBuilding : selectedBuilding;
+  // Chips beyond the stage legend that the phone Filters button should count.
+  const phoneFilterCount = activeStageIds.length + (classFilter !== 'all' ? 1 : 0);
 
   function toggleStage(id: string) {
     setActiveStageIds(prev =>
@@ -243,8 +271,66 @@ export function ProjectDiagramPage() {
       </div>
 
       <div className="flex flex-col h-full overflow-hidden print:h-auto print:overflow-visible">
+        {/*
+          Phone bar. One building at a time behind big tabs, and the whole
+          filter block folded into a single Filters button — the diagram used
+          to start a full screen of chips further down.
+        */}
+        <div className="md:hidden bg-white border-b border-gray-200 px-3 pt-2 pb-2 flex-shrink-0 print:hidden flex flex-col gap-2">
+          <div className="flex gap-1.5 overflow-x-auto">
+            {buildings.map(b => (
+              <button
+                key={b.id}
+                onClick={() => setSelectedBuilding(b.id)}
+                className={`flex-1 min-w-[64px] py-2.5 rounded-xl text-base font-bold transition-all ${
+                  effectiveBuilding === b.id
+                    ? 'bg-[#1e3a5f] text-white shadow-sm'
+                    : 'bg-gray-100 text-gray-600 active:bg-gray-200'
+                }`}
+              >
+                {b.id}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder={s.searchApt}
+                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-gray-50"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+            <button
+              onClick={() => setFiltersOpen(true)}
+              className={`relative flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold border transition-all ${
+                phoneFilterCount > 0 || bulkMode
+                  ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]'
+                  : 'bg-gray-100 border-gray-200 text-gray-600'
+              }`}
+            >
+              <SlidersHorizontal size={15} />
+              {s.filtersSection}
+              {phoneFilterCount > 0 && (
+                <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#4aa8d8] text-white text-[11px] font-black flex items-center justify-center">
+                  {phoneFilterCount}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+
         {/* Top bar — hidden on print */}
-        <div className="bg-white border-b border-gray-200 px-5 py-3 flex-shrink-0 print:hidden">
+        <div className="hidden md:block bg-white border-b border-gray-200 px-5 py-3 flex-shrink-0 print:hidden">
           <div className="flex items-center gap-3 flex-wrap">
             {/* Building selector */}
             <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
@@ -391,7 +477,8 @@ export function ProjectDiagramPage() {
             activeStageIds={activeStageIds}
             classFilter={classFilter}
             searchQuery={searchQuery}
-            selectedBuilding={selectedBuilding}
+            selectedBuilding={effectiveBuilding}
+            phone={isPhone}
             onApartmentClick={handleAptClick}
             showShinuiBadge={showShinuiBadge}
             bulkMode={bulkMode}
@@ -427,7 +514,10 @@ export function ProjectDiagramPage() {
 
         {/* Bulk action bar — hidden on print */}
         {bulkMode && (
-          <div className="fixed bottom-0 left-16 right-0 bg-[#1e3a5f] text-white px-5 py-3 shadow-2xl flex items-center gap-4 flex-wrap z-30 print:hidden">
+          <div
+            className="fixed bottom-0 left-0 md:left-16 right-0 bg-[#1e3a5f] text-white px-5 py-3 shadow-2xl flex items-center gap-4 flex-wrap z-40 print:hidden"
+            style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}
+          >
             <span className="font-semibold text-sm">
               {bulkSelected.size} apartment{bulkSelected.size !== 1 ? 's' : ''} selected
             </span>
@@ -488,6 +578,109 @@ export function ProjectDiagramPage() {
           <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />
         )}
       </div>
+
+      {/*
+        The phone Filters sheet. Everything the desktop top bar spreads across
+        the page lives here behind one button: type, the stage legend, the
+        Changes badge toggle, bulk update and print. Closes on backdrop tap,
+        the X, Done, and Escape — a sheet that only closes one way is a wall.
+      */}
+      {filtersOpen && (
+        <div
+          className="md:hidden fixed inset-0 z-50 print:hidden"
+          onClick={() => setFiltersOpen(false)}
+          onKeyDown={e => { if (e.key === 'Escape') setFiltersOpen(false); }}
+        >
+          <div className="absolute inset-0 bg-black/40" />
+          <div
+            onClick={e => e.stopPropagation()}
+            className="absolute bottom-0 left-0 right-0 rounded-t-2xl bg-white p-4 flex flex-col gap-4 max-h-[80vh] overflow-y-auto"
+            style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)' }}
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-base font-bold text-gray-900">{s.filtersSection}</span>
+              <span className="text-xs text-gray-500 flex-1">
+                <strong className="text-gray-800">{total}</strong> {s.bulkUnits} · <strong>{noStage}</strong> {s.bulkNotStarted}
+              </span>
+              <button onClick={() => setFiltersOpen(false)} className="p-2 -m-1 rounded-lg text-gray-400">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Type */}
+            <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
+              {(['all', 'standard', 'shinui'] as const).map(c => (
+                <button
+                  key={c}
+                  onClick={() => setClassFilter(c)}
+                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+                    classFilter === c
+                      ? c === 'shinui' ? 'bg-amber-500 text-white shadow-sm' : 'bg-[#1e3a5f] text-white shadow-sm'
+                      : 'text-gray-600'
+                  }`}
+                >
+                  {c === 'all' ? s.all : c === 'standard' ? s.standard : s.changes}
+                </button>
+              ))}
+            </div>
+
+            {/* Stage legend — same component, same behaviour as the desktop bar */}
+            <StageLegend
+              stages={sortedStages}
+              activeStageIds={bulkMode ? [] : activeStageIds}
+              onToggle={bulkMode ? () => {} : toggleStage}
+            />
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => setShowShinuiBadge(v => !v)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border transition-all ${
+                  showShinuiBadge ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-gray-100 border-gray-200 text-gray-500'
+                }`}
+              >
+                <ToggleLeft size={14} />
+                {s.changes}
+              </button>
+              <button
+                onClick={() => {
+                  if (bulkMode) exitBulkMode(); else setBulkMode(true);
+                  setFiltersOpen(false);
+                }}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border transition-all ${
+                  bulkMode ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'bg-gray-100 border-gray-200 text-gray-600'
+                }`}
+              >
+                <CheckSquare size={14} />
+                Bulk Update
+              </button>
+              <button
+                onClick={() => { setFiltersOpen(false); setTimeout(handlePrint, 150); }}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-gray-200 text-gray-600"
+              >
+                <Printer size={14} />
+                Print
+              </button>
+              {hasFilters && (
+                <button
+                  onClick={clearFilters}
+                  className="flex items-center gap-1 text-xs text-red-500 px-2 py-2 ml-auto"
+                >
+                  <X size={12} />
+                  Clear
+                </button>
+              )}
+            </div>
+
+            <button
+              onClick={() => setFiltersOpen(false)}
+              className="w-full py-3 rounded-xl text-sm font-bold text-white"
+              style={{ backgroundColor: '#1e3a5f' }}
+            >
+              {s.doneBtn}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Naming dialog for unnamed ground/lobby/basement slots */}
       {namingApt && (
