@@ -682,6 +682,18 @@ export function GeneralJobsPage() {
   }
 
   function handleToolPick(next: BoardTool) {
+    /**
+     * Pressing the tool you are already holding puts it DOWN.
+     *
+     * Every mode tool used to be a one-way trip: once the pen was armed the
+     * only way back was to hunt for Select, so "I'm done drawing" took two
+     * decisions instead of one. A second press on the lit button is the
+     * obvious gesture and it now means what it looks like. Select itself is
+     * the floor — pressing it again is a no-op rather than leaving the board
+     * with no tool at all.
+     */
+    if (next === toolRef.current && next !== 'select') { setTool('select'); return; }
+
     if (next === 'clipart') { setArtPicker(true); setTool('select'); return; }
     if (next === 'title') {
       const at = freeSpotRef.current(NODE_DEFAULT_SIZE.title.w, NODE_DEFAULT_SIZE.title.h);
@@ -2553,9 +2565,28 @@ export function GeneralJobsPage() {
   clampPanRef.current = (p, atZoom) => {
     const z = atZoom ?? zoom;
     const w = maxX * z, h = maxY * z;
+    /**
+     * Zooming out must never reveal room nobody asked for.
+     *
+     * Once the scaled world is SMALLER than the viewport, the old clamp let the
+     * pan range over 0..(viewport − world) on each axis — a positive offset,
+     * which is blank space above and to the left of the board's own origin.
+     * So zooming out drifted everything down-right off the corner and opened
+     * emptiness over the planner, whatever the expand toggles said.
+     *
+     * Pinned to the corner instead, unless that side has actually been unlocked
+     * — which is the same rule `sideAllowed` applies to dragging, so the toggle
+     * finally means one thing in both places.
+     */
+    const pinX = !sideAllowed(projectBoard.expand, 'left');
+    const pinY = !sideAllowed(projectBoard.expand, 'top');
     return {
-      x: w <= vp.w ? Math.max(0, Math.min(p.x, vp.w - w)) : Math.min(0, Math.max(p.x, vp.w - w)),
-      y: h <= vp.h ? Math.max(0, Math.min(p.y, vp.h - h)) : Math.min(0, Math.max(p.y, vp.h - h)),
+      x: w <= vp.w
+        ? (pinX ? 0 : Math.max(0, Math.min(p.x, vp.w - w)))
+        : Math.min(0, Math.max(p.x, vp.w - w)),
+      y: h <= vp.h
+        ? (pinY ? 0 : Math.max(0, Math.min(p.y, vp.h - h)))
+        : Math.min(0, Math.max(p.y, vp.h - h)),
     };
   };
 

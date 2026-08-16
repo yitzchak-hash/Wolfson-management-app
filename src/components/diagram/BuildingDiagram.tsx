@@ -384,13 +384,37 @@ function AptCell({
   );
 }
 
-function Stairwell({ compact }: { compact?: boolean }) {
+/**
+ * The stairwell strip down the middle of a floor — and, on a phone, the floor's
+ * NUMBER as well.
+ *
+ * The number used to sit in a 34px grey gutter down the left, which on a 390px
+ * screen is 9% of the width spent on two digits, taken from the four cells that
+ * actually hold the information. Here it costs nothing: the strip already
+ * exists as a divider, and the middle of the row is where the eye is anyway.
+ */
+function Stairwell({ compact, floorLabel }: { compact?: boolean; floorLabel?: string }) {
+  const w = floorLabel ? '20px' : compact ? '6px' : '10px';
   return (
-    <div className="flex-shrink-0 flex items-center justify-center" style={{ width: compact ? '6px' : '10px' }}>
+    <div className="flex-shrink-0 flex items-center justify-center relative" style={{ width: w }}>
       <div
         className="rounded-full"
         style={{ width: '3px', height: '100%', backgroundColor: '#f59e0b', opacity: 0.55 }}
       />
+      {floorLabel && (
+        <span
+          className="absolute inset-0 flex items-center justify-center text-center pointer-events-none"
+          style={{
+            fontSize: floorLabel.length > 2 ? '6.5px' : '9px',
+            fontWeight: 700, color: '#64748b', lineHeight: 1,
+            // A pill behind it so the strip does not read through the digits.
+            background: '#f8fafc', borderRadius: '4px',
+            margin: 'auto', width: '19px', height: '19px',
+          }}
+        >
+          {floorLabel}
+        </span>
+      )}
     </div>
   );
 }
@@ -400,7 +424,7 @@ function FourCellRow({
   hoverGroup, onHoverApt,
   isContractorHighlighted, isBulkSelected, getAptSubLabel, getTaskInfo, getNextStageName, getOnAddTask, getAllTasksDone,
   getOnNameUnnamed,
-  showShinuiBadge, onApartmentClick, rowFloorType, compact, phone,
+  showShinuiBadge, onApartmentClick, rowFloorType, compact, phone, floorLabel,
 }: {
   aptNums: number[];
   getApt: (n: number) => Apartment | undefined;
@@ -425,6 +449,8 @@ function FourCellRow({
   rowFloorType?: 'basement' | 'ground' | 'lobby';
   compact?: boolean;
   phone?: boolean;
+  /** Set only on a phone: the floor number, drawn on the middle divider. */
+  floorLabel?: string;
 }) {
   const gapClass = compact ? 'gap-1' : 'gap-2';
 
@@ -463,7 +489,7 @@ function FourCellRow({
         })}
       </div>
 
-      <Stairwell compact={compact} />
+      <Stairwell compact={compact} floorLabel={floorLabel} />
 
       <div className={`flex flex-1 ${gapClass} min-w-0`}>
         {[2, 3].map(ci => {
@@ -638,6 +664,9 @@ function BuildingColumn({
                 borderBottom: ri < floorRows.length - 1 ? '1px solid #e9edf2' : 'none',
               }}
             >
+              {/* No left gutter on a phone — the floor number rides the middle
+                  divider instead, giving all 34px back to the apartments. */}
+              {!phone && (
               <div
                 className="flex items-center justify-center flex-shrink-0 text-gray-500"
                 style={{
@@ -663,6 +692,7 @@ function BuildingColumn({
                   </span>
                 )}
               </div>
+              )}
 
               <div className={`flex flex-1 items-stretch ${padClass} min-w-0`}>
                 {isNonApt ? (
@@ -677,6 +707,11 @@ function BuildingColumn({
                   />
                 ) : row.type === 'normal' || row.type === 'basement' || row.type === 'ground' || row.type === 'lobby' ? (
                   <FourCellRow
+                    floorLabel={phone
+                      ? (row.type === 'ground' ? ui.groundCommercial
+                        : row.type === 'lobby' ? ui.lobby
+                        : row.floorLabel)
+                      : undefined}
                     aptNums={row.aptNums!}
                     getApt={getApt}
                     getStage={getStage}
@@ -712,7 +747,12 @@ function BuildingColumn({
                       const apt = getApt(row.aptNums![idx]);
                       return (
                         <React.Fragment key={idx}>
-                          {idx === 1 && <Stairwell compact={compact} />}
+                          {idx === 1 && (
+                            <Stairwell
+                              compact={compact}
+                              floorLabel={phone ? row.floorLabel : undefined}
+                            />
+                          )}
                           <AptCell
                             apt={apt}
                             stage={getStage(apt)}
@@ -954,7 +994,9 @@ function NetivBuildingColumn({
       <div className="flex flex-col rounded-b-lg overflow-hidden" style={{ border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
         {/* Roof */}
         <div className="flex items-stretch" style={{ height: `${roofH}px`, minHeight: `${roofH}px`, borderBottom: '1px solid #e9edf2' }}>
-          <div className="flex items-center justify-center flex-shrink-0" style={{ width: `${LABEL_W}px`, borderRight: '1px solid #e2e8f0', backgroundColor: '#dbeafe' }} />
+          {!phone && (
+            <div className="flex items-center justify-center flex-shrink-0" style={{ width: `${LABEL_W}px`, borderRight: '1px solid #e2e8f0', backgroundColor: '#dbeafe' }} />
+          )}
           <div className={`flex flex-1 items-stretch ${padClass}`}>
             <div className="flex-1 rounded-md" style={{ backgroundColor: '#bfdbfe' }} />
           </div>
@@ -974,17 +1016,26 @@ function NetivBuildingColumn({
           return (
             <div key={floor} className="flex items-stretch"
               style={{ height: `${rowH}px`, minHeight: `${rowH}px`, borderBottom: fi < floorNumbers.length - 1 ? '1px solid #e9edf2' : 'none' }}>
-              <div className="flex items-center justify-center flex-shrink-0 text-gray-500"
-                style={{ width: `${LABEL_W}px`, borderRight: '1px solid #e2e8f0', backgroundColor: rowBg, fontSize: '9px', fontWeight: 600 }}>
-                <span style={{ fontSize: floor === -1 ? '7px' : '9px', textAlign: 'center', lineHeight: 1.1 }}>
-                  {floor === -1 ? ui.lobby : floor === 0 ? ui.groundCommercial : String(floor)}
-                </span>
-              </div>
+              {/* No left gutter on a phone — the floor number rides the middle
+                  divider instead, giving all 34px back to the apartments. */}
+              {!phone && (
+                <div className="flex items-center justify-center flex-shrink-0 text-gray-500"
+                  style={{ width: `${LABEL_W}px`, borderRight: '1px solid #e2e8f0', backgroundColor: rowBg, fontSize: '9px', fontWeight: 600 }}>
+                  <span style={{ fontSize: floor === -1 ? '7px' : '9px', textAlign: 'center', lineHeight: 1.1 }}>
+                    {floor === -1 ? ui.lobby : floor === 0 ? ui.groundCommercial : String(floor)}
+                  </span>
+                </div>
+              )}
               <div className={`flex flex-1 items-stretch ${padClass} min-w-0`}>
                 <div className={`flex flex-1 ${gapCls} min-w-0`}>
                   {renderCells(floor, Array.from({ length: leftN }, (_, i) => i + 1))}
                 </div>
-                <Stairwell compact={compact} />
+                <Stairwell
+                  compact={compact}
+                  floorLabel={phone
+                    ? (floor === -1 ? ui.lobby : floor === 0 ? ui.groundCommercial : String(floor))
+                    : undefined}
+                />
                 <div className={`flex flex-1 ${gapCls} min-w-0`}>
                   {renderCells(floor, Array.from({ length: rightN }, (_, i) => leftN + i + 1))}
                 </div>

@@ -222,6 +222,22 @@ Module-level constants cannot access the translation store. Any constant that ou
 ### RTL
 `settings.isRtl` controls text direction. `dir="rtl"` is applied to the root layout when true.
 
+## Board tools toggle off
+Pressing the tool you are already holding puts it DOWN and returns to Select (the board's
+default, `useState<BoardTool>('select')`). Guarded so Select itself is a no-op — the board
+must never end up with no tool. `handleToolPick` compares against `toolRef.current`, which is
+assigned during render and is therefore current.
+
+## Zooming out must never reveal room nobody asked for
+`clampPanRef` used to allow a pan of `0..(viewport − world)` on each axis once the scaled
+world was SMALLER than the viewport — a POSITIVE offset, i.e. blank space above and left of
+the board's own origin. Zooming out therefore drifted the board off its corner and opened
+emptiness over the planner whatever the expand toggles said. It now pins that axis to 0
+unless `sideAllowed(expand, 'left'|'top')`, so the toggle means the same thing to zooming as
+it does to dragging. `scratchpad/board.mjs` proves it by SHOVING the board down-right with a
+middle-drag after zooming out — zooming alone leaves pan at 0 and would pass for the wrong
+reason. Verified non-vacuous: the old clamp shoves to x=450 y=350.
+
 ## Board node types (v2)
 `CanvasElement.type` is now `note | box | title | countdown | stopwatch | clipart | stroke`.
 Default sizes differ per type (`NODE_DEFAULT_SIZE`) — not everything is the same size.
@@ -1269,6 +1285,11 @@ in between `top: 0` meant zero in the SCALED space — measured 577px down at
 - **The drawer is FULL SCREEN on a phone** (`usePhone()` in `src/data/usePhone.ts`), with a
   **Plan tab** that opens the markup studio directly — a phone has no side pane, so the plan
   would otherwise be unreachable.
+- **The phone diagram has NO left gutter.** The floor number rides the middle stairwell
+  divider (`Stairwell` takes a `floorLabel`), because a 34px grey column on a 390px screen
+  is 9% of the width spent on two digits, taken from the four cells that carry the meaning.
+  Note there are TWO column components — `BuildingColumn` (Wolfson) and `NetivBuildingColumn`
+  — and a change to one is invisible in the other; Wolfson renders `BuildingColumn`.
 - **Phone preview pages**: `scratchpad/mobcapture.mjs` captures real rendered pages
   (scripts stripped, images inlined) and `build-preview.mjs` wraps them in phone frames for
   an artifact the owner reviews before/after changes. `scratchpad/shots.mjs` is the measuring
