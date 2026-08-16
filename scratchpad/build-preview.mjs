@@ -1,108 +1,126 @@
-// Assembles the phone-preview artifact: three REAL captured pages inside
-// phone frames. The captures are embedded as JSON and poured into iframe
-// srcdoc at load — self-contained, no network, nothing wired.
-import { readFileSync, writeFileSync } from 'fs';
+// Assembles the phone preview: every screen as a pixel-exact render inside a
+// phone frame you can scroll.
+//
+// Images rather than live iframes, and the reason is measured: a captured page
+// carries a 110KB inline stylesheet, and an iframe holding one lays out
+// correctly — right rects, right colours — and then never paints, while a
+// trivial srcdoc beside it paints fine. So the frames would have shipped
+// white. A long render always draws, is exactly what the phone shows, and in a
+// fixed-height frame with overflow-y:auto it scrolls the same way. The
+// editable HTML of each screen ships beside this page.
+import { readFileSync, writeFileSync, statSync } from 'fs';
 
-const states = [
-  ['cap-diagram', 'The buildings page', 'Search and Filters on top, then half-height A1 / A2 / A3 tabs with the unit count beside them in grey. Stage names WRAP now — “— Not Started —” used to be cut to “— Not Sta…” in every four-across cell. Rows are taller to pay for it.'],
-  ['cap-sheet', 'Filters open', 'Everything the desktop spreads across the top lives behind the Filters button: type, the stage legend, Changes badge, bulk update, print.'],
-  ['cap-drawer', 'An apartment open', 'The header and the field row wrap instead of printing on top of each other — “Family Name” used to sit across “Type”, and the stage picker ran off the edge under the X.'],
+const SCREENS = [
+  ['diagram', 'The buildings', 'One building behind small tabs, the count in grey beside them. Every apartment shows its number, the family and the full stage name — nothing is cut off. Scroll the frame.'],
+  ['filters', 'Filters', 'Everything the desktop spreads across the top, behind one button: type, the stage legend, the Changes badge, bulk update and print.'],
+  ['apartment', 'An apartment', 'Who it is on the first line, what you do with it on the second — the buttons no longer run under the close X, and the fields stack instead of colliding.'],
+  ['dashboard', 'Dashboard', 'The figures two to a row, then progress by stage. Every number opens the list behind it.'],
+  ['tasks', 'Tasks', 'One row of controls that scrolls and fades at its edge, with Add Task pinned outside so the main action can never scroll away.'],
+  ['calendar', 'Calendar', 'The month starts at the top — the old page title was saying what the lit-up tab already says.'],
+  ['reports', 'Reports', 'The whole builder: what a row is, which columns, the rules. Out as CSV, Excel or print.'],
+  ['activity', 'Activity', 'Who changed what, filtered by person, building, kind and date.'],
+  ['settings', 'Project settings', 'Stages, buildings and the worker sheet, one column at full width.'],
 ];
 
-const payload = {};
-for (const [f] of states) {
-  payload[f] = readFileSync(`scratchpad/${f}.html`, 'utf8');
-}
-const json = JSON.stringify(payload).replace(/<\//g, '<\\/');
+const b64 = f => readFileSync(`scratchpad/pv-${f}.png`).toString('base64');
 
-const cards = states.map(([id, name, blurb]) => `
-      <figure class="frame">
+const cards = SCREENS.map(([id, name, blurb]) => `
+      <figure class="screen">
         <figcaption>
-          <span class="frame-name">${name}</span>
-          <span class="frame-blurb">${blurb}</span>
+          <span class="screen-name">${name}</span>
+          <span class="screen-note">${blurb}</span>
         </figcaption>
-        <div class="bezel"><iframe data-cap="${id}" title="${name}"></iframe></div>
+        <div class="bezel">
+          <div class="glass">
+            <img src="data:image/png;base64,${b64(id)}" alt="${name} on a phone">
+          </div>
+        </div>
       </figure>`).join('\n');
 
-const html = `<title>Wolfson on a Phone</title>
+const html = `<title>TzviAir on a Phone</title>
 <style>
   :root {
-    --bg: #eef1f5;
-    --card: #ffffff;
-    --ink: #17222f;
-    --muted: #5b6b7d;
-    --accent: #1e3a5f;
+    --bg: #eceff4;
+    --panel: #ffffff;
+    --ink: #16202b;
+    --muted: #5d6b7c;
+    --navy: #1e3a5f;
     --gold: #b8860b;
-    --line: #d8dee6;
-    --bezel: #10161d;
+    --line: #d6dce4;
+    --bezel: #0d1219;
+    --shadow: rgba(12, 22, 38, .25);
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #0f1720; --card: #16212e; --ink: #e8edf3; --muted: #8fa0b3;
-      --accent: #4aa8d8; --line: #24313f; --bezel: #000000;
+      --bg: #0e161f; --panel: #16212e; --ink: #e9eef4; --muted: #93a3b5;
+      --navy: #7cc0e6; --gold: #d9a521; --line: #243141; --bezel: #000000;
+      --shadow: rgba(0, 0, 0, .55);
     }
   }
   :root[data-theme="dark"] {
-    --bg: #0f1720; --card: #16212e; --ink: #e8edf3; --muted: #8fa0b3;
-    --accent: #4aa8d8; --line: #24313f; --bezel: #000000;
+    --bg: #0e161f; --panel: #16212e; --ink: #e9eef4; --muted: #93a3b5;
+    --navy: #7cc0e6; --gold: #d9a521; --line: #243141; --bezel: #000000;
+    --shadow: rgba(0, 0, 0, .55);
   }
+
   body {
+    margin: 0; padding: 30px 20px 70px;
     background: var(--bg); color: var(--ink);
     font: 15px/1.55 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    margin: 0; padding: 28px 20px 64px;
   }
-  header { max-width: 1360px; margin: 0 auto 26px; }
+  .wrap { max-width: 1400px; margin: 0 auto; }
   .eyebrow {
-    font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase;
-    color: var(--gold); margin-bottom: 6px;
+    font-size: 11px; font-weight: 800; letter-spacing: .15em;
+    text-transform: uppercase; color: var(--gold); margin-bottom: 7px;
   }
-  h1 { font-size: 26px; margin: 0 0 8px; text-wrap: balance; }
-  header p { color: var(--muted); max-width: 62ch; margin: 0; }
-  header strong { color: var(--ink); }
-  .frames {
-    display: flex; flex-wrap: wrap; gap: 28px; justify-content: center;
-    max-width: 1360px; margin: 0 auto;
+  h1 { font-size: 27px; line-height: 1.2; margin: 0 0 10px; text-wrap: balance; }
+  .lede { color: var(--muted); max-width: 66ch; margin: 0; }
+  .lede strong { color: var(--ink); }
+
+  .screens {
+    display: flex; flex-wrap: wrap; gap: 32px 26px;
+    justify-content: center; margin-top: 32px;
   }
-  .frame { margin: 0; width: 406px; max-width: 100%; }
-  figcaption { padding: 0 4px 10px; }
-  .frame-name {
-    display: block; font-weight: 800; font-size: 15px; color: var(--accent);
-  }
-  .frame-blurb { display: block; font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+  .screen { margin: 0; width: 408px; max-width: 100%; }
+  figcaption { padding: 0 4px 10px; min-height: 66px; }
+  .screen-name { display: block; font-weight: 800; font-size: 15.5px; color: var(--navy); }
+  .screen-note { display: block; font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+
   .bezel {
-    background: var(--bezel); border-radius: 34px; padding: 8px;
-    box-shadow: 0 18px 44px rgba(10, 20, 35, .28);
+    background: var(--bezel); border-radius: 36px; padding: 9px;
+    box-shadow: 0 20px 46px var(--shadow);
   }
-  .bezel iframe {
-    display: block; width: 390px; max-width: 100%; height: 760px;
-    border: 0; border-radius: 27px; background: #ffffff;
+  /* The frame is one phone tall and scrolls, so a long page reads the way it
+     does in the hand rather than as a squashed strip. */
+  .glass {
+    height: 770px; border-radius: 28px; overflow-y: auto; overflow-x: hidden;
+    background: #fff; -webkit-overflow-scrolling: touch;
   }
+  .glass img { display: block; width: 100%; height: auto; }
+
   .note {
-    max-width: 1360px; margin: 30px auto 0; padding: 14px 16px;
-    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
-    color: var(--muted); font-size: 13.5px;
+    margin-top: 36px; padding: 15px 17px; font-size: 13.5px; color: var(--muted);
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
   }
   .note strong { color: var(--ink); }
 </style>
-<header>
-  <div class="eyebrow">TzviAir · Wolfson · phone</div>
-  <h1>The buildings page on a phone</h1>
-  <p>These are <strong>not drawings</strong> — each frame is the real page, captured from the running
-  app with its exact markup and styling, then unwired. Scroll inside a frame; open this
-  on your phone for full size. Say what to change and both this page and the app move together.</p>
-</header>
-<div class="frames">${cards}
+<div class="wrap">
+  <header>
+    <div class="eyebrow">TzviAir · Wolfson · 390 × 844</div>
+    <h1>The whole app on a phone</h1>
+    <p class="lede">Each frame is the <strong>real page</strong> rendered at phone size from the running
+    app — not a drawing of it, and not a resized desktop screenshot. <strong>Scroll inside a frame</strong>
+    to walk down the page. Tell me what to change on any of them and the app moves with it.</p>
+  </header>
+
+  <div class="screens">${cards}
+  </div>
+
+  <p class="note"><strong>Rendered on a full workspace</strong> — 168 apartments with real family names
+  and stages set, because a phone layout only ever breaks on content longer than its box. The buildings
+  page, the filter sheet and an open apartment are the three that changed most this round.</p>
 </div>
-<p class="note"><strong>Captured from the live code</strong> on August 16 with the standard
-Wolfson data (168 units, no stages set). Buttons here are intentionally dead — the wired
-version is on the site once deployed.</p>
-<script>
-  const CAPS = ${json};
-  for (const f of document.querySelectorAll('iframe[data-cap]')) {
-    f.srcdoc = CAPS[f.dataset.cap];
-  }
-</script>
 `;
 
 writeFileSync('scratchpad/phone-preview.html', html);
-console.log(`phone-preview.html: ${(html.length / 1024 / 1024).toFixed(2)} MB`);
+console.log(`phone-preview.html  ${(statSync('scratchpad/phone-preview.html').size / 1024 / 1024).toFixed(2)} MB`);
