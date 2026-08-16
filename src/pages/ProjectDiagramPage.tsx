@@ -277,21 +277,6 @@ export function ProjectDiagramPage() {
           to start a full screen of chips further down.
         */}
         <div className="md:hidden bg-white border-b border-gray-200 px-3 pt-2 pb-2 flex-shrink-0 print:hidden flex flex-col gap-2">
-          <div className="flex gap-1.5 overflow-x-auto">
-            {buildings.map(b => (
-              <button
-                key={b.id}
-                onClick={() => setSelectedBuilding(b.id)}
-                className={`flex-1 min-w-[64px] py-2.5 rounded-xl text-base font-bold transition-all ${
-                  effectiveBuilding === b.id
-                    ? 'bg-[#1e3a5f] text-white shadow-sm'
-                    : 'bg-gray-100 text-gray-600 active:bg-gray-200'
-                }`}
-              >
-                {b.id}
-              </button>
-            ))}
-          </div>
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -326,6 +311,31 @@ export function ProjectDiagramPage() {
                 </span>
               )}
             </button>
+          </div>
+          {/*
+            Building tabs sit UNDER the search, are half their old height, and
+            carry the unit count on their own line in grey — it used to eat a
+            full row of its own between the bar and the diagram.
+          */}
+          <div className="flex items-center gap-1.5">
+            {buildings.map(b => (
+              <button
+                key={b.id}
+                onClick={() => setSelectedBuilding(b.id)}
+                className={`flex-1 min-w-[48px] py-1.5 rounded-lg text-sm font-bold transition-all ${
+                  effectiveBuilding === b.id
+                    ? 'bg-[#1e3a5f] text-white shadow-sm'
+                    : 'bg-gray-100 text-gray-600 active:bg-gray-200'
+                }`}
+              >
+                {b.id}
+              </button>
+            ))}
+            <span className="flex-shrink-0 pl-1 text-[11px] leading-tight text-gray-400 tabular-nums text-right">
+              {bulkMode
+                ? `${bulkSelected.size} ${s.bulkSelected}`
+                : `${total} ${s.bulkUnits}`}
+            </span>
           </div>
         </div>
 
@@ -452,7 +462,7 @@ export function ProjectDiagramPage() {
         </div>
 
         {/* Stage progress mini bar — hidden on print */}
-        <div className="bg-gray-50 border-b border-gray-200 px-5 py-2 flex items-center gap-3 overflow-x-auto flex-shrink-0 print:hidden">
+        <div className="hidden md:flex bg-gray-50 border-b border-gray-200 px-5 py-2 items-center gap-3 overflow-x-auto flex-shrink-0 print:hidden">
           {stageStats.map(({ stage, count }) => (
             count > 0 && (
               <div key={stage.id} className="flex items-center gap-1.5 flex-shrink-0">

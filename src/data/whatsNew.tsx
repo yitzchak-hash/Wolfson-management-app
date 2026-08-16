@@ -96,9 +96,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
       },
       {
         title: 'The buildings fit your phone',
-        body: 'On a phone the diagram shows one building at a time behind big A1 / A2 / A3 '
-          + 'tabs, with bigger cells and no sideways scrolling. All the filters moved into '
-          + 'one Filters button, so the building starts at the top of the screen.',
+        body: 'On a phone the diagram shows one building at a time. Search and Filters sit '
+          + 'at the top, the A1 / A2 / A3 tabs are a slim row underneath with the unit count '
+          + 'beside them, and every filter lives behind the one Filters button. Cells are '
+          + 'taller so the stage name reads in full instead of being cut off, and an open '
+          + 'apartment stacks its fields rather than piling them on top of each other.',
         demo: 'tap',
       },
       {

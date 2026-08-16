@@ -210,8 +210,16 @@ function AptCell({
           {/* Family name — always shown *in addition to* the apartment number */}
           {nameLabel && numberLabel && (
             <span
-              className="w-full text-center leading-none block truncate px-0.5"
-              style={{ fontSize: compact ? '9.5px' : phone ? '13px' : '12px', opacity: isDimmed ? 0.55 : 0.97, fontWeight: 600 }}
+              // Same reason as the stage line: a family name is the thing the
+              // office reads the grid for, so on a phone it wraps instead of
+              // being cut to three letters and an ellipsis.
+              className={`w-full text-center block px-0.5 ${phone ? 'leading-tight' : 'leading-none truncate'}`}
+              style={{
+                fontSize: compact ? '9.5px' : phone ? '11.5px' : '12px',
+                opacity: isDimmed ? 0.55 : 0.97,
+                fontWeight: 600,
+                ...(phone ? { wordBreak: 'break-word' as const } : null),
+              }}
             >
               {nameLabel}
             </span>
@@ -242,8 +250,17 @@ function AptCell({
       {/* Stage name with inline completion indicator */}
       {!compact && displayLabel && (
         <span
-          className="w-full text-center leading-none block truncate px-0.5"
-          style={{ fontSize: phone ? '10.5px' : '9px', opacity: isDimmed ? 0.5 : (hasStage ? 0.9 : 0.45), fontStyle: hasStage ? 'normal' : 'italic' }}
+          // On a phone the stage name WRAPS rather than truncating. A four-across
+          // row is ~77px wide and "— Not Started —" needs 92px, so truncating
+          // clipped the stage off every cell in the grid — the one thing the
+          // diagram exists to show. The row is taller to pay for it.
+          className={`w-full text-center block px-0.5 ${phone ? 'leading-tight' : 'leading-none truncate'}`}
+          style={{
+            fontSize: phone ? '10px' : '9px',
+            opacity: isDimmed ? 0.5 : (hasStage ? 0.9 : 0.45),
+            fontStyle: hasStage ? 'normal' : 'italic',
+            ...(phone ? { wordBreak: 'break-word' as const, hyphens: 'auto' as const } : null),
+          }}
         >
           {hasStage ? stage!.name : ui.notStartedOption}
           {allTasksDone && <span style={{ color: isDimmed ? '#9ca3af' : '#22c55e', fontStyle: 'normal', marginLeft: '1px' }}>✓</span>}
@@ -832,7 +849,10 @@ function NetivBuildingColumn({
     return () => onNameUnnamed(apt);
   }
 
-  const rowH = compact ? 36 : phone ? 74 : 64;
+  // The phone row is fixed-height like the others, so it has to clear the
+  // WORST case now that the stage name wraps: number + family name + a
+  // three-line stage ("Concealed Units Installed") + a task line.
+  const rowH = compact ? 36 : phone ? 98 : 64;
   const roofH = compact ? 16 : phone ? 22 : 26;
   const LABEL_W = compact ? 26 : 34;
   const padClass = compact ? 'p-0.5 gap-0.5' : 'p-1 gap-1';

@@ -1225,13 +1225,30 @@ in between `top: 0` meant zero in the SCALED space — measured 577px down at
   the normal `selectedBuilding` state so a desktop window keeps its all-buildings view. The
   filter block collapses into ONE Filters button opening a bottom sheet (type, stage legend,
   Changes badge, bulk update, print, clear); the desktop bar is `hidden md:block`, the phone
-  bar `md:hidden`. `BuildingDiagram` takes `phone?: boolean` — taller rows (normal 78 vs 68)
-  and larger type, threaded through getFloorRows/AptCell/both column components. Harness:
+  bar `md:hidden`. `BuildingDiagram` takes `phone?: boolean` — taller rows and larger type,
+  threaded through getFloorRows/AptCell/both column components. Harness:
   `scratchpad/mobdiagram.mjs` — assert with `>> visible=true`, the hidden desktop bar still
   exists and counting it reports the test's fault as the product's.
+- **Phone bar order is search → tabs, not tabs → search.** The tabs are a slim row
+  (`py-1.5 text-sm`) carrying the unit count in grey at its end, and the separate stage-count
+  strip is `hidden md:flex`, because that strip was a whole row saying "168".
+- **Phone cells WRAP their text; they never truncate it.** A four-across row is ~77px wide and
+  "— Not Started —" needs 92px, so `truncate` clipped the stage off every cell in the grid.
+  The stage line and the family-name line drop `truncate` when `phone`, and `rowH` is 98 to
+  clear the worst case (number + family name + a three-line stage + a task line). Desktop
+  keeps truncation — it has the width, and wrapping there would ragged the grid.
+- **A non-wrapping flex row is the phone bug in this codebase.** Four of them were found at
+  390px: the drawer's Apt#/Family/Type/Stage row (labels printed ON TOP of each other), the
+  drawer header (Drive/Print/Worker ran under the X and could not be tapped), the drawer's
+  Drive/Zoho `1fr 1fr` grid (measured 585px inside a 390px screen), and the dashboard title
+  row. All four fixed with `flex-wrap` + a `min-w` per child, NOT with a phone flag — the
+  same markup then stays one line in the 1020px modal. `scratchpad/deskcheck.mjs` asserts
+  that: all four drawer labels must share one `top`, and the Drive grid must stay two-column.
 - **Phone preview pages**: `scratchpad/mobcapture.mjs` captures real rendered pages
   (scripts stripped, images inlined) and `build-preview.mjs` wraps them in phone frames for
-  an artifact the owner reviews before/after changes.
+  an artifact the owner reviews before/after changes. `scratchpad/shots.mjs` is the measuring
+  one — PNGs of 11 phone views plus a per-view count of elements past 390px and of text nodes
+  whose `scrollWidth` exceeds their box. Both numbers must be 0 everywhere before shipping.
 
 `Sidebar` is `hidden md:flex` with a `MobileNav` in the column flow.
 Twelve routes measured at 390×844: no overflow, nothing unreachable, no tap

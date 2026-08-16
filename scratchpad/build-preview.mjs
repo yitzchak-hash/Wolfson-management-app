@@ -4,9 +4,9 @@
 import { readFileSync, writeFileSync } from 'fs';
 
 const states = [
-  ['cap-diagram', 'The buildings page', 'One building at a time. Tabs pick A1 / A2 / A3, search and Filters sit in one slim row, the diagram starts right away.'],
+  ['cap-diagram', 'The buildings page', 'Search and Filters on top, then half-height A1 / A2 / A3 tabs with the unit count beside them in grey. Stage names WRAP now — “— Not Started —” used to be cut to “— Not Sta…” in every four-across cell. Rows are taller to pay for it.'],
   ['cap-sheet', 'Filters open', 'Everything the desktop spreads across the top lives behind the Filters button: type, the stage legend, Changes badge, bulk update, print.'],
-  ['cap-drawer', 'An apartment open', 'Tapping a cell opens the same window the office uses, sized to the phone.'],
+  ['cap-drawer', 'An apartment open', 'The header and the field row wrap instead of printing on top of each other — “Family Name” used to sit across “Type”, and the stage picker ran off the edge under the X.'],
 ];
 
 const payload = {};
@@ -24,7 +24,7 @@ const cards = states.map(([id, name, blurb]) => `
         <div class="bezel"><iframe data-cap="${id}" title="${name}"></iframe></div>
       </figure>`).join('\n');
 
-const html = `<title>The Phone Diagram</title>
+const html = `<title>Wolfson on a Phone</title>
 <style>
   :root {
     --bg: #eef1f5;
@@ -36,7 +36,6 @@ const html = `<title>The Phone Diagram</title>
     --line: #d8dee6;
     --bezel: #10161d;
   }
-  :root:not([data-theme="light"]) { }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       --bg: #0f1720; --card: #16212e; --ink: #e8edf3; --muted: #8fa0b3;

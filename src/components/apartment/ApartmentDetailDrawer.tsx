@@ -811,9 +811,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           transition: 'width 180ms ease',
         }}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 bg-[#1e3a5f] text-white flex-shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
+        {/* Header — wraps on a narrow screen. Unwrapped, the Drive/Print/Worker
+            row ran off the right edge and finished UNDERNEATH the close button,
+            so the last control both overlapped the X and could not be reached.
+            items-start keeps the X in the top corner as the rest wraps below. */}
+        <div className="flex items-start justify-between gap-2 px-4 py-3 bg-[#1e3a5f] text-white flex-shrink-0">
+          <div className="flex flex-wrap items-center gap-2 min-w-0 flex-1">
             <Building2 size={16} className="text-[#4aa8d8] flex-shrink-0" />
             {isGeneralProject
               ? <span className="text-[#4aa8d8] font-semibold text-sm flex-shrink-0">{ui.jobLabel}</span>
@@ -938,8 +941,15 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         <div className="flex-1 overflow-y-auto scrollbar-thin p-4">
           {activeTab === 'details' && (
             <div className="space-y-4">
-              {/* Top row: Apt# | Family Name | Classification | Stage */}
-              <div className="flex items-start gap-2">
+              {/*
+                Top row: Apt# | Family Name | Classification | Stage.
+                It WRAPS. As one unwrapped line at 390px the four labels landed
+                on top of each other — "Family Name" printed through "Type" —
+                and the stage select ran 27px off the right edge. The minimums
+                below let it fall to two lines on a phone and stay one line in
+                the 1020px modal, with no phone flag needed.
+              */}
+              <div className="flex flex-wrap items-start gap-2">
                 {/* Apt number — read-only small */}
                 {!isGeneralProject && (
                 <div className="flex-shrink-0">
@@ -964,7 +974,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 )}
 
                 {/* Family name / Job name */}
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-[150px]">
                   <label className="block text-[10px] font-medium text-gray-500 mb-1">{isGeneralProject ? ui.jobNameLabel : ui.familyName}</label>
                   <input
                     value={familyName}
@@ -1005,7 +1015,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 )}
 
                 {/* Current stage */}
-                <div className="flex-shrink-0 min-w-[120px]">
+                <div className="flex-1 min-w-[150px]">
                   <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.currentStage}</label>
                   <select
                     value={currentStageId}
@@ -1266,7 +1276,10 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   a setting, it is the thing everybody opens twenty times a day,
                   and it was two clicks down behind a fold. Settings keeps only
                   the connected unit, which genuinely is a setting. */}
-              <div className="grid gap-3" style={{ gridTemplateColumns: isGeneralProject ? '1fr' : '1fr 1fr' }}>
+              {/* One column on a phone. Two fixed columns forced each LinkField
+                  to its own minimum, so the pair measured 585px inside a 390px
+                  screen and the second field sat off the edge entirely. */}
+              <div className={`grid gap-3 ${isGeneralProject ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'}`}>
                 <LinkField
                   label={ui.driveFolder}
                   icon={FolderOpen}

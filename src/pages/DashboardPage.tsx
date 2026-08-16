@@ -472,7 +472,10 @@ export function DashboardPage() {
                     <div className="w-1/2 rounded-t transition-all" title={`${w.tasks} tasks`}
                       style={{ height: `${(w.tasks / top) * 100}%`, backgroundColor: '#16a34a', minHeight: 2 }} />
                   </div>
-                  <span className="text-[10px] text-gray-400 truncate w-full text-center">{w.label}</span>
+                  {/* Wraps rather than truncates: eight bars across a phone give
+                      each label 28px and "Aug 16" needs 35, so the day number
+                      was cut off the newest columns. Two short lines fit. */}
+                  <span className="text-[10px] leading-tight text-gray-400 w-full text-center">{w.label}</span>
                 </div>
               ))}
             </div>
@@ -576,9 +579,10 @@ export function DashboardPage() {
        monitor, which on a page whose whole job is showing a lot at once is the
        one layout that cannot. */
     <div className="p-5 xl:p-6 w-full">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">{s.pageDashboard}</h1>
+      {/* Header — wraps, so the button group drops under the title on a phone
+          instead of running 61px off the right edge with "Customize" cut in half. */}
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{s.pageDashboard}</h1>
         {isCustomizing ? (
           <div className="flex items-center gap-2">
             <button
