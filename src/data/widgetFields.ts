@@ -434,6 +434,17 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
       hint: 'The stage is the only thing to choose — the day, date and person are already known.',
     },
     // ── Type ──────────────────────────────────────────────────────────
+    /**
+     * One dial over the whole sheet, and it comes FIRST in this group.
+     *
+     * The five sizes under it tune one thing each; this is the one somebody
+     * reaches for when the notebook is on a wall panel and all of it is too
+     * small, and it keeps the sizes in proportion rather than needing five
+     * changed in step. Range matches the widget's own clamp (0.5–3), or the
+     * panel would offer a number the sheet then quietly ignores.
+     */
+    { key: 'scale', label: 'Whole sheet size', kind: 'number', min: 0.5, max: 3, group: 'Type',
+      hint: '1 is normal. 2 is twice the size — type, squares and the name column together.' },
     { key: 'dateSize', label: 'Date size', kind: 'number', min: 7, max: 34, group: 'Type',
       hint: 'The day number. It is the thing people scan for, so it starts bigger '
         + 'than the weekday under it.' },
@@ -511,6 +522,14 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
   banner: [
     { key: 'text', label: 'Wording', kind: 'text', placeholder: 'THIS WEEK' },
     ...TEXT_STYLE_FIELDS,
+  ],
+  'notes-board': [
+    title(),
+    {
+      key: 'columns', label: 'Notes across', kind: 'number', min: 1, max: 6,
+      hint: 'Blank fits as many as the width allows, so widening the board shows more '
+        + 'per row rather than bigger notes.',
+    },
   ],
   divider: [
     { key: 'text', label: 'Word on the line', kind: 'text', placeholder: 'Leave blank for a plain rule' },
@@ -739,6 +758,22 @@ export const WIDGET_PREVIEW: Record<string, Record<string, unknown>> = {
   },
   converter: { kind: 'btu', v: '36000' },
   banner: { text: 'THIS WEEK' },
+  /**
+   * Notes for the shelf, in the six colours, with a tick-box and a bold line
+   * so both markers show. The board gathers the real pads when the machine has
+   * any and only falls back to these — an empty cork board on a card is
+   * indistinguishable from a widget that does not work.
+   */
+  'notes-board': {
+    notes: [
+      { id: 'sn1', text: '☐ Chase the crane firm for Tuesday', colour: 'yellow' },
+      { id: 'sn2', text: 'Riser on 9 is boxed in — check\naccess before the wall units go up', colour: 'blue' },
+      { id: 'sn3', text: '**Grilles** land Thursday', colour: 'pink' },
+      { id: 'sn4', text: '☑ Panel labelled', colour: 'green' },
+      { id: 'sn5', text: 'Lift booked 07:00–09:00 only', colour: 'orange' },
+      { id: 'sn6', text: 'Super has the roof key', colour: 'purple' },
+    ],
+  },
   photo: { fit: 'cover', url: SAMPLE_PHOTO },
   clock: { mode: 'both' },
   'job-list': {},

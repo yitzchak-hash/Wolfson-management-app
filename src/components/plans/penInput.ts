@@ -56,6 +56,20 @@ export interface PenOptions {
   max?: number;
   /** 0 = ignore the input signal entirely and draw a constant line. */
   sensitivity?: number;
+  /**
+   * A bare finger on a phone, rather than a nib of any kind.
+   *
+   * The contact source exists for the Samsung panel's passive pen, which the
+   * panel reports as a TOUCH — so it cannot be switched off by pointer type
+   * without switching that pen off too. A fingertip's patch is how the hand
+   * happens to be shaped at that instant, not how hard anybody meant to press,
+   * and it swings by well over 2× within a single stroke as the finger rolls.
+   * Read as pressure, that draws a line which fattens and thins at random.
+   * The caller knows which screen it is on; on a phone-sized one it says so,
+   * and the stroke falls back to speed — which still gives a finger a line
+   * with some life in it, and no wobble.
+   */
+  finger?: boolean;
 }
 
 const DEFAULTS: Required<PenOptions> = {
@@ -63,6 +77,7 @@ const DEFAULTS: Required<PenOptions> = {
   min: 0.4,
   max: 2.1,
   sensitivity: 1,
+  finger: false,
 };
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
@@ -122,8 +137,9 @@ export class PenStroke {
         }
       }
       // Contact size only counts once it is big enough to be a nib rather than
-      // the 1×1 placeholder a mouse reports.
-      if (!this.decided && contact > 1.5) this.source = 'contact';
+      // the 1×1 placeholder a mouse reports — and only when it could be a nib
+      // at all. See PenOptions.finger.
+      if (!this.decided && !this.opts.finger && contact > 1.5) this.source = 'contact';
     }
 
     let target: number;
@@ -246,8 +262,20 @@ export class NibWatch {
   /** The two nibs must differ by at least this much before we believe in them. */
   private static RATIO = 1.7;
 
-  /** 'thin' | 'fat', or null while there is not enough evidence to say. */
-  see(contact: number): 'thin' | 'fat' | null {
+  /**
+   * 'thin' | 'fat', or null while there is not enough evidence to say.
+   *
+   * `finger` is the caller saying "this screen cannot be the dual-nib panel".
+   * A hand produces two clearly different contact sizes all by itself — a
+   * fingertip against the flat of a thumb is far more than the ratio apart —
+   * so on a phone the watch would decide the pen had been flipped and swap the
+   * tool to the highlighter in the middle of a sentence, with nothing on
+   * screen to explain it. A finger is not learned FROM either: one stroke with
+   * a hand would otherwise set the two sizes for the whole session and a real
+   * pen used afterwards would be measured against them.
+   */
+  see(contact: number, opts: { finger?: boolean } = {}): 'thin' | 'fat' | null {
+    if (opts.finger) return null;
     if (!(contact > 0)) return null;              // a mouse reports nothing
     // Let the extremes drift slowly back together, so one odd sample — the side
     // of a hand, a knuckle — does not set the scale for the rest of the session.

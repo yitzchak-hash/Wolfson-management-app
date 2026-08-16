@@ -39,6 +39,7 @@ const SIZE_KEY = 'widget_store_scale';
  * being news.
  */
 const RECENT: string[] = [
+  'notes-board',
   'open-snags', 'no-date', 'gone-quiet', 'nobody-booked', 'backlog-trend',
   'no-plan', 'floor-by-floor', 'duplicates', 'skipped-stage',
   'map', 'weather', 'tap-in', 'shabbat', 'world-clocks',
@@ -51,6 +52,7 @@ const RECENT: string[] = [
  * category's own tail — the map is a guide, not a cage.
  */
 const SUBGROUP: Record<string, string> = {
+  'notes-board': 'Notes and paper',
   kpi: 'Counts and numbers', 'count-by-stage': 'Counts and numbers',
   'progress-ring': 'Counts and numbers', 'bin-counter': 'Counts and numbers',
   'stage-legend': 'Counts and numbers', 'stage-funnel': 'Counts and numbers',

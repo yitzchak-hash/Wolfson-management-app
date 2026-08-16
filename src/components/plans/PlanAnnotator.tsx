@@ -5,7 +5,7 @@ import {
   Plus, Minus, Maximize2, Loader2, Pen, Pencil, Highlighter, Eraser, Minus as LineIcon,
   ArrowUpRight, Square, Circle, Type, Hand, Layers, FileDown, Check, ExternalLink,
   MessageSquare, Move, Layers2, ChevronsUpDown, User as UserIcon,
-  Monitor, ArrowRight, RotateCcw,
+  Monitor, ArrowRight, RotateCcw, MoreHorizontal,
 } from 'lucide-react';
 import './pdfCompat';   // must come before pdf.js
 import * as pdfjs from 'pdfjs-dist';
@@ -19,6 +19,7 @@ import { InkPicker } from './InkPicker';
 import { notePointer, isPalm, isPen, touchWasPalm } from '../../data/pencil';
 import { paintStroke, bubbleTextBox, REF, LINE } from './paintStroke';
 import { PlanPicker } from './PlanPicker';
+import { usePhone } from '../../data/usePhone';
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -43,6 +44,28 @@ function fillPct(value: number, min: number, max: number): React.CSSProperties {
 }
 
 const ACCENT = '#4aa8d8';
+
+/**
+ * A media query, as a boolean that follows the screen.
+ *
+ * The studio has to answer two questions a width breakpoint cannot. How TALL
+ * is the screen — a phone on its side is 844 across and 390 down, a desktop's
+ * width and a quarter of its height, so `usePhone()` alone calls it a desktop
+ * and lays out for one. And which way up is it, since that decides whether the
+ * tool rail costs the plan its width or its height.
+ */
+function useMedia(query: string): boolean {
+  const [on, setOn] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia(query).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const go = () => setOn(mq.matches);
+    go();
+    mq.addEventListener('change', go);
+    return () => mq.removeEventListener('change', go);
+  }, [query]);
+  return on;
+}
 
 /** The tools the pen flip is allowed to swap between. */
 const INK_TOOLS = new Set(['pen', 'pencil', 'marker', 'highlighter']);
@@ -211,6 +234,31 @@ export function PlanAnnotator({
   /** Turns a read-only viewing into an editing session, in place. */
   onStartMarkup?: () => void;
 }) {
+  /**
+   * The shape of the screen, which on a phone is two different problems.
+   *
+   * Stood up (390 × 844) width is what is scarce, so a 62px rail down the side
+   * is a sixth of the plan; it goes across the bottom instead, where a thumb
+   * reaches it. On its side (844 × 390) — the way anybody actually holds a
+   * phone to read a construction drawing — height is what is scarce, so the
+   * rail belongs down the side and the chrome above the plan has to shrink to
+   * one row. `compact` is "either dimension is too small for the desk
+   * layout", which is true in BOTH orientations of the same phone; a width
+   * breakpoint on its own is false the moment the phone is turned.
+   */
+  const phone = usePhone();
+  /**
+   * The width test is deliberately part of this. A desk window dragged half
+   * way up the screen is also 500px tall, and it has 1400px of width to lay
+   * the header out in — collapsing that into a ⋯ menu would be the phone
+   * layout arriving on a machine that never needed it.
+   */
+  const shortScreen = useMedia('(max-height: 540px) and (max-width: 1024px)');
+  const landscape = useMedia('(orientation: landscape)');
+  const compact = phone || shortScreen;
+  /** The rail runs across the bottom only when the screen is taller than it is wide. */
+  const railRow = compact && !landscape;
+
   const planAnnotations = useStore(s => s.planAnnotations);
   const savePlanAnnotation = useStore(s => s.savePlanAnnotation);
   const updatePlanAnnotation = useStore(s => s.updatePlanAnnotation);
@@ -262,6 +310,14 @@ export function PlanAnnotator({
   const isImagePlan = loadedIsImage || !!plans.find(p => p.id === planFileId)?.isImage;
   const [showDownload, setShowDownload] = useState(false);
   const [showPlans, setShowPlans] = useState(false);
+  /**
+   * The rest of the header, on a screen that cannot hold it.
+   *
+   * Eleven buttons wrap onto four rows at 390px and eat half the plan. The
+   * five that are pressed while drawing stay out; everything else moves in
+   * here, at a size a finger can hit.
+   */
+  const [showMore, setShowMore] = useState(false);
   /** On the wallboard: who is drawing. Empty means nobody has said yet. */
   const [who, setWho] = useState(askWho ? '' : authorName);
 
@@ -281,19 +337,52 @@ export function PlanAnnotator({
   /** The ink tool to come back to when the pen is flipped the right way up. */
   const thinNibTool = useRef<string>('pen');
   /** A drag of something already drawn, rather than a new stroke. */
-  const moving = useRef<{ id: string; nx: number; ny: number; pts: number[]; grip?: 'a' | 'z' } | null>(null);
+  const moving = useRef<{
+    id: string; nx: number; ny: number; pts: number[]; grip?: 'a' | 'z';
+    /** Has it actually travelled, or was this a tap that happened to land on it? */
+    moved?: boolean;
+    /** A finger's second tap on the mark it already picked — see onDown. */
+    tapOpens?: boolean;
+  } | null>(null);
   const erased = useRef<Set<string>>(new Set());
   const textRef = useRef<HTMLTextAreaElement>(null);
+  /**
+   * The nib ghost's own element, so it can be moved without a render.
+   *
+   * `setNibAt` on every pointermove re-renders the whole studio — a component
+   * with the version list, the rail and three canvases in it — for a circle
+   * that has moved four pixels. On a desk that is waste; on a phone it is the
+   * difference between a line that follows your finger and one that trails it.
+   * While a stroke is actually being drawn the ghost is written straight to
+   * the DOM instead, and state takes over again the moment the pen lifts.
+   */
+  const nibElRef = useRef<HTMLSpanElement>(null);
+  /**
+   * What last touched the glass. A long press with a finger must not open the
+   * browser's own "open image in new tab" menu over a drawing, but a right
+   * click with a mouse is nobody's problem — and a contextmenu event carries
+   * no pointer type of its own to tell them apart.
+   */
+  const lastPointerType = useRef<string>('mouse');
   /** Where a zoom should land, as a fraction of the content. See renderPage. */
   const zoomAnchor = useRef<{ fx: number; fy: number; cx: number; cy: number } | null>(null);
   /** The live scale, for the pinch handler — which is registered once. */
   const scaleRef = useRef(scale);
   scaleRef.current = scale;
 
-  /** Abandon a stroke in progress without committing it. */
+  /**
+   * Abandon a stroke in progress without committing it.
+   *
+   * The offscreen buffer goes with it. On an A0 sheet that buffer is a hundred
+   * megabytes, and a pinch that cancelled a stroke used to leave it allocated
+   * until the next one started — which on a phone is exactly the machine that
+   * can least afford it.
+   */
   const cancelStroke = useCallback(() => {
     drawing.current = null;
     moving.current = null;
+    if (liveFrame.current) { cancelAnimationFrame(liveFrame.current); liveFrame.current = 0; }
+    releaseLiveBuffer();
     const c = liveRef.current;
     if (c) c.getContext('2d')!.clearRect(0, 0, c.width, c.height);
   }, []);
@@ -322,6 +411,33 @@ export function PlanAnnotator({
     /** Padding for the top-bar buttons, which are shaped by class not size. */
     barPad: `${Math.round(6 * ts)}px ${Math.round(9 * ts)}px`,
   }), [ts]);
+
+  /**
+   * An icon button a finger can actually hit.
+   *
+   * `p-1.5` around a 14px icon is a 26px target. The line everybody works to
+   * is 32, and a header button is pressed while holding a phone one-handed, so
+   * these go to 38 — bought with padding rather than a bigger icon, so the row
+   * looks the same and only the box around it grows. The desk keeps its own
+   * size to the pixel.
+   */
+  const iconBtn = compact
+    ? 'rounded-lg flex items-center justify-center flex-shrink-0 min-w-[38px] min-h-[38px]'
+    : 'p-1.5 rounded-lg';
+
+  /**
+   * A slider a finger can catch.
+   *
+   * `.ink-slider` sets the ELEMENT to 4px tall — the thumb hangs out of it — so
+   * the box a tap has to land inside is four pixels, and the width control was
+   * a matter of luck with a finger. Padding grows the element to 22 and the
+   * coloured track is clipped back to the content box, so the bar looks
+   * identical to the pixel and only the hit area changes. Tailwind's preflight
+   * already puts everything in border-box, so the height is the outside.
+   */
+  const touchSlider: React.CSSProperties = compact
+    ? { height: 22, paddingTop: 9, paddingBottom: 9, backgroundClip: 'content-box' }
+    : {};
 
   /**
    * Read-only until somebody says who they are.
@@ -390,8 +506,12 @@ export function PlanAnnotator({
     // bar and you could not see what you were about to mark up.
     let s = scale;
     if (fitting && stageRef.current) {
-      const availW = stageRef.current.clientWidth - 32;
-      const availH = stageRef.current.clientHeight - 32;
+      // The margin the stage keeps round the sheet — 16px a side at the desk,
+      // 4px on a phone, where sixteen of them is four per cent of the screen
+      // spent on nothing.
+      const pad = compact ? 8 : 32;
+      const availW = stageRef.current.clientWidth - pad;
+      const availH = stageRef.current.clientHeight - pad;
       const nat = p.getViewport({ scale: 1 });
       s = Math.max(0.1, Math.min(4, Math.min(availW / nat.width, availH / nat.height)));
       setScale(s); setFitting(false);
@@ -454,14 +574,32 @@ export function PlanAnnotator({
     renderTask.current = task;
     try { await task.promise; } catch { /* superseded by a newer render */ }
     redrawInk();
-  }, [doc, page, scale, fitting]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [doc, page, scale, fitting, compact]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { void renderPage(); }, [renderPage]);
+
+  /** The live `compact`, for the listeners below, which are registered once. */
+  const compactRef = useRef(compact);
+  compactRef.current = compact;
 
   // Re-fit when the window changes shape — the studio is full screen, so a
   // rotated tablet or a resized window otherwise leaves the plan stranded.
   useEffect(() => {
-    const on = () => setFitting(true);
+    let last = { w: window.innerWidth, h: window.innerHeight };
+    const on = () => {
+      const w = window.innerWidth, h = window.innerHeight;
+      const turned = w !== last.w;
+      last = { w, h };
+      /**
+       * On a phone the height changes for reasons that are not a resize: the
+       * keyboard sliding up under a note, and the address bar collapsing as
+       * the plan is scrolled. Re-fitting on those throws away the zoom
+       * somebody chose — mid-sentence, in the keyboard's case. A rotation
+       * changes the WIDTH, and that is the one that genuinely needs a new fit.
+       */
+      if (compactRef.current && !turned) return;
+      setFitting(true);
+    };
     window.addEventListener('resize', on);
     return () => window.removeEventListener('resize', on);
   }, []);
@@ -506,7 +644,18 @@ export function PlanAnnotator({
   }, [zoomAt]);
 
   /**
-   * Two fingers pinch, on the touch panel and on a trackpad's touch surface.
+   * Two fingers pinch AND drag, on the touch panel and on a phone.
+   *
+   * The dragging half is what makes a phone usable at all. With a drawing tool
+   * armed one finger draws, so the only way to look at another part of the
+   * sheet was to switch to the Pan tool and switch back — twice per mark. Two
+   * fingers is the gesture every map and every photo on the machine already
+   * uses, and it costs nothing here: the plan lives in a scroller, so a drag
+   * is the midpoint's travel subtracted from the scroll.
+   *
+   * The pan is applied BEFORE the zoom anchor is taken, because the anchor is
+   * read out of the scroll position — taking it first would zoom towards where
+   * the fingers were a frame ago.
    *
    * The second finger also CANCELS whatever stroke the first one had started —
    * otherwise a pinch leaves a stray mark across the plan from wherever the
@@ -516,24 +665,37 @@ export function PlanAnnotator({
     const el = stageRef.current;
     if (!el) return;
     let base: { dist: number; scale: number } | null = null;
+    let lastMid: { x: number; y: number } | null = null;
 
     const gap = (t: TouchList) =>
       Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    const mid = (t: TouchList) => ({
+      x: (t[0].clientX + t[1].clientX) / 2,
+      y: (t[0].clientY + t[1].clientY) / 2,
+    });
 
     function start(e: TouchEvent) {
       if (e.touches.length !== 2) return;
       cancelStroke();
       base = { dist: gap(e.touches), scale: scaleRef.current };
+      lastMid = mid(e.touches);
     }
     function move(e: TouchEvent) {
       if (e.touches.length !== 2 || !base) return;
       e.preventDefault();
+      const m = mid(e.touches);
+      if (lastMid) {
+        el!.scrollLeft -= m.x - lastMid.x;
+        el!.scrollTop -= m.y - lastMid.y;
+      }
+      lastMid = m;
+
       const d = gap(e.touches);
       if (base.dist < 8) return;
       const want = Math.min(6, Math.max(0.1, base.scale * (d / base.dist)));
       const r = el!.getBoundingClientRect();
-      const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - r.left;
-      const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - r.top;
+      const cx = m.x - r.left;
+      const cy = m.y - r.top;
       zoomAnchor.current = {
         fx: el!.scrollWidth ? (el!.scrollLeft + cx) / el!.scrollWidth : 0.5,
         fy: el!.scrollHeight ? (el!.scrollTop + cy) / el!.scrollHeight : 0.5,
@@ -542,7 +704,9 @@ export function PlanAnnotator({
       setFitting(false);
       setScale(Math.round(want * 100) / 100);
     }
-    function end(e: TouchEvent) { if (e.touches.length < 2) base = null; }
+    function end(e: TouchEvent) {
+      if (e.touches.length < 2) { base = null; lastMid = null; }
+    }
 
     el.addEventListener('touchstart', start, { passive: true });
     el.addEventListener('touchmove', move, { passive: false });
@@ -818,6 +982,25 @@ export function PlanAnnotator({
   }
 
   /**
+   * How near counts as "on it", for the tool that picks things up.
+   *
+   * The mark radii below are mouse radii: 1.2% of the page, which on a phone
+   * showing a whole A3 sheet is four pixels. A fingertip covers forty. So with
+   * a finger the move tool could not pick anything up at all and the corner
+   * grips could not be grabbed — you were aiming at something you could not
+   * see with something you could not aim. A touch therefore gets whichever is
+   * larger, the mark's own radius or a finger's worth of the page; a mouse and
+   * a pen are left exactly as they were, since they can aim.
+   */
+  const TAP_SLOP_PX = 20;
+  function tapRadius(e: { pointerType?: string }, base: number): number {
+    if (e.pointerType !== 'touch') return base;
+    const c = liveRef.current;
+    const cssW = c ? (parseFloat(c.style.width) || c.width || 1000) : 1000;
+    return Math.max(base, TAP_SLOP_PX / Math.max(1, cssW));
+  }
+
+  /**
    * Is this point on this mark?
    *
    * The old eraser only compared against the mark's stored POINTS, which for a
@@ -998,17 +1181,16 @@ export function PlanAnnotator({
     ];
   }
 
-  function handleAt(nx: number, ny: number): 'a' | 'z' | null {
+  function handleAt(nx: number, ny: number, r = 0.014): 'a' | 'z' | null {
     const s = strokes.find(x => x.id === picked);
     for (const g of gripsOf(s)) {
-      if (Math.hypot(g.x - nx, g.y - ny) < 0.014) return g.id;
+      if (Math.hypot(g.x - nx, g.y - ny) < r) return g.id;
     }
     return null;
   }
 
   /** The mark under a point, topmost first — what the move tool picks up. */
-  function markAt(nx: number, ny: number): AnnStroke | null {
-    const r = 0.012;
+  function markAt(nx: number, ny: number, r = 0.012): AnnStroke | null {
     for (let i = strokes.length - 1; i >= 0; i--) {
       const s = strokes[i];
       if (s.page !== page) continue;
@@ -1031,6 +1213,7 @@ export function PlanAnnotator({
      * and a finger is ignored outright while a pen is in play.
      */
     notePointer(e.nativeEvent);
+    lastPointerType.current = e.pointerType || 'mouse';
     if (isPalm(e.nativeEvent)) return;
     if (isPen(e.nativeEvent) && drawing.current && touchWasPalm()) {
       drawing.current = null;
@@ -1044,7 +1227,7 @@ export function PlanAnnotator({
     if (tool === 'move') {
       // A corner of whatever is already picked resizes it. Checked before the
       // hit test, or grabbing a handle would simply select what is underneath.
-      const grip = handleAt(dnx, dny);
+      const grip = handleAt(dnx, dny, tapRadius(e, 0.014));
       if (grip) {
         (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
         e.preventDefault();
@@ -1052,12 +1235,28 @@ export function PlanAnnotator({
         moving.current = { id: s.id, nx: dnx, ny: dny, pts: [...s.pts], grip };
         return;
       }
-      const hit = markAt(dnx, dny);
+      const hit = markAt(dnx, dny, tapRadius(e, 0.012));
+      /**
+       * A finger has no double-click.
+       *
+       * Retyping a balloon was a double-click, and two quick taps do not
+       * reliably reach the page as one — the phone reserves the gesture for
+       * zooming — so on a phone your own words could not be got back at. The
+       * touch rule is the one the board already uses and the one every phone
+       * uses: tap to pick it out, tap the picked one to open it. It has to be
+       * read HERE, before the next line picks the mark, or the answer is
+       * always yes and the first tap opens it, leaving no gesture that means
+       * "I mean this one". A drag still moves it — see onUp.
+       */
+      const already = !!hit && picked === hit.id;
       setPicked(hit?.id ?? null);
       if (hit) {
         (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
         e.preventDefault();
-        moving.current = { id: hit.id, nx: dnx, ny: dny, pts: [...hit.pts] };
+        moving.current = {
+          id: hit.id, nx: dnx, ny: dny, pts: [...hit.pts],
+          tapOpens: already && e.pointerType === 'touch' && hit.tool === 'bubble',
+        };
       }
       return;
     }
@@ -1085,7 +1284,12 @@ export function PlanAnnotator({
     const drawWith = nibFlip(e.nativeEvent);
     const pre = toolById(drawWith);
 
-    const pen = new PenStroke({ sensitivity: pre.sensitivity * sens });
+    // A bare finger on a phone: its contact patch is the shape of the hand,
+    // not the pressure of a nib. See PenOptions.finger.
+    const pen = new PenStroke({
+      sensitivity: pre.sensitivity * sens,
+      finger: compact && e.pointerType === 'touch',
+    });
     const s = pen.push(e.nativeEvent, performance.now());
     drawing.current = {
       pen, pts: [{ x: nx, y: ny, w: s.w }], startedAt: Date.now(), tool: drawWith,
@@ -1109,7 +1313,11 @@ export function PlanAnnotator({
    */
   function nibFlip(e: PointerEvent): string {
     if (locked || !INK_TOOLS.has(tool)) return tool;
-    const nib = nibs.current.see(Math.max(e.width ?? 0, e.height ?? 0));
+    // The panel this is for is 75 or 86 inches across, so a phone-sized screen
+    // is proof there is no dual-nib pen here — and a hand on its own produces
+    // two contact sizes far enough apart to be read as a flip, which would
+    // hand you the highlighter in the middle of a sentence.
+    const nib = nibs.current.see(Math.max(e.width ?? 0, e.height ?? 0), { finger: compact });
     if (!nib) return tool;
 
     if (nib === 'fat' && tool !== FAT_NIB_TOOL) {
@@ -1134,11 +1342,19 @@ export function PlanAnnotator({
   function onMove(e: React.PointerEvent<HTMLCanvasElement>) {
     // A palm dragging across the glass must not extend the pen's stroke.
     notePointer(e.nativeEvent);
+    lastPointerType.current = e.pointerType || 'mouse';
     if (isPalm(e.nativeEvent)) return;
 
     // The nib follows the pointer whatever else is happening, so the width is
-    // chosen by looking at it rather than by drawing a test line.
-    if (showNib) setNibAt({ x: e.clientX, y: e.clientY });
+    // chosen by looking at it rather than by drawing a test line. While ink is
+    // actually flowing it is moved straight on the element — see nibElRef.
+    if (showNib) {
+      const ghost = nibElRef.current;
+      if (ghost && drawing.current && !isEraser) {
+        ghost.style.left = `${e.clientX}px`;
+        ghost.style.top = `${e.clientY}px`;
+      } else setNibAt({ x: e.clientX, y: e.clientY });
+    }
 
     // Dragging something already drawn.
     const m = moving.current;
@@ -1146,6 +1362,11 @@ export function PlanAnnotator({
       e.preventDefault();
       const { nx, ny } = norm(e);
       const dx = nx - m.nx, dy = ny - m.ny;
+      m.moved = true;
+      // A finger never holds perfectly still, so a tap arrives with a few
+      // pixels of travel in it. Past this much it was meant as a drag, and the
+      // second-tap-to-open rule stands down.
+      if (Math.abs(dx) > 0.012 || Math.abs(dy) > 0.012) m.tapOpens = false;
 
       if (m.grip) {
         /**
@@ -1262,11 +1483,40 @@ export function PlanAnnotator({
 
   draftStrokeRef.current = draftStroke;
 
+  /**
+   * The browser took the gesture away.
+   *
+   * A pointercancel is not a lift: it means a second finger arrived, or the
+   * system claimed the touch. Committing what had been drawn so far — which is
+   * what routing this to onUp did — leaves a stray line across the plan from
+   * wherever the first finger happened to land every time somebody pinches.
+   */
+  function onCancelDraw(e: React.PointerEvent<HTMLCanvasElement>) {
+    try { (e.target as HTMLCanvasElement).releasePointerCapture(e.pointerId); } catch { /* gone */ }
+    // What had already landed in the marks stays — a cancel abandons the
+    // stroke in the air, it is not an undo — so a drag or a rub that was
+    // under way still counts as a change, or the autosave would not see it.
+    if (moving.current?.moved || (drawing.current && isEraser)) { setRedo([]); setDirty(true); }
+    erased.current = new Set();
+    cancelStroke();
+    setNibAt(null);
+  }
+
   function onUp(e: React.PointerEvent<HTMLCanvasElement>) {
-    if (moving.current) {
+    const m = moving.current;
+    if (m) {
       moving.current = null;
       try { (e.target as HTMLCanvasElement).releasePointerCapture(e.pointerId); } catch { /* gone */ }
-      setRedo([]); setDirty(true);
+      // A finger's second tap on the balloon it already picked opens the words
+      // for retyping — the touch stand-in for the double-click.
+      if (m.tapOpens) {
+        const host = strokes.find(s => s.id === m.id);
+        if (host) {
+          setTextDraft({ nx: m.nx, ny: m.ny, value: host.text ?? '', forId: host.id });
+          return;
+        }
+      }
+      if (m.moved) { setRedo([]); setDirty(true); }
       return;
     }
     const d = drawing.current;
@@ -1544,6 +1794,7 @@ export function PlanAnnotator({
         if (confirmReset || confirmClose) return;
         if (textDraft) setTextDraft(null);
         else if (showPalette) setShowPalette(false);
+        else if (showMore) setShowMore(false);
         else if (showLayers) setShowLayers(false);
         else if (showDownload) setShowDownload(false);
         else if (showPlans) setShowPlans(false);
@@ -1803,6 +2054,116 @@ export function PlanAnnotator({
   const palette = tool === 'highlighter' ? HIGHLIGHT_COLORS : INK_COLORS;
   const marksOnPage = strokes.filter(s => s.page === page).length;
 
+  /**
+   * The rail's buttons, written once and hung either down a side or across the
+   * bottom.
+   *
+   * Which way round is decided by which dimension the screen has to spare, so
+   * the same twenty buttons cannot drift apart between the two layouts — a
+   * second copy of this list is how a tool ends up existing in portrait and
+   * not in landscape.
+   */
+  const railBtn: React.CSSProperties = {
+    width: ui.btn, paddingTop: ui.padY, paddingBottom: ui.padY, gap: 2, flexShrink: 0,
+  };
+  const railDivider = railRow
+    ? <div className="w-px h-8 mx-1 flex-shrink-0" style={{ backgroundColor: 'rgba(255,255,255,.16)' }} />
+    : <div className="h-px w-8 my-1" style={{ backgroundColor: 'rgba(255,255,255,.16)' }} />;
+
+  const railBody = (
+    <>
+      {TOOLS.map(t => {
+        const Icon = ICONS[t.id] ?? Pen;
+        const on = tool === t.id;
+        return (
+          <button key={t.id} onClick={() => pick(t.id)} title={`${t.label} — ${t.hint}`}
+            className="rounded-xl flex flex-col items-center transition-colors"
+            style={{
+              ...railBtn,
+              backgroundColor: on ? ACCENT : 'transparent',
+              color: on ? '#fff' : 'rgba(255,255,255,.62)',
+            }}>
+            <Icon size={ui.icon} />
+            <span className="font-semibold leading-none" style={{ fontSize: ui.label }}>{t.label}</span>
+          </button>
+        );
+      })}
+      {railDivider}
+      {/* "Pan", not "Move" — Move is the tool that picks marks up, and two
+          buttons with the same word is a coin toss. */}
+      <button onClick={() => pick('pan')} title="Pan — scroll around the plan without drawing"
+        className="rounded-xl flex flex-col items-center"
+        style={{ ...railBtn,
+                 backgroundColor: tool === 'pan' ? ACCENT : 'transparent',
+                 color: tool === 'pan' ? '#fff' : 'rgba(255,255,255,.62)' }}>
+        <Hand size={ui.icon} />
+        <span className="font-semibold leading-none" style={{ fontSize: ui.label }}>Pan</span>
+      </button>
+      <button onClick={undo} disabled={!strokes.length} title="Undo (Ctrl+Z)"
+        className="rounded-xl flex flex-col items-center text-white/60 disabled:opacity-25 hover:bg-white/10"
+        style={railBtn}>
+        <Undo2 size={ui.smallIcon} />
+        <span className="font-semibold leading-none" style={{ fontSize: ui.label }}>Undo</span>
+      </button>
+      <button onClick={redoOne} disabled={!redo.length} title="Redo (Ctrl+Shift+Z)"
+        className="rounded-xl flex flex-col items-center text-white/60 disabled:opacity-25 hover:bg-white/10"
+        style={railBtn}>
+        <Redo2 size={ui.smallIcon} />
+        <span className="font-semibold leading-none" style={{ fontSize: ui.label }}>Redo</span>
+      </button>
+      {/* Clear takes THIS PAGE. New starts a fresh sketch. They both used
+          to call newSketch, so on a multi-page set there was no way to
+          wipe one sheet, and two buttons did the same thing. */}
+      <button onClick={clearPage} disabled={!strokes.some(s => s.page === page)}
+        title="Rub out every mark on this page"
+        className="rounded-xl flex flex-col items-center text-white/60 disabled:opacity-25 hover:bg-white/10"
+        style={railBtn}>
+        <Trash2 size={ui.smallIcon} />
+        <span className="font-semibold leading-none" style={{ fontSize: ui.label }}>Clear</span>
+      </button>
+
+      {/* ── Saved versions, on the rail ──
+          They were a 248px panel down the right-hand side, which is a
+          quarter of the screen given to a list you look at twice a day.
+          Newest nearest the top, because that is the one you want. */}
+      {railDivider}
+
+      <button onClick={newSketch} title="Start a fresh sketch on this plan"
+        className="rounded-xl flex flex-col items-center text-white/70 hover:bg-white/10"
+        style={railBtn}>
+        <Plus size={ui.smallIcon} />
+        <span className="font-semibold leading-none" style={{ fontSize: ui.label }}>New</span>
+      </button>
+
+      {versions.map(v => {
+        const showing = v.strokes?.length === strokes.length && v.version === nextVersion - 1;
+        return (
+          <button
+            key={v.id}
+            onClick={() => loadVersion(v, !readOnly)}
+            title={`Version ${v.version} — ${v.createdBy || 'the office'}, `
+              + `${new Date(v.createdAt).toLocaleString()}`
+              + `${v.driveUrl ? ' · in Drive' : ' · not in Drive yet'}`}
+            className="rounded-xl flex flex-col items-center gap-0.5 transition-colors relative"
+            style={{
+              width: ui.btn, paddingTop: ui.padY, paddingBottom: ui.padY, flexShrink: 0,
+              backgroundColor: showing ? 'rgba(255,255,255,.12)' : 'transparent',
+              color: 'rgba(255,255,255,.72)',
+            }}
+          >
+            <span className="font-black leading-none" style={{ fontSize: ui.text }}>v{v.version}</span>
+            <span className="text-[7.5px] leading-none opacity-70">
+              {new Date(v.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+            </span>
+            {/* A dot for "this one reached Drive". */}
+            <span className="absolute top-1 right-1.5 w-1.5 h-1.5 rounded-full"
+              style={{ backgroundColor: v.driveUrl ? '#4ade80' : 'rgba(255,255,255,.28)' }} />
+          </button>
+        );
+      })}
+    </>
+  );
+
   return (
     <div
       className={embedded ? 'absolute inset-0 flex flex-col' : 'fixed inset-0 z-[150] flex flex-col'}
@@ -1815,11 +2176,23 @@ export function PlanAnnotator({
           button catching taps where it used to be. It wraps rather than
           overflows, and at the desk size it is not applied at all, so nothing
           about the existing screen moves by a pixel. The tool rail is sized
-          explicitly instead, because it also has to scroll. */}
-      <div className="flex items-center gap-2 px-3 py-2 flex-shrink-0 flex-wrap"
+          explicitly instead, because it also has to scroll.
+
+          On a phone it must NOT wrap: eleven buttons at 390px make four rows,
+          which is half the plan spent on chrome, and in landscape it is more
+          than the plan. Everything that is not pressed while drawing moves
+          into the ⋯ sheet instead, and what is left is one row. */}
+      {/* The row scrolls sideways on a phone, and Close does not scroll with
+          it. A multi-page plan adds a pager, and an unsaved one adds the Drive
+          count: at 390px the arithmetic runs out and the last button in the
+          row — Close — is pushed off the screen with no way to reach it. The
+          two that must always be there are pinned to the right-hand edge and
+          everything else runs under them. */}
+      <div className={`flex items-center gap-2 py-2 flex-shrink-0 ${
+        compact ? 'px-2 flex-nowrap overflow-x-auto' : 'px-3 flex-wrap'}`}
         style={{ backgroundColor: NAVY, ...(ui.on ? { zoom: ts } : {}) }}>
-        <Layers size={16} className="text-[#4aa8d8] flex-shrink-0" />
-        <div className="min-w-0">
+        {!compact && <Layers size={16} className="text-[#4aa8d8] flex-shrink-0" />}
+        <div className={compact ? 'min-w-0 flex-1' : 'min-w-0'}>
           <div className="text-[13px] font-bold text-white truncate">{planName || 'Plan'}</div>
           <div className="text-[10.5px] text-gray-400 truncate">
             {apartmentLabel}
@@ -1828,59 +2201,64 @@ export function PlanAnnotator({
           </div>
         </div>
 
-        <div className="flex-1" />
+        {!compact && <div className="flex-1" />}
 
         {doc && doc.numPages > 1 && (
-          <div className="flex items-center gap-1 text-white/85 text-[12px] mr-1">
+          <div className="flex items-center gap-1 text-white/85 text-[12px] mr-1 flex-shrink-0">
             <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
-              className="p-1.5 rounded-lg hover:bg-white/10 disabled:opacity-30"><ChevronLeft size={15} /></button>
+              className={`${iconBtn} hover:bg-white/10 disabled:opacity-30`}><ChevronLeft size={15} /></button>
             <span className="tabular-nums">{page + 1} / {doc.numPages}</span>
             <button onClick={() => setPage(p => Math.min(doc.numPages - 1, p + 1))} disabled={page >= doc.numPages - 1}
-              className="p-1.5 rounded-lg hover:bg-white/10 disabled:opacity-30"><ChevronRight size={15} /></button>
+              className={`${iconBtn} hover:bg-white/10 disabled:opacity-30`}><ChevronRight size={15} /></button>
           </div>
         )}
 
-        <div className="flex items-center gap-0.5 text-white/85 mr-1">
-          <button onClick={() => setScale(s => Math.max(0.2, s - 0.2))} title="Zoom out"
-            className="p-1.5 rounded-lg hover:bg-white/10"><Minus size={14} /></button>
-          <span className="text-[11px] tabular-nums w-11 text-center">{Math.round(scale * 100)}%</span>
-          <button onClick={() => setScale(s => Math.min(5, s + 0.2))} title="Zoom in"
-            className="p-1.5 rounded-lg hover:bg-white/10"><Plus size={14} /></button>
-          <button onClick={() => setFitting(true)} title="Fit the page"
-            className="p-1.5 rounded-lg hover:bg-white/10"><Maximize2 size={13} /></button>
-        </div>
+        {/* Zoom, the plan chooser, the layers, downloading and printing all
+            move into the ⋯ sheet on a phone — none of them is touched while a
+            mark is being drawn, and a pinch does the zooming there anyway. */}
+        {!compact && (<>
+          <div className="flex items-center gap-0.5 text-white/85 mr-1">
+            <button onClick={() => setScale(s => Math.max(0.2, s - 0.2))} title="Zoom out"
+              className="p-1.5 rounded-lg hover:bg-white/10"><Minus size={14} /></button>
+            <span className="text-[11px] tabular-nums w-11 text-center">{Math.round(scale * 100)}%</span>
+            <button onClick={() => setScale(s => Math.min(5, s + 0.2))} title="Zoom in"
+              className="p-1.5 rounded-lg hover:bg-white/10"><Plus size={14} /></button>
+            <button onClick={() => setFitting(true)} title="Fit the page"
+              className="p-1.5 rounded-lg hover:bg-white/10"><Maximize2 size={13} /></button>
+          </div>
 
-        {/* Always offered, not only when there are two.
-            The chooser is how you reach ANOTHER FOLDER, so hiding it when the
-            plans folder happened to hold one file hid the way out of it. */}
-        <button data-open-plans onClick={() => setShowPlans(true)}
-          title="Choose a plan — or another folder in this job's Drive"
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold text-white/85 hover:bg-white/10">
-          <ChevronsUpDown size={13} /> Plans
-        </button>
+          {/* Always offered, not only when there are two.
+              The chooser is how you reach ANOTHER FOLDER, so hiding it when the
+              plans folder happened to hold one file hid the way out of it. */}
+          <button data-open-plans onClick={() => setShowPlans(true)}
+            title="Choose a plan — or another folder in this job's Drive"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold text-white/85 hover:bg-white/10">
+            <ChevronsUpDown size={13} /> Plans
+          </button>
 
-        <button onClick={() => setShowLayers(v => !v)}
-          disabled={isImagePlan}
-          title={isImagePlan
-            ? 'A picture has no layers of its own'
-            : "Show or hide the plan's own layers"}
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold ${
-            showLayers ? 'bg-white/15 text-white' : 'text-white/85 hover:bg-white/10'}`}>
-          <Layers2 size={13} /> Layers
-          {layers.length > 0 && (
-            <span className="text-[9.5px] font-bold px-1 rounded-full bg-white/20">{layers.length}</span>
-          )}
-        </button>
+          <button onClick={() => setShowLayers(v => !v)}
+            disabled={isImagePlan}
+            title={isImagePlan
+              ? 'A picture has no layers of its own'
+              : "Show or hide the plan's own layers"}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold ${
+              showLayers ? 'bg-white/15 text-white' : 'text-white/85 hover:bg-white/10'}`}>
+            <Layers2 size={13} /> Layers
+            {layers.length > 0 && (
+              <span className="text-[9.5px] font-bold px-1 rounded-full bg-white/20">{layers.length}</span>
+            )}
+          </button>
 
-        <button onClick={() => setShowDownload(true)} title="Download as a PDF or as pictures"
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold text-white/85 hover:bg-white/10">
-          <Download size={14} /> Download
-        </button>
+          <button onClick={() => setShowDownload(true)} title="Download as a PDF or as pictures"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold text-white/85 hover:bg-white/10">
+            <Download size={14} /> Download
+          </button>
 
-        <button onClick={print} title="Print this plan with the markup on it"
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold text-white/90 hover:bg-white/10">
-          <Printer size={14} /> Print
-        </button>
+          <button onClick={print} title="Print this plan with the markup on it"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold text-white/90 hover:bg-white/10">
+            <Printer size={14} /> Print
+          </button>
+        </>)}
 
         {/* Where the work has got to.
             The saving is automatic now, which is only reassuring if you can see
@@ -1893,20 +2271,25 @@ export function PlanAnnotator({
             back. Reset asks first, because it is the one that cannot be
             undone by pressing it again. */}
         {!locked && (
-          <span className="flex items-center gap-0.5 mr-1">
+          <span className="flex items-center gap-0.5 mr-1 flex-shrink-0">
             <button data-top-undo onClick={undo} disabled={!strokes.length} title="Undo (Ctrl+Z)"
-              className="p-1.5 rounded-lg text-white/80 hover:bg-white/10 disabled:opacity-30">
+              className={`${iconBtn} text-white/80 hover:bg-white/10 disabled:opacity-30`}>
               <Undo2 size={ui.smallIcon} />
             </button>
             <button data-top-redo onClick={redoOne} disabled={!redo.length} title="Redo (Ctrl+Shift+Z)"
-              className="p-1.5 rounded-lg text-white/80 hover:bg-white/10 disabled:opacity-30">
+              className={`${iconBtn} text-white/80 hover:bg-white/10 disabled:opacity-30`}>
               <Redo2 size={ui.smallIcon} />
             </button>
-            <button data-top-reset onClick={() => setConfirmReset(true)} disabled={!strokes.length}
-              title="Take every mark off this plan"
-              className="p-1.5 rounded-lg text-white/80 hover:bg-red-500/25 disabled:opacity-30">
-              <RotateCcw size={ui.smallIcon} />
-            </button>
+            {/* Reset is in the ⋯ sheet on a phone: it is the one button here
+                that cannot be taken back by pressing it again, and it does not
+                belong a thumb's width from Undo on a 390px row. */}
+            {!compact && (
+              <button data-top-reset onClick={() => setConfirmReset(true)} disabled={!strokes.length}
+                title="Take every mark off this plan"
+                className="p-1.5 rounded-lg text-white/80 hover:bg-red-500/25 disabled:opacity-30">
+                <RotateCcw size={ui.smallIcon} />
+              </button>
+            )}
           </span>
         )}
 
@@ -1914,6 +2297,7 @@ export function PlanAnnotator({
           <SaveTrip
             state={saveState}
             secondsLeft={driveIn}
+            compact={compact}
             onSendNow={() => { clearTimeout(idleTimer.current); void pushToDrive(); }}
           />
         )}
@@ -1921,148 +2305,85 @@ export function PlanAnnotator({
         {!locked && (
           <button onClick={save} disabled={saving || !strokes.length}
             title="Save this markup as a new version and file a PDF in Drive"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-bold text-white disabled:opacity-40"
+            className={`flex items-center gap-1.5 rounded-lg text-[12px] font-bold text-white disabled:opacity-40 flex-shrink-0 ${
+              compact ? 'px-2.5 min-h-[38px]' : 'px-3 py-1.5'}`}
             style={{ backgroundColor: ACCENT }}>
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-            {saving ? 'Filing…' : `Save v${nextVersion}`}
+            {/* The word costs a fifth of a 390px row and says nothing the icon
+                does not. The version number is the part you check. */}
+            {saving ? (compact ? '' : 'Filing…') : compact ? `v${nextVersion}` : `Save v${nextVersion}`}
           </button>
         )}
 
-        <button onClick={() => setShowVersions(v => !v)} title="Saved versions"
-          className={`p-1.5 rounded-lg ${showVersions ? 'bg-white/15 text-white' : 'text-white/70 hover:bg-white/10'}`}>
-          <FileDown size={15} />
-        </button>
+        {!compact && (
+          <button onClick={() => setShowVersions(v => !v)} title="Saved versions"
+            className={`p-1.5 rounded-lg ${showVersions ? 'bg-white/15 text-white' : 'text-white/70 hover:bg-white/10'}`}>
+            <FileDown size={15} />
+          </button>
+        )}
         {/* Looking at it should be one step away from marking it up — closing
             and reopening through a different button is friction for nothing. */}
         {readOnly && !askWho && onStartMarkup && (
           <button onClick={onStartMarkup}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-bold text-white"
+            className={`flex items-center gap-1.5 rounded-lg text-[12px] font-bold text-white flex-shrink-0 ${
+              compact ? 'px-2.5 min-h-[38px]' : 'px-3 py-1.5'}`}
             style={{ backgroundColor: ACCENT }}>
-            <Pen size={13} /> Mark up
+            <Pen size={13} /> {compact ? '' : 'Mark up'}
           </button>
         )}
         {askWho && who && (
           <button onClick={() => setWho('')} title="Not you? Hand over to somebody else"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold text-white/85 hover:bg-white/10">
-            <UserIcon size={13} /> {who}
+            className={`flex items-center gap-1.5 rounded-lg text-[12px] font-semibold text-white/85 hover:bg-white/10 flex-shrink-0 ${
+              compact ? `${iconBtn}` : 'px-2.5 py-1.5'}`}>
+            <UserIcon size={13} /> {compact ? '' : who}
           </button>
         )}
-        {/* Closing before Drive has it asks. There is a window of a few seconds
-            where the markup is safe on this machine but not yet filed, and
-            walking away inside it is the one way to lose the drawing. */}
-        <button data-close-studio
-          onClick={() => {
-            const risky = !locked && strokes.length > 0
-              && (saveState === 'local' || saveState === 'failed');
-            if (risky) setConfirmClose(true); else onClose();
-          }}
-          title="Close" className="p-1.5 rounded-lg text-white/70 hover:bg-white/10">
-          <X size={17} />
-        </button>
+
+        {/* The two that can never scroll away: everything else in this row is
+            reachable from the ⋯ sheet, and Close is the way out. */}
+        <span className={`flex items-center gap-1 flex-shrink-0 ${compact ? 'sticky right-0 pl-1' : ''}`}
+          style={compact ? { backgroundColor: NAVY } : undefined}>
+          {/* Everything that came out of this row, one press away. */}
+          {compact && (
+            <button data-plan-more onClick={() => setShowMore(true)} title="More"
+              className={`${iconBtn} text-white/85 hover:bg-white/10`}>
+              <MoreHorizontal size={18} />
+            </button>
+          )}
+
+          {/* Closing before Drive has it asks. There is a window of a few seconds
+              where the markup is safe on this machine but not yet filed, and
+              walking away inside it is the one way to lose the drawing. */}
+          <button data-close-studio
+            onClick={() => {
+              const risky = !locked && strokes.length > 0
+                && (saveState === 'local' || saveState === 'failed');
+              if (risky) setConfirmClose(true); else onClose();
+            }}
+            title="Close" className={`${iconBtn} text-white/70 hover:bg-white/10`}>
+            <X size={17} />
+          </button>
+        </span>
       </div>
 
       <div className="flex-1 min-h-0 flex">
-        {/* Tool rail */}
-        {!locked && (
+        {/* Tool rail, down the side — the desk, and a phone held sideways,
+            where height is the scarce dimension and width is not. */}
+        {!locked && !railRow && (
           <div className="flex-shrink-0 flex flex-col items-center gap-1 py-2 overflow-y-auto board-rail"
             style={{ backgroundColor: NAVY, width: ui.rail }}>
-            {TOOLS.map(t => {
-              const Icon = ICONS[t.id] ?? Pen;
-              const on = tool === t.id;
-              return (
-                <button key={t.id} onClick={() => pick(t.id)} title={`${t.label} — ${t.hint}`}
-                  className="rounded-xl flex flex-col items-center transition-colors"
-                  style={{
-                    width: ui.btn, paddingTop: ui.padY, paddingBottom: ui.padY, gap: 2,
-                    backgroundColor: on ? ACCENT : 'transparent',
-                    color: on ? '#fff' : 'rgba(255,255,255,.62)',
-                  }}>
-                  <Icon size={ui.icon} />
-                  <span className="font-semibold leading-none" style={{ fontSize: ui.label }}>{t.label}</span>
-                </button>
-              );
-            })}
-            <div className="h-px w-8 my-1" style={{ backgroundColor: 'rgba(255,255,255,.12)' }} />
-            {/* "Pan", not "Move" — Move is the tool that picks marks up, and two
-                buttons with the same word is a coin toss. */}
-            <button onClick={() => pick('pan')} title="Pan — scroll around the plan without drawing"
-              className="rounded-xl flex flex-col items-center"
-              style={{ width: ui.btn, paddingTop: ui.padY, paddingBottom: ui.padY, gap: 2,
-                       backgroundColor: tool === 'pan' ? ACCENT : 'transparent',
-                       color: tool === 'pan' ? '#fff' : 'rgba(255,255,255,.62)' }}>
-              <Hand size={ui.icon} />
-              <span className="font-semibold leading-none" style={{ fontSize: ui.label }}>Pan</span>
-            </button>
-            <button onClick={undo} disabled={!strokes.length} title="Undo (Ctrl+Z)"
-              className="rounded-xl flex flex-col items-center text-white/60 disabled:opacity-25 hover:bg-white/10"
-              style={{ width: ui.btn, paddingTop: ui.padY, paddingBottom: ui.padY, gap: 2 }}>
-              <Undo2 size={ui.smallIcon} />
-              <span className="font-semibold leading-none" style={{ fontSize: ui.label }}>Undo</span>
-            </button>
-            <button onClick={redoOne} disabled={!redo.length} title="Redo (Ctrl+Shift+Z)"
-              className="rounded-xl flex flex-col items-center text-white/60 disabled:opacity-25 hover:bg-white/10"
-              style={{ width: ui.btn, paddingTop: ui.padY, paddingBottom: ui.padY, gap: 2 }}>
-              <Redo2 size={ui.smallIcon} />
-              <span className="font-semibold leading-none" style={{ fontSize: ui.label }}>Redo</span>
-            </button>
-            {/* Clear takes THIS PAGE. New starts a fresh sketch. They both used
-                to call newSketch, so on a multi-page set there was no way to
-                wipe one sheet, and two buttons did the same thing. */}
-            <button onClick={clearPage} disabled={!strokes.some(s => s.page === page)}
-              title="Rub out every mark on this page"
-              className="rounded-xl flex flex-col items-center text-white/60 disabled:opacity-25 hover:bg-white/10"
-              style={{ width: ui.btn, paddingTop: ui.padY, paddingBottom: ui.padY, gap: 2 }}>
-              <Trash2 size={ui.smallIcon} />
-              <span className="font-semibold leading-none" style={{ fontSize: ui.label }}>Clear</span>
-            </button>
-
-            {/* ── Saved versions, on the rail ──
-                They were a 248px panel down the right-hand side, which is a
-                quarter of the screen given to a list you look at twice a day.
-                Newest nearest the top, because that is the one you want. */}
-            <div className="w-8 h-px my-1.5" style={{ backgroundColor: 'rgba(255,255,255,.16)' }} />
-
-            <button onClick={newSketch} title="Start a fresh sketch on this plan"
-              className="rounded-xl flex flex-col items-center text-white/70 hover:bg-white/10"
-              style={{ width: ui.btn, paddingTop: ui.padY, paddingBottom: ui.padY, gap: 2 }}>
-              <Plus size={ui.smallIcon} />
-              <span className="font-semibold leading-none" style={{ fontSize: ui.label }}>New</span>
-            </button>
-
-            {versions.map(v => {
-              const showing = v.strokes?.length === strokes.length && v.version === nextVersion - 1;
-              return (
-                <button
-                  key={v.id}
-                  onClick={() => loadVersion(v, !readOnly)}
-                  title={`Version ${v.version} — ${v.createdBy || 'the office'}, `
-                    + `${new Date(v.createdAt).toLocaleString()}`
-                    + `${v.driveUrl ? ' · in Drive' : ' · not in Drive yet'}`}
-                  className="rounded-xl flex flex-col items-center gap-0.5 transition-colors relative"
-                  style={{
-                    width: ui.btn, paddingTop: ui.padY, paddingBottom: ui.padY,
-                    backgroundColor: showing ? 'rgba(255,255,255,.12)' : 'transparent',
-                    color: 'rgba(255,255,255,.72)',
-                  }}
-                >
-                  <span className="font-black leading-none" style={{ fontSize: ui.text }}>v{v.version}</span>
-                  <span className="text-[7.5px] leading-none opacity-70">
-                    {new Date(v.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
-                  </span>
-                  {/* A dot for "this one reached Drive". */}
-                  <span className="absolute top-1 right-1.5 w-1.5 h-1.5 rounded-full"
-                    style={{ backgroundColor: v.driveUrl ? '#4ade80' : 'rgba(255,255,255,.28)' }} />
-                </button>
-              );
-            })}
+            {railBody}
           </div>
         )}
 
         {/* Stage */}
         <div className="flex-1 min-w-0 flex flex-col">
           {!locked && (
-            // Scaled as a row, same reasoning as the header.
-            <div className="flex items-center gap-2 px-3 py-1.5 flex-wrap flex-shrink-0"
+            // Scaled as a row, same reasoning as the header. On a phone it
+            // scrolls sideways rather than wrapping: a second row here costs
+            // the plan a tenth of a landscape screen.
+            <div className={`flex items-center gap-2 px-3 py-1.5 flex-shrink-0 ${
+              compact ? 'flex-nowrap overflow-x-auto' : 'flex-wrap'}`}
               style={{ backgroundColor: 'rgba(255,255,255,.04)', ...(ui.on ? { zoom: ts } : {}) }}>
               {/* An eraser has no colour and no see-through: it is not ink.
                   Showing the controls implied it was, and setting one did
@@ -2073,34 +2394,44 @@ export function PlanAnnotator({
                   onClick={e => {
                     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
                     setShowPalette(v => !v);
-                    setPaletteAt({ x: r.left, y: r.bottom + 8 });
+                    // A phone gets the picker hung from the top-left instead of
+                    // from the well: the panel is 292 wide and nearly as tall as
+                    // a landscape screen, so anywhere else it is clipped.
+                    setPaletteAt(compact ? { x: 8, y: 8 } : { x: r.left, y: r.bottom + 8 });
                   }}
                   title="Ink colour"
-                  className="flex items-center gap-1.5 pl-1 pr-2 py-1 rounded-full transition-colors"
+                  className={`flex items-center gap-1.5 pl-1 pr-2 rounded-full transition-colors flex-shrink-0 ${
+                    compact ? 'min-h-[34px]' : 'py-1'}`}
                   style={{ backgroundColor: 'rgba(255,255,255,.08)' }}
                 >
-                  <span className="w-[20px] h-[20px] rounded-full flex-shrink-0"
+                  <span className={`rounded-full flex-shrink-0 ${compact ? 'w-[26px] h-[26px]' : 'w-[20px] h-[20px]'}`}
                     style={{ backgroundColor: color, border: '2px solid rgba(255,255,255,.55)' }} />
                   <span className="text-[10.5px] font-mono text-white/70">{color}</span>
                 </button>
 
-                {/* The tool's own shortlist, so the common ones stay one click away. */}
-                <div className="flex items-center gap-1">
-                  {palette.slice(0, 7).map(c => (
-                    <button key={c} onClick={() => setColor(c)} title={c}
-                      className="w-[17px] h-[17px] rounded-full transition-transform"
-                      style={{
-                        backgroundColor: c,
-                        border: color === c ? '2px solid #fff' : '1px solid rgba(255,255,255,.28)',
-                        transform: color === c ? 'scale(1.2)' : undefined,
-                      }} />
-                  ))}
-                </div>
+                {/* The tool's own shortlist, so the common ones stay one click
+                    away. Not on a phone: a 17px swatch is half the smallest
+                    target a finger can be asked to hit, and seven of them are
+                    a third of the row. The same seven are the first shelf
+                    inside the picker, at 28px, one press away. */}
+                {!compact && (
+                  <div className="flex items-center gap-1">
+                    {palette.slice(0, 7).map(c => (
+                      <button key={c} onClick={() => setColor(c)} title={c}
+                        className="w-[17px] h-[17px] rounded-full transition-transform"
+                        style={{
+                          backgroundColor: c,
+                          border: color === c ? '2px solid #fff' : '1px solid rgba(255,255,255,.28)',
+                          transform: color === c ? 'scale(1.2)' : undefined,
+                        }} />
+                    ))}
+                  </div>
+                )}
 
-                <span className="w-px h-5 bg-white/10" />
+                <span className="w-px h-5 bg-white/10 flex-shrink-0" />
               </>)}
 
-              <label className="flex items-center gap-1.5 text-[10.5px] text-white/70">
+              <label className="flex items-center gap-1.5 text-[10.5px] text-white/70 flex-shrink-0">
                 {pickedMark?.tool === 'bubble' ? 'Text size' : 'Width'}
                 <input type="range" min={0.5} max={60} step={0.5}
                   value={pickedMark ? (pickedMark.tool === 'bubble'
@@ -2114,9 +2445,12 @@ export function PlanAnnotator({
                     } else setWidth(v);
                   }}
                   className="ink-slider w-[92px]"
-                  style={fillPct(
-                    pickedMark ? (pickedMark.tool === 'bubble'
-                      ? (pickedMark.fontSize ?? 15) : pickedMark.width) : width, 0.5, 60)} />
+                  style={{
+                    ...fillPct(
+                      pickedMark ? (pickedMark.tool === 'bubble'
+                        ? (pickedMark.fontSize ?? 15) : pickedMark.width) : width, 0.5, 60),
+                    ...touchSlider,
+                  }} />
                 <span className="tabular-nums w-6">
                   {pickedMark ? (pickedMark.tool === 'bubble'
                     ? (pickedMark.fontSize ?? 15) : pickedMark.width) : width}
@@ -2131,7 +2465,8 @@ export function PlanAnnotator({
                 <button
                   onClick={() => (pickedMark ? editPicked({ bold: !pickedMark.bold }) : setBold(b => !b))}
                   title="Bold"
-                  className="w-[26px] h-[26px] rounded-lg text-[13px] font-black transition-colors"
+                  className={`rounded-lg text-[13px] font-black transition-colors flex-shrink-0 ${
+                    compact ? 'w-[34px] h-[34px]' : 'w-[26px] h-[26px]'}`}
                   style={{
                     backgroundColor: (pickedMark ? pickedMark.bold : bold)
                       ? ACCENT : 'rgba(255,255,255,.08)',
@@ -2141,7 +2476,7 @@ export function PlanAnnotator({
               )}
 
               {!isEraser && (
-                <label className="flex items-center gap-1.5 text-[10.5px] text-white/70">
+                <label className="flex items-center gap-1.5 text-[10.5px] text-white/70 flex-shrink-0">
                   See-through
                   <input type="range" min={0.05} max={1} step={0.05}
                     value={pickedMark ? pickedMark.opacity : opacity}
@@ -2150,7 +2485,10 @@ export function PlanAnnotator({
                       if (pickedMark) editPicked({ opacity: v }); else setOpacity(v);
                     }}
                     className="ink-slider w-[80px]"
-                    style={fillPct(pickedMark ? pickedMark.opacity : opacity, 0.05, 1)} />
+                    style={{
+                      ...fillPct(pickedMark ? pickedMark.opacity : opacity, 0.05, 1),
+                      ...touchSlider,
+                    }} />
                   <span className="tabular-nums w-7">
                     {Math.round((pickedMark ? pickedMark.opacity : opacity) * 100)}%
                   </span>
@@ -2163,20 +2501,27 @@ export function PlanAnnotator({
                   still varies with the nib you are using, which is the signal
                   that screen actually gives. */}
 
-              <div className="flex-1" />
-              <span className="text-[10px] text-white/40">
-                {pickedMark
-                  ? 'editing the mark you picked · click empty space to let go'
-                  : `${marksOnPage} mark${marksOnPage === 1 ? '' : 's'} on this page`}
-                {/* The old "· speed" meant nothing to anybody reading it. */}
-              </span>
+              {/* The running commentary is the first thing to go on a phone:
+                  it is the widest item in the row and the only one that is
+                  not a control. */}
+              {!compact && (<>
+                <div className="flex-1" />
+                <span className="text-[10px] text-white/40">
+                  {pickedMark
+                    ? 'editing the mark you picked · click empty space to let go'
+                    : `${marksOnPage} mark${marksOnPage === 1 ? '' : 's'} on this page`}
+                  {/* The old "· speed" meant nothing to anybody reading it. */}
+                </span>
+              </>)}
             </div>
           )}
 
           {/* `pan-x pan-y`, never `auto` — see the live canvas below. A pinch
               that starts on the margin rather than on the sheet has to reach
               the same handler, or it zooms the page instead. */}
-          <div ref={stageRef} className="flex-1 min-h-0 overflow-auto p-4 flex items-start justify-center"
+          <div ref={stageRef}
+            className={`flex-1 min-h-0 overflow-auto flex items-start justify-center ${
+              compact ? 'p-1' : 'p-4'}`}
             style={{ touchAction: 'pan-x pan-y' }}>
             {loadErr ? (
               <div className="text-center text-gray-300 text-[13px] mt-16 max-w-md">
@@ -2219,8 +2564,14 @@ export function PlanAnnotator({
                   onPointerDown={onDown}
                   onPointerMove={onMove}
                   onPointerUp={onUp}
-                  onPointerCancel={onUp}
+                  onPointerCancel={onCancelDraw}
                   onPointerLeave={() => setNibAt(null)}
+                  onContextMenu={e => {
+                    // A long press with a finger is how the eraser is used; the
+                    // browser reads it as "open this image in a new tab". A
+                    // right click with a mouse is left alone.
+                    if (lastPointerType.current === 'touch') e.preventDefault();
+                  }}
                   onDoubleClick={e => {
                     // Double-click a balloon to retype it. It does NOT have to
                     // be picked first — needing two separate clicks to get at
@@ -2307,6 +2658,22 @@ export function PlanAnnotator({
             screen given to a list; the versions live on the left rail now. */}
       </div>
 
+      {/* The same rail, laid across the bottom, on a phone stood up.
+          Down the side it would be a sixth of a 390px sheet, and it is the one
+          piece of chrome a thumb reaches for constantly — so it goes where the
+          thumb already is. It scrolls sideways rather than wrapping; the
+          `board-rail` fade is deliberately not used, since its mask runs top to
+          bottom and would fade a row's whole height away. */}
+      {!locked && railRow && (
+        <div className="flex-shrink-0 flex flex-row items-center gap-1 px-2 pt-1.5 overflow-x-auto"
+          style={{
+            backgroundColor: NAVY,
+            paddingBottom: 'max(6px, env(safe-area-inset-bottom))',
+          }}>
+          {railBody}
+        </div>
+      )}
+
       {/* The colour picker, drawn in the app rather than the operating system. */}
       {showPalette && !locked && (
         <InkPicker
@@ -2322,15 +2689,24 @@ export function PlanAnnotator({
       {showLayers && (
         <>
           <div className="fixed inset-0 z-[158]" onClick={() => setShowLayers(false)} />
+          {/* On a phone this hung 128px off the left-hand edge of the screen:
+              `right: 268` was measured against a desk window and a panel that
+              no longer exists. It is pinned to the right-hand edge instead, and
+              given the height that is actually there rather than 60% of a
+              landscape screen. */}
           <div className="fixed z-[159] rounded-2xl overflow-hidden"
             style={{
-              right: 268, top: 58, width: 250, maxHeight: '60vh',
+              ...(compact
+                ? { right: 8, top: 54, width: 'min(280px, calc(100vw - 16px))',
+                    maxHeight: 'calc(100vh - 68px)' }
+                : { right: 268, top: 58, width: 250, maxHeight: '60vh' }),
               background: '#fff', boxShadow: '0 20px 48px -10px rgba(15,23,42,.4)',
             }}>
             <div className="px-3 py-2 text-[12px] font-bold text-white" style={{ backgroundColor: NAVY }}>
               Layers
             </div>
-            <div className="p-2 overflow-y-auto" style={{ maxHeight: '48vh' }}>
+            <div className="p-2 overflow-y-auto"
+              style={{ maxHeight: compact ? 'calc(100vh - 112px)' : '48vh' }}>
               {/* YOUR marks, one layer per colour, newest first.
                   Somebody marking a plan up works in passes — the red ones are
                   the problems, the green ones are the answers — so a colour is
@@ -2349,7 +2725,8 @@ export function PlanAnnotator({
                         if (next.has(l.colour)) next.delete(l.colour); else next.add(l.colour);
                         return next;
                       })}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 text-left">
+                      className={`w-full flex items-center gap-2 px-2 rounded-lg hover:bg-gray-50 text-left ${
+                        compact ? 'py-2.5' : 'py-1.5'}`}>
                       <span className="w-[15px] h-[15px] rounded flex items-center justify-center flex-shrink-0"
                         style={!hiddenInk.has(l.colour)
                           ? { backgroundColor: NAVY, color: '#fff' }
@@ -2379,7 +2756,8 @@ export function PlanAnnotator({
               )}
               {layers.map(l => (
                 <button key={l.id} onClick={() => toggleLayer(l.id)}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 text-left">
+                  className={`w-full flex items-center gap-2 px-2 rounded-lg hover:bg-gray-50 text-left ${
+                    compact ? 'py-2.5' : 'py-1.5'}`}>
                   <span className="w-[15px] h-[15px] rounded flex items-center justify-center flex-shrink-0"
                     style={l.on
                       ? { backgroundColor: NAVY, color: '#fff' }
@@ -2390,6 +2768,66 @@ export function PlanAnnotator({
                 </button>
               ))}
             </div>
+          </div>
+        </>
+      )}
+
+      {/* Everything the phone's header could not hold.
+          Hung from the top-right corner rather than slid up from the bottom,
+          because the same panel has to work on a screen 390px tall — a bottom
+          sheet there is the whole screen, and it would cover the plan it is
+          being used on. */}
+      {showMore && (
+        <>
+          <div className="fixed inset-0 z-[158] bg-black/30" onClick={() => setShowMore(false)} />
+          <div data-plan-more-sheet className="fixed z-[159] rounded-2xl overflow-hidden bg-white p-1.5"
+            style={{
+              top: 54, right: 8, width: 'min(300px, calc(100vw - 16px))',
+              maxHeight: 'calc(100vh - 66px)', overflowY: 'auto',
+              boxShadow: '0 24px 60px -12px rgba(15,23,42,.45)',
+            }}>
+            {/* Zoom, as one row. A pinch does this too, but a number you can
+                read is how you get back to a known size. */}
+            <div className="flex items-center gap-1 px-1 py-1">
+              <button onClick={() => setScale(s => Math.max(0.2, s - 0.2))} title="Zoom out"
+                className="rounded-lg flex items-center justify-center min-w-[42px] min-h-[42px]"
+                style={{ backgroundColor: '#f1f5f9', color: '#334155' }}><Minus size={16} /></button>
+              <span className="flex-1 text-center text-[13px] font-bold tabular-nums text-slate-700">
+                {Math.round(scale * 100)}%
+              </span>
+              <button onClick={() => setScale(s => Math.min(5, s + 0.2))} title="Zoom in"
+                className="rounded-lg flex items-center justify-center min-w-[42px] min-h-[42px]"
+                style={{ backgroundColor: '#f1f5f9', color: '#334155' }}><Plus size={16} /></button>
+              <button onClick={() => { setFitting(true); setShowMore(false); }} title="Fit the page"
+                className="rounded-lg flex items-center justify-center min-w-[42px] min-h-[42px]"
+                style={{ backgroundColor: '#f1f5f9', color: '#334155' }}><Maximize2 size={15} /></button>
+            </div>
+
+            <SheetRow icon={ChevronsUpDown} label="Plans"
+              hint="This job's drawings, and the rest of its Drive"
+              onClick={() => { setShowMore(false); setShowPlans(true); }} />
+            <SheetRow icon={Layers2} label="Layers"
+              disabled={isImagePlan}
+              hint={isImagePlan ? 'A picture has no layers of its own'
+                : layers.length ? `${layers.length} on this plan` : "The plan's own layers, and yours"}
+              onClick={() => { setShowMore(false); setShowLayers(true); }} />
+            <SheetRow icon={Download} label="Download"
+              hint="As a PDF, or as pictures"
+              onClick={() => { setShowMore(false); setShowDownload(true); }} />
+            <SheetRow icon={Printer} label="Print"
+              hint="This plan with the markup on it"
+              onClick={() => { setShowMore(false); void print(); }} />
+            {askWho && who && (
+              <SheetRow icon={UserIcon} label={who}
+                hint="Not you? Hand over to somebody else"
+                onClick={() => { setShowMore(false); setWho(''); }} />
+            )}
+            {!locked && (
+              <SheetRow icon={RotateCcw} label="Take every mark off" danger
+                disabled={!strokes.length}
+                hint="Versions already filed are not touched"
+                onClick={() => { setShowMore(false); setConfirmReset(true); }} />
+            )}
           </div>
         </>
       )}
@@ -2449,10 +2887,13 @@ export function PlanAnnotator({
       {askWho && !who && (
         <>
           <div className="fixed inset-0 z-[158] bg-black/55" />
-          <div className="fixed z-[159] rounded-2xl overflow-hidden bg-white"
+          {/* A long list of names on a 390px-tall screen has to scroll rather
+              than run off both ends of it. */}
+          <div className="fixed z-[159] rounded-2xl bg-white"
             style={{ left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: 'min(460px,92vw)',
+                     maxHeight: '92vh', overflowY: 'auto',
                      boxShadow: '0 24px 60px -12px rgba(15,23,42,.5)' }}>
-            <div className="px-4 py-3 text-white" style={{ backgroundColor: NAVY }}>
+            <div className="px-4 py-3 text-white rounded-t-2xl" style={{ backgroundColor: NAVY }}>
               <div className="text-[14px] font-bold">Who is marking this up?</div>
               <div className="text-[11.5px] text-white/70 mt-0.5">
                 This screen is shared, so the version is saved under your name.
@@ -2533,6 +2974,7 @@ export function PlanAnnotator({
           but never how big, which is the thing you are choosing. */}
       {showNib && nibAt && !showPalette && (
         <span
+          ref={nibElRef}
           className="nib-ghost"
           style={{
             left: nibAt.x, top: nibAt.y,
@@ -2543,6 +2985,34 @@ export function PlanAnnotator({
         />
       )}
     </div>
+  );
+}
+
+/**
+ * One line in the phone's ⋯ sheet.
+ *
+ * A 44px row with the name in full and what it does underneath. The header
+ * these came out of could say "Plans" and rely on a tooltip for the rest;
+ * a phone has no hover, so the sentence has to be on the row.
+ */
+function SheetRow({ icon: Icon, label, hint, danger, disabled, onClick }: {
+  icon: React.ComponentType<{ size?: number }>;
+  label: string;
+  hint?: string;
+  danger?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button onClick={onClick} disabled={disabled}
+      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left disabled:opacity-40 hover:bg-slate-50"
+      style={{ color: danger ? '#b4342a' : NAVY, minHeight: 46 }}>
+      <Icon size={17} />
+      <span className="flex-1 min-w-0">
+        <span className="block text-[13.5px] font-bold">{label}</span>
+        {hint && <span className="block text-[11px] font-medium text-slate-500 truncate">{hint}</span>}
+      </span>
+    </button>
   );
 }
 
@@ -2559,18 +3029,62 @@ export function PlanAnnotator({
  * out the count, which is what somebody about to walk away from the panel
  * wants.
  */
-function SaveTrip({ state, secondsLeft, onSendNow }: {
+function SaveTrip({ state, secondsLeft, compact, onSendNow }: {
   state: 'clean' | 'local' | 'sending' | 'sent' | 'failed';
   secondsLeft: number;
+  /** A phone has no room for the journey — only for where it has got to. */
+  compact?: boolean;
   onSendNow: () => void;
 }) {
   const failed = state === 'failed';
   const flying = state === 'sending';
 
+  /**
+   * On a phone the computer and the arrow go and the Drive stays.
+   *
+   * Ninety pixels of picture is a quarter of a 390px row, and the row has a
+   * pager and a Save button to fit in as well. What is left says the same
+   * three things — kept here (grey), on its way (spinning), arrived (green
+   * tick) — with the count on the corner, and it is still the button that
+   * sends it now.
+   */
+  if (compact) {
+    return (
+      <span data-save-state={state} className="flex items-center flex-shrink-0 rounded-lg"
+        style={{
+          backgroundColor: state === 'sent' ? 'rgba(74,222,128,.14)'
+            : failed ? 'rgba(239,68,68,.16)' : 'rgba(255,255,255,.08)',
+          color: state === 'sent' ? '#86efac' : failed ? '#fca5a5' : 'rgba(255,255,255,.78)',
+        }}
+        title={failed
+          ? 'Drive would not take it. Your marks are kept here — press to try again.'
+          : state === 'sent' ? 'Filed in Drive'
+          : 'Kept on this machine. Press to send it to Drive now.'}
+      >
+        <button data-save-now onClick={onSendNow}
+          className="relative rounded-lg flex items-center justify-center min-w-[38px] min-h-[38px]">
+          {failed ? <AlertTriangle size={16} /> : <HardDrive size={16} />}
+          {state === 'sent' && (
+            <Check size={11} className="absolute bottom-1 right-1" />
+          )}
+          {flying && (
+            <Loader2 size={11} className="absolute bottom-1 right-1 animate-spin" />
+          )}
+          {!flying && !failed && state !== 'sent' && secondsLeft > 0 && (
+            <span data-save-count
+              className="absolute bottom-0.5 right-1 text-[9px] font-bold tabular-nums">
+              {secondsLeft}
+            </span>
+          )}
+        </button>
+      </span>
+    );
+  }
+
   if (state === 'sent') {
     return (
       <span data-save-state="sent" title="Filed in Drive"
-        className="flex items-center gap-1 px-2 py-1.5 rounded-lg"
+        className="flex items-center gap-1 px-2 py-1.5 rounded-lg flex-shrink-0"
         style={{ backgroundColor: 'rgba(74,222,128,.14)', color: '#86efac' }}>
         <HardDrive size={15} />
         <Check size={12} />
@@ -2581,7 +3095,7 @@ function SaveTrip({ state, secondsLeft, onSendNow }: {
   return (
     <span
       data-save-state={state}
-      className="flex items-center gap-1 px-2 py-1.5 rounded-lg"
+      className="flex items-center gap-1 px-2 py-1.5 rounded-lg flex-shrink-0"
       style={{
         backgroundColor: failed ? 'rgba(239,68,68,.16)' : 'rgba(255,255,255,.08)',
         color: failed ? '#fca5a5' : 'rgba(255,255,255,.78)',

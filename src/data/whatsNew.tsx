@@ -104,6 +104,39 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'tap',
       },
       {
+        title: 'The phone, again — and this time the small print',
+        body: 'A stage name now SHRINKS until it fits on one line instead of wrapping or '
+          + 'being cut short, the floor number moved onto the divider so apartments use the '
+          + 'whole width, and the second building name over each diagram is gone — the tabs '
+          + 'already say which one you are on. The dashboard puts its figures two to a row '
+          + 'instead of one giant tile each, and the workspace picker in the header is a '
+          + 'proper dropdown that will hold as many workspaces as you make.',
+        demo: 'tap',
+      },
+      {
+        title: 'Voice memos, wherever a note takes a file',
+        body: 'Press the microphone beside the paperclip and talk. You get a running timer '
+          + 'while you record, a bin if you change your mind, and once sent it plays back '
+          + 'with a bar you can tap to skip through and a 1x / 1.5x / 2x button. Works from '
+          + 'a worker\u2019s phone.',
+        demo: 'tap',
+      },
+      {
+        title: 'The board lines things up, and puts tools down',
+        body: 'Drag or resize ANYTHING and guide lines show what it is lining up with — '
+          + 'notes, drawings, widgets, not just jobs. Press the pen a second time to put it '
+          + 'down. Hold something against an edge and the board grows. A finished drawing '
+          + 'becomes its own note you can move and resize, there is an eraser under the pen, '
+          + 'and the panels can be dragged out of the way by the corner.',
+        demo: 'drag',
+      },
+      {
+        title: 'A week you can hide, and a planner you can size',
+        body: 'Hide a week on the schedule and nothing in it is lost — bring the week back '
+          + 'and every job is where you left it. The planner also has a size setting now.',
+        demo: 'list',
+      },
+      {
         title: 'Closing a pin says who closed it',
         body: 'In a pin\'s note, Save keeps the bubble open, and Mark as done is its own '
           + 'button that records the name — so a pin the architect closes says so. '

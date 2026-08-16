@@ -90,21 +90,55 @@ function phoneCellTextWidth(cols: number): number {
  * other way, clipped it. Buckets get every real stage name within a few percent
  * for the cost of one pass over the string.
  */
+/**
+ * Width of a string in ems, MEASURED.
+ *
+ * This was a hand-calibrated table of per-character widths, and it undershot
+ * real text by about 8% — "Thermostats & Haffala" was reckoned to fit 83px when
+ * it needed 90 — so every long stage name chose a size too big and then got an
+ * ellipsis put through it, which is the one outcome the auto-fit exists to
+ * avoid. Any such table also has to be re-tuned for every font and script it
+ * meets; the Hebrew names had no entries at all and fell to the default bucket.
+ *
+ * A 2D canvas measures the actual font at 1px and hands back ems directly, so
+ * it cannot drift from what the browser will really draw. Memoised because the
+ * same seven stage names are asked for on all 168 cells.
+ */
+const emCache = new Map<string, number>();
+let emCtx: CanvasRenderingContext2D | null | undefined;
+
 function emWidth(text: string): number {
-  let w = 0;
-  for (const ch of text) {
-    if ('iljtfI|!.,:;\'`()[]'.includes(ch)) w += 0.28;
-    else if (ch === ' ') w += 0.26;
-    else if (ch === 'm' || ch === 'w' || ch === 'M' || ch === 'W') w += 0.88;
-    else if (ch === '—' || ch === '–') w += 0.95;
-    else if (ch >= 'A' && ch <= 'Z') w += 0.66;
-    else w += 0.55;
+  const hit = emCache.get(text);
+  if (hit !== undefined) return hit;
+
+  if (emCtx === undefined) {
+    try {
+      const c = document.createElement('canvas');
+      emCtx = c.getContext('2d');
+      if (emCtx) {
+        // Whatever the cells actually render in — read off the body so a theme
+        // or a system font change cannot leave this measuring the wrong face.
+        const family = getComputedStyle(document.body).fontFamily
+          || 'system-ui, sans-serif';
+        emCtx.font = `600 100px ${family}`;
+      }
+    } catch {
+      emCtx = null;
+    }
   }
+
+  // A crude fallback for a context that could not be made (jsdom, SSR). It is
+  // deliberately GENEROUS — over-estimating picks a smaller font, which is
+  // merely less pretty, while under-estimating clips the text.
+  const w = emCtx
+    ? emCtx.measureText(text).width / 100
+    : text.length * 0.62;
+  emCache.set(text, w);
   return w;
 }
 
 const PHONE_STAGE_MAX = 8.5;
-const PHONE_STAGE_MIN = 6.5;
+const PHONE_STAGE_MIN = 6;
 
 /**
  * Shrink the stage name until it fits on ONE line, with a floor.
@@ -120,7 +154,7 @@ function fitStageFont(text: string, availW: number): { size: number; wrap: boole
   const ideal = availW / ems;
   if (ideal >= PHONE_STAGE_MAX) return { size: PHONE_STAGE_MAX, wrap: false };
   if (ideal < PHONE_STAGE_MIN) return { size: PHONE_STAGE_MIN, wrap: true };
-  return { size: Math.round(ideal * 10) / 10, wrap: false };
+  return { size: Math.floor(ideal * 10) / 10, wrap: false };
 }
 
 interface FloorRowDef {
@@ -484,10 +518,26 @@ function AptCell({
  * actually hold the information. Here it costs nothing: the strip already
  * exists as a divider, and the middle of the row is where the eye is anyway.
  */
+/**
+ * Shorten a floor label to fit the phone's 17px pill.
+ *
+ * Floor NUMBERS ("15", "-2") fit as they are and must never be touched — they
+ * are what somebody counts down. Only the named floors are too long, and those
+ * are a closed set of two, so an initial is unambiguous: L over the lobby row,
+ * G over the ground row. Ellipsizing them instead ("Groun…") spends the same
+ * pixels saying less.
+ */
+function shortFloorLabel(label: string): string {
+  if (/^-?\d/.test(label)) return label;      // 15, -2, …
+  const first = label.trim()[0];
+  return first ? first.toUpperCase() : label;
+}
+
 function Stairwell({ compact, floorLabel }: { compact?: boolean; floorLabel?: string }) {
   // `floorLabel` is only ever set on a phone, so this first branch IS the phone
   // width. It stays wide enough for the pill and not a pixel wider.
   const w = floorLabel ? `${PHONE_STAIRWELL_W}px` : compact ? '6px' : '10px';
+  const shown = floorLabel ? shortFloorLabel(floorLabel) : '';
   return (
     <div className="flex-shrink-0 flex items-center justify-center relative" style={{ width: w }}>
       <div
@@ -497,15 +547,17 @@ function Stairwell({ compact, floorLabel }: { compact?: boolean; floorLabel?: st
       {floorLabel && (
         <span
           className="absolute inset-0 flex items-center justify-center text-center pointer-events-none"
+          // The full name still reaches anyone who long-presses or hovers.
+          title={floorLabel}
           style={{
-            fontSize: floorLabel.length > 2 ? '6.5px' : '9px',
+            fontSize: shown.length > 2 ? '6.5px' : '9px',
             fontWeight: 700, color: '#64748b', lineHeight: 1,
             // A pill behind it so the strip does not read through the digits.
             background: '#f8fafc', borderRadius: '4px',
             margin: 'auto', width: '17px', height: '17px',
           }}
         >
-          {floorLabel}
+          {shown}
         </span>
       )}
     </div>

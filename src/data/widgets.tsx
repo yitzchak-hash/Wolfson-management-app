@@ -6,7 +6,7 @@ import {
   CircleDashed, Archive, StickyNote, Copy, Check, Filter, CalendarCheck,
   Calculator, Ruler, Target, Users, GitCommitHorizontal, TimerReset,
   ArrowRightLeft, ListFilter, Search, Sparkles, Timer, Sticker, Type, FolderPlus, Building,
-  Minus, MessageSquareQuote, Palette, X,
+  Minus, MessageSquareQuote, Palette, X, Pin, Plus, Trash2,
 } from 'lucide-react';
 import {
   Apartment, CanvasElement, Stage, ContractorAssignment, Contractor,
@@ -24,7 +24,7 @@ import { TV_WIDGETS } from './tvWidgets';
 import { INSIGHT_WIDGETS } from './insightWidgets';
 import { MORE_WIDGETS } from './moreWidgets';
 import { PlannerWidget, PlannerData, PlannerEntry } from '../components/board/PlannerWidget';
-import { StickyNoteWidget } from '../components/board/StickyNoteWidget';
+import { StickyNoteWidget, StickyNoteRecord, NOTE_COLOURS } from '../components/board/StickyNoteWidget';
 import { ActivitySentence } from '../components/ui/ActivitySentence';
 
 /**
@@ -1240,8 +1240,28 @@ export const WIDGETS: WidgetDef[] = [
     w: 260, h: 300,
     blurb: 'A pad of sticky notes with a cork board behind it. Bold, bullets and tick-boxes, '
       + 'six colours, and a corner that folds up into a fresh page.',
-    data: { notes: [], openId: undefined },
+    // '' rather than undefined: fsSet's sanitiser turns a TOP-LEVEL undefined
+    // into deleteField(), but this one is nested inside `data`, where it stays
+    // undefined — and Firestore rejects the whole write. The note pad would
+    // then save on this device and silently never reach any other.
+    data: { notes: [], openId: '' },
     render: (el, c) => <StickyNoteWidget el={el} readOnly={c.readOnly} isRtl={c.isRtl} update={c.update} />,
+  },
+  {
+    /**
+     * The cork board on its own.
+     *
+     * It was only ever reachable from inside one pad, which made it the wrong
+     * shape for what people use it for: the question is "what has anybody
+     * written down?", and that spans every pad on the board rather than the one
+     * you happen to be holding. Placed on its own it answers that in a glance.
+     */
+    id: 'notes-board', rank: 2, name: 'Notes board', category: 'visual', icon: Pin,
+    w: 340, h: 300,
+    blurb: 'Every note on this board, pinned up on cork. New note puts a fresh note on the '
+      + 'board beside it, and clicking one pinned up opens it on its own pad.',
+    data: {},
+    render: (el, c) => <NotesBoard el={el} ctx={c} />,
   },
   {
     id: 'w-title', rank: 1, name: 'Heading', category: 'visual', icon: Type, w: 280, h: 48,
@@ -2282,6 +2302,224 @@ function JobFinder({ el, ctx }: { el: CanvasElement; ctx: WidgetCtx }) {
             size={size}
           />
         ))}
+      </div>
+    </div>
+  );
+}
+
+
+/**
+ * The cork the notes are pinned to.
+ *
+ * Restated here rather than shared with the pad because the pad keeps its own
+ * board as component state and there is nothing to import — but the two must
+ * keep matching. They are the same object seen two ways (one pad's notes, or
+ * every pad's), and two different-looking cork boards read as two unrelated
+ * features rather than one.
+ */
+const CORK: React.CSSProperties = {
+  background:
+    'radial-gradient(circle at 20% 25%, #C58A4B 0 2px, transparent 3px), '
+    + 'radial-gradient(circle at 62% 68%, #B87C3F 0 2px, transparent 3px), '
+    + 'radial-gradient(circle at 85% 20%, #C9925A 0 2px, transparent 3px), '
+    + 'linear-gradient(150deg, #C08A50 0%, #B27B41 55%, #A76F38 100%)',
+  backgroundSize: '26px 26px, 34px 34px, 30px 30px, 100% 100%',
+  boxShadow: 'inset 0 0 0 6px #8A5A2B, inset 0 0 22px rgba(0,0,0,.35)',
+};
+
+/** A note's headline: its first written line, with any marker stripped off. */
+function noteHeadline(text: string, fallback: string): string {
+  const line = text
+    .split('\n')
+    .map(l => l.replace(/^[☐☑•]\s*/, '').replace(/\*\*/g, '').trim())
+    .find(Boolean);
+  return line || fallback;
+}
+
+/**
+ * Somewhere free beside the board for a new note to land.
+ *
+ * Straight down the board's right-hand edge, first gap wins. The page's own
+ * free-spot finder knows about the viewport and lives on the page, which a
+ * widget cannot reach — and this only has to put one node next to the thing
+ * that made it, not fill a canvas.
+ */
+function spotBeside(all: CanvasElement[], host: CanvasElement, w: number, h: number) {
+  const gap = 20;
+  const x = host.x + host.w + gap;
+  const near = all.filter(e => (e.board ?? '') === (host.board ?? '') && e.id !== host.id);
+  for (let row = 0; row < 20; row++) {
+    const y = host.y + row * (h + gap);
+    const clash = near.some(e => x < e.x + e.w && x + w > e.x && y < e.y + e.h && y + h > e.y);
+    if (!clash) return { x, y };
+  }
+  return { x, y: host.y };
+}
+
+/**
+ * The notes board.
+ *
+ * The cork board that used to be reachable only from inside one sticky pad,
+ * placed on its own. It gathers every pad standing on the same board and pins
+ * all their notes up together, because "what has anybody written down?" spans
+ * the board rather than the one pad you happen to be holding.
+ *
+ * The one behaviour that changes: **New note makes a new note WIDGET** beside
+ * the board rather than another page inside a single pad. A note is a thing on
+ * the board — it can be moved, coloured, resized, attached and put on the wall
+ * like anything else — and a notes board that quietly hid them all inside
+ * itself would be the pad again under a different name.
+ */
+function NotesBoard({ el, ctx }: { el: CanvasElement; ctx: WidgetCtx }) {
+  const storeElements = useStore(s => s.canvasElements);
+  const addCanvasElement = useStore(s => s.addCanvasElement);
+  const updateCanvasElement = useStore(s => s.updateCanvasElement);
+
+  const he = !!ctx.isRtl;
+  const readOnly = !!ctx.readOnly;
+  const cfg = d(el);
+
+  // The shelf hands over the board's nodes; everywhere else the store IS the board.
+  const elements = ctx.boardElements ?? storeElements;
+
+  /** Every pad on the same board as this one — a group's board is its own board. */
+  const pads = elements.filter(e =>
+    e.type === 'widget' && e.widget === 'sticky-pad' && (e.board ?? '') === (el.board ?? ''));
+
+  const pinned = pads
+    .flatMap(p => (((p.data ?? {}) as Record<string, any>).notes as StickyNoteRecord[] ?? [])
+      .map(note => ({ note, padId: p.id })))
+    // Newest first: a board people keep adding to is read from the top.
+    .sort((a, b) => (b.note.updatedAt ?? '').localeCompare(a.note.updatedAt ?? ''));
+
+  /**
+   * The shelf has no pads to gather from, so a sample stands in — the same
+   * rule the rest of the store follows. On a real board with nothing written
+   * yet there is no sample, and the empty state is simply the truth.
+   */
+  const sample = (cfg.notes as StickyNoteRecord[] | undefined) ?? [];
+  const rows: { note: StickyNoteRecord; padId: string }[] =
+    pinned.length ? pinned : sample.map(note => ({ note, padId: '' }));
+
+  /** Blank fits as many across as the node is wide — it is a resizable node. */
+  const cols = Number(cfg.columns) || 0;
+
+  function openOnItsPad(padId: string, noteId: string) {
+    const pad = elements.find(e => e.id === padId);
+    if (readOnly || !pad) return;
+    updateCanvasElement(padId, { data: { ...(pad.data ?? {}), openId: noteId } });
+  }
+
+  function takeDown(padId: string, noteId: string) {
+    const pad = elements.find(e => e.id === padId);
+    if (readOnly || !pad) return;
+    if (!window.confirm(he ? 'להסיר את הפתק?' : 'Take this note down?')) return;
+    const data = (pad.data ?? {}) as Record<string, any>;
+    const rest = ((data.notes ?? []) as StickyNoteRecord[]).filter(n => n.id !== noteId);
+    // '' rather than undefined: an undefined value NESTED inside `data` is not
+    // something Firestore accepts, and fsSet's sanitiser only reaches the top
+    // level — the write would fail into a console warning and the note would
+    // come back on the next device. The pad reads a missing id the same way.
+    updateCanvasElement(padId, { data: { ...data, notes: rest, openId: rest[0]?.id ?? '' } });
+  }
+
+  function newNote() {
+    if (readOnly) return;
+    const w = 260, h = 300;
+    const at = spotBeside(storeElements, el, w, h);
+    const now = new Date().toISOString();
+    const noteId = `SN-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+    addCanvasElement({
+      addedAt: now,
+      id: 'CE-' + Math.random().toString(36).slice(2, 9),
+      type: 'widget', widget: 'sticky-pad',
+      // It lands on whatever board this one is standing on.
+      ...(el.board ? { board: el.board } : {}),
+      x: Math.round(at.x), y: Math.round(at.y), w, h,
+      text: '', color: 'transparent',
+      // Seeded with one blank page rather than none, so the new note is pinned
+      // up here the moment it is made. An empty pad shows nothing on the cork,
+      // which would have made the button look as though it had done nothing.
+      data: { notes: [{ id: noteId, text: '', colour: 'yellow', updatedAt: now }], openId: noteId },
+    });
+  }
+
+  return (
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-md" style={CORK}>
+      <div className="flex shrink-0 items-center justify-between gap-2 px-3 py-2">
+        <span className="truncate text-xs font-bold text-amber-50 drop-shadow">
+          {(cfg.title as string) || (he ? 'לוח הפתקים' : 'The notes board')} · {rows.length}
+        </span>
+        {!readOnly && (
+          <button type="button" data-no-drag data-el-action data-notes-board-new
+            title={he ? 'פתק חדש' : 'New note'}
+            onClick={newNote}
+            className="flex shrink-0 items-center gap-1 rounded bg-amber-50/85 px-1.5 py-1
+                       text-[10px] font-bold text-amber-900 hover:bg-amber-50">
+            <Plus className="h-3.5 w-3.5" />
+            {he ? 'פתק' : 'Note'}
+          </button>
+        )}
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto p-2" data-no-drag data-wheel>
+        {rows.length === 0 ? (
+          <div className="flex h-full items-center justify-center px-4 text-center text-[11.5px] text-amber-50/90">
+            {he
+              ? 'אין עדיין פתקים על הלוח. לחצו “פתק” כדי להוסיף אחד.'
+              : 'Nothing written down yet. Press Note for one.'}
+          </div>
+        ) : (
+          <div
+            className="grid gap-3"
+            style={cols
+              ? { gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }
+              : { gridTemplateColumns: 'repeat(auto-fill, minmax(112px, 1fr))' }}
+          >
+            {rows.map(({ note, padId }, i) => {
+              const cc = NOTE_COLOURS[note.colour] ?? NOTE_COLOURS.yellow;
+              // A board of perfectly square notes reads as a spreadsheet. The
+              // tilts repeat every five so a note does not jump about as the
+              // list re-sorts under it.
+              const tilt = [-2.5, 1.8, -1.2, 2.4, -0.8][i % 5];
+              return (
+                <div key={`${padId}:${note.id}`} data-notes-board-note={note.id}
+                  className="group/pin relative pt-2" style={{ transform: `rotate(${tilt}deg)` }}>
+                  <span aria-hidden
+                    className="absolute start-1/2 top-0 z-10 h-3.5 w-3.5 -translate-x-1/2 rounded-full rtl:translate-x-1/2"
+                    style={{
+                      background: 'radial-gradient(circle at 32% 30%, #ff8a8a 0 30%, #d92c2c 55%, #8e1414 100%)',
+                      boxShadow: '0 2px 3px rgba(0,0,0,.45)',
+                    }} />
+                  <button type="button" data-no-drag data-el-action data-notes-board-open={note.id}
+                    title={readOnly ? undefined : (he ? 'פתיחה על הפתק שלו' : 'Open it on its own pad')}
+                    onClick={() => openOnItsPad(padId, note.id)}
+                    className="block h-24 w-full overflow-hidden rounded-[3px] p-2 text-start text-[11px] leading-5 transition-transform hover:scale-[1.03]"
+                    style={{
+                      background: `linear-gradient(160deg, ${cc.bg} 0%, ${cc.bg} 62%, ${cc.bg2} 100%)`,
+                      color: cc.text,
+                      boxShadow: '0 6px 12px -6px rgba(0,0,0,.55)',
+                    }}>
+                    <span className="line-clamp-4 whitespace-pre-wrap break-words">
+                      {noteHeadline(note.text, he ? '(פתק ריק)' : '(empty note)')}
+                    </span>
+                  </button>
+                  {/* No pad behind it means this is the shelf's sample — there
+                      is nothing to take down, and offering it would be a lie. */}
+                  {!readOnly && padId !== '' && (
+                    <button type="button" data-no-drag data-el-action data-notes-board-delete={note.id}
+                      title={he ? 'הסרה' : 'Take down'}
+                      onClick={() => takeDown(padId, note.id)}
+                      className="absolute -end-1.5 -top-0.5 rounded-full bg-white/90 p-1 text-rose-600
+                                 opacity-0 shadow transition group-hover/pin:opacity-100">
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

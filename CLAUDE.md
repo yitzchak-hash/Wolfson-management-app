@@ -222,6 +222,24 @@ Module-level constants cannot access the translation store. Any constant that ou
 ### RTL
 `settings.isRtl` controls text direction. `dir="rtl"` is applied to the root layout when true.
 
+## Voice memos
+`src/data/voiceMemo.ts` is the mechanism (`useVoiceRecorder`, `squash`, `storeVoiceMemo`);
+`src/components/ui/VoiceMemo.tsx` is only its face. A memo attaches as an ordinary audio FILE
+on whatever attachment path the host already has — its own record field would mean a new key
+in persist + export + import plus a second upload path to keep in step, for no behaviour a
+file does not already have. Two traps already paid for: iOS Safari records mp4/aac and throws
+on the webm Chrome prefers, so the container is negotiated (`pickMimeType`); and a memo stored
+on Drive is a web VIEW link that an `<audio>` element can never play, so the player links out
+instead of drawing a dead transport. The interaction is the familiar one on purpose — no third
+party's artwork, icons or wording, and none should be added.
+
+## The board snaps EVERYTHING, and the setting only means the grid
+Neighbour snapping (edges and centres of every other node) is always on during a move or a
+resize, for every node type; `snapToGrid` governs the grid alone. Guides are drawn live and
+cleared on pointer-up. Thresholds are in SCREEN pixels divided by zoom — forget that and
+things run away from the cursor at any zoom but 100%. A finished stroke that overlaps nothing
+becomes its own resizable node (`data.own`).
+
 ## Board tools toggle off
 Pressing the tool you are already holding puts it DOWN and returns to Select (the board's
 default, `useState<BoardTool>('select')`). Guarded so Select itself is a no-op — the board
@@ -1290,6 +1308,34 @@ in between `top: 0` meant zero in the SCALED space — measured 577px down at
   is 9% of the width spent on two digits, taken from the four cells that carry the meaning.
   Note there are TWO column components — `BuildingColumn` (Wolfson) and `NetivBuildingColumn`
   — and a change to one is invisible in the other; Wolfson renders `BuildingColumn`.
+- **The phone stage name SHRINKS to one line; it never ellipsizes.** `fitStageFont` divides
+  the cell's usable width by the string's measured em-width and clamps to [6, 8.5]px, falling
+  back to wrapping only below the floor. `emWidth` MEASURES with a 2D canvas at `600 100px`
+  of the body's own font family, memoised. It used to be a hand-tuned per-character table
+  which undershot real text by ~8% ("Thermostats & Haffala" reckoned to fit 83px, actually
+  90), so every long stage name chose a size too big and then had an ellipsis put through it
+  — the one outcome the auto-fit exists to prevent. A table also has to be re-tuned per font
+  and per script, and the Hebrew names had no entries at all. Round DOWN, never to nearest.
+- **`scratchpad/stagefit.mjs` is the guard for that**, at 360/390/412px. `shots.mjs` cannot
+  catch it: that harness exempts `truncate` elements as deliberate (right for a widget blurb,
+  exactly wrong here), so it reported 0 clipped while 39 stage labels were ellipsized on
+  screen. An exemption added to quieten one page WILL hide a regression on another.
+- **The phone cell-geometry constants** (`PHONE_PAGE_PAD`, `PHONE_ROW_PAD`, `PHONE_HALF_GAP`,
+  `PHONE_CELL_GAP`, `PHONE_STAIRWELL_W`, `PHONE_CELL_CHROME`) mirror specific Tailwind classes
+  and are commented with which. Change a class on the phone path without the constant and the
+  font is computed against the wrong width.
+- **Named floors abbreviate on the phone pill**: the divider pill is 17px, so `shortFloorLabel`
+  gives "L" for Lobby and "G" for Ground/Commercial while NUMBERS ("15", "-2") are never
+  touched — they are what somebody counts down. The full name stays in `title`.
+- **The phone hides the per-building navy header** in BOTH column components — the A1/A2/A3
+  tabs above the diagram already say which building you are on, and desktop keeps it because
+  several columns sit side by side there.
+- **The drawer's plan pane is ONE function rendered in two places** — `planPane('side')` for
+  the desktop side pane, `planPane('tab')` for the phone's Plan tab. It is a plain function,
+  deliberately NOT a nested component: a component declared in a render body is a new type
+  every render, which remounts the iframe and re-fetches the PDF from Drive on each change.
+  The phone Plan tab must never jump straight into the markup studio — Mark up inside the
+  pane is the only way in, exactly as on desktop.
 - **Phone preview pages**: `scratchpad/mobcapture.mjs` captures real rendered pages
   (scripts stripped, images inlined) and `build-preview.mjs` wraps them in phone frames for
   an artifact the owner reviews before/after changes. `scratchpad/shots.mjs` is the measuring

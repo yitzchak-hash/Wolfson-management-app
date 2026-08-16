@@ -2759,7 +2759,11 @@ export function GeneralJobsPage() {
     if (drawing) {
       // One record per stroke — never one per point, which would flood the store.
       if (drawing.pts.length > 1) {
-        const box = pointsBounds(drawing.pts);
+        // Rounded FIRST, so the stored box and the stored path describe exactly
+        // the same rectangle — the node fits one to the other, and a box a
+        // fraction out would draw the ink very slightly stretched.
+        const pts = drawing.pts.map(p => ({ x: Math.round(p.x), y: Math.round(p.y) }));
+        const box = pointsBounds(pts);
         /**
          * A drawing that overlaps nothing becomes a thing in its own right.
          *
@@ -2782,7 +2786,7 @@ export function GeneralJobsPage() {
           ...box,
           text: '',
           color: drawing.marker ? markStyle.color : penStyle.color,
-          points: fmtPoints(drawing.pts),
+          points: fmtPoints(pts),
           strokeWidth: drawing.marker ? markStyle.width : penStyle.width,
           nib: drawing.marker ? markStyle.nib : penStyle.nib,
           ...(drawing.marker ? { art: 'marker' as const } : {}),
@@ -3190,8 +3194,13 @@ export function GeneralJobsPage() {
     // on THIS board — counting them stretched the surface to fit coordinates
     // that are never drawn here.
     if (el.board || el.attachedTo || (el.type === 'stroke' && !isDrawingNode(el))) return;
-    contentX = Math.max(contentX, el.x + el.w);
-    contentY = Math.max(contentY, el.y + el.h);
+    // Through `elPos`, so the surface extends under a node WHILE it is being
+    // dragged or resized — the same live measurement the tiles get. Reading the
+    // stored x/y meant the board only grew once a node was let go, which left
+    // the edge push with nowhere to travel and the board refusing to follow.
+    const p = elPos(el);
+    contentX = Math.max(contentX, p.x + p.w);
+    contentY = Math.max(contentY, p.y + p.h);
   });
   /**
    * The board is exactly as big as what is on it, plus room to put the next
