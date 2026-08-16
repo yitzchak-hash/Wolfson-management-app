@@ -13,6 +13,7 @@ import { DeleteImpact } from '../ui/DeleteImpact';
 import { LinkField } from '../ui/LinkField';
 import { printSheet, printEsc } from '../../data/printing';
 import { PlanPinOverlay } from './PlanPinOverlay';
+import { cachedPlanAspect, measurePlanAspect } from '../../data/planAspect';
 // Lazy, deliberately. The markup studio carries pdf.js — about a megabyte of
 // PDF engine — and nobody should pay for that on the login screen. It arrives
 // the moment someone presses "Mark up", and not before.
@@ -242,21 +243,15 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    *
    * The Drive preview letterboxes the PDF inside its box, and the surround is
    * black and cannot be turned off — so the only way to not see it is a box
-   * whose shape matches the page. Plans are A-series: portrait 1:√2 or
-   * landscape √2:1. The pane's width is derived from its height and the
-   * chosen orientation, remembered per machine (a preference of the eye, not
-   * of the data), and the fields keep a fixed readable column beside it.
+   * whose shape matches the page. The sheet's real proportions are MEASURED
+   * (thumbnail first, bytes as a fallback — see planAspect.ts) and cached per
+   * file, replacing the portrait/landscape chips the office had to guess at.
+   * Landscape √2 stands in for the moment before the measurement lands.
    */
-  const [planAspect, setPlanAspect] = useState<'portrait' | 'landscape'>(() =>
-    (localStorage.getItem('plan_pane_aspect') as 'portrait' | 'landscape') ?? 'landscape');
-  const pickAspect = (a: 'portrait' | 'landscape') => {
-    setPlanAspect(a);
-    localStorage.setItem('plan_pane_aspect', a);
-  };
+  const [planRatio, setPlanRatio] = useState<number | null>(null);
   const modalH = Math.min(980, window.innerHeight * 0.93);
   const paneH = modalH - 56;                       // minus the navy header
-  const A4 = Math.SQRT2;
-  const planW = Math.round(planAspect === 'landscape' ? paneH * A4 : paneH / A4);
+  const planW = Math.round(paneH * (planRatio ?? Math.SQRT2));
 
   /** The plan pane beside the fields — off when there is no plan to show. */
   const [planWanted, setPlanWanted] = useState(true);
@@ -265,6 +260,20 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [fetchingPdf, setFetchingPdf] = useState(false);
   const [availablePdfs, setAvailablePdfs] = useState<DriveFile[]>([]);
   const [selectedPdfIdx, setSelectedPdfIdx] = useState(0);
+
+  // Measure the sheet as soon as we know which file is showing. A cached
+  // answer applies before paint; a fresh measurement snaps the pane into
+  // shape when it lands — unless the user has switched plans meanwhile.
+  useEffect(() => {
+    const fid = shownPlanId ?? availablePdfs[selectedPdfIdx]?.id ?? null;
+    if (!fid) { setPlanRatio(null); return; }
+    const hit = cachedPlanAspect(fid);
+    setPlanRatio(hit);
+    if (hit !== null) return;
+    let stale = false;
+    measurePlanAspect(fid).then(r => { if (!stale && r !== null) setPlanRatio(r); });
+    return () => { stale = true; };
+  }, [shownPlanId, availablePdfs, selectedPdfIdx]);
   const [stageChangeModal, setStageChangeModal] = useState<{ newStageId: string; newStageName: string } | null>(null);
   const [prevStageId, setPrevStageId] = useState<string>('');
   const [drawerEditingTaskId, setDrawerEditingTaskId] = useState<string | null>(null);
@@ -1943,19 +1952,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   )}
                 </button>
               </Tooltip>
-              {/* Which way the sheet faces. Wrong guess = black bars, so the
-                  choice is one press and remembered on this machine. */}
-              <span className="flex rounded-lg border border-gray-200 overflow-hidden mr-1">
-                {(['portrait', 'landscape'] as const).map(a => (
-                  <button key={a} onClick={() => pickAspect(a)}
-                    title={a === 'portrait' ? 'Portrait sheet' : 'Landscape sheet'}
-                    className="px-1.5 py-1 text-gray-400"
-                    style={planAspect === a ? { backgroundColor: '#1e3a5f', color: '#fff' } : undefined}>
-                    <span className="block border-2 border-current rounded-[2px]"
-                      style={a === 'portrait' ? { width: 8, height: 11 } : { width: 11, height: 8 }} />
-                  </button>
-                ))}
-              </span>
               {/* The PLANS folder, not the job folder — an architect opening
                   the drawing wants the folder the sheets are in. */}
               {planSet.plansFolderId && (

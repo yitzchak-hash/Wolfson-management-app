@@ -1379,8 +1379,13 @@ never hover-gated" and is the test measuring its own impatience.
   text size, synced like `lang`; the portal scales the ROOT font size so every rem follows).
 - Worker permission 16: `assignOthers` — reveals the contractor picker in the portal's task
   form and unlocks the full unit list there.
-- The plan pane is sheet-shaped: width = height ÷/× √2, orientation chips remembered per
-  machine (`plan_pane_aspect`). Board default zoom per machine (`board_default_zoom_<pid>`).
+- The plan pane is sheet-shaped AUTOMATICALLY: `src/data/planAspect.ts` measures page 1's
+  real width÷height — Drive thumbnail as a plain `<img>` first (a few KB), full bytes +
+  lazy pdf.js only if the thumbnail refuses — clamps to [0.45, 2.4] and caches per file id
+  (`plan_aspect_cache`, this machine only). Landscape √2 stands in while measuring; a
+  failure is never cached so the next open tries again. The manual portrait/landscape
+  chips and `plan_pane_aspect` are gone. Board default zoom per machine
+  (`board_default_zoom_<pid>`).
 - `findPlanSetViaBackend` falls back to PDFs in the job folder ROOT when there is no
   Engineered Plans subfolder — Job Board folders are often flat.
 - The map view is saved DEBOUNCED (800ms after rest), never per wheel tick; the previous

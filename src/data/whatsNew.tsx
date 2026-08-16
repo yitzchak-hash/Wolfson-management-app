@@ -81,11 +81,25 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'zoom',
       },
       {
-        title: 'Plans fill their pane',
-        body: 'The plan pane is shaped like the sheet — portrait or landscape, two small '
-          + 'chips choose which — so the black bars are gone. The folder Status check is '
-          + 'back on the Drive row, with a refresh at the end.',
+        title: 'Plans fill their pane, by themselves',
+        body: 'The pane measures the sheet and takes its shape — portrait, landscape or '
+          + 'odd, no chips to press, no black bars. The folder Status check is back on '
+          + 'the Drive row, with a refresh at the end.',
         demo: 'tap',
+      },
+      {
+        title: 'Sign in with your face on the door',
+        body: 'The login shows a tile for each person. Tap yours, type your code, and '
+          + 'you are back in the workspace you left — the project logos have moved to '
+          + 'the switcher in the header.',
+        demo: 'tap',
+      },
+      {
+        title: 'Closing a pin says who closed it',
+        body: 'In a pin\'s note, Save keeps the bubble open, and Mark as done is its own '
+          + 'button that records the name — so a pin the architect closes says so. '
+          + 'Reopen undoes a mistake; deleting now asks first.',
+        demo: 'pin',
       },
     ],
   },
