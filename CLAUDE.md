@@ -108,7 +108,7 @@ Active project persisted to `active_project` localStorage key.
 - Sidebar shows Briefcase icon → `/jobs` for General; Building2 icon → `/project` for building projects
 
 ### Login flow
-Two-step: user enters their code → on success, project picker shows all three project logos → clicking a logo calls `setCurrentProject(id)` and navigates to the correct page.
+Two-step: a tile per saved **user** (active only, colored avatar via `personColor`) → tapping a tile asks for that user's 6-digit code → on success you land straight in the last-used workspace (`/jobs` for General, `/project` otherwise). The project logos are gone from login — the header switcher is where projects change. The code must belong to the picked tile: `login()` signs in whoever owns the code, so the page checks ownership BEFORE calling it, or typing someone else's code on your tile would sign you in as them. The auth hardening ordering (`loadUsersForLogin` → `authReady` gates everything, never fail open) is unchanged; tiles render from the same authoritative list.
 
 ### Project-specific stages
 `Stage.projectId?: string` — `undefined` means global (shown in Wolfson + Netiv), `'general'` means General Jobs only. Settings → Stages shows only the current project's stages. `sortedStages` in every component must filter: `st.projectId === 'general' ? ... : !st.projectId`.

@@ -1508,6 +1508,7 @@ export interface MainUiStrings {
   lobby: string;
   doneIndicator: string;
   // Login
+  whoIsSigningIn: string;
   enterCode: string;
   pleaseEnterDigits: string;
   invalidCode: string;
@@ -2055,6 +2056,7 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   lobby: 'Lobby',
   doneIndicator: '✓ Done',
   // Login
+  whoIsSigningIn: 'Who is signing in?',
   enterCode: 'Enter your access code',
   pleaseEnterDigits: 'Please enter all 6 digits.',
   invalidCode: 'Invalid code. Please try again.',
@@ -2601,6 +2603,7 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   lobby: 'לובי',
   doneIndicator: '✓ הושלם',
   // Login
+  whoIsSigningIn: 'מי נכנס?',
   enterCode: 'הכנס את קוד הגישה שלך',
   pleaseEnterDigits: 'יש להזין את כל 6 הספרות.',
   invalidCode: 'קוד שגוי. נסה שוב.',

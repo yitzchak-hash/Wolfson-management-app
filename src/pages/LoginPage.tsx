@@ -1,19 +1,51 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ChevronLeft } from 'lucide-react';
 import { useStore } from '../data/store';
+import { personColor } from '../types';
 
+/**
+ * Two steps: pick WHO you are from a tile per saved user, then enter that
+ * user's code. The old flow asked for a code cold and then offered the three
+ * project logos; the logos are gone from login entirely — after the code you
+ * land straight in the last-used workspace, and the header switcher is where
+ * projects change.
+ *
+ * SECURITY — the ordering here is load-bearing (see store.loadUsersForLogin):
+ * the real user list is fetched first and nothing is clickable until
+ * `authReady`. The tiles render from that same authoritative list. A code is
+ * refused unless it belongs to the tile that was picked — the store's login()
+ * authenticates whoever owns the code, so without that check typing somebody
+ * else's code on your tile would quietly sign you in as them.
+ */
 export function LoginPage() {
-  const [step, setStep] = useState<'code' | 'project'>('code');
+  const [step, setStep] = useState<'who' | 'code'>('who');
+  const [pickedId, setPickedId] = useState<string | null>(null);
   const [digits, setDigits] = useState<string[]>(['', '', '', '', '', '']);
   const [error, setError] = useState('');
   const [shake, setShake] = useState(false);
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
-  const { login, mainUiStrings: s, projects, setCurrentProject, authReady, loadUsersForLogin } = useStore();
+  const { login, mainUiStrings: s, users, currentProjectId, authReady, loadUsersForLogin } = useStore();
   const navigate = useNavigate();
 
   // Load the real user list before any code can be checked (see store.loadUsersForLogin)
   useEffect(() => { loadUsersForLogin(); }, []);
-  useEffect(() => { inputRefs.current[0]?.focus(); }, []);
+  useEffect(() => { if (step === 'code') inputRefs.current[0]?.focus(); }, [step]);
+
+  const tiles = users.filter(u => u.active);
+  const picked = tiles.find(u => u.id === pickedId) ?? null;
+
+  function initialsOf(name: string) {
+    const parts = name.trim().split(/\s+/);
+    return (parts[0]?.[0] ?? '?') + (parts[1]?.[0] ?? '');
+  }
+
+  function pickUser(id: string) {
+    setPickedId(id);
+    setDigits(['', '', '', '', '', '']);
+    setError('');
+    setStep('code');
+  }
 
   function handleDigit(idx: number, val: string) {
     if (!/^\d*$/.test(val)) return;
@@ -38,22 +70,24 @@ export function LoginPage() {
     if (text.length === 6 && authReady) { setDigits(text.split('')); setTimeout(() => attemptLogin(text), 50); }
   }
 
-  function attemptLogin(code: string) {
-    if (!authReady) return;
-    const user = login(code);
-    if (user) {
-      setStep('project');
-    } else {
-      setError(s.invalidCode);
-      setShake(true);
-      setDigits(['', '', '', '', '', '']);
-      setTimeout(() => { setShake(false); inputRefs.current[0]?.focus(); }, 600);
-    }
+  function rejectCode() {
+    setError(s.invalidCode);
+    setShake(true);
+    setDigits(['', '', '', '', '', '']);
+    setTimeout(() => { setShake(false); inputRefs.current[0]?.focus(); }, 600);
   }
 
-  function pickProject(id: string) {
-    setCurrentProject(id);
-    navigate('/project');
+  function attemptLogin(code: string) {
+    if (!authReady || !picked) return;
+    // The code must be THIS tile's code. login() signs in whoever owns the
+    // code, so the ownership check has to come before it runs.
+    if (picked.code !== code) { rejectCode(); return; }
+    const user = login(code);
+    if (user && user.id === picked.id) {
+      navigate(currentProjectId === 'general' ? '/jobs' : '/project');
+    } else {
+      rejectCode();
+    }
   }
 
   return (
@@ -96,9 +130,48 @@ export function LoginPage() {
             <p className="text-gray-500 text-xs tracking-wider mb-6">{s.loginFooterBrand}</p>
           </div>
 
-          {step === 'code' ? (
+          {step === 'who' ? (
             <>
-              <p className="text-gray-400 text-sm text-center mb-6">{s.enterCode}</p>
+              <p className="text-gray-400 text-sm text-center mb-6">{s.whoIsSigningIn}</p>
+              {!authReady ? (
+                <div className="flex justify-center py-8">
+                  <div className="w-6 h-6 border-2 border-white/20 border-t-[#4aa8d8] rounded-full animate-spin" />
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 max-h-[46vh] overflow-y-auto pr-1">
+                  {tiles.map(u => (
+                    <button
+                      key={u.id}
+                      onClick={() => pickUser(u.id)}
+                      className="flex flex-col items-center gap-2 py-4 px-2 rounded-2xl border-2 border-white/10 hover:border-[#4aa8d8] transition-all hover:scale-[1.03] group"
+                      style={{ backgroundColor: 'rgba(255,255,255,0.05)' }}
+                    >
+                      <span
+                        className="flex items-center justify-center w-14 h-14 rounded-full text-white text-lg font-black uppercase shadow-lg"
+                        style={{ backgroundColor: personColor(u.name, u.color) }}
+                      >
+                        {initialsOf(u.name)}
+                      </span>
+                      <span className="text-gray-300 text-xs font-semibold group-hover:text-white transition-colors truncate max-w-full">
+                        {u.name}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="flex flex-col items-center gap-2 mb-6">
+                <span
+                  className="flex items-center justify-center w-14 h-14 rounded-full text-white text-lg font-black uppercase shadow-lg"
+                  style={{ backgroundColor: personColor(picked?.name ?? '', picked?.color) }}
+                >
+                  {initialsOf(picked?.name ?? '?')}
+                </span>
+                <span className="text-white text-sm font-bold">{picked?.name}</span>
+                <p className="text-gray-400 text-xs">{s.enterCode}</p>
+              </div>
               <div className={`${shake ? 'animate-bounce' : ''}`}>
                 <div className="flex gap-2 justify-center mb-5" onPaste={handlePaste}>
                   {digits.map((d, i) => (
@@ -125,27 +198,15 @@ export function LoginPage() {
                 >
                   {authReady ? s.enterProject : '…'}
                 </button>
+                <button
+                  onClick={() => { setStep('who'); setPickedId(null); setError(''); }}
+                  className="w-full mt-3 py-2 flex items-center justify-center gap-1 text-gray-400 hover:text-white text-xs font-medium transition-colors"
+                >
+                  <ChevronLeft size={14} />
+                  {s.goBack}
+                </button>
               </div>
             </>
-          ) : (
-            <div>
-              <p className="text-gray-400 text-sm text-center mb-8">{s.switchProject}</p>
-              <div className="flex gap-6 justify-center">
-                {projects.map(p => (
-                  <button
-                    key={p.id}
-                    onClick={() => pickProject(p.id)}
-                    className="flex flex-col items-center gap-3 group"
-                  >
-                    <div className="rounded-2xl overflow-hidden border-2 border-white/15 hover:border-[#4aa8d8] transition-all group-hover:scale-105 group-hover:shadow-lg"
-                      style={{ boxShadow: '0 4px 20px rgba(0,0,0,0.4)' }}>
-                      <img src={p.logoPath} alt={p.name} className="h-24 w-auto block" />
-                    </div>
-                    <span className="text-gray-400 text-xs group-hover:text-white transition-colors">{p.shortName}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
           )}
 
           <p className="text-center text-gray-600 text-xs mt-8">{s.footerText}</p>
