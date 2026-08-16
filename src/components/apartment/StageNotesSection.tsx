@@ -2,6 +2,8 @@ import React, { useState, useRef } from 'react';
 import { ChevronDown, ChevronUp, Save, Calendar, User, MessageSquare, Paperclip, X, ExternalLink, Clock, RotateCcw } from 'lucide-react';
 import { Stage, User as UserType, StageNoteAttachment, getStageName } from '../../types';
 import { useStore } from '../../data/store';
+import { VoiceRecorderButton } from '../ui/VoiceMemo';
+import { RecordedMemo } from '../../data/voiceMemo';
 import { format } from 'date-fns';
 import {
   isUploadBackendConfigured, extractFolderId,
@@ -67,6 +69,22 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
       img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
       img.src = url;
     });
+  }
+
+  /**
+   * A memo is attached as an audio FILE, through the same path a photo takes.
+   *
+   * Everything downstream — the Drive upload, the pending list, the note record,
+   * the sync — already knows how to carry a file, and giving voice its own field
+   * would mean a new key in persist, export and import (CLAUDE.md's rule) for no
+   * behaviour that a file does not already have.
+   */
+  async function handleVoiceMemo(stageId: string, memo: RecordedMemo) {
+    const ext = memo.blob.type.includes('mp4') ? 'm4a' : 'webm';
+    await handleFileChosen(stageId, new File(
+      [memo.blob], `voice-memo-${Date.now()}.${ext}`,
+      { type: memo.blob.type || 'audio/webm' },
+    ));
   }
 
   async function handleFileChosen(stageId: string, file: File) {
@@ -444,6 +462,11 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                       >
                         <Paperclip size={12} />
                       </button>
+                      {/* Beside the paperclip, everywhere a note takes a file. */}
+                      <VoiceRecorderButton
+                        compact
+                        onRecorded={m => handleVoiceMemo(stage.id, m)}
+                      />
                       <button
                         onClick={() => handleSave(stage.id)}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-xs font-medium hover:bg-[#162d4a] transition-colors"

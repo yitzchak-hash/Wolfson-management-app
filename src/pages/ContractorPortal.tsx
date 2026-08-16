@@ -16,6 +16,8 @@ import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
 import { permsOf } from '../data/workerLevels';
 import { PlannerWidget } from '../components/board/PlannerWidget';
 import { TaskCalendar, CalendarEvent } from '../components/tasks/TaskCalendar';
+import { VoiceRecorderButton, VoiceMemoPlayer } from '../components/ui/VoiceMemo';
+import { RecordedMemo } from '../data/voiceMemo';
 import {
   extractFileId, drivePreviewUrl, driveDownloadUrl, driveThumbUrl,
   extractFolderId, isUploadBackendConfigured, findOrCreateFolderViaBackend,
@@ -576,6 +578,38 @@ export function ContractorPortal() {
       }
       setNoteAttachments(prev => [...prev, { dataUrl, filename: file.name, mimeType: file.type }]);
     }
+  }
+
+  /**
+   * A voice memo attaches exactly like any other file.
+   *
+   * Giving it its own field would mean a new key in the record, in persist, in
+   * export and in import (CLAUDE.md's standing rule), plus a second upload path
+   * to keep in step with the first. It is an audio file; the note already knows
+   * how to carry a file.
+   */
+  async function handleNoteVoiceMemo(memo: RecordedMemo) {
+    const ext = memo.blob.type.includes('mp4') ? 'm4a' : 'webm';
+    const file = new File([memo.blob], `voice-memo-${Date.now()}.${ext}`,
+      { type: memo.blob.type || 'audio/webm' });
+    const apt = selectedAssignment ? getApt(selectedAssignment.apartmentId) : null;
+    const mainFolderId = apt?.driveLink ? extractFolderId(apt.driveLink) : null;
+
+    if (isUploadBackendConfigured() && mainFolderId) {
+      try {
+        const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');
+        const notesFolderId = await findOrCreateFolderViaBackend(photosFolderId, 'Contractor Notes');
+        const { fileId, webViewLink } = await uploadFileViaResumableSession(notesFolderId, file);
+        await shareFileToDrive(fileId);
+        setNoteAttachments(prev => [...prev, {
+          dataUrl: '', filename: file.name, mimeType: file.type,
+          driveFileId: fileId, driveUrl: webViewLink,
+        }]);
+        return;
+      } catch { /* fall through to local */ }
+    }
+    const dataUrl = await readAsDataUrl(file);
+    setNoteAttachments(prev => [...prev, { dataUrl, filename: file.name, mimeType: file.type }]);
   }
 
   function handleSendNote() {
@@ -1715,10 +1749,18 @@ export function ContractorPortal() {
                           <p className="text-gray-700 leading-relaxed">{n.text}</p>
                           {(n.attachmentDataUrl || n.attachmentDriveFileId) && (() => {
                             const isImg = n.attachmentMimeType?.startsWith('image/');
+                            const isAudio = n.attachmentMimeType?.startsWith('audio/');
                             const thumbSrc = n.attachmentDriveFileId
                               ? driveThumbUrl(n.attachmentDriveFileId, 400)
                               : (isImg ? n.attachmentDataUrl : null);
                             const openHref = n.attachmentDriveUrl || n.attachmentDataUrl;
+                            if (isAudio && openHref) {
+                              return (
+                                <div className="mt-1.5">
+                                  <VoiceMemoPlayer src={openHref} />
+                                </div>
+                              );
+                            }
                             return (
                               <div className="mt-1.5">
                                 {isImg && thumbSrc ? (
@@ -1753,10 +1795,18 @@ export function ContractorPortal() {
                           <p className="text-gray-700 leading-relaxed">{n.text}</p>
                           {(n.attachmentDataUrl || n.attachmentDriveFileId) && (() => {
                             const isImg = n.attachmentMimeType?.startsWith('image/');
+                            const isAudio = n.attachmentMimeType?.startsWith('audio/');
                             const thumbSrc = n.attachmentDriveFileId
                               ? driveThumbUrl(n.attachmentDriveFileId, 400)
                               : (isImg ? n.attachmentDataUrl : null);
                             const openHref = n.attachmentDriveUrl || n.attachmentDataUrl;
+                            if (isAudio && openHref) {
+                              return (
+                                <div className="mt-1.5">
+                                  <VoiceMemoPlayer src={openHref} />
+                                </div>
+                              );
+                            }
                             return (
                               <div className="mt-1.5">
                                 {isImg && thumbSrc ? (
@@ -1815,6 +1865,9 @@ export function ContractorPortal() {
                     <input ref={noteAttachRef} type="file"
                       accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip"
                       multiple className="hidden" onChange={handleNoteAttachmentPick} />
+                    {/* Talking is faster than typing on a site, in gloves, in
+                        whichever language the worker actually thinks in. */}
+                    <VoiceRecorderButton onRecorded={handleNoteVoiceMemo} title={s.addNote} />
                     <input
                       value={noteText}
                       onChange={e => setNoteText(e.target.value)}
