@@ -95,12 +95,12 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'tap',
       },
       {
-        title: 'The buildings fit your phone',
-        body: 'On a phone the diagram shows one building at a time. Search and Filters sit '
-          + 'at the top, the A1 / A2 / A3 tabs are a slim row underneath with the unit count '
-          + 'beside them, and every filter lives behind the one Filters button. Cells are '
-          + 'taller so the stage name reads in full instead of being cut off, and an open '
-          + 'apartment stacks its fields rather than piling them on top of each other.',
+        title: 'The phone view, properly',
+        body: 'The buildings page shows one building at a time, with search and Filters on '
+          + 'top and slim A1 / A2 / A3 tabs carrying the unit count. Every cell shows its '
+          + 'number, family name and stage in full — the name used to cover the number. An '
+          + 'apartment opens FULL SCREEN with all its tabs, including a new Plan tab that '
+          + 'opens the markup tools. Settings, Reports and Tasks fit the screen too.',
         demo: 'tap',
       },
       {

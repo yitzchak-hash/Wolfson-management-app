@@ -519,3 +519,21 @@ html, body {
   position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%);
   font-size: 30px; font-weight: 900; color: #16a34a;
 }
+
+/*
+ * A page must be able to be narrower than its widest word.
+ *
+ * <main> is a flex column, so every page root inside it is a flex ITEM. Two
+ * separate flex rules then conspire against a narrow screen:
+ *   1. a flex item defaults to min-width:auto, refusing to shrink below its
+ *      content's min-content width; and
+ *   2. `mx-auto` (margin-inline: auto) CANCELS the default stretch, so the item
+ *      is sized shrink-to-fit by its content rather than by the screen.
+ * A page root written the usual way — `max-w-3xl mx-auto` — therefore laid
+ * itself out at 503px inside a 390px screen, and no amount of padding or
+ * max-width could pull it back.
+ *
+ * min-width:0 fixes (1) here for every page. (2) needs `w-full` on the page
+ * root itself, since only the page knows it wants the full width.
+ */
+main > * { min-width: 0; }

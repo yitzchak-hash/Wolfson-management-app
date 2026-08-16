@@ -343,11 +343,14 @@ export function TasksPage() {
 
       <div className="space-y-4">
         {/* Toolbar */}
-        <div className="flex items-center gap-3 flex-wrap">
+        {/* One row on a phone. At desktop sizes these six controls sit on a line;
+            at 390px they stacked into three rows and pushed the list itself below
+            the fold on a page whose whole job is the list. */}
+        <div className="flex items-center gap-1.5 md:gap-3 flex-wrap">
           <select
             value={filterContractorId}
             onChange={e => setFilterContractorId(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+            className="border border-gray-200 rounded-lg px-2 py-1.5 md:px-3 md:py-2 text-[12px] md:text-sm max-w-[42vw] md:max-w-none focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
           >
             <option value="">{s.allContractors}</option>
             {contractors.map(c => (
@@ -358,7 +361,7 @@ export function TasksPage() {
           <Tooltip text="More filters">
             <button
               onClick={() => setShowFilters(v => !v)}
-              className={`flex items-center gap-1.5 px-3 py-2 border rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center gap-1 px-2 py-1.5 md:px-3 md:py-2 border rounded-lg text-[12px] md:text-sm font-medium transition-colors ${
                 hasAdvancedFilters ? 'border-[#1e3a5f] bg-[#1e3a5f]/5 text-[#1e3a5f]' : 'border-gray-200 text-gray-500 hover:border-gray-300'
               }`}
             >
@@ -410,7 +413,7 @@ export function TasksPage() {
                 );
                 if (!ok) setToast({ msg: 'Your browser blocked the print window.', type: 'error' });
               }}
-              className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 text-gray-500 rounded-lg text-sm font-medium hover:border-gray-300 hover:text-gray-700 transition-colors"
+              className="flex items-center gap-1 px-2 py-1.5 md:px-3 md:py-2 border border-gray-200 text-gray-500 rounded-lg text-[12px] md:text-sm font-medium hover:border-gray-300 hover:text-gray-700 transition-colors"
             >
               <Printer size={14} />
             </button>
@@ -421,7 +424,7 @@ export function TasksPage() {
             <Tooltip text={s.listView}>
               <button
                 onClick={() => setView('list')}
-                className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors ${
+                className={`flex items-center gap-1 px-2 py-1.5 md:px-3 md:py-2 text-[12px] md:text-sm font-medium transition-colors ${
                   view === 'list' ? 'bg-[#1e3a5f] text-white' : 'text-gray-500 hover:bg-gray-50'
                 }`}
               >
@@ -431,7 +434,7 @@ export function TasksPage() {
             <Tooltip text={s.calendarView}>
               <button
                 onClick={() => setView('calendar')}
-                className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors ${
+                className={`flex items-center gap-1 px-2 py-1.5 md:px-3 md:py-2 text-[12px] md:text-sm font-medium transition-colors ${
                   view === 'calendar' ? 'bg-[#1e3a5f] text-white' : 'text-gray-500 hover:bg-gray-50'
                 }`}
               >
@@ -442,14 +445,14 @@ export function TasksPage() {
 
           <button
             onClick={() => setShowBulkAdd(true)}
-            className="flex items-center gap-1.5 px-3 py-2 border border-[#1e3a5f] text-[#1e3a5f] rounded-lg text-sm font-medium hover:bg-[#1e3a5f]/5 transition-colors"
+            className="flex items-center gap-1 px-2 py-1.5 md:px-3 md:py-2 border border-[#1e3a5f] text-[#1e3a5f] rounded-lg text-[12px] md:text-sm font-medium hover:bg-[#1e3a5f]/5 transition-colors"
           >
             <Layers size={15} />
             {s.bulkAdd}
           </button>
           <button
             onClick={() => setShowAdd(v => !v)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors"
+            className="flex items-center gap-1 px-2.5 py-1.5 md:px-3 md:py-2 bg-[#1e3a5f] text-white rounded-lg text-[12px] md:text-sm font-medium hover:bg-[#162d4a] transition-colors"
           >
             <Plus size={15} />
             {s.addTask}

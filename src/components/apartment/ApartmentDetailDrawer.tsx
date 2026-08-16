@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer } from 'lucide-react';
 import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel } from '../../types';
 import { useStore } from '../../data/store';
+import { usePhone } from '../../data/usePhone';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import { StageNotesSection } from './StageNotesSection';
 import { ActivitySection } from './ActivitySection';
@@ -196,7 +197,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [zohoLinkLocal, setZohoLinkLocal] = useState('');
   const [addressLocal, setAddressLocal] = useState('');
   const [mergedWithId, setMergedWithId] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'details' | 'tasks' | 'stages' | 'history' | 'photos'>('details');
+  const isPhone = usePhone();
+  const [activeTab, setActiveTab] = useState<'details' | 'tasks' | 'stages' | 'history' | 'photos' | 'plan'>('details');
   const [drivePhotos, setDrivePhotos] = useState<DrivePhotoItem[]>([]);
   const [loadingPhotos, setLoadingPhotos] = useState(false);
   const [photosLoaded, setPhotosLoaded] = useState(false);
@@ -798,18 +800,25 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       <div className="drawer-overlay fixed inset-0 bg-black/50 z-[110]" onClick={onClose} />
 
       <div
-        className="drawer-panel fixed bg-white shadow-2xl z-[120] flex flex-col rounded-2xl overflow-hidden"
-        style={{
-          left: '50%',
-          top: '50%',
-          transform: 'translate(-50%, -50%)',
-          // Wide enough to hold the fields AND the plan side by side, but still
-          // inset on every edge so it reads as a window over the board rather
-          // than as a page you have navigated to.
-          width: planPaneOn ? `min(${560 + planW}px, 96vw)` : 'min(1020px, 94vw)',
-          height: 'min(980px, 93vh)',
-          transition: 'width 180ms ease',
-        }}
+        className={`drawer-panel fixed bg-white shadow-2xl z-[120] flex flex-col overflow-hidden ${
+          isPhone ? '' : 'rounded-2xl'}`}
+        style={isPhone
+          // On a phone it is a FULL SCREEN, not a shrunken desktop window.
+          // Centred at 94vw × 93vh it left a useless margin all round while the
+          // content inside it was still too cramped to read — the worst of both.
+          // A phone has one thing on screen at a time; this is that thing.
+          ? { inset: 0, width: '100%', height: '100%' }
+          : {
+              left: '50%',
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
+              // Wide enough to hold the fields AND the plan side by side, but still
+              // inset on every edge so it reads as a window over the board rather
+              // than as a page you have navigated to.
+              width: planPaneOn ? `min(${560 + planW}px, 96vw)` : 'min(1020px, 94vw)',
+              height: 'min(980px, 93vh)',
+              transition: 'width 180ms ease',
+            }}
       >
         {/* Header — wraps on a narrow screen. Unwrapped, the Drive/Print/Worker
             row ran off the right edge and finished UNDERNEATH the close button,
@@ -913,8 +922,18 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
 
         {/* Tabs */}
         <div className="flex border-b border-gray-200 flex-shrink-0 overflow-x-auto">
-          {(['details', 'tasks', 'stages', 'photos', 'history'] as const).map(tab => (
+          {/* The phone gets a Plan tab. On a desktop the plan lives in a side
+              pane beside the fields; a phone has no side, so the plan needs a
+              place of its own rather than being unreachable. */}
+          {(isPhone
+            ? (['details', 'plan', 'tasks', 'stages', 'photos', 'history'] as const)
+            : (['details', 'tasks', 'stages', 'photos', 'history'] as const)
+          ).map(tab => (
             <button key={tab} onClick={() => {
+              // The studio IS the phone's plan view — it is already full-screen
+              // and carries the markup tools and the pins, so a phone opens it
+              // straight rather than showing a preview it cannot draw on.
+              if (tab === 'plan') { setPlanWanted(true); setAnnotating('draw'); return; }
               setActiveTab(tab);
               if (tab === 'photos' && !photosLoaded && apartment?.driveLink && backendConfigured) {
                 setLoadingPhotos(true);
@@ -924,10 +943,15 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   .finally(() => setLoadingPhotos(false));
               }
             }}
-              className={`flex-1 py-2.5 text-sm font-medium transition-colors relative ${
+              className={`flex-1 whitespace-nowrap font-medium transition-colors relative ${
+                isPhone ? 'py-2 px-1 text-[12px]' : 'py-2.5 text-sm'
+              } ${
                 activeTab === tab ? 'border-b-2 border-[#1e3a5f] text-[#1e3a5f]' : 'text-gray-500 hover:text-gray-700'
               }`}>
-              {tab === 'tasks' ? ui.tabTasks : tab === 'stages' ? ui.tabNotes : tab === 'history' ? ui.tabHistory : tab === 'photos' ? ui.tabPhotos : ui.tabDetails}
+              {/* "Plan", not ui.engineeringPlans — the full label is two words
+                  wide and squeezed the other five tabs off the row. */}
+              {tab === 'plan' ? (ui.isRtl ? 'תוכנית' : 'Plan')
+                : tab === 'tasks' ? ui.tabTasks : tab === 'stages' ? ui.tabNotes : tab === 'history' ? ui.tabHistory : tab === 'photos' ? ui.tabPhotos : ui.tabDetails}
               {tab === 'tasks' && pendingTaskCount > 0 && (
                 <span className="ml-1 text-[10px] bg-orange-500 text-white rounded-full px-1.5 py-0.5 font-bold">
                   {pendingTaskCount}
@@ -938,9 +962,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto scrollbar-thin p-4">
+        <div className={`flex-1 overflow-y-auto scrollbar-thin ${isPhone ? "p-2.5" : "p-4"}`}>
           {activeTab === 'details' && (
-            <div className="space-y-4">
+            <div className={isPhone ? 'space-y-2.5' : 'space-y-4'}>
               {/*
                 Top row: Apt# | Family Name | Classification | Stage.
                 It WRAPS. As one unwrapped line at 390px the four labels landed

@@ -73,7 +73,10 @@ export function ToolbarEditor({ onToast }: { onToast: (m: string, t?: 'success' 
         instead of three.
       </p>
 
-      <div className="grid gap-4" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)' }}>
+      {/* One column on a phone. Two 1fr columns of a 390px screen give each
+          side ~148px, which is narrower than the widget names that go in it —
+          every description in the store list was cut to three words. */}
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
         {/* ── the rail ── */}
         <div>
           <div className="text-[10px] font-extrabold tracking-wide text-gray-400 mb-1.5">ON THE RAIL</div>

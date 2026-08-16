@@ -1244,6 +1244,31 @@ in between `top: 0` meant zero in the SCALED space — measured 577px down at
   row. All four fixed with `flex-wrap` + a `min-w` per child, NOT with a phone flag — the
   same markup then stays one line in the 1020px modal. `scratchpad/deskcheck.mjs` asserts
   that: all four drawer labels must share one `top`, and the Drive grid must stay two-column.
+- **A page must be able to be narrower than its widest word.** `<main>` is a flex column,
+  so every page root is a flex ITEM, and TWO flex rules gang up on a phone: a flex item
+  defaults to `min-width:auto` (won't shrink below min-content), and `mx-auto` CANCELS the
+  default stretch so the item is sized shrink-to-fit by its content. A page root written the
+  usual way (`max-w-3xl mx-auto`) therefore laid itself out at **503px inside a 390px
+  screen**. `main > * { min-width: 0 }` in `index.css` fixes the first for every page;
+  the second needs `w-full` on the page root. Check both when a new page runs off the edge.
+- **A phone harness on EMPTY data tests nothing.** The first version of `shots.mjs` ran on
+  the bare seed — no family names, no stages — so every cell held a number and
+  "— Not Started —", and it reported zero faults while the real board overlapped its own
+  text. `scratchpad/seed.mjs` imports `buildDefaultApartments()` through Vite (the app
+  persists only on MUTATION, so a fresh boot leaves nothing to read back) and fills in real
+  names and the LONGEST stage names. It must also set `wolfson_app_version`, or the app
+  treats the store as stale, resets, and drops the harness at the login page.
+- **The cell number carries `flex-shrink-0`.** A cell is a fixed-height flex column, so once
+  the family name wrapped to two lines the number was shrunk to 0px high and the name drew
+  straight over it. Use `overflow-wrap: break-word`, never `word-break: break-word` — the
+  latter splits eagerly and gave "Weinstei / n, Steven".
+- **The sticky building header is `z-10`, not `z-30`.** A sticky element paints above page
+  flow, and at z-30 the building name sat on top of the What's New window.
+  `scratchpad/zorder.mjs` asserts with `elementFromPoint` across a grid of points that
+  nothing outside a dialog paints over it — numbers alone did not settle it.
+- **The drawer is FULL SCREEN on a phone** (`usePhone()` in `src/data/usePhone.ts`), with a
+  **Plan tab** that opens the markup studio directly — a phone has no side pane, so the plan
+  would otherwise be unreachable.
 - **Phone preview pages**: `scratchpad/mobcapture.mjs` captures real rendered pages
   (scripts stripped, images inlined) and `build-preview.mjs` wraps them in phone frames for
   an artifact the owner reviews before/after changes. `scratchpad/shots.mjs` is the measuring

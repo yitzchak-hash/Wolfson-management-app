@@ -170,7 +170,7 @@ function AptCell({
     : hasStage ? `0 1px 3px ${borderColor}55`
     : '0 1px 2px rgba(0,0,0,0.06)';
 
-  const numFontSize = compact ? '9px' : phone ? (mergedLabel ? '12px' : '13.5px') : mergedLabel ? '10px' : '11px';
+  const numFontSize = compact ? '9px' : phone ? (mergedLabel ? '10.5px' : '11.5px') : mergedLabel ? '10px' : '11px';
 
   // Pending task indicator: orange dot when has tasks but NOT all done
   const hasPendingTask = !!taskInfo && !allTasksDone;
@@ -202,7 +202,11 @@ function AptCell({
       {displayLabel ? (
         <>
           <span
-            className="font-bold leading-tight text-center w-full block truncate"
+            // flex-shrink-0 is the whole fix for "the name covers the number":
+            // the cell is a fixed-height flex column, so once the family name
+            // wrapped to two lines the number — a flex item like any other —
+            // was shrunk to 0px high and the name drew straight over it.
+            className="font-bold leading-tight text-center w-full block truncate flex-shrink-0"
             style={{ fontSize: numFontSize, padding: '0 1px' }}
           >
             {displayLabel}
@@ -213,12 +217,15 @@ function AptCell({
               // Same reason as the stage line: a family name is the thing the
               // office reads the grid for, so on a phone it wraps instead of
               // being cut to three letters and an ellipsis.
-              className={`w-full text-center block px-0.5 ${phone ? 'leading-tight' : 'leading-none truncate'}`}
+              className={`w-full text-center block px-0.5 ${phone ? 'leading-tight min-h-0' : 'leading-none truncate'}`}
               style={{
-                fontSize: compact ? '9.5px' : phone ? '11.5px' : '12px',
+                fontSize: compact ? '9.5px' : phone ? '9.5px' : '12px',
                 opacity: isDimmed ? 0.55 : 0.97,
                 fontWeight: 600,
-                ...(phone ? { wordBreak: 'break-word' as const } : null),
+                // overflow-wrap, NOT word-break. word-break: break-word splits
+                // eagerly and gave "Weinstei / n, Steven"; overflow-wrap only
+                // breaks a word that cannot fit on a line of its own.
+                ...(phone ? { overflowWrap: 'break-word' as const } : null),
               }}
             >
               {nameLabel}
@@ -254,12 +261,12 @@ function AptCell({
           // row is ~77px wide and "— Not Started —" needs 92px, so truncating
           // clipped the stage off every cell in the grid — the one thing the
           // diagram exists to show. The row is taller to pay for it.
-          className={`w-full text-center block px-0.5 ${phone ? 'leading-tight' : 'leading-none truncate'}`}
+          className={`w-full text-center block px-0.5 ${phone ? 'leading-tight min-h-0' : 'leading-none truncate'}`}
           style={{
-            fontSize: phone ? '10px' : '9px',
+            fontSize: phone ? '8.5px' : '9px',
             opacity: isDimmed ? 0.5 : (hasStage ? 0.9 : 0.45),
             fontStyle: hasStage ? 'normal' : 'italic',
-            ...(phone ? { wordBreak: 'break-word' as const, hyphens: 'auto' as const } : null),
+            ...(phone ? { overflowWrap: 'break-word' as const } : null),
           }}
         >
           {hasStage ? stage!.name : ui.notStartedOption}
@@ -849,10 +856,11 @@ function NetivBuildingColumn({
     return () => onNameUnnamed(apt);
   }
 
-  // The phone row is fixed-height like the others, so it has to clear the
-  // WORST case now that the stage name wraps: number + family name + a
-  // three-line stage ("Concealed Units Installed") + a task line.
-  const rowH = compact ? 36 : phone ? 98 : 64;
+  // Sized against the real worst case measured on live data: number (11.5px)
+  // + a two-line family name at 9.5px ("Rottenstreich, Yosef") + a two-line
+  // stage at 8.5px ("Concealed Units Installed"). Scaled down from the first
+  // attempt's 98 — at that height only seven floors fitted on the screen.
+  const rowH = compact ? 36 : phone ? 74 : 64;
   const roofH = compact ? 16 : phone ? 22 : 26;
   const LABEL_W = compact ? 26 : 34;
   const padClass = compact ? 'p-0.5 gap-0.5' : 'p-1 gap-1';
@@ -934,7 +942,12 @@ function NetivBuildingColumn({
   return (
     <div className="flex flex-col flex-1" style={{ minWidth: compact ? '140px' : '220px' }}>
       {/* See BuildingColumn — same pinning behaviour */}
-      <div className={`sticky top-0 z-30 print:static text-center font-bold text-white tracking-widest rounded-t-lg ${compact ? 'py-1 pb-1.5 text-xs' : 'py-2 pb-2.5 text-sm'}`}
+      {/* z-10, not z-30: this is a STICKY element, so it paints above anything
+          in the page flow with a lower z — including dialogs. At z-30 the
+          building name sat on top of the What's New window. It only ever needs
+          to beat the cells it scrolls over. */}
+      <div className={`sticky top-0 z-10 print:static text-center font-bold text-white tracking-widest rounded-t-lg ${
+        compact ? 'py-1 pb-1.5 text-xs' : phone ? 'py-0.5 text-[11px]' : 'py-2 pb-2.5 text-sm'}`}
         style={{ backgroundColor: '#1e3a5f' }}>
         {buildingId}
       </div>

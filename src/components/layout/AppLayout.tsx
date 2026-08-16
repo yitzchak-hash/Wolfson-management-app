@@ -39,7 +39,13 @@ export function AppLayout() {
             clipped away by its own overflow-hidden and invisible.
             Ordinary long pages still scroll, because a flex item with
             content-based min-height will not shrink below its content. */}
-        <main className="flex-1 min-h-0 overflow-auto flex flex-col">
+        {/* min-w-0 matters as much as min-h-0 and was missing.
+            A flex item defaults to min-width:auto, so <main> could never be
+            narrower than its content's min-content width — on a phone the
+            settings page laid itself out at 527px inside a 390px screen and
+            everything ran off the right edge. The pages that looked fine were
+            simply the ones whose min-content happened to be small. */}
+        <main className="flex-1 min-h-0 min-w-0 overflow-auto flex flex-col">
           <Outlet />
         </main>
       </div>

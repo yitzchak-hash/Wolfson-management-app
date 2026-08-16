@@ -109,7 +109,7 @@ export function SettingsPage({ scope = 'project' }: { scope?: SettingsScope }) {
   const accent = projectColor(projects, currentProjectId);
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
+    <div className="p-3 md:p-6 w-full max-w-3xl mx-auto">
       {/* The two settings pages looked identical, so moving between them read as
           nothing happening. Project settings now wears the workspace's own
           colour and says whose settings these are; app settings stays neutral
@@ -125,21 +125,21 @@ export function SettingsPage({ scope = 'project' }: { scope?: SettingsScope }) {
             style={{ color: scope === 'app' ? '#94a3b8' : accent }}>
             {scope === 'app' ? 'Everything' : projectName}
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 leading-tight">
+          <h1 className="text-lg md:text-2xl font-bold text-gray-900 leading-tight">
             {scope === 'app' ? s.appSettingsTitle : s.projectSettingsTitle}
           </h1>
         </div>
       </div>
-      <p className="text-sm text-gray-500 mb-6 ml-4">
+      <p className="text-xs md:text-sm text-gray-500 mb-3 md:mb-6 ml-4">
         {scope === 'app'
           ? s.appSettingsHint
           : `${projectName} — ${s.projectSettingsHint}`}
       </p>
 
-      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-6 flex-wrap">
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-4 md:mb-6 flex-wrap">
         {tabs.map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
-            className={`pick px-4 py-2 rounded-lg text-sm font-medium ${
+            className={`pick px-2.5 py-1.5 md:px-4 md:py-2 rounded-lg text-[12px] md:text-sm font-medium ${
               activeTab === tab ? 'pick-on' : 'text-gray-500 hover:text-gray-700'
             }`}
             style={{
@@ -214,7 +214,7 @@ function ColorPickerWithPresets({ value, onChange }: ColorPickerProps) {
           className="w-24 border border-gray-200 rounded-lg px-2 py-1 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
           maxLength={7} placeholder="#000000" />
       </div>
-      <div className="grid grid-cols-10 gap-1">
+      <div className="grid grid-cols-7 sm:grid-cols-10 gap-1">
         {PRESET_COLORS.map(c => (
           <button key={c} onClick={() => onChange(c)} title={c}
             className="w-9 h-9 sm:w-6 sm:h-6 rounded-md transition-transform hover:scale-110 focus:outline-none"
@@ -3333,7 +3333,7 @@ function WorkspaceLook({ onToast }: { onToast: (msg: string) => void }) {
   const project = projects.find(p => p.id === currentProjectId);
   if (!project) return null;
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5 mb-5">
+    <div className="bg-white border border-gray-200 rounded-xl p-3 md:p-5 mb-4 md:mb-5">
       <h2 className="font-semibold text-gray-800 mb-1 flex items-center gap-2">
         <span className="w-3.5 h-3.5 rounded-full" style={{ backgroundColor: project.color }} />
         {project.name} colour

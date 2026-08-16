@@ -276,15 +276,15 @@ export function ProjectDiagramPage() {
           filter block folded into a single Filters button — the diagram used
           to start a full screen of chips further down.
         */}
-        <div className="md:hidden bg-white border-b border-gray-200 px-3 pt-2 pb-2 flex-shrink-0 print:hidden flex flex-col gap-2">
-          <div className="flex items-center gap-2">
+        <div className="md:hidden bg-white border-b border-gray-200 px-2.5 pt-1.5 pb-1.5 flex-shrink-0 print:hidden flex flex-col gap-1.5">
+          <div className="flex items-center gap-1.5">
             <div className="relative flex-1">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder={s.searchApt}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-gray-50"
+                className="w-full pl-8 pr-3 py-1.5 text-[13px] border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-gray-50"
               />
               {searchQuery && (
                 <button
@@ -297,13 +297,13 @@ export function ProjectDiagramPage() {
             </div>
             <button
               onClick={() => setFiltersOpen(true)}
-              className={`relative flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold border transition-all ${
+              className={`relative flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[13px] font-bold border transition-all ${
                 phoneFilterCount > 0 || bulkMode
                   ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]'
                   : 'bg-gray-100 border-gray-200 text-gray-600'
               }`}
             >
-              <SlidersHorizontal size={15} />
+              <SlidersHorizontal size={14} />
               {s.filtersSection}
               {phoneFilterCount > 0 && (
                 <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#4aa8d8] text-white text-[11px] font-black flex items-center justify-center">
@@ -322,7 +322,7 @@ export function ProjectDiagramPage() {
               <button
                 key={b.id}
                 onClick={() => setSelectedBuilding(b.id)}
-                className={`flex-1 min-w-[48px] py-1.5 rounded-lg text-sm font-bold transition-all ${
+                className={`flex-1 min-w-[44px] py-1 rounded-md text-[13px] font-bold transition-all ${
                   effectiveBuilding === b.id
                     ? 'bg-[#1e3a5f] text-white shadow-sm'
                     : 'bg-gray-100 text-gray-600 active:bg-gray-200'

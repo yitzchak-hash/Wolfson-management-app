@@ -150,12 +150,12 @@ export function ReportsPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-[1500px] mx-auto">
-      <div className="flex flex-wrap items-center gap-2 mb-5">
+      <div className="flex flex-wrap items-center gap-1.5 md:gap-2 mb-3 md:mb-5">
         <input
           value={def.name}
           onChange={e => patch({ name: e.target.value })}
-          className="text-xl md:text-2xl font-bold text-gray-900 bg-transparent border-b-2 border-transparent
-                     hover:border-gray-200 focus:border-[#4aa8d8] outline-none px-1 -ml-1 min-w-[12rem]"
+          className="text-base md:text-2xl font-bold text-gray-900 bg-transparent border-b-2 border-transparent
+                     hover:border-gray-200 focus:border-[#4aa8d8] outline-none px-1 -ml-1 min-w-[7rem] md:min-w-[12rem]"
         />
         {dirty && <span className="text-[11px] font-semibold text-amber-600">unsaved</span>}
         <span className="flex-1" />
@@ -167,9 +167,9 @@ export function ReportsPage() {
         <Btn onClick={exportExcel} icon={FileSpreadsheet} label="Excel" />
         {isSaved && <Btn onClick={() => doSave(true)} icon={Copy} label="Save a copy" />}
         <button onClick={() => doSave(false)}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white"
+          className="flex items-center gap-1 px-2.5 py-1.5 md:px-4 md:py-2 rounded-lg text-[12px] md:text-sm font-medium text-white"
           style={{ backgroundColor: NAVY }}>
-          <Save size={15} /> {isSaved ? 'Save' : 'Save report'}
+          <Save size={14} /> {isSaved ? 'Save' : s.save ?? 'Save'}
         </button>
       </div>
 
@@ -488,9 +488,11 @@ function Btn({ onClick, icon: Icon, label, title }: {
 }) {
   return (
     <button onClick={onClick} title={title}
-      className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-sm
-                 font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-      <Icon size={15} /> {label}
+      /* Compact on a phone: six of these at desktop size wrapped onto three
+         rows and pushed the report itself off the first screen. */
+      className="flex items-center gap-1 px-2 py-1.5 md:px-3 md:py-2 border border-gray-200 rounded-lg
+                 text-[12px] md:text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+      <Icon size={14} className="md:hidden" /><Icon size={15} className="hidden md:block" /> {label}
     </button>
   );
 }
