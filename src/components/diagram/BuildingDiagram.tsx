@@ -46,6 +46,83 @@ function getTextColor(bgHex: string): string {
   return lum > 0.52 ? '#1a202c' : '#ffffff';
 }
 
+/*
+ * Phone cell geometry.
+ *
+ * The phone view shows ONE building filling the screen, so every pixel between
+ * the viewport edge and an apartment's text is a known constant. Deriving the
+ * cell width from those constants is what lets the stage name choose its own
+ * font size without measuring: a ResizeObserver would be 56 of them per
+ * building, all reporting a number that only changes when the phone rotates —
+ * and rotating crosses the md breakpoint, which re-renders this anyway.
+ */
+const PHONE_PAGE_PAD = 4;      // BuildingDiagram's own p-1, each side
+const PHONE_ROW_PAD = 2;       // the floor row's p-0.5, each side
+const PHONE_HALF_GAP = 2;      // gap-0.5 either side of the stairwell
+const PHONE_CELL_GAP = 4;      // gap-1 between the two cells inside a half
+const PHONE_STAIRWELL_W = 18;  // middle divider, which also carries the floor number
+const PHONE_CELL_CHROME = 5;   // the cell's own 1.5px border + 1px padding, both sides
+// A phone always shows one building, and a single building is capped at this by
+// the wrapper below — so on a narrow desktop window the cells stop widening here.
+const SINGLE_COL_MAX_W = 560;
+
+/** Px of text width one apartment cell gets, given how many share the floor. */
+function phoneCellTextWidth(cols: number): number {
+  const vw = typeof window === 'undefined'
+    ? 390
+    : Math.min(window.innerWidth || 390, SINGLE_COL_MAX_W);
+  const chrome =
+    PHONE_PAGE_PAD * 2 +
+    2 + // the column's 1px border, both sides
+    PHONE_ROW_PAD * 2 +
+    PHONE_HALF_GAP * 2 +
+    PHONE_STAIRWELL_W +
+    Math.max(0, cols - 2) * PHONE_CELL_GAP;
+  return Math.max(24, (vw - chrome) / cols - PHONE_CELL_CHROME);
+}
+
+/**
+ * Width of a string in ems, bucketed by character.
+ *
+ * A flat "average character" factor is wrong by enough to matter at this size:
+ * "Registers & Access Panels" is 25 characters but only 12 ems wide, and an
+ * average would have shrunk it two steps further than it needs — or, set the
+ * other way, clipped it. Buckets get every real stage name within a few percent
+ * for the cost of one pass over the string.
+ */
+function emWidth(text: string): number {
+  let w = 0;
+  for (const ch of text) {
+    if ('iljtfI|!.,:;\'`()[]'.includes(ch)) w += 0.28;
+    else if (ch === ' ') w += 0.26;
+    else if (ch === 'm' || ch === 'w' || ch === 'M' || ch === 'W') w += 0.88;
+    else if (ch === '—' || ch === '–') w += 0.95;
+    else if (ch >= 'A' && ch <= 'Z') w += 0.66;
+    else w += 0.55;
+  }
+  return w;
+}
+
+const PHONE_STAGE_MAX = 8.5;
+const PHONE_STAGE_MIN = 6.5;
+
+/**
+ * Shrink the stage name until it fits on ONE line, with a floor.
+ *
+ * The stage is the one thing the grid exists to show, and wrapping it to three
+ * lines is what made a phone cell unreadable. Below the floor no single line
+ * would be legible either, so a name that long goes back to wrapping rather
+ * than disappearing — a custom stage nobody anticipated still shows in full.
+ */
+function fitStageFont(text: string, availW: number): { size: number; wrap: boolean } {
+  const ems = emWidth(text);
+  if (ems <= 0 || availW <= 0) return { size: PHONE_STAGE_MAX, wrap: false };
+  const ideal = availW / ems;
+  if (ideal >= PHONE_STAGE_MAX) return { size: PHONE_STAGE_MAX, wrap: false };
+  if (ideal < PHONE_STAGE_MIN) return { size: PHONE_STAGE_MIN, wrap: true };
+  return { size: Math.round(ideal * 10) / 10, wrap: false };
+}
+
 interface FloorRowDef {
   floorLabel: string;
   type: 'roof' | 'duplex' | 'wide' | 'normal' | 'lobby' | 'ground' | 'basement';
@@ -118,6 +195,8 @@ interface AptCellProps {
   allTasksDone?: boolean;
   compact?: boolean;
   phone?: boolean;
+  /** Phone only: px of text this cell has to play with, from `phoneCellTextWidth`. */
+  cellTextW?: number;
   onNameUnnamed?: () => void;
   /** 'connector' draws a link chip in the gap toward the partner on the right. */
   mergeLink?: 'connector' | 'badge' | null;
@@ -131,7 +210,7 @@ interface AptCellProps {
 function AptCell({
   apt, stage, isHighlighted, isDimmed, showShinuiBadge, onClick,
   isDuplex, rowFloorType, isMerged, mergedLabel, isBulkSelected, isContractorHighlighted,
-  aptSubLabel, taskInfo, nextStageName, onAddTask, allTasksDone, compact, phone, onNameUnnamed,
+  aptSubLabel, taskInfo, nextStageName, onAddTask, allTasksDone, compact, phone, cellTextW, onNameUnnamed,
   mergeLink, extraStyle, isHoverGroup, onHover,
 }: AptCellProps) {
   const ui = useStore(state => state.mainUiStrings);
@@ -191,8 +270,10 @@ function AptCell({
         border: `${borderWidth} solid ${borderColor}`,
         minWidth: 0,
         boxShadow,
-        padding: compact ? '1px 1px' : '2px 2px',
-        gap: compact ? undefined : '1px',
+        // A phone cell is ~86px wide, so 2px of padding and a 1px gap on every
+        // line is room the number and the family name were being denied.
+        padding: compact || phone ? '1px' : '2px 2px',
+        gap: compact || phone ? undefined : '1px',
       }}
       onClick={apt ? onClick : undefined}
       title={displayLabel
@@ -207,7 +288,7 @@ function AptCell({
             // wrapped to two lines the number — a flex item like any other —
             // was shrunk to 0px high and the name drew straight over it.
             className="font-bold leading-tight text-center w-full block truncate flex-shrink-0"
-            style={{ fontSize: numFontSize, padding: '0 1px' }}
+            style={{ fontSize: numFontSize, padding: phone ? 0 : '0 1px' }}
           >
             {displayLabel}
           </span>
@@ -217,7 +298,7 @@ function AptCell({
               // Same reason as the stage line: a family name is the thing the
               // office reads the grid for, so on a phone it wraps instead of
               // being cut to three letters and an ellipsis.
-              className={`w-full text-center block px-0.5 ${phone ? 'leading-tight min-h-0' : 'leading-none truncate'}`}
+              className={`w-full text-center block ${phone ? 'px-0 leading-tight min-h-0' : 'px-0.5 leading-none truncate'}`}
               style={{
                 fontSize: compact ? '9.5px' : phone ? '9.5px' : '12px',
                 opacity: isDimmed ? 0.55 : 0.97,
@@ -255,29 +336,39 @@ function AptCell({
       )}
 
       {/* Stage name with inline completion indicator */}
-      {!compact && displayLabel && (
-        <span
-          // On a phone the stage name WRAPS rather than truncating. A four-across
-          // row is ~77px wide and "— Not Started —" needs 92px, so truncating
-          // clipped the stage off every cell in the grid — the one thing the
-          // diagram exists to show. The row is taller to pay for it.
-          className={`w-full text-center block px-0.5 ${phone ? 'leading-tight min-h-0' : 'leading-none truncate'}`}
-          style={{
-            fontSize: phone ? '8.5px' : '9px',
-            opacity: isDimmed ? 0.5 : (hasStage ? 0.9 : 0.45),
-            fontStyle: hasStage ? 'normal' : 'italic',
-            ...(phone ? { overflowWrap: 'break-word' as const } : null),
-          }}
-        >
-          {hasStage ? stage!.name : ui.notStartedOption}
-          {allTasksDone && <span style={{ color: isDimmed ? '#9ca3af' : '#22c55e', fontStyle: 'normal', marginLeft: '1px' }}>✓</span>}
-        </span>
-      )}
+      {!compact && displayLabel && (() => {
+        const stageText = hasStage ? stage!.name : ui.notStartedOption;
+        // On a phone the stage name SHRINKS until it fits on one line rather
+        // than wrapping to three. A four-across row is ~86px wide and
+        // "Registers & Access Panels" needs 106px at 8.5px, so before this it
+        // took three lines out of a cell that also has to show a number and a
+        // family name. Only a name too long even at the floor size wraps.
+        const fit = phone
+          ? fitStageFont(stageText + (allTasksDone ? ' ✓' : ''), cellTextW ?? 0)
+          : null;
+        return (
+          <span
+            className={`w-full text-center block ${
+              !fit ? 'px-0.5 leading-none truncate'
+              : fit.wrap ? 'px-0 leading-tight min-h-0'
+              : 'px-0 leading-tight truncate'}`}
+            style={{
+              fontSize: fit ? `${fit.size}px` : '9px',
+              opacity: isDimmed ? 0.5 : (hasStage ? 0.9 : 0.45),
+              fontStyle: hasStage ? 'normal' : 'italic',
+              ...(fit?.wrap ? { overflowWrap: 'break-word' as const } : null),
+            }}
+          >
+            {stageText}
+            {allTasksDone && <span style={{ color: isDimmed ? '#9ca3af' : '#22c55e', fontStyle: 'normal', marginLeft: '1px' }}>✓</span>}
+          </span>
+        );
+      })()}
 
       {/* Task info — non-compact only */}
       {!compact && displayLabel && taskInfo && (
         <span
-          className="w-full text-center leading-none block truncate px-0.5"
+          className={`w-full text-center leading-none block truncate ${phone ? 'px-0' : 'px-0.5'}`}
           style={{ fontSize: phone ? '10.5px' : '9px', opacity: isDimmed ? 0.4 : 0.9, color: isDimmed ? undefined : (allTasksDone ? '#22c55e' : '#f97316'), fontWeight: 600 }}
         >
           {allTasksDone ? ui.doneIndicator : `⏳ ${taskInfo}`}
@@ -394,7 +485,9 @@ function AptCell({
  * exists as a divider, and the middle of the row is where the eye is anyway.
  */
 function Stairwell({ compact, floorLabel }: { compact?: boolean; floorLabel?: string }) {
-  const w = floorLabel ? '20px' : compact ? '6px' : '10px';
+  // `floorLabel` is only ever set on a phone, so this first branch IS the phone
+  // width. It stays wide enough for the pill and not a pixel wider.
+  const w = floorLabel ? `${PHONE_STAIRWELL_W}px` : compact ? '6px' : '10px';
   return (
     <div className="flex-shrink-0 flex items-center justify-center relative" style={{ width: w }}>
       <div
@@ -409,7 +502,7 @@ function Stairwell({ compact, floorLabel }: { compact?: boolean; floorLabel?: st
             fontWeight: 700, color: '#64748b', lineHeight: 1,
             // A pill behind it so the strip does not read through the digits.
             background: '#f8fafc', borderRadius: '4px',
-            margin: 'auto', width: '19px', height: '19px',
+            margin: 'auto', width: '17px', height: '17px',
           }}
         >
           {floorLabel}
@@ -424,7 +517,7 @@ function FourCellRow({
   hoverGroup, onHoverApt,
   isContractorHighlighted, isBulkSelected, getAptSubLabel, getTaskInfo, getNextStageName, getOnAddTask, getAllTasksDone,
   getOnNameUnnamed,
-  showShinuiBadge, onApartmentClick, rowFloorType, compact, phone, floorLabel,
+  showShinuiBadge, onApartmentClick, rowFloorType, compact, phone, cellTextW, floorLabel,
 }: {
   aptNums: number[];
   getApt: (n: number) => Apartment | undefined;
@@ -449,10 +542,12 @@ function FourCellRow({
   rowFloorType?: 'basement' | 'ground' | 'lobby';
   compact?: boolean;
   phone?: boolean;
+  /** Phone only: px of text each of these four cells has. */
+  cellTextW?: number;
   /** Set only on a phone: the floor number, drawn on the middle divider. */
   floorLabel?: string;
 }) {
-  const gapClass = compact ? 'gap-1' : 'gap-2';
+  const gapClass = compact || phone ? 'gap-1' : 'gap-2';
 
   return (
     <>
@@ -484,6 +579,7 @@ function FourCellRow({
               onNameUnnamed={getOnNameUnnamed?.(apt)}
               compact={compact}
               phone={phone}
+              cellTextW={cellTextW}
             />
           );
         })}
@@ -519,6 +615,7 @@ function FourCellRow({
               onNameUnnamed={getOnNameUnnamed?.(apt)}
               compact={compact}
               phone={phone}
+              cellTextW={cellTextW}
             />
           );
         })}
@@ -565,7 +662,10 @@ function BuildingColumn({
 
   const floorRows = getFloorRows(buildingId, compact, phone);
   const LABEL_W = compact ? 26 : 34;
-  const padClass = compact ? 'p-0.5 gap-0.5' : 'p-1 gap-1';
+  const padClass = compact || phone ? 'p-0.5 gap-0.5' : 'p-1 gap-1';
+  // A Wolfson floor is either four cells or, on 14/15, two wide ones.
+  const cellTextW4 = phone ? phoneCellTextWidth(4) : undefined;
+  const cellTextW2 = phone ? phoneCellTextWidth(2) : undefined;
 
   const getApt = (num: number) => aptMap.get(String(num));
   const getStage = (apt: Apartment | undefined): Stage | null =>
@@ -639,16 +739,23 @@ function BuildingColumn({
     <div className="flex flex-col flex-1" style={{ minWidth: compact ? '110px' : '180px' }}>
       {/* Pinned while its own column is in view, so you always know which
           building you are looking at. z-30 clears the cells (merge chip is z-20).
-          The 2px gap is padding rather than margin so nothing scrolls through it. */}
+          The 2px gap is padding rather than margin so nothing scrolls through it.
+
+          Not drawn on a phone. There is exactly one building on screen there and
+          the A1/A2/A3 tabs above the diagram already name it, so the bar was a
+          navy stripe repeating the selected tab — on desktop the buildings sit
+          side by side and this label is the only thing telling them apart. */}
+      {!phone && (
       <div
         className={`sticky top-0 z-30 print:static text-center font-bold text-white tracking-widest rounded-t-lg ${compact ? 'py-1 pb-1.5 text-xs' : 'py-2 pb-2.5 text-sm'}`}
         style={{ backgroundColor: '#1e3a5f' }}
       >
         {buildingId}
       </div>
+      )}
 
       <div
-        className="flex flex-col rounded-b-lg overflow-hidden"
+        className={`flex flex-col overflow-hidden ${phone ? 'rounded-lg' : 'rounded-b-lg'}`}
         style={{ border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}
       >
         {floorRows.map((row, ri) => {
@@ -740,6 +847,7 @@ function BuildingColumn({
                     }
                     compact={compact}
                     phone={phone}
+                    cellTextW={cellTextW4}
                   />
                 ) : (row.type === 'wide' || row.type === 'duplex') ? (
                   <>
@@ -774,6 +882,7 @@ function BuildingColumn({
                             allTasksDone={getAllTasksDone(apt)}
                             compact={compact}
                             phone={phone}
+                            cellTextW={cellTextW2}
                           />
                         </React.Fragment>
                       );
@@ -903,8 +1012,8 @@ function NetivBuildingColumn({
   const rowH = compact ? 36 : phone ? 74 : 64;
   const roofH = compact ? 16 : phone ? 22 : 26;
   const LABEL_W = compact ? 26 : 34;
-  const padClass = compact ? 'p-0.5 gap-0.5' : 'p-1 gap-1';
-  const gapCls = compact ? 'gap-1' : 'gap-2';
+  const padClass = compact || phone ? 'p-0.5 gap-0.5' : 'p-1 gap-1';
+  const gapCls = compact || phone ? 'gap-1' : 'gap-2';
 
   // For each floor, determine how many columns to render
   function getColsForFloor(floor: number): number {
@@ -924,7 +1033,9 @@ function NetivBuildingColumn({
     return partnerIsRightNeighbour ? 'connector' : null;
   }
 
-  function renderCells(floor: number, cols: number[]) {
+  // `cellTextW` comes from the caller because the number of columns is decided
+  // per floor here, not once for the whole building.
+  function renderCells(floor: number, cols: number[], cellTextW?: number) {
     return cols.map(col => {
       const apt = getAptAtPos(floor, col);
       const isDuplexTop = !!apt?.isDuplexApt && apt.floor !== floor;
@@ -936,8 +1047,8 @@ function NetivBuildingColumn({
         return <div key={col} className="flex-1 min-w-0" aria-hidden="true" />;
       }
       // Reach up one full row, then subtract the row padding at top and bottom
-      // (p-0.5 = 2px compact, p-1 = 4px otherwise) so the cell lands flush.
-      const rowPad = compact ? 2 : 4;
+      // (p-0.5 = 2px compact/phone, p-1 = 4px otherwise) so the cell lands flush.
+      const rowPad = compact || phone ? 2 : 4;
       const spanStyle: React.CSSProperties | undefined = isDuplexBase
         ? { alignSelf: 'flex-start', marginTop: `-${rowH}px`, height: `${rowH * 2 - rowPad * 2}px`, zIndex: 3 }
         : undefined;
@@ -969,6 +1080,7 @@ function NetivBuildingColumn({
           onNameUnnamed={getOnNameFn(apt)}
           compact={compact}
           phone={phone}
+          cellTextW={cellTextW}
           isDuplex={false}
         />
       );
@@ -981,17 +1093,20 @@ function NetivBuildingColumn({
 
   return (
     <div className="flex flex-col flex-1" style={{ minWidth: compact ? '140px' : '220px' }}>
-      {/* See BuildingColumn — same pinning behaviour */}
+      {/* See BuildingColumn — same pinning behaviour, and hidden on a phone for
+          the same reason: one building on screen, already named by the tabs. */}
       {/* z-10, not z-30: this is a STICKY element, so it paints above anything
           in the page flow with a lower z — including dialogs. At z-30 the
           building name sat on top of the What's New window. It only ever needs
           to beat the cells it scrolls over. */}
-      <div className={`sticky top-0 z-10 print:static text-center font-bold text-white tracking-widest rounded-t-lg ${
-        compact ? 'py-1 pb-1.5 text-xs' : phone ? 'py-0.5 text-[11px]' : 'py-2 pb-2.5 text-sm'}`}
-        style={{ backgroundColor: '#1e3a5f' }}>
-        {buildingId}
-      </div>
-      <div className="flex flex-col rounded-b-lg overflow-hidden" style={{ border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
+      {!phone && (
+        <div className={`sticky top-0 z-10 print:static text-center font-bold text-white tracking-widest rounded-t-lg ${
+          compact ? 'py-1 pb-1.5 text-xs' : 'py-2 pb-2.5 text-sm'}`}
+          style={{ backgroundColor: '#1e3a5f' }}>
+          {buildingId}
+        </div>
+      )}
+      <div className={`flex flex-col overflow-hidden ${phone ? 'rounded-lg' : 'rounded-b-lg'}`} style={{ border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
         {/* Roof */}
         <div className="flex items-stretch" style={{ height: `${roofH}px`, minHeight: `${roofH}px`, borderBottom: '1px solid #e9edf2' }}>
           {!phone && (
@@ -1006,6 +1121,7 @@ function NetivBuildingColumn({
           const numCols = getColsForFloor(floor);
           const leftN = Math.ceil(numCols / 2);
           const rightN = numCols - leftN;
+          const cellTextW = phone ? phoneCellTextWidth(numCols) : undefined;
           const rowFloorType: 'basement' | 'ground' | 'lobby' | undefined =
             floor < -0.5 ? 'basement' : floor === 0 ? 'ground' : floor === -1 ? 'lobby' : undefined;
           const rowBg =
@@ -1028,7 +1144,7 @@ function NetivBuildingColumn({
               )}
               <div className={`flex flex-1 items-stretch ${padClass} min-w-0`}>
                 <div className={`flex flex-1 ${gapCls} min-w-0`}>
-                  {renderCells(floor, Array.from({ length: leftN }, (_, i) => i + 1))}
+                  {renderCells(floor, Array.from({ length: leftN }, (_, i) => i + 1), cellTextW)}
                 </div>
                 <Stairwell
                   compact={compact}
@@ -1037,7 +1153,7 @@ function NetivBuildingColumn({
                     : undefined}
                 />
                 <div className={`flex flex-1 ${gapCls} min-w-0`}>
-                  {renderCells(floor, Array.from({ length: rightN }, (_, i) => leftN + i + 1))}
+                  {renderCells(floor, Array.from({ length: rightN }, (_, i) => leftN + i + 1), cellTextW)}
                 </div>
               </div>
             </div>
@@ -1100,13 +1216,14 @@ export function BuildingDiagram({
   }, [hoverAptId, apartments]);
 
   const gapClass = compact ? 'gap-3' : 'gap-5';
-  // On the phone the single building IS the page — padding is room it cannot spare.
-  const padClass = compact ? 'p-3' : phone ? 'p-2 pb-8' : 'p-5';
+  // On the phone the single building IS the page — padding is room it cannot
+  // spare. Kept in step with PHONE_PAGE_PAD, which the cell-width maths reads.
+  const padClass = compact ? 'p-3' : phone ? 'p-1 pb-8' : 'p-5';
 
   return (
     <div
       className={`flex ${gapClass} ${padClass} ${single && !compact ? 'justify-center' : 'w-full'}`}
-      style={single && !compact ? { maxWidth: '560px', margin: '0 auto' } : {}}
+      style={single && !compact ? { maxWidth: `${SINGLE_COL_MAX_W}px`, margin: '0 auto' } : {}}
     >
       {visibleBuildings.map(bId => {
         const isWolfsonBuilding = /^A\d/.test(bId);

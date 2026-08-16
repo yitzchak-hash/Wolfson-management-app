@@ -63,6 +63,47 @@ const TOOLS: ToolDef[][] = [
   ],
 ];
 
+/**
+ * The rail reflows; the buttons never scale.
+ *
+ * A button is a fixed 51px cell whatever size the toolbar is dragged to — the
+ * box changes, what is in it does not. How many fit across is simply how much
+ * width there is, so widening the rail far enough lays every button out in one
+ * line and narrowing it stacks them again.
+ */
+const BTN_W = 50;
+const GAP = 2;          // gap-x-0.5 / gap-y-0.5
+const RAIL_PAD = 14;    // p-1.5 both sides, plus the 1px border — the box is border-box
+const GRIP_W = 18;      // the move grip, once the rail is a single row
+const SEP_W = 9;        // w-px + mx-1, a group divider once the rail is a single row
+const MIN_W = RAIL_PAD + BTN_W;                  // one column
+const DEFAULT_W = RAIL_PAD + BTN_W * 2 + GAP;    // 116 — the two-column rail, pixel for pixel
+const MIN_H = 140;
+
+/**
+ * The rail's own size, per machine.
+ *
+ * localStorage rather than the synced board settings on purpose: how big the
+ * toolbar wants to be is a property of the SCREEN it is on, and pushing one
+ * person's wallboard-sized rail onto everybody else's laptop is wrong. Same
+ * rule as `board_default_zoom_<pid>` and the Drive desktop root — and it keeps
+ * a new key out of persist/export/import entirely.
+ */
+const SIZE_KEY = 'board_toolbar_size';
+/** Broadcast so the controls panel, a sibling of the rail, can stay clear of it. */
+const RAIL_SIZE_EVENT = 'board-rail-size';
+
+function readSize(): { w: number; h: number } {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SIZE_KEY) || 'null');
+    if (raw && typeof raw.w === 'number' && typeof raw.h === 'number') {
+      // `h: 0` means "as tall as there is room for" and must survive the clamp.
+      return { w: Math.max(MIN_W, raw.w), h: raw.h ? Math.max(MIN_H, raw.h) : 0 };
+    }
+  } catch { /* a corrupt entry is not worth a broken toolbar */ }
+  return { w: DEFAULT_W, h: 0 };
+}
+
 export function BoardToolbar({
   active, onPick, onFit, onToggleSettings, onToggleControls, controlsOpen,
   onOpenStore, onToggleMap, mapOn, onPenOptions, setup, onPickWidget,
@@ -86,13 +127,17 @@ export function BoardToolbar({
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const dragRef = useRef<{ px: number; py: number; ox: number; oy: number } | null>(null);
   /**
-   * How tall the rail is allowed to be, dragged from its bottom edge.
-   * Zero means "as tall as there is room for", which is the sensible default —
-   * a height is only remembered once somebody has deliberately set one.
+   * How big the rail is allowed to be, dragged from its bottom edge or its
+   * free (bottom-left) corner. Height zero means "as tall as there is room
+   * for", which is the sensible default — a height is only remembered once
+   * somebody has deliberately set one.
    */
-  const [height, setHeight] = useState(0);
-  const sizeRef = useRef<{ py: number; oh: number } | null>(null);
+  const [size, setSize] = useState(readSize);
+  const sizeRef = useRef<
+    { px: number; py: number; ow: number; oh: number; oh0: number; maxW: number; axis: 'y' | 'xy' } | null
+  >(null);
   const railRef = useRef<HTMLDivElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
   /**
    * On a phone the full rail covered a sixth of the board and ran off the
    * bottom, so it collapses to a single button and opens as a sheet. Desktop is
@@ -112,17 +157,60 @@ export function BoardToolbar({
   }
   function onGripUp() { dragRef.current = null; }
 
-  function onSizeDown(e: React.PointerEvent) {
-    e.preventDefault(); e.stopPropagation();
-    sizeRef.current = { py: e.clientY, oh: railRef.current?.getBoundingClientRect().height ?? 0 };
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  function onSizeDown(axis: 'y' | 'xy') {
+    return (e: React.PointerEvent) => {
+      e.preventDefault(); e.stopPropagation();
+      const box = railRef.current?.getBoundingClientRect();
+      /**
+       * The ceiling is the BOARD's width, not the window's — the sidebar and
+       * the page chrome are not the rail's to use, and a rail wider than its
+       * containing block just hangs off the left of the board.
+       */
+      const host = wrapRef.current?.offsetParent as HTMLElement | null;
+      sizeRef.current = {
+        px: e.clientX, py: e.clientY,
+        ow: box?.width ?? size.w, oh: box?.height ?? 0,
+        oh0: size.h, axis,
+        maxW: Math.max(MIN_W, (host?.clientWidth ?? window.innerWidth) - 48),
+      };
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    };
   }
   function onSizeMove(e: React.PointerEvent) {
     const st = sizeRef.current;
     if (!st) return;
-    setHeight(Math.max(140, st.oh + (e.clientY - st.py)));
+    const dy = e.clientY - st.py;
+    /**
+     * A corner drag that never moves vertically must leave the height on auto.
+     * Pinning it to whatever was measured at pointerdown would freeze the box
+     * at its tall two-column size, so reflowing into one line would leave a
+     * rail of mostly empty white.
+     */
+    const h = st.axis === 'y' || Math.abs(dy) > 4 ? Math.max(MIN_H, st.oh + dy) : st.oh0;
+    // The rail is docked to the right edge, so it grows leftwards.
+    const w = st.axis === 'xy'
+      ? Math.min(st.maxW, Math.max(MIN_W, st.ow - (e.clientX - st.px)))
+      : size.w;
+    setSize({ w, h });
   }
-  function onSizeUp() { sizeRef.current = null; }
+  function onSizeUp() {
+    sizeRef.current = null;
+    try { localStorage.setItem(SIZE_KEY, JSON.stringify(size)); } catch { /* private mode */ }
+  }
+  function resetSize() {
+    setSize({ w: DEFAULT_W, h: 0 });
+    try { localStorage.removeItem(SIZE_KEY); } catch { /* private mode */ }
+  }
+
+  /**
+   * The controls panel parks itself against the rail's left edge, and it is a
+   * sibling rendered by the board — so the width has to travel out of here.
+   * An event rather than a prop because the size is local state and lifting it
+   * would re-render the whole board on every pixel of a resize drag.
+   */
+  React.useEffect(() => {
+    window.dispatchEvent(new CustomEvent(RAIL_SIZE_EVENT, { detail: size.w }));
+  }, [size.w]);
 
   /**
    * The rail, after the workspace's own choices.
@@ -147,15 +235,71 @@ export function BoardToolbar({
     .map(id => WIDGET_BY_ID.get(id))
     .filter((w): w is NonNullable<typeof w> => !!w);
 
-  const buttons = (
+  /**
+   * The width at which everything lands on one line.
+   *
+   * Counted from the real button and divider sizes rather than guessed at, so
+   * the moment the rail switches to a single row is the moment a single row
+   * actually fits — a threshold that is out by one button reads as a toolbar
+   * that wraps for no reason.
+   */
+  const btnCount =
+    shownGroups.reduce((n, g) => n + g.length, 0) + railWidgets.length + 5;
+  const sepCount =
+    Math.max(0, shownGroups.length - 1) + (railWidgets.length ? 1 : 0) + 1;
+  const oneLineW =
+    RAIL_PAD + GRIP_W + btnCount * (BTN_W + GAP) + sepCount * (SEP_W + GAP);
+  const oneLine = size.w >= oneLineW;
+
+  /**
+   * `min-w-0` is load-bearing: a flex item's automatic minimum size is its
+   * content, so a long promoted-widget name would push its button past the
+   * 50px cell and knock the whole rail out of alignment.
+   */
+  const BTN = 'flex flex-col items-center gap-0.5 py-1.5 rounded-lg transition-colors min-w-0';
+  const btnStyle = { width: BTN_W };
+
+  /**
+   * The rail's contents, in whichever shape it has been dragged to.
+   *
+   * Taken as a parameter rather than read from `oneLine` because the phone
+   * sheet renders the same buttons in a grid and always wants the stacked
+   * form — a vertical divider in a five-column grid is a stray tick mark.
+   */
+  const railBody = (oneLine: boolean) => {
+    /**
+     * A group divider.
+     *
+     * `flexBasis` is what makes a stacked divider take a whole line and push
+     * the next group onto a fresh row; `gridColumn` is the same instruction
+     * for the phone sheet, which lays the identical markup out as a grid.
+     * Each container ignores the property that is not its own, so one element
+     * serves both.
+     *
+     * `min-w-0` on the wrapper AND `max-w-full` on the rule: a flex item's
+     * automatic minimum size is its content, so at a one-column rail the 64px
+     * rule was the one thing making the toolbar scroll sideways.
+     */
+    const sep = (key: string) => oneLine
+      ? <span key={key} className="self-center w-px h-8 bg-gray-200 mx-1" />
+      : (
+        <div key={key} className="flex items-center justify-center py-1 min-w-0"
+          style={{ flexBasis: '100%', gridColumn: '1 / -1' }}>
+          <span className="w-16 max-w-full h-px bg-gray-200" />
+        </div>
+      );
+
+    return (
     <>
-        {/* Drag grip */}
+        {/* Drag grip — a full-width bar while stacked, a slim column once the rail is one line */}
         <div
           onPointerDown={onGripDown}
           onPointerMove={onGripMove}
           onPointerUp={onGripUp}
           onPointerCancel={onGripUp}
-          className="col-span-2 w-full flex justify-center py-0.5 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-400"
+          className={`flex items-center justify-center cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-400 ${
+            oneLine ? 'h-9' : 'py-0.5'}`}
+          style={oneLine ? { width: GRIP_W } : { flexBasis: '100%', gridColumn: '1 / -1' }}
           title="Move toolbar"
         >
           <GripVertical size={13} />
@@ -163,7 +307,7 @@ export function BoardToolbar({
 
         {shownGroups.map((group, gi) => (
           <React.Fragment key={gi}>
-            {gi > 0 && <div className="col-span-2 w-16 h-px bg-gray-200 my-1 justify-self-center" />}
+            {gi > 0 && sep(`g${gi}`)}
             {group.map(({ id, icon: Icon, label, tip }) => (
               <button
                 key={id}
@@ -174,10 +318,10 @@ export function BoardToolbar({
                   onPenOptions(id, e.clientX, e.clientY);
                 }}
                 title={tip}
-                className="w-full flex flex-col items-center gap-0.5 py-1.5 rounded-lg transition-colors"
+                className={BTN}
                 style={active === id
-                  ? { backgroundColor: '#1e3a5f', color: '#fff' }
-                  : { color: '#64748b' }}
+                  ? { ...btnStyle, backgroundColor: '#1e3a5f', color: '#fff' }
+                  : { ...btnStyle, color: '#64748b' }}
               >
                 <Icon size={17} />
                 <span className="text-[8.5px] font-bold leading-none">{label}</span>
@@ -188,46 +332,45 @@ export function BoardToolbar({
 
         {railWidgets.length > 0 && (
           <>
-            <div className="col-span-2 w-16 h-px bg-gray-200 my-1 justify-self-center" />
+            {sep('widgets')}
             {railWidgets.map(w => {
               const WIcon = w.icon;
               return (
                 <button key={w.id} onClick={() => onPickWidget?.(w.id)} title={`${w.name} — ${w.blurb}`}
-                  className="w-full flex flex-col items-center gap-0.5 py-1.5 rounded-lg text-gray-500 hover:bg-gray-50">
+                  style={btnStyle} className={`${BTN} text-gray-500 hover:bg-gray-50`}>
                   <WIcon size={17} />
-                  <span className="text-[8.5px] font-bold leading-none truncate max-w-[52px]">{w.name}</span>
+                  <span className="text-[8.5px] font-bold leading-none truncate max-w-full">{w.name}</span>
                 </button>
               );
             })}
           </>
         )}
 
-        <div className="col-span-2 w-16 h-px bg-gray-200 my-1 justify-self-center" />
+        {sep('chrome')}
 
         <button onClick={onOpenStore} title="Widget store"
-          className="w-full flex flex-col items-center gap-0.5 py-1.5 rounded-lg text-gray-500 hover:bg-gray-50">
+          style={btnStyle} className={`${BTN} text-gray-500 hover:bg-gray-50`}>
           <LayoutGrid size={17} /><span className="text-[8.5px] font-bold leading-none">Store</span>
         </button>
-        <button onClick={onToggleMap} title="Board overview"
-          className="w-full flex flex-col items-center gap-0.5 py-1.5 rounded-lg transition-colors"
-          style={mapOn ? { backgroundColor: '#1e3a5f', color: '#fff' } : { color: '#64748b' }}>
+        <button onClick={onToggleMap} title="Board overview" className={BTN}
+          style={mapOn ? { ...btnStyle, backgroundColor: '#1e3a5f', color: '#fff' } : { ...btnStyle, color: '#64748b' }}>
           <MapIcon size={17} /><span className="text-[8.5px] font-bold leading-none">Map</span>
         </button>
         <button onClick={onFit} title="Zoom to fit"
-          className="w-full flex flex-col items-center gap-0.5 py-1.5 rounded-lg text-gray-500 hover:bg-gray-50">
+          style={btnStyle} className={`${BTN} text-gray-500 hover:bg-gray-50`}>
           <Maximize size={17} /><span className="text-[8.5px] font-bold leading-none">Fit</span>
         </button>
-        <button onClick={onToggleControls} title="Show controls"
-          className="w-full flex flex-col items-center gap-0.5 py-1.5 rounded-lg transition-colors"
-          style={controlsOpen ? { backgroundColor: '#1e3a5f', color: '#fff' } : { color: '#64748b' }}>
+        <button onClick={onToggleControls} title="Show controls" className={BTN}
+          style={controlsOpen ? { ...btnStyle, backgroundColor: '#1e3a5f', color: '#fff' } : { ...btnStyle, color: '#64748b' }}>
           <Keyboard size={17} /><span className="text-[8.5px] font-bold leading-none">Keys</span>
         </button>
         <button onClick={onToggleSettings} title="Board settings"
-          className="w-full flex flex-col items-center gap-0.5 py-1.5 rounded-lg text-gray-500 hover:bg-gray-50">
+          style={btnStyle} className={`${BTN} text-gray-500 hover:bg-gray-50`}>
           <Settings size={17} /><span className="text-[8.5px] font-bold leading-none">Setup</span>
         </button>
     </>
-  );
+    );
+  };
 
   return (
     <>
@@ -235,35 +378,54 @@ export function BoardToolbar({
       {/* Bottom is reserved for the minimap and the zoom readout, so the rail
           stops short of them and scrolls inside itself instead of overlapping. */}
       <div
+        ref={wrapRef}
         className="hidden md:flex absolute z-40 select-none"
         style={{ right: 12 - offset.x, top: 12 + offset.y, bottom: 124, alignItems: 'flex-start' }}
       >
         {/* Capped and scrollable: the rail grew past the bottom of a laptop
             screen once Store and Map joined it, hiding Setup entirely. Drag the
-            handle at the bottom to decide how tall it is. */}
+            handle at the bottom for height, or the corner for both. */}
         <div className="relative">
-          {/* TWO columns.
+          {/* Two columns by default, and whatever the width allows after that.
               One column ran the full height of the board and still reached down
-              into the minimap's corner. Two makes the rail half as tall for the
-              same buttons, which is what stops it overlapping. The grip and the
-              dividers stay full width by spanning both columns. */}
+              into the minimap's corner; two makes the rail half as tall for the
+              same buttons, which is what stops it overlapping. It is a wrapping
+              FLEX row rather than a fixed grid so the column count follows the
+              dragged width on its own — the buttons keep their 50px whatever
+              happens, and once there is room for the lot they land in one line.
+              `maxWidth` catches a width saved on a big monitor and reopened on
+              a laptop: the wrapper shrinks to fit, so the rail wraps rather
+              than hanging off the left of the board. */}
           <div
             ref={railRef}
-            className="w-[116px] bg-white border border-gray-200 rounded-xl shadow-lg p-1.5 pb-3 grid grid-cols-2 gap-x-0.5 gap-y-0.5 justify-items-center content-start overflow-y-auto board-rail"
-            style={height ? { height } : { maxHeight: '100%' }}
+            className="bg-white border border-gray-200 rounded-xl shadow-lg p-1.5 pb-3 flex flex-wrap items-start justify-center gap-x-0.5 gap-y-0.5 content-start overflow-y-auto board-rail"
+            style={{ width: size.w, maxWidth: '100%', ...(size.h ? { height: size.h } : { maxHeight: '100%' }) }}
           >
-            {buttons}
+            {railBody(oneLine)}
           </div>
           <div
-            onPointerDown={onSizeDown}
+            onPointerDown={onSizeDown('y')}
             onPointerMove={onSizeMove}
             onPointerUp={onSizeUp}
             onPointerCancel={onSizeUp}
-            onDoubleClick={() => setHeight(0)}
+            onDoubleClick={resetSize}
             title="Drag to resize · double-click to fit"
-            className="absolute left-0 right-0 -bottom-1 h-3 flex items-center justify-center cursor-ns-resize group/size"
+            className="absolute left-4 right-0 -bottom-1 h-3 flex items-center justify-center cursor-ns-resize group/size"
           >
             <span className="w-6 h-[3px] rounded-full bg-gray-200 group-hover/size:bg-gray-400 transition-colors" />
+          </div>
+          {/* The corner. The rail is docked right, so its free corner is the
+              bottom-LEFT one and dragging outwards means dragging left. */}
+          <div
+            onPointerDown={onSizeDown('xy')}
+            onPointerMove={onSizeMove}
+            onPointerUp={onSizeUp}
+            onPointerCancel={onSizeUp}
+            onDoubleClick={resetSize}
+            title="Drag to resize the toolbar · double-click to reset"
+            className="absolute -left-1 -bottom-1 w-4 h-4 flex items-end justify-start cursor-nesw-resize group/corner"
+          >
+            <span className="w-3 h-3 border-l-2 border-b-2 rounded-bl-md border-gray-200 group-hover/corner:border-gray-400 transition-colors" />
           </div>
         </div>
       </div>
@@ -286,7 +448,7 @@ export function BoardToolbar({
               <button onClick={() => setPhoneOpen(false)} className="ml-auto p-1 text-gray-400"><X size={16} /></button>
             </div>
             <div className="grid grid-cols-5 gap-1.5 [&>button]:!w-auto" onClick={() => setPhoneOpen(false)}>
-              {buttons}
+              {railBody(false)}
             </div>
           </div>
         </div>
@@ -320,8 +482,16 @@ export function BoardControlsPanel() {
     ['Delete', 'Remove selected'],
     ['Escape', 'Clear selection'],
   ];
+  // Parks against the rail's left edge, whatever width the rail has been dragged to.
+  const [railW, setRailW] = useState(() => readSize().w);
+  React.useEffect(() => {
+    const on = (e: Event) => setRailW((e as CustomEvent<number>).detail);
+    window.addEventListener(RAIL_SIZE_EVENT, on);
+    return () => window.removeEventListener(RAIL_SIZE_EVENT, on);
+  }, []);
   return (
-    <div className="absolute right-[140px] top-3 z-40 w-[188px] bg-white border border-gray-200 rounded-xl shadow-lg p-2.5">
+    <div className="absolute top-3 z-40 w-[188px] bg-white border border-gray-200 rounded-xl shadow-lg p-2.5"
+      style={{ right: railW + 24 }}>
       <div className="text-[10px] font-extrabold text-gray-700 mb-1.5 tracking-wide">CONTROLS</div>
       <div className="flex flex-col gap-1">
         {rows.map(([k, v]) => (

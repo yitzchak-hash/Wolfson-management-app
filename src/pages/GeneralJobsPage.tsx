@@ -5,6 +5,7 @@ import {
   Ghost, ThumbsUp, ThumbsDown, ClipboardPaste, LayoutGrid, Columns3, Archive, CheckCircle2, PlayCircle,
   Image as ImageIcon, ImageOff, History, MoveUpRight, Unlink, FileText, Search, FolderPlus, Printer,
   Settings2 as Settings, BringToFront, SendToBack, ChevronUp, ChevronDown, Eye,
+  Eraser, GripVertical,
 } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 import { useStore } from '../data/store';
@@ -22,7 +23,7 @@ import { DriveIcon, ZohoIcon, PlanIcon, TvIcon } from '../components/ui/BrandIco
 import { BoardToolbar, BoardControlsPanel, BoardTool } from '../components/board/BoardToolbar';
 import { BOARD_THEMES, getBoardTheme, surfaceAtZoom } from '../data/boardThemes';
 import { allowed as sideAllowed, edgePushed, roomFor, shiftFor, shiftJobs, shiftNodes, Side } from '../data/boardExpand';
-import { snapBox, Guide } from '../data/snapping';
+import { snapBox, snapResize, Box, Guide } from '../data/snapping';
 import { MiniMap } from '../components/board/MiniMap';
 import { DriveDesktopPath } from '../components/apartment/DriveDesktopPath';
 import { DeleteImpact } from '../components/ui/DeleteImpact';
@@ -51,7 +52,7 @@ import {
 } from '../data/driveApi';
 import {
   PinnedTitleLayer, StrokeLayer, CountdownNode, StopwatchNode, ClipArtNode, NODE_DEFAULT_SIZE,
-  VoiceMemoNode, ART_KINDS, ArtKind,
+  VoiceMemoNode, ART_KINDS, ArtKind, isDrawingNode, strokePoints,
 } from '../components/board/BoardNodes';
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
@@ -119,6 +120,129 @@ function defaultPos(i: number) {
 function genId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 }
+
+// ─── Movable panels ───────────────────────────────────────────────────────────
+/**
+ * Where each floating panel was last left, for THIS session only.
+ *
+ * Module-level rather than stored, and deliberately: where a panel sits depends
+ * on the size of the screen it was moved on, so syncing it would push one
+ * person's arrangement onto everybody else's monitor — the same rule the
+ * board's own default zoom follows. Closing and reopening a panel finds it
+ * where you put it; a reload starts it back at its dock.
+ */
+const PANEL_POS = new Map<string, { x: number; y: number }>();
+
+/**
+ * A floating panel with a move handle in its corner.
+ *
+ * Until it is dragged it keeps whatever anchor it was written with (`right`,
+ * `top`, …) so nothing about the default layout changes; the first drag reads
+ * the panel's own rectangle and switches to explicit left/top from there.
+ * Positions are relative to the panel's offset parent, which is the board
+ * viewport for the docked panels and the window for the `fixed` popovers.
+ */
+function MovablePanel({
+  id, className, style, onClose, title, children,
+}: {
+  id: string;
+  className: string;
+  /** The dock — used until somebody moves it. */
+  style: React.CSSProperties;
+  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+}) {
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(() => PANEL_POS.get(id) ?? null);
+  const ref = useRef<HTMLDivElement>(null);
+  const grab = useRef<{ px: number; py: number; ox: number; oy: number } | null>(null);
+
+  // Escape closes it. A panel you have not noticed lays a full-screen backdrop
+  // over the board and swallows every other click.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  function down(e: React.PointerEvent) {
+    e.preventDefault(); e.stopPropagation();
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const host = (el.offsetParent as HTMLElement | null)?.getBoundingClientRect();
+    const start = pos ?? { x: r.left - (host?.left ?? 0), y: r.top - (host?.top ?? 0) };
+    grab.current = { px: e.clientX, py: e.clientY, ox: start.x, oy: start.y };
+    setPos(start);
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+  function move(e: React.PointerEvent) {
+    const g = grab.current;
+    if (!g) return;
+    const next = { x: g.ox + (e.clientX - g.px), y: g.oy + (e.clientY - g.py) };
+    setPos(next);
+    PANEL_POS.set(id, next);
+  }
+  function up() { grab.current = null; }
+
+  return (
+    <div
+      ref={ref}
+      className={className}
+      // `right` is cleared explicitly: the docked panels are anchored to the
+      // right edge, and leaving that in place while setting `left` stretches
+      // the panel across the board instead of moving it.
+      style={pos ? { ...style, left: pos.x, top: pos.y, right: 'auto', bottom: 'auto' } : style}
+    >
+      {/* In the corner, INSIDE the panel — a handle floating outside it is
+          clipped away the moment a panel scrolls its own contents. Each panel
+          keeps its first line clear of it with a little left padding. */}
+      <div
+        onPointerDown={down}
+        onPointerMove={move}
+        onPointerUp={up}
+        onPointerCancel={up}
+        title={`Move ${title}`}
+        className="absolute top-1 left-0.5 p-0.5 rounded text-gray-300 hover:text-gray-600
+                   cursor-grab active:cursor-grabbing z-10"
+        style={{ touchAction: 'none' }}
+      >
+        <GripVertical size={13} />
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ─── Eraser geometry ──────────────────────────────────────────────────────────
+/**
+ * How far a point is from a segment.
+ *
+ * Testing the stored POINTS alone is what made the plan editor's first eraser
+ * only work at a stroke's corners: a fast drag leaves a long straight segment
+ * with nothing in the middle of it to hit.
+ */
+function distToSegment(
+  px: number, py: number,
+  ax: number, ay: number, bx: number, by: number,
+): number {
+  const vx = bx - ax, vy = by - ay;
+  const len = vx * vx + vy * vy;
+  const t = len === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * vx + (py - ay) * vy) / len));
+  return Math.hypot(px - (ax + vx * t), py - (ay + vy * t));
+}
+
+/** The box a polyline occupies, which is also the box its node gets. */
+function pointsBounds(pts: { x: number; y: number }[]) {
+  const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+  const x = Math.min(...xs), y = Math.min(...ys);
+  // A perfectly straight line has no extent on one axis, and a node with no
+  // height cannot be drawn into or grabbed.
+  return { x, y, w: Math.max(1, Math.max(...xs) - x), h: Math.max(1, Math.max(...ys) - y) };
+}
+
+const fmtPoints = (pts: { x: number; y: number }[]) =>
+  pts.map(p => `${Math.round(p.x)},${Math.round(p.y)}`).join(' ');
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface DragState {
@@ -362,6 +486,16 @@ export function GeneralJobsPage() {
   }, []);
   /** Live freehand stroke, world coordinates, committed once on pointerup. */
   const [drawing, setDrawing] = useState<{ pts: { x: number; y: number }[]; marker: boolean } | null>(null);
+  /**
+   * The eraser, which is a mode like the pen and lives in the same options
+   * popover. Two of them, as in the plan editor: `part` rubs a hole in a
+   * drawing and keeps whatever is left either side of it, `whole` lifts the
+   * entire mark. Neither has a colour — an eraser that paints is a pen.
+   */
+  const [eraser, setEraser] = useState<{ on: boolean; width: number; whole: boolean }>(
+    { on: false, width: 26, whole: false });
+  /** True between pointerdown and pointerup while rubbing out. */
+  const erasing = useRef(false);
   const [recordingEl, setRecordingEl] = useState<string | null>(null);
   const [savingAudio, setSavingAudio] = useState(false);
   const recorderRef = useRef<{ rec: MediaRecorder; chunks: Blob[]; started: number } | null>(null);
@@ -372,20 +506,70 @@ export function GeneralJobsPage() {
   /**
    * Lining things up, and the lines that say why.
    *
-   * Off unless asked for: a board is a place to put things roughly where they
-   * belong, and a magnet nobody switched on is a fight. `guides` is cleared on
-   * every pointer-up, so a line can never be left on screen describing a drag
-   * that finished.
+   * Two different things, and they were tangled together. Lining up with what is
+   * ALREADY THERE — a neighbour's left edge, its middle, its bottom — is what
+   * "line these up" means and is now always on, for every kind of thing on the
+   * board and for a resize as well as a move; it only ever moves something by a
+   * few pixels and it draws the line it moved to, so it can never be a surprise.
+   * The GRID is the separate, opt-in part: a 22px lattice to land on when there
+   * is nothing nearby to line up with, which is what the settings switch means.
+   *
+   * `guides` is cleared on every pointer-up, so a line can never be left on
+   * screen describing a gesture that has finished.
    */
   const snapOn = projectBoard.snapToGrid ?? false;
   const [guides, setGuides] = useState<Guide[]>([]);
-  const snapTargetsRef = useRef((exceptId: string) => [] as { x: number; y: number; w: number; h: number }[]);
-  snapTargetsRef.current = (exceptId: string) => [
-    ...jobs.filter(j => j.id !== exceptId).map((j, i) => ({ ...jobPos(j, i), w: TILE_W, h: TILE_H })),
-    ...canvasElements
-      .filter(el => el.id !== exceptId && (el.board ?? '') === (boardRef.current ?? ''))
-      .map(el => ({ x: el.x, y: el.y, w: el.w, h: el.h })),
-  ];
+  /**
+   * Everything a moving or resizing box may line itself up with.
+   *
+   * Two exclusions worth naming, because either one alone is a magnet at the
+   * board's origin: an arrow has no box of its own (it is two ends and is
+   * stored at 0,0,0,0) and attached clip art has no position of its own — its
+   * box is derived from whatever it is stuck to.
+   */
+  const snapTargetsRef = useRef((_exclude: Set<string>, _noInk?: boolean) => [] as Box[]);
+  snapTargetsRef.current = (exclude: Set<string>, noInk?: boolean) => {
+    const out: Box[] = [];
+    jobs.forEach((j, i) => {
+      if (exclude.has(j.id)) return;
+      out.push({ ...jobPos(j, i), w: TILE_W, h: TILE_H });
+    });
+    canvasElements.forEach(el => {
+      if (exclude.has(el.id)) return;
+      if ((el.board ?? '') !== (boardRef.current ?? '') && el.type !== 'bin') return;
+      if (el.type === 'arrow' || el.attachedTo) return;
+      // Loose ink is not a thing to line up with — it has a bounding box only
+      // because it has to be stored somewhere. A drawing that became a node is.
+      if (el.type === 'stroke' && (noInk || !isDrawingNode(el))) return;
+      if (el.w <= 0 || el.h <= 0) return;
+      out.push({ x: el.x, y: el.y, w: el.w, h: el.h });
+    });
+    return out;
+  };
+
+  /** In SCREEN pixels, divided by the zoom — or the pull is a huge magnet at 25% and nothing at 300%. */
+  const SNAP_REACH = 7;
+  /**
+   * Snap a moving box, and say which lines to draw.
+   *
+   * The grid gets a guide of its own when it is the thing that moved the box:
+   * a grid snap has no partner to draw a line TO, so without this it happens
+   * invisibly — which is exactly the "I don't see rulers show up" complaint.
+   */
+  function snapMoving(box: Box, exclude: Set<string>) {
+    const tol = SNAP_REACH / Math.max(0.2, zoom);
+    const grid = snapOn ? GAP : 0;
+    const r = snapBox(box, snapTargetsRef.current(exclude), tol, grid);
+    const lines = [...r.guides];
+    const REACH = 70;
+    if (grid > 0 && !lines.some(g => g.axis === 'x') && Math.abs(r.x - box.x) > 0.01) {
+      lines.push({ axis: 'x', at: r.x, from: r.y - REACH, to: r.y + box.h + REACH });
+    }
+    if (grid > 0 && !lines.some(g => g.axis === 'y') && Math.abs(r.y - box.y) > 0.01) {
+      lines.push({ axis: 'y', at: r.y, from: r.x - REACH, to: r.x + box.w + REACH });
+    }
+    return { x: r.x, y: r.y, guides: lines };
+  }
 
   const theme = getBoardTheme(projectBoard.themeId);
   const showControls = projectBoard.showControls ?? false;
@@ -682,6 +866,9 @@ export function GeneralJobsPage() {
   }
 
   function handleToolPick(next: BoardTool) {
+    // Picking up any tool puts the eraser down. Two things armed at once is a
+    // board where the same press does two different things.
+    setEraser(v => (v.on ? { ...v, on: false } : v));
     /**
      * Pressing the tool you are already holding puts it DOWN.
      *
@@ -1110,8 +1297,15 @@ export function GeneralJobsPage() {
     return g;
   }
 
-  function onGhostPointerDown(e: React.PointerEvent, job: Apartment, index: number, g: { x: number; y: number }) {
+  /**
+   * The tile passes the ghost's INDEX, not its position — the position is read
+   * back off the job here. Taking it as a fourth argument meant it arrived
+   * undefined, because `BoardHandlers.ghostDown` only ever carried three.
+   */
+  function onGhostPointerDown(e: React.PointerEvent, job: Apartment, index: number) {
     if (e.button !== 0) return;
+    const g = job.ghosts?.[index];
+    if (!g) return;
     e.stopPropagation();
     setCtxMenu(null); setColorPicker(null);
     const w0 = toWorld(e.clientX, e.clientY);
@@ -1122,14 +1316,27 @@ export function GeneralJobsPage() {
   function onGhostPointerMove(e: React.PointerEvent) {
     if (!ghostDrag) return;
     const w0 = toWorld(e.clientX, e.clientY);
-    const dx = w0.x - ghostDrag.grabX;
-    const dy = w0.y - ghostDrag.grabY;
-    setGhostDrag({ ...ghostDrag, dx, dy, moved: ghostDrag.moved || Math.abs(dx) > 4 || Math.abs(dy) > 4 });
+    let dx = w0.x - ghostDrag.grabX;
+    let dy = w0.y - ghostDrag.grabY;
+
+    // A ghost is a tile like any other while it is being carried, so it lines
+    // itself up the same way — against the job it belongs to included.
+    const box = { x: ghostDrag.startX + dx, y: ghostDrag.startY + dy, w: TILE_W, h: TILE_H };
+    const snapped = snapMoving(box, new Set<string>());
+    dx += snapped.x - box.x;
+    dy += snapped.y - box.y;
+    setGuides(snapped.guides);
+
+    const moved = ghostDrag.moved || Math.abs(dx) > 4 || Math.abs(dy) > 4;
+    if (moved) edgePush(e.clientX, e.clientY); else stopEdgePush();
+    setGhostDrag({ ...ghostDrag, dx, dy, moved });
     setHoverBin(binAt(w0.x, w0.y)?.id ?? null);
     setRotaHover(anyRota() ? rotaCellAt(e.clientX, e.clientY) : null);
   }
 
   function onGhostPointerUp(e: React.PointerEvent, job: Apartment) {
+    setGuides([]);
+    stopEdgePush();
     if (!ghostDrag) return;
     if (ghostDrag.moved) {
       const w0 = toWorld(e.clientX, e.clientY);
@@ -1742,6 +1949,10 @@ export function GeneralJobsPage() {
         setSelectedJobIds(new Set()); setSelectedElIds(new Set());
         setCtxMenu(null); setColorPicker(null);
         setArrowFrom(null); setArrowTip(null);
+        // An armed eraser is a mode, and a mode you cannot put down with
+        // Escape is a trap — the same reason the pen answers to it.
+        setEraser(v => (v.on ? { ...v, on: false } : v));
+        setGuides([]);
       }
     }
     document.addEventListener('keydown', onKey);
@@ -1818,8 +2029,10 @@ export function GeneralJobsPage() {
     if ((e.target as HTMLElement).closest('[data-no-drag]')) return;
     // With the pen or highlighter armed, a press starts a stroke wherever it
     // lands — including on top of a tile. Otherwise you could not draw across
-    // the board, only in the gaps between jobs.
+    // the board, only in the gaps between jobs. The eraser follows the same
+    // rule, or ink drawn over a tile could never be rubbed off it.
     if (drawMode) { startStrokeAt(e); return; }
+    if (eraseMode) { startEraseAt(e); return; }
     e.stopPropagation();
     setCtxMenu(null); setColorPicker(null);
 
@@ -1876,20 +2089,22 @@ export function GeneralJobsPage() {
      *
      * Only while a single tile is being moved: with several selected there is
      * no one box to line up, and pulling the group by whichever member happened
-     * to be nearest something would rearrange the rest behind your back. The
-     * tolerance is divided by the zoom so the pull is the same size on screen
-     * however far in or out you are.
+     * to be nearest something would rearrange the rest behind your back.
      */
-    if (snapOn && drag.ids.length === 1 && drag.starts.get(drag.ids[0])) {
-      const id = drag.ids[0];
-      const me = drag.starts.get(id);
+    if (drag.ids.length === 1 && drag.starts.get(drag.ids[0])) {
+      const me = drag.starts.get(drag.ids[0]);
       const box = { x: (me?.x ?? 0) + dx, y: (me?.y ?? 0) + dy, w: TILE_W, h: TILE_H };
-      const others = snapTargetsRef.current(id);
-      const snapped = snapBox(box, others, 7 / Math.max(0.2, zoom));
+      const snapped = snapMoving(box, new Set(drag.ids));
       dx += snapped.x - box.x;
       dy += snapped.y - box.y;
       setGuides(snapped.guides);
     }
+
+    const moved = drag.moved || Math.abs(dx) > 4 || Math.abs(dy) > 4;
+    // Held against an edge of the SCREEN, the board comes to meet you — but
+    // only once this is genuinely a drag. A press that has not moved is a click
+    // waiting to happen, and near an edge it would otherwise set the board off.
+    if (moved) edgePush(e.clientX, e.clientY); else stopEdgePush();
 
     // Is any dragged tile pressed against a locked edge right now?
     let atEdge = false;
@@ -1901,14 +2116,84 @@ export function GeneralJobsPage() {
     const overBin = binAt(w0.x, w0.y);
     const overCell = anyRota() ? rotaCellAt(e.clientX, e.clientY) : null;
     setDrag({
-      ...drag, dx, dy,
-      moved: drag.moved || Math.abs(dx) > 4 || Math.abs(dy) > 4,
+      ...drag, dx, dy, moved,
       edgeSince: atEdge ? (drag.edgeSince ?? Date.now()) : null,
       overDrop: !!overBin || !!overCell,
     });
     setHoverBin(overBin?.id ?? null);
     setRotaHover(overCell);
   }
+
+  // ── The board grows while you hold something at its edge ───────────
+  /**
+   * Drag a job, a note, a widget or a drawing against the side of the screen
+   * and the board comes to meet you, for as long as you hold it there.
+   *
+   * Down and to the right this is free and silent: the surface is measured from
+   * the live drag position, so the world genuinely extends under the thing you
+   * are carrying. Up and to the left it is NOT free — there is no negative
+   * space to grow into, so gaining room there moves everything already placed,
+   * and that keeps the consent it has always had: the edge push does nothing
+   * until the side has been unlocked, and a dwell at the edge still raises the
+   * question on drop.
+   */
+  const EDGE_BAND = 46;
+  const EDGE_SPEED = 16;
+  const edgeVel = useRef({ vx: 0, vy: 0 });
+  const edgeTimer = useRef<number | undefined>(undefined);
+  /** Through a ref, so the running interval always calls this render's closure. */
+  const edgeTickRef = useRef(() => {});
+  edgeTickRef.current = () => {
+    const { vx, vy } = edgeVel.current;
+    if (!vx && !vy) return;
+    const before = panRef2.current;
+    const next = clampPanRef.current({ x: before.x - vx, y: before.y - vy });
+    // World units the VIEW travelled. Zero means the board has no more room
+    // this way yet — the surface grows as the dragged thing extends it, so the
+    // next tick usually can move.
+    const movedX = (before.x - next.x) / zoomRef.current;
+    const movedY = (before.y - next.y) / zoomRef.current;
+    if (!movedX && !movedY) return;
+    panRef2.current = next;
+    setPan(next);
+    // The dragged thing stays under the pointer: the pointer has not moved, but
+    // the world beneath it has, so the drag delta takes up exactly that much.
+    setDrag(d => (d ? { ...d, dx: d.dx + movedX, dy: d.dy + movedY, moved: true } : d));
+    setGhostDrag(g => (g ? { ...g, dx: g.dx + movedX, dy: g.dy + movedY, moved: true } : g));
+  };
+
+  function edgePush(clientX: number, clientY: number) {
+    const vp = viewportRef.current;
+    if (!vp) return;
+    const r = vp.getBoundingClientRect();
+    const ramp = (over: number) => Math.min(1, over / EDGE_BAND) * EDGE_SPEED;
+    let vx = 0, vy = 0;
+    if (clientX > r.right - EDGE_BAND) vx = ramp(clientX - (r.right - EDGE_BAND));
+    else if (clientX < r.left + EDGE_BAND) vx = -ramp(r.left + EDGE_BAND - clientX);
+    if (clientY > r.bottom - EDGE_BAND) vy = ramp(clientY - (r.bottom - EDGE_BAND));
+    else if (clientY < r.top + EDGE_BAND) vy = -ramp(r.top + EDGE_BAND - clientY);
+    if (vx < 0 && !sideAllowed(projectBoard.expand, 'left')) vx = 0;
+    if (vy < 0 && !sideAllowed(projectBoard.expand, 'top')) vy = 0;
+    edgeVel.current = { vx, vy };
+    if (!vx && !vy) { stopEdgePush(); return; }
+    if (edgeTimer.current === undefined) {
+      edgeTimer.current = window.setInterval(() => edgeTickRef.current(), 16);
+    }
+  }
+
+  function stopEdgePush() {
+    if (edgeTimer.current !== undefined) {
+      clearInterval(edgeTimer.current);
+      edgeTimer.current = undefined;
+    }
+    edgeVel.current = { vx: 0, vy: 0 };
+  }
+
+  // A pointer lost mid-drag (a switched tab, a workspace change) must not leave
+  // the board sliding on its own.
+  useEffect(() => () => {
+    if (edgeTimer.current !== undefined) clearInterval(edgeTimer.current);
+  }, []);
 
   /**
    * Where a dropped node is allowed to SETTLE.
@@ -1935,6 +2220,10 @@ export function GeneralJobsPage() {
 
   function onJobPointerUp(e: React.PointerEvent, job: Apartment) {
     setGuides([]);
+    stopEdgePush();
+    // A rub-out that began on this tile ends here if the canvas never took the
+    // capture; leaving the flag up would erase on the next pointer move.
+    erasing.current = false;
     if (panRef.current && panFromJob.current) {
       // A press that never moved is a click, so the job still opens.
       const moved = Math.abs(e.clientX - panRef.current.px) > 4
@@ -2047,6 +2336,7 @@ export function GeneralJobsPage() {
     if (arrowFrom) { e.stopPropagation(); finishArrow(el.id); return; }
     if ((e.target as HTMLElement).closest('[data-el-action]')) return;
     if (drawMode) { startStrokeAt(e); return; }
+    if (eraseMode) { startEraseAt(e); return; }
     e.stopPropagation();
     setCtxMenu(null); setColorPicker(null);
 
@@ -2074,22 +2364,54 @@ export function GeneralJobsPage() {
   function onElPointerMove(e: React.PointerEvent) {
     if (!drag || drag.kind !== 'element') return;
     const w0 = toWorld(e.clientX, e.clientY);
-    const dx = w0.x - drag.grabX;
-    const dy = w0.y - drag.grabY;
+    let dx = w0.x - drag.grabX;
+    let dy = w0.y - drag.grabY;
     const moved = drag.moved || Math.abs(dx) > 4 || Math.abs(dy) > 4;
-    setDrag({ ...drag, dx, dy, moved });
 
     // Show where a piece of clip art would land, so the drop is decided before
     // you let go rather than found out afterwards.
-    if (moved && drag.ids.length === 1) {
-      const el = canvasElements.find(x => x.id === drag.ids[0]);
-      if (el?.type === 'clipart') {
-        const host = hostAt(w0.x, w0.y, el.id);
-        setAttachHint(host ? { hostId: host.id, anchor: nearestAnchor(host, w0.x, w0.y) } : null);
-        return;
-      }
+    const only = drag.ids.length === 1
+      ? canvasElements.find(x => x.id === drag.ids[0])
+      : undefined;
+    let host: HostBox | null = null;
+    if (moved && only?.type === 'clipart') {
+      host = hostAt(w0.x, w0.y, only.id);
+      setAttachHint(host ? { hostId: host.id, anchor: nearestAnchor(host, w0.x, w0.y) } : null);
+    } else if (attachHint) {
+      setAttachHint(null);
     }
-    if (attachHint) setAttachHint(null);
+
+    /**
+     * The same lining-up the tiles get, for every other kind of thing on the
+     * board — a note, a heading, a widget, a group, a drawing.
+     *
+     * Skipped while a piece of clip art is over something it would stick to:
+     * there the answer is the anchor it is about to land on, and a magnet
+     * pulling it a few pixels sideways would only fight that.
+     */
+    if (only && !host) {
+      const st = drag.starts.get(only.id);
+      const box = { x: (st?.x ?? only.x) + dx, y: (st?.y ?? only.y) + dy, w: only.w, h: only.h };
+      const snapped = snapMoving(box, new Set(drag.ids));
+      dx += snapped.x - box.x;
+      dy += snapped.y - box.y;
+      setGuides(snapped.guides);
+    }
+
+    if (moved) edgePush(e.clientX, e.clientY); else stopEdgePush();
+
+    // Pressed against a locked edge, exactly as a tile is — a note pushed into
+    // the corner asks for room on the same terms.
+    let atEdge = false;
+    drag.ids.forEach(id => {
+      const st = drag.starts.get(id);
+      if (st && edgePushed(st.x + dx, st.y + dy)) atEdge = true;
+    });
+
+    setDrag({
+      ...drag, dx, dy, moved,
+      edgeSince: atEdge ? (drag.edgeSince ?? Date.now()) : null,
+    });
   }
 
   /** The host under a world point, if any — used to decide an attach or arrow. */
@@ -2106,6 +2428,9 @@ export function GeneralJobsPage() {
   }
 
   function onElPointerUp(el: CanvasElement, e?: React.PointerEvent) {
+    setGuides([]);
+    stopEdgePush();
+    erasing.current = false;
     if (!drag || drag.kind !== 'element') return;
 
     // Clip art dropped on top of something STICKS to it, and from then on has
@@ -2144,10 +2469,27 @@ export function GeneralJobsPage() {
     }
 
     if (drag.moved) {
+      // The same question a tile raises: pushed into a locked corner and held
+      // there, the board offers to make room rather than doing it silently.
+      let pushed: Side | null = null;
+      drag.ids.forEach(id => {
+        const st = drag.starts.get(id);
+        if (!st) return;
+        const side = edgePushed(Math.round(st.x + drag.dx), Math.round(st.y + drag.dy));
+        if (side && !sideAllowed(projectBoard.expand, side)) pushed = pushed ?? side;
+      });
+      if (pushed && drag.edgeSince != null && Date.now() - drag.edgeSince >= 350) setAskRoom(pushed);
+
       drag.ids.forEach(id => {
         const st = drag.starts.get(id)!;
         const settled = settleDrop(st.x + drag.dx, st.y + drag.dy);
-        updateCanvasElement(id, settled);
+        const node = canvasElements.find(n => n.id === id);
+        // A drawing carries its polyline with it — the points ARE the ink, so
+        // moving the node without them would leave the drawing behind. Still
+        // one record holding one path; only its coordinates change.
+        updateCanvasElement(id, node && isDrawingNode(node)
+          ? { ...settled, points: relaidPoints(node, { ...settled, w: node.w, h: node.h }) }
+          : settled);
       });
     } else if (el.type === 'bin' && el.binKind && drag.ids.length === 1 && drag.ids[0] === el.id) {
       // A press that never became a drag is a click, so the bin opens. Deciding
@@ -2179,9 +2521,32 @@ export function GeneralJobsPage() {
   function minSize(el: CanvasElement): { w: number; h: number } {
     if (el.type === 'clipart') return { w: 24, h: 24 };
     if (el.type === 'title') return { w: 80, h: 28 };
+    // A drawing can honestly be a short flick or a straight line, so its floor
+    // is the smallest box that can still be grabbed rather than a card's.
+    if (el.type === 'stroke') return { w: 12, h: 12 };
     if (el.type === 'voice' || el.type === 'note') return { w: 110, h: 56 };
     if (el.type === 'widget') return { w: 120, h: 64 };
     return { w: 120, h: 80 };
+  }
+
+  /**
+   * A drawing's polyline, re-laid into a new box.
+   *
+   * Called once when a move or a resize lands — never per frame, and never one
+   * record per point. While the gesture is live the node scales the SAME path
+   * with its viewBox, so this only makes the stored coordinates agree with
+   * where the drawing now is, which is what the overview, the export and the
+   * wallboard all read.
+   */
+  function relaidPoints(el: CanvasElement, box: { x: number; y: number; w: number; h: number }): string | undefined {
+    const pts = strokePoints(el);
+    if (pts.length < 2) return el.points;
+    const b = pointsBounds(pts);
+    const kx = box.w / b.w, ky = box.h / b.h;
+    return fmtPoints(pts.map(p => ({
+      x: box.x + (p.x - b.x) * kx,
+      y: box.y + (p.y - b.y) * ky,
+    })));
   }
 
   function onResizePointerDown(e: React.PointerEvent, el: CanvasElement) {
@@ -2192,31 +2557,67 @@ export function GeneralJobsPage() {
 
   function onResizePointerMove(e: React.PointerEvent) {
     if (!resize) return;
+    const el = canvasElements.find(x => x.id === resize.id);
+    const m = el ? minSize(el) : { w: 120, h: 80 };
     // Local only. Writing to the store here serialised the entire project to
     // localStorage on every pointer frame; the commit happens on pointerup.
     // Divided by zoom, or the corner would run away from the cursor at any
     // zoom but 100% — the same trap the tile drag fell into.
-    setResize({
-      ...resize,
-      dw: (e.clientX - resize.startPX) / zoom,
-      dh: (e.clientY - resize.startPY) / zoom,
-    });
+    let w = Math.max(m.w, resize.startW + (e.clientX - resize.startPX) / zoom);
+    let h = Math.max(m.h, resize.startH + (e.clientY - resize.startPY) / zoom);
+
+    /**
+     * A resize lines up with its neighbours too, which is the half of this that
+     * was missing: dragging a note's corner out to the width of the one beside
+     * it was eyework. The corner being placed is the FAR one, so the near one
+     * has to stay exactly where it is — `snapResize` is written that way.
+     */
+    if (el) {
+      const rawW = w, rawH = h;
+      const snapped = snapResize(
+        { x: el.x, y: el.y, w, h },
+        snapTargetsRef.current(new Set([el.id])),
+        SNAP_REACH / Math.max(0.2, zoom),
+        snapOn ? GAP : 0,
+      );
+      w = Math.max(m.w, snapped.w);
+      h = Math.max(m.h, snapped.h);
+      // The grid has no partner to draw a line to, so it draws one against the
+      // edge it just moved — the same rule a move follows.
+      const lines = [...snapped.guides];
+      const REACH = 70;
+      if (snapOn && !lines.some(g => g.axis === 'x') && Math.abs(w - rawW) > 0.01) {
+        lines.push({ axis: 'x', at: el.x + w, from: el.y - REACH, to: el.y + h + REACH });
+      }
+      if (snapOn && !lines.some(g => g.axis === 'y') && Math.abs(h - rawH) > 0.01) {
+        lines.push({ axis: 'y', at: el.y + h, from: el.x - REACH, to: el.x + w + REACH });
+      }
+      setGuides(lines);
+    }
+
+    setResize({ ...resize, dw: w - resize.startW, dh: h - resize.startH });
   }
 
   function onResizePointerUp() {
+    setGuides([]);
     if (resize && (resize.dw !== 0 || resize.dh !== 0)) {
       const el = canvasElements.find(e => e.id === resize.id);
       const m = el ? minSize(el) : { w: 120, h: 80 };
-      updateCanvasElement(resize.id, {
+      const box = {
+        x: el?.x ?? 0, y: el?.y ?? 0,
         w: Math.max(m.w, resize.startW + resize.dw),
         h: Math.max(m.h, resize.startH + resize.dh),
-      });
+      };
+      updateCanvasElement(resize.id, el && isDrawingNode(el)
+        ? { w: box.w, h: box.h, points: relaidPoints(el, box) }
+        : { w: box.w, h: box.h });
     }
     setResize(null);
   }
 
   // ── Lasso + freehand drawing ──────────────────────────────────────
   const drawMode = tool === 'pen' || tool === 'highlighter';
+  const eraseMode = eraser.on;
 
   /** Begins a freehand stroke at a pointer position, whatever it landed on. */
   function startStrokeAt(e: React.PointerEvent) {
@@ -2224,6 +2625,64 @@ export function GeneralJobsPage() {
     setCtxMenu(null); setColorPicker(null);
     setDrawing({ pts: [{ x, y }], marker: tool === 'highlighter' });
     canvasRef.current?.setPointerCapture(e.pointerId);
+  }
+
+  /**
+   * Rubbing out, from wherever the press landed — over a tile included, exactly
+   * as the pen draws over one.
+   */
+  function startEraseAt(e: React.PointerEvent) {
+    setCtxMenu(null); setColorPicker(null);
+    erasing.current = true;
+    canvasRef.current?.setPointerCapture(e.pointerId);
+    eraseAt(e.clientX, e.clientY);
+  }
+
+  /**
+   * One pass of the eraser at a screen point.
+   *
+   * `whole` lifts any mark it touches. Otherwise the stroke is CUT: the points
+   * inside the eraser go, and each run that survives either side becomes a
+   * stroke of its own — still one record per stroke, never one per point.
+   * A run of a single point is dropped, because a polyline of one draws
+   * nothing and would only be an invisible thing to trip over later.
+   */
+  function eraseAt(clientX: number, clientY: number) {
+    const p = toWorld(clientX, clientY);
+    const r = eraser.width / 2;
+    canvasElements.forEach(el => {
+      if (el.type !== 'stroke' || !el.points) return;
+      if ((el.board ?? '') !== (boardRef.current ?? '')) return;
+      const reach = r + (el.strokeWidth ?? 3) / 2;
+      // Cheap rejection first: most of the board is nowhere near the pointer.
+      if (p.x < el.x - reach || p.x > el.x + el.w + reach
+        || p.y < el.y - reach || p.y > el.y + el.h + reach) return;
+
+      const pts = strokePoints(el);
+      if (pts.length < 2) return;
+      const hitsSegment = pts.some((pt, i) =>
+        i > 0 && distToSegment(p.x, p.y, pts[i - 1].x, pts[i - 1].y, pt.x, pt.y) <= reach);
+      if (!hitsSegment) return;
+
+      if (eraser.whole) { deleteCanvasElement(el.id); return; }
+
+      const runs: { x: number; y: number }[][] = [];
+      let run: { x: number; y: number }[] = [];
+      pts.forEach(pt => {
+        if (Math.hypot(pt.x - p.x, pt.y - p.y) <= reach) {
+          if (run.length) { runs.push(run); run = []; }
+        } else {
+          run.push(pt);
+        }
+      });
+      if (run.length) runs.push(run);
+
+      deleteCanvasElement(el.id);
+      runs.filter(rn => rn.length > 1).forEach(rn => {
+        const box = pointsBounds(rn);
+        addCanvasElement({ ...el, id: genId('CE'), ...box, points: fmtPoints(rn) });
+      });
+    });
   }
 
   /**
@@ -2242,8 +2701,9 @@ export function GeneralJobsPage() {
     setCtxMenu(null); setColorPicker(null);
     const { x, y } = toWorld(e.clientX, e.clientY);
 
-    // Pen and highlighter take the gesture outright while they are armed.
+    // Pen, highlighter and eraser take the gesture outright while armed.
     if (drawMode) { startStrokeAt(e); return; }
+    if (eraseMode) { startEraseAt(e); return; }
 
     setSelectedJobIds(new Set()); setSelectedElIds(new Set());
 
@@ -2268,6 +2728,7 @@ export function GeneralJobsPage() {
 
   function onCanvasPointerMove(e: React.PointerEvent) {
     if (zoomingWithButton.current) return;
+    if (erasing.current) { eraseAt(e.clientX, e.clientY); return; }
     if (panRef.current) {
       const st = panRef.current;
       setPan(clampPanRef.current({ x: st.ox + (e.clientX - st.px), y: st.oy + (e.clientY - st.py) }));
@@ -2291,22 +2752,41 @@ export function GeneralJobsPage() {
   }
 
   function onCanvasPointerUp() {
+    setGuides([]);
+    stopEdgePush();
+    if (erasing.current) { erasing.current = false; return; }
     if (panRef.current) { panRef.current = null; setPanning(false); return; }
     if (drawing) {
       // One record per stroke — never one per point, which would flood the store.
       if (drawing.pts.length > 1) {
-        const xs = drawing.pts.map(p => p.x), ys = drawing.pts.map(p => p.y);
+        const box = pointsBounds(drawing.pts);
+        /**
+         * A drawing that overlaps nothing becomes a thing in its own right.
+         *
+         * Ink laid ACROSS a tile or a note is annotation — it belongs to what it
+         * is drawn on and must not turn into a box sitting on top of it. Ink in
+         * clear space is a drawing somebody made: an arrow between two columns,
+         * a ring round a group. That one gets to be moved, resized and removed
+         * like everything else on the board.
+         *
+         * Other DRAWINGS are not counted as something to overlap: two strokes
+         * that cross are how anybody draws an X, and refusing the second one
+         * would make the pair behave differently from either alone.
+         */
+        const clear = !snapTargetsRef.current(new Set<string>(), true).some(t =>
+          box.x < t.x + t.w && box.x + box.w > t.x && box.y < t.y + t.h && box.y + box.h > t.y);
         addCanvasElement({
           id: genId('CE'),
           type: 'stroke',
-          x: Math.min(...xs), y: Math.min(...ys),
-          w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys),
+          ...(boardRef.current ? { board: boardRef.current } : {}),
+          ...box,
           text: '',
           color: drawing.marker ? markStyle.color : penStyle.color,
-          points: drawing.pts.map(p => `${Math.round(p.x)},${Math.round(p.y)}`).join(' '),
+          points: fmtPoints(drawing.pts),
           strokeWidth: drawing.marker ? markStyle.width : penStyle.width,
           nib: drawing.marker ? markStyle.nib : penStyle.nib,
           ...(drawing.marker ? { art: 'marker' as const } : {}),
+          ...(clear ? { data: { own: true } } : {}),
         });
       }
       setDrawing(null);
@@ -2496,7 +2976,11 @@ export function GeneralJobsPage() {
     if (!st) return;
     setPan(clampPanRef.current({ x: st.ox + (e.clientX - st.px), y: st.oy + (e.clientY - st.py) }));
   }
-  function onViewportPointerUp() { panRef.current = null; setPanning(false); }
+  function onViewportPointerUp() {
+    panRef.current = null;
+    setPanning(false);
+    stopEdgePush();
+  }
 
   /**
    * Fit what is actually on the board.
@@ -2534,7 +3018,9 @@ export function GeneralJobsPage() {
       x1 = Math.max(x1, p.x + TILE_W); y1 = Math.max(y1, p.y + TILE_H);
     });
     canvasElements.forEach(el => {
-      if (el.type === 'stroke') return;
+      // Loose ink has no box worth fitting to; a drawing that became a node
+      // does, and leaving it out meant Fit could scroll one off the screen.
+      if (el.type === 'stroke' && !isDrawingNode(el)) return;
       x0 = Math.min(x0, el.x); y0 = Math.min(y0, el.y);
       x1 = Math.max(x1, el.x + el.w); y1 = Math.max(y1, el.y + el.h);
     });
@@ -2703,7 +3189,7 @@ export function GeneralJobsPage() {
     // Nodes filed inside a group, and art stuck to something, have no position
     // on THIS board — counting them stretched the surface to fit coordinates
     // that are never drawn here.
-    if (el.board || el.attachedTo || el.type === 'stroke') return;
+    if (el.board || el.attachedTo || (el.type === 'stroke' && !isDrawingNode(el))) return;
     contentX = Math.max(contentX, el.x + el.w);
     contentY = Math.max(contentY, el.y + el.h);
   });
@@ -2967,7 +3453,7 @@ export function GeneralJobsPage() {
           // node's own class flips it to a grab, since a drag there moves the
           // tile — the cursor says which of the two you are about to get.
           cursor: panning ? 'grabbing'
-            : drawMode || arrowFrom ? 'crosshair'
+            : drawMode || eraseMode || arrowFrom ? 'crosshair'
             : 'grab',
           touchAction: 'none',
         }}
@@ -3010,10 +3496,32 @@ export function GeneralJobsPage() {
           </div>
         )}
 
+        {/* An armed mode says so. The pen and the highlighter light up on the
+            rail; the eraser has no button of its own, so this is where it
+            shows — and it is the way back out of the mode as well as Escape. */}
+        {eraseMode && (
+          <button
+            onClick={() => setEraser(v => ({ ...v, on: false }))}
+            className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1.5
+                       px-3 py-1.5 rounded-full text-[11.5px] font-bold shadow-lg"
+            style={{ backgroundColor: '#1e3a5f', color: '#fff' }}>
+            <Eraser size={13} />
+            {eraser.whole ? 'Eraser — whole marks' : 'Eraser — rub out'} · click here or Esc to stop
+          </button>
+        )}
+
         {boardSettingsOpen && (
-          <div className="absolute right-[86px] z-40 w-[236px] bg-white border border-gray-200 rounded-xl shadow-lg p-3"
+          <MovablePanel
+            id="board-settings"
+            title="board settings"
+            onClose={() => setBoardSettingsOpen(false)}
+            className="absolute right-[86px] z-40 w-[236px] bg-white border border-gray-200 rounded-xl shadow-lg p-3"
             style={{ top: showControls ? 236 : 12 }}>
-            <div className="text-[10px] font-extrabold text-gray-700 mb-2 tracking-wide">BOARD SETTINGS</div>
+            <div className="flex items-center gap-2 mb-2 pl-4">
+              <span className="text-[10px] font-extrabold text-gray-700 tracking-wide">BOARD SETTINGS</span>
+              <button onClick={() => setBoardSettingsOpen(false)}
+                className="ml-auto text-gray-300 hover:text-gray-500"><X size={13} /></button>
+            </div>
 
             <div className="text-[9.5px] font-bold text-gray-500 mb-1">Theme</div>
             <div className="grid grid-cols-2 gap-1 mb-3 max-h-[200px] overflow-y-auto">
@@ -3032,12 +3540,19 @@ export function GeneralJobsPage() {
               ))}
             </div>
 
-            <label className="flex items-center gap-2 text-[10px] text-gray-600 font-semibold mb-2">
+            {/* Lining up with what is already there is always on and draws its
+                own lines. This is the extra: a 22px lattice to land on when
+                there is nothing nearby to line up with. */}
+            <label className="flex items-center gap-2 text-[10px] text-gray-600 font-semibold mb-0.5">
               <input type="checkbox" className="rounded"
                 checked={projectBoard.snapToGrid ?? false}
                 onChange={e => setBoardSetting('snapToGrid', e.target.checked)} />
-              Snap to grid
+              Snap to grid as well
             </label>
+            <p className="text-[9px] text-gray-400 leading-snug mb-2">
+              Things always line up with their neighbours, and the lines show why. This adds the
+              22px grid for when there is nothing beside them.
+            </p>
 
             {/* Per machine on purpose — a synced default would push one
                 person's screen onto everybody else's monitor. */}
@@ -3105,7 +3620,7 @@ export function GeneralJobsPage() {
               className="w-full flex items-center gap-1.5 py-1.5 rounded-lg text-[10px] font-bold text-gray-600 border border-gray-200 hover:bg-gray-50 justify-center">
               <History size={12} /> Layout history
             </button>
-          </div>
+          </MovablePanel>
         )}
 
         {/* Board layout history.
@@ -3113,9 +3628,13 @@ export function GeneralJobsPage() {
             restored — so pressing Restore can never be a surprise, and can
             never bring back or remove a job. */}
         {layoutPanel && (
-          <div className="absolute right-[86px] z-40 w-[252px] bg-white border border-gray-200 rounded-xl shadow-lg p-3"
+          <MovablePanel
+            id="layout-history"
+            title="layout history"
+            onClose={() => setLayoutPanel(false)}
+            className="absolute right-[86px] z-40 w-[252px] bg-white border border-gray-200 rounded-xl shadow-lg p-3"
             style={{ top: showControls ? 236 : 12, maxHeight: '70%', overflowY: 'auto' }}>
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-2 pl-4">
               <span className="text-[10px] font-extrabold text-gray-700 tracking-wide">LAYOUT HISTORY</span>
               <button onClick={() => setLayoutPanel(false)} className="ml-auto text-gray-300 hover:text-gray-500">
                 <X size={13} />
@@ -3173,7 +3692,7 @@ export function GeneralJobsPage() {
                 </div>
               );
             })}
-          </div>
+          </MovablePanel>
         )}
 
         {/* View-space overlays: pinned titles hold a fixed screen Y, so they must
@@ -3244,7 +3763,11 @@ export function GeneralJobsPage() {
           </div>
         )}
 
-        {/* The lines that explain a snap, while it is happening. */}
+        {/* The lines that explain a snap, while it is happening.
+            Held at a constant SCREEN thickness — a world-space width would be a
+            hairline at 25% and a bar at 300%, and this is a ruler, not part of
+            the drawing. The pale halo is what keeps it readable over a white
+            tile and a dark widget alike. */}
         {guides.length > 0 && (
           <div className="absolute pointer-events-none"
             style={{
@@ -3253,11 +3776,13 @@ export function GeneralJobsPage() {
             }}>
             {guides.map((g, i) => (
               <div key={i} data-snap-guide className="absolute"
-                style={g.axis === 'x'
-                  ? { left: g.at, top: g.from, width: 1 / zoom, height: g.to - g.from,
-                      backgroundColor: '#e11d48' }
-                  : { left: g.from, top: g.at, height: 1 / zoom, width: g.to - g.from,
-                      backgroundColor: '#e11d48' }} />
+                style={{
+                  backgroundColor: '#e11d48',
+                  boxShadow: `0 0 0 ${1 / zoom}px rgba(255,255,255,.75)`,
+                  ...(g.axis === 'x'
+                    ? { left: g.at, top: g.from, width: 1.5 / zoom, height: g.to - g.from }
+                    : { left: g.from, top: g.at, height: 1.5 / zoom, width: g.to - g.from }),
+                }} />
             ))}
           </div>
         )}
@@ -3339,7 +3864,12 @@ export function GeneralJobsPage() {
             {/* ── Canvas nodes ──
                 Strokes and pinned titles are drawn by their own layers, so they
                 are skipped here; everything else is a positioned node. */}
-            <StrokeLayer elements={canvasElements.filter(e => !e.board)} />
+            {/* The ink on THIS board, minus the drawings that are nodes — those
+                draw inside their own node so they can be carried and resized.
+                The filter used to be `!e.board`, which drew the main board's
+                strokes on every named board and would have lost a named board's
+                own the moment strokes started carrying one. */}
+            <StrokeLayer elements={onThisBoard.filter(e => !isDrawingNode(e))} />
             {drawing && drawing.pts.length > 1 && (
               <svg className="absolute inset-0 pointer-events-none z-30" style={{ overflow: 'visible' }}>
                 <polyline
@@ -3391,7 +3921,9 @@ export function GeneralJobsPage() {
 
             {onThisBoard.map(el => {
               if (el.board && el.board !== activeBoardView) return null;   // filed in a group
-              if (el.type === 'stroke') return null;
+              // Ink laid over something stays ink and is drawn by the layer; a
+              // drawing that stands on its own is a node like any other.
+              if (el.type === 'stroke' && !isDrawingNode(el)) return null;
               if (el.type === 'arrow') return null;          // its own layer
               if (el.attachedTo) return null;                // drawn on its host
               if (el.type === 'title' && el.pinned) return null;
@@ -3623,6 +4155,21 @@ export function GeneralJobsPage() {
                   title="A named group with a board of its own">
                   <FolderPlus size={14} className="text-gray-400" /> Add a group
                 </button>
+                {/* The eraser's second door. Its thickness and its two kinds
+                    live with the pen, which is where you are when you are
+                    drawing — but right-clicking the board is where you look
+                    when you are not. */}
+                <button
+                  onClick={() => {
+                    setEraser(v => ({ ...v, on: !v.on }));
+                    setTool('select');
+                    setCtxMenu(null);
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5"
+                  title="Right-click the Pen or Mark button for its thickness">
+                  <Eraser size={14} className="text-gray-400" />
+                  {eraser.on ? 'Put the eraser down' : 'Pick up the eraser'}
+                </button>
                 <div className="h-px bg-gray-100 my-1" />
                 <button
                   disabled={!canCreateFromIntent(clip.kind)}
@@ -3791,12 +4338,17 @@ export function GeneralJobsPage() {
           ? [{ id: 'chisel', label: 'Chisel' }, { id: 'round', label: 'Round' }, { id: 'soft', label: 'Soft' }]
           : [{ id: 'round', label: 'Round' }, { id: 'chisel', label: 'Chisel' },
              { id: 'dashed', label: 'Dashed' }, { id: 'dotted', label: 'Dotted' }];
+        const ERASER_WIDTHS = [14, 26, 44, 70];
         return (
           <>
             <div className="fixed inset-0 z-40" onClick={() => setPenOpts(null)} />
-            <div className="fixed z-50 bg-white rounded-xl shadow-xl border border-gray-100 p-3"
-              style={{ left: Math.min(penOpts.x, window.innerWidth - 220), top: Math.min(penOpts.y, window.innerHeight - 200) }}>
-              <div className="text-[10px] font-extrabold text-gray-700 mb-2 tracking-wide">
+            <MovablePanel
+              id="pen-options"
+              title="the pen options"
+              onClose={() => setPenOpts(null)}
+              className="fixed z-50 bg-white rounded-xl shadow-xl border border-gray-100 p-3 w-[210px]"
+              style={{ left: Math.min(penOpts.x, window.innerWidth - 226), top: Math.min(penOpts.y, window.innerHeight - 340) }}>
+              <div className="text-[10px] font-extrabold text-gray-700 mb-2 tracking-wide pl-4">
                 {isMark ? 'HIGHLIGHTER' : 'PEN'}
               </div>
               <div className="flex gap-1.5 mb-3">
@@ -3831,9 +4383,56 @@ export function GeneralJobsPage() {
                 ))}
               </div>
               <p className="text-[9.5px] text-gray-400 mt-2 leading-snug">
-                Draw anywhere, tiles included. Each stroke is one item you can delete on its own.
+                Draw anywhere, tiles included. A drawing that lands in clear space becomes a thing of
+                its own you can move and resize.
               </p>
-            </div>
+
+              {/*
+                The eraser lives with the pen, because that is where you are
+                when you want it. Two of them, as in the plan editor: rubbing
+                out takes a piece out of a drawing and keeps what is left either
+                side, the whole mark takes the lot. Neither has a colour — an
+                eraser that paints is a pen.
+              */}
+              <div className="h-px bg-gray-100 my-2.5" />
+              <button
+                onClick={() => { setEraser(v => ({ ...v, on: !v.on })); setTool('select'); }}
+                className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[11px] font-bold transition-colors"
+                style={eraser.on
+                  ? { backgroundColor: '#1e3a5f', color: '#fff' }
+                  : { backgroundColor: '#f8fafc', color: '#64748b' }}>
+                <Eraser size={13} /> {eraser.on ? 'Eraser is up — click to put it down' : 'Pick up the eraser'}
+              </button>
+
+              <div className="text-[9.5px] font-bold text-gray-500 mt-2.5 mb-1">Eraser thickness</div>
+              <div className="flex items-center gap-2">
+                {ERASER_WIDTHS.map(w => (
+                  <button key={w} onClick={() => setEraser(v => ({ ...v, width: w, on: true }))}
+                    title={`${w}px across`}
+                    className="flex-1 h-8 rounded-lg flex items-center justify-center transition-colors"
+                    style={{ backgroundColor: eraser.width === w ? 'rgba(30,58,95,.08)' : '#f8fafc' }}>
+                    <span className="rounded-full block border border-gray-300"
+                      style={{ width: Math.min(w / 2.6, 22), height: Math.min(w / 2.6, 22),
+                               backgroundColor: '#fff' }} />
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-2 gap-1 mt-2">
+                {([[false, 'Rub out'], [true, 'Whole mark']] as const).map(([whole, label]) => (
+                  <button key={label} onClick={() => setEraser(v => ({ ...v, whole, on: true }))}
+                    title={whole
+                      ? 'Touch a drawing and the whole of it goes'
+                      : 'Takes a piece out and keeps what is left either side'}
+                    className="px-2 py-1.5 rounded-lg text-[10.5px] font-bold transition-colors"
+                    style={eraser.whole === whole
+                      ? { backgroundColor: '#1e3a5f', color: '#fff' }
+                      : { backgroundColor: '#f8fafc', color: '#64748b' }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </MovablePanel>
           </>
         );
       })()}
@@ -4123,13 +4722,17 @@ export function GeneralJobsPage() {
         return (
           <>
             <div className="fixed inset-0 z-[88]" onClick={() => setArrowStyle(null)} />
-            <div className="fixed z-[89] bg-white rounded-xl shadow-2xl border border-gray-100 p-3"
+            <MovablePanel
+              id="arrow-style"
+              title="the arrow panel"
+              onClose={() => setArrowStyle(null)}
+              className="fixed z-[89] bg-white rounded-xl shadow-2xl border border-gray-100 p-3"
               style={{
                 left: Math.min(arrowStyle.x, window.innerWidth - 250),
                 top: Math.min(arrowStyle.y + 12, window.innerHeight - 230),
                 width: 234,
               }}>
-              <div className="text-[10px] font-extrabold tracking-wide text-gray-400 mb-2">ARROW</div>
+              <div className="text-[10px] font-extrabold tracking-wide text-gray-400 mb-2 pl-4">ARROW</div>
 
               <label className="block text-[11px] font-semibold text-gray-500 mb-1">Thickness</label>
               <div className="flex items-center gap-2 mb-3">
@@ -4164,7 +4767,7 @@ export function GeneralJobsPage() {
                     }} />
                 ))}
               </div>
-            </div>
+            </MovablePanel>
           </>
         );
       })()}
@@ -4172,9 +4775,13 @@ export function GeneralJobsPage() {
       {colorPicker && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setColorPicker(null)} />
-          <div className="fixed z-50 bg-white rounded-xl shadow-xl border border-gray-100 p-3"
+          <MovablePanel
+            id="colour-picker"
+            title="the colour picker"
+            onClose={() => setColorPicker(null)}
+            className="fixed z-50 bg-white rounded-xl shadow-xl border border-gray-100 p-3"
             style={{ left: Math.min(colorPicker.x, window.innerWidth - 200), top: colorPicker.y }}>
-            <p className="text-[11px] font-medium text-gray-500 mb-2">Choose color</p>
+            <p className="text-[11px] font-medium text-gray-500 mb-2 pl-4">Choose color</p>
             <div className="flex flex-wrap gap-2" style={{ width: 168 }}>
               {(colorPicker.kind === 'job' ? TILE_PALETTE : (colorPicker.kind === 'element' ? (() => {
                 const t = canvasElements.find(e => e.id === colorPicker.ids[0])?.type;
@@ -4198,7 +4805,7 @@ export function GeneralJobsPage() {
                 );
               })}
             </div>
-          </div>
+          </MovablePanel>
         </>
       )}
 

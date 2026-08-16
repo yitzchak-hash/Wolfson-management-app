@@ -36,6 +36,34 @@ export function nibDash(nib: StrokeNib | undefined, width: number): string | und
   return undefined;
 }
 
+/**
+ * A drawing that stands on its own, rather than ink laid over something.
+ *
+ * A stroke whose box overlaps nothing is a thing somebody drew — an arrow
+ * between two columns, a circle round a group — and it should behave like every
+ * other thing on the board: pick it up, move it, resize it. A stroke drawn ON a
+ * tile is annotation and keeps the old behaviour, because that is what drawing
+ * on something means.
+ *
+ * The flag lives in the element's own free-form `data` bag, so this needs no new
+ * field on the type and therefore no change to the store, the sync or the
+ * backup. Everything drawn before this stays exactly as it was.
+ */
+export function isDrawingNode(el: CanvasElement): boolean {
+  return el.type === 'stroke' && !!el.data?.own;
+}
+
+/** The polyline, read back out of its stored `"x,y x,y …"` form. */
+export function strokePoints(el: CanvasElement | undefined): { x: number; y: number }[] {
+  if (!el?.points) return [];
+  return el.points.trim().split(/\s+/)
+    .map(p => {
+      const [x, y] = p.split(',').map(Number);
+      return { x, y };
+    })
+    .filter(p => Number.isFinite(p.x) && Number.isFinite(p.y));
+}
+
 // ─── Pinned title ────────────────────────────────────────────────────────────
 
 /**
@@ -437,6 +465,13 @@ export function ClipArtNode({ el, onUse }: { el: CanvasElement; onUse?: (art: st
  * pan and zoom with everything else. One record per stroke — never one per
  * point, which would flood both the store and Firestore.
  */
+/**
+ * Every stroke it is handed, so a surface that has no node for one — the
+ * wallboard, an export — still shows the ink. The editable board hands it the
+ * ink MINUS the drawings that have become nodes of their own, because those
+ * draw inside their node and would otherwise be on the board twice, with the
+ * copy down here failing to follow while the node was moved or resized.
+ */
 export const StrokeLayer = React.memo(function StrokeLayer({ elements }: { elements: CanvasElement[] }) {
   const strokes = elements.filter(el => el.type === 'stroke' && el.points);
   if (strokes.length === 0) return null;
@@ -460,3 +495,44 @@ export const StrokeLayer = React.memo(function StrokeLayer({ elements }: { eleme
     </svg>
   );
 });
+
+/**
+ * The same ink, drawn INSIDE a node so it can be picked up and resized.
+ *
+ * The polyline is still one record holding one world-space path — the viewBox is
+ * the path's own bounding box, so at rest this draws pixel-for-pixel what the
+ * layer above would have drawn, and a resize simply maps that box onto the
+ * node's box. Nothing is rewritten while the gesture is live; the page re-lays
+ * the points into the new box once, on release, so everything downstream (the
+ * overview, the export, the wallboard) keeps reading true coordinates.
+ */
+export function StrokeNode({ el }: { el: CanvasElement }) {
+  const pts = strokePoints(el);
+  if (pts.length < 2) return null;
+  const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+  const x0 = Math.min(...xs), y0 = Math.min(...ys);
+  // A perfectly straight line has no extent on one axis; a zero-width viewBox
+  // is invalid, so it gets one unit to live in.
+  const bw = Math.max(1, Math.max(...xs) - x0);
+  const bh = Math.max(1, Math.max(...ys) - y0);
+  return (
+    <svg
+      className="w-full h-full pointer-events-none"
+      style={{ overflow: 'visible' }}
+      viewBox={`${x0} ${y0} ${bw} ${bh}`}
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <polyline
+        points={el.points}
+        fill="none"
+        stroke={el.color || '#1e3a5f'}
+        strokeWidth={el.strokeWidth ?? 3}
+        strokeLinecap={el.nib === 'chisel' ? 'butt' : 'round'}
+        strokeLinejoin={el.nib === 'chisel' ? 'miter' : 'round'}
+        strokeDasharray={nibDash(el.nib, el.strokeWidth ?? 3)}
+        opacity={el.nib === 'soft' ? 0.32 : el.art === 'marker' ? 0.45 : 1}
+      />
+    </svg>
+  );
+}

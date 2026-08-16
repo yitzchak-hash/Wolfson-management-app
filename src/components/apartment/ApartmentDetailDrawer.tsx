@@ -333,6 +333,13 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     }
   }, [apartment?.id]);
 
+  // The Plan tab is only in the phone's tab row. A window growing past the
+  // breakpoint takes it out of the row, so anyone left standing on it would be
+  // looking at a tab they cannot leave.
+  useEffect(() => {
+    if (!isPhone) setActiveTab(t => (t === 'plan' ? 'details' : t));
+  }, [isPhone]);
+
   if (!apartment) return null;
 
   const detectedPdfId = availablePdfs[selectedPdfIdx]?.id ?? null;
@@ -347,6 +354,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const latestPlanVersion = planVersions[0];
   /** Only split the window when there is actually a plan to put on the right. */
   const planPaneOn = planWanted && !!detectedPdfId;
+  /**
+   * Splitting the window is a DESKTOP arrangement. A phone has no side to put
+   * the plan on — it reaches the same pane through its own Plan tab — so at
+   * 390px the fields keep the whole width.
+   */
+  const planSideOn = planPaneOn && !isPhone;
   const setPlanPaneOn = setPlanWanted;
   const planVersionCount = planVersions.length ? planVersions[0].version : 0;
 
@@ -649,6 +662,154 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     onToast(ui.apartmentUnlinked);
   }
 
+  /**
+   * The plan: its chips, its buttons, the viewer and the punch-list pins.
+   *
+   * ONE piece of markup rendered in two places — beside the fields on a
+   * desktop, and as the body of the phone's Plan tab. The phone tab used to
+   * jump straight into the markup studio, so a phone could reach the plan only
+   * by drawing on it: no file picker, no pins, no Drive row.
+   *
+   * A plain function, deliberately NOT a nested component. A component declared
+   * inside a render body is a new type on every render, so React would unmount
+   * the iframe and re-fetch the whole PDF from Drive every time anything else
+   * in the drawer changed.
+   */
+  function planPane(variant: 'side' | 'tab') {
+    const asTab = variant === 'tab';
+    const fileId = shownPlanId ?? detectedPdfId;
+
+    // Only the tab can land here — the side pane is gated on there being a
+    // plan. Say which of the three reasons it is, rather than showing a blank.
+    if (!fileId) {
+      return (
+        <div className="h-full flex flex-col items-center justify-center gap-2 p-6 text-center">
+          <BookOpen size={22} className="text-gray-300" />
+          <p className="text-[12.5px] text-gray-500">
+            {fetchingPdf ? 'Looking for plans…'
+              : driveLink ? 'No plans in this folder yet'
+              : 'Link a Drive folder on the Details tab and the plan shows up here.'}
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        className={`flex flex-col min-h-0 ${asTab ? 'h-full' : 'border-l border-gray-200'}`}
+        style={asTab
+          ? { backgroundColor: '#f8fafc' }
+          : { flex: '1 1 54%', backgroundColor: '#f8fafc' }}
+      >
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-200 flex-shrink-0 bg-white flex-wrap">
+          <BookOpen size={13} className="text-[#1e3a5f]" />
+
+          {/* Every plan in the folder as a chip, the one you are looking at
+              filled in — the same row the building projects have. With one
+              plan it stays a plain title; with several, switching between
+              them is one tap instead of a trip to the folder. */}
+          {planSet.plans.length > 1 ? (
+            <span className="flex items-center gap-1 flex-wrap min-w-0">
+              {planSet.plans.map(p => {
+                const on = p.id === fileId;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => {
+                      setShownPlanId(p.id);
+                      // The chosen plan is the one the contractor sees, so
+                      // it is written down rather than held on screen.
+                      if (currentUser) {
+                        updateApartment(apartment!.id,
+                          { plansPdfLink: `https://drive.google.com/file/d/${p.id}/view` },
+                          currentUser);
+                      }
+                    }}
+                    title={p.name}
+                    /* Taller chips on the tab — the side pane is clicked with a
+                       mouse, the tab is tapped with a finger. */
+                    className={`px-2 rounded-full text-[11px] font-bold truncate max-w-[150px]
+                               transition-colors ${asTab ? 'py-1.5' : 'py-0.5'}`}
+                    style={on
+                      ? { backgroundColor: '#1e3a5f', color: '#fff' }
+                      : { backgroundColor: '#eef2f7', color: '#475569' }}
+                  >
+                    {p.name.replace(/\.pdf$/i, '')}
+                  </button>
+                );
+              })}
+            </span>
+          ) : (
+            <span className="text-[12px] font-bold text-gray-800 truncate">
+              {planSet.plans.find(p => p.id === fileId)?.name?.replace(/\.pdf$/i, '')
+                ?? ui.engineeringPlans}
+            </span>
+          )}
+
+          <span className="flex-1" />
+          <Tooltip text="Mark up this plan" side="left">
+            <button onClick={() => setAnnotating('draw')}
+              /* One conditional per property, never a base class the variant
+                 has to out-rank — which of two same-specificity utilities wins
+                 is decided by Tailwind's output order, not by this string. */
+              className={`flex items-center gap-1.5 py-1 rounded-lg text-[11.5px] font-bold text-white
+                          ${asTab ? 'px-3 min-h-[36px]' : 'px-2.5'}`}
+              style={{ backgroundColor: '#4aa8d8' }}>
+              <PenLine size={11} /> Mark up
+              {planVersionCount > 0 && (
+                <span className="px-1 rounded-full text-[9px]" style={{ backgroundColor: 'rgba(255,255,255,.28)' }}>
+                  v{planVersionCount}
+                </span>
+              )}
+            </button>
+          </Tooltip>
+          {/* The PLANS folder, not the job folder — an architect opening
+              the drawing wants the folder the sheets are in. */}
+          {planSet.plansFolderId && (
+            <DriveDesktopPath driveLink={planSet.plansFolderId} onToast={onToast} />
+          )}
+          <Tooltip text="Full screen" side="left">
+            <button onClick={() => setAnnotating('view')}
+              className={`rounded-lg text-gray-400 hover:text-[#1e3a5f] ${asTab ? 'p-2' : 'p-1'}`}>
+              <Maximize2 size={asTab ? 15 : 13} />
+            </button>
+          </Tooltip>
+          {/* Collapsing is a side-pane idea. On the tab there is nothing left
+              behind to bring it back with, so the plan would simply vanish. */}
+          {!asTab && (
+            <Tooltip text="Hide the plan" side="left">
+              <button onClick={() => setPlanPaneOn(false)}
+                className="p-1 rounded-lg text-gray-400 hover:text-gray-700"><ChevronRight size={15} /></button>
+            </Tooltip>
+          )}
+        </div>
+        {/*
+          The viewer and the punch-list pins, in one relatively-positioned
+          box. The overlay was imported and never mounted after the plan
+          pane moved here — so the office had NO way to place a pin, and
+          the portal was showing a punch list nobody could write. The Pin
+          button arms placing; a click on the plan drops a numbered pin;
+          the pin's note and done-state live in the planPins collection the
+          contractor's read-only copy draws from.
+        */}
+        <div className="relative flex-1 min-h-0">
+          <iframe
+            src={drivePreviewUrl(fileId)}
+            title={ui.engineeringPlans}
+            className="w-full h-full"
+            style={{ border: 'none' }}
+            allow="autoplay"
+          />
+          <PlanPinOverlay
+            apartmentId={apartment!.id}
+            apartmentLabel={aptLabel(apartment!)}
+            authorName={currentUser?.name ?? ''}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       {/* Stage-change → assign task modal */}
@@ -815,7 +976,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               // Wide enough to hold the fields AND the plan side by side, but still
               // inset on every edge so it reads as a window over the board rather
               // than as a page you have navigated to.
-              width: planPaneOn ? `min(${560 + planW}px, 96vw)` : 'min(1020px, 94vw)',
+              width: planSideOn ? `min(${560 + planW}px, 96vw)` : 'min(1020px, 94vw)',
               height: 'min(980px, 93vh)',
               transition: 'width 180ms ease',
             }}
@@ -918,7 +1079,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         <div className="flex-1 min-h-0 flex">
         {/* ── Everything written down ── */}
         <div className="flex flex-col min-h-0 min-w-0"
-          style={{ flex: planPaneOn ? '0 0 560px' : '1 1 100%' }}>
+          style={{ flex: planSideOn ? '0 0 560px' : '1 1 100%' }}>
 
         {/* Tabs */}
         <div className="flex border-b border-gray-200 flex-shrink-0 overflow-x-auto">
@@ -930,10 +1091,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
             : (['details', 'tasks', 'stages', 'photos', 'history'] as const)
           ).map(tab => (
             <button key={tab} onClick={() => {
-              // The studio IS the phone's plan view — it is already full-screen
-              // and carries the markup tools and the pins, so a phone opens it
-              // straight rather than showing a preview it cannot draw on.
-              if (tab === 'plan') { setPlanWanted(true); setAnnotating('draw'); return; }
               setActiveTab(tab);
               if (tab === 'photos' && !photosLoaded && apartment?.driveLink && backendConfigured) {
                 setLoadingPhotos(true);
@@ -961,8 +1118,17 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           ))}
         </div>
 
-        {/* Content */}
-        <div className={`flex-1 overflow-y-auto scrollbar-thin ${isPhone ? "p-2.5" : "p-4"}`}>
+        {/* Content. The Plan tab fills the box rather than scrolling inside it:
+            the viewer does its own scrolling, and padding round a construction
+            drawing on a 390px screen is width nobody can read it with. */}
+        <div className={`flex-1 scrollbar-thin ${activeTab === 'plan'
+          ? 'overflow-hidden'
+          : `overflow-y-auto ${isPhone ? 'p-2.5' : 'p-4'}`}`}>
+          {/* The phone's plan view: the same pane the desktop puts beside the
+              fields — chips, pins, Drive path — with Mark up as the way into
+              the studio, rather than the studio being the only way in. */}
+          {activeTab === 'plan' && planPane('tab')}
+
           {activeTab === 'details' && (
             <div className={isPhone ? 'space-y-2.5' : 'space-y-4'}>
               {/*
@@ -1929,109 +2095,14 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         {/* ── The plan, alongside rather than buried in a tab ──
             It is the thing everyone opens a job to look at, so it gets half the
             window and stays visible whichever tab is showing. Collapsible,
-            because on a laptop the fields sometimes want the whole width. */}
-        {planPaneOn && (
-          <div className="flex flex-col min-h-0 border-l border-gray-200"
-            style={{ flex: '1 1 54%', backgroundColor: '#f8fafc' }}>
-            <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-200 flex-shrink-0 bg-white flex-wrap">
-              <BookOpen size={13} className="text-[#1e3a5f]" />
-
-              {/* Every plan in the folder as a chip, the one you are looking at
-                  filled in — the same row the building projects have. With one
-                  plan it stays a plain title; with several, switching between
-                  them is one tap instead of a trip to the folder. */}
-              {planSet.plans.length > 1 ? (
-                <span className="flex items-center gap-1 flex-wrap min-w-0">
-                  {planSet.plans.map(p => {
-                    const on = p.id === (shownPlanId ?? detectedPdfId);
-                    return (
-                      <button
-                        key={p.id}
-                        onClick={() => {
-                          setShownPlanId(p.id);
-                          // The chosen plan is the one the contractor sees, so
-                          // it is written down rather than held on screen.
-                          if (currentUser) {
-                            updateApartment(apartment.id,
-                              { plansPdfLink: `https://drive.google.com/file/d/${p.id}/view` },
-                              currentUser);
-                          }
-                        }}
-                        title={p.name}
-                        className="px-2 py-0.5 rounded-full text-[11px] font-bold truncate max-w-[150px]
-                                   transition-colors"
-                        style={on
-                          ? { backgroundColor: '#1e3a5f', color: '#fff' }
-                          : { backgroundColor: '#eef2f7', color: '#475569' }}
-                      >
-                        {p.name.replace(/\.pdf$/i, '')}
-                      </button>
-                    );
-                  })}
-                </span>
-              ) : (
-                <span className="text-[12px] font-bold text-gray-800 truncate">
-                  {planSet.plans.find(p => p.id === (shownPlanId ?? detectedPdfId))?.name?.replace(/\.pdf$/i, '')
-                    ?? ui.engineeringPlans}
-                </span>
-              )}
-
-              <span className="flex-1" />
-              <Tooltip text="Mark up this plan" side="left">
-                <button onClick={() => setAnnotating('draw')}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11.5px] font-bold text-white"
-                  style={{ backgroundColor: '#4aa8d8' }}>
-                  <PenLine size={11} /> Mark up
-                  {planVersionCount > 0 && (
-                    <span className="px-1 rounded-full text-[9px]" style={{ backgroundColor: 'rgba(255,255,255,.28)' }}>
-                      v{planVersionCount}
-                    </span>
-                  )}
-                </button>
-              </Tooltip>
-              {/* The PLANS folder, not the job folder — an architect opening
-                  the drawing wants the folder the sheets are in. */}
-              {planSet.plansFolderId && (
-                <DriveDesktopPath driveLink={planSet.plansFolderId} onToast={onToast} />
-              )}
-              <Tooltip text="Full screen" side="left">
-                <button onClick={() => setAnnotating('view')}
-                  className="p-1 rounded-lg text-gray-400 hover:text-[#1e3a5f]"><Maximize2 size={13} /></button>
-              </Tooltip>
-              <Tooltip text="Hide the plan" side="left">
-                <button onClick={() => setPlanPaneOn(false)}
-                  className="p-1 rounded-lg text-gray-400 hover:text-gray-700"><ChevronRight size={15} /></button>
-              </Tooltip>
-            </div>
-            {/*
-              The viewer and the punch-list pins, in one relatively-positioned
-              box. The overlay was imported and never mounted after the plan
-              pane moved here — so the office had NO way to place a pin, and
-              the portal was showing a punch list nobody could write. The Pin
-              button arms placing; a click on the plan drops a numbered pin;
-              the pin's note and done-state live in the planPins collection the
-              contractor's read-only copy draws from.
-            */}
-            <div className="relative flex-1 min-h-0">
-              <iframe
-                src={drivePreviewUrl(shownPlanId ?? detectedPdfId!)}
-                title={ui.engineeringPlans}
-                className="w-full h-full"
-                style={{ border: 'none' }}
-                allow="autoplay"
-              />
-              <PlanPinOverlay
-                apartmentId={apartment.id}
-                apartmentLabel={aptLabel(apartment)}
-                authorName={currentUser?.name ?? ''}
-              />
-            </div>
-          </div>
-        )}
+            because on a laptop the fields sometimes want the whole width.
+            The phone renders the very same pane inside its Plan tab instead. */}
+        {planSideOn && planPane('side')}
         </div>
 
-        {/* Bring it back. */}
-        {!planPaneOn && detectedPdfId && (
+        {/* Bring it back — the side pane only. On a phone the plan was never
+            put away, it lives in its own tab. */}
+        {!isPhone && !planPaneOn && detectedPdfId && (
           <button
             onClick={() => setPlanPaneOn(true)}
             title="Show the plan beside the details"

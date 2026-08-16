@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { LogOut, User, Sun, Moon, AlertTriangle, Loader2, CheckCircle2, Search, CalendarDays, Settings } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { LogOut, User, Sun, Moon, AlertTriangle, Loader2, CheckCircle2, Search, CalendarDays, Settings,
+         ChevronDown, Check, GripVertical } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../data/store';
+import { Project } from '../../types';
 import { Tooltip } from '../ui/Tooltip';
 import { ActivityTicker } from '../ui/ActivityTicker';
 import { WhatsNewButton } from '../ui/WhatsNew';
@@ -24,40 +26,101 @@ function CloudSyncBadge({ light }: { light: boolean }) {
 }
 
 
+/**
+ * The company mark.
+ *
+ * On a phone it is decoration standing beside a control, so it gives up its
+ * width FIRST — a high shrink factor against the picker's near-zero one — down
+ * to a floor where it is still legible. Measured at 360/390/414: with the cap
+ * at 84 the header stops being over-constrained at all, which is what stopped
+ * the workspace name losing its last letters to a fraction of a pixel.
+ */
 function TzviAirLogo() {
   return (
     <img
       src="/tzviair-logo.png"
       alt="TzviAir"
-      className="flex-shrink-0 h-8 md:h-14 max-w-[120px] md:max-w-none object-contain"
+      className="flex-shrink-[20] md:flex-shrink-0 min-w-[56px] h-8 md:h-14 max-w-[84px] md:max-w-none object-contain"
       style={{ width: 'auto', display: 'block', filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.18))' }}
     />
   );
 }
 
 
-export function Header() {
-  const { currentUser, logout, lightTheme, setLightTheme, firebaseSyncError, mainUiStrings: s,
-          projects, currentProjectId, setCurrentProject,
-          projectOrder, setProjectOrder } = useStore();
-  /** Which tile is being dragged along the row. */
-  const [dragId, setDragId] = useState<string | null>(null);
+/**
+ * A workspace logo in a fixed SQUARE, never at a fixed height.
+ *
+ * The pictures run from 1.2 to 3.4 times as wide as they are tall, so one
+ * shared height gives them wildly different widths — which is what left the old
+ * header row unable to fit on a phone and squeezing every logo to a sliver.
+ * A square with `object-contain` letterboxes whichever way the picture leans
+ * and always takes exactly the same room.
+ */
+function WorkspaceLogo({ project, light, className = 'flex' }: { project: Project; light: boolean; className?: string }) {
+  return (
+    <span
+      className={`${className} flex-shrink-0 w-7 h-7 rounded-lg items-center justify-center overflow-hidden`}
+      style={{
+        backgroundColor: light ? `${project.color}1f` : 'rgba(255,255,255,0.10)',
+        border: `1px solid ${project.color}59`,
+      }}
+    >
+      <img src={project.logoPath} alt="" draggable={false} className="max-w-full max-h-full object-contain" />
+    </span>
+  );
+}
+
+
+/**
+ * Which workspace you are in.
+ *
+ * This was one logo button per project, laid out in a row. A row survives
+ * neither of the two things happening to it: the project builder means there is
+ * no upper bound on how many workspaces there are, and on a 390px phone three
+ * of them plus the company logo already wanted more width than the header had,
+ * so flex shrank the pictures into unreadable slivers. A dropdown is the same
+ * size at three workspaces or thirty, and the name is spelt out rather than
+ * guessed at from a thumbnail.
+ */
+function WorkspacePicker({ light }: { light: boolean }) {
+  const { projects, currentProjectId, setCurrentProject, projectOrder, setProjectOrder,
+          mainUiStrings: s } = useStore();
   const navigate = useNavigate();
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [open, setOpen] = useState(false);
+  /** Which row is being dragged up or down the menu. */
+  const [dragId, setDragId] = useState<string | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
 
   /**
-   * The tiles sit in whatever order the office decided.
+   * The workspaces sit in whatever order the office decided.
    *
    * Any workspace made after the order was last saved falls in at the end
    * rather than disappearing, which is what a naive `sort by index` would do to
    * a project the order has never heard of.
    */
-  const ordered = React.useMemo(() => {
+  const ordered = useMemo(() => {
     if (!projectOrder.length) return projects;
     const rank = new Map(projectOrder.map((id, i) => [id, i]));
     return [...projects].sort((a, b) =>
       (rank.get(a.id) ?? 999) - (rank.get(b.id) ?? 999));
   }, [projects, projectOrder]);
+
+  // Escape, and a press anywhere else, close it. A panel that stays open behind
+  // your next click swallows it — the standing bug CLAUDE.md calls out.
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false); }
+    function onDown(e: PointerEvent) {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('keydown', onKey);
+    // Capture, so a press that another surface stops still closes this.
+    document.addEventListener('pointerdown', onDown, true);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onDown, true);
+    };
+  }, [open]);
 
   function reorder(from: string, to: string) {
     if (from === to) return;
@@ -67,9 +130,121 @@ export function Header() {
   }
 
   function handlePickProject(id: string) {
+    setOpen(false);
     setCurrentProject(id);
     navigate(id === 'general' ? '/jobs' : '/project');
   }
+
+  const active = ordered.find(p => p.id === currentProjectId) ?? ordered[0];
+  if (!active) return null;
+
+  return (
+    // `shrink-[0.05]` against the company mark's 20: both can give way, so the
+    // header can never overflow, but the name only starts losing letters once
+    // the mark has nothing left to give.
+    <div ref={wrapRef} className="relative min-w-0 flex shrink-[0.05] md:shrink">
+      <button
+        onClick={() => setOpen(v => !v)}
+        title={s.switchProject}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="flex items-center gap-1 md:gap-2 min-w-0 max-w-[46vw] md:max-w-none rounded-xl py-1 pl-1.5 pr-1 md:pr-2.5 transition-colors"
+        style={{
+          // The chip itself is washed in the workspace colour, which is what
+          // lets the phone drop the logo square and still say where you are.
+          backgroundColor: `${active.color}${light ? '1f' : '33'}`,
+          border: `1px solid ${active.color}${light ? '66' : 'aa'}`,
+        }}
+      >
+        <WorkspaceLogo project={active} light={light} className="hidden md:flex" />
+        <span
+          className="min-w-0 truncate text-[11.5px] md:text-[13px] font-bold"
+          style={{ color: light ? '#1e3a5f' : '#ffffff' }}
+        >
+          {active.shortName}
+        </span>
+        <ChevronDown
+          size={14}
+          className={`flex-shrink-0 w-3 h-3 md:w-3.5 md:h-3.5 transition-transform ${open ? 'rotate-180' : ''}`}
+          style={{ color: light ? '#6b7280' : 'rgba(255,255,255,0.7)' }}
+        />
+      </button>
+
+      {open && (
+        // Under the header and edge-to-edge on a phone, where there is no room
+        // to hang a 288px panel off a control that already sits a third of the
+        // way across; anchored to the button from `md` up. `start-0` rather than
+        // `left-0` so the panel opens under the button in Hebrew too — and
+        // Tailwind emits `inset-x` BEFORE `start`, so `inset-x-auto` clears the
+        // phone rule without cancelling the anchor.
+        <div
+          role="menu"
+          className="fixed left-2 right-2 top-[58px] z-[70] rounded-2xl overflow-hidden
+                     md:absolute md:inset-x-auto md:start-0 md:top-full md:mt-1.5 md:w-[288px]"
+          style={{
+            backgroundColor: light ? '#ffffff' : '#162d4a',
+            border: light ? '1px solid #e5e7eb' : '1px solid rgba(255,255,255,0.12)',
+            boxShadow: '0 18px 44px -10px rgba(15,23,42,0.45)',
+          }}
+        >
+          <div
+            className="px-3 pt-2.5 pb-1 text-[9.5px] font-extrabold tracking-wide"
+            style={{ color: light ? '#9ca3af' : '#7f9ec2' }}
+          >
+            {s.switchProject}
+          </div>
+
+          <div className="max-h-[min(60vh,420px)] overflow-y-auto pb-1.5">
+            {ordered.map(p => {
+              const on = p.id === currentProjectId;
+              return (
+                <button
+                  key={p.id}
+                  role="menuitemradio"
+                  aria-checked={on}
+                  draggable
+                  onDragStart={() => setDragId(p.id)}
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={() => { if (dragId) reorder(dragId, p.id); setDragId(null); }}
+                  onDragEnd={() => setDragId(null)}
+                  onClick={() => handlePickProject(p.id)}
+                  className={`w-full flex items-stretch gap-2.5 px-2.5 py-2 text-left transition-colors ${
+                    on ? '' : light ? 'hover:bg-gray-50' : 'hover:bg-white/5'}`}
+                  style={{
+                    ...(on ? { backgroundColor: light ? `${p.color}14` : 'rgba(255,255,255,0.07)' } : {}),
+                    opacity: dragId === p.id ? 0.55 : 1,
+                  }}
+                >
+                  {/* The same identity rail the sidebar wears, so a colour means
+                      one workspace everywhere in the app. */}
+                  <span className="w-1 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
+                  <WorkspaceLogo project={p} light={light} />
+                  <span className="min-w-0 flex-1 self-center">
+                    <span className="block text-[13px] font-bold truncate"
+                      style={{ color: light ? '#1e3a5f' : '#ffffff' }}>{p.shortName}</span>
+                    <span className="block text-[10.5px] truncate"
+                      style={{ color: light ? '#9ca3af' : '#8fa9c6' }}>{p.name}</span>
+                  </span>
+                  {on && <Check size={15} className="flex-shrink-0 self-center" style={{ color: p.color }} />}
+                  {/* Drag to reorder is a mouse gesture — HTML5 drag never fires
+                      from a finger — so the grip is not advertised on a phone. */}
+                  <GripVertical size={13} className="hidden md:block flex-shrink-0 self-center"
+                    style={{ color: light ? '#d1d5db' : 'rgba(255,255,255,0.28)' }} />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+export function Header() {
+  const { currentUser, logout, lightTheme, setLightTheme, firebaseSyncError, mainUiStrings: s } = useStore();
+  const navigate = useNavigate();
+  const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -91,37 +266,13 @@ export function Header() {
       style={{ backgroundColor: lightTheme ? '#ffffff' : '#1e3a5f', borderBottom: lightTheme ? '1px solid #e5e7eb' : 'none' }}
     >
       {/* Everything left of the actions has to survive a 390px phone, so the
-          logo shrinks, the divider goes, and the project chips lose their
-          labels — the coloured ring already says which one is active. */}
+          company logo shrinks, the divider goes, and the workspace name inside
+          the picker truncates before anything is pushed off the edge. */}
       <div className="flex items-center gap-2 md:gap-4 min-w-0">
         <TzviAirLogo />
         <div className="hidden md:block w-px h-10" style={{ backgroundColor: lightTheme ? '#e5e7eb' : 'rgba(255,255,255,0.2)' }} />
         <div className="flex items-center gap-1 md:gap-2 min-w-0">
-          {ordered.map(p => (
-            <Tooltip key={p.id} text={p.name}>
-              <button
-                draggable
-                onDragStart={() => setDragId(p.id)}
-                onDragOver={e => e.preventDefault()}
-                onDrop={() => { if (dragId) reorder(dragId, p.id); setDragId(null); }}
-                onDragEnd={() => setDragId(null)}
-                onClick={() => handlePickProject(p.id)}
-                className="rounded-lg p-0.5 transition-all focus:outline-none flex items-center gap-1.5 pr-2 cursor-grab active:cursor-grabbing"
-                style={currentProjectId === p.id
-                  ? { boxShadow: `0 0 0 2px ${p.color}`, opacity: 1,
-                      backgroundColor: lightTheme ? `${p.color}14` : 'rgba(255,255,255,0.08)' }
-                  : { opacity: dragId === p.id ? 0.75 : 0.4 }}
-              >
-                <img src={p.logoPath} alt={p.name} className="h-7 md:h-9 w-auto rounded" style={{ objectFit: 'contain' }} />
-                {currentProjectId === p.id && (
-                  <span className="hidden md:inline text-[11px] font-bold whitespace-nowrap"
-                    style={{ color: lightTheme ? p.color : '#ffffff' }}>
-                    {p.shortName}
-                  </span>
-                )}
-              </button>
-            </Tooltip>
-          ))}
+          <WorkspacePicker light={lightTheme} />
           {currentUser && (
             <>
               <div className="hidden md:block w-px h-8 mx-1" style={{ backgroundColor: lightTheme ? '#e5e7eb' : 'rgba(255,255,255,0.2)' }} />

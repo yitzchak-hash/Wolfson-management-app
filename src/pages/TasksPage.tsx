@@ -316,7 +316,7 @@ export function TasksPage() {
     });
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
+    <div className="p-4 md:p-6 w-full max-w-3xl mx-auto">
       <input
         ref={addFileInputRef}
         type="file"
@@ -339,120 +339,147 @@ export function TasksPage() {
           e.target.value = '';
         }}
       />
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">{s.pageTasks}</h1>
+      {/* The page's own heading is desktop-only. On a phone the bottom bar
+          already carries a lit-up Tasks tab, and the toolbar right under this
+          counts tasks and offers Add Task — a 2xl heading saying the word a
+          third time spent 56px at the top of a page whose whole job is the
+          list underneath it. */}
+      <h1 className="hidden md:block text-2xl font-bold text-gray-900 mb-6">{s.pageTasks}</h1>
 
-      <div className="space-y-4">
+      <div className="space-y-3 md:space-y-4">
         {/* Toolbar */}
-        {/* One row on a phone. At desktop sizes these six controls sit on a line;
+        {/* ONE row on a phone. At desktop sizes these six controls sit on a line;
             at 390px they stacked into three rows and pushed the list itself below
-            the fold on a page whose whole job is the list. */}
-        <div className="flex items-center gap-1.5 md:gap-3 flex-wrap">
-          <select
-            value={filterContractorId}
-            onChange={e => setFilterContractorId(e.target.value)}
-            className="border border-gray-200 rounded-lg px-2 py-1.5 md:px-3 md:py-2 text-[12px] md:text-sm max-w-[42vw] md:max-w-none focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
-          >
-            <option value="">{s.allContractors}</option>
-            {contractors.map(c => (
-              <option key={c.id} value={c.id}>{c.name} ({CAT_LABELS[c.category]})</option>
-            ))}
-          </select>
-
-          <Tooltip text="More filters">
-            <button
-              onClick={() => setShowFilters(v => !v)}
-              className={`flex items-center gap-1 px-2 py-1.5 md:px-3 md:py-2 border rounded-lg text-[12px] md:text-sm font-medium transition-colors ${
-                hasAdvancedFilters ? 'border-[#1e3a5f] bg-[#1e3a5f]/5 text-[#1e3a5f]' : 'border-gray-200 text-gray-500 hover:border-gray-300'
-              }`}
+            the fold on a page whose whole job is the list. They now ride a single
+            horizontal scroller, compact and icon-only, with Add Task pinned
+            OUTSIDE it — the primary action is the one thing that must never turn
+            out to be the bit that scrolled off.
+            From md up the scroller is `display: contents`, so it generates no box
+            at all and the desktop row is exactly the wrapping flex line it has
+            always been. */}
+        <div className="flex items-center gap-1.5 md:gap-3 md:flex-wrap">
+          <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-x-auto md:contents">
+            {/* The select is the one thing on the row that may give up width: it
+                shrinks to the 96px floor before the row starts scrolling, so the
+                buttons beside it never squash into each other. */}
+            <select
+              value={filterContractorId}
+              onChange={e => setFilterContractorId(e.target.value)}
+              className="border border-gray-200 rounded-lg px-2 py-1.5 md:px-3 md:py-2 text-[12px] md:text-sm min-w-[96px] max-w-[40vw] md:max-w-none focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
             >
-              <Filter size={14} />
-              {hasAdvancedFilters ? 'Filtered' : 'Filter'}
-            </button>
-          </Tooltip>
+              <option value="">{s.allContractors}</option>
+              {contractors.map(c => (
+                <option key={c.id} value={c.id}>{c.name} ({CAT_LABELS[c.category]})</option>
+              ))}
+            </select>
 
-          <span className="text-xs text-gray-400 flex-1">
-            {filtered.length} task{filtered.length !== 1 ? 's' : ''} · {filtered.filter(a => a.completedAt).length} done
-          </span>
-
-          {/* A work list somebody can carry. Prints exactly what the filters
-              are showing, so "print the AC jobs due this week" is two clicks. */}
-          <Tooltip text="Print this list">
-            <button
-              onClick={() => {
-                const ok = printTable(
-                  `Tasks — ${projectName}`,
-                  filtered,
-                  [
-                    { header: 'Job', value: a => {
-                      const apt = apartments.find(x => x.id === a.apartmentId);
-                      return apt ? aptLabel(apt) : '—';
-                    } },
-                    { header: 'Task', value: a => a.taskDescription || '—' },
-                    { header: 'Contractor', value: a => contractors.find(c => c.id === a.contractorId)?.name ?? '—' },
-                    { header: 'Stage', html: true, width: '130px', value: a => {
-                      const st = stages.find(x => x.id === a.stageId);
-                      return st ? printDot(st.color, getStageName(st, !!s.isRtl)) : '—';
-                    } },
-                    { header: 'Due', width: '86px', value: a => a.dueDate ? format(parseISO(a.dueDate), 'd MMM yyyy') : '—' },
-                    { header: 'Priority', html: true, width: '72px', value: a =>
-                      a.priority === 'urgent' ? printPill('#fee2e2', '#b91c1c', 'Urgent')
-                      : a.priority === 'low' ? printPill('#f1f5f9', '#64748b', 'Low')
-                      : printPill('#e0f2fe', '#0369a1', 'Normal') },
-                    { header: 'Status', html: true, width: '72px', value: a =>
-                      a.completedAt ? printPill('#dcfce7', '#15803d', 'Done')
-                      : printPill('#fef3c7', '#a16207', 'Open') },
-                  ],
-                  {
-                    landscape: true,
-                    rtl: !!s.isRtl,
-                    subtitle: `${filtered.length} task${filtered.length === 1 ? '' : 's'} · `
-                      + `${filtered.filter(a => a.completedAt).length} done`
-                      + (filterContractorId ? ` · ${contractors.find(c => c.id === filterContractorId)?.name}` : '')
-                      + (hasAdvancedFilters ? ' · extra filters applied' : ''),
-                  },
-                );
-                if (!ok) setToast({ msg: 'Your browser blocked the print window.', type: 'error' });
-              }}
-              className="flex items-center gap-1 px-2 py-1.5 md:px-3 md:py-2 border border-gray-200 text-gray-500 rounded-lg text-[12px] md:text-sm font-medium hover:border-gray-300 hover:text-gray-700 transition-colors"
-            >
-              <Printer size={14} />
-            </button>
-          </Tooltip>
-
-          {/* List / Calendar view toggle */}
-          <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden">
-            <Tooltip text={s.listView}>
+            <Tooltip text="More filters">
               <button
-                onClick={() => setView('list')}
-                className={`flex items-center gap-1 px-2 py-1.5 md:px-3 md:py-2 text-[12px] md:text-sm font-medium transition-colors ${
-                  view === 'list' ? 'bg-[#1e3a5f] text-white' : 'text-gray-500 hover:bg-gray-50'
+                onClick={() => setShowFilters(v => !v)}
+                aria-label="More filters"
+                className={`flex items-center gap-1 px-2 py-1.5 md:px-3 md:py-2 border rounded-lg text-[12px] md:text-sm font-medium transition-colors flex-shrink-0 ${
+                  hasAdvancedFilters ? 'border-[#1e3a5f] bg-[#1e3a5f]/5 text-[#1e3a5f]' : 'border-gray-200 text-gray-500 hover:border-gray-300'
                 }`}
               >
-                <List size={15} />
+                <Filter size={14} />
+                {/* Icon alone on a phone — the navy fill is what says "filtered",
+                    and the word cost 40px on a row that has none to spare. */}
+                <span className="hidden md:inline">{hasAdvancedFilters ? 'Filtered' : 'Filter'}</span>
               </button>
             </Tooltip>
-            <Tooltip text={s.calendarView}>
+
+            {/* Kept, but reduced to a small inline aside rather than a line of
+                its own — it is a footnote to the filters, not a heading. */}
+            <span className="text-[11px] md:text-xs text-gray-400 whitespace-nowrap md:flex-1">
+              {filtered.length} task{filtered.length !== 1 ? 's' : ''} · {filtered.filter(a => a.completedAt).length} done
+            </span>
+
+            {/* A work list somebody can carry. Prints exactly what the filters
+                are showing, so "print the AC jobs due this week" is two clicks. */}
+            <Tooltip text="Print this list">
               <button
-                onClick={() => setView('calendar')}
-                className={`flex items-center gap-1 px-2 py-1.5 md:px-3 md:py-2 text-[12px] md:text-sm font-medium transition-colors ${
-                  view === 'calendar' ? 'bg-[#1e3a5f] text-white' : 'text-gray-500 hover:bg-gray-50'
-                }`}
+                onClick={() => {
+                  const ok = printTable(
+                    `Tasks — ${projectName}`,
+                    filtered,
+                    [
+                      { header: 'Job', value: a => {
+                        const apt = apartments.find(x => x.id === a.apartmentId);
+                        return apt ? aptLabel(apt) : '—';
+                      } },
+                      { header: 'Task', value: a => a.taskDescription || '—' },
+                      { header: 'Contractor', value: a => contractors.find(c => c.id === a.contractorId)?.name ?? '—' },
+                      { header: 'Stage', html: true, width: '130px', value: a => {
+                        const st = stages.find(x => x.id === a.stageId);
+                        return st ? printDot(st.color, getStageName(st, !!s.isRtl)) : '—';
+                      } },
+                      { header: 'Due', width: '86px', value: a => a.dueDate ? format(parseISO(a.dueDate), 'd MMM yyyy') : '—' },
+                      { header: 'Priority', html: true, width: '72px', value: a =>
+                        a.priority === 'urgent' ? printPill('#fee2e2', '#b91c1c', 'Urgent')
+                        : a.priority === 'low' ? printPill('#f1f5f9', '#64748b', 'Low')
+                        : printPill('#e0f2fe', '#0369a1', 'Normal') },
+                      { header: 'Status', html: true, width: '72px', value: a =>
+                        a.completedAt ? printPill('#dcfce7', '#15803d', 'Done')
+                        : printPill('#fef3c7', '#a16207', 'Open') },
+                    ],
+                    {
+                      landscape: true,
+                      rtl: !!s.isRtl,
+                      subtitle: `${filtered.length} task${filtered.length === 1 ? '' : 's'} · `
+                        + `${filtered.filter(a => a.completedAt).length} done`
+                        + (filterContractorId ? ` · ${contractors.find(c => c.id === filterContractorId)?.name}` : '')
+                        + (hasAdvancedFilters ? ' · extra filters applied' : ''),
+                    },
+                  );
+                  if (!ok) setToast({ msg: 'Your browser blocked the print window.', type: 'error' });
+                }}
+                className="flex items-center gap-1 px-2 py-1.5 md:px-3 md:py-2 border border-gray-200 text-gray-500 rounded-lg text-[12px] md:text-sm font-medium hover:border-gray-300 hover:text-gray-700 transition-colors"
               >
-                <CalendarDays size={15} />
+                <Printer size={14} />
               </button>
             </Tooltip>
+
+            {/* List / Calendar view toggle */}
+            <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
+              <Tooltip text={s.listView}>
+                <button
+                  onClick={() => setView('list')}
+                  className={`flex items-center gap-1 px-2 py-1.5 md:px-3 md:py-2 text-[12px] md:text-sm font-medium transition-colors ${
+                    view === 'list' ? 'bg-[#1e3a5f] text-white' : 'text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  <List size={15} />
+                </button>
+              </Tooltip>
+              <Tooltip text={s.calendarView}>
+                <button
+                  onClick={() => setView('calendar')}
+                  className={`flex items-center gap-1 px-2 py-1.5 md:px-3 md:py-2 text-[12px] md:text-sm font-medium transition-colors ${
+                    view === 'calendar' ? 'bg-[#1e3a5f] text-white' : 'text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  <CalendarDays size={15} />
+                </button>
+              </Tooltip>
+            </div>
+
+            {/* Grey and wordless on a phone: two navy buttons side by side both
+                read as "the button", and only one of them is what you came for.
+                The label carries the name from md up; aria-label carries it on a
+                phone, where the Tooltip component is deliberately not rendered. */}
+            <button
+              onClick={() => setShowBulkAdd(true)}
+              aria-label={s.bulkAdd}
+              className="flex items-center gap-1 px-2 py-1.5 md:px-3 md:py-2 border border-gray-200 text-gray-500 md:border-[#1e3a5f] md:text-[#1e3a5f] rounded-lg text-[12px] md:text-sm font-medium md:hover:bg-[#1e3a5f]/5 transition-colors flex-shrink-0"
+            >
+              <Layers size={15} />
+              <span className="hidden md:inline">{s.bulkAdd}</span>
+            </button>
           </div>
 
           <button
-            onClick={() => setShowBulkAdd(true)}
-            className="flex items-center gap-1 px-2 py-1.5 md:px-3 md:py-2 border border-[#1e3a5f] text-[#1e3a5f] rounded-lg text-[12px] md:text-sm font-medium hover:bg-[#1e3a5f]/5 transition-colors"
-          >
-            <Layers size={15} />
-            {s.bulkAdd}
-          </button>
-          <button
             onClick={() => setShowAdd(v => !v)}
-            className="flex items-center gap-1 px-2.5 py-1.5 md:px-3 md:py-2 bg-[#1e3a5f] text-white rounded-lg text-[12px] md:text-sm font-medium hover:bg-[#162d4a] transition-colors"
+            className="flex items-center gap-1 px-2.5 py-1.5 md:px-3 md:py-2 bg-[#1e3a5f] text-white rounded-lg text-[12px] md:text-sm font-medium hover:bg-[#162d4a] transition-colors flex-shrink-0"
           >
             <Plus size={15} />
             {s.addTask}

@@ -15,6 +15,7 @@ import { WidgetStore } from '../components/board/WidgetStore';
 import { NodeSettings } from '../components/board/NodeSettings';
 import { WidgetCtx, renderWidget as renderBoardWidget, WIDGET_BY_ID } from '../data/widgets';
 import { printSheet, printEsc } from '../data/printing';
+import { usePhone } from '../data/usePhone';
 
 type ModalKind = 'changes' | 'notes' | 'total' | 'notStarted' | 'overdue' | 'pending' | 'completedToday' | null;
 
@@ -303,7 +304,7 @@ export function DashboardPage() {
     switch (id) {
       case 'apt-stats':
         return (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
             {/* EVERY number opens its list — a figure you cannot look behind
                 reads as a claim, not a fact. */}
             <SummaryCard icon={<Building2 size={20} />} label={s.totalUnits} value={total} color="#1e3a5f"
@@ -331,7 +332,12 @@ export function DashboardPage() {
 
       case 'task-stats':
         return (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          /* Two up on a phone, three across from md. One per row gave a tile
+             the whole 390px for a single figure — the exact complaint. Three
+             tiles over two columns leaves the last one half width, which is
+             what a phone dashboard looks like; stretching it to fill the row
+             would put the biggest tile on the smallest screen. */
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-4">
             <SummaryCard
               icon={<AlertCircle size={20} />}
               label={s.overdueTasks}
@@ -361,36 +367,36 @@ export function DashboardPage() {
 
       case 'stage-progress':
         return (
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h2 className="font-semibold text-gray-800 mb-4">{s.progressByStage}</h2>
-            <div className="space-y-3">
+          <div className="bg-white rounded-xl border border-gray-200 p-3 md:p-5">
+            <h2 className="text-sm md:text-base font-semibold text-gray-800 mb-3 md:mb-4">{s.progressByStage}</h2>
+            <div className="space-y-2.5 md:space-y-3">
               {sortedStages.map(stage => {
                 const count = apartments.filter(a => isCountableApartment(a) && a.currentStageId === stage.id).length;
                 const pct = total > 0 ? Math.round(count / total * 100) : 0;
                 return (
                   <div key={stage.id}>
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: stage.color }} />
-                        <span className="text-sm text-gray-700">{getStageName(stage, s.isRtl)}</span>
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color }} />
+                        <span className="text-xs md:text-sm text-gray-700">{getStageName(stage, s.isRtl)}</span>
                       </div>
-                      <span className="text-sm font-medium text-gray-800">{count} <span className="text-gray-400 font-normal text-xs">({pct}%)</span></span>
+                      <span className="text-xs md:text-sm font-medium text-gray-800 tabular-nums flex-shrink-0">{count} <span className="text-gray-400 font-normal text-[10px] md:text-xs">({pct}%)</span></span>
                     </div>
-                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-1.5 md:h-2 bg-gray-100 rounded-full overflow-hidden">
                       <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: stage.color }} />
                     </div>
                   </div>
                 );
               })}
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-gray-300" />
-                    <span className="text-sm text-gray-500">{s.notStarted}</span>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-gray-300 flex-shrink-0" />
+                    <span className="text-xs md:text-sm text-gray-500">{s.notStarted}</span>
                   </div>
-                  <span className="text-sm font-medium text-gray-500">{notStarted}</span>
+                  <span className="text-xs md:text-sm font-medium text-gray-500 tabular-nums flex-shrink-0">{notStarted}</span>
                 </div>
-                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-1.5 md:h-2 bg-gray-100 rounded-full overflow-hidden">
                   <div className="h-full rounded-full bg-gray-300" style={{ width: `${total > 0 ? Math.round(notStarted / total * 100) : 0}%` }} />
                 </div>
               </div>
@@ -400,38 +406,41 @@ export function DashboardPage() {
 
       case 'building-progress':
         return (
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h2 className="font-semibold text-gray-800 mb-4">{s.progressByBuilding}</h2>
-            <div className="space-y-5">
+          <div className="bg-white rounded-xl border border-gray-200 p-3 md:p-5">
+            <h2 className="text-sm md:text-base font-semibold text-gray-800 mb-3 md:mb-4">{s.progressByBuilding}</h2>
+            <div className="space-y-3.5 md:space-y-5">
               {buildings.map(b => {
                 const { total: bTotal, started, pct } = getBuildingProgress(b.id);
                 return (
                   <div key={b.id}>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="font-semibold text-[#1e3a5f]">{b.name}</span>
-                      <span className="text-sm text-gray-600">{started}/{bTotal} {s.unitsStarted} <span className="text-gray-400">({pct}%)</span></span>
+                    <div className="flex items-center justify-between gap-2 flex-wrap mb-1.5">
+                      <span className="text-sm md:text-base font-semibold text-[#1e3a5f]">{b.name}</span>
+                      <span className="text-xs md:text-sm text-gray-600">{started}/{bTotal} {s.unitsStarted} <span className="text-gray-400">({pct}%)</span></span>
                     </div>
-                    <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-2 md:h-3 bg-gray-100 rounded-full overflow-hidden">
                       <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: '#1e3a5f' }} />
                     </div>
                   </div>
                 );
               })}
             </div>
-            <div className="mt-5 pt-4 border-t border-gray-100 flex gap-4">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-[#1e3a5f]">
+            {/* Three figures side by side in ~360px: they share the row evenly
+                and their captions wrap, rather than one long caption pushing
+                the other two off the edge. */}
+            <div className="mt-4 md:mt-5 pt-3 md:pt-4 border-t border-gray-100 flex gap-2 md:gap-4">
+              <div className="flex-1 md:flex-none min-w-0 text-center">
+                <div className="text-lg md:text-2xl font-bold text-[#1e3a5f] tabular-nums">
                   {total > 0 ? Math.round((total - notStarted) / total * 100) : 0}%
                 </div>
-                <div className="text-xs text-gray-500">{s.overallStarted}</div>
+                <div className="text-[10px] md:text-xs text-gray-500 leading-tight">{s.overallStarted}</div>
               </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-amber-500">{shinuiCount}</div>
-                <div className="text-xs text-gray-500">{s.changesUnits}</div>
+              <div className="flex-1 md:flex-none min-w-0 text-center">
+                <div className="text-lg md:text-2xl font-bold text-amber-500 tabular-nums">{shinuiCount}</div>
+                <div className="text-[10px] md:text-xs text-gray-500 leading-tight">{s.changesUnits}</div>
               </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-gray-500">{notStarted}</div>
-                <div className="text-xs text-gray-500">{s.notStarted}</div>
+              <div className="flex-1 md:flex-none min-w-0 text-center">
+                <div className="text-lg md:text-2xl font-bold text-gray-500 tabular-nums">{notStarted}</div>
+                <div className="text-[10px] md:text-xs text-gray-500 leading-tight">{s.notStarted}</div>
               </div>
             </div>
           </div>
@@ -458,12 +467,12 @@ export function DashboardPage() {
         });
         const top = Math.max(1, ...weeks.map(w => Math.max(w.tasks, w.stages)));
         return (
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h2 className="font-semibold text-gray-800 mb-1">Work finished each week</h2>
-            <p className="text-xs text-gray-400 mb-4">
+          <div className="bg-white rounded-xl border border-gray-200 p-3 md:p-5">
+            <h2 className="text-sm md:text-base font-semibold text-gray-800 mb-1">Work finished each week</h2>
+            <p className="text-[10px] md:text-xs text-gray-400 mb-3 md:mb-4">
               Stages reached and tasks completed, the last eight weeks.
             </p>
-            <div className="flex items-end gap-3 h-40">
+            <div className="flex items-end gap-1.5 md:gap-3 h-28 md:h-40">
               {weeks.map(w => (
                 <div key={w.label} className="flex-1 flex flex-col items-center gap-1 min-w-0">
                   <div className="w-full flex items-end justify-center gap-1 flex-1">
@@ -479,7 +488,7 @@ export function DashboardPage() {
                 </div>
               ))}
             </div>
-            <div className="flex items-center gap-4 mt-3 text-xs text-gray-500">
+            <div className="flex items-center flex-wrap gap-x-4 gap-y-1 mt-3 text-[10px] md:text-xs text-gray-500">
               <span className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: '#4aa8d8' }} /> stages reached
               </span>
@@ -503,24 +512,24 @@ export function DashboardPage() {
         }).sort((a, b) => b.open - a.open);
         const top = Math.max(1, ...rows.map(r => r.open + r.done));
         return (
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h2 className="font-semibold text-gray-800 mb-4">Contractor load</h2>
+          <div className="bg-white rounded-xl border border-gray-200 p-3 md:p-5">
+            <h2 className="text-sm md:text-base font-semibold text-gray-800 mb-3 md:mb-4">Contractor load</h2>
             {rows.length === 0 ? (
               <p className="text-gray-400 text-sm text-center py-4">No contractors yet.</p>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2.5 md:space-y-3">
                 {rows.map(({ c, open, done, late }) => (
                   <div key={c.id}>
                     <div className="flex items-center gap-2 mb-1">
                       <span className="w-2.5 h-2.5 rounded-full flex-shrink-0"
                         style={{ backgroundColor: personColor(c.name, c.color) }} />
-                      <span className="text-sm text-gray-700 flex-1 truncate">{c.name}</span>
+                      <span className="text-xs md:text-sm text-gray-700 flex-1 truncate">{c.name}</span>
                       {late > 0 && (
-                        <span className="text-xs font-bold text-red-600 tabular-nums">{late} late</span>
+                        <span className="text-[10px] md:text-xs font-bold text-red-600 tabular-nums flex-shrink-0">{late} late</span>
                       )}
-                      <span className="text-sm font-medium text-gray-800 tabular-nums">{open}</span>
+                      <span className="text-xs md:text-sm font-medium text-gray-800 tabular-nums flex-shrink-0">{open}</span>
                     </div>
-                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden flex">
+                    <div className="h-1.5 md:h-2 bg-gray-100 rounded-full overflow-hidden flex">
                       <div style={{ width: `${(open / top) * 100}%`, backgroundColor: '#4aa8d8' }} />
                       <div style={{ width: `${(done / top) * 100}%`, backgroundColor: '#cbd5e1' }} />
                     </div>
@@ -534,19 +543,19 @@ export function DashboardPage() {
 
       case 'activity':
         return (
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h2 className="font-semibold text-gray-800 mb-4">{s.recentActivity}</h2>
+          <div className="bg-white rounded-xl border border-gray-200 p-3 md:p-5">
+            <h2 className="text-sm md:text-base font-semibold text-gray-800 mb-3 md:mb-4">{s.recentActivity}</h2>
             {recentLogs.length === 0 ? (
               <p className="text-gray-400 text-sm text-center py-4">{s.noActivity}</p>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2.5 md:space-y-3">
                 {recentLogs.map(log => (
-                  <div key={log.id} className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full bg-[#1e3a5f]/10 flex items-center justify-center text-[#1e3a5f] font-bold text-sm flex-shrink-0">
+                  <div key={log.id} className="flex items-start gap-2.5 md:gap-3">
+                    <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-[#1e3a5f]/10 flex items-center justify-center text-[#1e3a5f] font-bold text-xs md:text-sm flex-shrink-0">
                       {log.userName.charAt(0)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm">
+                      <div className="text-xs md:text-sm">
                         <span className="font-medium text-gray-800">{log.userName}</span>
                         {' '}
                         <span className="text-gray-600">
@@ -558,7 +567,7 @@ export function DashboardPage() {
                           }
                         </span>
                       </div>
-                      <div className="text-xs text-gray-400 mt-0.5">
+                      <div className="text-[10px] md:text-xs text-gray-400 mt-0.5">
                         {format(new Date(log.createdAt), 'MMM d, yyyy · HH:mm')}
                       </div>
                     </div>
@@ -578,10 +587,10 @@ export function DashboardPage() {
     /* Full width. It was a 1152px column down the middle of a 2560px office
        monitor, which on a page whose whole job is showing a lot at once is the
        one layout that cannot. */
-    <div className="p-5 xl:p-6 w-full">
+    <div className="p-3 sm:p-5 xl:p-6 w-full">
       {/* Header — wraps, so the button group drops under the title on a phone
           instead of running 61px off the right edge with "Customize" cut in half. */}
-      <div className="flex items-center justify-between gap-3 flex-wrap mb-6">
+      <div className="flex items-center justify-between gap-2 md:gap-3 flex-wrap mb-4 md:mb-6">
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{s.pageDashboard}</h1>
         {isCustomizing ? (
           <div className="flex items-center gap-2">
@@ -637,7 +646,7 @@ export function DashboardPage() {
       )}
 
       {/* Widgets */}
-      <div className="space-y-4">
+      <div className="space-y-3 md:space-y-4">
         {visibleOrder.map((id, idx) => (
           <WidgetWrapper
             key={id}
@@ -665,8 +674,10 @@ export function DashboardPage() {
           Laid out in a grid rather than on a free canvas, because a dashboard
           has to reflow on a laptop and a wall screen alike. Each widget's own
           width decides how many columns it spans. */}
-      <div className="mt-6">
-        <div className="flex items-center gap-2 mb-3">
+      <div className="mt-5 md:mt-6">
+        {/* Wraps: the title plus two buttons measure past 390px, and a
+            non-wrapping flex row is how controls end up off the screen edge. */}
+        <div className="flex items-center flex-wrap gap-2 mb-3">
           <h2 className="text-sm font-semibold text-gray-500">Your widgets</h2>
           <span className="text-xs text-gray-300">{dashWidgets.length}</span>
           <div className="flex-1" />
@@ -698,7 +709,7 @@ export function DashboardPage() {
             anything from the same shelf the board uses.
           </button>
         ) : (
-          <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(12, minmax(0, 1fr))' }}>
+          <div className="grid gap-2.5 md:gap-4" style={{ gridTemplateColumns: 'repeat(12, minmax(0, 1fr))' }}>
             {dashWidgets.map(el => (
               <DashCard
                 key={el.id}
@@ -909,9 +920,9 @@ function WidgetWrapper({
   return (
     <div className="rounded-xl ring-2 ring-blue-200 overflow-hidden">
       {/* Drag handle / control bar */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-blue-50 border-b border-blue-200">
-        <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">{label}</span>
-        <div className="flex items-center gap-0.5">
+      <div className="flex items-center justify-between gap-2 px-3 py-1.5 bg-blue-50 border-b border-blue-200">
+        <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide truncate">{label}</span>
+        <div className="flex items-center gap-0.5 flex-shrink-0">
           <button
             onClick={onMoveUp}
             disabled={!canMoveUp}
@@ -954,18 +965,42 @@ function SummaryCard({ icon, label, value, color, onClick, clickable }: {
 }) {
   return (
     <div
-      className={`bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-4 ${clickable ? 'cursor-pointer hover:border-gray-300 hover:shadow-sm transition-all' : ''}`}
+      className={`bg-white rounded-xl border border-gray-200 p-2.5 md:p-4 flex items-center gap-2.5 md:gap-4 ${clickable ? 'cursor-pointer hover:border-gray-300 hover:shadow-sm transition-all' : ''}`}
       onClick={onClick}
     >
-      <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: color + '15', color }}>
+      {/* The icon arrives already built at size={20}, so the phone size is set
+          from here on the svg itself rather than by threading a size prop
+          through seven call sites. */}
+      <div
+        className="w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl flex items-center justify-center flex-shrink-0
+                   [&>svg]:w-4 [&>svg]:h-4 md:[&>svg]:w-5 md:[&>svg]:h-5"
+        style={{ backgroundColor: color + '15', color }}
+      >
         {icon}
       </div>
-      <div>
-        <div className="text-2xl font-bold text-gray-900">{value}</div>
-        <div className="text-xs text-gray-500">{label}</div>
+      <div className="min-w-0">
+        {/* md:leading-8 is text-2xl's own line height — restated so the phone's
+            leading-none cannot leak upwards and shorten the desktop card. */}
+        <div className="text-lg md:text-2xl font-bold text-gray-900 leading-none md:leading-8 tabular-nums">{value}</div>
+        {/* Wraps rather than truncates — half a phone screen is ~125px of text
+            and "Completed today" needs two lines there. */}
+        <div className="text-[10px] md:text-xs text-gray-500 leading-tight mt-1 md:mt-0">{label}</div>
       </div>
     </div>
   );
+}
+
+/**
+ * What a card claims of the 12 columns on a phone.
+ *
+ * A twelfth of a 390px screen is 32px, so a desktop span cannot be honoured
+ * there — a widget asking for three columns would be 98px wide and draw
+ * nothing readable. Narrow widgets pair up half-and-half, anything already
+ * half the desktop grid or wider takes the row. The grid itself stays 12
+ * columns, so nothing about the desktop layout or the stored width changes.
+ */
+function phoneSpanOf(span: number): number {
+  return span <= 5 ? 6 : 12;
 }
 
 /**
@@ -991,6 +1026,7 @@ function DashCard({ el, ctx, arranging, registry, onSettings, onRemove, onPlaceO
 }) {
   const def = el.widget ? WIDGET_BY_ID.get(el.widget) : undefined;
   const updateCanvasElement = useStore(st => st.updateCanvasElement);
+  const phone = usePhone();
 
   // Stored as a width in pixels so the same element can sit on a free board
   // too; on the grid it reads as a span. 100px per column, clamped to the grid.
@@ -1056,7 +1092,10 @@ function DashCard({ el, ctx, arranging, registry, onSettings, onRemove, onPlaceO
     // A column is a twelfth of the grid; measured from our own card so the
     // snap follows the real rendered width at any window size.
     const node = registry.current.get(el.id);
-    const colPx = node ? node.getBoundingClientRect().width / span : 100;
+    // The card is laid out at its phone span there, so the measured width has
+    // to be divided by the span it is actually wearing, not the stored one.
+    const nodeSpan = phone ? phoneSpanOf(span) : span;
+    const colPx = node ? node.getBoundingClientRect().width / nodeSpan : 100;
     const nextSpan = Math.max(2, Math.min(12, Math.round((st.w + (e.clientX - st.x)) / colPx)));
     const nextH = Math.max(120, Math.min(720, Math.round((st.h + (e.clientY - st.y)) / 40) * 40));
     setPreview({ span: nextSpan, h: nextH });
@@ -1069,6 +1108,7 @@ function DashCard({ el, ctx, arranging, registry, onSettings, onRemove, onPlaceO
   }
 
   const shownSpan = preview?.span ?? span;
+  const laidOutSpan = phone ? phoneSpanOf(shownSpan) : shownSpan;
   const shownH = Math.max(120, preview?.h ?? (el.h || 165));
 
   return (
@@ -1076,7 +1116,7 @@ function DashCard({ el, ctx, arranging, registry, onSettings, onRemove, onPlaceO
       ref={node => { if (node) registry.current.set(el.id, node); else registry.current.delete(el.id); }}
       className="relative group bg-white rounded-xl border border-gray-200 overflow-hidden"
       style={{
-        gridColumn: `span ${shownSpan} / span ${shownSpan}`,
+        gridColumn: `span ${laidOutSpan} / span ${laidOutSpan}`,
         minHeight: shownH,
         transform: lift ? `translate(${lift.dx}px, ${lift.dy}px) scale(1.02)` : undefined,
         boxShadow: lift ? '0 14px 34px rgba(15,23,42,.25)' : undefined,

@@ -34,7 +34,7 @@ function planDownloadUrl(link: string): string {
   return id ? driveDownloadUrl(id) : link;
 }
 import { DriveStatus } from '../ui/DriveStatus';
-import { CountdownNode, StopwatchNode, ClipArtNode, VoiceMemoNode } from './BoardNodes';
+import { CountdownNode, StopwatchNode, ClipArtNode, VoiceMemoNode, StrokeNode } from './BoardNodes';
 import { renderWidget, WidgetCtx, WIDGET_BY_ID } from '../../data/widgets';
 
 /**
@@ -394,7 +394,13 @@ export const BoardNode = React.memo(function BoardNode({
 }: BoardNodeProps) {
   // Any bin node, built-in or one you made.
   const isBin = el.type === 'bin';
-  const plain = el.type === 'clipart';
+  /**
+   * No card and no text editor: a piece of clip art, and a drawing that has
+   * become a node of its own. Both are the picture itself — a white rounded
+   * rectangle behind either of them would be a box nobody asked for.
+   */
+  const isStroke = el.type === 'stroke';
+  const plain = el.type === 'clipart' || isStroke;
   const isWidget = el.type === 'widget';
   /**
    * A blue dot for the first while after something is placed.
@@ -502,8 +508,10 @@ export const BoardNode = React.memo(function BoardNode({
           the planner's "next week" was covered by Remove, so reaching for the
           next week deleted the planner. A floating strip above the top edge
           cannot cover anything, and because it is still a child of the node the
-          hover that reveals it also survives the pointer moving onto it. */}
-      {!plain && (
+          hover that reveals it also survives the pointer moving onto it.
+          A drawing gets the strip even though it has no card — it is a thing on
+          the board like any other, and removing one had no other route. */}
+      {el.type !== 'clipart' && (
         <div className={`absolute right-0 flex gap-1 z-20 transition-opacity ${
             isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'}`}
           style={{ bottom: '100%', marginBottom: 4, pointerEvents: 'auto' }}>
@@ -564,6 +572,8 @@ export const BoardNode = React.memo(function BoardNode({
         <WidgetSurface el={el} w={w} h={h}>{renderWidget(el, boundCtx)}</WidgetSurface>
       ) : el.type === 'clipart' ? (
         <ClipArtNode el={el} onUse={art => H.artUse(el, art)} />
+      ) : isStroke ? (
+        <StrokeNode el={el} />
       ) : el.type === 'title' ? (
         <div className="w-full h-full flex items-center px-2 leading-tight overflow-hidden"
           style={{
@@ -670,39 +680,50 @@ export const BoardNode = React.memo(function BoardNode({
         />
       )}
 
-      {/* EVERY node resizes, from the corner OR either edge.
+      {/* EVERY node resizes, from the corner OR either edge — and that now
+          genuinely means every one, drawings included. It was gated on
+          `type !== 'stroke'`, which was right while ink was only ever a layer
+          and wrong the moment a drawing became a node.
           The corner was 20px and a mouse-sized target; on a touch panel it is
           most of a fingertip, and a widget that is nearly all controls left
           almost nothing else to aim at. It is 26 now, with a strip down the
-          right and along the bottom so the whole edge works. */}
-      {el.type !== 'stroke' && (
-        <>
-          <div data-el-action data-resize
-            onPointerDown={e => H.resizeDown(e, el)}
-            onPointerMove={H.resizeMove}
-            onPointerUp={H.resizeUp}
-            className={`absolute right-0 top-3 bottom-6 w-2 cursor-ew-resize z-10 transition-opacity ${
-              isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-          />
-          <div data-el-action data-resize
-            onPointerDown={e => H.resizeDown(e, el)}
-            onPointerMove={H.resizeMove}
-            onPointerUp={H.resizeUp}
-            className={`absolute bottom-0 left-3 right-6 h-2 cursor-ns-resize z-10 transition-opacity ${
-              isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-          />
-          <div data-el-action data-resize
-            onPointerDown={e => H.resizeDown(e, el)}
-            onPointerMove={H.resizeMove}
-            onPointerUp={H.resizeUp}
-            className={`absolute -bottom-0.5 -right-0.5 cursor-se-resize transition-opacity z-10 ${
-              isSelected ? 'opacity-70' : 'opacity-0 group-hover:opacity-70'}`}
-            style={{ width: 26, height: 26,
-                     borderRight: '2px solid currentColor', borderBottom: '2px solid currentColor',
-                     borderRadius: '0 0 5px 0', color: '#64748b' }}
-          />
-        </>
-      )}
+          right and along the bottom so the whole edge works.
+          Selecting a node SHOWS the corner rather than hinting at it: a handle
+          you can only find by hovering the exact pixel reads as "this type
+          can't be resized", which is what it read as on half the board. */}
+      <div data-el-action data-resize
+        onPointerDown={e => H.resizeDown(e, el)}
+        onPointerMove={H.resizeMove}
+        onPointerUp={H.resizeUp}
+        className={`absolute right-0 top-3 bottom-6 w-2 cursor-ew-resize z-10 transition-opacity ${
+          isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+        style={{ background: 'linear-gradient(90deg, rgba(74,168,216,0), rgba(74,168,216,.30))' }}
+      />
+      <div data-el-action data-resize
+        onPointerDown={e => H.resizeDown(e, el)}
+        onPointerMove={H.resizeMove}
+        onPointerUp={H.resizeUp}
+        className={`absolute bottom-0 left-3 right-6 h-2 cursor-ns-resize z-10 transition-opacity ${
+          isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+        style={{ background: 'linear-gradient(180deg, rgba(74,168,216,0), rgba(74,168,216,.30))' }}
+      />
+      <div data-el-action data-resize
+        onPointerDown={e => H.resizeDown(e, el)}
+        onPointerMove={H.resizeMove}
+        onPointerUp={H.resizeUp}
+        title="Drag to resize"
+        className={`absolute -bottom-0.5 -right-0.5 cursor-se-resize transition-opacity z-10 ${
+          isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-80'}`}
+        style={{ width: 26, height: 26,
+                 borderRight: '2px solid currentColor', borderBottom: '2px solid currentColor',
+                 borderRadius: '0 0 5px 0', color: isSelected ? '#4aa8d8' : '#64748b' }}
+      >
+        {/* A filled knob under the corner, so the handle reads on a photo tile,
+            a dark widget or a bare drawing alike. */}
+        <span className="absolute bottom-[1px] right-[1px] block rounded-[2px]"
+          style={{ width: 7, height: 7, backgroundColor: isSelected ? '#4aa8d8' : '#94a3b8',
+                   boxShadow: '0 0 0 1.5px rgba(255,255,255,.9)' }} />
+      </div>
     </div>
   );
 });

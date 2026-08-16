@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { X, Search, CalendarDays } from 'lucide-react';
 import { Apartment, CanvasElement, Contractor, Stage, User } from '../../types';
-import { PlannerEntry, PlannerData, personOf, iso, tint } from './PlannerWidget';
+import { PlannerEntry, PlannerData, personOf, iso, weekStartOf, tint } from './PlannerWidget';
 
 /**
  * Every job in the schedule, in one scrollable window.
@@ -39,6 +39,23 @@ export function ScheduleWindow({
   }, [jobs]);
 
   const today = iso(new Date());
+
+  /**
+   * Days whose week has been put away on the planner.
+   *
+   * Hiding a week changes what the planner DRAWS and nothing else — everything
+   * in it is still scheduled, and this window is where somebody comes looking
+   * for a job they can no longer see. So the day says the week is put away
+   * rather than the job reading as though it had gone.
+   */
+  const hiddenWeeks = useMemo(
+    () => new Set((Array.isArray(data.hiddenWeeks) ? data.hiddenWeeks : []) as string[]),
+    [data.hiddenWeeks],
+  );
+  const weekStart = Number(data.weekStart) === 1 ? 1 : 0;
+  const inHiddenWeek = (day: string) =>
+    hiddenWeeks.size > 0
+    && hiddenWeeks.has(iso(weekStartOf(new Date(`${day}T00:00:00`), weekStart)));
 
   /** Flattened to one row per entry, then grouped by day. */
   const byDay = useMemo(() => {
@@ -136,6 +153,13 @@ export function ScheduleWindow({
                   {day === today && (
                     <span className="px-1.5 rounded-full text-[9.5px] font-bold"
                       style={{ backgroundColor: '#e0f2fe', color: '#0369a1' }}>today</span>
+                  )}
+                  {inHiddenWeek(day) && (
+                    <span className="px-1.5 rounded-full text-[9.5px] font-bold"
+                      style={{ backgroundColor: '#f1f5f9', color: '#64748b' }}
+                      title="This week is put away on the planner. Nothing in it was removed — showing the week again brings it all back.">
+                      week put away
+                    </span>
                   )}
                   <span className="text-[10.5px] text-gray-300 tabular-nums">{rows.length}</span>
                 </div>

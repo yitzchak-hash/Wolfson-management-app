@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, X, CalendarDays, Maximize2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, X, CalendarDays, Maximize2, Eye, EyeOff } from 'lucide-react';
 import {
   Apartment, CanvasElement, Contractor, User, ContractorAssignment, Stage, personColor,
   aptLabel,
@@ -57,6 +57,17 @@ export interface PlannerData {
    */
   firstWeek?: string;
   weekCount?: number;
+  /**
+   * Weeks put away, by their start date.
+   *
+   * Hiding is a matter of what is DRAWN and nothing else: the week stays in the
+   * run and every card stays in `cells`, so the schedule window, the wall, the
+   * tasks behind them and every count still see it — and showing the week again
+   * shows exactly what it held. Hiding by shortening the run instead would have
+   * to move `firstWeek` or `weekCount`, which renumbers the run and orphans the
+   * weeks the other side of the hole.
+   */
+  hiddenWeeks?: string[];
   /** Sticky notes pinned in a day, by cell key. */
   stickies?: Record<string, { id: string; text: string; colour: string }[]>;
   mode?: 'week' | 'month';
@@ -92,6 +103,15 @@ export interface PlannerData {
   cellBg?: string;
   /** Row height, as a multiplier on the natural one. */
   rowScale?: number;
+  /**
+   * One multiplier over the whole sheet — type, row height and the name column.
+   *
+   * The individual sizes are still there for tuning one thing; this is the one
+   * somebody reaches for when the notebook is on a wall panel and everything on
+   * it is too small, and it keeps the sizes in proportion to each other rather
+   * than needing five settings changed in step.
+   */
+  scale?: number;
 }
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -136,6 +156,18 @@ export function personOf(id: string, contractors: Contractor[], users: User[]) {
 const num = (v: unknown, fallback: number, lo: number, hi: number) => {
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? Math.max(lo, Math.min(hi, Math.round(n))) : fallback;
+};
+
+/**
+ * A multiplier, kept as one.
+ *
+ * `num` rounds, which is right for a font size in whole pixels and wrong for a
+ * multiplier: the row-height setting is offered as "1.5 gives half again as
+ * much room" and rounding quietly turned that into 2.
+ */
+const frac = (v: unknown, fallback: number, lo: number, hi: number) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? Math.max(lo, Math.min(hi, n)) : fallback;
 };
 
 /**
@@ -238,8 +270,21 @@ export function PlannerWidget({
   const mode = data.mode === 'month' ? 'month' : 'week';
   const span = num(data.span, 5, 1, 7);
   const weekStart = Number(data.weekStart) === 1 ? 1 : 0;
-  const textSize = num(data.textSize, 11, 7, 26);
-  const daySize = num(data.dayNameSize, 11, 7, 28);
+  /**
+   * The whole sheet, at one size.
+   *
+   * Every measurement on the notebook — type, the height of a square, the width
+   * of the name column — goes through `z`, so the setting scales the sheet
+   * rather than just its words. The floors that keep the small type legible are
+   * scaled too: leaving them absolute meant that at anything under 1 the
+   * secondary lines stopped shrinking while the headings kept going, and the
+   * sheet came out with its hierarchy inverted.
+   */
+  const scale = frac(data.scale, 1, 0.5, 3);
+  const z = (n: number) => Math.round(n * scale * 10) / 10;
+
+  const baseText = num(data.textSize, 11, 7, 26);
+  const baseDay = num(data.dayNameSize, 11, 7, 28);
   /**
    * The date is its own size, and it starts BIGGER than the day name.
    *
@@ -247,13 +292,17 @@ export function PlannerWidget({
    * backwards: on a printed rota the number is what the eye goes to and the
    * weekday is the label under it.
    */
-  const dateSize = num(data.dateSize, Math.round(daySize * 1.15), 7, 34);
-  const nameSize = num(data.nameSize, textSize, 7, 30);
+  const baseDate = num(data.dateSize, Math.round(baseDay * 1.15), 7, 34);
+  const baseName = num(data.nameSize, baseText, 7, 30);
+  const textSize = z(baseText);
+  const daySize = z(baseDay);
+  const dateSize = z(baseDate);
+  const nameSize = z(baseName);
   const dayBg = String(data.dayBg || '#f1f5f9');
   const offBg = String(data.offBg || '#f5f3ff');
   const todayBg = String(data.todayBg || '#e0f2fe');
   const cellBg = String(data.cellBg || '#fbfcfd');
-  const rowScale = num(data.rowScale, 1, 0.6, 3);
+  const rowScale = frac(data.rowScale, 1, 0.6, 3);
   const cells = data.cells ?? {};
   const people = data.people ?? [];
   const offFrom = data.offFrom ?? {};
@@ -290,7 +339,7 @@ export function PlannerWidget({
   const divStyle = {
     thick: Math.max(1, Math.min(6, Number(d.divThick) || 1)),
     color: typeof d.divColor === 'string' && d.divColor ? d.divColor : '#e2e8f0',
-    textSize: Math.max(6, Math.min(14, Number(d.divTextSize) || 8)),
+    textSize: z(Math.max(6, Math.min(14, Number(d.divTextSize) || 8))),
     weight: Number(d.divWeight) || 600,
     textColor: typeof d.divTextColor === 'string' && d.divTextColor ? d.divTextColor : '#94a3b8',
   };
@@ -321,26 +370,79 @@ export function PlannerWidget({
   ), [data.firstWeek, anchor, weekStart]);
   const weekCount = Math.max(1, Math.min(520, Math.round(num(data.weekCount, 1, 1, 520))));
 
-  const weeks = useMemo(
+  /** Every week the notebook holds, hidden or not. */
+  const runWeeks = useMemo(
     () => Array.from({ length: weekCount }, (_, i) => addDays(firstWeek, i * 7)),
     [firstWeek, weekCount],
   );
 
+  const hiddenKeys = useMemo(() => {
+    const raw = Array.isArray(data.hiddenWeeks) ? data.hiddenWeeks : [];
+    return [...new Set(raw.filter((k): k is string => typeof k === 'string'))].sort();
+  }, [data.hiddenWeeks]);
+  const hidden = useMemo(() => new Set(hiddenKeys), [hiddenKeys]);
+
+  /** What is drawn. */
+  const weeks = useMemo(() => runWeeks.filter(w => !hidden.has(iso(w))), [runWeeks, hidden]);
+  /** What has been put away, oldest first. */
+  const hiddenInRun = useMemo(() => runWeeks.filter(w => hidden.has(iso(w))), [runWeeks, hidden]);
+
+  /**
+   * Putting a week away, and getting it back.
+   *
+   * Nothing is removed, unassigned or moved — the week keeps its place in the
+   * run and its squares keep their cards, so showing it again shows exactly
+   * what it held.
+   *
+   * NOT memoised, and neither is `addWeek`. `write` spreads the element's data
+   * as it was when it was created, so a callback that captured an old one would
+   * write that old data back — and since the notebook starts empty, adding a
+   * week silently emptied every square that had been filled since. A plain
+   * function always has the current one.
+   */
+  function hideWeek(key: string) {
+    if (hidden.has(key)) return;
+    write({ hiddenWeeks: [...hiddenKeys, key].sort() });
+  }
+  function showWeek(key: string) {
+    write({ hiddenWeeks: hiddenKeys.filter(k => k !== key) });
+  }
+
+  /** Is there a week put away just off the top, or just off the bottom? */
+  const firstShown = weeks[0] ? iso(weeks[0]) : null;
+  const lastShown = weeks.length ? iso(weeks[weeks.length - 1]) : null;
+  const hiddenAbove = hiddenInRun.map(iso).filter(k => !firstShown || k < firstShown);
+  const hiddenBelow = hiddenInRun.map(iso).filter(k => !lastShown || k > lastShown);
+
   /**
    * Add a week before the first, or after the last.
    *
-   * NOT memoised. `write` spreads the element's data as it was when it was
-   * created, so a callback that captured an old one would write that old data
-   * back — and since the notebook starts empty, adding a week silently emptied
-   * every square that had been filled since. A plain function always has the
-   * current one.
+   * When a week has been put away in that direction, the plus brings THAT week
+   * back — with everything that was written in it — rather than opening a blank
+   * one beside it. Asking for a week after hiding one means "show it again",
+   * which is exactly what the office asked for.
    */
   function addWeek(where: 'before' | 'after') {
-    if (where === 'after') {
-      write({ firstWeek: iso(firstWeek), weekCount: weekCount + 1 });
-    } else {
+    if (where === 'before') {
+      // The nearest one first, so repeated presses walk back up the run.
+      if (hiddenAbove.length) { showWeek(hiddenAbove[hiddenAbove.length - 1]); return; }
       write({ firstWeek: iso(addDays(firstWeek, -7)), weekCount: weekCount + 1 });
+      return;
     }
+    if (hiddenBelow.length) { showWeek(hiddenBelow[0]); return; }
+    write({ firstWeek: iso(firstWeek), weekCount: weekCount + 1 });
+  }
+
+  /** How many cards a week is holding — what showing it would bring back. */
+  function cardsInWeek(wkStart: Date): number {
+    const from = iso(wkStart);
+    const to = iso(addDays(wkStart, span - 1));
+    let n = 0;
+    for (const [key, entries] of Object.entries(cells)) {
+      const day = key.split('|')[1];
+      if (day >= from && day <= to) n += entries.length;
+    }
+    return n;
   }
 
   const cellRefs = useRef(new Map<string, HTMLElement>());
@@ -449,7 +551,9 @@ export function PlannerWidget({
    */
   const scrollRef = useRef<HTMLDivElement>(null);
   const weekRefs = useRef(new Map<string, HTMLElement>());
-  const [shownMonth, setShownMonth] = useState<string>(() => monthKey(weeks[0]));
+  // `weeks[0]` can be missing — every week can be put away — so the run's own
+  // first week stands in rather than the label reading "Invalid Date".
+  const [shownMonth, setShownMonth] = useState<string>(() => monthKey(weeks[0] ?? firstWeek));
 
   const readMonth = useCallback(() => {
     const box = scrollRef.current?.getBoundingClientRect();
@@ -466,10 +570,14 @@ export function PlannerWidget({
     }
   }, []);
 
-  useEffect(() => { readMonth(); }, [readMonth, weekCount]);
+  // `weeks.length` as well as the run's length: putting a week away or bringing
+  // one back changes which week is topmost without the run changing at all, and
+  // the month at the top would otherwise still name the week that was hidden.
+  useEffect(() => { readMonth(); }, [readMonth, weekCount, weeks.length]);
 
   /** Scroll to the first week of the next or previous month. */
   function jumpMonth(by: 1 | -1) {
+    if (!weeks.length) return;
     const here = new Date(`${shownMonth}-01T00:00:00`);
     const want = new Date(here.getFullYear(), here.getMonth() + by, 1);
     // The nearest week that touches that month, within what the notebook holds.
@@ -496,11 +604,11 @@ export function PlannerWidget({
       <div className="flex items-center gap-1.5 px-2 pt-1.5 pb-1 flex-shrink-0 overflow-x-auto scrollbar-thin">
         <CalendarDays size={12} className="text-gray-400 flex-shrink-0" />
         <span className="font-extrabold tracking-wide text-gray-500 truncate"
-          style={{ fontSize: Math.max(9, textSize - 1) }}>
+          style={{ fontSize: Math.max(z(9), textSize - z(1)) }}>
           {title.toUpperCase()}
         </span>
         <span className="px-1.5 rounded-full bg-slate-100 text-slate-500 flex-shrink-0 tabular-nums"
-          style={{ fontSize: Math.max(8, textSize - 2) }}>{label}</span>
+          style={{ fontSize: Math.max(z(8), textSize - z(2)) }}>{label}</span>
         <span className="flex-1" />
         {!readOnly && (
           <>
@@ -526,7 +634,7 @@ export function PlannerWidget({
                 }
               }}
               className="px-1.5 py-0.5 rounded font-bold text-gray-500 hover:bg-gray-100"
-              style={{ fontSize: Math.max(8, textSize - 2) }}>
+              style={{ fontSize: Math.max(z(8), textSize - z(2)) }}>
               Today
             </button>
             <button data-no-drag data-el-action onClick={() => jumpMonth(1)}
@@ -557,11 +665,66 @@ export function PlannerWidget({
           </div>
         ) : <>
         {!readOnly && (
-          <AddWeekRow where="before" size={textSize} onAdd={() => addWeek('before')} />
+          <AddWeekRow where="before" size={Math.max(z(8), textSize - z(2))}
+            restoring={hiddenAbove.length > 0} onAdd={() => addWeek('before')} />
         )}
+
+        {/* Put away, and where to find them. Drawn only for the office: a wall
+            panel and a worker's phone see the week list the office chose, and
+            neither has any business bringing a week back. */}
+        {!readOnly && hiddenInRun.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1 py-1 my-0.5">
+            <span className="uppercase tracking-wider font-bold text-gray-400"
+              style={{ fontSize: Math.max(z(8), textSize - z(3)) }}>
+              Put away — nothing in them was removed
+            </span>
+            {hiddenInRun.map(wk => {
+              const cards = cardsInWeek(wk);
+              const end = addDays(wk, span - 1);
+              return (
+                <button
+                  key={iso(wk)}
+                  data-no-drag data-el-action
+                  onClick={() => showWeek(iso(wk))}
+                  title={`Show the week of ${wk.toLocaleDateString(undefined, {
+                    day: 'numeric', month: 'long', year: 'numeric' })}`}
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded-full border border-gray-200
+                             text-gray-500 hover:text-[#1e3a5f] hover:border-[#cbd5e1] hover:bg-slate-50"
+                  style={{ fontSize: Math.max(z(8), textSize - z(2)) }}
+                >
+                  <Eye size={Math.max(9, Math.round(z(10)))} />
+                  <span className="tabular-nums">
+                    {wk.toLocaleDateString(undefined, { day: 'numeric' })}–
+                    {end.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                  </span>
+                  {cards > 0 && (
+                    <span className="px-1 rounded-full font-bold tabular-nums"
+                      style={{ backgroundColor: '#fef3c7', color: '#92400e' }}
+                      title={`${cards} still in it`}>{cards}</span>
+                  )}
+                </button>
+              );
+            })}
+            {hiddenInRun.length > 1 && (
+              <button data-no-drag data-el-action onClick={() => write({ hiddenWeeks: [] })}
+                className="px-1.5 py-0.5 rounded-full font-bold text-gray-400 hover:text-[#1e3a5f]"
+                style={{ fontSize: Math.max(z(8), textSize - z(2)) }}>
+                show them all
+              </button>
+            )}
+          </div>
+        )}
+
+        {!readOnly && weeks.length === 0 && (
+          <div className="text-center text-gray-400 leading-snug py-6 px-4"
+            style={{ fontSize: textSize }}>
+            Every week is put away. Nothing in them was removed — bring one back above.
+          </div>
+        )}
+
         {weeks.map((wkStart, wi) => {
           const days = Array.from({ length: span }, (_, i) => addDays(wkStart, i));
-          const cols = `minmax(74px, 0.85fr) repeat(${span}, minmax(0, 1fr))`;
+          const cols = `minmax(${z(74)}px, 0.85fr) repeat(${span}, minmax(0, 1fr))`;
           // A rule wherever the month changes, so the run reads as months
           // rather than as an undifferentiated column of weeks.
           const newMonth = wi > 0 && monthKey(wkStart) !== monthKey(weeks[wi - 1]);
@@ -570,22 +733,38 @@ export function PlannerWidget({
               key={iso(wkStart)}
               ref={node => { if (node) weekRefs.current.set(iso(wkStart), node);
                              else weekRefs.current.delete(iso(wkStart)); }}
-              className={wi ? 'mt-2.5' : ''}
+              className={`group/wk ${wi ? 'mt-2.5' : ''}`}
             >
               {newMonth && (
                 <div className="flex items-center gap-2 my-2">
                   <span className="h-px flex-1" style={{ backgroundColor: '#cbd5e1' }} />
                   <span className="font-black tracking-wide text-slate-500"
-                    style={{ fontSize: Math.max(8, textSize - 1) }}>
+                    style={{ fontSize: Math.max(z(8), textSize - z(1)) }}>
                     {wkStart.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }).toUpperCase()}
                   </span>
                   <span className="h-px flex-1" style={{ backgroundColor: '#cbd5e1' }} />
                 </div>
               )}
               <div className="grid gap-px mb-px" style={{ gridTemplateColumns: cols }}>
-                <div className="font-black tracking-wide text-gray-400 flex items-end pb-0.5"
-                  style={{ fontSize: Math.max(7, daySize - 3) }}>
-                  {wkStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                <div className="font-black tracking-wide text-gray-400 flex items-end justify-between gap-1 pb-0.5"
+                  style={{ fontSize: Math.max(z(7), daySize - z(3)) }}>
+                  <span className="truncate">
+                    {wkStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                  </span>
+                  {/* Putting the week away. Not a delete and never asks: the
+                      cards stay where they are and the plus above or below
+                      brings the week back with all of them. */}
+                  {!readOnly && (
+                    <button
+                      data-no-drag data-el-action
+                      onClick={() => hideWeek(iso(wkStart))}
+                      title="Put this week away — nothing in it is removed, and adding the week back brings it all with it"
+                      className="flex-shrink-0 text-gray-300 hover:text-[#1e3a5f] transition-opacity
+                                 opacity-0 group-hover/wk:opacity-100"
+                    >
+                      <EyeOff size={Math.max(10, Math.round(z(11)))} />
+                    </button>
+                  )}
                 </div>
                 {days.map(dt => {
                   const key = iso(dt);
@@ -602,7 +781,7 @@ export function PlannerWidget({
                       <div className="truncate tabular-nums font-black"
                         style={{ fontSize: dateSize, color: isToday ? '#0369a1' : '#334155' }}>
                         {dt.getDate()}
-                        <span className="font-normal" style={{ fontSize: Math.max(7, dateSize - 4), color: '#94a3b8' }}>
+                        <span className="font-normal" style={{ fontSize: Math.max(z(7), dateSize - z(4)), color: '#94a3b8' }}>
                           {' '}{dt.toLocaleDateString(undefined, { month: 'short' })}
                         </span>
                       </div>
@@ -615,7 +794,7 @@ export function PlannerWidget({
                       </div>
                       {hols.length > 0 && (
                         <div className="truncate font-bold"
-                          style={{ fontSize: Math.max(7, daySize - 3), color: '#7c3aed' }}
+                          style={{ fontSize: Math.max(z(7), daySize - z(3)), color: '#7c3aed' }}
                           title={hols.map(h => h.name).join(' · ')}>
                           {hols.map(h => h.name).join(' · ')}
                         </div>
@@ -685,7 +864,9 @@ export function PlannerWidget({
                           style={{
                             // A slot is a rectangle a job card fits in, and it
                             // grows by whole cards — never by squeezing them.
-                            minHeight: SLOT_H * rowScale,
+                            // Through `z` as well, or the sheet's type grows
+                            // and the square it sits in does not.
+                            minHeight: z(SLOT_H) * rowScale,
                             backgroundColor: lit ? '#dbeafe'
                               : state === 'ending' ? '#f1f5f9' : cellBg,
                             backgroundImage: state === 'ending'
@@ -704,6 +885,7 @@ export function PlannerWidget({
                               assignments={assignments}
                               color={person.color}
                               size={textSize}
+                              scale={scale}
                               bold={data.bold}
                               readOnly={readOnly || state === 'ending'}
                               onOpen={() => en.jobId && openJob(en.jobId)}
@@ -743,7 +925,8 @@ export function PlannerWidget({
           );
         })}
         {!readOnly && (
-          <AddWeekRow where="after" size={textSize} onAdd={() => addWeek('after')} />
+          <AddWeekRow where="after" size={Math.max(z(8), textSize - z(2))}
+            restoring={hiddenBelow.length > 0} onAdd={() => addWeek('after')} />
         )}
         </>}
       </div>
@@ -763,15 +946,25 @@ function monthKey(d: Date): string {
  * run you extend in the direction you need, and what is already written never
  * moves. Quiet until you go near it, so a long notebook is weeks and not
  * buttons.
+ *
+ * `restoring` is when a week was put away in that direction — the same press
+ * then brings it back, with everything in it, and says so rather than reading
+ * as though it were about to open a blank one. `size` is the exact font size,
+ * already scaled by the sheet's own setting.
  */
-function AddWeekRow({ where, size, onAdd }: {
-  where: 'before' | 'after'; size: number; onAdd: () => void;
+function AddWeekRow({ where, size, restoring, onAdd }: {
+  where: 'before' | 'after'; size: number; restoring?: boolean; onAdd: () => void;
 }) {
+  const word = restoring
+    ? (where === 'before' ? 'show the week before' : 'show the next week')
+    : (where === 'before' ? 'earlier week' : 'another week');
   return (
     <button
       data-no-drag data-el-action
       onClick={onAdd}
-      title={where === 'before' ? 'Add the week before' : 'Add the week after'}
+      title={restoring
+        ? 'Bring back the week that was put away, with everything that was in it'
+        : where === 'before' ? 'Add the week before' : 'Add the week after'}
       className="w-full flex items-center gap-2 py-1 my-0.5 group/add"
     >
       <span className="h-px flex-1 transition-colors"
@@ -779,9 +972,9 @@ function AddWeekRow({ where, size, onAdd }: {
       <span className="flex items-center gap-1 px-2 py-0.5 rounded-full border transition-colors
                        text-gray-400 border-transparent
                        group-hover/add:text-[#1e3a5f] group-hover/add:border-[#cbd5e1]"
-        style={{ fontSize: Math.max(8, size - 2) }}>
-        <Plus size={9} />
-        {where === 'before' ? 'earlier week' : 'another week'}
+        style={{ fontSize: size }}>
+        {restoring ? <Eye size={Math.max(9, Math.round(size))} /> : <Plus size={Math.max(9, Math.round(size))} />}
+        {word}
       </span>
       <span className="h-px flex-1" style={{ backgroundColor: '#e2e8f0' }} />
     </button>
@@ -799,7 +992,8 @@ const SLOT_H = 58;
  * the job — the same rule as the board, so there is one habit to learn.
  */
 function PlannerCard({
-  entry, job, stages, assignments, color, size, bold, readOnly, onOpen, onText, onRemove, onDragOff, onDragTo,
+  entry, job, stages, assignments, color, size, scale = 1, bold, readOnly,
+  onOpen, onText, onRemove, onDragOff, onDragTo,
 }: {
   entry: PlannerEntry;
   job?: Apartment;
@@ -807,6 +1001,8 @@ function PlannerCard({
   assignments: ContractorAssignment[];
   color: string;
   size: number;
+  /** The sheet's scale, so the card's own floors move with it. */
+  scale?: number;
   bold?: boolean;
   readOnly?: boolean;
   onOpen: () => void;
@@ -819,6 +1015,8 @@ function PlannerCard({
 }) {
   const [v, setV] = useState(entry.text ?? '');
   useEffect(() => setV(entry.text ?? ''), [entry.text]);
+
+  const z = (n: number) => n * scale;
 
   /**
    * Dragging a card from one square to another.
@@ -923,7 +1121,7 @@ function PlannerCard({
             </span>
             {(stage || entry.text || job?.address) && (
               <span className="block truncate font-medium"
-                style={{ fontSize: Math.max(7, size - 2), color: '#64748b' }}>
+                style={{ fontSize: Math.max(z(7), size - z(2)), color: '#64748b' }}>
                 {[entry.text, stage?.name, job?.address].filter(Boolean).join(' · ')}
               </span>
             )}
@@ -933,7 +1131,7 @@ function PlannerCard({
           <span className="flex items-center gap-0.5 flex-shrink-0">
             {pending > 0 && (
               <span className="px-1 rounded-full font-bold tabular-nums"
-                style={{ fontSize: Math.max(7, size - 3), backgroundColor: '#fef3c7', color: '#92400e' }}
+                style={{ fontSize: Math.max(z(7), size - z(3)), backgroundColor: '#fef3c7', color: '#92400e' }}
                 title={`${pending} still to do`}>
                 {pending}
               </span>
@@ -942,21 +1140,21 @@ function PlannerCard({
               <a data-no-drag data-el-action href={job.driveLink} target="_blank" rel="noreferrer"
                 title="Drive folder" onClick={e => e.stopPropagation()}
                 className="text-[#4aa8d8] hover:opacity-70">
-                <DriveIcon size={Math.max(9, size - 2)} />
+                <DriveIcon size={Math.max(z(9), size - z(2))} />
               </a>
             )}
             {job?.zohoLink && (
               <a data-no-drag data-el-action href={job.zohoLink} target="_blank" rel="noreferrer"
                 title="Zoho" onClick={e => e.stopPropagation()}
                 className="text-[#e11d48] hover:opacity-70">
-                <ZohoIcon size={Math.max(9, size - 2)} />
+                <ZohoIcon size={Math.max(z(9), size - z(2))} />
               </a>
             )}
             {job?.plansPdfLink && (
               <a data-no-drag data-el-action href={job.plansPdfLink} target="_blank" rel="noreferrer"
                 title="Plan" onClick={e => e.stopPropagation()}
                 className="text-[#1e3a5f] hover:opacity-70">
-                <PlanIcon size={Math.max(9, size - 2)} />
+                <PlanIcon size={Math.max(z(9), size - z(2))} />
               </a>
             )}
             {!readOnly && (
