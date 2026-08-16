@@ -4,3 +4,5 @@ dist/
 *.local
 -.xml
 .claude/
+scratchpad/*.png
+scratchpad/*.log
