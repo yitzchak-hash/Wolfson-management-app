@@ -238,25 +238,62 @@ export function MapWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   }, [z, originX, originY, size.w, size.h, tileUrl]);
 
   // A zoom change: park the last frame underneath, scaled to the new world.
+  // It stays until the NEW tiles have genuinely arrived — a fixed timeout was
+  // tuned against stubbed instant tiles, and real tiles on a site connection
+  // outlived it, which is exactly the 'blanks out when I zoom' report.
   useEffect(() => {
     const prev = lastFrame.current;
     if (prev && prev.z !== z && prev.tiles.length) {
       const scale = 2 ** (z - prev.z);
       setUnder({ tiles: prev.tiles, scale, ox: 0, oy: 0 });
-      const t = setTimeout(() => setUnder(null), 600);
-      return () => clearTimeout(t);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [z]);
-  lastFrame.current = { z, tiles };
+  /**
+   * Remember the frame AFTER the underlay effect has had its look.
+   *
+   * As a plain render-body assignment this ran during the z=8 render — before
+   * the effect above committed — so the effect always compared the new frame
+   * with itself and the underlay never appeared. Effects run in declaration
+   * order after commit, so this one, declared second, records the frame the
+   * NEXT zoom will need.
+   */
+  useEffect(() => { lastFrame.current = { z, tiles }; });
+
+  // Enough of the current view has loaded → the old picture may go. Checked on
+  // every tile-load bump; a 5s ceiling covers a tile server having a bad day.
+  useEffect(() => {
+    if (!under) return;
+    const have = tiles.filter(t => loadedTiles.has(t.url)).length;
+    if (tiles.length > 0 && have >= Math.ceil(tiles.length * 0.6)) {
+      // Loaded is not yet VISIBLE: the new tiles fade in over 180ms, and
+      // retiring the old picture the instant the bytes arrive left a one-
+      // fade-long dim flash. The handover waits for the fade.
+      const done = setTimeout(() => setUnder(null), 280);
+      return () => clearTimeout(done);
+    }
+    const cap = setTimeout(() => setUnder(null), 5000);
+    return () => clearTimeout(cap);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [under, tiles, loadedTiles.size]);
 
   const place = (at: LatLon) => ({
     left: lonToX(at.lon, z) - originX,
     top: latToY(at.lat, z) - originY,
   });
 
-  const setCenterFromPixel = (px: number, py: number) =>
-    ({ lat: yToLat(py, z), lon: xToLon(px, z) });
+  /**
+   * Pixels are meaningless without saying WHICH zoom's pixels.
+   *
+   * This closed over the render's `z`, so zoomAt — which computes the new
+   * centre in the NEW zoom's pixels — converted them at the OLD zoom, and
+   * every zoom doubled the longitude: 34.8° → 250° → 680° → off the world,
+   * where there are no tiles. Which is precisely 'every time I zoom in, it
+   * blanks out' and why the buttons seemed dead. The zoom is now an explicit
+   * argument, so the mistake cannot be re-made silently.
+   */
+  const setCenterFromPixel = (px: number, py: number, atZoom: number) =>
+    ({ lat: yToLat(py, atZoom), lon: xToLon(px, atZoom) });
 
   /** Zoom, keeping whatever is under the pointer under the pointer. */
   const zoomAt = (delta: number, clientX?: number, clientY?: number) => {
@@ -271,7 +308,7 @@ export function MapWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
     const worldLat = yToLat(originY + oy, z);
     const nx = lonToX(worldLon, nz) - ox + size.w / 2;
     const ny = latToY(worldLat, nz) - oy + size.h / 2;
-    const next = { center: setCenterFromPixel(nx, ny), zoom: nz };
+    const next = { center: setCenterFromPixel(nx, ny, nz), zoom: nz };
     setView(next);
     saveViewSoon(next);
   };
@@ -498,11 +535,25 @@ export function MapWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
         )}
 
         {unplaced > 0 && (
-          <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[8px] font-bold shadow-sm"
+          <button data-no-drag data-el-action
+            className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[8px] font-bold shadow-sm"
             style={{ backgroundColor: 'rgba(220,38,38,.92)', color: '#fff' }}
-            title="These have no address on them, so they are shown loose in the middle of the country">
-            {unplaced} with no address
-          </span>
+            title="No address on these — press to fly to where they are shown"
+            onClick={ev => {
+              /*
+                Zoomed into a street, the address-less pins live somewhere else
+                entirely and read as missing. The badge that reports them is
+                now the way to REACH them.
+              */
+              ev.stopPropagation();
+              const loose = markers.filter(m => m.unplaced).map(m => m.at);
+              if (!loose.length) return;
+              const next = fitBounds(loose, size.w, size.h);
+              setView(next);
+              saveViewSoon(next);
+            }}>
+            {unplaced} with no address ›
+          </button>
         )}
 
         {/* Required by the tile licence, and small enough not to matter. */}
