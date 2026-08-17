@@ -2231,7 +2231,19 @@ export function withSampleData(ctx: WidgetCtx): WidgetCtx {
     }
     return false;
   })();
-  const skipJob = withIdle[1] ?? withIdle[0];
+  /**
+   * A job with NO stage history of its own.
+   *
+   * The first pick was withIdle[1] — j2, the very job SAMPLE_LOGS already
+   * moves. Its Survey→Start-up row (a name the real stage list cannot map)
+   * sorts BETWEEN the two appended rows and resets the widget's tracker to
+   * "unknown", so the skip was invisible exactly when the sample names and the
+   * real names differ — the case this fallback exists for.
+   */
+  const moved = new Set(logs
+    .filter(l => l.fieldChanged === 'currentStageId')
+    .map(l => l.apartmentId));
+  const skipJob = withIdle.find(j => !moved.has(j.id)) ?? null;
   const withSkip = hasSkip || !skipJob || stages.length < 3
     ? logs
     : [...logs,
