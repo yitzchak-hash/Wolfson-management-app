@@ -40,7 +40,7 @@ import {
   AttachedArtLayer, ArrowLayer, ArrowDraft, AnchorHints, HostBox, Anchor,
   nearestAnchor, anchorOf, attachBox, DEFAULT_ATTACH_SCALE,
 } from '../components/board/AttachLayer';
-import { renderWidget, WidgetDef, WidgetCtx } from '../data/widgets';
+import { renderWidget, WidgetDef, WidgetCtx, WIDGET_BY_ID } from '../data/widgets';
 import { JobTile, BoardNode, BoardHandlers } from '../components/board/BoardItems';
 import { useTouchGestures, isFingerTouch } from '../hooks/useTouchGestures';
 import { detectPasteIntent, fieldForIntent, canCreateFromIntent, PasteIntent } from '../data/pasteIntent';
@@ -2499,6 +2499,7 @@ export function GeneralJobsPage() {
       x1 = Math.max(x1, n.x + n.w); y1 = Math.max(y1, n.y + n.h);
     }
     if (!starts.size) return;
+    resetDone.current = false;
     setResize({
       id: el.id, ids: [...starts.keys()], starts,
       boxX: x0, boxY: y0, startW: x1 - x0, startH: y1 - y0,
@@ -2512,6 +2513,46 @@ export function GeneralJobsPage() {
     // selection with it; grabbing a node outside it resizes just that node.
     const sel = selectedElIds.has(el.id) ? [...selectedElIds] : undefined;
     beginResize(e, el, sel);
+  }
+
+  /**
+   * The size a node SHIPS at.
+   *
+   * A widget's own registry entry is the authority — every widget declares the
+   * w/h it was designed around — and everything else falls back to the shared
+   * per-type default. This is what "press 0" puts back.
+   */
+  function defaultSizeOf(el: CanvasElement): { w: number; h: number } {
+    if (el.type === 'widget' && el.widget) {
+      const def = WIDGET_BY_ID.get(el.widget);
+      if (def) return { w: def.w, h: def.h };
+    }
+    return NODE_DEFAULT_SIZE[el.type] ?? { w: 180, h: 120 };
+  }
+
+  /**
+   * Set when 0 has already put this gesture back to the default.
+   *
+   * A REF, not state: `setResize(null)` has not flushed by the time the
+   * pointer comes up a moment later, so pointerup still saw the old gesture
+   * and committed the dragged size straight back over the reset.
+   */
+  const resetDone = useRef(false);
+
+  /** Put every node in the current gesture back to the size it ships at. */
+  function resetToDefaultSize() {
+    if (!resize) return;
+    resetDone.current = true;
+    for (const id of resize.ids) {
+      const el = canvasElements.find(c => c.id === id);
+      if (!el) continue;
+      const d = defaultSizeOf(el);
+      updateCanvasElement(id, isDrawingNode(el)
+        ? { ...d, points: relaidPoints(el, { x: el.x, y: el.y, ...d }) }
+        : d);
+    }
+    setGuides([]);
+    setResize(null);
   }
 
   /**
@@ -2592,8 +2633,27 @@ export function GeneralJobsPage() {
     setResize({ ...resize, dw: w - resize.startW, dh: h - resize.startH, ratio: e.shiftKey });
   }
 
+  /**
+   * Zero puts it back.
+   *
+   * Bound only while a resize is actually in progress, so the key is free for
+   * anything else the rest of the time, and torn down with the gesture.
+   */
+  useEffect(() => {
+    if (!resize) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '0') return;
+      e.preventDefault();
+      resetToDefaultSize();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resize]);
+
   function onResizePointerUp() {
     setGuides([]);
+    if (resetDone.current) { resetDone.current = false; setResize(null); return; }
     if (resize && (resize.dw !== 0 || resize.dh !== 0)) {
       const target = resizeBox(resize);
       const m = target?.min ?? { w: 120, h: 80 };
@@ -3805,7 +3865,7 @@ export function GeneralJobsPage() {
           const y0 = Math.min(...boxes.map(bx => bx.y));
           const x1 = Math.max(...boxes.map(bx => bx.x + bx.w));
           const y1 = Math.max(...boxes.map(bx => bx.y + bx.h));
-          const grip = 22 / zoom;
+          const grip = 30 / zoom;
           return (
             <div className="absolute pointer-events-none"
               style={{
@@ -3814,8 +3874,9 @@ export function GeneralJobsPage() {
               }}>
               <div className="absolute" style={{
                 left: x0, top: y0, width: x1 - x0, height: y1 - y0,
-                border: `${1.5 / zoom}px dashed rgba(74,168,216,.9)`,
+                border: `${2.5 / zoom}px dashed #4aa8d8`,
                 borderRadius: 6 / zoom,
+                backgroundColor: 'rgba(74,168,216,.06)',
               }} />
               <div
                 data-el-action data-resize data-group-resize
@@ -3829,11 +3890,47 @@ export function GeneralJobsPage() {
                 className="absolute pointer-events-auto cursor-se-resize"
                 style={{
                   left: x1 - grip / 2, top: y1 - grip / 2, width: grip, height: grip,
-                  backgroundColor: '#4aa8d8', borderRadius: 3 / zoom,
-                  boxShadow: `0 0 0 ${1.5 / zoom}px #fff`,
+                  backgroundColor: '#4aa8d8', borderRadius: 4 / zoom,
+                  // A white ring AND a shadow: the corner can land on a pale
+                  // note or a dark widget and has to read on both.
+                  boxShadow: `0 0 0 ${2.5 / zoom}px #fff, 0 ${2 / zoom}px ${6 / zoom}px rgba(15,23,42,.35)`,
                   touchAction: 'none',
                 }}
-              />
+              >
+                <span className="absolute" style={{
+                  right: 4 / zoom, bottom: 4 / zoom,
+                  width: 9 / zoom, height: 9 / zoom,
+                  borderRight: `${2 / zoom}px solid #fff`,
+                  borderBottom: `${2 / zoom}px solid #fff`,
+                }} />
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* What you can do while your hand is still down.
+            Shown only DURING a resize, next to the corner being dragged, and
+            gone the moment it ends — a permanent legend on the board would be
+            noise, and a hint nobody sees while doing the thing is not a hint. */}
+        {resize && (() => {
+          const t = resizeBox(resize);
+          if (!t) return null;
+          const w = resize.startW + resize.dw, h = resize.startH + resize.dh;
+          return (
+            <div className="absolute pointer-events-none" style={{
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+              transformOrigin: '0 0', left: 0, top: 0, width: 1, height: 1, zIndex: 60,
+            }}>
+              <div className="absolute whitespace-nowrap rounded-md font-semibold"
+                style={{
+                  left: t.x + w + 10 / zoom, top: t.y + h + 10 / zoom,
+                  padding: `${4 / zoom}px ${7 / zoom}px`,
+                  fontSize: 11 / zoom,
+                  backgroundColor: 'rgba(15,23,42,.92)', color: '#fff',
+                  boxShadow: `0 ${2 / zoom}px ${8 / zoom}px rgba(15,23,42,.35)`,
+                }}>
+                {Math.round(w)} × {Math.round(h)} · Shift keeps the shape · press 0 for the default size
+              </div>
             </div>
           );
         })()}

@@ -257,6 +257,19 @@ rect, so the single case falls out of the group case rather than being a second 
 - **Job tiles are NOT resizable.** Tried and dropped by the owner; tiles keep the shared
   `TILE_W`/`TILE_H`. Do not reintroduce `Apartment.tileW/tileH`.
 
+## Resizing tells you what it can do
+While a resize is live a hint follows the corner: the live size, "Shift keeps the shape", and
+"press 0 for the default size". Shown only DURING the gesture — a permanent legend is noise,
+and a hint nobody sees while doing the thing is not a hint.
+
+`0` puts every node in the gesture back to the size it SHIPS at (a widget's registry `w`/`h`,
+otherwise `NODE_DEFAULT_SIZE`). It sets a **ref**, not state: `setResize(null)` has not flushed
+by the time the pointer comes up a moment later, so pointerup still saw the old gesture and
+committed the dragged size straight back over the reset.
+
+The group handle is 30px with a white ring, a shadow and a corner bracket. At 22px flat blue
+it was reported as missing — it was there, it just read as a speck.
+
 ## The widget shelf is audited by `scratchpad/storefull.mjs`
 It tags every card with `data-widget-id` and reports previews drawing an empty state. Two
 traps it fell into first, both of which made it report healthy cards as broken: the widget's

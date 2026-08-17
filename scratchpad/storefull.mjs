@@ -42,7 +42,7 @@ const report = await page.evaluate(() => {
     if (clone) clone.querySelectorAll('[data-widget-blurb], .opacity-0, [class*="group-hover"]').forEach(n => n.remove());
     const t = ((clone && clone.textContent) || '').replace(/\s+/g, ' ').trim();
     const r = c.getBoundingClientRect();
-    out.push({ id, empty: EMPTY.test(t), chars: t.length, h: Math.round(r.height) });
+    out.push({ id, empty: EMPTY.test(t), chars: t.length, h: Math.round(r.height), text: t.slice(0, 80) });
   }
   return { total: cards.length, out };
 });
@@ -58,6 +58,6 @@ if (!report.total) {
 } else {
   const bad = report.out.filter(x => x.empty);
   console.log(`cards: ${report.total}   drawing an empty state: ${bad.length}`);
-  bad.slice(0, 40).forEach(x => console.log(`   ${x.id}`));
+  bad.slice(0, 40).forEach(x => console.log(`   ${x.id} :: ${x.text}`));
 }
 await b.close();

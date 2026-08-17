@@ -2202,12 +2202,56 @@ export function withSampleData(ctx: WidgetCtx): WidgetCtx {
     ? jobs
     : [...jobs, { ...jobs[0], id: `${jobs[0].id}-idle`, displayName: 'Rosen, Chana', currentStageId: null }];
 
+  /**
+   * A job that jumped a stage.
+   *
+   * SAMPLE_LOGS already carries one — but `logs` falls back WHOLESALE, so any
+   * machine with even one real history entry took the real list, and a real
+   * history mostly contains no skip. "Skipped a stage" then drew its empty
+   * state on a shelf whose entire job is showing what the widget does.
+   *
+   * Same failure the sample task rows had, and the same fix: ADD the rows
+   * rather than choose between the two lists. Detected exactly the way the
+   * widget detects it, so the two can never disagree about what a skip is.
+   */
+  const stages = ctx.stages.length ? ctx.stages : SAMPLE_STAGES;
+  const logs = ctx.logs.length ? ctx.logs : SAMPLE_LOGS;
+  const order = new Map(stages.map((st, i) => [st.name, i]));
+  const hasSkip = (() => {
+    const at = new Map<string, number>();
+    const moves = logs
+      .filter(l => l.fieldChanged === 'currentStageId' && l.apartmentId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    for (const l of moves) {
+      const to = order.get(l.newValue ?? '');
+      if (to === undefined) { at.set(l.apartmentId!, -1); continue; }
+      const from = at.get(l.apartmentId!) ?? -1;
+      if (from >= 0 && to > from + 1) return true;
+      at.set(l.apartmentId!, to);
+    }
+    return false;
+  })();
+  const skipJob = withIdle[1] ?? withIdle[0];
+  const withSkip = hasSkip || !skipJob || stages.length < 3
+    ? logs
+    : [...logs,
+        { id: 'sample-skip-a', userName: 'Esther', apartmentId: skipJob.id,
+          apartmentNumber: skipJob.displayName ?? '', actionType: 'update',
+          fieldChanged: 'currentStageId', previousValue: '', newValue: stages[0].name,
+          createdAt: new Date(Date.now() - 9 * 86_400_000).toISOString() },
+        { id: 'sample-skip-b', userName: 'Yitzchak', apartmentId: skipJob.id,
+          apartmentNumber: skipJob.displayName ?? '', actionType: 'update',
+          fieldChanged: 'currentStageId', previousValue: stages[0].name,
+          newValue: stages[stages.length - 1].name,
+          createdAt: new Date(Date.now() - 2 * 86_400_000).toISOString() },
+      ] as unknown as typeof logs;
+
   return {
     ...ctx,
     jobs: withIdle, contractors, photos,
     assignments: withDone,
-    stages: ctx.stages.length ? ctx.stages : SAMPLE_STAGES,
-    logs: ctx.logs.length ? ctx.logs : SAMPLE_LOGS,
+    stages,
+    logs: withSkip,
     planPins: ctx.planPins?.length ? ctx.planPins : SAMPLE_PINS,
     notes: ctx.notes?.length ? ctx.notes : SAMPLE_NOTES,
     employees: ctx.employees?.length ? ctx.employees : SAMPLE_EMPLOYEES,

@@ -65,6 +65,7 @@ const perNode = await page.locator('[data-node-id="CE-a"] [data-resize]').count(
 console.log(`per-node handles while grouped: ${perNode}  ${perNode === 0 ? 'PASS hidden' : 'FAIL still shown'}`);
 console.log(`group handles visible: ${grips}  ${grips === 1 ? 'PASS exactly one' : 'FAIL'}`);
 
+await page.screenshot({ path: 'scratchpad/shot-group-sel.png' });
 const A0 = await box('CE-a'), B0 = await box('CE-b');
 const gapBefore = B0.x - (A0.x + A0.width);
 const grip = await page.locator('[data-group-resize]').first().boundingBox();
@@ -84,4 +85,31 @@ console.log(`left-edge span ${Math.round(spanBefore)} -> ${Math.round(spanAfter)
 console.log(A1.width > A0.width + 20 && B1.width > B0.width + 20 && spanAfter > spanBefore + 20
   ? 'PASS both grew and the arrangement scaled with them'
   : 'FAIL group resize did not scale both');
+// ── the hint, and 0 resetting to the shipped size ──
+// Clear the group selection FIRST. Left over from the previous step, CE-b is
+// still part of a group, so its own handles are hidden and the corner grab
+// lands on the node and moves it — which reads as "resize is broken".
+await page.keyboard.press('Escape');
+await page.waitForTimeout(300);
+const N0 = await box('CE-b');
+await page.locator('[data-node-id="CE-b"]').click({ position: { x: 40, y: 40 } });
+await page.waitForTimeout(300);
+const nb = await box('CE-b');
+await page.mouse.move(nb.x + nb.width - 3, nb.y + nb.height - 3);
+await page.mouse.down();
+await page.mouse.move(nb.x + nb.width + 160, nb.y + nb.height + 120, { steps: 12 });
+await page.waitForTimeout(250);
+// getByText with a substring — a regex text engine matched nothing here.
+const hint = await page.getByText('press 0 for the default size', { exact: false }).count();
+console.log(`resize hint shown while dragging: ${hint}  ${hint >= 1 ? 'PASS' : 'FAIL'}`);
+await page.screenshot({ path: 'scratchpad/shot-resize-hint.png' });
+await page.keyboard.press('0');
+await page.waitForTimeout(600);
+await page.mouse.up();
+await page.waitForTimeout(500);
+const N1 = await box('CE-b');
+console.log(`after pressing 0: ${Math.round(N1.width)}x${Math.round(N1.height)} (note default is 165x150)`);
+console.log(Math.abs(N1.width - 165) < 6 && Math.abs(N1.height - 150) < 6
+  ? 'PASS 0 reset it to the shipped size' : 'FAIL 0 did not reset');
+
 await b.close();
