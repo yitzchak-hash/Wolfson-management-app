@@ -125,6 +125,52 @@ if (await markup.count()) {
   const tools = await page.evaluate(() =>
     [...document.querySelectorAll('button[title]')].filter(b => b.offsetParent).length);
   console.log(`       tools visible: ${tools}`);
+
+  // ── a FINGER draws a stroke ──
+  // The one claim layout checks cannot make: a bare touch, on the live canvas,
+  // leaves ink. Arm the pen, drag a finger, and read the committed-ink canvas's
+  // pixels — the palm rule and touch-action both sit in this path, so if either
+  // regresses this goes blank.
+  const pen = page.locator('button[title]').filter({ hasText: /^Pen$/ });
+  if (await pen.count()) await pen.first().tap();
+  await page.waitForTimeout(400);
+  const canvases = page.locator('canvas');
+  const nCanv = await canvases.count();
+  const cbox = await canvases.nth(nCanv - 1).boundingBox();   // live layer is topmost
+  const inkBefore = await page.evaluate(() => {
+    const list = [...document.querySelectorAll('canvas')];
+    const c = list[1];                                        // committed-ink layer
+    if (!c) return -1;
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    let n = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
+    return n;
+  });
+  const sx = cbox.x + cbox.width * 0.3, sy = cbox.y + cbox.height * 0.5;
+  // A raw touch sequence, not tap(): a stroke is a press that MOVES.
+  const cdp = await page.context().newCDPSession(page);
+  const pts = Array.from({ length: 12 }, (_, i) => ({
+    x: sx + i * (cbox.width * 0.35 / 11), y: sy + Math.sin(i / 2) * 30 }));
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [pts[0]] });
+  for (const pt of pts.slice(1)) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [pt] });
+    await page.waitForTimeout(16);
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await page.waitForTimeout(900);
+  const inkAfter = await page.evaluate(() => {
+    const list = [...document.querySelectorAll('canvas')];
+    const c = list[1];
+    if (!c) return -1;
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    let n = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
+    return n;
+  });
+  console.log(`       committed ink pixels: ${inkBefore} -> ${inkAfter}`);
+  console.log(inkAfter > inkBefore + 200
+    ? 'OK   a finger stroke committed ink'
+    : 'FAIL finger drawing left no ink');
 } else {
   console.log('     (no Mark up button found)');
 }

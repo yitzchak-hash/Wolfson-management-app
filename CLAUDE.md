@@ -237,7 +237,11 @@ rejection only bites once a PEN has been seen, so with no stylus present every t
 pass. Get that backwards and the markup studio is silently dead on a phone with nothing
 thrown and nothing logged.
 
-**End-to-end markup on a real plan cannot be tested in this container** — there is no
+`planphone.mjs` also DRAWS with a raw touch sequence (CDP touch events, not tap — a stroke
+is a press that MOVES) and reads the committed-ink canvas's pixels, so the palm rule and
+touch-action are asserted end-to-end: 0 → ~1300 ink pixels from one finger stroke.
+
+**End-to-end markup on a REAL Drive plan cannot be tested in this container** — there is no
 `.env.local`, so the Drive backend is unconfigured and no PDF can load. Layout, touch-action
 and the palm rule are covered; drawing on an actual sheet needs a real device.
 
@@ -1499,6 +1503,13 @@ half by a boundary reads as broken, not as "more this way". Mirrored under RTL.
   an artifact the owner reviews before/after changes. `scratchpad/shots.mjs` is the measuring
   one — PNGs of 11 phone views plus a per-view count of elements past 390px and of text nodes
   whose `scrollWidth` exceeds their box. Both numbers must be 0 everywhere before shipping.
+
+- **The sweep covers every routed screen** except `/tv`/`/tv-view` (wall panels) and
+  `/login`. Board content inside `[data-board-viewport]` is exempt from the overflow check —
+  a canvas extends past the screen BY DESIGN and you pan to it — but the chrome around it is
+  measured in full. The `board` shot switches workspace through the REAL header dropdown
+  (a localStorage patch is flushed over on unload) and then asserts the board actually
+  mounted — a shot of the wrong page passes every check.
 
 `Sidebar` is `hidden md:flex` with a `MobileNav` in the column flow.
 Twelve routes measured at 390×844: no overflow, nothing unreachable, no tap

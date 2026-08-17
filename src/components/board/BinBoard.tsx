@@ -9,7 +9,7 @@ import {
 } from '../../types';
 import { getBoardTheme } from '../../data/boardThemes';
 import { WidgetStore } from './WidgetStore';
-import { WidgetDef, WidgetCtx } from '../../data/widgets';
+import { WidgetDef, WidgetCtx, WIDGET_BY_ID } from '../../data/widgets';
 import { NODE_DEFAULT_SIZE, ArtKind } from './BoardNodes';
 import { BoardNode, BoardHandlers } from './BoardItems';
 import { NodeSettings } from './NodeSettings';
@@ -213,9 +213,19 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
   }
   function resizeMove(e: React.PointerEvent) {
     if (!resize) return;
-    setResize({ ...resize, dw: e.clientX - resize.startPX, dh: e.clientY - resize.startPY });
+    let dw = e.clientX - resize.startPX;
+    let dh = e.clientY - resize.startPY;
+    // Shift keeps the shape — the same rule as the main board, or the gesture
+    // means different things depending on which window it happens in.
+    if (e.shiftKey && resize.startW > 0 && resize.startH > 0) {
+      const k = Math.max((resize.startW + dw) / resize.startW, (resize.startH + dh) / resize.startH);
+      dw = resize.startW * k - resize.startW;
+      dh = resize.startH * k - resize.startH;
+    }
+    setResize({ ...resize, dw, dh });
   }
   function resizeUp() {
+    if (binResetDone.current) { binResetDone.current = false; setResize(null); return; }
     if (resize && (resize.dw || resize.dh)) {
       updateCanvasElement(resize.id, {
         w: Math.max(60, Math.round(resize.startW + resize.dw)),
@@ -224,6 +234,29 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
     }
     setResize(null);
   }
+
+  /** 0 during a resize puts the node back to the size it ships at. A ref, not
+      state — pointerup lands before setResize(null) flushes, exactly the race
+      the main board already paid for. */
+  const binResetDone = useRef(false);
+  useEffect(() => {
+    if (!resize) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '0') return;
+      e.preventDefault();
+      const el = nodes.find(n => n.id === resize.id);
+      if (!el) return;
+      const dflt = el.type === 'widget' && el.widget
+        ? (WIDGET_BY_ID.get(el.widget) ?? { w: 180, h: 120 })
+        : (NODE_DEFAULT_SIZE[el.type] ?? { w: 180, h: 120 });
+      binResetDone.current = true;
+      updateCanvasElement(el.id, { w: dflt.w, h: dflt.h });
+      setResize(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resize, nodes]);
 
   /**
    * The same handler bundle the main board builds, so `BoardNode` behaves the

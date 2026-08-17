@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../data/store';
 import { WidgetListPopup } from '../components/board/WidgetListPopup';
 import { useNavigate } from 'react-router-dom';
@@ -1097,7 +1097,13 @@ function DashCard({ el, ctx, arranging, registry, onSettings, onRemove, onPlaceO
     const nodeSpan = phone ? phoneSpanOf(span) : span;
     const colPx = node ? node.getBoundingClientRect().width / nodeSpan : 100;
     const nextSpan = Math.max(2, Math.min(12, Math.round((st.w + (e.clientX - st.x)) / colPx)));
-    const nextH = Math.max(120, Math.min(720, Math.round((st.h + (e.clientY - st.y)) / 40) * 40));
+    let nextH = Math.max(120, Math.min(720, Math.round((st.h + (e.clientY - st.y)) / 40) * 40));
+    // Shift keeps the shape here too — the height follows the width through the
+    // card's starting ratio, still snapped to the grid's 40px rows.
+    if (e.shiftKey && st.w > 0) {
+      nextH = Math.max(120, Math.min(720,
+        Math.round((st.h * (nextSpan * colPx) / st.w) / 40) * 40));
+    }
     setPreview({ span: nextSpan, h: nextH });
   }
   function sizeUp() {
@@ -1106,6 +1112,22 @@ function DashCard({ el, ctx, arranging, registry, onSettings, onRemove, onPlaceO
     setPreview(null);
     if (p) updateCanvasElement(el.id, { w: p.span * 100, h: p.h });
   }
+
+  // 0 during a resize puts the card back to the default footprint (span 3,
+  // 165px) — the same values a card starts with before anyone touches it.
+  useEffect(() => {
+    if (!preview) return;
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key !== '0') return;
+      ev.preventDefault();
+      sizeRef.current = null;
+      setPreview(null);
+      updateCanvasElement(el.id, { w: 300, h: 165 });
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preview]);
 
   const shownSpan = preview?.span ?? span;
   const laidOutSpan = phone ? phoneSpanOf(shownSpan) : shownSpan;

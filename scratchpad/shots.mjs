@@ -54,9 +54,11 @@ async function audit(label) {
       }
       return false;
     };
+    const inBoardWorld = el => !!el.closest?.('[data-board-viewport]');
     for (const el of Array.from(document.querySelectorAll('*'))) {
       const r = el.getBoundingClientRect();
       if (r.width === 0 || r.height === 0 || !vis(el)) continue;
+      if (inBoardWorld(el)) continue; // pannable canvas content — reachable by design
       if (r.right > vw + 1.5 && r.width < vw * 3 && !inScroller(el)) {
         out.overflow.push({ tag: el.tagName, cls: (el.className || '').toString().slice(0, 60), right: Math.round(r.right) });
       }
@@ -117,6 +119,28 @@ await shot('pcalendar', '/project-calendar');
 await shot('reports', '/reports');
 await shot('settings', '/settings');
 await shot('appsettings', '/app-settings');
+
+// The screens the sweep never covered: the all-workspace calendar, the change
+// log, and — the big one — the BOARD. A canvas's content extends past the
+// screen BY DESIGN (you pan to it), so inside [data-board-viewport] only
+// CLIPPED TEXT counts as a fault and raw overflow is expected; the chrome
+// around the canvas is still measured in full.
+await shot('gcalendar', '/calendar');
+await shot('activity', '/activity');
+await shot('board', '/jobs', async () => {
+  // /jobs on the Wolfson workspace redirects to /project, and a hand-written
+  // localStorage patch is overwritten by the app's own flush-on-unload (the
+  // standing harness trap in CLAUDE.md) — so switch workspaces the way a
+  // person does: through the header's workspace dropdown.
+  await page.locator('header button', { hasText: /Wolfson/ }).first().tap();
+  await page.waitForTimeout(500);
+  await page.getByRole('menu').getByText(/Job Board/).first().tap();
+  await page.waitForTimeout(2200);
+  // A shot of the wrong page passes every check, so assert the board is
+  // actually on screen before measuring it.
+  const ok = await page.locator('[data-board-viewport]').count();
+  if (!ok) throw new Error('board did not open — still on the diagram');
+});
 
 // The worker portal — the one screen that genuinely lives on a phone, and the
 // one that had never been measured on one.

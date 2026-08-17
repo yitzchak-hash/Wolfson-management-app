@@ -3,6 +3,7 @@ import { Mic, Trash2, Send, Play, Pause, Loader2 } from 'lucide-react';
 import {
   useVoiceRecorder, clock, squash, PLAYBACK_SPEEDS, PlaybackSpeed, RecordedMemo,
 } from '../../data/voiceMemo';
+import { extractFileId, fetchPlanBytes, isUploadBackendConfigured } from '../../data/driveApi';
 
 /**
  * The face of a voice memo — recorder and player.
@@ -134,10 +135,40 @@ export function VoiceMemoPlayer({
   const [total, setTotal] = useState(seconds ?? 0);
   const [speed, setSpeed] = useState<PlaybackSpeed>(1);
 
-  // A memo stored on Drive is a web VIEW link, not a media file — an <audio>
-  // element cannot play it, so the honest thing is to hand over the link
-  // rather than render a player that will never start.
-  const isDriveLink = /drive\.google\.com|docs\.google\.com/.test(src);
+  /**
+   * A memo stored on Drive is a web VIEW link — an <audio> element cannot play
+   * it. But the app already has a route that pipes a private Drive file's
+   * BYTES (api/drive-fetch, built for plans), so the player fetches them into
+   * a blob URL and plays inline like any local memo. Fetched lazily on the
+   * first press of Play, never on render: a note thread can hold a dozen
+   * memos, and downloading all of them to draw the list is the wrong trade.
+   * Only when the backend is not configured — or the fetch fails — does it
+   * fall back to the honest link-out.
+   */
+  const driveFileId = /drive\.google\.com|docs\.google\.com/.test(src) ? extractFileId(src) : null;
+  const [fetched, setFetched] = useState<string | null>(null);
+  const [fetching, setFetching] = useState(false);
+  const [fetchFailed, setFetchFailed] = useState(false);
+  const playableSrc = driveFileId ? fetched : src;
+
+  // A blob URL holds the whole file in memory until revoked.
+  useEffect(() => () => { if (fetched) URL.revokeObjectURL(fetched); }, [fetched]);
+
+  async function fetchDriveAudio() {
+    if (fetching || fetched || !driveFileId) return;
+    setFetching(true);
+    try {
+      const bytes = await fetchPlanBytes(driveFileId);
+      const url = URL.createObjectURL(new Blob([bytes]));
+      setFetched(url);
+      // Play as soon as the element has the source — the user already pressed.
+      setTimeout(() => { void audioRef.current?.play(); setPlaying(true); }, 30);
+    } catch {
+      setFetchFailed(true);
+    } finally {
+      setFetching(false);
+    }
+  }
 
   useEffect(() => {
     const el = audioRef.current;
@@ -145,7 +176,7 @@ export function VoiceMemoPlayer({
     el.playbackRate = speed;
   }, [speed]);
 
-  if (isDriveLink) {
+  if (driveFileId && (fetchFailed || !isUploadBackendConfigured())) {
     return (
       <a
         href={src} target="_blank" rel="noopener noreferrer"
@@ -161,6 +192,7 @@ export function VoiceMemoPlayer({
   const pct = total > 0 ? Math.min(1, at / total) : 0;
 
   function toggle() {
+    if (driveFileId && !fetched) { void fetchDriveAudio(); return; }
     const el = audioRef.current;
     if (!el) return;
     if (el.paused) { void el.play(); setPlaying(true); }
@@ -180,7 +212,7 @@ export function VoiceMemoPlayer({
     <div className={`flex items-center gap-2 rounded-full bg-gray-100 border border-gray-200 px-2 py-1 max-w-full ${className}`}>
       <audio
         ref={audioRef}
-        src={src}
+        src={playableSrc ?? undefined}
         preload="metadata"
         onLoadedMetadata={e => {
           const d = e.currentTarget.duration;
@@ -195,7 +227,8 @@ export function VoiceMemoPlayer({
         title={playing ? 'Pause' : 'Play'}
         className="flex items-center justify-center w-8 h-8 rounded-full bg-[#1e3a5f] text-white flex-shrink-0"
       >
-        {playing ? <Pause size={14} /> : <Play size={14} />}
+        {fetching ? <Loader2 size={14} className="animate-spin" />
+          : playing ? <Pause size={14} /> : <Play size={14} />}
       </button>
 
       {/* The bars ARE the scrubber — a separate slider underneath would be a

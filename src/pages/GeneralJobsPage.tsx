@@ -3525,6 +3525,7 @@ export function GeneralJobsPage() {
       <div
         hidden={viewMode === 'stages'}
         ref={viewportRef}
+        data-board-viewport
         className="flex-1 min-h-0 relative overflow-hidden board-pan"
         style={{
           // A hand over empty board, because a drag there pans. Over a tile the
