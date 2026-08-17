@@ -278,6 +278,8 @@ interface AppState {
   updateApartment: (id: string, changes: Partial<Apartment>, user: User) => void;
   bulkUpdateApartments: (ids: string[], changes: Partial<Apartment>, user: User) => void;
   addApartment: (apt: Apartment) => void;
+  /** Bulk add — one state set, one persist, one (chunked) Firestore batch. */
+  importJobs: (jobs: Apartment[]) => void;
   /** PERMANENT, cascading. Only reachable from the Trash window. */
   deleteApartment: (id: string) => void;
   /** Counts of everything a delete would take with it — for the warning. */
@@ -981,6 +983,15 @@ export const useStore = create<AppState>((set, get) => ({
     set(state => ({ apartments: [...state.apartments, apt] }));
     persist(get);
     fsSet(projectCollection(get().currentProjectId, 'apartments'), apt.id, apt);
+  },
+
+  importJobs: (jobs) => {
+    if (!jobs.length) return;
+    set(state => ({ apartments: [...state.apartments, ...jobs] }));
+    persist(get);
+    // One chunked batch, not hundreds of single writes — a CSV import lands
+    // several hundred jobs at once and each fsSet is its own network round.
+    fsBatchSet(projectCollection(get().currentProjectId, 'apartments'), jobs.map(j => ({ id: j.id, data: j })));
   },
 
   addGhost: (id, x, y) => {

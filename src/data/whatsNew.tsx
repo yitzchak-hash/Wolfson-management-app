@@ -31,8 +31,25 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     date: '2026-08-17',
-    title: 'Selections behave, and the board fits a phone',
+    title: 'The CRM comes aboard, selections behave, the board fits a phone',
     items: [
+      {
+        title: 'Bring the whole CRM year onto the board',
+        body: 'Job Board → settings → "Import jobs from a CSV". Feed it the deals export and '
+          + 'every deal becomes a job — family name from the deal name, Drive link and phone '
+          + 'attached, filed into Done, Ready to Start or its own group by its CRM stage. '
+          + 'You see the full plan first and untick anything; a deal whose Drive folder '
+          + 'belongs to Wolfson or Netiv is kept out automatically, and running the same '
+          + 'file twice cannot create doubles.',
+        demo: 'list',
+      },
+      {
+        title: 'Jobs have a phone number now',
+        body: 'A Phone field sits beside the address in every job and apartment, with a '
+          + 'call button — one tap dials from a phone. Imported jobs bring their number '
+          + 'from the CRM, with the missing Israeli zero put back.',
+        demo: 'tap',
+      },
       {
         title: 'A selection moves as one thing',
         body: 'Lasso jobs, notes and drawings together and drag ANY of them — the whole '

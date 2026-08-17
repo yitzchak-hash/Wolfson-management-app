@@ -103,7 +103,12 @@ export const PORTAL_TOKEN = 'HarnessWorkerToken00001';
 /** Apply the patched blob to a context before the app boots. */
 export async function applySeed(ctx, blob, { whatsNewSeen = true, hebrew = false } = {}) {
   await ctx.addInitScript(([b, seen, heb]) => {
-    localStorage.setItem('active_project', 'wolfson');
+    // Only when absent — this script re-runs on EVERY navigation (the standing
+    // trap), and an unconditional write here yanked any harness that switched
+    // workspace through the real UI straight back to Wolfson on its next
+    // goto(). Harnesses that want a workspace outright still set it in their
+    // own init script, which runs after this one.
+    if (!localStorage.getItem('active_project')) localStorage.setItem('active_project', 'wolfson');
     // Without the version key the app treats the store as stale, resets, and
     // drops you at the login page — which reads as "the harness is broken".
     localStorage.setItem('wolfson_app_version', '3');

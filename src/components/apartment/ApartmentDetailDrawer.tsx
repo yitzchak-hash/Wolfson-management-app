@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
-import { Mic, X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer } from 'lucide-react';
+import { Mic, X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer, Phone as PhoneIcon } from 'lucide-react';
 import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel } from '../../types';
 import { useStore } from '../../data/store';
 import { usePhone } from '../../data/usePhone';
@@ -204,6 +204,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [plansPdfLink, setPlansPdfLink] = useState('');
   const [zohoLinkLocal, setZohoLinkLocal] = useState('');
   const [addressLocal, setAddressLocal] = useState('');
+  const [phoneLocal, setPhoneLocal] = useState('');
   const [mergedWithId, setMergedWithId] = useState<string>('');
   const isPhone = usePhone();
   const [activeTab, setActiveTab] = useState<'details' | 'tasks' | 'stages' | 'history' | 'photos' | 'plan'>('details');
@@ -303,6 +304,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       setPlansPdfLink(apartment.plansPdfLink ?? '');
       setZohoLinkLocal(apartment.zohoLink ?? '');
       setAddressLocal(apartment.address ?? '');
+      setPhoneLocal(apartment.phone ?? '');
       setMergedWithId(apartment.mergedWith ?? '');
       setShowPdfViewer(false);
       setShowHealthCheck(false);
@@ -578,6 +580,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       plansPdfLink: plansPdfLink.trim() || undefined,
       zohoLink: zohoLinkLocal.trim() || undefined,
       address: addressLocal.trim() || undefined,
+      phone: phoneLocal.trim() || undefined,
       ...(clearHistory ? { stageDates: {} } : {}),
     }, currentUser);
     setPrevStageId(stageId);
@@ -619,6 +622,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       plansPdfLink: plansPdfLink.trim() || undefined,
       zohoLink: zohoLinkLocal.trim() || undefined,
       address: addressLocal.trim() || undefined,
+      phone: phoneLocal.trim() || undefined,
     }, currentUser);
     setPrevStageId(currentStageId);
   }
@@ -1272,9 +1276,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 </div>
               </div>
 
-              {/* Address (building projects) — shown under the top row, above notes */}
-              {!isGeneralProject && (
-                <div>
+              {/* Address and phone — one row on desktop, stacked on a phone.
+                  The same block for apartments and General jobs on purpose:
+                  the Drive and Zoho links live in the shared pair below
+                  General Notes, so both kinds are edited the same way. */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="min-w-0">
                   <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.addressLabel}</label>
                   <input
                     value={addressLocal}
@@ -1284,23 +1291,29 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                   />
                 </div>
-              )}
-
-              {/* Address. The Drive and Zoho links that used to sit here too are
-                  in the shared pair below General Notes now, so a General job
-                  and an apartment are edited the same way. */}
-              {isGeneralProject && (
-                <div>
-                  <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.addressLabel}</label>
-                  <input
-                    value={addressLocal}
-                    onChange={e => setAddressLocal(e.target.value)}
-                    onBlur={autoSave}
-                    placeholder={ui.addressLabel}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
-                  />
+                <div className="min-w-0">
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1">Phone</label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      value={phoneLocal}
+                      onChange={e => setPhoneLocal(e.target.value)}
+                      onBlur={autoSave}
+                      placeholder="Phone"
+                      inputMode="tel"
+                      className="w-full min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                    />
+                    {phoneLocal.trim() && (
+                      <a
+                        href={`tel:${phoneLocal.replace(/[^\d+]/g, '')}`}
+                        title="Call"
+                        className="flex items-center justify-center w-9 h-9 rounded-lg border border-gray-200 text-[#1e3a5f] hover:bg-gray-50 flex-shrink-0"
+                      >
+                        <PhoneIcon size={14} />
+                      </a>
+                    )}
+                  </div>
                 </div>
-              )}
+              </div>
 
               {/* General notes */}
               <div>

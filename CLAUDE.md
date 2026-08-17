@@ -1724,3 +1724,55 @@ never hover-gated" and is the test measuring its own impatience.
   Recently-added chip and Newest sort, size slider (`widget_store_scale`), `destLabel` prop
   so the dashboard's button says where the widget lands.
 - Settings hints render as a ⓘ tooltip in the shared `Row` — never as inline explainer text.
+
+---
+
+# v2 — the CRM import
+
+## Importing the Zoho deals export (`src/data/jobsImport.ts` + `ImportJobsCard`)
+Job Board → project settings (gear) → "Import jobs from a CSV". Preview-first like the
+Drive-names tool: choosing a file writes NOTHING; every row can be unticked; only Apply
+creates anything. The card lives in `src/components/settings/ImportJobsCard.tsx` and renders
+only for `currentProjectId === 'general'`.
+
+- **The arithmetic is pure and offline-tested** (`jobsImport.ts`): the CSV walk (quoted
+  fields, Zoho's preamble found by looking for the "Deal Name" header, never a line number),
+  `familyFromDeal` (before the first comma; no comma → before the first " - ", same rule as
+  Drive folder titles), `normalizePhone`, `STAGE_ROUTES`, and `planImport`. Tested against
+  the real 1,148-row export in the container; the repo carries only a synthetic fixture with
+  fake families (`scratchpad/importjobs.mjs` writes it at runtime).
+- **The phone zero rule**: prepend `0` only when the number looks like an Israeli number that
+  lost it — bare digits, not starting `0`/`1`/`+`, at most 9 digits. American and
+  international numbers pass through untouched, formatting preserved.
+- **Stage routing is the owner's 2026-08-17 mapping** (in `STAGE_ROUTES`): Job Completed /
+  Collecting Remaining Balance / Collecting Extras → Done group with stage "Job completed";
+  Hibernating / Collecting Deposit-Key → Ready to Start group, no stage; Being installed →
+  open board, stage "AC installation"; Installation of Geves → its own "Currently in Geves"
+  group + stage. Unlisted CRM stages (incl. Babysitting — "don't put in yet") are skipped
+  with a per-reason count in the preview. Stages are matched by name among the workspace's
+  OWN stages (`projectId === 'general'` — the board's tiles read only those) and created
+  when missing; a named group is found by `binLabelOf` or created as a real bin node beside
+  the seeded four.
+- **The cross-workspace guard** (what the owner asked for by name): a deal whose Drive folder
+  id is already some apartment's `driveLink` in ANY other workspace is skipped as that
+  workspace's job. Built from each project's `${id}_app_data` snapshot — only the open
+  workspace is live, and the card says so. A deal NAME mentioning Wolfson/Netiv is only a
+  warning chip ("Wolfson, Tzvika" is a family), never an auto-skip.
+- **Re-running the same file plans zero**: rows are deduped against existing jobs by Drive
+  folder id, and for driveless rows by the full deal name against the first line of
+  `generalNotes` (imports store the deal name there, plus `Account:` when it adds anything).
+- **`importJobs(jobs)` store action**: one state set, one persist, one chunked `fsBatchSet` —
+  never hundreds of `fsSet` rounds.
+- **`fsBatchSet` chunks at 450**: Firestore rejects a batch past 500 writes, and the catch
+  only warns — a 600-row import (or Force Push of a big board) would have looked saved and
+  silently never reached the cloud.
+- **`Apartment.phone`** — shown beside Address in the drawer (both project kinds, one merged
+  block, `tel:` link), saved on blur via `autoSave`, rides in `apartments` so persist /
+  export / import / Firestore need no new key.
+- **Board open gesture reminder**: a single mouse click on a tile SELECTS; double-click
+  opens (touch: tap picks, second tap opens). The harness first read select-only as a bug —
+  it is the designed "I mean this one" gesture.
+- **`applySeed` seeds `active_project` only when absent** (`scratchpad/seed.mjs`): the init
+  script re-runs on every navigation, and the unconditional write yanked any harness that
+  switched workspace through the real UI back to Wolfson on its next `goto()`. Harnesses
+  that want a workspace outright still set it in their own later-registered init script.

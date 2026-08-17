@@ -491,6 +491,12 @@ export interface Apartment {
   zohoLink?: string;   // General Jobs: Zoho CRM / work order link
   address?: string;    // General Jobs: job site address
   /**
+   * The client's phone number, shown beside the address with a tap-to-call
+   * link. Stored as typed (dashes and all) — it is for a person to read and
+   * dial, not for a machine to parse.
+   */
+  phone?: string;
+  /**
    * Where the job sits on each NAMED board, keyed by view id. The main board
    * keeps using canvasX/canvasY, so nothing that exists today moves.
    */

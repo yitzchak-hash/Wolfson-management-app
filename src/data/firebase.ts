@@ -162,18 +162,24 @@ export async function fsDelete(collectionName: string, docId: string) {
   }
 }
 
-// Batch write multiple docs
+// Batch write multiple docs.
+// Firestore hard-caps a batch at 500 writes and REJECTS the whole thing past
+// that — and since this catch only warns, a 600-row set would look saved and
+// silently never reach the cloud. Chunked, so the CSV import (or a Force Push
+// of a big board) cannot fall off that cliff.
 export async function fsBatchSet(collectionName: string, items: Array<{ id: string; data: object }>) {
   if (!db) return;
   try {
-    const batch = writeBatch(db);
-    items.forEach(({ id, data }) => {
-      const sanitized = Object.fromEntries(
-        Object.entries({ ...data, _updatedAt: serverTimestamp() }).map(([k, v]) => [k, v === undefined ? deleteField() : v])
-      );
-      batch.set(doc(db!, collectionName, id), sanitized, { merge: true });
-    });
-    await _trackWrite(batch.commit());
+    for (let i = 0; i < items.length; i += 450) {
+      const batch = writeBatch(db);
+      items.slice(i, i + 450).forEach(({ id, data }) => {
+        const sanitized = Object.fromEntries(
+          Object.entries({ ...data, _updatedAt: serverTimestamp() }).map(([k, v]) => [k, v === undefined ? deleteField() : v])
+        );
+        batch.set(doc(db!, collectionName, id), sanitized, { merge: true });
+      });
+      await _trackWrite(batch.commit());
+    }
   } catch (e) {
     console.warn(`Firestore batch write failed for ${collectionName}:`, e);
   }
