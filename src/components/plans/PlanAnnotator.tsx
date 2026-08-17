@@ -5,12 +5,13 @@ import {
   Plus, Minus, Maximize2, Loader2, Pen, Pencil, Highlighter, Eraser, Minus as LineIcon,
   ArrowUpRight, Square, Circle, Type, Hand, Layers, FileDown, Check, ExternalLink,
   MessageSquare, Move, Layers2, ChevronsUpDown, User as UserIcon,
-  Monitor, ArrowRight, RotateCcw, MoreHorizontal,
+  Monitor, ArrowRight, RotateCcw, RotateCw, MoreHorizontal,
 } from 'lucide-react';
 import './pdfCompat';   // must come before pdf.js
 import * as pdfjs from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { useStore } from '../../data/store';
+import { useOrientation } from '../../data/useOrientation';
 import { AnnStroke, AnnTool, PlanAnnotation } from '../../types';
 import { fetchPlanBytes, stampPlanToDrive, extractFolderId, isUploadBackendConfigured } from '../../data/driveApi';
 import { PenStroke, PenSample, NibWatch, samplesOf, simplify, nearSegment } from './penInput';
@@ -271,6 +272,9 @@ export function PlanAnnotator({
   const [page, setPage] = useState(0);
   const [scale, setScale] = useState(1.25);
   const [fitting, setFitting] = useState(true);
+  /** Is the SHEET wider than it is tall? Decides the turn-your-phone hint. */
+  const [sheetWide, setSheetWide] = useState(false);
+  const screen = useOrientation();
 
   const [strokes, setStrokes] = useState<AnnStroke[]>([]);
   const [redo, setRedo] = useState<AnnStroke[]>([]);
@@ -518,6 +522,7 @@ export function PlanAnnotator({
     }
 
     const vp = p.getViewport({ scale: s });
+    setSheetWide(vp.width > vp.height * 1.1);
     // Render above CSS resolution so the linework stays sharp on a 4K panel,
     // capped so an A0 sheet does not allocate a canvas the browser refuses.
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
@@ -2379,11 +2384,14 @@ export function PlanAnnotator({
         {/* Stage */}
         <div className="flex-1 min-w-0 flex flex-col">
           {!locked && (
-            // Scaled as a row, same reasoning as the header. On a phone it
-            // scrolls sideways rather than wrapping: a second row here costs
-            // the plan a tenth of a landscape screen.
-            <div className={`flex items-center gap-2 px-3 py-1.5 flex-shrink-0 ${
-              compact ? 'flex-nowrap overflow-x-auto' : 'flex-wrap'}`}
+            // The TOOL row scrolls sideways on a phone; this one wraps.
+            // Scrolling is right for eleven buttons whose order you learn, and
+            // wrong for three controls of which the last is a SLIDER: See-through
+            // was cut in half at the screen edge, and you cannot drag a handle
+            // you cannot see. Two lines cost 34px of a screen that had 800
+            // spare below the sheet.
+            <div className={`flex items-center gap-2 px-3 py-1.5 flex-shrink-0 gap-y-1.5 ${
+              compact ? 'flex-wrap' : 'flex-wrap'}`}
               style={{ backgroundColor: 'rgba(255,255,255,.04)', ...(ui.on ? { zoom: ts } : {}) }}>
               {/* An eraser has no colour and no see-through: it is not ink.
                   Showing the controls implied it was, and setting one did
@@ -2520,7 +2528,16 @@ export function PlanAnnotator({
               that starts on the margin rather than on the sheet has to reach
               the same handler, or it zooms the page instead. */}
           <div ref={stageRef}
-            className={`flex-1 min-h-0 overflow-auto flex items-start justify-center ${
+            /*
+              `items-center`, not `items-start`.
+
+              A landscape sheet on an upright phone fits to WIDTH — 382px across
+              and about 270 tall — inside a stage some 1400 tall, so it sat
+              pinned to the top with two thirds of the screen empty navy below
+              it. Centred, the drawing lands under the thumb and the space reads
+              as margin rather than as something failing to load.
+            */
+            className={`flex-1 min-h-0 overflow-auto flex items-center justify-center ${
               compact ? 'p-1' : 'p-4'}`}
             style={{ touchAction: 'pan-x pan-y' }}>
             {loadErr ? (
@@ -2556,6 +2573,21 @@ export function PlanAnnotator({
               </div>
             ) : (
               <div className="relative shadow-2xl" style={{ backgroundColor: '#fff' }}>
+                {/*
+                  A wide sheet on an upright phone fits to width and comes out
+                  about a third of the screen tall — big enough to see, too
+                  small to mark up. Turning the phone genuinely fixes it: the
+                  same sheet then fills the screen. So the empty space says so
+                  once, quietly, instead of being empty.
+                */}
+                {compact && sheetWide && screen.orientation === 'portrait' && (
+                  <div className="absolute left-0 right-0 top-full mt-3 flex justify-center pointer-events-none">
+                    <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11.5px] font-semibold"
+                      style={{ backgroundColor: 'rgba(255,255,255,.08)', color: '#93a3b5' }}>
+                      <RotateCw size={12} /> Turn the phone for a bigger drawing
+                    </span>
+                  </div>
+                )}
                 <canvas ref={pdfRef} className="block" />
                 <canvas ref={inkRef} className="absolute inset-0 pointer-events-none" />
                 <canvas
