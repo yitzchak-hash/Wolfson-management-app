@@ -1271,6 +1271,48 @@ measures its offsets in its scrolling ancestor's space, so with the transform
 in between `top: 0` meant zero in the SCALED space — measured 577px down at
 1.6×.
 
+
+## The phone sweep — five configurations, one harness
+`scratchpad/shots.mjs` runs the whole app and audits it for overflow and
+clipping. Switches, all env vars: `W=360` / `W=375` (a common Android, an SE —
+thirty pixels less than the 390 everything was built against is where a row
+that "just fits" stops fitting), `LANG_HE=1` (Hebrew, right-to-left),
+`VIEW=landscape` (844x390). `seed.mjs` supplies REAL data — long family names,
+long stage names, a worker with a token and six dated tasks — because a phone
+layout only ever breaks on content longer than its box, and the bare seed has
+none.
+
+Two traps the detector already carries, both of which once made it report the
+test's fault as the product's: a wide row inside its own `overflow-x` container
+is CORRECT and is exempt — but only if that container itself fits on screen —
+and an element carrying `truncate` is cut off on purpose. A third: a page that
+did not render passes every check, so anything measuring a route must first
+assert the route drew something.
+
+**The portal reads the WORKER's language, not the office's** (`Contractor.lang`).
+Seeding `isRtl` tests the admin app in Hebrew and the portal in English, which
+is the one screen a Hebrew-speaking worker actually holds.
+
+**Hardcoded English is the recurring bilingual fault.** `getDueBadge` in the
+portal was a module-level function with "Overdue"/"Today"/"Tomorrow" in it — the
+trap this file already names for `PRIORITY_CONFIG` and friends, and it survived
+because a constant outside a component simply keeps whatever string it was
+written with. The task list said "12 tasks · 3 done" the same way. When adding
+a user-facing string, it comes from the strings object or it is a bug.
+Adding a key to `ContractorUiStrings` makes it **optional with a fallback** —
+those strings are user-edited and stored, and there is no `mergeFresh` for them,
+so a required key renders blank on every object written before today.
+
+**A phone on its side** is not a narrow screen, it is a SHORT one. At 844x390
+the app lays out the desktop, correctly by width, and the sidebar plus filter
+bar plus legend plus progress strip are together taller than the screen. The
+`.short-scroll` rule (`max-height: 560px`) turns the page from a fixed frame
+with an inner scroller into one ordinary scrolling page, so the chrome scrolls
+away. Keyed on height, so a short desktop window behaves the same.
+
+**`.edge-fade`** marks a horizontal scroller as scrollable: a control chopped in
+half by a boundary reads as broken, not as "more this way". Mirrored under RTL.
+
 ## Phone
 - **The buildings page is one building at a time on a phone.** `usePhone()` in
   `ProjectDiagramPage` (matchMedia at Tailwind's md line, the same line the sidebar/MobileNav

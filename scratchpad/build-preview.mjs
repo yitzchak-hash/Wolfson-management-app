@@ -20,11 +20,19 @@ const SCREENS = [
   ['reports', 'Reports', 'The whole builder: what a row is, which columns, the rules. Out as CSV, Excel or print.'],
   ['activity', 'Activity', 'Who changed what, filtered by person, building, kind and date.'],
   ['settings', 'Project settings', 'Stages, buildings and the worker sheet, one column at full width.'],
+  ['portal', 'The worker portal', 'What a worker holds on site: his tasks by date, the job, the stage, whether he is late. His name and count now fit the bar instead of running off it.'],
+];
+
+/** The same app for a Hebrew office and a Hebrew worker. */
+const HEBREW = [
+  ['diagram-he', 'הבניינים', 'Everything mirrors: the tabs run right to left, the search sits on the right, the bottom bar flips. The apartment numbers and family names stay where the eye expects them.'],
+  ['portal-he', 'פורטל העובד', 'The portal follows the WORKER’s language, not the office’s — and the countdown badges now translate with it, which they never did.'],
+  ['tasks-he', 'משימות', 'The task list, mirrored, with the controls in the same order a Hebrew reader scans them.'],
 ];
 
 const b64 = f => readFileSync(`scratchpad/pv-${f}.png`).toString('base64');
 
-const cards = SCREENS.map(([id, name, blurb]) => `
+const card = ([id, name, blurb]) => `
       <figure class="screen">
         <figcaption>
           <span class="screen-name">${name}</span>
@@ -35,7 +43,9 @@ const cards = SCREENS.map(([id, name, blurb]) => `
             <img src="data:image/png;base64,${b64(id)}" alt="${name} on a phone">
           </div>
         </div>
-      </figure>`).join('\n');
+      </figure>`;
+const cards = SCREENS.map(card).join('\n');
+const hebrewCards = HEBREW.map(card).join('\n');
 
 const html = `<title>TzviAir on a Phone</title>
 <style>
@@ -103,6 +113,10 @@ const html = `<title>TzviAir on a Phone</title>
     background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
   }
   .note strong { color: var(--ink); }
+  .section {
+    font-size: 20px; margin: 54px 0 6px; padding-top: 26px;
+    border-top: 1px solid var(--line);
+  }
 </style>
 <div class="wrap">
   <header>
@@ -114,6 +128,12 @@ const html = `<title>TzviAir on a Phone</title>
   </header>
 
   <div class="screens">${cards}
+  </div>
+
+  <h2 class="section">In Hebrew</h2>
+  <p class="lede">The office and the worker each read the app in their own language, and the whole
+  layout mirrors — <strong>right to left</strong>, not merely translated.</p>
+  <div class="screens">${hebrewCards}
   </div>
 
   <p class="note"><strong>Rendered on a full workspace</strong> — 168 apartments with real family names

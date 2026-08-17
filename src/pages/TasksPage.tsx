@@ -399,7 +399,10 @@ export function TasksPage() {
             {/* Kept, but reduced to a small inline aside rather than a line of
                 its own — it is a footnote to the filters, not a heading. */}
             <span className="text-[11px] md:text-xs text-gray-400 whitespace-nowrap md:flex-1">
-              {filtered.length} task{filtered.length !== 1 ? 's' : ''} · {filtered.filter(a => a.completedAt).length} done
+              {/* Was "12 tasks · 3 done" written in English inside a bilingual
+                  page — the same fault as the portal's countdown badges, and
+                  visible the moment the office switched to Hebrew. */}
+              {filtered.length} {s.navTasks} · {filtered.filter(a => a.completedAt).length} {s.completedLabel}
             </span>
 
             {/* A work list somebody can carry. Prints exactly what the filters

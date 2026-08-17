@@ -9,10 +9,14 @@
 // ships beside it.
 import { chromium, devices } from 'playwright';
 import { writeFileSync } from 'fs';
-import { realisticWolfson, applySeed } from './seed.mjs';
+import { realisticWolfson, applySeed, PORTAL_TOKEN } from './seed.mjs';
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
-const blob = await realisticWolfson(browser);
+// A Hebrew pass renders the same screens for a Hebrew office and, crucially,
+// a Hebrew WORKER — the portal follows his language, not the office's.
+const HE = process.env.LANG_HE === '1';
+const SUF = HE ? '-he' : '';
+const blob = await realisticWolfson(browser, { hebrew: HE });
 
 const ctx = await browser.newContext({
   viewport: { width: 390, height: 844 },
@@ -20,7 +24,7 @@ const ctx = await browser.newContext({
   userAgent: devices['iPhone 13'].userAgent,
 });
 await ctx.route('**://drive.google.com/**', r => r.abort());
-await applySeed(ctx, blob);
+await applySeed(ctx, blob, { hebrew: HE });
 const page = await ctx.newPage();
 
 async function go(route, ms = 1700) {
@@ -50,12 +54,13 @@ async function shoot(name, opts = {}) {
     });
     await page.waitForTimeout(500);
   }
-  await page.screenshot({ path: `scratchpad/pv-${name}.png`, fullPage: long });
-  console.log(`pv-${name}.png`);
+  await page.screenshot({ path: `scratchpad/pv-${name}${SUF}.png`, fullPage: long });
+  console.log(`pv-${name}${SUF}.png`);
 }
 
 await go('/project');           await shoot('diagram');
-await page.getByRole('button', { name: /Filters/ }).tap();
+// Either language — the button reads "מסננים" for a Hebrew office.
+await page.getByRole('button', { name: /Filters|מסננים/ }).tap();
 await page.waitForTimeout(600);  await shoot('filters', { full: false });
 await page.keyboard.press('Escape');
 
@@ -70,6 +75,9 @@ await go('/reports');           await shoot('reports', { full: false });
 await go('/activity');          await shoot('activity');
 
 await go('/settings');          await shoot('settings');
+
+// The screen that genuinely lives in a pocket.
+await go(`/c/${PORTAL_TOKEN}`); await shoot('portal');
 
 await browser.close();
 console.log('done');
