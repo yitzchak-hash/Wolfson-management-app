@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
-import { X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer } from 'lucide-react';
+import { Mic, X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer } from 'lucide-react';
 import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel } from '../../types';
 import { useStore } from '../../data/store';
 import { usePhone } from '../../data/usePhone';
-import { VoiceRecorderButton } from '../ui/VoiceMemo';
+import { VoiceRecorderButton, VoiceMemoPlayer } from '../ui/VoiceMemo';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import { StageNotesSection } from './StageNotesSection';
 import { ActivitySection } from './ActivitySection';
@@ -1418,6 +1418,18 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     <div className="mt-2 flex flex-wrap gap-2">
                       {aptFiles.map(f => {
                         const isImage = f.mimeType.startsWith('image/');
+                        if (f.mimeType.startsWith('audio/')) {
+                          // A memo plays in place. Sending it to the lightbox
+                          // with the photos would open a black frame with
+                          // nothing in it.
+                          return (
+                            <VoiceMemoPlayer
+                              key={f.id}
+                              src={f.driveUrl || f.dataUrl || ''}
+                              className="max-w-[260px]"
+                            />
+                          );
+                        }
                         return (
                           <div key={f.id} className="relative group w-14 h-14 rounded-lg border border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center cursor-pointer"
                             onClick={() => {
@@ -1759,6 +1771,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                         >
                                           {att.mimeType.startsWith('image/')
                                             ? <DriveImg src={att.driveFileId ? driveThumbUrl(att.driveFileId, 200) : att.dataUrl} alt={att.filename} className="w-full h-full object-cover" />
+                                            : att.mimeType.startsWith('audio/')
+                                            ? <Mic size={14} className="text-[#1e3a5f]" />
                                             : <FileText size={14} className="text-gray-400" />
                                           }
                                         </div>

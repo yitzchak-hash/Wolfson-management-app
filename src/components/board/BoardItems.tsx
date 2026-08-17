@@ -90,6 +90,8 @@ export interface BoardHandlers {
   editCancel: () => void;
 
   resizeDown: (e: React.PointerEvent, el: CanvasElement) => void;
+  /** Same gesture for a job tile, whose size lives on the Apartment. */
+  jobResizeDown: (e: React.PointerEvent, job: Apartment) => void;
   resizeMove: (e: React.PointerEvent) => void;
   resizeUp: () => void;
 
@@ -180,6 +182,46 @@ export const JobTile = React.memo(function JobTile({
         >
           <Ghost size={9} /> ghost
         </span>
+      )}
+
+      {/* A job tile resizes like every other node on the board.
+          Not on a GHOST: a ghost is the same record shown twice, so dragging
+          one's corner would silently resize the job somewhere else on the
+          board — the size belongs to the job, and the job has one size.
+          Same three targets as BoardNode (right edge, bottom edge, corner) and
+          the same rule that selecting SHOWS them: a handle you can only find by
+          hovering the exact pixel reads as "this type can't be resized", which
+          is precisely what a job tile read as until now. */}
+      {!isGhost && (
+        <>
+          <div data-el-action data-resize
+            onPointerDown={e => H.jobResizeDown(e, job)}
+            onPointerMove={H.resizeMove}
+            onPointerUp={H.resizeUp}
+            className={`absolute right-0 top-3 bottom-6 w-2 cursor-ew-resize z-10 transition-opacity ${
+              isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+            style={{ background: 'linear-gradient(90deg, rgba(74,168,216,0), rgba(74,168,216,.30))' }}
+          />
+          <div data-el-action data-resize
+            onPointerDown={e => H.jobResizeDown(e, job)}
+            onPointerMove={H.resizeMove}
+            onPointerUp={H.resizeUp}
+            className={`absolute bottom-0 left-3 right-6 h-2 cursor-ns-resize z-10 transition-opacity ${
+              isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+            style={{ background: 'linear-gradient(180deg, rgba(74,168,216,0), rgba(74,168,216,.30))' }}
+          />
+          <div data-el-action data-resize
+            onPointerDown={e => H.jobResizeDown(e, job)}
+            onPointerMove={H.resizeMove}
+            onPointerUp={H.resizeUp}
+            title="Drag to resize"
+            className={`absolute -bottom-0.5 -right-0.5 cursor-se-resize transition-opacity z-10 ${
+              isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-80'}`}
+            style={{ width: 26, height: 26,
+                     borderRight: '2px solid currentColor', borderBottom: '2px solid currentColor',
+                     borderRadius: '0 0 5px 0', color: isSelected ? '#4aa8d8' : '#64748b' }}
+          />
+        </>
       )}
 
       {/* Wallboard visibility. Everything shows by default; this only ever

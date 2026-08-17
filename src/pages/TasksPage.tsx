@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useStore } from '../data/store';
+import { VoiceRecorderButton, VoiceMemoPlayer } from '../components/ui/VoiceMemo';
+import { RecordedMemo } from '../data/voiceMemo';
 import { contractorLoad } from '../data/contractorLoad';
 import {
   Plus, Trash2, Save, Edit2, X, CheckCircle2, Clock, Paperclip, ExternalLink, Layers, Filter,
@@ -654,7 +656,9 @@ export function TasksPage() {
               <div className="flex flex-wrap gap-2 mb-3">
                 {addAttachments.map(att => (
                   <div key={att.id} className="relative">
-                    {att.mimeType.startsWith('image/') ? (
+                    {att.mimeType.startsWith('audio/') ? (
+                      <VoiceMemoPlayer src={att.driveUrl || att.dataUrl || ''} className="max-w-[240px]" />
+                    ) : att.mimeType.startsWith('image/') ? (
                       <>
                         <img
                           src={att.driveFileId ? driveThumbUrl(att.driveFileId, 300) : att.dataUrl}
@@ -703,6 +707,20 @@ export function TasksPage() {
               >
                 <Paperclip size={14} />
               </button>
+              <VoiceRecorderButton
+                compact
+                onRecorded={(memo: RecordedMemo) => {
+                  const ext = memo.blob.type.includes('mp4') ? 'm4a' : 'webm';
+                  const reader = new FileReader();
+                  reader.onload = ev => setAddAttachments(prev => [...prev, {
+                    id: Math.random().toString(36).slice(2, 11),
+                    filename: `voice-memo-${Date.now()}.${ext}`,
+                    mimeType: memo.blob.type || 'audio/webm',
+                    dataUrl: ev.target?.result as string,
+                  }]);
+                  reader.readAsDataURL(memo.blob);
+                }}
+              />
               <button
                 onClick={handleAdd}
                 disabled={!addForm.contractorId || !addForm.aptId || !addForm.task.trim()}

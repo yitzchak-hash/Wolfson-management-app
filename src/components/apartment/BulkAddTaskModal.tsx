@@ -5,6 +5,8 @@ import {
 } from 'lucide-react';
 import { Apartment, ContractorCategory, TaskAttachment, TaskPriority } from '../../types';
 import { useStore } from '../../data/store';
+import { VoiceRecorderButton } from '../ui/VoiceMemo';
+import { RecordedMemo } from '../../data/voiceMemo';
 import { contractorLoad } from '../../data/contractorLoad';
 import {
   isUploadBackendConfigured, extractFolderId,
@@ -420,6 +422,22 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                         >
                           <Paperclip size={10} /> {s.attachBtn}
                         </button>
+                        {/* The bulk path takes a memo too — one recording sent
+                            to every apartment in the batch. */}
+                        <VoiceRecorderButton
+                          compact
+                          onRecorded={(memo: RecordedMemo) => {
+                            const ext = memo.blob.type.includes('mp4') ? 'm4a' : 'webm';
+                            const reader = new FileReader();
+                            reader.onload = ev => setAttachments(prev => [...prev, {
+                              id: Math.random().toString(36).slice(2, 11),
+                              filename: `voice-memo-${Date.now()}.${ext}`,
+                              mimeType: memo.blob.type || 'audio/webm',
+                              dataUrl: ev.target?.result as string,
+                            }]);
+                            reader.readAsDataURL(memo.blob);
+                          }}
+                        />
                       </div>
                       <textarea
                         value={task}

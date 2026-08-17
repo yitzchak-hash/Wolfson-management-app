@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { ChevronDown, ChevronUp, Save, Calendar, User, MessageSquare, Paperclip, X, ExternalLink, Clock, RotateCcw } from 'lucide-react';
 import { Stage, User as UserType, StageNoteAttachment, getStageName } from '../../types';
 import { useStore } from '../../data/store';
-import { VoiceRecorderButton } from '../ui/VoiceMemo';
+import { VoiceRecorderButton, VoiceMemoPlayer } from '../ui/VoiceMemo';
 import { RecordedMemo } from '../../data/voiceMemo';
 import { format } from 'date-fns';
 import {
@@ -360,7 +360,9 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                     <div className="mt-1.5 flex flex-wrap gap-1.5">
                       {savedAtts.map(att => (
                         <div key={att.id} className="relative group">
-                          {att.mimeType?.startsWith('image/') ? (
+                          {att.mimeType?.startsWith('audio/') ? (
+                            <VoiceMemoPlayer src={att.driveUrl || att.dataUrl || ''} className="max-w-[240px]" />
+                          ) : att.mimeType?.startsWith('image/') ? (
                             att.driveFileId ? (
                               <a href={att.driveUrl ?? '#'} target="_blank" rel="noopener noreferrer">
                                 <img
@@ -398,7 +400,13 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                     <div className="mt-1.5 flex flex-wrap gap-1.5">
                       {pendingList.map(p => (
                         <div key={p.id} className="relative">
-                          {p.mimeType.startsWith('image/') && (p.dataUrl || p.driveFileId) ? (
+                          {p.mimeType.startsWith('audio/') ? (
+                            <div className="flex items-center gap-1">
+                              <VoiceMemoPlayer src={p.dataUrl || ''} className="max-w-[220px]" />
+                              <button onClick={() => handleRemovePending(stage.id, p.id)}
+                                className="text-[10px] text-gray-400 hover:text-red-500 px-1">×</button>
+                            </div>
+                          ) : p.mimeType.startsWith('image/') && (p.dataUrl || p.driveFileId) ? (
                             <>
                               <img
                                 src={p.driveFileId ? driveThumbUrl(p.driveFileId, 300) : p.dataUrl}

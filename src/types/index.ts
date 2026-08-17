@@ -498,6 +498,20 @@ export interface Apartment {
   canvasX?: number;    // General Jobs: free-canvas X position (px)
   canvasY?: number;    // General Jobs: free-canvas Y position (px)
   tileColor?: string;  // General Jobs: custom background color for the tile
+  /**
+   * The tile's own size on the board, when it has been resized.
+   *
+   * Absent means the shared default (TILE_W x TILE_H), which is what every job
+   * starts at and what the great majority keep — so this stays undefined on
+   * almost every record rather than writing the same two numbers 200 times.
+   *
+   * These ride inside `apartments`, which is already a persisted, exported and
+   * imported state key, so no new entry in that trio is needed. They ARE listed
+   * alongside canvasX/canvasY in updateApartment's canvas-only set, because
+   * tidying the board is not editing the job and must not bump contentUpdatedAt.
+   */
+  tileW?: number;
+  tileH?: number;
   createdAt: string;
   updatedAt: string;
   updatedBy: string;

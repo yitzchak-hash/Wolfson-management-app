@@ -82,15 +82,6 @@ function phoneCellTextWidth(cols: number): number {
 }
 
 /**
- * Width of a string in ems, bucketed by character.
- *
- * A flat "average character" factor is wrong by enough to matter at this size:
- * "Registers & Access Panels" is 25 characters but only 12 ems wide, and an
- * average would have shrunk it two steps further than it needs — or, set the
- * other way, clipped it. Buckets get every real stage name within a few percent
- * for the cost of one pass over the string.
- */
-/**
  * Width of a string in ems, MEASURED.
  *
  * This was a hand-calibrated table of per-character widths, and it undershot
@@ -399,15 +390,31 @@ function AptCell({
         );
       })()}
 
-      {/* Task info — non-compact only */}
-      {!compact && displayLabel && taskInfo && (
-        <span
-          className={`w-full text-center leading-none block truncate ${phone ? 'px-0' : 'px-0.5'}`}
-          style={{ fontSize: phone ? '10.5px' : '9px', opacity: isDimmed ? 0.4 : 0.9, color: isDimmed ? undefined : (allTasksDone ? '#22c55e' : '#f97316'), fontWeight: 600 }}
-        >
-          {allTasksDone ? ui.doneIndicator : `⏳ ${taskInfo}`}
-        </span>
-      )}
+      {/* Task info — non-compact only.
+          Auto-fitted exactly like the stage line above it. A worker's name is
+          longer than a stage name ("⏳ Moshe Aharonov" needs 116px in an 83px
+          cell), so at a fixed 10.5px this was the ONE line still ellipsizing —
+          and it only showed up once the harness seed grew real assignments,
+          which is the whole argument for testing on realistic data. */}
+      {!compact && displayLabel && taskInfo && (() => {
+        const taskText = allTasksDone ? ui.doneIndicator : `⏳ ${taskInfo}`;
+        const fit = phone && cellTextW ? fitStageFont(taskText, cellTextW) : null;
+        return (
+          <span
+            className={`w-full text-center block ${phone ? 'px-0' : 'px-0.5'} ${
+              fit?.wrap ? 'leading-tight' : 'leading-none truncate'}`}
+            style={{
+              fontSize: fit ? `${fit.size}px` : phone ? '10.5px' : '9px',
+              opacity: isDimmed ? 0.4 : 0.9,
+              color: isDimmed ? undefined : (allTasksDone ? '#22c55e' : '#f97316'),
+              fontWeight: 600,
+              ...(fit?.wrap ? { overflowWrap: 'break-word' as const } : null),
+            }}
+          >
+            {taskText}
+          </span>
+        );
+      })()}
 
       {isDuplex && displayLabel && !compact && (
         <span style={{ fontSize: '6px', opacity: 0.4, lineHeight: 1 }}>↑</span>

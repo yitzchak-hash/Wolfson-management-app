@@ -241,6 +241,24 @@ thrown and nothing logged.
 `.env.local`, so the Drive backend is unconfigured and no PDF can load. Layout, touch-action
 and the palm rule are covered; drawing on an actual sheet needs a real device.
 
+## A job tile resizes like anything else
+`Apartment.tileW/tileH`, absent meaning the shared default — so the field stays undefined on
+almost every record instead of writing the same two numbers onto hundreds. They ride inside
+`apartments`, which is ALREADY a persisted/exported/imported key, so the backup trio needs no
+new entry; but they ARE in `updateApartment`'s `CANVAS_ONLY` set, because arranging the board
+is not editing the job and must not bump `contentUpdatedAt`.
+
+`tileSize(job)` is the single answer to "how big is this tile" and every place that needs a
+job's BOX goes through it — snap targets, lasso hit-testing, world bounds, the minimap, the
+fly-to, ghosts. `defaultPos`'s grid deliberately does NOT, or a board of resized tiles would
+re-flow every time one changed. The gesture reuses the element resize state and handlers via
+`resizeBox()`, so jobs and nodes can never drift apart on the next snapping change. Ghosts get
+no handle: a ghost is the same record shown twice, and the size belongs to the job.
+
+**`scratchpad/tileresize.mjs` also guards the harness's own trap**: `addInitScript` runs on
+EVERY navigation, so seeding unconditionally overwrites what the app just saved and the
+reload check fails, blaming the app. Seed only when the key is absent.
+
 ## Voice memos
 `src/data/voiceMemo.ts` is the mechanism (`useVoiceRecorder`, `squash`, `storeVoiceMemo`);
 `src/components/ui/VoiceMemo.tsx` is only its face. A memo attaches as an ordinary audio FILE
