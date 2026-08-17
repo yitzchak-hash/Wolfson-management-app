@@ -241,6 +241,30 @@ thrown and nothing logged.
 `.env.local`, so the Drive backend is unconfigured and no PDF can load. Layout, touch-action
 and the palm rule are covered; drawing on an actual sheet needs a real device.
 
+## Resizing: one gesture, one box
+`ResizeState` carries `ids` + `starts` + the BOX (`boxX/boxY/startW/startH`), and everything —
+one node or a whole selection — scales about that box's top-left. A lone node's box IS its own
+rect, so the single case falls out of the group case rather than being a second code path.
+
+- **Shift locks the ratio**, driven by the LARGER of the two proportional changes so the box
+  follows the direction the hand is really pulling. Read live off the event, not off
+  pointerdown: people reach for shift halfway through a drag.
+- **A multi-selection gets ONE handle** on the combined box, and each member's own corner
+  handles are hidden (`inGroup`). Leaving them visible invites a drag that resizes one node
+  and silently breaks the arrangement.
+- Neighbour snapping is skipped for a group and while shift is held — there is no single edge
+  to line up, and it would fight the locked ratio.
+- **Job tiles are NOT resizable.** Tried and dropped by the owner; tiles keep the shared
+  `TILE_W`/`TILE_H`. Do not reintroduce `Apartment.tileW/tileH`.
+
+## The widget shelf is audited by `scratchpad/storefull.mjs`
+It tags every card with `data-widget-id` and reports previews drawing an empty state. Two
+traps it fell into first, both of which made it report healthy cards as broken: the widget's
+own BLURB lives inside the preview subtree and those blurbs use exactly the words an empty
+state uses ("nobody wants", "so nothing is left implied", "if a day goes by empty"); and a
+widget's own TITLE can too ("NOBODY'S BOOKED"). Strip the overlay before judging, and read the
+number as a starting point rather than a verdict.
+
 ## One movable-panel implementation
 `src/components/board/MovablePanel.tsx` — lifted out of GeneralJobsPage so the Keys panel
 (which lives in BoardToolbar) and NodeSettings can use the SAME one. It clears `right` AND

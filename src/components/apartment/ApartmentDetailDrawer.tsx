@@ -1335,7 +1335,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     </button>
                   </Tooltip>
                   <VoiceRecorderButton
-                    compact
+                    label="Voice"
                     title={ui.attachFiles}
                     onRecorded={async memo => {
                       const ext = memo.blob.type.includes('mp4') ? 'm4a' : 'webm';

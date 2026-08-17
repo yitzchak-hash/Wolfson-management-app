@@ -111,19 +111,6 @@ const BOX_PALETTE = [
   'rgba(254,249,195,0.45)',
 ];
 
-/**
- * A job tile's size.
- *
- * Absent means the shared default, which is what almost every job keeps — so
- * the field stays undefined on the record rather than writing the same two
- * numbers onto two hundred of them. Everything that needs a job's BOX goes
- * through here; the grid that lays out un-positioned jobs deliberately does
- * not, because a default grid built from resized tiles would jump about.
- */
-function tileSize(job: { tileW?: number; tileH?: number }): { w: number; h: number } {
-  return { w: job.tileW ?? TILE_W, h: job.tileH ?? TILE_H };
-}
-
 function defaultPos(i: number) {
   const col = i % PER_ROW;
   const row = Math.floor(i / PER_ROW);
@@ -190,9 +177,14 @@ interface DragState {
 }
 
 interface ResizeState {
-  /** 'job' resizes an Apartment tile, 'el' a CanvasElement. */
-  kind?: 'el' | 'job';
+  /** The node under the handle — and, for a group, every node being carried. */
   id: string;
+  ids: string[];
+  /** Each node's rect when the gesture started, so a group scales about the box. */
+  starts: Map<string, { x: number; y: number; w: number; h: number }>;
+  /** The BOX being dragged: one node's rect, or the union of the selection. */
+  boxX: number;
+  boxY: number;
   startW: number;
   startH: number;
   startPX: number;
@@ -200,6 +192,8 @@ interface ResizeState {
   /** Live delta held locally; committed to the store once on pointerup. */
   dw: number;
   dh: number;
+  /** Shift held on this frame — locks the box's aspect ratio. */
+  ratio: boolean;
 }
 
 interface LassoState { sx: number; sy: number; ex: number; ey: number }
@@ -457,7 +451,7 @@ export function GeneralJobsPage() {
     const out: Box[] = [];
     jobs.forEach((j, i) => {
       if (exclude.has(j.id)) return;
-      out.push({ ...jobPos(j, i), ...tileSize(j) });
+      out.push({ ...jobPos(j, i), w: TILE_W, h: TILE_H });
     });
     canvasElements.forEach(el => {
       if (exclude.has(el.id)) return;
@@ -628,7 +622,7 @@ export function GeneralJobsPage() {
     const cy = (vp ? (vp.clientHeight / 2 - pan.y) / zoom : 200) - h / 2;
     const taken = [
       ...canvasElements.filter(e => e.type !== 'stroke').map(e => ({ x: e.x, y: e.y, w: e.w, h: e.h })),
-      ...jobs.map((j, i) => ({ ...jobPos(j, i), ...tileSize(j) })),
+      ...jobs.map((j, i) => ({ ...jobPos(j, i), w: TILE_W, h: TILE_H })),
     ];
     const clear = (x: number, y: number) => !taken.some(t =>
       x < t.x + t.w + 8 && x + w + 8 > t.x && y < t.y + t.h + 8 && y + h + 8 > t.y);
@@ -728,7 +722,7 @@ export function GeneralJobsPage() {
     let y = Math.max(0, Math.round(c.y - h / 2));
     const taken = [
       ...canvasElements.filter(e => (e.board ?? '') === activeBoardView).map(e => ({ x: e.x, y: e.y, w: e.w, h: e.h })),
-      ...jobs.map((j, i) => ({ ...jobPos(j, i), ...tileSize(j) })),
+      ...jobs.map((j, i) => ({ ...jobPos(j, i), w: TILE_W, h: TILE_H })),
     ];
     for (let n = 0; n < 24; n++) {
       const clash = taken.some(t => x < t.x + t.w && x + w > t.x && y < t.y + t.h && y + h > t.y);
@@ -956,7 +950,6 @@ export function GeneralJobsPage() {
     editCommit: () => live.current.editCommit(),
     editCancel: () => live.current.editCancel(),
     resizeDown: (e, el) => live.current.resizeDown(e, el),
-    jobResizeDown: (e, job) => live.current.jobResizeDown(e, job),
     resizeMove: e => live.current.resizeMove(e),
     resizeUp: () => live.current.resizeUp(),
     openBin: k => live.current.openBin(k),
@@ -1060,13 +1053,22 @@ export function GeneralJobsPage() {
       const st = drag.starts.get(el.id)!;
       return { x: st.x + drag.dx, y: st.y + drag.dy, w: el.w, h: el.h };
     }
-    if (resize?.id === el.id) {
-      const m = minSize(el);
-      return {
-        x: el.x, y: el.y,
-        w: Math.max(m.w, resize.startW + resize.dw),
-        h: Math.max(m.h, resize.startH + resize.dh),
-      };
+    // One rule for a single node and for a whole selection: everything scales
+    // about the BOX's top-left, so a group keeps its internal arrangement and a
+    // lone node (whose box IS its own rect) behaves exactly as it always did.
+    if (resize && resize.ids.includes(el.id)) {
+      const st = resize.starts.get(el.id);
+      if (st) {
+        const kx = resize.startW > 0 ? (resize.startW + resize.dw) / resize.startW : 1;
+        const ky = resize.startH > 0 ? (resize.startH + resize.dh) / resize.startH : 1;
+        const m = minSize(el);
+        return {
+          x: resize.boxX + (st.x - resize.boxX) * kx,
+          y: resize.boxY + (st.y - resize.boxY) * ky,
+          w: Math.max(m.w, st.w * kx),
+          h: Math.max(m.h, st.h * ky),
+        };
+      }
     }
     return { x: el.x, y: el.y, w: el.w, h: el.h };
   }
@@ -1141,11 +1143,10 @@ export function GeneralJobsPage() {
     const idx = jobs.findIndex(j => j.id === job.id);
     if (vp && idx !== -1) {
       const p = jobPos(jobs[idx], idx);
-      const ts = tileSize(jobs[idx]);
       setFlying(true);
       setPan(clampPanRef.current({
-        x: vp.clientWidth / 2 - (p.x + ts.w / 2) * zoom,
-        y: vp.clientHeight / 2 - (p.y + ts.h / 2) * zoom,
+        x: vp.clientWidth / 2 - (p.x + TILE_W / 2) * zoom,
+        y: vp.clientHeight / 2 - (p.y + TILE_H / 2) * zoom,
       }));
       setTimeout(() => setFlying(false), 620);
     }
@@ -1212,7 +1213,7 @@ export function GeneralJobsPage() {
       const idx = jobs.findIndex(j => j.id === id);
       if (idx === -1) return;
       const p = jobPos(jobs[idx], idx);
-      addGhost(id, Math.round(p.x + tileSize(jobs[idx]).w + 20), Math.round(p.y + 20));
+      addGhost(id, Math.round(p.x + TILE_W + 20), Math.round(p.y + 20));
     });
     setCtxMenu(null);
   }
@@ -1248,9 +1249,7 @@ export function GeneralJobsPage() {
 
     // A ghost is a tile like any other while it is being carried, so it lines
     // itself up the same way — against the job it belongs to included.
-    const ghostJob = jobs.find(j => j.id === ghostDrag.jobId);
-    const gts = ghostJob ? tileSize(ghostJob) : { w: TILE_W, h: TILE_H };
-    const box = { x: ghostDrag.startX + dx, y: ghostDrag.startY + dy, w: gts.w, h: gts.h };
+    const box = { x: ghostDrag.startX + dx, y: ghostDrag.startY + dy, w: TILE_W, h: TILE_H };
     const snapped = snapMoving(box, new Set<string>());
     dx += snapped.x - box.x;
     dy += snapped.y - box.y;
@@ -2022,9 +2021,7 @@ export function GeneralJobsPage() {
      */
     if (drag.ids.length === 1 && drag.starts.get(drag.ids[0])) {
       const me = drag.starts.get(drag.ids[0]);
-      const dragged = jobs.find(j => j.id === drag.ids[0]);
-      const dts = dragged ? tileSize(dragged) : { w: TILE_W, h: TILE_H };
-      const box = { x: (me?.x ?? 0) + dx, y: (me?.y ?? 0) + dy, w: dts.w, h: dts.h };
+      const box = { x: (me?.x ?? 0) + dx, y: (me?.y ?? 0) + dy, w: TILE_W, h: TILE_H };
       const snapped = snapMoving(box, new Set(drag.ids));
       dx += snapped.x - box.x;
       dy += snapped.y - box.y;
@@ -2480,38 +2477,61 @@ export function GeneralJobsPage() {
     })));
   }
 
-  function onResizePointerDown(e: React.PointerEvent, el: CanvasElement) {
+  /**
+   * Start a resize — of one node, or of everything selected with it.
+   *
+   * A selection of several things gets ONE handle on the corner of their
+   * combined box, and dragging it scales the whole arrangement about that
+   * box's top-left: each node keeps its position and size RELATIVE to the
+   * others, which is what makes a group resize read as one object rather than
+   * as several things that happen to be moving.
+   */
+  function beginResize(e: React.PointerEvent, el: CanvasElement, groupIds?: string[]) {
     e.stopPropagation(); e.preventDefault();
-    setResize({ kind: 'el', id: el.id, startW: el.w, startH: el.h, startPX: e.clientX, startPY: e.clientY, dw: 0, dh: 0 });
+    const ids = groupIds && groupIds.length > 1 ? groupIds : [el.id];
+    const starts = new Map<string, { x: number; y: number; w: number; h: number }>();
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const id of ids) {
+      const n = canvasElements.find(c => c.id === id);
+      if (!n) continue;
+      starts.set(id, { x: n.x, y: n.y, w: n.w, h: n.h });
+      x0 = Math.min(x0, n.x); y0 = Math.min(y0, n.y);
+      x1 = Math.max(x1, n.x + n.w); y1 = Math.max(y1, n.y + n.h);
+    }
+    if (!starts.size) return;
+    setResize({
+      id: el.id, ids: [...starts.keys()], starts,
+      boxX: x0, boxY: y0, startW: x1 - x0, startH: y1 - y0,
+      startPX: e.clientX, startPY: e.clientY, dw: 0, dh: 0, ratio: e.shiftKey,
+    });
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onResizePointerDown(e: React.PointerEvent, el: CanvasElement) {
+    // Resizing something that is part of the current selection takes the whole
+    // selection with it; grabbing a node outside it resizes just that node.
+    const sel = selectedElIds.has(el.id) ? [...selectedElIds] : undefined;
+    beginResize(e, el, sel);
   }
 
   /**
-   * The same gesture, for a job tile.
+   * The smallest the BOX may be.
    *
-   * A job is not a CanvasElement — it is an Apartment, and its size lives in
-   * tileW/tileH rather than w/h — but everything about the DRAG is identical,
-   * so it shares the one state and the one move/up pair rather than growing a
-   * parallel set that would drift out of step on the next snapping change.
+   * For a group it is the largest of the members' minimums scaled back up, but
+   * that is a lot of arithmetic for a floor nobody reaches — the box minimum is
+   * simply the biggest single minimum, which cannot let any member go under its
+   * own.
    */
-  function onJobResizePointerDown(e: React.PointerEvent, job: Apartment) {
-    e.stopPropagation(); e.preventDefault();
-    const ts = tileSize(job);
-    setResize({ kind: 'job', id: job.id, startW: ts.w, startH: ts.h, startPX: e.clientX, startPY: e.clientY, dw: 0, dh: 0 });
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-  }
-
-  /** The box being resized, whichever kind it is. */
   function resizeBox(r: ResizeState): { x: number; y: number; min: { w: number; h: number } } | null {
-    if (r.kind === 'job') {
-      const idx = jobs.findIndex(j => j.id === r.id);
-      if (idx === -1) return null;
-      const p = jobPos(jobs[idx], idx);
-      // A tile has to stay big enough to read a family name and a stage on.
-      return { x: p.x, y: p.y, min: { w: 120, h: 80 } };
+    if (!r.ids.length) return null;
+    let mw = 0, mh = 0;
+    for (const id of r.ids) {
+      const n = canvasElements.find(c => c.id === id);
+      if (!n) continue;
+      const m = minSize(n);
+      mw = Math.max(mw, m.w); mh = Math.max(mh, m.h);
     }
-    const el = canvasElements.find(x => x.id === r.id);
-    return el ? { x: el.x, y: el.y, min: minSize(el) } : null;
+    return { x: r.boxX, y: r.boxY, min: { w: mw || 120, h: mh || 80 } };
   }
 
   function onResizePointerMove(e: React.PointerEvent) {
@@ -2526,12 +2546,26 @@ export function GeneralJobsPage() {
     let h = Math.max(m.h, resize.startH + (e.clientY - resize.startPY) / zoom);
 
     /**
+     * Shift locks the shape.
+     *
+     * Driven by the LARGER of the two proportional changes, so the box follows
+     * whichever way the hand is really pulling instead of sticking to the axis
+     * that happens to have moved one pixel more. Read live off the event, not
+     * off pointerdown — people reach for shift halfway through a drag.
+     */
+    if (e.shiftKey && resize.startW > 0 && resize.startH > 0) {
+      const k = Math.max(w / resize.startW, h / resize.startH);
+      w = Math.max(m.w, resize.startW * k);
+      h = Math.max(m.h, resize.startH * k);
+    }
+
+    /**
      * A resize lines up with its neighbours too, which is the half of this that
      * was missing: dragging a note's corner out to the width of the one beside
      * it was eyework. The corner being placed is the FAR one, so the near one
      * has to stay exactly where it is — `snapResize` is written that way.
      */
-    if (target) {
+    if (target && resize.ids.length === 1 && !e.shiftKey) {
       const rawW = w, rawH = h;
       const snapped = snapResize(
         { x: target.x, y: target.y, w, h },
@@ -2554,7 +2588,8 @@ export function GeneralJobsPage() {
       setGuides(lines);
     }
 
-    setResize({ ...resize, dw: w - resize.startW, dh: h - resize.startH });
+    if (resize.ids.length > 1 || e.shiftKey) setGuides([]);
+    setResize({ ...resize, dw: w - resize.startW, dh: h - resize.startH, ratio: e.shiftKey });
   }
 
   function onResizePointerUp() {
@@ -2565,18 +2600,25 @@ export function GeneralJobsPage() {
       const w = Math.max(m.w, resize.startW + resize.dw);
       const h = Math.max(m.h, resize.startH + resize.dh);
 
-      if (resize.kind === 'job') {
-        // Rounded, because a tile size is read back into layout maths and a
-        // long fraction there is just noise in every future diff.
-        if (currentUser) {
-          updateApartment(resize.id, { tileW: Math.round(w), tileH: Math.round(h) }, currentUser);
-        }
-      } else {
-        const el = canvasElements.find(e => e.id === resize.id);
-        const box = { x: target?.x ?? 0, y: target?.y ?? 0, w, h };
-        updateCanvasElement(resize.id, el && isDrawingNode(el)
-          ? { w: box.w, h: box.h, points: relaidPoints(el, box) }
-          : { w: box.w, h: box.h });
+      const kx = resize.startW > 0 ? w / resize.startW : 1;
+      const ky = resize.startH > 0 ? h / resize.startH : 1;
+      for (const id of resize.ids) {
+        const st = resize.starts.get(id);
+        const el = canvasElements.find(c => c.id === id);
+        if (!st || !el) continue;
+        const mn = minSize(el);
+        // Position AND size scale about the box corner, so the arrangement
+        // inside the selection is preserved rather than every node landing on
+        // the same spot.
+        const box = {
+          x: Math.round(resize.boxX + (st.x - resize.boxX) * kx),
+          y: Math.round(resize.boxY + (st.y - resize.boxY) * ky),
+          w: Math.max(mn.w, Math.round(st.w * kx)),
+          h: Math.max(mn.h, Math.round(st.h * ky)),
+        };
+        updateCanvasElement(id, isDrawingNode(el)
+          ? { ...box, points: relaidPoints(el, box) }
+          : box);
       }
     }
     setResize(null);
@@ -2772,8 +2814,7 @@ export function GeneralJobsPage() {
       const newEls = new Set<string>();
       jobs.forEach((job, i) => {
         const p = jobPos(job, i);
-        const ts = tileSize(job);
-        if (p.x < maxX && p.x + ts.w > minX && p.y < maxY && p.y + ts.h > minY) newJobs.add(job.id);
+        if (p.x < maxX && p.x + TILE_W > minX && p.y < maxY && p.y + TILE_H > minY) newJobs.add(job.id);
       });
       canvasElements.forEach(el => {
         if (el.x < maxX && el.x + el.w > minX && el.y < maxY && el.y + el.h > minY) newEls.add(el.id);
@@ -2987,7 +3028,7 @@ export function GeneralJobsPage() {
     jobs.forEach((j, i) => {
       const p = jobPos(j, i);
       x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y);
-      x1 = Math.max(x1, p.x + tileSize(j).w); y1 = Math.max(y1, p.y + tileSize(j).h);
+      x1 = Math.max(x1, p.x + TILE_W); y1 = Math.max(y1, p.y + TILE_H);
     });
     canvasElements.forEach(el => {
       // Loose ink has no box worth fitting to; a drawing that became a node
@@ -3073,7 +3114,7 @@ export function GeneralJobsPage() {
     const m = new Map<string, HostBox>();
     jobs.forEach((j, i) => {
       const p = jobPos(j, i);
-      m.set(j.id, { id: j.id, x: p.x, y: p.y, ...tileSize(j) });
+      m.set(j.id, { id: j.id, x: p.x, y: p.y, w: TILE_W, h: TILE_H });
     });
     canvasElements.forEach(el => {
       if (el.type === 'stroke' || el.type === 'arrow' || el.attachedTo || el.board) return;
@@ -3156,7 +3197,7 @@ export function GeneralJobsPage() {
    */
   const EDGE_PAD = 140;
   let contentX = 0, contentY = 0;
-  jobs.forEach((job, i) => { const p = jobPos(job, i); const ts = tileSize(job); contentX = Math.max(contentX, p.x + ts.w); contentY = Math.max(contentY, p.y + ts.h); });
+  jobs.forEach((job, i) => { const p = jobPos(job, i); contentX = Math.max(contentX, p.x + TILE_W); contentY = Math.max(contentY, p.y + TILE_H); });
   canvasElements.forEach(el => {
     // Nodes filed inside a group, and art stuck to something, have no position
     // on THIS board — counting them stretched the surface to fit coordinates
@@ -3236,7 +3277,6 @@ export function GeneralJobsPage() {
     elThumbsDown: (id: string, d: number) => bumpThumbs('element', [id], d, 'down'),
     editChange: setEditText, editCommit: commitEdit, editCancel: () => setEditingEl(null),
     resizeDown: onResizePointerDown, resizeMove: onResizePointerMove, resizeUp: onResizePointerUp,
-    jobResizeDown: onJobResizePointerDown,
     openBin: (k: BinKind) => setOpenBin(k),
     binCount,
   };
@@ -3747,6 +3787,57 @@ export function GeneralJobsPage() {
           </div>
         )}
 
+        {/* One handle for a whole selection.
+            Several things selected together read as one object, so they get one
+            box and one corner rather than a handle on each — dragging any
+            individual corner would resize that node alone and quietly break the
+            arrangement. Drawn in the world layer so it sits exactly on the
+            nodes; the handle itself is kept a constant SCREEN size, because a
+            grab target that shrinks with zoom stops being grabbable. */}
+        {(() => {
+          if (selectedElIds.size < 2) return null;
+          const members = canvasElements.filter(
+            el => selectedElIds.has(el.id) && el.type !== 'bin'
+              && (el.board ?? '') === (boardRef.current ?? ''));
+          if (members.length < 2) return null;
+          const boxes = members.map(elPos);
+          const x0 = Math.min(...boxes.map(bx => bx.x));
+          const y0 = Math.min(...boxes.map(bx => bx.y));
+          const x1 = Math.max(...boxes.map(bx => bx.x + bx.w));
+          const y1 = Math.max(...boxes.map(bx => bx.y + bx.h));
+          const grip = 22 / zoom;
+          return (
+            <div className="absolute pointer-events-none"
+              style={{
+                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                transformOrigin: '0 0', left: 0, top: 0, width: 1, height: 1, zIndex: 46,
+              }}>
+              <div className="absolute" style={{
+                left: x0, top: y0, width: x1 - x0, height: y1 - y0,
+                border: `${1.5 / zoom}px dashed rgba(74,168,216,.9)`,
+                borderRadius: 6 / zoom,
+              }} />
+              <div
+                data-el-action data-resize data-group-resize
+                title="Drag to resize all of them — hold Shift to keep the shape"
+                onPointerDown={e => {
+                  const first = members[0];
+                  if (first) beginResize(e, first, members.map(m => m.id));
+                }}
+                onPointerMove={onResizePointerMove}
+                onPointerUp={onResizePointerUp}
+                className="absolute pointer-events-auto cursor-se-resize"
+                style={{
+                  left: x1 - grip / 2, top: y1 - grip / 2, width: grip, height: grip,
+                  backgroundColor: '#4aa8d8', borderRadius: 3 / zoom,
+                  boxShadow: `0 0 0 ${1.5 / zoom}px #fff`,
+                  touchAction: 'none',
+                }}
+              />
+            </div>
+          );
+        })()}
+
         {/* The lines that explain a snap, while it is happening.
             Held at a constant SCREEN thickness — a world-space width would be a
             hairline at 25% and a bar at 300%, and this is a ruler, not part of
@@ -3918,6 +4009,7 @@ export function GeneralJobsPage() {
                   el={el}
                   x={pos.x} y={pos.y} w={pos.w} h={pos.h}
                   isSelected={selectedElIds.has(el.id)}
+                  inGroup={selectedElIds.size > 1 && selectedElIds.has(el.id)}
                   isDragging={drag?.kind === 'element' && drag.ids.includes(el.id) && drag.moved}
                   isEditing={editingEl === el.id}
                   editText={editingEl === el.id ? editText : ''}
@@ -3943,7 +4035,7 @@ export function GeneralJobsPage() {
                 <JobTile
                   key={`${job.id}-ghost-${gi}`}
                   job={job} index={gi} ghostIndex={gi}
-                  x={p.x} y={p.y} w={tileSize(job).w} h={tileSize(job).h}
+                  x={p.x} y={p.y} w={TILE_W} h={TILE_H}
                   stage={job.currentStageId ? stageMap.get(job.currentStageId) ?? null : null}
                   pendingTasks={pendingByJob.get(job.id) ?? 0}
                   isSelected={false}
@@ -3964,11 +4056,7 @@ export function GeneralJobsPage() {
                 <JobTile
                   key={job.id}
                   job={job} index={i}
-                  x={pos.x} y={pos.y}
-                  w={resize?.kind === 'job' && resize.id === job.id
-                    ? Math.max(120, resize.startW + resize.dw) : tileSize(job).w}
-                  h={resize?.kind === 'job' && resize.id === job.id
-                    ? Math.max(80, resize.startH + resize.dh) : tileSize(job).h}
+                  x={pos.x} y={pos.y} w={TILE_W} h={TILE_H}
                   stage={job.currentStageId ? stageMap.get(job.currentStageId) ?? null : null}
                   pendingTasks={pendingByJob.get(job.id) ?? 0}
                   isSelected={selectedJobIds.has(job.id)}

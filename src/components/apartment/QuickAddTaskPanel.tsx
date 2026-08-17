@@ -512,7 +512,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                         it is audio, and the task already knows how to carry a
                         file. Nothing new to persist, export or import. */}
                     <VoiceRecorderButton
-                      compact
+                      label="Voice"
                       onRecorded={(memo: RecordedMemo) => {
                         const ext = memo.blob.type.includes('mp4') ? 'm4a' : 'webm';
                         const reader = new FileReader();

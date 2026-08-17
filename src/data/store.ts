@@ -866,12 +866,7 @@ export const useStore = create<AppState>((set, get) => ({
 
     // Board position is not "content" — tidying the board must not make every
     // tile read "edited just now".
-    // tileW/tileH belong here with the rest: resizing a tile is arranging the
-    // board, not editing the job, so it must not make every tile read
-    // "edited just now".
-    const CANVAS_ONLY = new Set([
-      'canvasX', 'canvasY', 'tileColor', 'boardBin', 'binnedAt', 'tileW', 'tileH',
-    ]);
+    const CANVAS_ONLY = new Set(['canvasX', 'canvasY', 'tileColor', 'boardBin', 'binnedAt']);
     const touchedContent = Object.keys(changes).some(k => !CANVAS_ONLY.has(k));
     if (touchedContent) updated.contentUpdatedAt = now;
 

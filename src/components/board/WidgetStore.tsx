@@ -461,6 +461,10 @@ function WidgetCard({ def, ctx, onPick, taken, picked, scale = 1, destLabel = 't
   return (
     <div
       role="button" tabIndex={0}
+      // The card says which widget it is, so the shelf can be AUDITED — a
+      // preview quietly drawing "nothing yet" is indistinguishable from a
+      // broken one, and there was no way to ask which ones did.
+      data-widget-id={def.id}
       onClick={() => onPick(def)}
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(def); } }}
       className="group text-left rounded-xl border border-gray-200 overflow-hidden hover:border-[#4aa8d8] hover:shadow-md transition-all flex flex-col cursor-pointer relative"

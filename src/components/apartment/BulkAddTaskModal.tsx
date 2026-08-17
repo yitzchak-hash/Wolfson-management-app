@@ -425,7 +425,7 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                         {/* The bulk path takes a memo too — one recording sent
                             to every apartment in the batch. */}
                         <VoiceRecorderButton
-                          compact
+                          label="Voice"
                           onRecorded={(memo: RecordedMemo) => {
                             const ext = memo.blob.type.includes('mp4') ? 'm4a' : 'webm';
                             const reader = new FileReader();

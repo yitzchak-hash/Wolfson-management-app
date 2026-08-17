@@ -2188,9 +2188,23 @@ export function withSampleData(ctx: WidgetCtx): WidgetCtx {
   const anyDone = assignments.some(a => a.completedAt);
   const withDone = anyDone ? assignments : [...assignments, ...repoint(SAMPLE_DONE)];
 
+  /**
+   * A job nobody has picked up.
+   *
+   * Several widgets exist precisely to find the job with no stage and no open
+   * task — and every sample job had both, so those cards drew their own empty
+   * state on the shelf, which is indistinguishable from a broken preview. One
+   * idle clone gives them something true to show.
+   */
+  const hasIdle = jobs.some(j => !j.currentStageId
+    && !withDone.some(a => a.apartmentId === j.id && !a.completedAt));
+  const withIdle = hasIdle || !jobs.length
+    ? jobs
+    : [...jobs, { ...jobs[0], id: `${jobs[0].id}-idle`, displayName: 'Rosen, Chana', currentStageId: null }];
+
   return {
     ...ctx,
-    jobs, contractors, photos,
+    jobs: withIdle, contractors, photos,
     assignments: withDone,
     stages: ctx.stages.length ? ctx.stages : SAMPLE_STAGES,
     logs: ctx.logs.length ? ctx.logs : SAMPLE_LOGS,

@@ -708,7 +708,7 @@ export function TasksPage() {
                 <Paperclip size={14} />
               </button>
               <VoiceRecorderButton
-                compact
+                label="Voice"
                 onRecorded={(memo: RecordedMemo) => {
                   const ext = memo.blob.type.includes('mp4') ? 'm4a' : 'webm';
                   const reader = new FileReader();
@@ -961,6 +961,20 @@ export function TasksPage() {
                         >
                           <Paperclip size={13} />
                         </button>
+                        <VoiceRecorderButton
+                          label="Voice"
+                          onRecorded={(memo: RecordedMemo) => {
+                            const ext = memo.blob.type.includes('mp4') ? 'm4a' : 'webm';
+                            const reader = new FileReader();
+                            reader.onload = ev => setEditAttachments(prev => [...prev, {
+                              id: Math.random().toString(36).slice(2, 11),
+                              filename: `voice-memo-${Date.now()}.${ext}`,
+                              mimeType: memo.blob.type || 'audio/webm',
+                              dataUrl: ev.target?.result as string,
+                            }]);
+                            reader.readAsDataURL(memo.blob);
+                          }}
+                        />
                         <button
                           onClick={() => saveEdit(a.id)}
                           className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-xs font-medium hover:bg-[#162d4a]"

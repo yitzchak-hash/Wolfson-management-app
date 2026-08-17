@@ -670,6 +670,11 @@ function rotaSampleCells(): Record<string, { id: string; text: string }[]> {
   return out;
 }
 
+/**
+ * Cards that draw from their OWN data bag rather than from the sample world.
+ * Without an entry here they render the empty state they ship with, which on a
+ * shelf reads as a broken widget rather than an unconfigured one.
+ */
 export const WIDGET_PREVIEW: Record<string, Record<string, unknown>> = {
   kpi: { metric: 'overdue', title: 'Running late' },
   divider: { text: 'this week' },
@@ -801,7 +806,8 @@ export const WIDGET_PREVIEW: Record<string, Record<string, unknown>> = {
   'crew-race': { days: 30 },
   // Half a sheet already popped, so a shopper can see both states at once.
   'bubble-wrap': { cols: 10, rows: 6, popped: [1, 2, 5, 9, 11, 14, 20, 21, 22, 30, 33, 41, 44, 47, 52] },
-  'spin-wheel': {},
+  // Names, or the wheel draws an empty disc and a Spin button that does nothing.
+  'spin-wheel': { names: 'Moshe\nAvi\nChaim\nSara\nYitzchak' },
   'streak-flame': {},
   celebrate: {},
   'btu-hp': { unit: 'btu', value: '24000' },

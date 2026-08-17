@@ -91,8 +91,6 @@ export interface BoardHandlers {
   editCancel: () => void;
 
   resizeDown: (e: React.PointerEvent, el: CanvasElement) => void;
-  /** Same gesture for a job tile, whose size lives on the Apartment. */
-  jobResizeDown: (e: React.PointerEvent, job: Apartment) => void;
   resizeMove: (e: React.PointerEvent) => void;
   resizeUp: () => void;
 
@@ -185,45 +183,6 @@ export const JobTile = React.memo(function JobTile({
         </span>
       )}
 
-      {/* A job tile resizes like every other node on the board.
-          Not on a GHOST: a ghost is the same record shown twice, so dragging
-          one's corner would silently resize the job somewhere else on the
-          board — the size belongs to the job, and the job has one size.
-          Same three targets as BoardNode (right edge, bottom edge, corner) and
-          the same rule that selecting SHOWS them: a handle you can only find by
-          hovering the exact pixel reads as "this type can't be resized", which
-          is precisely what a job tile read as until now. */}
-      {!isGhost && (
-        <>
-          <div data-el-action data-resize
-            onPointerDown={e => H.jobResizeDown(e, job)}
-            onPointerMove={H.resizeMove}
-            onPointerUp={H.resizeUp}
-            className={`absolute right-0 top-3 bottom-6 w-2 cursor-ew-resize z-10 transition-opacity ${
-              isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-            style={{ background: 'linear-gradient(90deg, rgba(74,168,216,0), rgba(74,168,216,.30))' }}
-          />
-          <div data-el-action data-resize
-            onPointerDown={e => H.jobResizeDown(e, job)}
-            onPointerMove={H.resizeMove}
-            onPointerUp={H.resizeUp}
-            className={`absolute bottom-0 left-3 right-6 h-2 cursor-ns-resize z-10 transition-opacity ${
-              isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-            style={{ background: 'linear-gradient(180deg, rgba(74,168,216,0), rgba(74,168,216,.30))' }}
-          />
-          <div data-el-action data-resize
-            onPointerDown={e => H.jobResizeDown(e, job)}
-            onPointerMove={H.resizeMove}
-            onPointerUp={H.resizeUp}
-            title="Drag to resize"
-            className={`absolute -bottom-0.5 -right-0.5 cursor-se-resize transition-opacity z-10 ${
-              isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-80'}`}
-            style={{ width: 26, height: 26,
-                     borderRight: '2px solid currentColor', borderBottom: '2px solid currentColor',
-                     borderRadius: '0 0 5px 0', color: isSelected ? '#4aa8d8' : '#64748b' }}
-          />
-        </>
-      )}
 
       {/* Wallboard visibility. Everything shows by default; this only ever
           switches something OFF. Slash through the TV when hidden, so the state
@@ -417,6 +376,12 @@ export interface BoardNodeProps {
   h: number;
   isSelected: boolean;
   isDragging: boolean;
+  /**
+   * Part of a multi-selection. Its own corner handles are hidden — the whole
+   * selection shares ONE handle on the combined box, and dragging an individual
+   * corner would resize that node alone and break the arrangement.
+   */
+  inGroup?: boolean;
   isEditing: boolean;
   editText: string;
   binHot: boolean;
@@ -432,7 +397,7 @@ export interface BoardNodeProps {
 }
 
 export const BoardNode = React.memo(function BoardNode({
-  el, x, y, w, h, isSelected, isDragging, isEditing, editText, binHot, binCount,
+  el, x, y, w, h, isSelected, isDragging, isEditing, editText, binHot, binCount, inGroup,
   recording, savingAudio, ctx, editRef, H, onRecord, onStopRecord, onUploadAudio,
 }: BoardNodeProps) {
   // Any bin node, built-in or one you made.
@@ -757,6 +722,7 @@ export const BoardNode = React.memo(function BoardNode({
           Selecting a node SHOWS the corner rather than hinting at it: a handle
           you can only find by hovering the exact pixel reads as "this type
           can't be resized", which is what it read as on half the board. */}
+      {!inGroup && (<>
       <div data-el-action data-resize
         onPointerDown={e => H.resizeDown(e, el)}
         onPointerMove={H.resizeMove}
@@ -790,6 +756,7 @@ export const BoardNode = React.memo(function BoardNode({
           style={{ width: 7, height: 7, backgroundColor: isSelected ? '#4aa8d8' : '#94a3b8',
                    boxShadow: '0 0 0 1.5px rgba(255,255,255,.9)' }} />
       </div>
+      </>)}
     </div>
   );
 });

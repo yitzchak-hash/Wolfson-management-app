@@ -234,9 +234,6 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
   const H = useRef<BoardHandlers>({
     jobDown: () => {}, jobMove: () => {}, jobUp: () => {}, jobMenu: () => {}, jobOpen: () => {},
     jobDelete: () => {}, jobTv: () => {}, jobThumbs: () => {}, jobThumbsDown: () => {},
-    // A bin is a filing drawer, not a layout — resizing a tile in here would
-    // change how it looks back on the board, which is not what filing means.
-    jobResizeDown: () => {},
     elDown: (e, el) => live.current.elDown(e, el),
     elMove: e => live.current.elMove(e),
     elUp: el => live.current.elUp(el),

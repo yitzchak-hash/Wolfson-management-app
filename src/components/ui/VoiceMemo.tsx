@@ -20,7 +20,7 @@ import {
 // ── Recorder ────────────────────────────────────────────────────────────────
 
 export function VoiceRecorderButton({
-  onRecorded, disabled, busy, title = 'Record a voice memo', compact,
+  onRecorded, disabled, busy, title = 'Record a voice memo', compact, label,
 }: {
   onRecorded: (memo: RecordedMemo) => void | Promise<void>;
   disabled?: boolean;
@@ -28,6 +28,15 @@ export function VoiceRecorderButton({
   busy?: boolean;
   title?: string;
   compact?: boolean;
+  /**
+   * Words beside the microphone.
+   *
+   * A bare grey icon sitting next to a button that SAYS "Attach" reads as
+   * decoration — it was reported as "there is no voice option" on a screen
+   * where the control was present the whole time. Where the row has room, say
+   * what it is.
+   */
+  label?: string;
 }) {
   const rec = useVoiceRecorder();
   const recording = rec.state !== 'idle';
@@ -46,12 +55,14 @@ export function VoiceRecorderButton({
         title={rec.error ?? title}
         className={`flex items-center justify-center rounded-full transition-colors flex-shrink-0
                     ${compact ? 'w-8 h-8' : 'min-w-[36px] min-h-[36px] px-2'}
+                    ${label ? 'border border-gray-200 rounded-lg px-2.5' : ''}
                     ${rec.error
                       ? 'text-red-400 hover:bg-red-50'
                       : 'text-gray-500 hover:text-[#1e3a5f] hover:bg-gray-100'}
                     disabled:opacity-40`}
       >
         {busy ? <Loader2 size={16} className="animate-spin" /> : <Mic size={16} />}
+        {label && <span className="ml-1 text-xs font-medium">{label}</span>}
       </button>
     );
   }

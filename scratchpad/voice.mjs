@@ -44,5 +44,16 @@ await page.waitForTimeout(800);
 const taskMics = await mics('.drawer-panel');
 console.log(`drawer Tasks  — mic controls: ${taskMics}  ${taskMics >= 1 ? 'PASS' : 'FAIL'}`);
 
+// The Tasks PAGE — its own add form, and its edit form. The owner reported
+// pressing "add attachment" on a task and finding no voice option, so both
+// forms have to be checked, not just the drawer's panel.
+await page.goto('http://localhost:5173/tasks');
+await page.waitForTimeout(1600);
+await page.locator('button', { hasText: /Add Task/i }).first().tap().catch(() => {});
+await page.waitForTimeout(800);
+const addMics = await mics(null);
+console.log(`/tasks add form — mic controls: ${addMics}  ${addMics >= 1 ? 'PASS' : 'FAIL'}`);
+await page.screenshot({ path: 'scratchpad/shot-voice-tasks.png' });
+
 await page.screenshot({ path: 'scratchpad/shot-voice-drawer.png' });
 await b.close();
