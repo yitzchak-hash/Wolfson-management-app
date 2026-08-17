@@ -63,10 +63,20 @@ for (let i = 0; i < 5; i++) {
   await page.locator('button[title*="Zoom out"], button[title*="zoom out"]').first().click().catch(() => {});
   await page.waitForTimeout(200);
 }
+// The clamp now treats the FLOATING HEADER's bottom as the top boundary, so
+// the pinned y is the header's measured height, not 0 — content rests below
+// the chrome instead of underneath it. x still pins to the corner.
+const headerBottom = await page.evaluate(() => {
+  const vp = document.querySelector('[data-board-viewport]');
+  const hb = vp?.parentElement?.querySelector('.absolute.top-0');
+  if (!vp || !hb) return 0;
+  return Math.max(0, Math.round(hb.getBoundingClientRect().bottom - vp.getBoundingClientRect().top));
+});
+const pinnedOk = (p) => p.x <= 0.5 && p.y <= headerBottom + 1.5;
 const after = await readPan();
-console.log('pan after zoom out :', JSON.stringify(after));
+console.log(`pan after zoom out : ${JSON.stringify(after)} (header bottom ${headerBottom})`);
 if (after && typeof after.x === 'number') {
-  console.log(after.x <= 0.5 && after.y <= 0.5
+  console.log(pinnedOk(after)
     ? 'PASS board stays in its corner when zoomed out'
     : `FAIL board drifted to x=${after.x} y=${after.y} — blank room above/left`);
 }
@@ -83,7 +93,7 @@ await page.waitForTimeout(300);
 const dragged = await readPan();
 console.log('pan after shoving down-right:', JSON.stringify(dragged));
 if (dragged && typeof dragged.x === 'number') {
-  console.log(dragged.x <= 0.5 && dragged.y <= 0.5
+  console.log(pinnedOk(dragged)
     ? 'PASS cannot be shoved off the corner into empty space'
     : `FAIL shoved to x=${dragged.x} y=${dragged.y} — blank room above/left`);
 }

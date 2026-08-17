@@ -127,6 +127,11 @@ await shot('appsettings', '/app-settings');
 // around the canvas is still measured in full.
 await shot('gcalendar', '/calendar');
 await shot('activity', '/activity');
+await shot('list', '/list');
+await shot('list-search', '/list', async () => {
+  await page.locator('input').first().fill('Topper');
+  await page.waitForTimeout(600);
+});
 await shot('board', '/jobs', async () => {
   // /jobs on the Wolfson workspace redirects to /project, and a hand-written
   // localStorage patch is overwritten by the app's own flush-on-unload (the

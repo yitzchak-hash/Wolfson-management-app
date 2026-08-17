@@ -74,6 +74,22 @@ export const WHATS_NEW: WhatsNewEntry[] = [
           + 'overview map.',
         demo: 'zoom',
       },
+      {
+        title: 'A finger moves the board, never the work',
+        body: 'On a phone or tablet, dragging with a finger pans the board and two '
+          + 'fingers pinch to zoom — tiles and notes stay exactly where they were. A tap '
+          + 'still opens a job or a group. Arranging the board is done with a mouse or '
+          + 'the pen, so nothing gets shoved around by accident on site.',
+        demo: 'drag',
+      },
+      {
+        title: 'The List tab',
+        body: 'A new tab in the phone’s bottom bar shows every job as one list: '
+          + 'search at the top (it forgives spelling and Hebrew/English mix-ups), sorted '
+          + 'by what happened last — or by name or stage — with stage and group filters. '
+          + 'Tap a row and the job opens.',
+        demo: 'list',
+      },
     ],
   },
   {

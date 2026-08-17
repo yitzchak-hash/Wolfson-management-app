@@ -12,6 +12,7 @@ import { ContractorPortal } from './pages/ContractorPortal';
 import { TvViewPage } from './pages/TvViewPage';
 import { TasksPage } from './pages/TasksPage';
 import { GeneralJobsPage } from './pages/GeneralJobsPage';
+import { JobListPage } from './pages/JobListPage';
 import { GlobalCalendarPage } from './pages/GlobalCalendarPage';
 import { ProjectCalendarPage } from './pages/ProjectCalendarPage';
 import { TvPresentationPage } from './pages/TvPresentationPage';
@@ -48,6 +49,9 @@ export default function App() {
           {/* Per-project calendar (sidebar); /calendar stays the all-workspace one */}
           <Route path="project-calendar" element={<ProjectCalendarPage />} />
           <Route path="jobs" element={<GeneralJobsPage />} />
+          {/* The phone's answer to the board: every job as a searchable list.
+              Linked from the bottom bar; the desktop sidebar leaves it out. */}
+          <Route path="list" element={<JobListPage />} />
           {/* Analytics folded into the Dashboard — one page, nothing lost.
               The old address still works so a bookmark does not 404. */}
           <Route path="analytics" element={<Navigate to="/dashboard" replace />} />

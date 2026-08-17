@@ -109,6 +109,9 @@ export const PinnedTitleLayer = React.memo(function PinnedTitleLayer({
    */
   function down(e: React.PointerEvent, el: CanvasElement) {
     if (!onMove) return;
+    // The board's finger rule: touch never moves a node. The layer sits over
+    // the viewport, so letting the press through means the board pans.
+    if (e.pointerType === 'touch') return;
     e.stopPropagation();
     drag.current = {
       id: el.id, px: e.clientX, py: e.clientY,

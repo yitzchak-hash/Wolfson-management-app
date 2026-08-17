@@ -1776,3 +1776,52 @@ only for `currentProjectId === 'general'`.
   script re-runs on every navigation, and the unconditional write yanked any harness that
   switched workspace through the real UI back to Wolfson on its next `goto()`. Harnesses
   that want a workspace outright still set it in their own later-registered init script.
+
+---
+
+# v2 — touch navigates, and the phone gets a list
+
+## The finger rule on the board
+**Touch NAVIGATES; it never arranges.** A finger press on a tile, node, ghost,
+pinned title or resize handle starts a BOARD PAN (`panFromJob` / `panFromEl`,
+the view-only idiom); a motionless tap still opens (job → drawer, group → its
+window, node → picked); two fingers pinch (`useTouchGestures`, which predates
+this). A STYLUS is deliberately not a finger (`isFingerTouch` excludes
+`pen`) — the Samsung pen still arranges like a mouse. Armed pen/highlighter
+tools still draw with a finger — arming a tool is deliberate.
+
+Wiring rules, each of which was a real trap:
+- The touch branches **stopPropagation** — the viewport also pans unclaimed
+  finger presses, and two captures on one pointer meant pointerup never
+  reached the tile, killing tap-to-open.
+- Interactive children (`a,button,input,textarea,select`) are left alone at
+  BOTH levels (node branch and viewport fallback) — capturing them retargets
+  the click (the standing capture trap; the map's corner buttons died of it).
+- `beginResize` bails on touch BEFORE its stopPropagation, so the press
+  bubbles to the node and becomes a pan.
+
+## The clamp knows about the floating header
+`clampPanRef` runs its y-axis in the space BELOW the floating header's
+measured bottom (`headerBarRef`): pinned means "world top at the chrome's
+edge", and panning can never park content underneath it. In stage view the
+header is in the flow and the headroom clamps to 0. `zoomToFit` therefore
+goes THROUGH the clamp again (no raw pan) — and when the phone's 50% zoom
+floor means content still cannot fit, Fit aligns the content's LEFT edge
+rather than centring, so everything off-screen is in one known direction.
+`board.mjs` asserts pinned-y equals the measured header bottom, not 0.
+
+## The job list (`/list`, `JobListPage`)
+Every job in the workspace as one searchable list — the phone's answer to the
+board. Search uses the board's own forgiveness (`queryVariants`/`skeleton`),
+sort cycles Recent activity → Name → Stage, chips filter by stage and (Job
+Board only) by group. The same visibility rule as board search: **Trash never
+appears; other groups appear, labeled** (the row's sub-line). Rows are
+`MiniJob`; a row opens the ordinary `ApartmentDetailDrawer`. Reached from the
+bottom bar — `MobileNav` splices it in as the second tab and shows FIVE
+primary slots so Tasks keeps its place; `useNavItems` deliberately does NOT
+carry it, so the desktop sidebar never shows it. `relativeTime` moved to
+`types/index.ts` (tiles and list share one stamp).
+
+Harness: `scratchpad/touchpan.mjs` — finger drags from tile and note pan and
+leave stored positions unchanged, taps open the job and the group window,
+pinch zooms. The sweep gained `list` / `list-search` shots.

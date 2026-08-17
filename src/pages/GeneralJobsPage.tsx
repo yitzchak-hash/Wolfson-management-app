@@ -14,7 +14,7 @@ import { PlannerEntry, personOf } from '../components/board/PlannerWidget';
 import { PlannerTaskDialog, PlannerRemoveDialog } from '../components/board/PlannerDialogs';
 import { ScheduleWindow } from '../components/board/ScheduleWindow';
 import { boardAccess } from '../types';
-import { Apartment, CanvasElement, BinKind, BIN_KINDS, BIN_META, binKeyOf, binLabelOf, isBuiltInBin, getStageName } from '../types';
+import { Apartment, CanvasElement, BinKind, BIN_KINDS, BIN_META, binKeyOf, binLabelOf, isBuiltInBin, getStageName, relativeTime } from '../types';
 import { printTable, printDot } from '../data/printing';
 import { ApartmentDetailDrawer } from '../components/apartment/ApartmentDetailDrawer';
 import { QuickAddTaskPanel } from '../components/apartment/QuickAddTaskPanel';
@@ -56,21 +56,8 @@ import {
 } from '../components/board/BoardNodes';
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
-/** "3h ago" / "yesterday" / "6 Aug" — short, because tile space is scarce. */
-function relativeTime(iso?: string): string {
-  if (!iso) return '';
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return '';
-  const mins = Math.floor((Date.now() - then) / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days === 1) return 'yesterday';
-  if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-}
+// relativeTime moved to types/index.ts — the job list page stamps rows with
+// the same words the tiles use, and two copies would drift.
 
 const TILE_W = 215;
 const TILE_H = 132;
@@ -387,6 +374,8 @@ export function GeneralJobsPage() {
    *  `buttons` is not dependable across browsers or synthetic input. */
   const leftDown = useRef(false);
   const panFromJob = useRef<Apartment | null>(null);
+  /** A finger pan that began on a NODE — the touch twin of panFromJob. */
+  const panFromEl = useRef<CanvasElement | null>(null);
   const [panning, setPanning] = useState(false);
   /** True while the view is gliding to a search result. */
   const [flying, setFlying] = useState(false);
@@ -1275,6 +1264,16 @@ export function GeneralJobsPage() {
     if (e.button !== 0) return;
     const g = job.ghosts?.[index];
     if (!g) return;
+    // A ghost is the same record shown twice, and the finger rule is the same
+    // too: touch pans, a motionless tap opens the job the ghost stands for.
+    if (isFingerTouch(e) && !e.ctrlKey && !e.metaKey) {
+      e.stopPropagation();
+      panRef.current = { px: e.clientX, py: e.clientY, ox: pan.x, oy: pan.y };
+      setPanning(true);
+      panFromJob.current = job;
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      return;
+    }
     e.stopPropagation();
     setCtxMenu(null); setColorPicker(null);
     const w0 = toWorld(e.clientX, e.clientY);
@@ -1283,6 +1282,11 @@ export function GeneralJobsPage() {
   }
 
   function onGhostPointerMove(e: React.PointerEvent) {
+    if (panRef.current && panFromJob.current) {
+      const st = panRef.current;
+      setPan(clampPanRef.current({ x: st.ox + (e.clientX - st.px), y: st.oy + (e.clientY - st.py) }));
+      return;
+    }
     if (!ghostDrag) return;
     const w0 = toWorld(e.clientX, e.clientY);
     let dx = w0.x - ghostDrag.grabX;
@@ -1306,6 +1310,15 @@ export function GeneralJobsPage() {
   function onGhostPointerUp(e: React.PointerEvent, job: Apartment) {
     setGuides([]);
     stopEdgePush();
+    if (panRef.current && panFromJob.current) {
+      const st = panRef.current;
+      const moved = Math.abs(e.clientX - st.px) > 4 || Math.abs(e.clientY - st.py) > 4;
+      panRef.current = null;
+      panFromJob.current = null;
+      setPanning(false);
+      if (!moved) setSelectedJob(job);
+      return;
+    }
     if (!ghostDrag) return;
     if (ghostDrag.moved) {
       const w0 = toWorld(e.clientX, e.clientY);
@@ -2002,6 +2015,26 @@ export function GeneralJobsPage() {
     // rule, or ink drawn over a tile could never be rubbed off it.
     if (drawMode) { startStrokeAt(e); return; }
     if (eraseMode) { startEraseAt(e); return; }
+    /**
+     * A FINGER on a tile navigates; it never moves the tile.
+     *
+     * On a phone or iPad every touch was starting a drag, so trying to pan the
+     * board shoved jobs around — arranging is a desk job. A finger press pans
+     * exactly like view-only mode, a motionless tap still opens the job, and
+     * two fingers pinch (useTouchGestures). A STYLUS is deliberately not a
+     * finger (isFingerTouch): the Samsung pen keeps arranging like a mouse.
+     * Taps on a tile's own links and buttons pass through untouched — capturing
+     * them would retarget the click to the tile (the standing capture trap).
+     */
+    if (isFingerTouch(e) && !e.ctrlKey && !e.metaKey) {
+      if ((e.target as HTMLElement).closest('a,button,input,textarea,select')) return;
+      e.stopPropagation();
+      panRef.current = { px: e.clientX, py: e.clientY, ox: pan.x, oy: pan.y };
+      setPanning(true);
+      panFromJob.current = job;
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      return;
+    }
     e.stopPropagation();
     setCtxMenu(null); setColorPicker(null);
 
@@ -2324,6 +2357,18 @@ export function GeneralJobsPage() {
     if ((e.target as HTMLElement).closest('[data-el-action]')) return;
     if (drawMode) { startStrokeAt(e); return; }
     if (eraseMode) { startEraseAt(e); return; }
+    // The same finger rule the tiles follow: touch navigates, it never moves a
+    // node. Interactive children (a widget's buttons, a player's controls) are
+    // left alone so they still take the tap.
+    if (isFingerTouch(e) && !e.ctrlKey && !e.metaKey) {
+      if ((e.target as HTMLElement).closest('a,button,input,textarea,select')) return;
+      e.stopPropagation();
+      panRef.current = { px: e.clientX, py: e.clientY, ox: pan.x, oy: pan.y };
+      setPanning(true);
+      panFromEl.current = el;
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      return;
+    }
     e.stopPropagation();
     setCtxMenu(null); setColorPicker(null);
 
@@ -2358,6 +2403,11 @@ export function GeneralJobsPage() {
   }
 
   function onElPointerMove(e: React.PointerEvent) {
+    if (panRef.current && panFromEl.current) {
+      const st = panRef.current;
+      setPan(clampPanRef.current({ x: st.ox + (e.clientX - st.px), y: st.oy + (e.clientY - st.py) }));
+      return;
+    }
     if (!drag || drag.kind !== 'element') return;
     const w0 = toWorld(e.clientX, e.clientY);
     let dx = w0.x - drag.grabX;
@@ -2427,6 +2477,20 @@ export function GeneralJobsPage() {
     setGuides([]);
     stopEdgePush();
     erasing.current = false;
+    if (panRef.current && panFromEl.current) {
+      // A tap that never moved still READS: a group opens its window, anything
+      // else is picked out so its state shows. Nothing on a finger EDITS.
+      const st = panRef.current;
+      const moved = e ? (Math.abs(e.clientX - st.px) > 6 || Math.abs(e.clientY - st.py) > 6) : true;
+      panRef.current = null;
+      panFromEl.current = null;
+      setPanning(false);
+      if (!moved) {
+        if (el.type === 'bin') setOpenBin(binKeyOf(el));
+        else setSelectedElIds(new Set([el.id]));
+      }
+      return;
+    }
     if (!drag || drag.kind !== 'element') return;
 
     // Clip art dropped on top of something STICKS to it, and from then on has
@@ -2566,6 +2630,9 @@ export function GeneralJobsPage() {
    * as several things that happen to be moving.
    */
   function beginResize(e: React.PointerEvent, el: CanvasElement, groupIds?: string[]) {
+    // Read-only under a finger: bailing BEFORE stopPropagation lets the press
+    // bubble to the node, whose own finger rule turns it into a board pan.
+    if (isFingerTouch(e)) return;
     e.stopPropagation(); e.preventDefault();
     const ids = groupIds && groupIds.length > 1 ? groupIds : [el.id];
     const starts = new Map<string, { x: number; y: number; w: number; h: number }>();
@@ -3113,7 +3180,15 @@ export function GeneralJobsPage() {
 
   function onViewportPointerDown(e: React.PointerEvent) {
     // Middle mouse, or space held — pan. Left-drag keeps its existing meaning.
-    if (e.button === 1 || (spaceHeld && e.button === 0)) {
+    // A FINGER that nothing below claimed (a pinned title, any stray chrome-free
+    // surface) also pans: on touch the whole board navigates. Two exclusions:
+    // the canvas background, whose own handler already starts this same pan and
+    // would lose the pointer to a second capture here; and interactive targets
+    // (buttons, links, no-drag controls) — capturing those retargets their
+    // click to this container and reads as the control being dead on touch.
+    if (e.button === 1 || (spaceHeld && e.button === 0)
+        || (isFingerTouch(e) && (e.target as Element) !== canvasRef.current
+            && !(e.target as HTMLElement).closest('a,button,input,textarea,select,[data-no-drag],[data-el-action]'))) {
       e.preventDefault();
       panRef.current = { px: e.clientX, py: e.clientY, ox: pan.x, oy: pan.y };
       setPanning(true);
@@ -3159,15 +3234,17 @@ export function GeneralJobsPage() {
     const s = Math.max(raw, MIN);
     const step = [...ZOOM_STEPS].reverse().find(z => z <= s) ?? ZOOM_STEPS[0];
     setZoom(step);
-    // Raw, not through the clamp: the clamp pins the pan to the world's own
-    // corner when the scaled world is smaller than the viewport (so ZOOMING
-    // cannot open blank space — see clampPanRef), and that would shove the
-    // fitted content straight back under the floating header. Fit is an
-    // explicit framing request; the very next drag or zoom re-clamps.
-    setPan({
-      x: Math.min(24, (r.width - b.w * step) / 2) - b.x * step,
+    // Through the clamp like every other pan — the clamp itself now knows the
+    // floating header is the top boundary, so the fitted content lands below
+    // the chrome and the next drag cannot yank it back underneath.
+    // When the zoom FLOOR means the content still cannot all fit (a phone at
+    // 50%), centring would cut it off on BOTH sides — start from its left
+    // edge instead, so what is off-screen is all in one known direction.
+    const cx = (r.width - b.w * step) / 2;
+    setPan(clampPanRef.current({
+      x: (cx >= 0 ? Math.min(24, cx) : 0) - b.x * step,
       y: headroom + 16 - b.y * step,
-    });
+    }, step));
   }
 
   /** Bounding box of everything on the board, or null when it is empty. */
@@ -3227,13 +3304,28 @@ export function GeneralJobsPage() {
      */
     const pinX = !sideAllowed(projectBoard.expand, 'left');
     const pinY = !sideAllowed(projectBoard.expand, 'top');
+    /**
+     * The floating header is the top boundary, not the viewport edge.
+     *
+     * The header floats OVER the viewport, so "world pinned to y=0" parked the
+     * first row of the board underneath the chrome — and the first pan after a
+     * header-aware Fit yanked it back under. The y-clamp therefore runs in the
+     * space BELOW the header's measured bottom: the world's top rests at the
+     * chrome's edge, and panning can never hide content behind it. In stage
+     * view the header is in the flow above the viewport and hr clamps to 0.
+     */
+    const hb = headerBarRef.current?.getBoundingClientRect();
+    const vr = viewportRef.current?.getBoundingClientRect();
+    const hr = hb && vr ? Math.max(0, Math.min(hb.bottom - vr.top, vp.h * 0.4)) : 0;
+    const vpH = vp.h - hr;
+    const yPrime = h <= vpH
+      ? (pinY ? 0 : Math.max(0, Math.min(p.y - hr, vpH - h)))
+      : Math.min(0, Math.max(p.y - hr, vpH - h));
     return {
       x: w <= vp.w
         ? (pinX ? 0 : Math.max(0, Math.min(p.x, vp.w - w)))
         : Math.min(0, Math.max(p.x, vp.w - w)),
-      y: h <= vp.h
-        ? (pinY ? 0 : Math.max(0, Math.min(p.y, vp.h - h)))
-        : Math.min(0, Math.max(p.y, vp.h - h)),
+      y: yPrime + hr,
     };
   };
 
