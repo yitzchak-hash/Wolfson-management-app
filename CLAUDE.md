@@ -1527,6 +1527,25 @@ half by a boundary reads as broken, not as "more this way". Mirrored under RTL.
   (a localStorage patch is flushed over on unload) and then asserts the board actually
   mounted — a shot of the wrong page passes every check.
 
+- **The phone board chrome**. The header tool strip scrolls sideways (`overflow-x-auto
+  edge-fade max-w-[72vw]`) with **`[&>*]:flex-shrink-0` on every child** — in a scroller the
+  CONTAINER gives, never the items. Without it the zoom group and the Board/Stages toggle
+  (both `overflow-hidden`, so their automatic minimum is zero) were squeezed to 2px and read
+  as not existing on a phone, while everything with a natural min-content survived — the
+  exact kind of half-failure that passes an overflow audit. The zoom group keeps −/+/Fit on
+  a phone and hides only the typeable % and 100%. The phone tools FAB sits **bottom-LEFT**
+  (`left-3`, 12px + safe-area up): top-right sat on the Board/Stages toggle and bottom-right
+  on the board overview, which owns that corner. On first open with content, the phone board
+  runs `zoomToFit()` once (`phoneFitDone` ref).
+
+- **`zoomToFit()` reserves the floating header and bypasses the pan clamp.** The header
+  floats OVER the viewport, so fitting to the full height parked the first row of the board
+  under the chrome; Fit measures `headerBarRef`'s bottom and fits into what is visible below
+  it. It sets the pan RAW — the clamp pins the pan to the world's corner whenever the scaled
+  world is smaller than the viewport (that rule exists so ZOOMING cannot open blank space)
+  and would shove the fitted content straight back under the chrome. Fit is an explicit
+  framing request; the very next drag or zoom goes through the clamp again.
+
 `Sidebar` is `hidden md:flex` with a `MobileNav` in the column flow.
 Twelve routes measured at 390×844: no overflow, nothing unreachable, no tap
 target under 32px. The per-cell add-task "+" is `hidden sm:flex` — a 21px

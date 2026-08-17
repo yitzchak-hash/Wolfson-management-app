@@ -30,6 +30,36 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-08-17',
+    title: 'Selections behave, and the board fits a phone',
+    items: [
+      {
+        title: 'A selection moves as one thing',
+        body: 'Lasso jobs, notes and drawings together and drag ANY of them — the whole '
+          + 'selection travels and lands together. The Done / Ready / Archive / Trash '
+          + 'groups join a group resize too, so arranging a corner of the board is one '
+          + 'gesture, not four.',
+        demo: 'drag',
+      },
+      {
+        title: 'Every scribble is a note now',
+        body: 'Anything you draw on the board becomes its own piece the moment you lift '
+          + 'the pen — move it, resize it, delete it like any note. It used to only '
+          + 'happen when the drawing touched nothing else, which read as drawings '
+          + 'randomly refusing to behave.',
+        demo: 'tap',
+      },
+      {
+        title: 'The board on a phone',
+        body: 'Open the Job Board on a phone and it fits itself to the screen below the '
+          + 'buttons. Zoom − / + and Fit are in the top strip (slide it sideways for '
+          + 'the rest), and the round tools button sits bottom-left, clear of the little '
+          + 'overview map.',
+        demo: 'zoom',
+      },
+    ],
+  },
+  {
     date: '2026-08-16',
     title: 'The August round',
     items: [

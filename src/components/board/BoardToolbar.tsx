@@ -435,7 +435,12 @@ export function BoardToolbar({
       <button
         onClick={() => setPhoneOpen(true)}
         title="Board tools"
-        className="md:hidden absolute z-40 right-3 top-3 w-11 h-11 rounded-full bg-white border border-gray-200 shadow-lg flex items-center justify-center text-[#1e3a5f]"
+        // Bottom-LEFT. Top-3 sat exactly on the Board/Stages toggle, and
+        // bottom-right sat on the board overview's corner — the overview owns
+        // that corner (right-3, bottom 12px). The left one is free on a phone.
+        // env(safe-area-inset-bottom) keeps it off an iPhone's home bar.
+        className="md:hidden absolute z-40 left-3 w-12 h-12 rounded-full bg-[#1e3a5f] text-white shadow-lg flex items-center justify-center"
+        style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}
       >
         <LayoutGrid size={20} />
       </button>

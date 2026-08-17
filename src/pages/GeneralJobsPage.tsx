@@ -123,6 +123,7 @@ function genId(prefix: string) {
 
 // ─── Movable panels ───────────────────────────────────────────────────────────
 import { MovablePanel } from '../components/board/MovablePanel';
+import { usePhone } from '../data/usePhone';
 
 // ─── Eraser geometry ──────────────────────────────────────────────────────────
 /**
@@ -562,6 +563,7 @@ export function GeneralJobsPage() {
    * only ever holds a drawing tool or 'select', which means "nothing armed".
    */
   const [tool, setTool] = useState<BoardTool>('select');
+
   const [boardSettingsOpen, setBoardSettingsOpen] = useState(false);
 
   /**
@@ -1027,6 +1029,27 @@ export function GeneralJobsPage() {
    */
   const jobs = apartments.filter(a =>
     !a.isUnnamed && a.buildingId === 'G' && !a.boardBin && !a.inNotebook);
+
+  /**
+   * A phone OPENS on the whole board.
+   *
+   * At 100% a phone shows a keyhole view of one corner — usually empty dotted
+   * grid, which reads as "there is nothing here". Fit-on-open shows everything
+   * and lets the finger zoom in from there. Once, on arrival, and only when
+   * there is content to fit; a desktop keeps its saved zoom.
+   */
+  const isPhoneBoard = usePhone();
+  const phoneFitDone = useRef(false);
+  useEffect(() => {
+    if (!isPhoneBoard || phoneFitDone.current) return;
+    if (currentProjectId !== 'general') return;
+    if (jobs.length === 0 && canvasElements.length === 0) return;
+    phoneFitDone.current = true;
+    // Next frame, so the viewport has its real size before Fit measures it.
+    const t = setTimeout(() => zoomToFit(), 60);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPhoneBoard, jobs.length, canvasElements.length, currentProjectId]);
 
   /**
    * A node belongs to exactly one surface.
@@ -3122,17 +3145,29 @@ export function GeneralJobsPage() {
     const vp = viewportRef.current;
     if (!vp) return;
     const r = vp.getBoundingClientRect();
+    // The header floats OVER the viewport, so a fit that uses the full height
+    // parks the first row of the board underneath the chrome — on a phone that
+    // was the Done group wearing the search button. Fit into what is actually
+    // visible: the strip below the header. In stage view the header is in the
+    // flow above the viewport and the difference clamps to 0.
+    const hb = headerBarRef.current?.getBoundingClientRect();
+    const headroom = hb ? Math.max(0, Math.min(hb.bottom - r.top, r.height * 0.4)) : 0;
     const b = contentBounds();
     if (!b) return;
-    const raw = Math.min(r.width / (b.w + 48), r.height / (b.h + 48), 1);
+    const raw = Math.min(r.width / (b.w + 48), (r.height - headroom) / (b.h + 48), 1);
     const MIN = r.width < 700 ? 0.5 : 0.25;
     const s = Math.max(raw, MIN);
     const step = [...ZOOM_STEPS].reverse().find(z => z <= s) ?? ZOOM_STEPS[0];
     setZoom(step);
-    setPan(clampPanRef.current({
+    // Raw, not through the clamp: the clamp pins the pan to the world's own
+    // corner when the scaled world is smaller than the viewport (so ZOOMING
+    // cannot open blank space — see clampPanRef), and that would shove the
+    // fitted content straight back under the floating header. Fit is an
+    // explicit framing request; the very next drag or zoom re-clamps.
+    setPan({
       x: Math.min(24, (r.width - b.w * step) / 2) - b.x * step,
-      y: 16 - b.y * step,
-    }));
+      y: headroom + 16 - b.y * step,
+    });
   }
 
   /** Bounding box of everything on the board, or null when it is empty. */
@@ -3481,8 +3516,14 @@ export function GeneralJobsPage() {
           )}
         </div>
 
-        {/* Tool buttons */}
-        <div className={`flex items-center gap-2 ${
+        {/* Tool buttons. On a phone the strip SCROLLS and says so (.edge-fade)
+            — before this the Board/Stages toggle simply clipped at the screen
+            edge, which read as broken rather than as "more this way".
+            Every child is flex-shrink-0: in a scroller the CONTAINER gives,
+            never the items — without it the zoom group and the Board/Stages
+            toggle (both overflow-hidden, so their min size is zero) were
+            squeezed to 2px and read as simply not existing on a phone. */}
+        <div className={`flex items-center gap-2 overflow-x-auto edge-fade md:overflow-visible max-w-[72vw] md:max-w-none [&>*]:flex-shrink-0 ${
           floatingHeader ? 'pointer-events-auto rounded-2xl bg-white/75 backdrop-blur-sm px-2 py-1 shadow-sm' : ''
         }`}>
           <button
@@ -3511,7 +3552,10 @@ export function GeneralJobsPage() {
 
           {/* Zoom, where it can be reached without hunting the corner. The
               percentage is typeable — "150" is faster than five clicks. */}
-          <div className="hidden sm:flex items-center rounded-xl border border-gray-200 overflow-hidden">
+          {/* On a phone this keeps −, + and Fit and drops the typeable % —
+              zoom used to vanish entirely below sm, leaving pinch as the only
+              way and Fit unreachable. */}
+          <div className="flex items-center rounded-xl border border-gray-200 overflow-hidden">
             <button onClick={() => zoomCentre(-1)} title="Zoom out"
               className="w-8 h-9 text-gray-500 hover:bg-gray-50 text-base font-bold">−</button>
             <input
@@ -3519,16 +3563,16 @@ export function GeneralJobsPage() {
               onChange={e => setZoomField(e.target.value.replace(/[^\d]/g, ''))}
               onBlur={commitZoomField}
               onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-              className="w-11 h-9 text-center text-[12px] font-bold text-gray-700 tabular-nums outline-none"
+              className="hidden sm:block w-11 h-9 text-center text-[12px] font-bold text-gray-700 tabular-nums outline-none"
               title="Type a zoom level"
             />
-            <span className="text-[11px] text-gray-400 pr-1.5 -ml-1">%</span>
+            <span className="hidden sm:inline text-[11px] text-gray-400 pr-1.5 -ml-1">%</span>
             <button onClick={() => zoomCentre(1)} title="Zoom in"
               className="w-8 h-9 text-gray-500 hover:bg-gray-50 text-base font-bold">+</button>
-            <span className="w-px h-5 bg-gray-200" />
+            <span className="hidden sm:block w-px h-5 bg-gray-200" />
             <button onClick={() => { setZoom(1); setPan(clampPanRef.current({ x: 0, y: 0 })); }}
               title="Back to 100%"
-              className="px-2.5 h-9 text-[11px] font-bold text-gray-500 hover:bg-gray-50">100%</button>
+              className="hidden sm:block px-2.5 h-9 text-[11px] font-bold text-gray-500 hover:bg-gray-50">100%</button>
             <button onClick={zoomToFit} title="Fit the whole board"
               className="px-2.5 h-9 text-[11px] font-bold text-gray-500 hover:bg-gray-50">Fit</button>
           </div>
