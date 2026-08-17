@@ -336,8 +336,24 @@ party's artwork, icons or wording, and none should be added.
 Neighbour snapping (edges and centres of every other node) is always on during a move or a
 resize, for every node type; `snapToGrid` governs the grid alone. Guides are drawn live and
 cleared on pointer-up. Thresholds are in SCREEN pixels divided by zoom — forget that and
-things run away from the cursor at any zoom but 100%. A finished stroke that overlaps nothing
-becomes its own resizable node (`data.own`).
+things run away from the cursor at any zoom but 100%. EVERY finished stroke becomes its own
+resizable node (`data.own`). The overlap rule was dropped: on a dense board — or at 25%,
+where visually empty screen is crowded world — most scribbles silently stayed flat ink,
+which read as "my drawing became nothing". The blocking problem that rule existed to avoid
+is solved at the hit-test instead: a drawing node's container is `pointer-events-none` and
+only a fat invisible hit-line over the ink catches the pointer, so a stroke across a tile
+never stops the tile being clicked. The resize handles re-enable themselves with
+`pointer-events-auto`.
+
+## A drag carries the whole selection
+`DragState.carryJobs`/`carryEls` — dragging any member of a mixed selection moves BOTH kinds.
+They are separate maps because the kinds commit differently (`updateApartment` vs
+`updateCanvasElement`, drawings re-laying their points). Grabbing a job used to move only the
+jobs and leave the notes standing, which read as "I can't drag a group at all". Bins ride in
+group RESIZE too — they are excluded from deletion as fixtures, and copying that idiom into
+the group-handle filter had left a selection of bins with no handle at all.
+`scratchpad/groupbugs.mjs` asserts all of it, including that a press at 25% zoom must land
+INSIDE the shrunken world div — a small test board only covers the corner of the screen.
 
 ## Board tools toggle off
 Pressing the tool you are already holding puts it DOWN and returns to Select (the board's

@@ -572,6 +572,18 @@ export function StrokeNode({ el }: { el: CanvasElement }) {
       preserveAspectRatio="none"
       aria-hidden="true"
     >
+      {/* The HIT line: invisible, fat, and the only part that takes the
+          pointer — grabbing a 3px pen line by its exact pixels is a game
+          nobody wins. Events land here and bubble to the node's handlers. */}
+      <polyline
+        points={el.points}
+        fill="none"
+        stroke="rgba(0,0,0,0)"
+        strokeWidth={(el.strokeWidth ?? 3) + 14}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        style={{ pointerEvents: 'visibleStroke', cursor: 'grab' }}
+      />
       <polyline
         points={el.points}
         fill="none"

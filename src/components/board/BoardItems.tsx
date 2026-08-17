@@ -489,9 +489,14 @@ export const BoardNode = React.memo(function BoardNode({
       onDoubleClick={() => { if (!plain) H.elEdit(el); }}
       data-node-id={el.id}
       title={isWidget ? 'Drag the strip at the top to move it' : undefined}
+      // A drawing's BOX passes the pointer through: only the ink itself (a
+      // fat invisible hit-line in StrokeNode) catches it, bubbling back up to
+      // this container's handlers. That is what lets EVERY stroke be a node
+      // without a stroke drawn across a tile ever blocking the tile — the
+      // reason the old rule refused to promote overlapping ink at all.
       className={`group absolute rounded-xl select-none ${plain || isBin ? '' : 'shadow-md'} ${
         isDragging ? 'cursor-grabbing' : 'cursor-grab'
-      }`}
+      } ${isStroke ? 'pointer-events-none' : ''}`}
       style={{
         left: x, top: y, width: w, height: h,
         ...surface,
@@ -727,7 +732,7 @@ export const BoardNode = React.memo(function BoardNode({
         onPointerDown={e => H.resizeDown(e, el)}
         onPointerMove={H.resizeMove}
         onPointerUp={H.resizeUp}
-        className={`absolute right-0 top-3 bottom-6 w-2 cursor-ew-resize z-10 transition-opacity ${
+        className={`pointer-events-auto absolute right-0 top-3 bottom-6 w-2 cursor-ew-resize z-10 transition-opacity ${
           isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
         style={{ background: 'linear-gradient(90deg, rgba(74,168,216,0), rgba(74,168,216,.30))' }}
       />
@@ -735,7 +740,7 @@ export const BoardNode = React.memo(function BoardNode({
         onPointerDown={e => H.resizeDown(e, el)}
         onPointerMove={H.resizeMove}
         onPointerUp={H.resizeUp}
-        className={`absolute bottom-0 left-3 right-6 h-2 cursor-ns-resize z-10 transition-opacity ${
+        className={`pointer-events-auto absolute bottom-0 left-3 right-6 h-2 cursor-ns-resize z-10 transition-opacity ${
           isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
         style={{ background: 'linear-gradient(180deg, rgba(74,168,216,0), rgba(74,168,216,.30))' }}
       />
@@ -744,7 +749,7 @@ export const BoardNode = React.memo(function BoardNode({
         onPointerMove={H.resizeMove}
         onPointerUp={H.resizeUp}
         title="Drag to resize"
-        className={`absolute -bottom-0.5 -right-0.5 cursor-se-resize transition-opacity z-10 ${
+        className={`pointer-events-auto absolute -bottom-0.5 -right-0.5 cursor-se-resize transition-opacity z-10 ${
           isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-80'}`}
         style={{ width: 26, height: 26,
                  borderRight: '2px solid currentColor', borderBottom: '2px solid currentColor',

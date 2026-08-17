@@ -159,6 +159,16 @@ interface DragState {
   kind: 'job' | 'element';
   ids: string[];
   starts: Map<string, { x: number; y: number }>;
+  /**
+   * The OTHER kind, riding along.
+   *
+   * A lasso selects jobs AND notes together, and dragging any member must move
+   * the whole selection — it used to move only the kind you happened to grab,
+   * which read as "I can't drag a group at all". Kept as separate maps because
+   * the two kinds commit differently (updateApartment vs updateCanvasElement).
+   */
+  carryJobs?: Map<string, { x: number; y: number }>;
+  carryEls?: Map<string, { x: number; y: number }>;
   grabX: number;
   grabY: number;
   dx: number;
@@ -1033,6 +1043,10 @@ export function GeneralJobsPage() {
 
   // ── Position helpers ──────────────────────────────────────────────
   function jobPos(job: Apartment, index: number): { x: number; y: number } {
+    if (drag?.carryJobs?.has(job.id) && drag.moved) {
+      const st = drag.carryJobs.get(job.id)!;
+      return { x: st.x + drag.dx, y: st.y + drag.dy };
+    }
     if (drag?.kind === 'job' && drag.ids.includes(job.id)) {
       const s = drag.starts.get(job.id)!;
       return { x: s.x + drag.dx, y: s.y + drag.dy };
@@ -1051,6 +1065,10 @@ export function GeneralJobsPage() {
   function elPos(el: CanvasElement): { x: number; y: number; w: number; h: number } {
     if (drag?.kind === 'element' && drag.ids.includes(el.id)) {
       const st = drag.starts.get(el.id)!;
+      return { x: st.x + drag.dx, y: st.y + drag.dy, w: el.w, h: el.h };
+    }
+    if (drag?.carryEls?.has(el.id) && drag.moved) {
+      const st = drag.carryEls.get(el.id)!;
       return { x: st.x + drag.dx, y: st.y + drag.dy, w: el.w, h: el.h };
     }
     // One rule for a single node and for a whole selection: everything scales
@@ -1996,7 +2014,18 @@ export function GeneralJobsPage() {
       }
     });
 
-    setDrag({ kind: 'job', ids: idsToMove, starts, grabX, grabY, dx: 0, dy: 0, moved: false });
+    const carryEls = new Map<string, { x: number; y: number }>();
+    if (selectedJobIds.has(job.id)) {
+      canvasElements.forEach(elem => {
+        if (!selectedElIds.has(elem.id)) return;
+        // Arrows have no position, attached art has its host's, and a pinned
+        // title lives half in screen space — none of them can ride a world drag.
+        if (elem.type === 'arrow' || elem.attachedTo || (elem.type === 'title' && elem.pinned)) return;
+        carryEls.set(elem.id, { x: elem.x, y: elem.y });
+      });
+    }
+
+    setDrag({ kind: 'job', ids: idsToMove, starts, carryEls, grabX, grabY, dx: 0, dy: 0, moved: false });
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
 
@@ -2215,6 +2244,13 @@ export function GeneralJobsPage() {
             updateApartment(id, { canvasX: x, canvasY: y }, currentUser);
           }
         });
+        drag.carryEls?.forEach((st, id) => {
+          const settled = settleDrop(st.x + drag.dx, st.y + drag.dy);
+          const node = canvasElements.find(n => n.id === id);
+          updateCanvasElement(id, node && isDrawingNode(node)
+            ? { ...settled, points: relaidPoints(node, { ...settled, w: node.w, h: node.h }) }
+            : settled);
+        });
       }
     } else if (drag.ids.length === 1 && drag.ids[0] === job.id) {
       /**
@@ -2280,12 +2316,21 @@ export function GeneralJobsPage() {
     const idsToMove = selectedElIds.has(el.id) && selectedElIds.size > 1 ? [...selectedElIds] : [el.id];
     if (!selectedElIds.has(el.id)) { setSelectedElIds(new Set([el.id])); setSelectedJobIds(new Set()); }
 
+    const carryJobs = new Map<string, { x: number; y: number }>();
+    if (selectedElIds.has(el.id)) {
+      jobs.forEach((j, i) => {
+        if (!selectedJobIds.has(j.id)) return;
+        carryJobs.set(j.id, typeof j.canvasX === 'number' && typeof j.canvasY === 'number'
+          ? { x: j.canvasX, y: j.canvasY } : defaultPos(i));
+      });
+    }
+
     const starts = new Map<string, { x: number; y: number }>();
     canvasElements.forEach(elem => {
       if (idsToMove.includes(elem.id)) starts.set(elem.id, { x: elem.x, y: elem.y });
     });
 
-    setDrag({ kind: 'element', ids: idsToMove, starts, grabX, grabY, dx: 0, dy: 0, moved: false });
+    setDrag({ kind: 'element', ids: idsToMove, starts, carryJobs, grabX, grabY, dx: 0, dy: 0, moved: false });
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
 
@@ -2418,6 +2463,17 @@ export function GeneralJobsPage() {
         updateCanvasElement(id, node && isDrawingNode(node)
           ? { ...settled, points: relaidPoints(node, { ...settled, w: node.w, h: node.h }) }
           : settled);
+      });
+      if (currentUser) drag.carryJobs?.forEach((st, id) => {
+        const { x, y } = settleDrop(st.x + drag.dx, st.y + drag.dy);
+        if (activeBoardView) {
+          const j = apartments.find(a => a.id === id);
+          updateApartment(id, {
+            viewPos: { ...(j?.viewPos ?? {}), [activeBoardView]: { x, y } },
+          }, currentUser);
+        } else {
+          updateApartment(id, { canvasX: x, canvasY: y }, currentUser);
+        }
       });
     } else if (el.type === 'bin' && el.binKind && drag.ids.length === 1 && drag.ids[0] === el.id) {
       // A press that never became a drag is a click, so the bin opens. Deciding
@@ -2834,20 +2890,17 @@ export function GeneralJobsPage() {
         const pts = drawing.pts.map(p => ({ x: Math.round(p.x), y: Math.round(p.y) }));
         const box = pointsBounds(pts);
         /**
-         * A drawing that overlaps nothing becomes a thing in its own right.
+         * EVERY finished drawing is a node — movable, resizable, snappable.
          *
-         * Ink laid ACROSS a tile or a note is annotation — it belongs to what it
-         * is drawn on and must not turn into a box sitting on top of it. Ink in
-         * clear space is a drawing somebody made: an arrow between two columns,
-         * a ring round a group. That one gets to be moved, resized and removed
-         * like everything else on the board.
-         *
-         * Other DRAWINGS are not counted as something to overlap: two strokes
-         * that cross are how anybody draws an X, and refusing the second one
-         * would make the pair behave differently from either alone.
+         * The first rule promoted only ink that overlapped nothing, treating
+         * ink across a tile as annotation. On a real board that read as "my
+         * scribble didn't become anything", because a dense board leaves no
+         * clear space — and at 25% zoom even visually empty screen is crowded
+         * world. The blocking problem the old rule existed to avoid is solved
+         * where it belongs instead: a drawing node's box only catches the
+         * pointer ON THE INK, so a stroke across a tile never stops the tile
+         * being clicked.
          */
-        const clear = !snapTargetsRef.current(new Set<string>(), true).some(t =>
-          box.x < t.x + t.w && box.x + box.w > t.x && box.y < t.y + t.h && box.y + box.h > t.y);
         addCanvasElement({
           id: genId('CE'),
           type: 'stroke',
@@ -2859,7 +2912,7 @@ export function GeneralJobsPage() {
           strokeWidth: drawing.marker ? markStyle.width : penStyle.width,
           nib: drawing.marker ? markStyle.nib : penStyle.nib,
           ...(drawing.marker ? { art: 'marker' as const } : {}),
-          ...(clear ? { data: { own: true } } : {}),
+          data: { own: true },
         });
       }
       setDrawing(null);
@@ -3857,8 +3910,12 @@ export function GeneralJobsPage() {
             grab target that shrinks with zoom stops being grabbable. */}
         {(() => {
           if (selectedElIds.size < 2) return null;
+          // Bins belong in the group: they are excluded from DELETION as
+          // fixtures, and copying that idiom here silently left a selection of
+          // bins with no handle at all — their own corners hide in a group,
+          // and the group refused to include them.
           const members = canvasElements.filter(
-            el => selectedElIds.has(el.id) && el.type !== 'bin'
+            el => selectedElIds.has(el.id)
               && (el.board ?? '') === (boardRef.current ?? ''));
           if (members.length < 2) return null;
           const boxes = members.map(elPos);
