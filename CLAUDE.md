@@ -1848,3 +1848,14 @@ prompts, a dead end on iPhone Safari). The owner chose sharing over proxying
   needs the app served with `VITE_DRIVE_API_KEY` set (the helper rightly does
   nothing without a key) — a second dev server on 5174, so the main one keeps
   key-less behaviour for every other harness.
+- **"Share all plans now"** (`SharePlansCard`, app settings → App, beside the
+  Drive-names backfill): one press walks every apartment's `plansPdfLink` and
+  every stamped annotation in the CURRENT workspace and shares the lot,
+  chunked in fives, with a progress count and a failed-count that invites a
+  retry. Exists because the lazy heal only fires on OPEN — right for the long
+  tail, useless for "make everything work today". `shareFileToDrive` now
+  returns a boolean for exactly this counting; its old callers ignore it.
+- Verified against PRODUCTION on 2026-08-17: a real shared-drive file answered
+  401 anonymously, the live /api/share call succeeded, and the same file then
+  opened with no login — the mechanism works; what remains on any device is
+  running the new bundle (an already-open tab keeps the old one).

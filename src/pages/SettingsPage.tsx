@@ -28,7 +28,7 @@ import {
 } from '../data/tzviairHelper';
 import { format } from 'date-fns';
 import { saveAs } from 'file-saver';
-import { extractFolderId, isUploadBackendConfigured, getFolderNameViaBackend, familyNameFromFolderName } from '../data/driveApi';
+import { extractFolderId, extractFileId, isUploadBackendConfigured, getFolderNameViaBackend, familyNameFromFolderName, shareFileToDrive } from '../data/driveApi';
 import { fetchContractorSheet } from '../data/sheetApi';
 import { ProjectBuilder } from '../components/settings/ProjectBuilder';
 import { ImportJobsCard } from '../components/settings/ImportJobsCard';
@@ -1399,6 +1399,88 @@ function BulkReadyToStart({ onToast }: { onToast: (msg: string, type?: 'success'
   );
 }
 
+/**
+ * One press shares every plan already linked in this workspace.
+ *
+ * The lazy heal in the drawer and portal shares a plan the first time it is
+ * OPENED — right for the long tail, useless for "make everything work now".
+ * This walks every apartment's chosen plan and every stamped markup version
+ * and link-shares the lot, so nobody has to open two hundred drawers. Chunked
+ * like the Drive-names scan, for the same reason.
+ */
+function SharePlansCard({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
+  const { apartments, planAnnotations, mainUiStrings: s } = useStore();
+  const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const [result, setResult] = useState<{ ok: number; failed: number } | null>(null);
+  const backendOn = isUploadBackendConfigured();
+
+  const fileIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const a of apartments) {
+      if (a.plansPdfLink) {
+        const id = extractFileId(a.plansPdfLink);
+        if (id) ids.add(id);
+      }
+    }
+    for (const ann of planAnnotations) if (ann.driveFileId) ids.add(ann.driveFileId);
+    return [...ids];
+  }, [apartments, planAnnotations]);
+
+  async function run() {
+    setRunning(true);
+    setResult(null);
+    setProgress({ done: 0, total: fileIds.length });
+    let ok = 0, failed = 0;
+    const CHUNK = 5;
+    for (let i = 0; i < fileIds.length; i += CHUNK) {
+      const results = await Promise.all(fileIds.slice(i, i + CHUNK).map(id => shareFileToDrive(id)));
+      results.forEach(r => (r ? ok++ : failed++));
+      setProgress({ done: Math.min(i + CHUNK, fileIds.length), total: fileIds.length });
+    }
+    setResult({ ok, failed });
+    setRunning(false);
+    onToast(failed === 0
+      ? `${ok} plan${ok === 1 ? '' : 's'} shared — they open without a Google login now`
+      : `${ok} shared, ${failed} failed — press again to retry the failures`,
+      failed === 0 ? 'success' : 'error');
+  }
+
+  if (!backendOn) return null;
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5 mt-5">
+      <div className="flex items-start gap-3 flex-wrap">
+        <div className="min-w-0 flex-1">
+          <h2 className="font-semibold text-gray-800 flex items-center gap-2">
+            <BookOpen size={16} className="text-[#1e3a5f]" /> Plans open for everyone
+          </h2>
+          <p className="text-sm text-gray-500 mt-1">
+            Shares every plan already linked in this workspace — {fileIds.length} file{fileIds.length === 1 ? '' : 's'},
+            marked-up versions included — so viewing one needs nothing but the link. New plans
+            share themselves from now on; this catches everything from before.
+          </p>
+        </div>
+        <button
+          onClick={() => { void run(); }}
+          disabled={running || fileIds.length === 0}
+          className="px-3 py-2 rounded-lg bg-[#1e3a5f] text-white text-xs font-semibold hover:bg-[#162d4a] disabled:opacity-40 flex-shrink-0"
+        >
+          {running ? `Sharing ${progress.done}/${progress.total}…` : 'Share all plans now'}
+        </button>
+      </div>
+      {result && (
+        <p className={`text-xs mt-2 ${result.failed ? 'text-amber-700' : 'text-green-700'}`}>
+          {result.ok} shared{result.failed ? ` · ${result.failed} failed — run it again to retry` : ' — done'}
+        </p>
+      )}
+      {fileIds.length === 0 && (
+        <p className="text-xs text-gray-400 mt-2">{s.searchNoResults}</p>
+      )}
+    </div>
+  );
+}
+
 function DriveNameBackfill({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
   const { apartments, updateApartment, currentUser, currentProjectId, mainUiStrings: s } = useStore();
   const [scanning, setScanning] = useState(false);
@@ -2042,6 +2124,8 @@ function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
       <ThisComputerCard onToast={onToast} />
 
       <TvPresentationSettings onToast={onToast} />
+
+      <SharePlansCard onToast={onToast} />
 
       <DriveNameBackfill onToast={onToast} />
 

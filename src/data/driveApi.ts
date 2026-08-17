@@ -363,16 +363,18 @@ export function driveThumbUrl(fileId: string, maxPx = 1200): string {
 }
 
 /** Make a Drive file readable by anyone with the link, via backend service account */
-export async function shareFileToDrive(fileId: string): Promise<void> {
-  if (!DRIVE_API_KEY) return;
+export async function shareFileToDrive(fileId: string): Promise<boolean> {
+  if (!DRIVE_API_KEY) return false;
   try {
-    await fetch('/api/share', {
+    const r = await fetch('/api/share', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': DRIVE_API_KEY },
       body: JSON.stringify({ fileId }),
     });
+    return r.ok;
   } catch (e) {
     console.warn('Failed to share Drive file:', e);
+    return false;
   }
 }
 

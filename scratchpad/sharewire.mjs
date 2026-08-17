@@ -78,6 +78,51 @@ await page.waitForTimeout(1500);
 check(shared.includes('WORKERPLAN2'), 'portal shared the plan the worker is shown');
 check(shared.includes('STAMPED3'), 'portal shared the stamped markup it links to');
 
+// ── the one-press bulk share catches everything nobody has opened yet ──
+// A fresh context: its localStorage carries no done-list, so every file in
+// the workspace is fair game for the button.
+{
+  const ctx2 = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  await applySeed(ctx2, blob);
+  await ctx2.addInitScript(() => {
+    const raw = localStorage.getItem('wolfson_app_data');
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    if (d.__planShareSeeded) return;
+    d.__planShareSeeded = true;
+    const workerApts = new Set((d.contractorAssignments ?? []).map(a => a.apartmentId));
+    for (const a of d.apartments ?? []) {
+      if (a.id === 'A1-53') a.plansPdfLink = 'https://drive.google.com/file/d/OFFICEPLAN1/view';
+      else if (workerApts.has(a.id)) a.plansPdfLink = 'https://drive.google.com/file/d/WORKERPLAN2/view';
+    }
+    d.planAnnotations = [{
+      id: 'PA-bulk', apartmentId: 'A1-53', planFileId: 'OFFICEPLAN1',
+      version: 1, strokes: [], pageCount: 1,
+      createdAt: '2026-08-01T00:00:00Z', createdBy: 'Office',
+      driveFileId: 'STAMPED3', driveUrl: 'https://drive.google.com/file/d/STAMPED3/view',
+    }];
+    localStorage.setItem('wolfson_app_data', JSON.stringify(d));
+  });
+  const bulkShared = [];
+  await ctx2.route('**/api/share', async r => {
+    bulkShared.push(r.request().postDataJSON().fileId);
+    await r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
+  });
+  const p2 = await ctx2.newPage();
+  await p2.goto(`${APP}/app-settings`);
+  await p2.waitForTimeout(1400);
+  await p2.getByRole('button', { name: /^App$/ }).click().catch(() => {});
+  await p2.waitForTimeout(600);
+  const btn = p2.getByRole('button', { name: /Share all plans now/ });
+  check(await btn.count() > 0, 'the bulk card is in App settings');
+  await btn.click();
+  await p2.waitForTimeout(1500);
+  const want = ['OFFICEPLAN1', 'WORKERPLAN2', 'STAMPED3'];
+  check(want.every(id => bulkShared.includes(id)),
+    `one press shared every linked plan and markup (${bulkShared.length} calls)`);
+  await ctx2.close();
+}
+
 console.log(fails === 0 ? '\nALL PASS' : `\n${fails} FAILURES`);
 await browser.close();
 process.exit(fails ? 1 : 0);
