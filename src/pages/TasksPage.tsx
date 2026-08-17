@@ -824,7 +824,10 @@ export function TasksPage() {
                       {a.attachments && a.attachments.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 mt-2">
                           {a.attachments.map(att => (
-                            att.mimeType?.startsWith('image/') ? (
+                            att.mimeType?.startsWith('audio/') ? (
+                              <VoiceMemoPlayer key={att.id}
+                                src={att.driveUrl || att.dataUrl || ''} className="max-w-[240px]" />
+                            ) : att.mimeType?.startsWith('image/') ? (
                               att.driveFileId ? (
                                 <a key={att.id} href={att.driveUrl ?? '#'} target="_blank" rel="noopener noreferrer">
                                   <img
@@ -918,7 +921,9 @@ export function TasksPage() {
                         <div className="flex flex-wrap gap-1.5">
                           {editAttachments.map(att => (
                             <div key={att.id} className="relative group">
-                              {att.mimeType?.startsWith('image/') ? (
+                              {att.mimeType?.startsWith('audio/') ? (
+                                <VoiceMemoPlayer src={att.driveUrl || att.dataUrl || ''} className="max-w-[240px]" />
+                              ) : att.mimeType?.startsWith('image/') ? (
                                 att.driveFileId ? (
                                   <img
                                     src={driveThumbUrl(att.driveFileId, 200)}

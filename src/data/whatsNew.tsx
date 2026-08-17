@@ -137,18 +137,20 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'list',
       },
       {
+        title: 'Resizing, with manners',
+        body: 'Hold Shift while resizing anything and it keeps its shape. Select several '
+          + 'things and one handle on the corner resizes the whole arrangement together. '
+          + 'And while you drag, a little label shows the size — press 0 to snap back to '
+          + 'the default.',
+        demo: 'drag',
+      },
+      {
         title: 'Talk into anything',
         body: 'The microphone is now beside the paperclip on every note — the worker portal, '
           + 'stage notes, office notes, tasks, bulk tasks and the board\u2019s own sticky '
           + 'notes. And a memo now PLAYS wherever it appears instead of arriving as a file to '
           + 'download.',
         demo: 'tap',
-      },
-      {
-        title: 'Job tiles resize too',
-        body: 'Select a job on the board and drag its corner or edge, exactly like a note or '
-          + 'a widget. The size sticks.',
-        demo: 'drag',
       },
       {
         title: 'Closing a pin says who closed it',
