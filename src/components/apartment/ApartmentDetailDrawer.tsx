@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { Mic, X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer, Phone as PhoneIcon } from 'lucide-react';
 import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel } from '../../types';
 import { useStore } from '../../data/store';
@@ -7,7 +7,7 @@ import { VoiceRecorderButton, VoiceMemoPlayer } from '../ui/VoiceMemo';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import { StageNotesSection } from './StageNotesSection';
 import { ActivitySection } from './ActivitySection';
-import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, findAllPlansPdfsViaBackend, findPlanSetViaBackend, PlanEntry, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, extractFolderId, driveThumbUrl, listAllPhotosViaBackend, getFolderNameViaBackend, familyNameFromFolderName, DrivePhotoItem, DriveFile, FolderHealth, checkFolderHealthViaBackend } from '../../data/driveApi';
+import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, findAllPlansPdfsViaBackend, findPlanSetViaBackend, PlanEntry, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, ensurePlanShared, extractFolderId, driveThumbUrl, listAllPhotosViaBackend, getFolderNameViaBackend, familyNameFromFolderName, DrivePhotoItem, DriveFile, FolderHealth, checkFolderHealthViaBackend } from '../../data/driveApi';
 import { Tooltip } from '../ui/Tooltip';
 import { DriveStatus, driveStateOf } from '../ui/DriveStatus';
 import { DriveDesktopPath } from './DriveDesktopPath';
@@ -349,6 +349,26 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   useEffect(() => {
     if (!isPhone) setActiveTab(t => (t === 'plan' ? 'details' : t));
   }, [isPhone]);
+
+  /**
+   * Every plan the drawer shows becomes link-shared (owner's decision): the
+   * viewer is Google's own preview iframe, which knows nothing about the
+   * app's login and turns away anyone not signed into the company Google
+   * account. Sharing here — on DISPLAY, not only on pick — is what heals
+   * every plan chosen before this existed, the first time it is opened.
+   * The newest stamped markup is shared on the same trigger, because the
+   * portal hands workers a plain Drive link to it.
+   */
+  const currentPlanFileId = shownPlanId ?? availablePdfs[selectedPdfIdx]?.id ?? null;
+  const latestStampedFileId = useMemo(() => {
+    if (!apartment || !currentPlanFileId) return null;
+    const vs = planAnnotations
+      .filter(a => a.apartmentId === apartment.id && a.planFileId === currentPlanFileId && a.driveFileId)
+      .sort((a, b) => b.version - a.version);
+    return vs[0]?.driveFileId ?? null;
+  }, [planAnnotations, apartment, currentPlanFileId]);
+  useEffect(() => { ensurePlanShared(currentPlanFileId); }, [currentPlanFileId]);
+  useEffect(() => { ensurePlanShared(latestStampedFileId); }, [latestStampedFileId]);
 
   if (!apartment) return null;
 

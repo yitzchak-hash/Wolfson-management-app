@@ -1825,3 +1825,26 @@ carry it, so the desktop sidebar never shows it. `relativeTime` moved to
 Harness: `scratchpad/touchpan.mjs` — finger drags from tile and note pan and
 leave stored positions unchanged, taps open the job and the group window,
 pinch zooms. The sweep gained `list` / `list-search` shots.
+
+## Plans are link-shared, by decision
+The plan view is Google's preview iframe and the marked-up plan is a plain
+Drive link — both served by drive.google.com, which knows nothing about the
+app's login and turns away anyone outside the company Google account (cookie
+prompts, a dead end on iPhone Safari). The owner chose sharing over proxying
+(2026-08-17): **every plan the app shows becomes anyone-with-link readable.**
+- `ensurePlanShared(fileId)` in `driveApi.ts` — fire-and-forget, remembered in
+  `shared_plan_ids` (localStorage, this machine) + an in-flight set, so a
+  re-rendering portal does not hammer the route; a FAILED share is not
+  recorded, so the next open retries.
+- Wired where a plan is DISPLAYED, not only where it is picked — that is what
+  heals every plan chosen before this existed: the drawer (current plan + its
+  newest stamped version) and the portal task sheet (same pair).
+- `api/plan-annotate.js` shares each stamped PDF the moment it uploads it,
+  non-fatally — the portal's lazy call is the retry.
+- **`supportsAllDrives: true` in `api/share.js` is load-bearing**: the plans
+  live on a shared drive, and without it permissions.create answers "file not
+  found" and the share silently never happens.
+- `scratchpad/sharewire.mjs` proves the wiring with a stubbed share route. It
+  needs the app served with `VITE_DRIVE_API_KEY` set (the helper rightly does
+  nothing without a key) — a second dev server on 5174, so the main one keeps
+  key-less behaviour for every other harness.

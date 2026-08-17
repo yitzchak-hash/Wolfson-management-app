@@ -376,6 +376,48 @@ export async function shareFileToDrive(fileId: string): Promise<void> {
   }
 }
 
+/**
+ * Make sure a PLAN file is link-shared, once.
+ *
+ * The plan view is Google's own preview iframe and the marked-up-plan link is
+ * a plain Drive link — both are served by drive.google.com, which knows
+ * nothing about the app's login and turns anyone not signed into the company
+ * Google account away (cookie prompts on desktop, an outright dead end on an
+ * iPhone). The owner's chosen fix: every plan the app shows becomes
+ * anyone-with-the-link readable. New picks and new stamped versions are
+ * shared as they are made; this helper also runs wherever a plan is DISPLAYED,
+ * so every legacy plan heals itself the first time somebody opens it.
+ *
+ * The done-list lives in localStorage (per machine) plus an in-flight set, so
+ * a portal that re-renders its task sheet does not hammer the share route.
+ * Sharing twice is harmless on Google's side — this is only about not
+ * repeating a network call on every render.
+ */
+const sharingNow = new Set<string>();
+export function ensurePlanShared(fileId: string | null | undefined): void {
+  if (!fileId || !DRIVE_API_KEY) return;
+  let done: string[] = [];
+  try { done = JSON.parse(localStorage.getItem('shared_plan_ids') ?? '[]'); } catch { /* fresh */ }
+  if (done.includes(fileId) || sharingNow.has(fileId)) return;
+  sharingNow.add(fileId);
+  void fetch('/api/share', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': DRIVE_API_KEY },
+    body: JSON.stringify({ fileId }),
+  }).then(r => {
+    if (!r.ok) return;    // failed = not recorded, so the next open retries
+    try {
+      const now: string[] = JSON.parse(localStorage.getItem('shared_plan_ids') ?? '[]');
+      if (!now.includes(fileId)) {
+        now.push(fileId);
+        // A bounded list: this machine only needs to remember recent plans.
+        localStorage.setItem('shared_plan_ids', JSON.stringify(now.slice(-400)));
+      }
+    } catch { /* private mode */ }
+  }).catch(() => { /* offline — the next open retries */ })
+    .finally(() => sharingNow.delete(fileId));
+}
+
 /** Find or create a subfolder by name under a parent, via the backend service account. */
 export async function findOrCreateFolderViaBackend(parentId: string, name: string): Promise<string> {
   const resp = await fetch('/api/folder', {

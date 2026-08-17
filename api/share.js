@@ -26,9 +26,13 @@ export default async function handler(req, res) {
   try {
     const auth = getAuth();
     const drive = google.drive({ version: 'v3', auth });
+    // supportsAllDrives is load-bearing: the company's plans live on a SHARED
+    // drive, and without it the permissions call answers "file not found" for
+    // every file there — the share silently never happens.
     await drive.permissions.create({
       fileId,
       requestBody: { role: 'reader', type: 'anyone' },
+      supportsAllDrives: true,
     });
     res.json({ ok: true });
   } catch (err) {

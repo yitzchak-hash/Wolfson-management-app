@@ -90,6 +90,14 @@ export const WHATS_NEW: WhatsNewEntry[] = [
           + 'Tap a row and the job opens.',
         demo: 'list',
       },
+      {
+        title: 'Plans open for everyone',
+        body: 'A plan used to demand a Google sign-in from anyone outside the company '
+          + 'account — workers, incognito windows, iPhones. Every plan the app shows is '
+          + 'now shared by link automatically, including the marked-up versions, so '
+          + 'viewing a plan needs nothing but opening the app.',
+        demo: 'tap',
+      },
     ],
   },
   {

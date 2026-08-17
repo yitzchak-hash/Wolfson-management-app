@@ -504,6 +504,21 @@ export default async function handler(req, res) {
       supportsAllDrives: true,
     });
 
+    // The portal hands workers a PLAIN Drive link to this file, and Drive
+    // demands a Google login for a private one — so every stamped plan is
+    // link-shared the moment it exists (the owner's decision, 2026-08-17).
+    // Never fatal: the file is already filed, and the portal re-shares
+    // lazily if this one call misses.
+    try {
+      await drive.permissions.create({
+        fileId: created.data.id,
+        requestBody: { role: 'reader', type: 'anyone' },
+        supportsAllDrives: true,
+      });
+    } catch (shareErr) {
+      console.warn('stamped-plan share failed:', shareErr.message);
+    }
+
     res.json({
       fileId: created.data.id,
       name: created.data.name,

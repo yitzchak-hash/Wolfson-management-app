@@ -21,7 +21,7 @@ import { RecordedMemo } from '../data/voiceMemo';
 import {
   extractFileId, drivePreviewUrl, driveDownloadUrl, driveThumbUrl,
   extractFolderId, isUploadBackendConfigured, findOrCreateFolderViaBackend,
-  uploadFileViaResumableSession, shareFileToDrive,
+  uploadFileViaResumableSession, shareFileToDrive, ensurePlanShared,
 } from '../data/driveApi';
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -440,6 +440,27 @@ export function ContractorPortal() {
   const getStage = (id: string | null) => stages.find(s => s.id === id);
   const getMedia = (assignmentId: string) => contractorPhotos.filter(p => p.assignmentId === assignmentId);
   const getNotes = (assignmentId: string) => contractorNotes.filter(n => n.assignmentId === assignmentId);
+
+  /**
+   * The plan a worker is about to look at becomes link-shared (the owner's
+   * decision): the plan view is Google's preview iframe and the marked-up
+   * plan is a plain Drive link, both served by drive.google.com — which knows
+   * nothing about the portal token and demands a Google login from anyone
+   * outside the company account. Fired when the task sheet opens, so every
+   * plan heals itself the first time it is actually needed on site.
+   */
+  useEffect(() => {
+    if (!selectedAssignment) return;
+    const apt = apartments.find(x => x.id === selectedAssignment.apartmentId);
+    const planId = apt?.plansPdfLink ? extractFileId(apt.plansPdfLink) : null;
+    ensurePlanShared(planId);
+    if (apt && planId) {
+      const latest = planAnnotations
+        .filter(x => x.apartmentId === apt.id && x.planFileId === planId && x.driveFileId)
+        .sort((a, b) => b.version - a.version)[0];
+      ensurePlanShared(latest?.driveFileId);
+    }
+  }, [selectedAssignment, apartments, planAnnotations]);
 
   const assignedAptIds = new Set(assignments.map(a => a.apartmentId));
 
