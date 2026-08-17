@@ -1863,7 +1863,17 @@ export function ContractorPortal() {
                   {noteAttachments.length > 0 && (
                     <div className="mb-2 flex flex-wrap gap-2">
                       {noteAttachments.map((att, idx) => (
-                        att.mimeType.startsWith('image/') && att.dataUrl ? (
+                        att.mimeType.startsWith('audio/') ? (
+                          // Check it before you send it — the whole point of a
+                          // preview is hearing what you just recorded.
+                          <div key={idx} className="flex items-center gap-1">
+                            <VoiceMemoPlayer src={att.driveUrl || att.dataUrl || ''} className="max-w-[220px]" />
+                            <button
+                              onClick={() => setNoteAttachments(prev => prev.filter((_, i) => i !== idx))}
+                              className="w-6 h-6 flex items-center justify-center rounded-full text-gray-400 hover:text-red-500"
+                            ><X size={12} /></button>
+                          </div>
+                        ) : att.mimeType.startsWith('image/') && att.dataUrl ? (
                           <div key={idx} className="relative inline-block">
                             <img
                               src={att.dataUrl}

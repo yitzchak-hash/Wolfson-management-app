@@ -47,6 +47,7 @@ function LightboxOverlay({ items, initialIndex, onClose, imageUnavailable, openD
   const next = () => setIdx(i => Math.min(items.length - 1, i + 1));
   const isImg = item.mimeType.startsWith('image/');
   const isVid = item.mimeType.startsWith('video/');
+  const isAudio = item.mimeType.startsWith('audio/');
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -86,7 +87,13 @@ function LightboxOverlay({ items, initialIndex, onClose, imageUnavailable, openD
 
       {/* Content */}
       <div className="flex-1 flex items-center justify-center relative overflow-hidden px-12">
-        {isImg ? (
+        {isAudio ? (
+          // A memo has nothing to show, so the viewer gives it the transport
+          // rather than a black frame with a filename under it.
+          <div className="flex items-center justify-center w-full h-full p-6">
+            <VoiceMemoPlayer src={item.downloadHref || item.thumbSrc || ''} className="max-w-[420px] w-full" />
+          </div>
+        ) : isImg ? (
           item.thumbSrc
             ? <img src={item.thumbSrc} alt={item.filename} className="max-w-full max-h-full object-contain" draggable={false} />
             : <div className="text-gray-500 text-sm">{imageUnavailable}</div>

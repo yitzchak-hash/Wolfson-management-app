@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { ToolbarSetup } from '../../types';
 import { WIDGET_BY_ID } from '../../data/widgets';
+import { MovablePanel } from './MovablePanel';
 import {
   MousePointer2, Hand, Plus, StickyNote, Square, Type, Pen, Highlighter,
   Palette, Maximize, Settings, Timer, Clock, Keyboard, GripVertical, Mic, Image,
@@ -463,7 +464,7 @@ export function BoardToolbar({
  * Sits top-right ABOVE the toolbar, which shifts down to make room — so the two
  * never overlap, exactly as specified.
  */
-export function BoardControlsPanel() {
+export function BoardControlsPanel({ onClose }: { onClose: () => void }) {
   const rows: [string, string][] = [
     ['Click a job', 'Open it'],
     ['Drag a job', 'Move it'],
@@ -490,8 +491,15 @@ export function BoardControlsPanel() {
     return () => window.removeEventListener(RAIL_SIZE_EVENT, on);
   }, []);
   return (
-    <div className="absolute top-3 z-40 w-[188px] bg-white border border-gray-200 rounded-xl shadow-lg p-2.5"
-      style={{ right: railW + 24 }}>
+    // The same MovablePanel every other floating panel uses, so the grip, the
+    // remembered position and the Escape-to-close all behave identically.
+    <MovablePanel
+      id="board-controls"
+      title="Controls"
+      className="absolute z-40 w-[188px] bg-white border border-gray-200 rounded-xl shadow-lg p-2.5"
+      style={{ top: 12, right: railW + 24 }}
+      onClose={onClose}
+    >
       <div className="text-[10px] font-extrabold text-gray-700 mb-1.5 tracking-wide">CONTROLS</div>
       <div className="flex flex-col gap-1">
         {rows.map(([k, v]) => (
@@ -502,6 +510,6 @@ export function BoardControlsPanel() {
           </div>
         ))}
       </div>
-    </div>
+    </MovablePanel>
   );
 }

@@ -241,6 +241,20 @@ thrown and nothing logged.
 `.env.local`, so the Drive backend is unconfigured and no PDF can load. Layout, touch-action
 and the palm rule are covered; drawing on an actual sheet needs a real device.
 
+## One movable-panel implementation
+`src/components/board/MovablePanel.tsx` — lifted out of GeneralJobsPage so the Keys panel
+(which lives in BoardToolbar) and NodeSettings can use the SAME one. It clears `right` AND
+`transform` when positioned: a panel docked by `translate(-50%,-50%)` centring would otherwise
+jump by half its own size the instant left/top were set. `PANEL_POS` is module-level and
+session-only on purpose — where a panel sits depends on the screen it was moved on.
+
+## A pinned title is draggable, and stays pinned
+It keeps its two-coordinate nature while dragged: sideways writes the BOARD `x` (divided by
+zoom so it tracks the cursor), up-down writes the SCREEN `pinTop`. Anything else un-pins it
+the moment you touch it. Committed once on pointer-up, never per frame.
+`scratchpad/panels.mjs` asserts both — and then PANS the board and checks the title's y has
+not moved, because "it can be dragged" and "it is still pinned" are two different claims.
+
 ## A job tile resizes like anything else
 `Apartment.tileW/tileH`, absent meaning the shared default — so the field stays undefined on
 almost every record instead of writing the same two numbers onto hundreds. They ride inside
@@ -260,6 +274,13 @@ EVERY navigation, so seeding unconditionally overwrites what the app just saved 
 reload check fails, blaming the app. Seed only when the key is absent.
 
 ## Voice memos
+Every note takes one: the worker portal thread, stage notes, the drawer's office notes, task
+attachments (quick-add, the Tasks page, bulk add) and the board's own sticky notes and boxes
+(which already carried `audioUrl`). An audio attachment RENDERS as a player everywhere —
+stage notes, office files, the drawer's media viewer, the portal's pending chip, the task
+chips. Getting the recorder in without the player is what made the feature read as broken:
+you spoke into it and got back a grey download tile.
+
 `src/data/voiceMemo.ts` is the mechanism (`useVoiceRecorder`, `squash`, `storeVoiceMemo`);
 `src/components/ui/VoiceMemo.tsx` is only its face. A memo attaches as an ordinary audio FILE
 on whatever attachment path the host already has — its own record field would mean a new key

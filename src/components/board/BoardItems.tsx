@@ -24,7 +24,7 @@ function withAlpha(color: string, alpha = 0.45): string {
 import { MapPin, ClipboardList, Trash2, Palette, Pencil, X, ThumbsUp, ThumbsDown, Ghost,
   Archive, CheckCircle2, PlayCircle, FolderOpen } from 'lucide-react';
 import { Apartment, CanvasElement, Stage, BinKind, BIN_META, binKeyOf, binLabelOf } from '../../types';
-import { Settings2 } from 'lucide-react';
+import { Settings2, Mic } from 'lucide-react';
 import { DriveIcon, ZohoIcon, PlanIcon, TvIcon } from '../ui/BrandIcons';
 import { extractFileId, driveDownloadUrl } from '../../data/driveApi';
 
@@ -35,6 +35,7 @@ function planDownloadUrl(link: string): string {
 }
 import { DriveStatus } from '../ui/DriveStatus';
 import { CountdownNode, StopwatchNode, ClipArtNode, VoiceMemoNode, StrokeNode } from './BoardNodes';
+import { VoiceMemoPlayer } from '../ui/VoiceMemo';
 import { renderWidget, WidgetCtx, WIDGET_BY_ID } from '../../data/widgets';
 
 /**
@@ -557,6 +558,19 @@ export const BoardNode = React.memo(function BoardNode({
         <div className={`absolute right-0 flex gap-1 z-20 transition-opacity ${
             isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'}`}
           style={{ bottom: '100%', marginBottom: 4, pointerEvents: 'auto' }}>
+          {/* Talk into a note. Every note on the board takes a memo the same
+              way the office and worker notes do — a spoken sentence is often
+              faster and clearer than typing on site, and the record already
+              carries audioUrl, so nothing new has to be stored or synced. */}
+          {(el.type === 'note' || el.type === 'box') && !el.audioUrl && (
+            <button data-el-action
+              onClick={e => { e.stopPropagation(); recording ? onStopRecord() : onRecord(el.id); }}
+              title={recording ? 'Stop recording' : 'Record a voice memo on this note'}
+              className="w-7 h-7 rounded-lg bg-white/95 hover:bg-white flex items-center justify-center shadow-sm border border-gray-100"
+              style={{ color: recording ? '#dc2626' : '#94a3b8' }}>
+              <Mic size={13} />
+            </button>
+          )}
           <button data-el-action
             onClick={e => { e.stopPropagation(); H.elPatch(el.id, { showOnTv: el.showOnTv === false ? undefined : false }); }}
             title={el.showOnTv === false ? 'Hidden from TV' : 'Showing on TV'}
@@ -656,6 +670,16 @@ export const BoardNode = React.memo(function BoardNode({
           {el.text || <span className="italic text-gray-400">Double-click to edit</span>}
         </div>
         )
+      )}
+
+      {(el.type === 'note' || el.type === 'box') && el.audioUrl && (
+        <div className="absolute left-2 right-2 bottom-2 z-10" data-no-drag data-el-action>
+          <VoiceMemoPlayer
+            src={el.audioUrl}
+            seconds={el.audioSeconds}
+            onDelete={() => H.elPatch(el.id, { audioUrl: undefined, audioSeconds: undefined })}
+          />
+        </div>
       )}
 
       {/* The box's name lives in its header bar and NOWHERE else. It used to be

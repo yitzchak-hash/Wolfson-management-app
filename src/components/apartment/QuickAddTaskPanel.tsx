@@ -4,7 +4,7 @@ import {
   Apartment, User, ContractorCategory, TaskAttachment, ContractorAssignment, getStageName,
 } from '../../types';
 import { useStore } from '../../data/store';
-import { VoiceRecorderButton } from '../ui/VoiceMemo';
+import { VoiceRecorderButton, VoiceMemoPlayer } from '../ui/VoiceMemo';
 import { RecordedMemo } from '../../data/voiceMemo';
 import { contractorLoad, loadTooltip, loadColor } from '../../data/contractorLoad';
 import { taskShareText, copyTaskShare } from '../../data/taskShare';
@@ -555,6 +555,11 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                           const pct = attProgress[att.id] ?? null;
                           const isUploading = pct !== null;
                           return (
+                            att.mimeType.startsWith('audio/') ? (
+                              // A memo is listened to, not opened — so it gets a
+                              // transport here rather than a 120px file chip.
+                              <VoiceMemoPlayer key={att.id} src={att.dataUrl || ''} className="max-w-[230px]" />
+                            ) : (
                             <div
                               key={att.id}
                               className="relative flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg overflow-hidden cursor-pointer hover:border-[#1e3a5f]/40 transition-colors"
@@ -600,6 +605,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                                 </button>
                               )}
                             </div>
+                            )
                           );
                         })}
                       </div>

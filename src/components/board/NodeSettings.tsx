@@ -1,3 +1,4 @@
+import { MovablePanel } from './MovablePanel';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Trash2, Upload, Check, Plus, ChevronUp, ChevronDown } from 'lucide-react';
 import { useStore } from '../../data/store';
@@ -140,10 +141,14 @@ export function NodeSettings({ el, onClose, onDelete }: {
   return (
     <>
       <div className="fixed inset-0 z-[95]" onClick={onClose} />
-      <div
+      {/* Movable, like every other board panel — you are editing a node and the
+          panel is very often sitting on top of the node you are editing. */}
+      <MovablePanel
+        id="node-settings"
+        title={heading}
         className="fixed z-[96] bg-white rounded-2xl shadow-2xl border border-gray-100 flex flex-col overflow-hidden"
         style={{ left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: 'min(400px, 94vw)', maxHeight: '82vh' }}
-        onPointerDown={e => e.stopPropagation()}
+        onClose={onClose}
       >
         <div className="flex items-center gap-2 px-4 py-2.5 flex-shrink-0"
           style={{ backgroundColor: '#1e3a5f', color: '#fff' }}>
@@ -291,7 +296,7 @@ export function NodeSettings({ el, onClose, onDelete }: {
             </button>
           </div>
         )}
-      </div>
+      </MovablePanel>
     </>
   );
 

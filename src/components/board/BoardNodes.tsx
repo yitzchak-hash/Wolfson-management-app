@@ -80,27 +80,75 @@ export function strokePoints(el: CanvasElement | undefined): { x: number; y: num
  * and would otherwise select a title that is visually somewhere else entirely.
  */
 export const PinnedTitleLayer = React.memo(function PinnedTitleLayer({
-  elements, zoom, panX, onEdit,
+  elements, zoom, panX, onEdit, onMove,
 }: {
   elements: CanvasElement[];
   zoom: number;
   panX: number;
   onEdit?: (el: CanvasElement) => void;
+  /**
+   * Committed once on pointer-up, never per frame — the same rule the board's
+   * other drags follow, because writing here serialises the whole project.
+   */
+  onMove?: (id: string, patch: { x: number; pinTop: number }) => void;
 }) {
   const pinned = elements.filter(el => el.type === 'title' && el.pinned);
+  const drag = React.useRef<{
+    id: string; px: number; py: number; x0: number; top0: number; moved: boolean;
+  } | null>(null);
+  const [live, setLive] = React.useState<{ id: string; x: number; top: number } | null>(null);
   if (pinned.length === 0) return null;
+
+  /**
+   * A pinned title was the one node that could not be moved at all.
+   *
+   * It keeps its two-coordinate nature while being dragged: sideways writes the
+   * BOARD x (divided by zoom, so it tracks the cursor at any zoom), and up-down
+   * writes the SCREEN pinTop. Anything else would un-pin it the moment you
+   * touched it.
+   */
+  function down(e: React.PointerEvent, el: CanvasElement) {
+    if (!onMove) return;
+    e.stopPropagation();
+    drag.current = {
+      id: el.id, px: e.clientX, py: e.clientY,
+      x0: el.x, top0: el.pinTop ?? 12, moved: false,
+    };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+  function move(e: React.PointerEvent) {
+    const d = drag.current;
+    if (!d) return;
+    const dx = (e.clientX - d.px) / Math.max(0.05, zoom);
+    const dy = e.clientY - d.py;
+    if (!d.moved && Math.abs(e.clientX - d.px) + Math.abs(e.clientY - d.py) < 4) return;
+    d.moved = true;
+    setLive({ id: d.id, x: d.x0 + dx, top: Math.max(0, d.top0 + dy) });
+  }
+  function up() {
+    const d = drag.current;
+    drag.current = null;
+    if (d?.moved && live && onMove) onMove(d.id, { x: Math.round(live.x), pinTop: Math.round(live.top) });
+    setLive(null);
+  }
 
   return (
     <div className="absolute inset-0 pointer-events-none z-30">
-      {pinned.map(el => (
+      {pinned.map(el => {
+        const l = live?.id === el.id ? live : null;
+        return (
         <div
           key={el.id}
           onDoubleClick={() => onEdit?.(el)}
-          className="absolute pointer-events-auto select-none"
+          onPointerDown={e => down(e, el)}
+          onPointerMove={move}
+          onPointerUp={up}
+          className={`absolute pointer-events-auto select-none ${onMove ? 'cursor-grab active:cursor-grabbing' : ''}`}
           style={{
             // X follows the board; Y is nailed to the viewport.
-            left: panX + el.x * zoom,
-            top: el.pinTop ?? 12,
+            left: panX + (l ? l.x : el.x) * zoom,
+            top: l ? l.top : (el.pinTop ?? 12),
+            touchAction: 'none',
             // Scales with zoom, as specified — including getting small when
             // zoomed far out, which is the intended behaviour here.
             transform: `scale(${zoom})`,
@@ -117,7 +165,8 @@ export const PinnedTitleLayer = React.memo(function PinnedTitleLayer({
         >
           {el.text || 'Title'}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 });
