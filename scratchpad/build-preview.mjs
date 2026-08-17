@@ -23,6 +23,13 @@ const SCREENS = [
   ['portal', 'The worker portal', 'What a worker holds on site: his tasks by date, the job, the stage, whether he is late. His name and count now fit the bar instead of running off it.'],
 ];
 
+/** The plan screens — the viewer with its snags, and the markup studio. */
+const PLANS = [
+  ['plan-drawer-plantab', 'A plan, with its snags', 'Tap Pin, tap the spot, type the note. The numbered pins are the punch list; the worker sees the same ones on his phone, read-only.'],
+  ['plan-studio', 'Marking up', 'Pen, pencil, marker, highlighter and two erasers along the bottom where a thumb reaches. Colour, width and see-through wrap onto two lines so the slider is never cut in half.'],
+  ['plan-portal-plan-open', 'What the worker sees', 'The same plan and the same pins on site, read-only — his to look at, the office’s to write.'],
+];
+
 /** The same app for a Hebrew office and a Hebrew worker. */
 const HEBREW = [
   ['diagram-he', 'הבניינים', 'Everything mirrors: the tabs run right to left, the search sits on the right, the bottom bar flips. The apartment numbers and family names stay where the eye expects them.'],
@@ -30,7 +37,11 @@ const HEBREW = [
   ['tasks-he', 'משימות', 'The task list, mirrored, with the controls in the same order a Hebrew reader scans them.'],
 ];
 
-const b64 = f => readFileSync(`scratchpad/pv-${f}.png`).toString('base64');
+// The plan renders come from planphone.mjs and are named differently — a
+// preview that silently skipped a missing file would ship a blank frame.
+const b64 = f => readFileSync(
+  f.startsWith('plan-') ? `scratchpad/${f}.png` : `scratchpad/pv-${f}.png`,
+).toString('base64');
 
 const card = ([id, name, blurb]) => `
       <figure class="screen">
@@ -46,6 +57,7 @@ const card = ([id, name, blurb]) => `
       </figure>`;
 const cards = SCREENS.map(card).join('\n');
 const hebrewCards = HEBREW.map(card).join('\n');
+const planCards = PLANS.map(card).join('\n');
 
 const html = `<title>TzviAir on a Phone</title>
 <style>
@@ -128,6 +140,12 @@ const html = `<title>TzviAir on a Phone</title>
   </header>
 
   <div class="screens">${cards}
+  </div>
+
+  <h2 class="section">Plans, snags and markup</h2>
+  <p class="lede">The drawing is the part of this job that lives on site. All of it works with a
+  <strong>finger</strong> — no hover, no right-click, no double-click.</p>
+  <div class="screens">${planCards}
   </div>
 
   <h2 class="section">In Hebrew</h2>

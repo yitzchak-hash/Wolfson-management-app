@@ -1272,6 +1272,27 @@ in between `top: 0` meant zero in the SCALED space — measured 577px down at
 1.6×.
 
 
+## The plan screens on a phone (`scratchpad/planphone.mjs`)
+The viewer with its pins and the markup studio sat outside every sweep for a
+simple reason: both need a real PDF and the container has no Drive. The harness
+**makes one with pdf-lib** and serves it on the route the app actually asks,
+`/api/drive-fetch`, so pdf.js loads, a page renders and the tools arm for real.
+Seed the plan on **A1-53 AND on every apartment the worker has a task on** — the
+portal only draws its plan section when the job has one, so seeding a single
+apartment tests the office and silently skips the worker.
+
+Rules the studio's phone layout must keep:
+- The **tool rail scrolls** sideways (eleven buttons whose order you learn); the
+  **ink row wraps** (three controls of which the last is a slider — See-through
+  was cut in half, and a handle you cannot see cannot be dragged).
+- The stage is `items-center`. A landscape sheet fits to WIDTH on an upright
+  phone — about 270px tall in a 1400px stage — and top-aligned it read as
+  something failing to load.
+- Turning the phone genuinely fixes that, so the empty space says so once,
+  quietly, rather than being empty.
+Drive it with `tap`, never `click`: the whole point of these two screens is a
+finger on site.
+
 ## The phone sweep — five configurations, one harness
 `scratchpad/shots.mjs` runs the whole app and audits it for overflow and
 clipping. Switches, all env vars: `W=360` / `W=375` (a common Android, an SE —
