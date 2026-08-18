@@ -1899,9 +1899,13 @@ account's permission, the sheet does not need retyping what Drive knows.
 Stage and Group route from the file's own columns; unknown stages are created
 (`projectId 'general'`), group labels match `binLabelOf` (built-ins included)
 or create a real group. The cross-workspace Drive-folder guard and re-upload
-dedup are unchanged. Import ids keep the `G-imp-` prefix, and
-`removeJobsByIdPrefix('G-imp-')` (store) powers the one-press "remove
-previous import" that touches nothing made by hand.
+dedup are unchanged. Import ids keep the `G-imp-<stamp>-` prefix, where the stamp is the BATCH:
+the amber strip shows one row per import (date, count, and how many were
+edited since), each with its own Remove — a STANDING per-import undo, not a
+one-shot. `removeJobsByIdPrefix(prefix)` (store) deletes exactly that
+batch's ids and fsDeletes them, so removal syncs to every device; anything
+made by hand is never touched. "Edited since" reads
+`contentUpdatedAt !== createdAt`, which the import sets equal on purpose.
 
 ## Drawer rules from this round
 - **Anything the drawer opens must sit ABOVE z-[120]** (the drawer panel).

@@ -137,9 +137,33 @@ check(again?.trim() === '1 will be imported', `re-upload dedupes the Drive rows 
 await page.getByRole('button', { name: /Cancel/ }).click();
 await page.waitForTimeout(400);
 
-// ── clear the previous import — the handmade job must survive ──
-check(await page.getByText(/A previous import left 4 jobs/).count() > 0, 'previous-import strip counts 4');
-await page.getByRole('button', { name: /Remove previous import/ }).click();
+// ── a SECOND import becomes its own batch ──
+writeFileSync('scratchpad/import-test2.csv',
+  'Drive folder link,Family name,Address,Phone,Zoho link,Stage,Group,General notes\n'
+  + ',"Second, Batch",Later St 9,,,,,came in a later import\n');
+await page.locator('input[type="file"][accept*="csv"]').setInputFiles('scratchpad/import-test2.csv');
+await page.waitForTimeout(1500);
+await page.getByRole('button', { name: /^Import 1 job$/ }).click();
+await page.waitForTimeout(1200);
+
+// ── each import is its own row with its own Remove — a standing undo ──
+const strips = await page.getByText(/Import from/).count();
+check(strips === 2, `two import batches, two rows (${strips})`);
+// The newest batch (1 job) is listed first; removing it must not touch the
+// older batch of 4 or the handmade job.
+await page.getByRole('button', { name: /Remove this import/ }).first().click();
+await page.getByRole('button', { name: /Yes, remove 1/ }).click();
+await page.waitForTimeout(1000);
+const mid = await page.evaluate(() => {
+  const d = JSON.parse(localStorage.getItem('general_app_data') ?? '{}');
+  return {
+    imported: (d.apartments ?? []).filter(a => a.id.startsWith('G-imp-')).length,
+    second: (d.apartments ?? []).some(a => a.displayName === 'Second, Batch'),
+  };
+});
+check(mid.imported === 4 && !mid.second, `removing the new batch spared the old one (${mid.imported} remain)`);
+
+await page.getByRole('button', { name: /Remove this import/ }).first().click();
 await page.getByRole('button', { name: /Yes, remove 4/ }).click();
 await page.waitForTimeout(1200);
 const after = await page.evaluate(() => {
@@ -149,8 +173,8 @@ const after = await page.evaluate(() => {
     handmade: (d.apartments ?? []).some(a => a.id === 'G-handmade-1'),
   };
 });
-check(after.imported === 0, 'previous import removed');
-check(after.handmade, 'the handmade job survived the cleanup');
+check(after.imported === 0, 'the first batch removed on its own press');
+check(after.handmade, 'the handmade job survived both cleanups');
 
 console.log(fails === 0 ? '\nALL PASS' : `\n${fails} FAILURES`);
 await browser.close();

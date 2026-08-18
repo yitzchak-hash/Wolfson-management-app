@@ -47,13 +47,38 @@ export function ImportJobsCard({ onToast }: { onToast: (msg: string, type?: 'suc
   const [showSkipped, setShowSkipped] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [clearing, setClearing] = useState(false);
-  const [confirmClear, setConfirmClear] = useState(false);
+  const [clearing, setClearing] = useState<string | null>(null);
+  const [confirmClear, setConfirmClear] = useState<string | null>(null);
 
-  const previousImportCount = useMemo(
-    () => apartments.filter(a => a.buildingId === 'G' && a.id.startsWith('G-imp-')).length,
-    [apartments],
-  );
+  /**
+   * Every import is its own BATCH — the ids carry the batch's timestamp
+   * (G-imp-<stamp>-…), so each one gets its own row and its own Remove.
+   * That is what makes removal a standing undo rather than a one-shot: a
+   * new import next quarter can be taken back without touching the one from
+   * August that has since become real, worked-on jobs. "Edited since" warns
+   * exactly about those — contentUpdatedAt moves the first time anybody
+   * changes an imported job's content.
+   */
+  const importBatches = useMemo(() => {
+    const by = new Map<string, { count: number; edited: number; when: number }>();
+    for (const a of apartments) {
+      if (a.buildingId !== 'G') continue;
+      const m = a.id.match(/^G-imp-(\d+)-/);
+      if (!m) continue;
+      const b = by.get(m[1]) ?? { count: 0, edited: 0, when: Number(m[1]) };
+      b.count++;
+      if (a.contentUpdatedAt && a.contentUpdatedAt !== a.createdAt) b.edited++;
+      by.set(m[1], b);
+    }
+    // Legacy ids without a parsable stamp fall into one "earlier" bucket.
+    const legacy = apartments.filter(a => a.buildingId === 'G'
+      && a.id.startsWith('G-imp-') && !/^G-imp-\d+-/.test(a.id));
+    const out = [...by.entries()]
+      .map(([stamp, b]) => ({ stamp, ...b }))
+      .sort((a, b) => b.when - a.when);
+    if (legacy.length) out.push({ stamp: '', count: legacy.length, edited: 0, when: 0 });
+    return out;
+  }, [apartments]);
 
   const ctx: PlanContext = useMemo(() => {
     const otherWorkspaceFolders = new Map<string, string>();
@@ -230,14 +255,14 @@ export function ImportJobsCard({ onToast }: { onToast: (msg: string, type?: 'suc
     }
   }
 
-  function clearPrevious() {
-    setClearing(true);
+  function clearBatch(stamp: string) {
+    setClearing(stamp);
     try {
-      const n = removeJobsByIdPrefix('G-imp-');
+      const n = removeJobsByIdPrefix(stamp ? `G-imp-${stamp}-` : 'G-imp-');
       onToast(`${n} imported job${n === 1 ? '' : 's'} removed — everything made by hand is untouched`);
     } finally {
-      setClearing(false);
-      setConfirmClear(false);
+      setClearing(null);
+      setConfirmClear(null);
     }
   }
 
@@ -274,27 +299,44 @@ export function ImportJobsCard({ onToast }: { onToast: (msg: string, type?: 'suc
         onChange={e => { void pickFile(e.target.files?.[0]); e.target.value = ''; }}
       />
 
-      {previousImportCount > 0 && (
-        <div className="mt-3 flex items-center gap-2 flex-wrap text-xs bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-          <AlertTriangle size={13} className="text-amber-600 flex-shrink-0" />
-          <span className="text-amber-800 flex-1 min-w-[180px]">
-            A previous import left {previousImportCount} job{previousImportCount === 1 ? '' : 's'} here.
-            Removing them touches nothing made by hand.
-          </span>
-          {confirmClear ? (
-            <span className="flex items-center gap-1.5">
-              <button onClick={clearPrevious} disabled={clearing}
-                className="px-2.5 py-1.5 rounded-lg bg-red-600 text-white font-semibold disabled:opacity-50">
-                {clearing ? 'Removing…' : `Yes, remove ${previousImportCount}`}
-              </button>
-              <button onClick={() => setConfirmClear(false)} className="px-2 py-1.5 text-gray-500">Cancel</button>
-            </span>
-          ) : (
-            <button onClick={() => setConfirmClear(true)}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-amber-300 text-amber-800 font-semibold hover:bg-amber-100">
-              <Trash2 size={12} /> Remove previous import
-            </button>
-          )}
+      {importBatches.length > 0 && (
+        <div className="mt-3 rounded-lg bg-amber-50 border border-amber-200 divide-y divide-amber-100">
+          {importBatches.map(b => {
+            const label = b.stamp
+              ? new Date(b.when).toLocaleString(undefined,
+                  { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+              : 'earlier import';
+            const asking = confirmClear === b.stamp;
+            return (
+              <div key={b.stamp || 'legacy'} className="flex items-center gap-2 flex-wrap text-xs px-3 py-2">
+                <AlertTriangle size={13} className="text-amber-600 flex-shrink-0" />
+                <span className="text-amber-800 flex-1 min-w-[170px]">
+                  Import from <b>{label}</b> — {b.count} job{b.count === 1 ? '' : 's'}
+                  {b.edited > 0 && <> · <b>{b.edited} edited since</b></>}
+                </span>
+                {asking ? (
+                  <span className="flex items-center gap-1.5">
+                    <button onClick={() => clearBatch(b.stamp)} disabled={clearing !== null}
+                      className="px-2.5 py-1.5 rounded-lg bg-red-600 text-white font-semibold disabled:opacity-50">
+                      {clearing === b.stamp ? 'Removing…'
+                        : b.edited > 0
+                          ? `Remove ${b.count} (incl. ${b.edited} edited)`
+                          : `Yes, remove ${b.count}`}
+                    </button>
+                    <button onClick={() => setConfirmClear(null)} className="px-2 py-1.5 text-gray-500">Cancel</button>
+                  </span>
+                ) : (
+                  <button onClick={() => setConfirmClear(b.stamp)}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-amber-300 text-amber-800 font-semibold hover:bg-amber-100">
+                    <Trash2 size={12} /> Remove this import
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          <p className="px-3 py-1.5 text-[10.5px] text-amber-700/80">
+            Removing an import deletes exactly those jobs, on every device. Anything made by hand is never touched.
+          </p>
         </div>
       )}
 
