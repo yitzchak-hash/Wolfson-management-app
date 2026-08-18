@@ -21,7 +21,7 @@ import { RecordedMemo } from '../data/voiceMemo';
 import {
   extractFileId, drivePreviewUrl, driveDownloadUrl, driveThumbUrl,
   extractFolderId, isUploadBackendConfigured, findOrCreateFolderViaBackend,
-  uploadFileViaResumableSession, shareFileToDrive, ensurePlanShared,
+  uploadFileViaResumableSession, shareFileToDrive, ensureDriveShared,
 } from '../data/driveApi';
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -453,12 +453,12 @@ export function ContractorPortal() {
     if (!selectedAssignment) return;
     const apt = apartments.find(x => x.id === selectedAssignment.apartmentId);
     const planId = apt?.plansPdfLink ? extractFileId(apt.plansPdfLink) : null;
-    ensurePlanShared(planId);
+    ensureDriveShared(planId);
     if (apt && planId) {
       const latest = planAnnotations
         .filter(x => x.apartmentId === apt.id && x.planFileId === planId && x.driveFileId)
         .sort((a, b) => b.version - a.version)[0];
-      ensurePlanShared(latest?.driveFileId);
+      ensureDriveShared(latest?.driveFileId);
     }
   }, [selectedAssignment, apartments, planAnnotations]);
 
@@ -533,6 +533,7 @@ export function ContractorPortal() {
           setUploadProgress({ name: file.name, pct: 0 });
           try {
             const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId!, 'Photos');
+            ensureDriveShared(photosFolderId);
             const stageName = getStage(selectedAssignment.stageId)?.name ?? 'General';
             const stageFolderId = await findOrCreateFolderViaBackend(photosFolderId, stageName);
             const { fileId, webViewLink } = await uploadFileViaResumableSession(
@@ -612,6 +613,8 @@ export function ContractorPortal() {
       if (isUploadBackendConfigured() && mainFolderId) {
         try {
           const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');
+        ensureDriveShared(photosFolderId);
+          ensureDriveShared(photosFolderId);
           const notesFolderId = await findOrCreateFolderViaBackend(photosFolderId, 'Contractor Notes');
           const { fileId, webViewLink } = await uploadFileViaResumableSession(notesFolderId, file);
           await shareFileToDrive(fileId);
@@ -641,6 +644,7 @@ export function ContractorPortal() {
     if (isUploadBackendConfigured() && mainFolderId) {
       try {
         const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');
+        ensureDriveShared(photosFolderId);
         const notesFolderId = await findOrCreateFolderViaBackend(photosFolderId, 'Contractor Notes');
         const { fileId, webViewLink } = await uploadFileViaResumableSession(notesFolderId, file);
         await shareFileToDrive(fileId);

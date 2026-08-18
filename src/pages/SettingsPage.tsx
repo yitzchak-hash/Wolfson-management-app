@@ -1400,16 +1400,22 @@ function BulkReadyToStart({ onToast }: { onToast: (msg: string, type?: 'success'
 }
 
 /**
- * One press shares every plan already linked in this workspace.
+ * One press shares every Drive file this workspace's records point at.
  *
- * The lazy heal in the drawer and portal shares a plan the first time it is
- * OPENED — right for the long tail, useless for "make everything work now".
- * This walks every apartment's chosen plan and every stamped markup version
- * and link-shares the lot, so nobody has to open two hundred drawers. Chunked
- * like the Drive-names scan, for the same reason.
+ * The lazy heal shares a file the first time it is OPENED — right for the
+ * long tail, useless for "make everything work now". This walks everything
+ * the store knows carries a Drive file: each job's chosen plan, every
+ * stamped markup, worker photos and files that landed on Drive, stage-note
+ * and task attachments, office files, and voice memos — and link-shares the
+ * lot, so nobody has to open two hundred drawers. Chunked like the
+ * Drive-names scan, for the same reason. The office is a mix of personal
+ * Google accounts, so this is what makes ALL of it open for all of them.
  */
 function SharePlansCard({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
-  const { apartments, planAnnotations, mainUiStrings: s } = useStore();
+  const {
+    apartments, planAnnotations, contractorPhotos, officeNoteFiles, stageNotes,
+    contractorAssignments, contractorNotes, canvasElements, mainUiStrings: s,
+  } = useStore();
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [result, setResult] = useState<{ ok: number; failed: number } | null>(null);
@@ -1417,15 +1423,24 @@ function SharePlansCard({ onToast }: { onToast: (msg: string, type?: 'success' |
 
   const fileIds = useMemo(() => {
     const ids = new Set<string>();
-    for (const a of apartments) {
-      if (a.plansPdfLink) {
-        const id = extractFileId(a.plansPdfLink);
-        if (id) ids.add(id);
-      }
-    }
-    for (const ann of planAnnotations) if (ann.driveFileId) ids.add(ann.driveFileId);
+    const take = (raw?: string | null) => {
+      if (!raw) return;
+      // Either a bare Drive file id or any Drive URL.
+      const id = raw.includes('/') || raw.includes('?') ? extractFileId(raw) : raw;
+      if (id) ids.add(id);
+    };
+    for (const a of apartments) take(a.plansPdfLink);
+    for (const ann of planAnnotations) take(ann.driveFileId);
+    for (const p of contractorPhotos) take(p.driveFileId ?? p.driveUrl);
+    for (const f of officeNoteFiles) take(f.driveFileId ?? f.driveUrl);
+    for (const n of stageNotes) for (const att of n.attachments ?? []) take(att.driveFileId ?? att.driveUrl);
+    for (const t of contractorAssignments) for (const att of t.attachments ?? []) take(att.driveFileId ?? att.driveUrl);
+    for (const n of contractorNotes) take(n.attachmentDriveFileId ?? n.attachmentDriveUrl);
+    // Board voice memos and files store a Drive web-view URL.
+    for (const el of canvasElements) take(el.audioUrl);
     return [...ids];
-  }, [apartments, planAnnotations]);
+  }, [apartments, planAnnotations, contractorPhotos, officeNoteFiles, stageNotes,
+      contractorAssignments, contractorNotes, canvasElements]);
 
   async function run() {
     setRunning(true);
@@ -1441,7 +1456,7 @@ function SharePlansCard({ onToast }: { onToast: (msg: string, type?: 'success' |
     setResult({ ok, failed });
     setRunning(false);
     onToast(failed === 0
-      ? `${ok} plan${ok === 1 ? '' : 's'} shared — they open without a Google login now`
+      ? `${ok} file${ok === 1 ? '' : 's'} shared — they open without a Google login now`
       : `${ok} shared, ${failed} failed — press again to retry the failures`,
       failed === 0 ? 'success' : 'error');
   }
@@ -1453,12 +1468,14 @@ function SharePlansCard({ onToast }: { onToast: (msg: string, type?: 'success' |
       <div className="flex items-start gap-3 flex-wrap">
         <div className="min-w-0 flex-1">
           <h2 className="font-semibold text-gray-800 flex items-center gap-2">
-            <BookOpen size={16} className="text-[#1e3a5f]" /> Plans open for everyone
+            <BookOpen size={16} className="text-[#1e3a5f]" /> Plans &amp; files open for everyone
           </h2>
           <p className="text-sm text-gray-500 mt-1">
-            Shares every plan already linked in this workspace — {fileIds.length} file{fileIds.length === 1 ? '' : 's'},
-            marked-up versions included — so viewing one needs nothing but the link. New plans
-            share themselves from now on; this catches everything from before.
+            Shares every Drive file this workspace points at — {fileIds.length} file{fileIds.length === 1 ? '' : 's'}:
+            plans and marked-up versions, worker photos and files stored on Drive, note and task
+            attachments, voice memos — so viewing one needs nothing but the link. New uploads
+            share themselves from now on; this catches everything from before. Photo folders
+            share themselves the first time their job&apos;s Photos tab is opened.
           </p>
         </div>
         <button
@@ -1466,7 +1483,7 @@ function SharePlansCard({ onToast }: { onToast: (msg: string, type?: 'success' |
           disabled={running || fileIds.length === 0}
           className="px-3 py-2 rounded-lg bg-[#1e3a5f] text-white text-xs font-semibold hover:bg-[#162d4a] disabled:opacity-40 flex-shrink-0"
         >
-          {running ? `Sharing ${progress.done}/${progress.total}…` : 'Share all plans now'}
+          {running ? `Sharing ${progress.done}/${progress.total}…` : 'Share everything now'}
         </button>
       </div>
       {result && (

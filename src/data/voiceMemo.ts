@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   isUploadBackendConfigured, extractFolderId,
-  findOrCreateFolderViaBackend, uploadFileViaBackend,
+  findOrCreateFolderViaBackend, uploadFileViaBackend, shareFileToDrive,
 } from './driveApi';
 
 /**
@@ -234,6 +234,7 @@ export async function storeVoiceMemo(
       const ext = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('mpeg') ? 'mp3' : 'webm';
       const file = new File([blob], `memo-${Date.now()}.${ext}`, { type: blob.type || 'audio/webm' });
       const res = await uploadFileViaBackend(folderId, file);
+      if (res?.fileId) void shareFileToDrive(res.fileId);
       if (res?.webViewLink) return { url: res.webViewLink };
     } catch {
       // fall through to the local path

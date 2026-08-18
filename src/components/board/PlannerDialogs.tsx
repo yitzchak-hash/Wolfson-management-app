@@ -5,7 +5,7 @@ import {
 } from '../../types';
 import { useStore } from '../../data/store';
 import {
-  isUploadBackendConfigured, extractFolderId, findOrCreateFolderViaBackend, uploadFileViaBackend,
+  isUploadBackendConfigured, extractFolderId, findOrCreateFolderViaBackend, uploadFileViaBackend, shareFileToDrive,
 } from '../../data/driveApi';
 
 /**
@@ -71,6 +71,7 @@ export function PlannerTaskDialog({
       const out: TaskAttachment[] = [];
       for (const f of files) {
         const up = await uploadFileViaBackend(into, f);
+        if (up?.fileId) void shareFileToDrive(up.fileId);
         out.push({
           id: `A-${Math.random().toString(36).slice(2, 8)}`,
           filename: f.name, mimeType: f.type, dataUrl: '',

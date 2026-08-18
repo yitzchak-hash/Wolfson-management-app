@@ -379,16 +379,17 @@ export async function shareFileToDrive(fileId: string): Promise<boolean> {
 }
 
 /**
- * Make sure a PLAN file is link-shared, once.
+ * Make sure a Drive FILE OR FOLDER is link-shared, once.
  *
- * The plan view is Google's own preview iframe and the marked-up-plan link is
- * a plain Drive link — both are served by drive.google.com, which knows
- * nothing about the app's login and turns anyone not signed into the company
- * Google account away (cookie prompts on desktop, an outright dead end on an
- * iPhone). The owner's chosen fix: every plan the app shows becomes
- * anyone-with-the-link readable. New picks and new stamped versions are
- * shared as they are made; this helper also runs wherever a plan is DISPLAYED,
- * so every legacy plan heals itself the first time somebody opens it.
+ * Plan viewers, photo thumbnails and plain Drive links are all served by
+ * drive.google.com, which knows nothing about the app's login and turns away
+ * anyone not signed into an account with access — and the office itself is a
+ * mix of personal Google accounts. The owner's chosen fix: everything the app
+ * SHOWS from Drive becomes anyone-with-the-link readable. New uploads and
+ * picks share as they are made; this helper also runs wherever something is
+ * DISPLAYED, so the backlog heals itself the first time it is opened. Sharing
+ * a FOLDER (each job's Photos subfolder) makes everything inside inherit,
+ * future uploads included.
  *
  * The done-list lives in localStorage (per machine) plus an in-flight set, so
  * a portal that re-renders its task sheet does not hammer the share route.
@@ -396,7 +397,7 @@ export async function shareFileToDrive(fileId: string): Promise<boolean> {
  * repeating a network call on every render.
  */
 const sharingNow = new Set<string>();
-export function ensurePlanShared(fileId: string | null | undefined): void {
+export function ensureDriveShared(fileId: string | null | undefined): void {
   if (!fileId || !DRIVE_API_KEY) return;
   let done: string[] = [];
   try { done = JSON.parse(localStorage.getItem('shared_plan_ids') ?? '[]'); } catch { /* fresh */ }
@@ -571,6 +572,10 @@ export async function listAllPhotosViaBackend(driveLink: string): Promise<DriveP
       f => f.mimeType === 'application/vnd.google-apps.folder' && /^photos?$/i.test(f.name),
     );
     if (!photosFolder) return [];
+    // Opening a job's photos is the moment they are needed by somebody — make
+    // the whole Photos folder link-readable so every picture inside (and every
+    // future upload into it) opens without a Google login.
+    ensureDriveShared(photosFolder.id);
 
     const photosContents = await listFolderViaBackend(photosFolder.id);
     const results: DrivePhotoItem[] = [];

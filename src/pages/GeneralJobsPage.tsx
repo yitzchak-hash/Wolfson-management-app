@@ -48,7 +48,7 @@ import { StrokeNib, nibDash } from '../components/board/BoardNodes';
 import { exportBoardPng, exportBoardPdf } from '../data/boardExport';
 import {
   getFolderNameViaBackend, familyNameFromFolderName, extractFolderId,
-  isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaBackend,
+  isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaBackend, shareFileToDrive,
 } from '../data/driveApi';
 import {
   PinnedTitleLayer, StrokeLayer, CountdownNode, StopwatchNode, ClipArtNode, NODE_DEFAULT_SIZE,
@@ -1651,6 +1651,7 @@ export function GeneralJobsPage() {
         const folderId = await findOrCreateFolderViaBackend(parent, 'Voice Memos');
         const file = new File([blob], `memo-${Date.now()}.webm`, { type: blob.type || 'audio/webm' });
         const res = await uploadFileViaBackend(folderId, file);
+        if (res?.fileId) void shareFileToDrive(res.fileId);
         if (res?.webViewLink) return res.webViewLink;
       } catch {
         // fall through to the local path
@@ -1675,6 +1676,7 @@ export function GeneralJobsPage() {
     try {
       const folderId = await findOrCreateFolderViaBackend(parent, 'Board Files');
       const res = await uploadFileViaBackend(folderId, file);
+      if (res?.fileId) void shareFileToDrive(res.fileId);
       return res?.webViewLink ?? null;
     } catch {
       return null;

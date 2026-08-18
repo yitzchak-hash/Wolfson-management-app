@@ -1832,13 +1832,21 @@ Drive link — both served by drive.google.com, which knows nothing about the
 app's login and turns away anyone outside the company Google account (cookie
 prompts, a dead end on iPhone Safari). The owner chose sharing over proxying
 (2026-08-17): **every plan the app shows becomes anyone-with-link readable.**
-- `ensurePlanShared(fileId)` in `driveApi.ts` — fire-and-forget, remembered in
+- `ensureDriveShared(fileId)` in `driveApi.ts` (files AND folders) — fire-and-forget, remembered in
   `shared_plan_ids` (localStorage, this machine) + an in-flight set, so a
   re-rendering portal does not hammer the route; a FAILED share is not
   recorded, so the next open retries.
 - Wired where a plan is DISPLAYED, not only where it is picked — that is what
   heals every plan chosen before this existed: the drawer (current plan + its
-  newest stamped version) and the portal task sheet (same pair).
+  newest stamped version) and the portal task sheet (same pair). The same
+  breadth now covers the rest of Drive: `listAllPhotosViaBackend` shares each
+  job's **Photos FOLDER** on first open (inheritance covers every picture and
+  future upload), the five Photos-subfolder creation sites share the folder at
+  upload, and the four upload paths that never shared their output (planner
+  attachments, `storeVoiceMemo`, the board's audio + Board Files) now do.
+  The office uses a MIX of personal Google accounts, so this is what makes the
+  app's Drive surfaces work for staff too — folder BROWSING in the Drive UI
+  still needs their accounts added to the shared drive as members.
 - `api/plan-annotate.js` shares each stamped PDF the moment it uploads it,
   non-fatally — the portal's lazy call is the retry.
 - **`supportsAllDrives: true` in `api/share.js` is load-bearing**: the plans
@@ -1848,9 +1856,11 @@ prompts, a dead end on iPhone Safari). The owner chose sharing over proxying
   needs the app served with `VITE_DRIVE_API_KEY` set (the helper rightly does
   nothing without a key) — a second dev server on 5174, so the main one keeps
   key-less behaviour for every other harness.
-- **"Share all plans now"** (`SharePlansCard`, app settings → App, beside the
-  Drive-names backfill): one press walks every apartment's `plansPdfLink` and
-  every stamped annotation in the CURRENT workspace and shares the lot,
+- **"Share everything now"** (`SharePlansCard`, app settings → App, beside the
+  Drive-names backfill): one press walks every Drive file the CURRENT
+  workspace's records point at — plans, stamped annotations, contractor
+  photos/files on Drive, stage-note and task attachments, contractor-note
+  attachments, board voice memos — and shares the lot,
   chunked in fives, with a progress count and a failed-count that invites a
   retry. Exists because the lazy heal only fires on OPEN — right for the long
   tail, useless for "make everything work today". `shareFileToDrive` now

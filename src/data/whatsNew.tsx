@@ -91,11 +91,12 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'list',
       },
       {
-        title: 'Plans open for everyone',
-        body: 'A plan used to demand a Google sign-in from anyone outside the company '
-          + 'account — workers, incognito windows, iPhones. Every plan the app shows is '
-          + 'now shared by link automatically, including the marked-up versions, so '
-          + 'viewing a plan needs nothing but opening the app.',
+        title: 'Plans, photos and files open for everyone',
+        body: 'Anything the app shows from Drive used to demand a Google sign-in — and '
+          + 'the office itself uses different Google accounts. Now every plan, marked-up '
+          + 'version, photo folder, attachment and voice memo the app shows is shared by '
+          + 'link automatically, and "Share everything now" in App settings catches the '
+          + 'whole backlog in one press.',
         demo: 'tap',
       },
     ],

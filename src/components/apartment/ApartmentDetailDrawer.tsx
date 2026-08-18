@@ -7,7 +7,7 @@ import { VoiceRecorderButton, VoiceMemoPlayer } from '../ui/VoiceMemo';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import { StageNotesSection } from './StageNotesSection';
 import { ActivitySection } from './ActivitySection';
-import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, findAllPlansPdfsViaBackend, findPlanSetViaBackend, PlanEntry, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, ensurePlanShared, extractFolderId, driveThumbUrl, listAllPhotosViaBackend, getFolderNameViaBackend, familyNameFromFolderName, DrivePhotoItem, DriveFile, FolderHealth, checkFolderHealthViaBackend } from '../../data/driveApi';
+import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, findAllPlansPdfsViaBackend, findPlanSetViaBackend, PlanEntry, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, ensureDriveShared, extractFolderId, driveThumbUrl, listAllPhotosViaBackend, getFolderNameViaBackend, familyNameFromFolderName, DrivePhotoItem, DriveFile, FolderHealth, checkFolderHealthViaBackend } from '../../data/driveApi';
 import { Tooltip } from '../ui/Tooltip';
 import { DriveStatus, driveStateOf } from '../ui/DriveStatus';
 import { DriveDesktopPath } from './DriveDesktopPath';
@@ -367,8 +367,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       .sort((a, b) => b.version - a.version);
     return vs[0]?.driveFileId ?? null;
   }, [planAnnotations, apartment, currentPlanFileId]);
-  useEffect(() => { ensurePlanShared(currentPlanFileId); }, [currentPlanFileId]);
-  useEffect(() => { ensurePlanShared(latestStampedFileId); }, [latestStampedFileId]);
+  useEffect(() => { ensureDriveShared(currentPlanFileId); }, [currentPlanFileId]);
+  useEffect(() => { ensureDriveShared(latestStampedFileId); }, [latestStampedFileId]);
 
   if (!apartment) return null;
 
@@ -662,6 +662,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     if (backendConfigured && mainFolderId) {
       try {
         const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');
+        ensureDriveShared(photosFolderId);
         const notesFolderId = await findOrCreateFolderViaBackend(photosFolderId, 'Job Notes');
         setOfficeUploadPct(0);
         const { fileId, webViewLink } = await uploadFileViaResumableSession(
@@ -1547,7 +1548,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     updateApartment(apartment!.id, { driveLink: next || undefined }, currentUser);
                     const folderId = next ? extractFolderId(next) : null;
                     if (folderId && backendConfigured) {
-                      findOrCreateFolderViaBackend(folderId, 'Photos').catch(() => {});
+                      findOrCreateFolderViaBackend(folderId, 'Photos').then(id => ensureDriveShared(id)).catch(() => {});
                       autoFillFamilyNameFromFolder(folderId);
                       findPlanSetViaBackend(next).then(setPlanSet).catch(() => {});
                       setFetchingPdf(true);
