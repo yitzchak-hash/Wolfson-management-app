@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { Apartment, ContractorCategory, TaskAttachment, TaskPriority } from '../../types';
 import { useStore } from '../../data/store';
-import { VoiceRecorderButton } from '../ui/VoiceMemo';
+import { VoiceRecorderButton, VoiceMemoPlayer } from '../ui/VoiceMemo';
 import { RecordedMemo } from '../../data/voiceMemo';
 import { contractorLoad } from '../../data/contractorLoad';
 import {
@@ -449,6 +449,10 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                       {attachments.length > 0 && (
                         <div className="mt-1.5 flex flex-wrap gap-1.5">
                           {attachments.map(att => (
+                            att.mimeType.startsWith('audio/') ? (
+                              <VoiceMemoPlayer key={att.id} src={att.dataUrl || ''} className="max-w-[250px]"
+                                onDelete={() => removeAttachment(att.id)} />
+                            ) : (
                             <div
                               key={att.id}
                               className="relative flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg overflow-hidden cursor-pointer hover:border-[#1e3a5f]/30"
@@ -478,6 +482,7 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                                 <X size={8} color="white" />
                               </button>
                             </div>
+                            )
                           ))}
                         </div>
                       )}

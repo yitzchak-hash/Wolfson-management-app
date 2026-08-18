@@ -657,7 +657,8 @@ export function TasksPage() {
                 {addAttachments.map(att => (
                   <div key={att.id} className="relative">
                     {att.mimeType.startsWith('audio/') ? (
-                      <VoiceMemoPlayer src={att.driveUrl || att.dataUrl || ''} className="max-w-[240px]" />
+                      <VoiceMemoPlayer src={att.driveUrl || att.dataUrl || ''} className="max-w-[250px]"
+                        onDelete={() => setAddAttachments(prev => prev.filter(a => a.id !== att.id))} />
                     ) : att.mimeType.startsWith('image/') ? (
                       <>
                         <img

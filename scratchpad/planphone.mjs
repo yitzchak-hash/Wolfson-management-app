@@ -139,7 +139,7 @@ if (await markup.count()) {
   const cbox = await canvases.nth(nCanv - 1).boundingBox();   // live layer is topmost
   const inkBefore = await page.evaluate(() => {
     const list = [...document.querySelectorAll('canvas')];
-    const c = list[1];                                        // committed-ink layer
+    const c = list[list.length - 2];                          // studio committed-ink (its stack is last; the plan pane below has its own three)
     if (!c) return -1;
     const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
     let n = 0;
@@ -160,7 +160,7 @@ if (await markup.count()) {
   await page.waitForTimeout(900);
   const inkAfter = await page.evaluate(() => {
     const list = [...document.querySelectorAll('canvas')];
-    const c = list[1];
+    const c = list[list.length - 2];
     if (!c) return -1;
     const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
     let n = 0;
@@ -188,7 +188,7 @@ if (await planTab2.count()) { await planTab2.first().tap(); await page.waitForTi
 const pinBtn = page.getByRole('button', { name: /^Pin$/ });
 if (await pinBtn.count()) {
   await pinBtn.first().tap();
-  const box = await page.locator('div.relative.flex-1.min-h-0, div.relative').filter({ has: page.locator('iframe') }).first().boundingBox();
+  const box = await page.locator('div.relative.flex-1.min-h-0').filter({ has: page.locator('canvas') }).first().boundingBox();
   if (box) {
     await page.touchscreen.tap(box.x + box.width * 0.45, box.y + box.height * 0.4);
     await page.waitForTimeout(700);

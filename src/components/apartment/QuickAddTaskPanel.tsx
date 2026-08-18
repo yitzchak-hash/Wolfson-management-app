@@ -557,8 +557,10 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                           return (
                             att.mimeType.startsWith('audio/') ? (
                               // A memo is listened to, not opened — so it gets a
-                              // transport here rather than a 120px file chip.
-                              <VoiceMemoPlayer key={att.id} src={att.dataUrl || ''} className="max-w-[230px]" />
+                              // transport here rather than a 120px file chip,
+                              // and the same way OUT as every file: a delete.
+                              <VoiceMemoPlayer key={att.id} src={att.dataUrl || ''} className="max-w-[250px]"
+                                onDelete={() => setAttachments(prev => prev.filter(a => a.id !== att.id))} />
                             ) : (
                             <div
                               key={att.id}

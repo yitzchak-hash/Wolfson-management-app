@@ -7,7 +7,7 @@ import { VoiceRecorderButton, VoiceMemoPlayer } from '../ui/VoiceMemo';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import { StageNotesSection } from './StageNotesSection';
 import { ActivitySection } from './ActivitySection';
-import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, findAllPlansPdfsViaBackend, findPlanSetViaBackend, PlanEntry, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, ensureDriveShared, extractFolderId, driveThumbUrl, listAllPhotosViaBackend, getFolderNameViaBackend, familyNameFromFolderName, DrivePhotoItem, DriveFile, FolderHealth, checkFolderHealthViaBackend } from '../../data/driveApi';
+import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, findAllPlansPdfsViaBackend, findPlanSetViaBackend, listPlanSubfoldersViaBackend, listFolderPlansViaBackend, PlanEntry, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, ensureDriveShared, extractFolderId, driveThumbUrl, listAllPhotosViaBackend, getFolderNameViaBackend, familyNameFromFolderName, DrivePhotoItem, DriveFile, FolderHealth, checkFolderHealthViaBackend } from '../../data/driveApi';
 import { Tooltip } from '../ui/Tooltip';
 import { DriveStatus, driveStateOf } from '../ui/DriveStatus';
 import { DriveDesktopPath } from './DriveDesktopPath';
@@ -182,16 +182,43 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    * click on the board behind it. A field gets the first Escape, so backing out
    * of a typo does not shut the whole window.
    */
+  /**
+   * What the editable basics looked like when this apartment was opened.
+   * Closing the window flushes anything that still differs — a save that
+   * only ever ran on blur could be skipped by any close path that never
+   * blurred, and typed notes silently vanished.
+   */
+  const basicSnapshot = useRef<{ familyName: string; generalNotes: string; address: string; phone: string; zoho: string; drive: string } | null>(null);
+  const [showSaved, setShowSaved] = useState(false);
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function basicDirty(): boolean {
+    const snap = basicSnapshot.current;
+    if (!snap || !apartment) return false;
+    return snap.generalNotes !== generalNotes
+      || snap.familyName !== familyName
+      || snap.address !== addressLocal
+      || snap.phone !== phoneLocal
+      || snap.zoho !== zohoLinkLocal
+      || snap.drive !== driveLink;
+  }
+
+  /** Every way out of the window goes through here, so edits cannot be lost. */
+  function closeDrawer() {
+    if (apartment && currentUser && basicDirty()) autoSave();
+    onClose();
+  }
+
   useEffect(() => {
     function key(e: KeyboardEvent) {
       if (e.key !== 'Escape') return;
       const t = e.target as HTMLElement | null;
       if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) { t.blur(); return; }
-      onClose();
+      closeDrawer();
     }
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, [onClose]);
+  });
   const officeFileRef = useRef<HTMLInputElement>(null);
   const taskEditFileRef = useRef<HTMLInputElement>(null);
 
@@ -247,6 +274,14 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     { plansFolderId: null, plans: [] });
   /** Which chip is showing — an id from planSet, or null for the detected default. */
   const [shownPlanId, setShownPlanId] = useState<string | null>(null);
+  /** The plan picker's folder tree: subfolders of Engineered Plans, which
+   *  folder is selected ('' = the plans folder itself), and the picked
+   *  folder's own files as chips. Sixteen stamped versions stop spamming
+   *  the bar — they live behind their folder's name. */
+  const [planFolders, setPlanFolders] = useState<DriveFile[]>([]);
+  const [planFolderSel, setPlanFolderSel] = useState('');
+  const [folderPlans, setFolderPlans] = useState<PlanEntry[]>([]);
+  const [folderMenuOpen, setFolderMenuOpen] = useState(false);
   /** The Drive folder's own title, so the link field can show it instead of a URL. */
   const [driveFolderName, setDriveFolderName] = useState('');
   /**
@@ -295,6 +330,14 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
 
   useEffect(() => {
     if (apartment) {
+      basicSnapshot.current = {
+        familyName: apartment.displayName || '',
+        generalNotes: apartment.generalNotes ?? '',
+        address: apartment.address ?? '',
+        phone: apartment.phone ?? '',
+        zoho: apartment.zohoLink ?? '',
+        drive: apartment.driveLink ?? '',
+      };
       setFamilyName(apartment.displayName || '');
       setCurrentStageId(apartment.currentStageId ?? '');
       setPrevStageId(apartment.currentStageId ?? '');
@@ -319,11 +362,20 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       setPlanSet({ plansFolderId: null, plans: [] });
       setShownPlanId(null);
 
+      setPlanFolders([]);
+      setPlanFolderSel('');
+      setFolderPlans([]);
+      setFolderMenuOpen(false);
       setDriveFolderName('');
       if (apartment.driveLink && backendConfigured) {
         // One scan gets the originals, the markups and the folder a new markup
         // has to be filed into.
-        findPlanSetViaBackend(apartment.driveLink).then(setPlanSet).catch(() => {});
+        findPlanSetViaBackend(apartment.driveLink).then(ps => {
+          setPlanSet(ps);
+          if (ps.plansFolderId) {
+            listPlanSubfoldersViaBackend(ps.plansFolderId).then(setPlanFolders).catch(() => {});
+          }
+        }).catch(() => {});
         const fid = extractFolderId(apartment.driveLink);
         if (fid) getFolderNameViaBackend(fid).then(n => { if (n) setDriveFolderName(n); }).catch(() => {});
       }
@@ -631,8 +683,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     }
   }
 
-  // Silent auto-save on blur — no toast, no modal
+  // Auto-save on blur. Quiet, but no longer INVISIBLE: a small tick beside
+  // the notes says the write happened, which is the difference between
+  // "saved" and "hoped".
   function autoSave() {
+    const wasDirty = basicDirty();
     updateApartment(apartment!.id, {
       displayName: familyName || apartment!.apartmentNumber,
       currentStageId: currentStageId || null,
@@ -645,6 +700,15 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       phone: phoneLocal.trim() || undefined,
     }, currentUser);
     setPrevStageId(currentStageId);
+    basicSnapshot.current = {
+      familyName, generalNotes, address: addressLocal, phone: phoneLocal,
+      zoho: zohoLinkLocal, drive: driveLink,
+    };
+    if (wasDirty) {
+      setShowSaved(true);
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+      savedTimer.current = setTimeout(() => setShowSaved(false), 2200);
+    }
   }
 
   // Drive folders are named "Artzi, Avital - 1234 - …" — pull everything before the
@@ -778,49 +842,109 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           : { flex: '1 1 54%', backgroundColor: '#f8fafc' }}
       >
         <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-200 flex-shrink-0 bg-white flex-wrap">
-          <BookOpen size={13} className="text-[#1e3a5f]" />
-
-          {/* Every plan in the folder as a chip, the one you are looking at
-              filled in — the same row the building projects have. With one
-              plan it stays a plain title; with several, switching between
-              them is one tap instead of a trip to the folder. */}
-          {planSet.plans.length > 1 ? (
-            <span className="flex items-center gap-1 flex-wrap min-w-0">
-              {planSet.plans.map(p => {
-                const on = p.id === fileId;
-                return (
-                  <button
-                    key={p.id}
-                    onClick={() => {
-                      setShownPlanId(p.id);
-                      // The chosen plan is the one the contractor sees, so
-                      // it is written down rather than held on screen.
-                      if (currentUser) {
-                        updateApartment(apartment!.id,
-                          { plansPdfLink: `https://drive.google.com/file/d/${p.id}/view` },
-                          currentUser);
-                      }
-                    }}
-                    title={p.name}
-                    /* Taller chips on the tab — the side pane is clicked with a
-                       mouse, the tab is tapped with a finger. */
-                    className={`px-2 rounded-full text-[11px] font-bold truncate max-w-[150px]
-                               transition-colors ${asTab ? 'py-1.5' : 'py-0.5'}`}
-                    style={on
-                      ? { backgroundColor: '#1e3a5f', color: '#fff' }
-                      : { backgroundColor: '#eef2f7', color: '#475569' }}
-                  >
-                    {p.name.replace(/\.pdf$/i, '')}
-                  </button>
-                );
-              })}
+          {/* The folder, then its plans: the book icon grew into a dropdown
+              over Engineered Plans. Pick the main folder and only ITS sheets
+              show as chips; pick Annotated Plans (or any other subfolder) and
+              that folder's files take the row — sixteen stamped versions no
+              longer spam the bar. */}
+          {planFolders.length > 0 ? (
+            <span className="relative">
+              <button
+                onClick={() => setFolderMenuOpen(v => !v)}
+                title="Choose a folder inside Engineered Plans"
+                className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11.5px] font-bold
+                           bg-[#eef2f7] text-[#1e3a5f] hover:bg-[#e2e9f2] max-w-[170px]"
+              >
+                <BookOpen size={12} className="flex-shrink-0" />
+                <span className="truncate">
+                  {planFolderSel
+                    ? (planFolders.find(f => f.id === planFolderSel)?.name ?? '…')
+                    : ui.engineeringPlans}
+                </span>
+                <ChevronDown size={11} className="flex-shrink-0" />
+              </button>
+              {folderMenuOpen && (
+                <>
+                  <span className="fixed inset-0 z-[145]" onClick={() => setFolderMenuOpen(false)} />
+                  <span className="absolute z-[146] top-full mt-1 start-0 w-56 rounded-xl bg-white border border-gray-200 shadow-xl overflow-hidden block">
+                    <button
+                      onClick={() => { setPlanFolderSel(''); setFolderPlans([]); setFolderMenuOpen(false); }}
+                      className={`w-full text-left px-3 py-2 text-[12px] font-semibold hover:bg-gray-50 ${!planFolderSel ? 'text-[#1e3a5f]' : 'text-gray-700'}`}
+                    >
+                      {ui.engineeringPlans}
+                    </button>
+                    {planFolders.map(f => (
+                      <button
+                        key={f.id}
+                        onClick={() => {
+                          setPlanFolderSel(f.id);
+                          setFolderPlans([]);
+                          setFolderMenuOpen(false);
+                          listFolderPlansViaBackend(f.id).then(setFolderPlans).catch(() => {});
+                        }}
+                        className={`w-full text-left px-3 py-2 text-[12px] hover:bg-gray-50 border-t border-gray-50
+                                    flex items-center gap-1.5 ${planFolderSel === f.id ? 'text-[#1e3a5f] font-semibold' : 'text-gray-700'}`}
+                      >
+                        <FolderOpen size={12} className="text-gray-400 flex-shrink-0" />
+                        <span className="truncate">{f.name}</span>
+                      </button>
+                    ))}
+                  </span>
+                </>
+              )}
             </span>
           ) : (
-            <span className="text-[12px] font-bold text-gray-800 truncate">
-              {planSet.plans.find(p => p.id === fileId)?.name?.replace(/\.pdf$/i, '')
-                ?? ui.engineeringPlans}
-            </span>
+            <BookOpen size={13} className="text-[#1e3a5f]" />
           )}
+
+          {(() => {
+            const chips = planFolderSel ? folderPlans : planSet.plans;
+            if (chips.length > 1 || planFolderSel) {
+              return (
+                <span className="flex items-center gap-1 flex-wrap min-w-0">
+                  {chips.map(p => {
+                    const on = p.id === fileId;
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => {
+                          setShownPlanId(p.id);
+                          // Only a plan from the MAIN folder becomes "the"
+                          // plan the contractor sees — viewing a stamped
+                          // version or a side folder's sheet must not
+                          // overwrite the job's chosen plan.
+                          if (!planFolderSel && currentUser) {
+                            updateApartment(apartment!.id,
+                              { plansPdfLink: `https://drive.google.com/file/d/${p.id}/view` },
+                              currentUser);
+                          }
+                        }}
+                        title={p.name}
+                        /* Taller chips on the tab — the side pane is clicked with a
+                           mouse, the tab is tapped with a finger. */
+                        className={`px-2 rounded-full text-[11px] font-bold truncate max-w-[150px]
+                                   transition-colors ${asTab ? 'py-1.5' : 'py-0.5'}`}
+                        style={on
+                          ? { backgroundColor: '#1e3a5f', color: '#fff' }
+                          : { backgroundColor: '#eef2f7', color: '#475569' }}
+                      >
+                        {p.name.replace(/\.pdf$/i, '')}
+                      </button>
+                    );
+                  })}
+                  {planFolderSel && chips.length === 0 && (
+                    <span className="text-[11px] text-gray-400">Empty folder</span>
+                  )}
+                </span>
+              );
+            }
+            return (
+              <span className="text-[12px] font-bold text-gray-800 truncate">
+                {planSet.plans.find(p => p.id === fileId)?.name?.replace(/\.pdf$/i, '')
+                  ?? ui.engineeringPlans}
+              </span>
+            );
+          })()}
 
           <span className="flex-1" />
           <Tooltip text="Mark up this plan" side="left">
@@ -869,13 +993,31 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           contractor's read-only copy draws from.
         */}
         <div className="relative flex-1 min-h-0">
-          <iframe
-            src={drivePreviewUrl(fileId)}
-            title={ui.engineeringPlans}
-            className="w-full h-full"
-            style={{ border: 'none' }}
-            allow="autoplay"
-          />
+          {/* The app's own renderer, not Google's preview iframe: the sheet
+              fills the pane edge to edge with no grey surround, zooms with
+              the wheel, and needs no Google login — the same swap the TV
+              wallboard made, for the same reasons. Keyed by file id so
+              switching chips remounts with the new sheet. */}
+          <Suspense fallback={
+            <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm">
+              {ui.engineeringPlans}…
+            </div>
+          }>
+            <PlanAnnotator
+              key={fileId}
+              embedded
+              readOnly
+              planFileId={fileId}
+              planName={planSet.plans.find(p => p.id === fileId)?.name
+                ?? folderPlans.find(p => p.id === fileId)?.name
+                ?? ui.engineeringPlans}
+              apartmentId={apartment!.id}
+              apartmentLabel={aptLabel(apartment!)}
+              driveFolderUrl={apartment!.driveLink}
+              authorName={currentUser?.name ?? ''}
+              onClose={() => { /* part of the pane */ }}
+            />
+          </Suspense>
           <PlanPinOverlay
             apartmentId={apartment!.id}
             apartmentLabel={aptLabel(apartment!)}
@@ -892,7 +1034,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       {stageChangeModal && (
         <>
           <div className="fixed inset-0 bg-black/50 z-[130]" />
-          <div className="fixed z-[70] bg-white rounded-2xl shadow-2xl p-6" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 'min(380px, 90vw)' }}>
+          <div className="fixed z-[140] bg-white rounded-2xl shadow-2xl p-6" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 'min(380px, 90vw)' }}>
             <div className="flex items-center gap-2 mb-2">
               <ClipboardList size={18} className="text-[#1e3a5f]" />
               <h3 className="font-bold text-gray-900 text-base">{ui.stageChangedModal}</h3>
@@ -929,7 +1071,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       {keepHistoryModal && (
         <>
           <div className="fixed inset-0 bg-black/50 z-[130]" />
-          <div className="fixed z-[70] bg-white rounded-2xl shadow-2xl p-6" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 'min(380px, 90vw)' }}>
+          <div className="fixed z-[140] bg-white rounded-2xl shadow-2xl p-6" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 'min(380px, 90vw)' }}>
             <div className="flex items-center gap-2 mb-2">
               <Clock size={18} className="text-amber-500" />
               <h3 className="font-bold text-gray-900 text-base">Reset to Not Started</h3>
@@ -959,7 +1101,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       {showUnmergeModal && unmergeTarget && (
         <>
           <div className="fixed inset-0 bg-black/50 z-[130]" onClick={() => { setShowUnmergeModal(false); setUnmergeTarget(null); }} />
-          <div className="fixed z-[70] bg-white rounded-2xl shadow-2xl p-6" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 'min(400px, 90vw)' }}>
+          <div className="fixed z-[140] bg-white rounded-2xl shadow-2xl p-6" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 'min(400px, 90vw)' }}>
             <h3 className="font-bold text-gray-900 mb-1 text-base">{ui.unlinkApartments}</h3>
             <p className="text-sm text-gray-500 mb-4">
               {ui.unmergeQuestion}
@@ -993,7 +1135,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         return (
           <>
             <div className="fixed inset-0 bg-black/50 z-[130]" onClick={() => setShowDeleteConfirm(false)} />
-            <div className="fixed z-[70] bg-white rounded-2xl shadow-2xl p-6 text-center"
+            <div className="fixed z-[140] bg-white rounded-2xl shadow-2xl p-6 text-center"
               style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 'min(360px, 90vw)' }}>
               <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-3">
                 <AlertTriangle size={22} className="text-red-500" />
@@ -1034,7 +1176,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       {/* Centred modal, not a side drawer. Roughly twice the usable width and it
           no longer squeezes the board or diagram behind it. Applies to every
           project — Job Board, Wolfson, Netiv and anything added later. */}
-      <div className="drawer-overlay fixed inset-0 bg-black/50 z-[110]" onClick={onClose} />
+      <div className="drawer-overlay fixed inset-0 bg-black/50 z-[110]" onClick={closeDrawer} />
 
       <div
         className={`drawer-panel fixed bg-white shadow-2xl z-[120] flex flex-col overflow-hidden ${
@@ -1146,7 +1288,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
             )}
                     </div>
           <Tooltip text={ui.cancel} side="left">
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0">
+            <button onClick={closeDrawer} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0">
               <X size={20} />
             </button>
           </Tooltip>
@@ -1341,6 +1483,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2">
                     <label className="block text-xs font-medium text-gray-600">{ui.generalNotes}</label>
+                    {showSaved && (
+                      <span className="inline-flex items-center gap-0.5 text-[10.5px] font-semibold text-green-600">
+                        <CheckCircle2 size={11} /> {ui.apartmentSaved}
+                      </span>
+                    )}
                     {apartment && (() => {
                       const versions = getGeneralNoteVersions(apartment.id);
                       return versions.length > 0 ? (
@@ -1356,37 +1503,42 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                       ) : null;
                     })()}
                   </div>
-                  <Tooltip text={ui.attachFiles}>
-                    <button
-                      type="button"
-                      onClick={() => officeFileRef.current?.click()}
-                      /* A bare text row is only as tall as its text — 16px, and
-                         unhittable with a finger. The padding is the target. */
-                      className="flex items-center gap-1 px-1.5 py-1.5 -mx-1.5 min-h-[32px] rounded-lg
-                                 text-xs text-gray-400 hover:text-[#1e3a5f] hover:bg-gray-50 transition-colors"
-                    >
-                      <Paperclip size={11} /> {ui.attachFiles}
-                    </button>
-                  </Tooltip>
-                  <VoiceRecorderButton
-                    label="Voice"
-                    title={ui.attachFiles}
-                    onRecorded={async memo => {
-                      const ext = memo.blob.type.includes('mp4') ? 'm4a' : 'webm';
-                      await attachOfficeFile(new File(
-                        [memo.blob], `voice-memo-${Date.now()}.${ext}`,
-                        { type: memo.blob.type || 'audio/webm' }));
-                    }}
-                  />
                 </div>
-                <textarea
-                  value={generalNotes}
-                  onChange={e => setGeneralNotes(e.target.value)}
-                  onBlur={autoSave}
-                  rows={3}
-                  placeholder={ui.generalNotesPlaceholder}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 resize-none"
-                />
+                {/* The paperclip and the microphone live INSIDE the notes box,
+                    bottom-right — attached to the thing they attach to. While a
+                    recording runs, the recorder bar stretches across the box. */}
+                <div className="relative">
+                  <textarea
+                    value={generalNotes}
+                    onChange={e => setGeneralNotes(e.target.value)}
+                    onBlur={autoSave}
+                    rows={4}
+                    placeholder={ui.generalNotesPlaceholder}
+                    className="w-full border border-gray-200 rounded-lg px-3 pt-2 pb-10 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 resize-none"
+                  />
+                  <div className="absolute bottom-2 inset-x-2 flex items-center justify-end gap-1">
+                    <Tooltip text={ui.attachFiles}>
+                      <button
+                        type="button"
+                        onClick={() => officeFileRef.current?.click()}
+                        className="flex items-center justify-center w-8 h-8 rounded-full text-gray-400
+                                   hover:text-[#1e3a5f] hover:bg-gray-100 transition-colors flex-shrink-0"
+                      >
+                        <Paperclip size={15} />
+                      </button>
+                    </Tooltip>
+                    <VoiceRecorderButton
+                      title={ui.attachFiles}
+                      busy={officeUploadPct !== null}
+                      onRecorded={async memo => {
+                        const ext = memo.blob.type.includes('mp4') ? 'm4a' : 'webm';
+                        await attachOfficeFile(new File(
+                          [memo.blob], `voice-memo-${Date.now()}.${ext}`,
+                          { type: memo.blob.type || 'audio/webm' }));
+                      }}
+                    />
+                  </div>
+                </div>
                 {/* General notes history panel */}
                 {generalNotesHistoryOpen && apartment && (() => {
                   const versions = getGeneralNoteVersions(apartment.id);
@@ -1467,7 +1619,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                             <VoiceMemoPlayer
                               key={f.id}
                               src={f.driveUrl || f.dataUrl || ''}
-                              className="max-w-[260px]"
+                              onDelete={() => deleteOfficeNoteFile(f.id)}
+                              className="max-w-[280px]"
                             />
                           );
                         }

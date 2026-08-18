@@ -835,22 +835,7 @@ function StepRow({ step }: { step: TestStep }) {
 }
 
 function FirebaseStatusSection() {
-  const { forcePushToFirestore, apartments, stages, contractors, mainUiStrings: s } = useStore();
-  const [pushing, setPushing]   = useState(false);
-  const [pushDone, setPushDone] = useState<'ok' | 'error' | null>(null);
-
-  async function handleForcePush() {
-    setPushing(true);
-    setPushDone(null);
-    try {
-      await forcePushToFirestore();
-      setPushDone('ok');
-    } catch {
-      setPushDone('error');
-    } finally {
-      setPushing(false);
-    }
-  }
+  const { mainUiStrings: s } = useStore();
 
   const envValues: Record<string, string | undefined> = {
     VITE_FIREBASE_API_KEY:             import.meta.env.VITE_FIREBASE_API_KEY,
@@ -980,24 +965,6 @@ function FirebaseStatusSection() {
         </p>
       )}
 
-      <div className="mt-4 pt-4 border-t border-gray-100">
-        <p className="text-xs text-gray-500 mb-2">
-          {s.forcePushDesc}
-          ({apartments.length} apartments · {stages.length} stages · {contractors.length} contractors)
-        </p>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleForcePush}
-            disabled={pushing || !isFirebaseConfigured || !db}
-            className="flex items-center gap-2 px-4 py-2 border border-[#1e3a5f] text-[#1e3a5f] rounded-lg text-sm font-medium hover:bg-[#1e3a5f]/5 disabled:opacity-40 transition-colors"
-          >
-            {pushing ? <Loader size={15} className="animate-spin" /> : <Database size={15} />}
-            {pushing ? s.forceSyncUploading : s.forceSync}
-          </button>
-          {pushDone === 'ok'    && <span className="text-xs text-green-600 flex items-center gap-1"><Check size={12} /> {s.forceSyncDone}</span>}
-          {pushDone === 'error' && <span className="text-xs text-red-500 flex items-center gap-1"><X size={12} /> {s.forceSyncFailed}</span>}
-        </div>
-      </div>
     </div>
   );
 }
@@ -1283,216 +1250,6 @@ function ContractorSheetSettings({ onToast }: { onToast: (msg: string, type?: 's
           {result.ok ? <Check size={13} className="flex-shrink-0 mt-0.5" /> : <WifiOff size={13} className="flex-shrink-0 mt-0.5" />}
           <span>{result.msg}</span>
         </div>
-      )}
-    </div>
-  );
-}
-
-// ─── One-time bulk action: set named-but-unstaged apartments to "Ready To Start" ──
-// Applies ONLY to apartments that (a) have no stage yet, (b) carry a real family
-// name — an apartment number on its own does not qualify — and (c) have an
-// Engineering Plans PDF recognised. Preview-first; nothing is written until the
-// user confirms.
-const READY_TO_START_RE = /^\s*ready\s*to\s*start\s*$/i;
-
-function BulkReadyToStart({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
-  const { apartments, stages, updateApartment, currentUser, currentProjectId, mainUiStrings: s } = useStore();
-  const [preview, setPreview] = useState(false);
-
-  const projectStages = stages.filter(st =>
-    currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId);
-  const readyStage = projectStages.find(st =>
-    st.active && (READY_TO_START_RE.test(st.name) || (st.nameHe && st.nameHe.trim() === 'מוכן להתחלה')));
-
-  // A real family name — not blank, and not merely the apartment number
-  function hasRealName(a: typeof apartments[0]): boolean {
-    const name = a.displayName?.trim() ?? '';
-    return !!name && name !== (a.apartmentNumber?.trim() ?? '');
-  }
-
-  const targets = apartments.filter(a =>
-    isCountableApartment(a)
-    && !a.currentStageId                 // no stage yet
-    && hasRealName(a)                    // has a real family name
-    && !!a.plansPdfLink?.trim());        // plans recognised
-
-  function apply() {
-    if (!currentUser || !readyStage) return;
-    targets.forEach(a => updateApartment(a.id, { currentStageId: readyStage.id }, currentUser));
-    onToast(`${targets.length} ${targets.length === 1 ? 'apartment' : 'apartments'} → ${readyStage.name}`);
-    setPreview(false);
-  }
-
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5">
-      <div className="flex items-center gap-2 mb-2">
-        <RefreshCw size={18} className="text-[#1e3a5f]" />
-        <h2 className="font-semibold text-gray-800">Set Named Apartments to “Ready To Start”</h2>
-      </div>
-      <p className="text-sm text-gray-500 mb-4">
-        Moves an apartment to the existing “Ready To Start” stage only when all three are
-        true: it has <strong>no stage yet</strong>, it has a <strong>real family name</strong>
-        (a bare apartment number doesn’t qualify), and its <strong>Engineering Plans PDF is
-        recognised</strong>. Anything already staged is skipped, and nothing else on the
-        apartment is touched.
-      </p>
-
-      {!readyStage ? (
-        <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-          No active stage named “Ready To Start” exists in this workspace. Create it under
-          Settings → Stages first.
-        </p>
-      ) : targets.length === 0 ? (
-        <p className="text-sm text-gray-500">
-          Nothing to change — no apartment currently has a name and recognised plans while
-          still having no stage.
-        </p>
-      ) : !preview ? (
-        <div className="flex items-center gap-3 flex-wrap">
-          <button
-            onClick={() => setPreview(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#1e3a5f] text-white text-sm font-medium hover:bg-[#16304f] transition-colors"
-          >
-            <Search size={15} /> Preview {targets.length}
-          </button>
-          <span className="text-xs text-gray-400">
-            {targets.length} named apartment{targets.length !== 1 ? 's' : ''} with plans and no stage
-          </span>
-        </div>
-      ) : (
-        <>
-          <div className="flex items-center gap-2 mb-3 text-xs">
-            <span className="px-2 py-1 rounded-full bg-green-50 text-green-700 border border-green-200 font-medium">
-              {targets.length} will move to {readyStage.name}
-            </span>
-          </div>
-          <div className="max-h-72 overflow-y-auto rounded-lg border border-gray-200 divide-y divide-gray-100">
-            {targets.map(a => (
-              <div key={a.id} className="flex items-center gap-2 px-3 py-2 text-sm">
-                <span className="text-xs text-gray-400 w-24 flex-shrink-0 truncate">
-                  {a.buildingId} · {a.apartmentNumber || a.id}
-                </span>
-                <span className="font-medium text-gray-800 truncate flex-1 min-w-0">{a.displayName}</span>
-                <span title="Plans recognised" className="text-[10px] text-gray-400 flex items-center gap-0.5 flex-shrink-0">
-                  <BookOpen size={10} /> plans
-                </span>
-                <span className="text-gray-300">→</span>
-                <span className="text-xs font-medium flex-shrink-0" style={{ color: readyStage.color }}>
-                  {readyStage.name}
-                </span>
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-3 mt-4 flex-wrap">
-            <button onClick={() => setPreview(false)}
-              className="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-colors">
-              {s.cancel}
-            </button>
-            <button onClick={apply}
-              className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-semibold transition-colors">
-              Apply to {targets.length}
-            </button>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-/**
- * One press shares every Drive file this workspace's records point at.
- *
- * The lazy heal shares a file the first time it is OPENED — right for the
- * long tail, useless for "make everything work now". This walks everything
- * the store knows carries a Drive file: each job's chosen plan, every
- * stamped markup, worker photos and files that landed on Drive, stage-note
- * and task attachments, office files, and voice memos — and link-shares the
- * lot, so nobody has to open two hundred drawers. Chunked like the
- * Drive-names scan, for the same reason. The office is a mix of personal
- * Google accounts, so this is what makes ALL of it open for all of them.
- */
-function SharePlansCard({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
-  const {
-    apartments, planAnnotations, contractorPhotos, officeNoteFiles, stageNotes,
-    contractorAssignments, contractorNotes, canvasElements, mainUiStrings: s,
-  } = useStore();
-  const [running, setRunning] = useState(false);
-  const [progress, setProgress] = useState({ done: 0, total: 0 });
-  const [result, setResult] = useState<{ ok: number; failed: number } | null>(null);
-  const backendOn = isUploadBackendConfigured();
-
-  const fileIds = useMemo(() => {
-    const ids = new Set<string>();
-    const take = (raw?: string | null) => {
-      if (!raw) return;
-      // Either a bare Drive file id or any Drive URL.
-      const id = raw.includes('/') || raw.includes('?') ? extractFileId(raw) : raw;
-      if (id) ids.add(id);
-    };
-    for (const a of apartments) take(a.plansPdfLink);
-    for (const ann of planAnnotations) take(ann.driveFileId);
-    for (const p of contractorPhotos) take(p.driveFileId ?? p.driveUrl);
-    for (const f of officeNoteFiles) take(f.driveFileId ?? f.driveUrl);
-    for (const n of stageNotes) for (const att of n.attachments ?? []) take(att.driveFileId ?? att.driveUrl);
-    for (const t of contractorAssignments) for (const att of t.attachments ?? []) take(att.driveFileId ?? att.driveUrl);
-    for (const n of contractorNotes) take(n.attachmentDriveFileId ?? n.attachmentDriveUrl);
-    // Board voice memos and files store a Drive web-view URL.
-    for (const el of canvasElements) take(el.audioUrl);
-    return [...ids];
-  }, [apartments, planAnnotations, contractorPhotos, officeNoteFiles, stageNotes,
-      contractorAssignments, contractorNotes, canvasElements]);
-
-  async function run() {
-    setRunning(true);
-    setResult(null);
-    setProgress({ done: 0, total: fileIds.length });
-    let ok = 0, failed = 0;
-    const CHUNK = 5;
-    for (let i = 0; i < fileIds.length; i += CHUNK) {
-      const results = await Promise.all(fileIds.slice(i, i + CHUNK).map(id => shareFileToDrive(id)));
-      results.forEach(r => (r ? ok++ : failed++));
-      setProgress({ done: Math.min(i + CHUNK, fileIds.length), total: fileIds.length });
-    }
-    setResult({ ok, failed });
-    setRunning(false);
-    onToast(failed === 0
-      ? `${ok} file${ok === 1 ? '' : 's'} shared — they open without a Google login now`
-      : `${ok} shared, ${failed} failed — press again to retry the failures`,
-      failed === 0 ? 'success' : 'error');
-  }
-
-  if (!backendOn) return null;
-
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5 mt-5">
-      <div className="flex items-start gap-3 flex-wrap">
-        <div className="min-w-0 flex-1">
-          <h2 className="font-semibold text-gray-800 flex items-center gap-2">
-            <BookOpen size={16} className="text-[#1e3a5f]" /> Plans &amp; files open for everyone
-          </h2>
-          <p className="text-sm text-gray-500 mt-1">
-            Shares every Drive file this workspace points at — {fileIds.length} file{fileIds.length === 1 ? '' : 's'}:
-            plans and marked-up versions, worker photos and files stored on Drive, note and task
-            attachments, voice memos — so viewing one needs nothing but the link. New uploads
-            share themselves from now on; this catches everything from before. Photo folders
-            share themselves the first time their job&apos;s Photos tab is opened.
-          </p>
-        </div>
-        <button
-          onClick={() => { void run(); }}
-          disabled={running || fileIds.length === 0}
-          className="px-3 py-2 rounded-lg bg-[#1e3a5f] text-white text-xs font-semibold hover:bg-[#162d4a] disabled:opacity-40 flex-shrink-0"
-        >
-          {running ? `Sharing ${progress.done}/${progress.total}…` : 'Share everything now'}
-        </button>
-      </div>
-      {result && (
-        <p className={`text-xs mt-2 ${result.failed ? 'text-amber-700' : 'text-green-700'}`}>
-          {result.ok} shared{result.failed ? ` · ${result.failed} failed — run it again to retry` : ' — done'}
-        </p>
-      )}
-      {fileIds.length === 0 && (
-        <p className="text-xs text-gray-400 mt-2">{s.searchNoResults}</p>
       )}
     </div>
   );
@@ -2142,11 +1899,7 @@ function AppSettingsTab({ lightTheme, setLightTheme, onToast }: {
 
       <TvPresentationSettings onToast={onToast} />
 
-      <SharePlansCard onToast={onToast} />
-
       <DriveNameBackfill onToast={onToast} />
-
-      <BulkReadyToStart onToast={onToast} />
 
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <div className="flex items-center gap-2 mb-4">

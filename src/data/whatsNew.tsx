@@ -91,13 +91,40 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'list',
       },
       {
-        title: 'Plans, photos and files open for everyone',
+        title: 'Plans and photos open for everyone, automatically',
         body: 'Anything the app shows from Drive used to demand a Google sign-in — and '
-          + 'the office itself uses different Google accounts. Now every plan, marked-up '
-          + 'version, photo folder, attachment and voice memo the app shows is shared by '
-          + 'link automatically, and "Share everything now" in App settings catches the '
-          + 'whole backlog in one press.',
+          + 'the office itself uses different Google accounts. Now the moment a Drive '
+          + 'link is saved on a job, its Engineered Plans and Photos folders are shared '
+          + 'by link on their own, and anything older heals itself the first time it is '
+          + 'opened. Nothing to press, nothing to remember.',
         demo: 'tap',
+      },
+      {
+        title: 'The import wizard',
+        body: 'Job Board → settings → Import jobs: download the template, fill a row per '
+          + 'job, upload it back. Leave the family name blank and it is read from the '
+          + 'Drive folder\u2019s own title; Stage and Group come from your columns. A '
+          + 'previous import can be removed with one press without touching anything '
+          + 'made by hand.',
+        demo: 'list',
+      },
+      {
+        title: 'Notes that say they saved',
+        body: 'A green tick appears the moment your general notes are written, closing '
+          + 'the window can no longer lose an unsaved edit, and the paperclip and '
+          + 'microphone now sit inside the notes box itself. Every voice memo can be '
+          + 'played inline and deleted with its own little trash can — everywhere notes '
+          + 'live.',
+        demo: 'tap',
+      },
+      {
+        title: 'The plan fills its pane',
+        body: 'The plan is drawn by the app itself now — edge to edge, no grey frame, '
+          + 'no Google login. The book icon above it became a folder picker: choose the '
+          + 'main Engineered Plans folder or any folder inside it, and only that '
+          + 'folder\u2019s sheets show as bubbles, so sixteen marked-up versions no '
+          + 'longer flood the bar.',
+        demo: 'zoom',
       },
     ],
   },

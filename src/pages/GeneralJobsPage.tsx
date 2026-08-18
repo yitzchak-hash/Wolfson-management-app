@@ -48,7 +48,7 @@ import { StrokeNib, nibDash } from '../components/board/BoardNodes';
 import { exportBoardPng, exportBoardPdf } from '../data/boardExport';
 import {
   getFolderNameViaBackend, familyNameFromFolderName, extractFolderId,
-  isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaBackend, shareFileToDrive,
+  isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaBackend, shareFileToDrive, shareJobFolderSurfaces,
 } from '../data/driveApi';
 import {
   PinnedTitleLayer, StrokeLayer, CountdownNode, StopwatchNode, ClipArtNode, NODE_DEFAULT_SIZE,
@@ -1630,6 +1630,9 @@ export function GeneralJobsPage() {
       createdAt: now, updatedAt: now, contentUpdatedAt: now,
       updatedBy: currentUser?.id ?? '', updatedByName: currentUser?.name ?? '',
     });
+    // Saving the link IS the moment everything should start working: the
+    // job folder's Engineered Plans and Photos folders become link-readable.
+    if (isDrive) shareJobFolderSurfaces(intent.value);
     setCreateFromLink(null);
     setToast(name ? `Job "${name}" created` : 'Job created');
   }
@@ -5240,6 +5243,8 @@ export function GeneralJobsPage() {
                 createdAt: now, updatedAt: now,
                 updatedBy: currentUser?.id ?? '', updatedByName: currentUser?.name ?? '',
               });
+              // The link's plan and photo folders open up the moment it is saved.
+              if (jobDrive.trim()) shareJobFolderSurfaces(jobDrive.trim());
               setJobName(''); setJobAddress(''); setJobZoho(''); setJobDrive('');
               setShowAddModal(false); setNewJobAt(null);
             }} className="space-y-3">

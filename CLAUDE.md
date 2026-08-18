@@ -1869,3 +1869,68 @@ prompts, a dead end on iPhone Safari). The owner chose sharing over proxying
   401 anonymously, the live /api/share call succeeded, and the same file then
   opened with no login — the mechanism works; what remains on any device is
   running the new bundle (an already-open tab keeps the old one).
+
+---
+
+# v2 — the owner's cleanup round (sharing automatic, wizard import, drawer polish)
+
+## Sharing is AUTOMATIC and has no button
+The "Share everything now" card, "Force Push Local → Cloud" and the bulk
+Ready-To-Start box are all REMOVED from settings. Sharing happens by itself:
+- `shareJobFolderSurfaces(driveLink)` (driveApi) fires when a Drive link is
+  SAVED on a job — drawer link save, board Add Job, paste-created jobs. It
+  shares exactly TWO subfolders when present: **Engineered Plans** (files and
+  the Annotated Plans child inherit) and **Photos**. Nothing else in the job
+  folder.
+- The plans folder also shares itself at DISCOVERY (`findPlanSetViaBackend`),
+  and the Photos folder on first Photos-tab open (`listAllPhotosViaBackend`)
+  — that is what heals the backlog with no bulk button.
+- Per-FILE shares remain only for files the app itself uploads outside those
+  two folders (task/note attachments, voice memos, board files) — disclosed
+  to the owner 2026-08-17.
+
+## The import wizard (`jobsImport.ts` rewritten)
+The Zoho stage-routing table is GONE. The card in Job Board project settings
+is a three-step wizard: download `templateCsv()` (columns: Drive folder link,
+Family name, Address, Phone, Zoho link, Stage, Group, General notes), fill,
+upload. Blank family names are read from Drive folder titles
+(`familyNameFromFolderName`, chunked fives) — the wizard has the service
+account's permission, the sheet does not need retyping what Drive knows.
+Stage and Group route from the file's own columns; unknown stages are created
+(`projectId 'general'`), group labels match `binLabelOf` (built-ins included)
+or create a real group. The cross-workspace Drive-folder guard and re-upload
+dedup are unchanged. Import ids keep the `G-imp-` prefix, and
+`removeJobsByIdPrefix('G-imp-')` (store) powers the one-press "remove
+previous import" that touches nothing made by hand.
+
+## Drawer rules from this round
+- **Anything the drawer opens must sit ABOVE z-[120]** (the drawer panel).
+  The contractor-status panel and three decision modals rendered at z-70/90
+  UNDER the drawer — visible as "the screen just goes gray". They are all
+  z-[130] backdrop / z-[140] panel now.
+- **Tooltip renders through a PORTAL** at fixed coordinates. The old in-place
+  bubble was clipped by any overflow ancestor; no z-index can save a child
+  from its parent's scissors.
+- **Closing the drawer flushes edits.** Every close path runs `closeDrawer()`
+  → autoSave when the basics differ from `basicSnapshot` (taken on open). A
+  green "saved" tick shows beside the notes label after each real write.
+- **The paperclip and microphone live INSIDE the General-notes box**,
+  bottom-right; office files and memos list under the box, and a MEMO has the
+  same trash delete a file has (`VoiceMemoPlayer onDelete`) — in the drawer,
+  quick-add, Tasks add form, and the bulk modal (which also renders memos as
+  players now, not grey chips).
+
+## The plan pane draws itself
+The drawer's pane no longer embeds Google's preview iframe — it renders
+`<PlanAnnotator embedded readOnly>` (the TV's precedent), keyed by file id,
+with `PlanPinOverlay` above it. The sheet fills the pane and needs no Google
+login. The book icon is now a FOLDER PICKER over Engineered Plans:
+`listPlanSubfoldersViaBackend` lists the tree one level deep, a picked
+folder's markable files (`listFolderPlansViaBackend`) take the chip row, and
+picking from a SUBFOLDER only views — `plansPdfLink` is written only from the
+main folder's chips, so browsing Annotated Plans can never change what the
+contractor sees. The portal keeps its iframe (link-shared files open it fine).
+
+`scratchpad/planphone.mjs` measures the studio's committed ink as
+`canvases[length-2]` — the pane below now contributes its own three
+canvases, so `canvases[1]` reads the WRONG stack and reports no ink.

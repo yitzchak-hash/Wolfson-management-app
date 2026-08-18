@@ -158,9 +158,9 @@ export function ContractorStatusPanel({ apartment, onClose }: {
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/50 z-[80]" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/50 z-[130]" onClick={onClose} />
       <div
-        className="fixed z-[90] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+        className="fixed z-[140] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
         style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 'min(440px, 92vw)', maxHeight: '82vh' }}
       >
         {/* Header */}

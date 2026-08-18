@@ -280,6 +280,9 @@ interface AppState {
   addApartment: (apt: Apartment) => void;
   /** Bulk add — one state set, one persist, one (chunked) Firestore batch. */
   importJobs: (jobs: Apartment[]) => void;
+  /** Undo a bulk import: permanently removes jobs whose id carries the import
+   *  prefix. Returns how many went. Touches nothing else. */
+  removeJobsByIdPrefix: (prefix: string) => number;
   /** PERMANENT, cascading. Only reachable from the Trash window. */
   deleteApartment: (id: string) => void;
   /** Counts of everything a delete would take with it — for the warning. */
@@ -992,6 +995,19 @@ export const useStore = create<AppState>((set, get) => ({
     // One chunked batch, not hundreds of single writes — a CSV import lands
     // several hundred jobs at once and each fsSet is its own network round.
     fsBatchSet(projectCollection(get().currentProjectId, 'apartments'), jobs.map(j => ({ id: j.id, data: j })));
+  },
+
+  removeJobsByIdPrefix: (prefix) => {
+    const pid = get().currentProjectId;
+    const doomed = get().apartments
+      .filter(a => a.buildingId === 'G' && a.id.startsWith(prefix))
+      .map(a => a.id);
+    if (!doomed.length) return 0;
+    const gone = new Set(doomed);
+    set(state => ({ apartments: state.apartments.filter(a => !gone.has(a.id)) }));
+    persist(get);
+    doomed.forEach(id => fsDelete(projectCollection(pid, 'apartments'), id));
+    return doomed.length;
   },
 
   addGhost: (id, x, y) => {

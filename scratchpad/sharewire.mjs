@@ -49,7 +49,8 @@ const shared = [];
 await ctx.route('**/api/drive-files', async r => {
   const folderId = r.request().postDataJSON()?.folderId;
   const files = folderId === 'MAINFOLDER53'
-    ? [{ id: 'PHOTOSSUB7', name: 'Photos', mimeType: 'application/vnd.google-apps.folder' }]
+    ? [{ id: 'PHOTOSSUB7', name: 'Photos', mimeType: 'application/vnd.google-apps.folder' },
+       { id: 'PLANSSUB9', name: 'Engineered Plans', mimeType: 'application/vnd.google-apps.folder' }]
     : folderId === 'PHOTOSSUB7'
       ? [{ id: 'PIC8', name: 'site.jpg', mimeType: 'image/jpeg' }]
       : [];
@@ -71,6 +72,7 @@ await page.waitForTimeout(1600);
 await page.locator('[class*="cursor-pointer"]', { hasText: /^53/ }).first().click();
 await page.waitForTimeout(1400);
 check(shared.includes('OFFICEPLAN1'), `drawer shared the plan it displays (calls: ${shared.join(',') || 'none'})`);
+check(shared.includes('PLANSSUB9'), 'the Engineered Plans FOLDER shared itself at discovery');
 
 // Reopen: the done-list must stop a second call for the same file.
 await page.keyboard.press('Escape');
@@ -99,67 +101,6 @@ await page.locator('button, [role=button]').filter({ hasText: /concealed unit|re
 await page.waitForTimeout(1500);
 check(shared.includes('WORKERPLAN2'), 'portal shared the plan the worker is shown');
 check(shared.includes('STAMPED3'), 'portal shared the stamped markup it links to');
-
-// ── the one-press bulk share catches everything nobody has opened yet ──
-// A fresh context: its localStorage carries no done-list, so every file in
-// the workspace is fair game for the button.
-{
-  const ctx2 = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-  await applySeed(ctx2, blob);
-  await ctx2.addInitScript(() => {
-    const raw = localStorage.getItem('wolfson_app_data');
-    if (!raw) return;
-    const d = JSON.parse(raw);
-    if (d.__planShareSeeded) return;
-    d.__planShareSeeded = true;
-    const workerApts = new Set((d.contractorAssignments ?? []).map(a => a.apartmentId));
-    for (const a of d.apartments ?? []) {
-      if (a.id === 'A1-53') a.plansPdfLink = 'https://drive.google.com/file/d/OFFICEPLAN1/view';
-      else if (workerApts.has(a.id)) a.plansPdfLink = 'https://drive.google.com/file/d/WORKERPLAN2/view';
-    }
-    d.planAnnotations = [{
-      id: 'PA-bulk', apartmentId: 'A1-53', planFileId: 'OFFICEPLAN1',
-      version: 1, strokes: [], pageCount: 1,
-      createdAt: '2026-08-01T00:00:00Z', createdBy: 'Office',
-      driveFileId: 'STAMPED3', driveUrl: 'https://drive.google.com/file/d/STAMPED3/view',
-    }];
-    // The other Drive-carrying records the bulk button must reach.
-    d.contractorPhotos = [...(d.contractorPhotos ?? []), {
-      id: 'CP-bulk', assignmentId: 'X', apartmentId: 'A1-53', dataUrl: '',
-      driveFileId: 'PHOTO4', driveUrl: 'https://drive.google.com/file/d/PHOTO4/view',
-      uploadedAt: '2026-08-01T00:00:00Z', uploadedBy: 'w',
-    }];
-    d.stageNotes = [...(d.stageNotes ?? []), {
-      id: 'SN-bulk', apartmentId: 'A1-53', stageId: 's1', noteText: 'x',
-      attachments: [{ id: 'AT1', filename: 'f.pdf', mimeType: 'application/pdf', driveFileId: 'ATTACH5' }],
-      createdAt: '2026-08-01T00:00:00Z', updatedAt: '2026-08-01T00:00:00Z', updatedBy: 'u', updatedByName: 'U',
-    }];
-    d.canvasElements = [...(d.canvasElements ?? []), {
-      id: 'CE-memo', type: 'note', x: 40, y: 40, w: 165, h: 150, text: 'memo', color: '#fef9c3',
-      audioUrl: 'https://drive.google.com/file/d/MEMO6/view',
-    }];
-    localStorage.setItem('wolfson_app_data', JSON.stringify(d));
-  });
-  const bulkShared = [];
-  await ctx2.route('**/api/share', async r => {
-    bulkShared.push(r.request().postDataJSON().fileId);
-    await r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
-  });
-  const p2 = await ctx2.newPage();
-  await p2.goto(`${APP}/app-settings`);
-  await p2.waitForTimeout(1400);
-  await p2.getByRole('button', { name: /^App$/ }).click().catch(() => {});
-  await p2.waitForTimeout(600);
-  const btn = p2.getByRole('button', { name: /Share everything now/ });
-  check(await btn.count() > 0, 'the bulk card is in App settings');
-  await btn.click();
-  await p2.waitForTimeout(1500);
-  const want = ['OFFICEPLAN1', 'WORKERPLAN2', 'STAMPED3', 'PHOTO4', 'ATTACH5', 'MEMO6'];
-  const missing = want.filter(id => !bulkShared.includes(id));
-  check(missing.length === 0,
-    `one press shared plans, markups, photos, attachments and memos (${bulkShared.length} calls${missing.length ? ', missing ' + missing.join(',') : ''})`);
-  await ctx2.close();
-}
 
 console.log(fails === 0 ? '\nALL PASS' : `\n${fails} FAILURES`);
 await browser.close();

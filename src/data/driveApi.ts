@@ -421,6 +421,37 @@ export function ensureDriveShared(fileId: string | null | undefined): void {
     .finally(() => sharingNow.delete(fileId));
 }
 
+/**
+ * A Drive link was just saved on a job — make its plan and photo surfaces
+ * link-readable NOW, not on first open. The owner's rule: pasting the link is
+ * the moment everything should be made to work. Shares exactly two
+ * subfolders when they exist — Engineered Plans (its files and the Annotated
+ * Plans child inherit) and Photos — and nothing else in the job folder.
+ * Fire-and-forget with a per-machine done-list, so re-saving the same link
+ * costs nothing.
+ */
+export function shareJobFolderSurfaces(driveLink: string | null | undefined): void {
+  if (!driveLink || !DRIVE_API_KEY) return;
+  const folderId = extractFolderId(driveLink);
+  if (!folderId) return;
+  let done: string[] = [];
+  try { done = JSON.parse(localStorage.getItem('shared_job_folders') ?? '[]'); } catch { /* fresh */ }
+  if (done.includes(folderId)) return;
+  void (async () => {
+    try {
+      const files = await listFolderViaBackend(folderId);
+      const plans = files.find(f => f.mimeType === FOLDER_MIME && isEngineeredPlansFolder(f.name));
+      const photos = files.find(f => f.mimeType === FOLDER_MIME && /^photos?$/i.test(f.name));
+      if (plans) ensureDriveShared(plans.id);
+      if (photos) ensureDriveShared(photos.id);
+      try {
+        const now: string[] = JSON.parse(localStorage.getItem('shared_job_folders') ?? '[]');
+        if (!now.includes(folderId)) localStorage.setItem('shared_job_folders', JSON.stringify([...now, folderId].slice(-400)));
+      } catch { /* private mode */ }
+    } catch { /* offline — the next save or open retries */ }
+  })();
+}
+
 /** Find or create a subfolder by name under a parent, via the backend service account. */
 export async function findOrCreateFolderViaBackend(parentId: string, name: string): Promise<string> {
   const resp = await fetch('/api/folder', {
@@ -773,6 +804,10 @@ export async function findPlanSetViaBackend(driveLink: string): Promise<{
     const files = await listFolderViaBackend(folderId);
     const plansFolder = files.find(f => f.mimeType === FOLDER_MIME && isEngineeredPlansFolder(f.name));
     if (plansFolder) {
+      // The moment the plans are looked at, the whole Engineered Plans folder
+      // becomes link-readable — its files and the Annotated Plans child
+      // inherit, so stamped versions never need their own share.
+      ensureDriveShared(plansFolder.id);
       const { plans } = await listPlansViaBackend(plansFolder.id);
       return { plansFolderId: plansFolder.id, plans };
     }
@@ -793,6 +828,29 @@ export async function findPlanSetViaBackend(driveLink: string): Promise<{
     return { plansFolderId: null, plans: [] };
   } catch {
     return { plansFolderId: null, plans: [] };
+  }
+}
+
+/** The subfolders of the plans folder — the picker's tree, one level deep. */
+export async function listPlanSubfoldersViaBackend(plansFolderId: string): Promise<DriveFile[]> {
+  try {
+    const files = await listFolderViaBackend(plansFolderId);
+    return files.filter(f => f.mimeType === FOLDER_MIME);
+  } catch {
+    return [];
+  }
+}
+
+/** The markable files of ONE folder, as plan entries — what a picked folder
+ *  shows as chips. */
+export async function listFolderPlansViaBackend(folderId: string): Promise<PlanEntry[]> {
+  try {
+    const files = await listFolderViaBackend(folderId);
+    return files
+      .filter(f => markable(f))
+      .map(f => ({ id: f.id, name: f.name, kind: 'original' as const, isImage: isImageFile(f) }));
+  } catch {
+    return [];
   }
 }
 
