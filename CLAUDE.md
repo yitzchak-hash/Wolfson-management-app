@@ -766,14 +766,19 @@ drag/resize/colour/TV/sync/backup for free. **Clip art is NOT a widget wrapper**
 placing an `art-*` store entry creates a real `type: 'clipart'` node, which is what
 lets it attach.
 
-`withSampleData(ctx)` fills in only the fields that are genuinely empty, so store
-previews show something on a new board and your own data as soon as there is any.
-Three rules it must keep, each of which was broken and showed as a preview that
-looked like a fault rather than a sample:
-- **Sample rows are re-pointed at whatever is really there.** Each field falls
-  back on its own, so a machine with real jobs and no tasks kept the real jobs
-  and took sample tasks naming `j1` — and every widget that resolves a task's
-  job printed "a job". `repoint()` spreads them round the real ids.
+`withSampleData(ctx)` fills in only the fields that are genuinely empty — the
+BOARD-side semantics, unchanged. **The STORE no longer calls it on real data:
+the shelf previews on `fullSampleCtx()`** (the same machinery over an empty
+context), by the owner's explicit ruling — his sparse real workspace made half
+the shelf preview its empty/all-clear state ("Due today · 0", a bare search
+box), and "no one can understand how they will actually look when data is
+full." A placed widget still reads the real data; only the shelf is fake.
+Three rules the machinery must keep, each of which was broken and showed as a
+preview that looked like a fault rather than a sample:
+- **Sample rows are re-pointed at whatever is really there — but ONLY when the
+  jobs/contractors are real.** When both sides are samples the tasks already
+  point at exactly the jobs they were written for, and re-pointing by index
+  scrambled the pin/note/photo chains that hang off those pairings.
 - **The sample planner is built from the resolved jobs and people**, not from
   sample ids, for the same reason. `WidgetCtx.boardElements` exists so
   `Out today` / `Tomorrow` can read a planner on the shelf, where there is no
@@ -796,8 +801,30 @@ reach the pictures.
 (`board-mini`, `project-glance`, `project-mini`). Only the shelf knows which
 workspaces exist, and it prefers one this machine has a stored snapshot for — a
 card reading "Nothing stored for Netiv on this machine" is honest on a board and
-useless on a shelf. `scratchpad/store-empty.mjs` lists every preview drawing an
-empty state; only the clip art should appear there, because it has no text.
+useless on a shelf. It now also passes `sample: true`: each of the three draws a
+busy canned preview (footed "sample data") when the picked workspace has nothing
+stored, and `BoardMini` **auto-fits its first view to the content** (`touched`
+ref guards user pans) — the fixed 34%-at-origin view is what made the owner's
+own board preview as an empty dotted field. The two Find-a-job widgets read
+`data.sampleQuery` (seeded by `WIDGET_PREVIEW`) so their previews show RESULTS —
+a preview cannot be typed into. `scratchpad/storefull.mjs` audits every card;
+its one standing false positive is `nobody-booked`, whose healthy rows say
+"no task".
+
+**The store's shelves** (`SHELF` + `SHELF_ORDER` in `WidgetStore.tsx`): one
+single-level, hand-assigned map by what a widget is FOR — Chasing the work ·
+Catching problems · Counts and progress · Finding and following · People and
+the week · Photos, map and weather · Clocks and timers · Your own lists and
+tools · Other workspaces · Decoration and fun. The old Live/Planning/Reference/
+Looks chips and the SUBGROUP map are gone (that was the code's taxonomy, not
+the shopper's); `WidgetDef.category` remains on the type but nothing groups by
+it. Unmapped ids fall to a MORE shelf; clip art is caught by its `art-` prefix.
+**Add a widget → add it to SHELF** or it lands in More. A tiny
+`Categories | One list` toggle in the header (persisted per machine,
+`widget_store_layout`) switches between the shelves and one flat grid. The
+bottom "From your other workspaces" cards render the real `project-glance`
+preview per workspace (live when this machine has the snapshot, sample when
+not) instead of a logo on a tinted box.
 
 `todayIso()` in `tvWidgets.tsx` must use the planner's `iso()`. It was
 `toISOString().slice(0,10)` — the UTC date — while the planner writes local

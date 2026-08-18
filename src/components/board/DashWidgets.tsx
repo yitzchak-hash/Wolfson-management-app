@@ -27,11 +27,14 @@ import { useStore, loadProjectSnapshot } from '../../data/store';
  * same thing from a snapshot: one column per building, one cell per unit, each
  * cell in its stage colour.
  */
-export function ProjectMini({ projectId: chosen, buildingId, onOpen }: {
+export function ProjectMini({ projectId: chosen, buildingId, onOpen, sample }: {
   projectId: string;
   /** One building only, or blank for all of them side by side. */
   buildingId?: string;
   onOpen?: (projectId: string) => void;
+  /** Store preview: with nothing stored to draw, show a full FAKE building
+      (marked as sample) instead of "not opened on this device". */
+  sample?: boolean;
 }) {
   const projects = useStore(st => st.projects);
   const liveApartments = useStore(st => st.apartments);
@@ -87,11 +90,36 @@ export function ProjectMini({ projectId: chosen, buildingId, onOpen }: {
           {(project?.name ?? projectId).toUpperCase()}
         </span>
         <span className="ml-auto text-[9px] text-gray-400 tabular-nums flex-shrink-0">
-          {started}/{units.length}
+          {byBuilding.length === 0 && sample ? '42/56' : `${started}/${units.length}`}
         </span>
       </div>
 
-      {byBuilding.length === 0 ? (
+      {byBuilding.length === 0 && sample ? (
+        /**
+         * The store's full-fake mode: a two-building miniature drawn from a
+         * fixed stage palette, so the shelf shows what the widget IS — a
+         * building with every unit in its stage colour — rather than an
+         * apology about this device's cache.
+         */
+        <div className="flex-1 min-h-0 flex gap-2 overflow-hidden">
+          {(['A1', 'A2'] as const).map((bid, bi) => (
+            <div key={bid} className="flex flex-col min-w-0 flex-1">
+              <span className="text-[8px] font-bold text-gray-400 mb-0.5">{bid}</span>
+              <div className="flex-1 min-h-0 grid gap-[2px] content-start"
+                style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>
+                {Array.from({ length: 28 }, (_, i) => {
+                  const palette = ['#0ea5e9', '#f59e0b', '#f43f5e', '#10b981', '#16a34a', '#8b5cf6', '#e2e8f0'];
+                  // A fixed spread, weighted towards the middle stages, with a
+                  // few grey not-started cells — deterministic, so the card
+                  // never shimmers between renders.
+                  const c = palette[(i * 5 + bi * 3) % 9 < 7 ? (i * 5 + bi * 3) % 7 : 6];
+                  return <span key={i} className="rounded-[2px]" style={{ backgroundColor: c, aspectRatio: '1.35' }} />;
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : byBuilding.length === 0 ? (
         <span className="text-[10px] text-gray-400">
           {projectId === currentProjectId ? 'No units yet' : 'Not opened on this device yet'}
         </span>
@@ -150,7 +178,7 @@ export function BoardMini({ el, jobs, stages, onOpen, update, readOnly }: {
   update: (patch: Partial<CanvasElement>) => void;
   readOnly?: boolean;
 }) {
-  const data = (el.data ?? {}) as { projectId?: string; boardId?: string; title?: string };
+  const data = (el.data ?? {}) as { projectId?: string; boardId?: string; title?: string; sample?: boolean };
   const projects = useStore(st => st.projects);
   const boardViews = useStore(st => st.boardViews);
   const currentUser = useStore(st => st.currentUser);
@@ -195,16 +223,66 @@ export function BoardMini({ el, jobs, stages, onOpen, update, readOnly }: {
     () => (sameWorkspace ? liveElements : []).filter(e => (e.board ?? '') === (chosenBoard ?? '')),
     [liveElements, chosenBoard, sameWorkspace],
   );
-  const tiles = useMemo(() => snap.apartments
-    .filter(a => a.buildingId === 'G' && !a.isUnnamed && !a.boardBin)
-    .map((j, i) => {
-      const at = chosenBoard ? j.viewPos?.[chosenBoard] : undefined;
-      return {
+  const tiles = useMemo(() => {
+    const real = snap.apartments
+      .filter(a => a.buildingId === 'G' && !a.isUnnamed && !a.boardBin)
+      .map((j, i) => {
+        const at = chosenBoard ? j.viewPos?.[chosenBoard] : undefined;
+        return {
+          job: j,
+          x: at?.x ?? j.canvasX ?? 24 + (i % 6) * 240,
+          y: at?.y ?? j.canvasY ?? 24 + Math.floor(i / 6) * 150,
+        };
+      });
+    /**
+     * The store's full-fake mode. With no board to draw on this machine, lay
+     * the SAMPLE jobs (the ctx `jobs` prop) out as a tidy board, so the shelf
+     * shows a busy miniature rather than an empty dotted field.
+     */
+    if (!real.length && data.sample && jobs.length) {
+      return jobs.slice(0, 8).map((j, i) => ({
         job: j,
-        x: at?.x ?? j.canvasX ?? 24 + (i % 6) * 240,
-        y: at?.y ?? j.canvasY ?? 24 + Math.floor(i / 6) * 150,
-      };
-    }), [snap.apartments, chosenBoard]);
+        x: 24 + (i % 3) * 240,
+        y: 24 + Math.floor(i / 3) * 152,
+      }));
+    }
+    return real;
+  }, [snap.apartments, chosenBoard, data.sample, jobs]);
+
+  /**
+   * Open FITTED to what is on the board.
+   *
+   * The fixed 34% at the origin is right for a board arranged from its corner
+   * and wrong for every other one — the owner's own board sits mid-world, so
+   * the widget opened on empty dots with the tiles off-frame, which is
+   * exactly how it previewed in the store. Fits once per board choice;
+   * touching the view (wheel or drag) is respected from then on.
+   */
+  const touched = useRef(false);
+  React.useEffect(() => {
+    if (touched.current || (!tiles.length && !nodes.length)) return;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const t of tiles) {
+      x0 = Math.min(x0, t.x); y0 = Math.min(y0, t.y);
+      x1 = Math.max(x1, t.x + 215); y1 = Math.max(y1, t.y + 132);
+    }
+    for (const n of nodes) {
+      if (n.type === 'stroke') continue;
+      x0 = Math.min(x0, n.x); y0 = Math.min(y0, n.y);
+      x1 = Math.max(x1, n.x + n.w); y1 = Math.max(y1, n.y + n.h);
+    }
+    if (!Number.isFinite(x0)) return;
+    const fw = frame.current?.clientWidth ?? Math.max(80, el.w - 8);
+    const fh = frame.current?.clientHeight ?? Math.max(60, el.h - 30);
+    const pad = 14;
+    const zoom = Math.max(0.08, Math.min(1.1,
+      Math.min((fw - pad * 2) / Math.max(1, x1 - x0), (fh - pad * 2) / Math.max(1, y1 - y0))));
+    setView({
+      zoom,
+      x: (fw - (x1 - x0) * zoom) / 2 - x0 * zoom,
+      y: (fh - (y1 - y0) * zoom) / 2 - y0 * zoom,
+    });
+  }, [tiles, nodes, el.w, el.h]);
 
   /** Zoom towards the pointer, inside the widget, without touching your board. */
   function wheel(e: React.WheelEvent) {

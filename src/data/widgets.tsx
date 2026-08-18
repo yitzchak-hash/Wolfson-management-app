@@ -985,8 +985,9 @@ export const WIDGETS: WidgetDef[] = [
   {
     id: 'job-search', rank: 14, name: 'Find a job', category: 'live', icon: Search, w: 230, h: 160,
     blurb: 'Type a name and jump straight to the job.',
-    render: (_el, c) => (
-      <JobSearch jobs={c.jobs} openJob={c.openJob} stages={c.stages} assignments={c.assignments} />
+    render: (el, c) => (
+      <JobSearch jobs={c.jobs} openJob={c.openJob} stages={c.stages} assignments={c.assignments}
+        preset={String(d(el).sampleQuery ?? '') || undefined} />
     ),
   },
   {
@@ -1095,6 +1096,23 @@ export const WIDGETS: WidgetDef[] = [
             on: a.dueDate!,
           }));
       const dated = items.filter(i => i.on).map(i => ({ ...i, ms: new Date(i.on).getTime() }));
+      /**
+       * One mark per DAY, labels on alternating rows.
+       *
+       * Every task drew its own label on the same line, so three tasks due the
+       * same day printed three names on top of each other — unreadable on any
+       * busy week, which is exactly the week a timeline is for. A day's mark
+       * now carries its first name plus "+n", and neighbouring marks take
+       * turns between the upper and lower row so close dates stay legible.
+       */
+      const byDay = new Map<string, { t: string; on: string; ms: number; n: number }>();
+      for (const i of dated) {
+        const key = i.on.slice(0, 10);
+        const cur = byDay.get(key);
+        if (cur) cur.n++;
+        else byDay.set(key, { t: i.t, on: i.on, ms: i.ms, n: 1 });
+      }
+      const marks = [...byDay.values()].sort((a, b) => a.ms - b.ms);
       const lo = Math.min(Date.now(), ...dated.map(i => i.ms));
       const hi = Math.max(Date.now(), ...dated.map(i => i.ms));
       const at = (ms: number) => (hi === lo ? 50 : ((ms - lo) / (hi - lo)) * 100);
@@ -1104,9 +1122,13 @@ export const WIDGETS: WidgetDef[] = [
             <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-slate-200" />
             <div className="absolute top-1/2 -translate-y-1/2 w-0.5 h-4 bg-red-500"
               style={{ left: `${at(Date.now())}%` }} title="today" />
-            {dated.map((i, k) => (
-              <div key={k} className="absolute -translate-x-1/2" style={{ left: `${at(i.ms)}%`, top: 0 }}>
-                <div className="text-[9px] text-gray-600 whitespace-nowrap">{i.t}</div>
+            {marks.map((i, k) => (
+              <div key={k} className="absolute -translate-x-1/2 flex flex-col items-center"
+                style={{ left: `${at(i.ms)}%`, top: k % 2 ? '46%' : 0 }}
+                title={i.n > 1 ? `${i.n} tasks on this day` : i.t}>
+                <div className="text-[9px] text-gray-600 whitespace-nowrap max-w-[90px] truncate">
+                  {i.t}{i.n > 1 ? ` +${i.n - 1}` : ''}
+                </div>
                 <div className="w-2 h-2 rounded-full bg-[#1e3a5f] mx-auto mt-1" />
                 <div className="text-[8px] text-gray-400 whitespace-nowrap mt-0.5">
                   {new Date(i.on).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
@@ -1354,6 +1376,7 @@ export const WIDGETS: WidgetDef[] = [
     render: (el, c) => (
       <ProjectMini projectId={String(d(el).projectId || '')}
         buildingId={String(d(el).buildingId || '') || undefined}
+        sample={!!d(el).sample}
         onOpen={c.openProject} />
     ),
   },
@@ -1478,6 +1501,9 @@ export const WIDGETS: WidgetDef[] = [
  */
 function ProjectGlance({ el, ctx }: { el: CanvasElement; ctx: WidgetCtx }) {
   const pid = (el.data as Record<string, unknown> | undefined)?.projectId as string | undefined;
+  /** The store sets this: with no snapshot to draw, show a FULL fake summary
+      (marked as sample) instead of a dash — a dash on a shelf reads as broken. */
+  const wantSample = !!(el.data as Record<string, unknown> | undefined)?.sample;
   const { projects, currentProjectId, apartments, stages: allStages } = useStore();
   const p = projects.find(x => x.id === pid);
 
@@ -1501,6 +1527,42 @@ function ProjectGlance({ el, ctx }: { el: CanvasElement; ctx: WidgetCtx }) {
       };
     } catch { return null; }
   }, [pid, live, apartments, allStages]);
+
+  // The store's full-fake mode: nothing stored for that workspace on this
+  // machine (or none picked at all) still shows a busy, labelled summary.
+  const sampleMode = wantSample && (!p || !snap || snap.apts.length === 0);
+  if (sampleMode) {
+    const name = p?.name ?? 'Wolfson Residence';
+    const tone = p?.color ?? '#b8860b';
+    const rows: [string, string, number][] = [
+      ['Piping', '#0ea5e9', 14], ['Concealed Units', '#f59e0b', 11],
+      ['Wiring', '#f43f5e', 9], ['Grilles & Vents', '#10b981', 6], ['Start-up', '#16a34a', 2],
+    ];
+    return (
+      <Frame title={name} icon={Building} tone={tone}>
+        <div className="h-full flex flex-col gap-1.5">
+          <div className="flex items-baseline gap-1.5">
+            <span className="font-black tabular-nums" style={{ fontSize: 26, color: tone }}>42</span>
+            <span className="text-[11px] text-gray-400">of 56 started</span>
+            <span className="ml-auto text-[11px] font-bold" style={{ color: tone }}>75%</span>
+          </div>
+          <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden flex-shrink-0">
+            <div className="h-full rounded-full" style={{ width: '75%', backgroundColor: tone }} />
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto pr-1 flex flex-col gap-0.5">
+            {rows.map(([nm, c, n]) => (
+              <div key={nm} className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: c }} />
+                <span className="text-[10px] text-gray-600 truncate flex-1">{nm}</span>
+                <span className="text-[10px] font-bold tabular-nums" style={{ color: c }}>{n}</span>
+              </div>
+            ))}
+          </div>
+          <span className="text-[8.5px] text-gray-300 flex-shrink-0">sample data</span>
+        </div>
+      </Frame>
+    );
+  }
 
   if (!p) {
     return (
@@ -1618,11 +1680,13 @@ function ContractorLinks({ contractors, assignments }: {
   );
 }
 
-function JobSearch({ jobs, openJob, stages, assignments }: {
+function JobSearch({ jobs, openJob, stages, assignments, preset }: {
   jobs: Apartment[]; openJob: (id: string) => void;
   stages: Stage[]; assignments: ContractorAssignment[];
+  /** The store seeds a query so the preview shows results, not an empty box. */
+  preset?: string;
 }) {
-  const [q, setQ] = useState('');
+  const [q, setQ] = useState(preset ?? '');
   const needle = q.trim().toLowerCase();
   const hits = needle
     ? jobs.filter(j => (j.displayName ?? '').toLowerCase().includes(needle)
@@ -1960,29 +2024,36 @@ function ClockWidget() {
 const SAMPLE_STAGES: Stage[] = [
   { id: 'x1', name: 'Survey', color: '#8b5cf6', order: 1, active: true, description: '', createdAt: '', updatedAt: '' },
   { id: 'x2', name: 'Piping', color: '#0ea5e9', order: 2, active: true, description: '', createdAt: '', updatedAt: '' },
-  { id: 'x3', name: 'Units In', color: '#f59e0b', order: 3, active: true, description: '', createdAt: '', updatedAt: '' },
-  { id: 'x4', name: 'Start-up', color: '#16a34a', order: 4, active: true, description: '', createdAt: '', updatedAt: '' },
+  { id: 'x3', name: 'Concealed Units', color: '#f59e0b', order: 3, active: true, description: '', createdAt: '', updatedAt: '' },
+  { id: 'x4', name: 'Wiring', color: '#f43f5e', order: 4, active: true, description: '', createdAt: '', updatedAt: '' },
+  { id: 'x5', name: 'Grilles & Vents', color: '#10b981', order: 5, active: true, description: '', createdAt: '', updatedAt: '' },
+  { id: 'x6', name: 'Start-up', color: '#16a34a', order: 6, active: true, description: '', createdAt: '', updatedAt: '' },
 ] as unknown as Stage[];
 
 /**
- * Stand-in jobs.
+ * Stand-in jobs — a board that reads FULL, per the owner: "no one can
+ * understand how they will actually look when data is full", so the fake board
+ * is a busy one, not a minimal one.
  *
- * They carry a FLOOR, which they did not, because "Floor by floor" reads one —
- * and a widget whose whole subject is missing from the sample previews as
- * "this workspace has no floors", which on a shelf reads as broken rather than
- * as empty. `j8` is deliberately started but unbooked and `j7` is deliberately
- * a near-miss of `j1`, so "Nobody's booked" and "Possible duplicates" each have
- * exactly one honest row to draw.
+ * They carry a FLOOR because "Floor by floor" reads one, DRIVE LINKS on most
+ * (so every Drive light and folder chip previews lit), a PHONE, and one plan
+ * link — so "On site without a plan" flags SOME rows rather than all of them.
+ * `j8` is deliberately started but unbooked and `j7` is deliberately a
+ * near-miss of `j1`, so "Nobody's booked" and "Possible duplicates" each have
+ * an honest row to draw.
  */
+const gdrive = (n: number) => `https://drive.google.com/drive/folders/sample${n}`;
 const SAMPLE_JOBS: Apartment[] = [
-  { id: 'j1', displayName: 'Artzi, Avital', address: '14 Ben Gurion', currentStageId: 'x2', floor: 3 },
-  { id: 'j2', displayName: 'Cohen, Miriam', address: '3 Herzl', currentStageId: 'x3', floor: 3 },
-  { id: 'j3', displayName: 'Levi, Yosef', address: '88 Dizengoff', currentStageId: 'x1', floor: 4 },
-  { id: 'j4', displayName: 'Mizrahi, Dana', address: '5 Rothschild', currentStageId: 'x4', floor: 4 },
-  { id: 'j5', displayName: 'Peretz, Eli', address: '21 Allenby', currentStageId: 'x2', floor: 5 },
-  { id: 'j6', displayName: 'Shapiro, Ruth', address: '9 Bialik', currentStageId: 'x3', boardBin: 'done', floor: 5 },
-  { id: 'j7', displayName: 'Arzi, Avital', address: '14 Ben Gurion', currentStageId: 'x2', floor: 6 },
-  { id: 'j8', displayName: 'Goodhardt, Nechama', address: '2 Weizmann', currentStageId: 'x1', floor: 6 },
+  { id: 'j1', displayName: 'Artzi, Avital', address: '14 Ben Gurion, Jerusalem', currentStageId: 'x2', floor: 3, driveLink: gdrive(1), plansPdfLink: 'https://drive.google.com/file/d/sampleplan1/view', phone: '052-700-0001' },
+  { id: 'j2', displayName: 'Cohen, Miriam', address: '3 Herzl, Ramat Gan', currentStageId: 'x3', floor: 3, driveLink: gdrive(2), phone: '054-311-0202' },
+  { id: 'j3', displayName: 'Levi, Yosef', address: '88 Dizengoff, Tel Aviv', currentStageId: 'x1', floor: 4, driveLink: gdrive(3) },
+  { id: 'j4', displayName: 'Mizrahi, Dana', address: '5 Rothschild, Rishon', currentStageId: 'x6', floor: 4, driveLink: gdrive(4), phone: '050-556-7788' },
+  { id: 'j5', displayName: 'Peretz, Eli', address: '21 Allenby, Tel Aviv', currentStageId: 'x2', floor: 5, driveLink: gdrive(5) },
+  { id: 'j6', displayName: 'Shapiro, Ruth', address: '9 Bialik, Givatayim', currentStageId: 'x3', boardBin: 'done', floor: 5, driveLink: gdrive(6) },
+  { id: 'j7', displayName: 'Arzi, Avital', address: '14 Ben Gurion, Jerusalem', currentStageId: 'x2', floor: 6 },
+  { id: 'j8', displayName: 'Goodhardt, Nechama', address: '2 Weizmann, Rehovot', currentStageId: 'x1', floor: 6 },
+  { id: 'j9', displayName: 'Friedman, Shmuel', address: '17 Jabotinsky, Bnei Brak', currentStageId: 'x5', floor: 7, driveLink: gdrive(9), phone: '053-980-4141' },
+  { id: 'j10', displayName: 'Ben-David, Rivka', address: '31 HaPalmach, Jerusalem', currentStageId: 'x4', floor: 7, driveLink: gdrive(10) },
 ].map(j => ({ ...j, buildingId: 'G', isUnnamed: false, createdAt: new Date(Date.now() - 2 * 86_400_000).toISOString() })) as unknown as Apartment[];
 
 const day = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
@@ -1993,9 +2064,14 @@ const localDay = (n: number) => {
 };
 const ago = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString();
 const SAMPLE_TASKS: ContractorAssignment[] = [
-  { id: 't1', apartmentId: 'j1', contractorId: 'k1', taskDescription: 'Hang the units', dueDate: day(-6), createdAt: ago(11) },
-  { id: 't2', apartmentId: 'j3', contractorId: 'k2', taskDescription: 'Duct run', dueDate: day(-2), createdAt: ago(9) },
-  { id: 't3', apartmentId: 'j2', contractorId: 'k1', taskDescription: 'Grilles', dueDate: day(0), createdAt: ago(4) },
+  { id: 't1', apartmentId: 'j1', contractorId: 'k1', taskDescription: 'Hang the concealed units', dueDate: day(-6), createdAt: ago(11), priority: 'urgent' },
+  { id: 't2', apartmentId: 'j3', contractorId: 'k2', taskDescription: 'Duct run, floors 3–4', dueDate: day(-2), createdAt: ago(9) },
+  // THREE due today — a "Due today" preview with one row reads as a quiet day,
+  // and the shelf is meant to show a full one.
+  { id: 't3', apartmentId: 'j2', contractorId: 'k1', taskDescription: 'Fit the grilles', dueDate: day(0), createdAt: ago(4) },
+  { id: 't8', apartmentId: 'j9', contractorId: 'k2', taskDescription: 'Gas top-up and leak test', dueDate: day(0), createdAt: ago(2), priority: 'urgent' },
+  { id: 't9', apartmentId: 'j10', contractorId: 'k3', taskDescription: 'Crane for the roof units', dueDate: day(0), createdAt: ago(5) },
+  { id: 't10', apartmentId: 'j5', contractorId: 'k1', taskDescription: 'Balance the system', dueDate: day(1), createdAt: ago(1) },
   { id: 't4', apartmentId: 'j4', contractorId: 'k3', taskDescription: 'Commissioning', dueDate: day(2), createdAt: ago(3) },
   { id: 't5', apartmentId: 'j5', contractorId: 'k2', taskDescription: 'Thermostats', dueDate: day(4), createdAt: ago(12) },
   // Deliberately dateless. Every other list keys off a due date, so these two
@@ -2020,12 +2096,21 @@ const SAMPLE_CONTRACTORS: Contractor[] = [
 ] as unknown as Contractor[];
 
 const SAMPLE_LOGS: ActivityLog[] = [
+  { id: 'g0', userName: 'Esther', apartmentId: 'j9', apartmentNumber: 'Friedman, Shmuel', actionType: 'update',
+    fieldChanged: 'currentStageId', previousValue: 'Wiring', newValue: 'Grilles & Vents',
+    createdAt: new Date(Date.now() - 3 * 60_000).toISOString() },
   { id: 'g1', userName: 'Esther', apartmentId: 'j1', apartmentNumber: 'Artzi, Avital', actionType: 'update',
     fieldChanged: 'currentStageId', previousValue: 'Survey', newValue: 'Piping',
     createdAt: new Date(Date.now() - 12 * 60_000).toISOString() },
+  { id: 'g5', userName: 'Yitzchak', apartmentId: 'j10', apartmentNumber: 'Ben-David, Rivka', actionType: 'update',
+    fieldChanged: 'generalNotes', previousValue: '', newValue: 'Crane booked for Thursday morning',
+    createdAt: new Date(Date.now() - 41 * 60_000).toISOString() },
   { id: 'g2', userName: 'Yitzchak', apartmentId: 'j4', apartmentNumber: 'Mizrahi, Dana', actionType: 'update',
-    fieldChanged: 'address', previousValue: '', newValue: '5 Rothschild',
+    fieldChanged: 'address', previousValue: '', newValue: '5 Rothschild, Rishon',
     createdAt: new Date(Date.now() - 95 * 60_000).toISOString() },
+  { id: 'g6', userName: 'Esther', apartmentId: 'j2', apartmentNumber: 'Cohen, Miriam', actionType: 'update',
+    fieldChanged: 'displayName', previousValue: 'Cohen', newValue: 'Cohen, Miriam',
+    createdAt: new Date(Date.now() - 3 * 3_600_000).toISOString() },
   // Two moves on the same job, the second jumping two stages ahead — which is
   // what "Skipped a stage" reads. One move on its own can never show a skip,
   // because there is nothing to have skipped FROM.
@@ -2123,7 +2208,14 @@ const SAMPLE_PINS = [
 const SAMPLE_NOTES = [
   { id: 'n1', assignmentId: 't3', apartmentId: 'j2', contractorId: 'k1', text: 'Grilles fitted, waiting on the trims.',
     authorType: 'contractor', authorId: 'k1', authorName: 'Avi Drywall', createdAt: ago(1) },
+  { id: 'n2', assignmentId: 't8', apartmentId: 'j9', contractorId: 'k2', text: 'Pressure held overnight — topping up now.',
+    authorType: 'contractor', authorId: 'k2', authorName: 'Moshe AC', createdAt: ago(0.2) },
 ] as unknown as ContractorNote[];
+
+const SAMPLE_USERS = [
+  { id: 'u1', name: 'Esther', code: '000000', role: 'admin', active: true, createdAt: '' },
+  { id: 'u2', name: 'Yitzchak', code: '000000', role: 'admin', active: true, createdAt: '' },
+] as unknown as WidgetCtx['users'];
 
 /** Three people and a morning's taps, so the tap-in board has something to be. */
 const SAMPLE_EMPLOYEES = [
@@ -2158,10 +2250,16 @@ export function withSampleData(ctx: WidgetCtx): WidgetCtx {
    * printed "a job", which reads as a fault rather than as a sample. Spreading
    * them round the real ids costs nothing and makes the shelf tell the truth.
    */
+  // Only when the jobs/contractors are REAL. When they are the samples too,
+  // the tasks already point at exactly the jobs they were written for —
+  // re-pointing by index would scramble the pin, note and photo chains that
+  // hang off those pairings.
+  const jobsAreSample = !ctx.jobs.length;
+  const peopleAreSample = !ctx.contractors.length;
   const repoint = <T extends ContractorAssignment>(rows: T[]): T[] => rows.map((a, i) => ({
     ...a,
-    apartmentId: jobs.length ? jobs[i % jobs.length].id : a.apartmentId,
-    contractorId: contractors.length ? contractors[i % contractors.length].id : a.contractorId,
+    apartmentId: jobsAreSample || !jobs.length ? a.apartmentId : jobs[i % jobs.length].id,
+    contractorId: peopleAreSample || !contractors.length ? a.contractorId : contractors[i % contractors.length].id,
   }));
 
   const assignments = ctx.assignments.length ? ctx.assignments : repoint(SAMPLE_TASKS);
@@ -2264,6 +2362,7 @@ export function withSampleData(ctx: WidgetCtx): WidgetCtx {
     assignments: withDone,
     stages,
     logs: withSkip,
+    users: ctx.users.length ? ctx.users : SAMPLE_USERS,
     planPins: ctx.planPins?.length ? ctx.planPins : SAMPLE_PINS,
     notes: ctx.notes?.length ? ctx.notes : SAMPLE_NOTES,
     employees: ctx.employees?.length ? ctx.employees : SAMPLE_EMPLOYEES,
@@ -2273,6 +2372,29 @@ export function withSampleData(ctx: WidgetCtx): WidgetCtx {
       : [...(ctx.boardElements ?? []), samplePlanner(jobs, contractors)],
     readOnly: true,
   };
+}
+
+/**
+ * The store's context: samples ONLY, never the machine's own data.
+ *
+ * The shelf used to run each preview on the real data field by field, on the
+ * theory that your own overdue list beats an artist's impression. The owner
+ * overruled it from experience: a sparse real workspace made half the shelf
+ * preview its empty or all-clear state — "Due today · 0", "everything open
+ * has a date", a bare search box — and "no one can understand how they will
+ * actually look when data is full." So the store always previews the same
+ * rich fake board, and the moment a widget is PLACED it reads the real data.
+ *
+ * Built by running the ordinary sample machinery over an empty context, so
+ * the fake board stays coherent (tasks point at jobs, photos at tasks, the
+ * skip at a job with no other history) without a second dataset to maintain.
+ */
+export function fullSampleCtx(): WidgetCtx {
+  return withSampleData({
+    jobs: [], stages: [], assignments: [], contractors: [], users: [],
+    photos: [], logs: [], boardElements: [],
+    update: () => {}, openJob: () => {}, readOnly: true,
+  });
 }
 
 
@@ -2311,7 +2433,10 @@ export function renderWidget(el: CanvasElement, ctx: WidgetCtx): React.ReactNode
  * job reads everywhere else, and clicking one opens it.
  */
 function JobFinder({ el, ctx }: { el: CanvasElement; ctx: WidgetCtx }) {
-  const [q, setQ] = useState('');
+  // The store preview seeds a query (`sampleQuery`) — an interactive widget
+  // whose preview cannot be typed into otherwise shows its empty state
+  // forever, which tells a shopper nothing about what it looks like in use.
+  const [q, setQ] = useState(String((el.data as Record<string, unknown> | undefined)?.sampleQuery ?? ''));
   const size = Number((el.data as Record<string, unknown> | undefined)?.textSize) || 12;
 
   const hits = useMemo(() => {

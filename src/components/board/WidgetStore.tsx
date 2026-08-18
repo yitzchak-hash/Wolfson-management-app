@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Search, Plus, Check } from 'lucide-react';
 import { useStore } from '../../data/store';
 import {
-  WIDGETS, CATEGORY_LABEL, WidgetCategory, WidgetDef, WidgetCtx, withSampleData,
+  WIDGETS, WidgetDef, WidgetCtx, fullSampleCtx,
 } from '../../data/widgets';
 import { CanvasElement, MAIN_BOARD, Project } from '../../types';
 import { WIDGET_PREVIEW, WIDGET_PREVIEW_COLOR } from '../../data/widgetFields';
@@ -47,30 +47,98 @@ const RECENT: string[] = [
 ];
 
 /**
- * Finer shelves INSIDE the big categories, so 'Live' is not forty cards in
- * one undifferentiated wall. A widget without an entry falls to the
- * category's own tail — the map is a guide, not a cage.
+ * The shelves, rebuilt from what a widget is FOR rather than from how it is
+ * implemented.
+ *
+ * The old top row — Live / Planning / Reference / Looks — was the code's own
+ * taxonomy ("does it read the store?"), which the owner rightly called not
+ * helpful and not smart: a person shopping for "something that shows me
+ * today's work" does not care whether it is live. One level, one question per
+ * shelf, every widget assigned by hand. A widget without an entry falls to a
+ * MORE shelf at the bottom (clip art is caught by its `art-` prefix), so a
+ * new widget is visible even before it is filed.
  */
-const SUBGROUP: Record<string, string> = {
-  'notes-board': 'Notes and paper',
-  kpi: 'Counts and numbers', 'count-by-stage': 'Counts and numbers',
-  'progress-ring': 'Counts and numbers', 'bin-counter': 'Counts and numbers',
-  'stage-legend': 'Counts and numbers', 'stage-funnel': 'Counts and numbers',
-  'overdue-list': 'Lists that chase', 'due-today': 'Lists that chase',
-  'job-list': 'Lists that chase', 'recent-jobs': 'Lists that chase',
-  'no-date': 'What is NOT happening', 'gone-quiet': 'What is NOT happening',
-  'nobody-booked': 'What is NOT happening', 'backlog-trend': 'What is NOT happening',
-  'open-snags': 'What is NOT happening', 'no-plan': 'What is NOT happening',
-  'floor-by-floor': 'What is NOT happening', duplicates: 'What is NOT happening',
-  'skipped-stage': 'What is NOT happening',
-  'contractor-load': 'People', 'team-today': 'People', 'tap-in': 'People',
-  'contractor-links': 'People',
-  'recent-photos': 'Photos', 'photo-review': 'Photos',
-  'activity-feed': 'The pulse', 'job-search': 'The pulse', 'job-find': 'The pulse',
-  'project-mini': 'Other workspaces', 'board-mini': 'Other workspaces',
-  'project-glance': 'Other workspaces', 'calendar-mini': 'Other workspaces',
-  map: 'Site and weather', weather: 'Site and weather',
+const SHELF_ORDER = [
+  'Chasing the work',
+  'Catching problems',
+  'Counts and progress',
+  'Finding and following',
+  'People and the week',
+  'Photos, map and weather',
+  'Clocks and timers',
+  'Your own lists and tools',
+  'Other workspaces',
+  'Decoration and fun',
+] as const;
+
+const SHELF: Record<string, string> = {
+  // What needs doing, and when.
+  'overdue-list': 'Chasing the work', 'due-today': 'Chasing the work',
+  'no-date': 'Chasing the work', 'week-ahead': 'Chasing the work',
+  'calendar-mini': 'Chasing the work', milestones: 'Chasing the work',
+  timeline: 'Chasing the work', 'weekly-goal': 'Chasing the work',
+  'backlog-trend': 'Chasing the work', 'tv-late': 'Chasing the work',
+  'tv-tomorrow': 'Chasing the work', 'tv-month': 'Chasing the work',
+  'tv-waiting': 'Chasing the work',
+  // What is quietly going wrong.
+  'gone-quiet': 'Catching problems', 'nobody-booked': 'Catching problems',
+  'no-plan': 'Catching problems', duplicates: 'Catching problems',
+  'skipped-stage': 'Catching problems', 'open-snags': 'Catching problems',
+  'floor-by-floor': 'Catching problems', 'tv-drive': 'Catching problems',
+  // Figures and bars.
+  kpi: 'Counts and progress', 'count-by-stage': 'Counts and progress',
+  'stage-legend': 'Counts and progress', 'stage-funnel': 'Counts and progress',
+  'progress-ring': 'Counts and progress', 'progress-bar': 'Counts and progress',
+  'bin-counter': 'Counts and progress', 'streak-flame': 'Counts and progress',
+  'split-flap': 'Counts and progress', 'tv-stage-spread': 'Counts and progress',
+  'tv-week-done': 'Counts and progress', 'tv-done-today': 'Counts and progress',
+  // Getting to a job, and seeing what changed.
+  'job-find': 'Finding and following', 'job-search': 'Finding and following',
+  'job-list': 'Finding and following', 'recent-jobs': 'Finding and following',
+  'activity-feed': 'Finding and following', 'tv-new': 'Finding and following',
+  'tv-feed': 'Finding and following',
+  // Who is where, and the week's plan.
+  rota: 'People and the week', 'week-planner': 'People and the week',
+  'team-today': 'People and the week', 'tap-in': 'People and the week',
+  'contractor-load': 'People and the week', 'contractor-links': 'People and the week',
+  'crew-race': 'People and the week', 'tv-load': 'People and the week',
+  'tv-out-today': 'People and the week',
+  // What the site looks like.
+  'recent-photos': 'Photos, map and weather', 'photo-review': 'Photos, map and weather',
+  'before-after': 'Photos, map and weather', 'tv-photo': 'Photos, map and weather',
+  'tv-photo-wall': 'Photos, map and weather', 'job-map': 'Photos, map and weather',
+  weather: 'Photos, map and weather',
+  // Time.
+  clock: 'Clocks and timers', 'tv-clock': 'Clocks and timers',
+  'world-clocks': 'Clocks and timers', 'shabbat-clock': 'Clocks and timers',
+  'w-countdown': 'Clocks and timers', 'w-stopwatch': 'Clocks and timers',
+  'multi-timer': 'Clocks and timers',
+  // Things you write yourself.
+  checklist: 'Your own lists and tools', tally: 'Your own lists and tools',
+  table: 'Your own lists and tools', 'order-list': 'Your own lists and tools',
+  'lined-note': 'Your own lists and tools', handover: 'Your own lists and tools',
+  contact: 'Your own lists and tools', link: 'Your own lists and tools',
+  address: 'Your own lists and tools', calculator: 'Your own lists and tools',
+  converter: 'Your own lists and tools', 'btu-hp': 'Your own lists and tools',
+  'add-bin': 'Your own lists and tools', 'sticky-pad': 'Your own lists and tools',
+  'notes-board': 'Your own lists and tools',
+  // Looking across workspaces.
+  'project-mini': 'Other workspaces', 'project-glance': 'Other workspaces',
+  'board-mini': 'Other workspaces', 'tv-workspace': 'Other workspaces',
+  // The rest is for the eyes.
+  'w-title': 'Decoration and fun', banner: 'Decoration and fun',
+  divider: 'Decoration and fun', quote: 'Decoration and fun',
+  legend: 'Decoration and fun', photo: 'Decoration and fun',
+  'spin-wheel': 'Decoration and fun', 'bubble-wrap': 'Decoration and fun',
+  celebrate: 'Decoration and fun', tiktok: 'Decoration and fun',
 };
+
+/** Which shelf a widget sits on — clip art by prefix, unmapped to More. */
+const shelfOf = (id: string): string =>
+  SHELF[id] ?? (id.startsWith('art-') ? 'Decoration and fun' : 'More');
+
+/** The layout toggle, remembered per machine. */
+const LAYOUT_KEY = 'widget_store_layout';
 
 /**
  * The shelf.
@@ -123,7 +191,13 @@ export function WidgetStore({ onPick, onClose, only, destLabel = 'the board' }: 
   only?: Set<string>;
 }) {
   const [q, setQ] = useState('');
-  const [cat, setCat] = useState<WidgetCategory | 'all' | 'recent'>('all');
+  /**
+   * The tiny switch the owner asked for by name: split into categories, or
+   * one flat list of everything. Remembered per machine.
+   */
+  const [layout, setLayout] = useState<'cats' | 'flat'>(() =>
+    localStorage.getItem(LAYOUT_KEY) === 'flat' ? 'flat' : 'cats');
+  const pickLayout = (v: 'cats' | 'flat') => { setLayout(v); localStorage.setItem(LAYOUT_KEY, v); };
   const [scale, setScale] = useState(() => {
     const v = Number(localStorage.getItem(SIZE_KEY));
     return v >= 0.7 && v <= 1.5 ? v : 1;
@@ -134,26 +208,20 @@ export function WidgetStore({ onPick, onClose, only, destLabel = 'the board' }: 
   const [taken, setTaken] = useState<Record<string, number>>({});
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const {
-    apartments, stages, contractorAssignments, contractors, contractorPhotos, activityLogs, users,
-    projects, currentProjectId, canvasElements,
-  } = useStore();
+  const { projects, currentProjectId } = useStore();
 
   /**
-   * Previews run on the REAL data where there is any, samples where there is
-   * not. An artist's impression tells you nothing about whether a widget is
-   * worth placing; your own overdue list answers it at a glance.
+   * Previews run on the FULL FAKE board, never on this machine's own data.
+   *
+   * They used to prefer the real data field by field, on the theory that your
+   * own overdue list beats an artist's impression — and the owner overruled it
+   * from experience: a sparse real workspace made half the shelf preview its
+   * empty or all-clear state ("Due today · 0", a bare search box), and "no one
+   * can understand how they will actually look when data is full." The store
+   * shows the busy fake board; the moment a widget is PLACED it reads the
+   * real thing.
    */
-  const previewCtx: WidgetCtx = useMemo(() => ({
-    jobs: apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed && !a.boardBin),
-    stages, assignments: contractorAssignments, contractors, users,
-    photos: contractorPhotos, logs: activityLogs,
-    boardElements: canvasElements,
-    update: () => {}, openJob: () => {}, readOnly: true,
-  }), [apartments, stages, contractorAssignments, contractors, contractorPhotos, activityLogs,
-       users, canvasElements]);
-
-  const shownCtx = useMemo(() => withSampleData(previewCtx), [previewCtx]);
+  const shownCtx = useMemo(() => fullSampleCtx(), []);
 
   /**
    * The two widgets that draw nothing until they are told what to show.
@@ -166,12 +234,15 @@ export function WidgetStore({ onPick, onClose, only, destLabel = 'the board' }: 
    */
   const pickedForPreview = useMemo(() => {
     const other = otherIdForPreview(projects, currentProjectId);
+    // `sample: true` is the full-fake fallback: with nothing stored on this
+    // machine for the picked workspace, each of these draws a busy canned
+    // preview (marked "sample") instead of an apology about the cache.
     return {
-      'board-mini': { projectId: currentProjectId, boardId: MAIN_BOARD },
-      'project-glance': { projectId: other },
+      'board-mini': { projectId: currentProjectId, boardId: MAIN_BOARD, sample: true },
+      'project-glance': { projectId: other, sample: true },
       // The building diagram needs a workspace that HAS buildings — showing it
       // against the job board draws an empty frame.
-      'project-mini': { projectId: other },
+      'project-mini': { projectId: other, sample: true },
     } as Record<string, Record<string, unknown>>;
   }, [projects, currentProjectId]);
 
@@ -206,24 +277,28 @@ export function WidgetStore({ onPick, onClose, only, destLabel = 'the board' }: 
     };
   }, [sort]);
 
+  /**
+   * One list, or the smart shelves — the toggle decides.
+   *
+   * In categories mode every widget lands on exactly one shelf, in the
+   * hand-set SHELF_ORDER; anything unmapped shows on a MORE shelf at the end
+   * rather than disappearing. In flat mode the same pool is one grid in the
+   * chosen sort.
+   */
   const groups = useMemo(() => {
-    const pool = cat === 'recent' ? matches.filter(w => RECENT.includes(w.id)) : matches;
-    return (['live', 'plan', 'ref', 'visual'] as WidgetCategory[])
-      .map(c => {
-        const items = pool.filter(w => w.category === c).sort(order);
-        // The finer shelves: clusters in first-appearance order, unmapped last.
-        const shelves: { name: string; items: WidgetDef[] }[] = [];
-        for (const w of items) {
-          const name = SUBGROUP[w.id] ?? '';
-          let shelf = shelves.find(x => x.name === name);
-          if (!shelf) { shelf = { name, items: [] }; shelves.push(shelf); }
-          shelf.items.push(w);
-        }
-        shelves.sort((a, b) => (a.name === '' ? 1 : 0) - (b.name === '' ? 1 : 0));
-        return { c, items, shelves };
-      })
-      .filter(g => g.items.length > 0 && (cat === 'all' || cat === 'recent' || cat === g.c));
-  }, [matches, cat, order]);
+    if (layout === 'flat') {
+      return matches.length ? [{ name: '', items: [...matches].sort(order) }] : [];
+    }
+    const by = new Map<string, WidgetDef[]>();
+    for (const w of matches) {
+      const name = shelfOf(w.id);
+      if (!by.has(name)) by.set(name, []);
+      by.get(name)!.push(w);
+    }
+    return [...SHELF_ORDER, 'More']
+      .filter(name => by.has(name))
+      .map(name => ({ name, items: by.get(name)!.sort(order) }));
+  }, [matches, layout, order]);
 
   /**
    * Live pieces of the other workspaces.
@@ -286,22 +361,22 @@ export function WidgetStore({ onPick, onClose, only, destLabel = 'the board' }: 
           </div>
 
           <div className="mt-3 flex items-center gap-2 flex-wrap">
-            {(['all', 'recent', 'live', 'plan', 'ref', 'visual'] as const).map(c => {
-              const on = cat === c;
-              const n = c === 'all' ? matches.length
-                : c === 'recent' ? matches.filter(w => RECENT.includes(w.id)).length
-                : matches.filter(w => w.category === c).length;
-              return (
-                <button key={c} onClick={() => setCat(c)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-bold transition-colors"
-                  style={on
+            {/* The little switch: shelves by what a widget is FOR, or one flat
+                list of everything. The old Live/Planning/Reference/Looks chips
+                were the code's own taxonomy and are gone. */}
+            <div className="flex items-center rounded-full p-0.5"
+              style={{ backgroundColor: 'rgba(255,255,255,.12)' }}>
+              {([['cats', 'Categories'], ['flat', 'One list']] as const).map(([v, label]) => (
+                <button key={v} onClick={() => pickLayout(v)}
+                  className="px-3 py-1 rounded-full text-[12px] font-bold transition-colors"
+                  style={layout === v
                     ? { backgroundColor: '#fff', color: '#1e3a5f' }
-                    : { backgroundColor: 'rgba(255,255,255,.12)', color: 'rgba(255,255,255,.82)' }}>
-                  {c === 'all' ? 'Everything' : c === 'recent' ? 'Recently added' : CATEGORY_LABEL[c]}
-                  <span className="text-[11px] font-extrabold opacity-60">{n}</span>
+                    : { color: 'rgba(255,255,255,.75)' }}>
+                  {label}
                 </button>
-              );
-            })}
+              ))}
+            </div>
+            <span className="text-[11.5px] font-semibold text-white/50">{matches.length} widgets</span>
             <span className="flex-1" />
             <select value={sort} onChange={e => setSort(e.target.value as typeof sort)}
               title="Sort the shelf"
@@ -327,81 +402,51 @@ export function WidgetStore({ onPick, onClose, only, destLabel = 'the board' }: 
           {groups.length === 0 && (
             <div className="h-full flex flex-col items-center justify-center text-center">
               <p className="text-[15px] text-gray-500">Nothing matches “{q.trim()}”.</p>
-              <button onClick={() => { setQ(''); setCat('all'); }}
+              <button onClick={() => setQ('')}
                 className="mt-2 text-[13px] font-semibold text-[#4aa8d8]">Show everything</button>
             </div>
           )}
 
-          {groups.map(({ c, shelves }) => (
-            <div key={c} className="mb-7">
-              {/* Only when everything is shown. Filtered to one group, the
-                  heading repeats the chip that is already lit above it. */}
-              {(cat === 'all' || cat === 'recent') && (
+          {groups.map(({ name, items }) => (
+            <div key={name || 'all'} className="mb-6">
+              {name && (
                 <h3 className="text-[13px] font-extrabold text-gray-500 uppercase tracking-wide mb-3">
-                  {CATEGORY_LABEL[c]}
+                  {name} <span className="text-gray-300 normal-case font-bold">· {items.length}</span>
                 </h3>
               )}
-              {shelves.map(shelf => (
-                <div key={shelf.name || 'rest'} className="mb-4">
-                  {shelf.name && shelves.length > 1 && (
-                    <h4 className="text-[11px] font-bold text-gray-400 tracking-wide mb-2">
-                      {shelf.name}
-                    </h4>
-                  )}
-                  <div className="grid gap-3"
-                    style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${Math.round(CARD_W * scale)}px, 1fr))` }}>
-                    {shelf.items.map(w => (
-                      <WidgetCard key={w.id} def={w} ctx={shownCtx} onPick={take} scale={scale}
-                        destLabel={destLabel}
-                        taken={taken[w.id] ?? 0} picked={pickedForPreview[w.id]} />
-                    ))}
-                  </div>
-                </div>
-              ))}
+              <div className="grid gap-3"
+                style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${Math.round(CARD_W * scale)}px, 1fr))` }}>
+                {items.map(w => (
+                  <WidgetCard key={w.id} def={w} ctx={shownCtx} onPick={take} scale={scale}
+                    destLabel={destLabel}
+                    taken={taken[w.id] ?? 0} picked={pickedForPreview[w.id]} />
+                ))}
+              </div>
             </div>
           ))}
 
-          {cat === 'all' && !q.trim() && otherWorkspaces.length > 0 && (
+          {layout === 'cats' && !q.trim() && otherWorkspaces.length > 0 && !only && (
             <div className="mb-4">
               <h3 className="text-[13px] font-extrabold text-gray-500 uppercase tracking-wide mb-3">
                 From your other workspaces
               </h3>
-              <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${CARD_W}px, 1fr))` }}>
-                {otherWorkspaces.map(p => (
-                  <button
-                    key={p.id}
-                    onClick={() => {
-                      const def = WIDGETS.find(w => w.id === 'project-glance');
-                      if (def) take({ ...def, data: { ...(def.data ?? {}), projectId: p.id } });
-                    }}
-                    className="group text-left rounded-xl border border-gray-200 overflow-hidden
-                               hover:border-[#4aa8d8] hover:shadow-md transition-all flex flex-col"
-                  >
-                    <div className="relative flex-1 flex flex-col items-center justify-center gap-2"
-                      style={{ height: CARD_H, backgroundColor: `${p.color}0e` }}>
-                      <span className="w-14 h-14 rounded-2xl flex items-center justify-center text-[22px] font-extrabold text-white"
-                        style={{ backgroundColor: p.color }}>
-                        {(p.shortName ?? p.name).slice(0, 2).toUpperCase()}
-                      </span>
-                      <span className="font-bold text-[15px] text-gray-900">{p.name}</span>
-                      <div className="absolute inset-x-0 bottom-0 p-3 pt-8 opacity-0 group-hover:opacity-100
-                                      transition-opacity pointer-events-none"
-                        style={{ background: 'linear-gradient(transparent, rgba(15,23,42,.86) 42%)' }}>
-                        <p className="text-[12px] leading-snug text-white/90">
-                          That workspace's stages, counts and progress, live on this board.
-                        </p>
-                        <span className="mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold text-white"
-                          style={{ backgroundColor: '#4aa8d8' }}>
-                          <Plus size={11} /> Add to {destLabel}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="px-3 py-2 flex items-center gap-2 border-t border-gray-100">
-                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
-                      <span className="font-bold text-[13px] text-gray-900 truncate">How {p.shortName ?? p.name} is doing</span>
-                    </div>
-                  </button>
-                ))}
+              {/* Each card is the real "Another workspace" widget previewing
+                  THAT workspace — live numbers when this machine has them, the
+                  sample summary when it does not. It used to be a logo on a
+                  tinted box, which showed nothing of what you would get. */}
+              <div className="grid gap-3"
+                style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${Math.round(CARD_W * scale)}px, 1fr))` }}>
+                {otherWorkspaces.map(p => {
+                  const def = WIDGETS.find(w => w.id === 'project-glance');
+                  if (!def) return null;
+                  const wired: WidgetDef = { ...def, data: { ...(def.data ?? {}), projectId: p.id } };
+                  return (
+                    <WidgetCard key={p.id} def={wired} ctx={shownCtx} onPick={take} scale={scale}
+                      destLabel={destLabel} taken={0}
+                      picked={{ projectId: p.id, sample: true }}
+                      nameOverride={`How ${p.shortName ?? p.name} is doing`} />
+                  );
+                })}
               </div>
             </div>
           )}
@@ -422,13 +467,15 @@ export function WidgetStore({ onPick, onClose, only, destLabel = 'the board' }: 
  * placed widget starts with and is correctly empty — reusing it for the preview
  * is what made half the shelf blank.
  */
-function WidgetCard({ def, ctx, onPick, taken, picked, scale = 1, destLabel = 'the board' }: {
+function WidgetCard({ def, ctx, onPick, taken, picked, scale = 1, destLabel = 'the board', nameOverride }: {
   def: WidgetDef; ctx: WidgetCtx; onPick: (d: WidgetDef) => void; taken: number;
   /** A choice the shelf makes on the widget's behalf, for preview only. */
   picked?: Record<string, unknown>;
   /** The shelf's zoom — the card grows and the preview grows with it. */
   scale?: number;
   destLabel?: string;
+  /** The workspace cards wear the workspace's name, not the widget's. */
+  nameOverride?: string;
 }) {
   const Icon = def.icon;
   const isArt = def.id.startsWith('art-');
@@ -532,7 +579,7 @@ function WidgetCard({ def, ctx, onPick, taken, picked, scale = 1, destLabel = 't
 
       <div className="px-3 py-2 flex items-center gap-2 border-t border-gray-100">
         <Icon size={14} className="text-[#1e3a5f] flex-shrink-0" />
-        <span className="font-bold text-[13px] text-gray-900 truncate">{def.name}</span>
+        <span className="font-bold text-[13px] text-gray-900 truncate">{nameOverride ?? def.name}</span>
       </div>
     </div>
   );

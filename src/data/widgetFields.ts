@@ -677,6 +677,11 @@ function rotaSampleCells(): Record<string, { id: string; text: string }[]> {
  */
 export const WIDGET_PREVIEW: Record<string, Record<string, unknown>> = {
   kpi: { metric: 'overdue', title: 'Running late' },
+  // A search box previewed empty forever — the preview cannot be typed into,
+  // so it seeds a query and shows RESULTS, which is what the widget looks
+  // like in use. 'cohen' matches the sample board's Cohen, Miriam.
+  'job-find': { sampleQuery: 'cohen' },
+  'job-search': { sampleQuery: 'cohen' },
   divider: { text: 'this week' },
   quote: { text: 'Ladders get tied off. Every time.', by: 'Site rules' },
   legend: {

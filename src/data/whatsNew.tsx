@@ -78,6 +78,22 @@ export const WHATS_NEW: WhatsNewEntry[] = [
           + 'the building names. It now paints above everything, on every page.',
         demo: 'tap',
       },
+      {
+        title: 'The widget store shows every widget full',
+        body: 'Every card now previews on a busy example board — three tasks due '
+          + 'today, late jobs, fresh photos, a filled planner — so you see exactly '
+          + 'what a widget looks like in real use, not an empty box. The moment you '
+          + 'place one it reads your real data.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'Store shelves that make sense',
+        body: 'Widgets are grouped by what they are FOR — Chasing the work, '
+          + 'Catching problems, Counts and progress, People and the week, and so '
+          + 'on. A small switch at the top flips between the shelves and one flat '
+          + 'list of everything.',
+        demo: 'list',
+      },
     ],
   },
   {
