@@ -3,14 +3,14 @@ import { ToolbarSetup } from '../../types';
 import { WIDGET_BY_ID } from '../../data/widgets';
 import { MovablePanel } from './MovablePanel';
 import {
-  MousePointer2, Hand, Plus, StickyNote, Square, Type, Pen, Highlighter,
+  MousePointer2, Hand, Plus, StickyNote, Square, Type, Pen, Highlighter, Eraser,
   Palette, Maximize, Settings, Timer, Clock, Keyboard, GripVertical, Mic, Image,
   Map as MapIcon, LayoutGrid, X,
 } from 'lucide-react';
 
 export type BoardTool =
   | 'select' | 'pan' | 'job' | 'note' | 'box' | 'title'
-  | 'pen' | 'highlighter' | 'clipart' | 'countdown' | 'stopwatch' | 'voice' | 'export';
+  | 'pen' | 'highlighter' | 'eraser' | 'clipart' | 'countdown' | 'stopwatch' | 'voice' | 'export';
 
 interface ToolDef { id: BoardTool; icon: React.ElementType; label: string; tip: string }
 
@@ -32,22 +32,28 @@ interface ToolDef { id: BoardTool; icon: React.ElementType; label: string; tip: 
  */
 export const TOOL_LABELS: Record<string, string> = {
   select: 'Select', pan: 'Pan', job: 'Job', note: 'Note', box: 'Box', title: 'Title',
-  pen: 'Pen', highlighter: 'Mark', voice: 'Voice', export: 'Save',
+  pen: 'Pen', highlighter: 'Mark', eraser: 'Eraser', voice: 'Voice', export: 'Save',
 };
 
 /**
- * Select and Pan are gone.
+ * One scheme, and a visible way back to it.
  *
- * They were two modes for what is really one set of habits, and having to know
- * which one you were in before you knew what a drag would do was the thing
- * making the board hard to use. There is one scheme now: a click selects, a
- * double click opens, a drag on something moves it, a drag on empty board pans,
- * Ctrl-drag lassoes, and the wheel always zooms to the pointer.
+ * A click selects, a double click opens, a drag on something moves it, a drag
+ * on empty board pans, Ctrl-drag lassoes, the wheel zooms to the pointer.
+ * SELECT is that default made visible: it changes no mouse behaviour, it is
+ * simply lit whenever no mode tool is armed, and pressing it puts whatever IS
+ * armed (pen, highlighter, eraser) down. Asked for by the owner by name —
+ * "if I wanna go back to the default, just build a select".
  *
- * The pen and the highlighter stay as modes, because a pen genuinely is one —
- * while it is armed a press on a tile draws instead of dragging.
+ * Pen, highlighter and the eraser are modes — while armed a press draws (or
+ * rubs out) instead of dragging. The eraser used to live inside the pen's
+ * options panel; it is its own tile now, with its size and kind on right-click
+ * exactly like the pen's colours.
  */
 const TOOLS: ToolDef[][] = [
+  [
+    { id: 'select', icon: MousePointer2, label: 'Select', tip: 'The default — drag, drop, click to open' },
+  ],
   [
     { id: 'job',   icon: Plus,        label: 'Job',   tip: 'New job' },
     { id: 'note',  icon: StickyNote,  label: 'Note',  tip: 'Sticky note' },
@@ -55,9 +61,10 @@ const TOOLS: ToolDef[][] = [
     { id: 'title', icon: Type,        label: 'Title', tip: 'Title' },
   ],
   [
-    { id: 'pen',         icon: Pen,         label: 'Pen',   tip: 'Draw · right-click for colours' },
-    { id: 'highlighter', icon: Highlighter, label: 'Mark',  tip: 'Highlight · right-click for colours' },
-    { id: 'voice',       icon: Mic,         label: 'Voice', tip: 'Voice memo' },
+    { id: 'pen',         icon: Pen,         label: 'Pen',    tip: 'Draw · right-click for colours' },
+    { id: 'highlighter', icon: Highlighter, label: 'Mark',   tip: 'Highlight · right-click for colours' },
+    { id: 'eraser',      icon: Eraser,      label: 'Eraser', tip: 'Rub out · right-click for size' },
+    { id: 'voice',       icon: Mic,         label: 'Voice',  tip: 'Voice memo' },
   ],
   [
     { id: 'export', icon: Image, label: 'Save', tip: 'Export board image' },
@@ -118,7 +125,7 @@ export function BoardToolbar({
   onOpenStore: () => void;
   onToggleMap: () => void;
   mapOn: boolean;
-  onPenOptions: (tool: 'pen' | 'highlighter', x: number, y: number) => void;
+  onPenOptions: (tool: 'pen' | 'highlighter' | 'eraser', x: number, y: number) => void;
   /** What is on the rail, from this workspace's settings. */
   setup?: ToolbarSetup;
   /** A widget promoted onto the rail, placed straight from it. */
@@ -314,7 +321,7 @@ export function BoardToolbar({
                 key={id}
                 onClick={() => onPick(id)}
                 onContextMenu={e => {
-                  if (id !== 'pen' && id !== 'highlighter') return;
+                  if (id !== 'pen' && id !== 'highlighter' && id !== 'eraser') return;
                   e.preventDefault(); e.stopPropagation();
                   onPenOptions(id, e.clientX, e.clientY);
                 }}
@@ -471,11 +478,11 @@ export function BoardToolbar({
  */
 export function BoardControlsPanel({ onClose }: { onClose: () => void }) {
   const rows: [string, string][] = [
-    ['Click a job', 'Open it'],
+    ['Click a job', 'Select it'],
+    ['Double-click a job', 'Open it'],
     ['Drag a job', 'Move it'],
-    ['Select tool', 'Drag empty = select'],
-    ['Pan tool', 'Drag anywhere = move'],
-    ['Ctrl / ⌘ + drag', 'The other one'],
+    ['Drag empty board', 'Pan'],
+    ['Ctrl / ⌘ + drag', 'Lasso select'],
     ['Ctrl / ⌘ + click', 'Add to selection'],
     ['Ctrl / ⌘ + wheel', 'Zoom board'],
     ['Hold click + wheel', 'Zoom board'],

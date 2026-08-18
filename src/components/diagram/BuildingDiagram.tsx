@@ -797,8 +797,14 @@ function BuildingColumn({
   return (
     <div className="flex flex-col flex-1" style={{ minWidth: compact ? '110px' : '180px' }}>
       {/* Pinned while its own column is in view, so you always know which
-          building you are looking at. z-30 clears the cells (merge chip is z-20).
+          building you are looking at.
           The 2px gap is padding rather than margin so nothing scrolls through it.
+
+          z-10, not z-30 — the same rule NetivBuildingColumn already carries: a
+          STICKY element paints above anything in the page flow with a lower z,
+          and at z-30 the building name drew over the What's New window and the
+          header's workspace menu. It only needs to beat the cells it scrolls
+          over (merge chip is z-20 inside the cell's own context).
 
           Not drawn on a phone. There is exactly one building on screen there and
           the A1/A2/A3 tabs above the diagram already name it, so the bar was a
@@ -806,7 +812,7 @@ function BuildingColumn({
           side by side and this label is the only thing telling them apart. */}
       {!phone && (
       <div
-        className={`sticky top-0 z-30 print:static text-center font-bold text-white tracking-widest rounded-t-lg ${compact ? 'py-1 pb-1.5 text-xs' : 'py-2 pb-2.5 text-sm'}`}
+        className={`sticky top-0 z-10 print:static text-center font-bold text-white tracking-widest rounded-t-lg ${compact ? 'py-1 pb-1.5 text-xs' : 'py-2 pb-2.5 text-sm'}`}
         style={{ backgroundColor: '#1e3a5f' }}
       >
         {buildingId}

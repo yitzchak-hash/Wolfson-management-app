@@ -22,7 +22,7 @@ function withAlpha(color: string, alpha = 0.45): string {
   return color;
 }
 import { MapPin, ClipboardList, Trash2, Palette, Pencil, X, ThumbsUp, ThumbsDown, Ghost,
-  Archive, CheckCircle2, PlayCircle, FolderOpen } from 'lucide-react';
+  Archive, CheckCircle2, PlayCircle, FolderOpen, Lock, Unlock } from 'lucide-react';
 import { Apartment, CanvasElement, Stage, BinKind, BIN_META, binKeyOf, binLabelOf } from '../../types';
 import { Settings2, Mic } from 'lucide-react';
 import { DriveIcon, ZohoIcon, PlanIcon, TvIcon } from '../ui/BrandIcons';
@@ -60,6 +60,8 @@ export interface BoardHandlers {
   jobOpen: (job: Apartment) => void;
   jobDelete: (ids: string[]) => void;
   jobTv: (job: Apartment) => void;
+  /** Toggle boardLocked — a locked tile stays where it is. */
+  jobLock: (job: Apartment) => void;
   jobThumbs: (id: string, delta: number) => void;
   jobThumbsDown: (id: string, delta: number) => void;
   /** Ghosts use the same tile, so they need their own pointer handlers. */
@@ -147,6 +149,7 @@ export const JobTile = React.memo(function JobTile({
       onDoubleClick={() => H.jobOpen(job)}
       data-node-id={job.id}
       className={`absolute rounded-xl border px-3 pb-3 pt-[22px] group select-none ${
+        job.boardLocked ? 'cursor-pointer shadow-sm hover:shadow-md' :
         isDragging ? 'shadow-2xl cursor-grabbing' :
         isSelected ? 'shadow-md cursor-grab' : 'shadow-sm hover:shadow-md cursor-grab'
       } ${justChanged && !isDragging ? 'live-change-pulse' : ''} ${searchLit ? 'search-hit' : ''}`}
@@ -183,6 +186,23 @@ export const JobTile = React.memo(function JobTile({
         </span>
       )}
 
+
+      {/* Lock — a locked tile stays put: dragging pans the board, a click
+          still opens the job. Hover-revealed until it is ON, then always
+          visible so a tile that will not move says why. */}
+      <button
+        data-no-drag
+        onClick={e => { e.stopPropagation(); H.jobLock(job); }}
+        title={job.boardLocked ? 'Locked in place — click to unlock' : 'Lock in place'}
+        className={`absolute top-1 right-[62px] p-1 rounded-md transition-all ${
+          job.boardLocked ? '' : 'opacity-0 group-hover:opacity-100'}`}
+        style={{
+          color: job.boardLocked ? '#b45309' : '#94a3b8',
+          backgroundColor: job.boardLocked ? '#fef3c7' : 'transparent',
+        }}
+      >
+        {job.boardLocked ? <Lock size={13} /> : <Unlock size={13} />}
+      </button>
 
       {/* Wallboard visibility. Everything shows by default; this only ever
           switches something OFF. Slash through the TV when hidden, so the state
@@ -495,7 +515,7 @@ export const BoardNode = React.memo(function BoardNode({
       // without a stroke drawn across a tile ever blocking the tile — the
       // reason the old rule refused to promote overlapping ink at all.
       className={`group absolute rounded-xl select-none ${plain || isBin ? '' : 'shadow-md'} ${
-        isDragging ? 'cursor-grabbing' : 'cursor-grab'
+        el.locked ? 'cursor-default' : isDragging ? 'cursor-grabbing' : 'cursor-grab'
       } ${isStroke ? 'pointer-events-none' : ''}`}
       style={{
         left: x, top: y, width: w, height: h,
@@ -541,6 +561,17 @@ export const BoardNode = React.memo(function BoardNode({
               <Mic size={13} />
             </button>
           )}
+          {/* Lock in place: no drag, no resize, until unlocked. `undefined`
+              rather than false when unlocking, so the field disappears from
+              the record instead of riding every node forever. */}
+          <button data-el-action
+            onClick={e => { e.stopPropagation(); H.elPatch(el.id, { locked: el.locked ? undefined : true }); }}
+            title={el.locked ? 'Locked in place — click to unlock' : 'Lock in place'}
+            className="w-7 h-7 rounded-lg bg-white/95 hover:bg-white flex items-center justify-center shadow-sm border border-gray-100"
+            style={{ color: el.locked ? '#b45309' : '#94a3b8',
+                     backgroundColor: el.locked ? '#fef3c7' : undefined }}>
+            {el.locked ? <Lock size={13} /> : <Unlock size={13} />}
+          </button>
           <button data-el-action
             onClick={e => { e.stopPropagation(); H.elPatch(el.id, { showOnTv: el.showOnTv === false ? undefined : false }); }}
             title={el.showOnTv === false ? 'Hidden from TV' : 'Showing on TV'}
@@ -703,6 +734,19 @@ export const BoardNode = React.memo(function BoardNode({
         />
       )}
 
+      {/* A locked node says so at rest — without this, a thing that will not
+          move reads as broken rather than as pinned. Clip art shows it too,
+          even though it has no action strip. */}
+      {el.locked && (
+        <span
+          className="absolute -top-1.5 -left-1.5 z-[7] w-[18px] h-[18px] rounded-full flex items-center justify-center pointer-events-none"
+          style={{ backgroundColor: '#fef3c7', color: '#b45309', boxShadow: '0 0 0 1.5px rgba(255,255,255,.9)' }}
+          title="Locked in place"
+        >
+          <Lock size={10} />
+        </span>
+      )}
+
       {/* Newly placed, and not yet looked at. Clears when you click it. */}
       {isNew && (
         <button
@@ -727,7 +771,9 @@ export const BoardNode = React.memo(function BoardNode({
           Selecting a node SHOWS the corner rather than hinting at it: a handle
           you can only find by hovering the exact pixel reads as "this type
           can't be resized", which is what it read as on half the board. */}
-      {!inGroup && (<>
+      {/* No handles on a locked node — a handle that refuses the drag reads
+          as broken, so a pinned node simply has none until it is unlocked. */}
+      {!inGroup && !el.locked && (<>
       <div data-el-action data-resize
         onPointerDown={e => H.resizeDown(e, el)}
         onPointerMove={H.resizeMove}

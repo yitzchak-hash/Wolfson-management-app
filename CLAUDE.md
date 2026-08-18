@@ -1938,3 +1938,83 @@ contractor sees. The portal keeps its iframe (link-shared files open it fine).
 `scratchpad/planphone.mjs` measures the studio's committed ink as
 `canvases[length-2]` — the pane below now contributes its own three
 canvases, so `canvases[1]` reads the WRONG stack and reports no ink.
+
+---
+
+# v2 — Select, the eraser's own tile, locks, and the menu that stays on top
+
+## The workspace menu is a PORTAL
+The header is a flex item with `z-30`, which makes it a stacking context — so
+no z-index ON the menu could lift it above the board's floating chrome
+(z-40/z-50) or any sticky page content: the same disease the drawer tooltips
+had, cured the same way. `WorkspacePicker` renders its menu through
+`createPortal(document.body)` at `z-[100]`, positioned from the button's rect
+measured at open (edge-to-edge under the header on a phone; right-anchored
+under RTL). The outside-press close checks BOTH refs (`wrapRef` + `menuRef`) —
+with a portal, `wrapRef.contains` alone closes the menu on its own rows.
+
+**`BuildingColumn`'s sticky building bar is `z-10`** — Netiv's column got that
+fix (What's New round) and Wolfson's never did: the documented two-component
+trap, found because the menu hid behind "the names of the buildings".
+
+## Select is a tile again — but only as a MIRROR
+The board still has exactly one control scheme; `select` is the default value
+of `tool` and always was. The tile exists so the default is VISIBLE and
+returnable: picking pen/highlighter/eraser lights that tile instead, pressing
+Select puts the armed mode down. The page passes
+`active={eraser.on ? 'eraser' : tool}` — the eraser is separate state
+(`eraser.on`), never a value of `tool`, and `handleToolPick('eraser')` toggles
+it BEFORE the put-the-eraser-down line that every other pick runs.
+
+## The eraser
+- Its own tile (rub out / whole-mark kinds and width live in ITS right-click
+  panel, `penOpts.tool === 'eraser'`); the pen panel lost its eraser section
+  AND its hard-coded explainer paragraph, per the owner.
+- `EraserCursor` — a fixed, pointer-events-none circle following the pointer at
+  `width × zoom` (the width is WORLD units; `eraseAt` halves it in world
+  space). Positioned imperatively from its own window listener so pointermove
+  never re-renders the board; hidden outside the viewport.
+- **Legacy flat-ink strokes are promoted on load**: a stroke with `points` but
+  no `data.own` (drawn before every stroke became a node) gets `data.own` +
+  its box rewritten from `pointsBounds(strokePoints(el))`. Its STORED box can
+  be a lie (0,0,10×10), which is why the eraser's cheap box rejection never
+  let a press near the ink — `eraseAt` now trusts `el.x/y/w/h` only when
+  `data.own`, and box-checks legacy strokes from their real points. The
+  partial-cut re-add always writes `own: true`, so erasing legacy ink cannot
+  breed more of it. A stroke with <2 points is deleted (invisible junk).
+
+## Locks
+`Apartment.boardLocked` + `CanvasElement.locked` — both optional, absent =
+unlocked, cleared with `undefined` (not `false`) so the field vanishes from
+records. `boardLocked` is in `updateApartment`'s CANVAS_ONLY set (locking is
+arranging, not editing) — that set also gained `viewPos`, `ghosts`,
+`stageOrder`, `showOnTv`, all board furniture that was wrongly bumping
+`contentUpdatedAt`.
+
+The rule everywhere: **a press on a locked thing pans the board** (the
+view-only idiom), so a motionless click still opens/picks it via the existing
+pan-up path. Locked members are FILTERED OUT of group drags (both carry maps),
+group resizes (`beginResize`), and the Delete-key sweep (explicit deletes — the
+strip X, the menu — still work). Resize handles are not rendered on a locked
+node; ghosts of a locked job pan too; `BinBoard.startDrag` honours both locks.
+The toggle lives in the node action strip (beside TV), on the tile top row
+(left of TV, hover-revealed until ON, amber when ON), and in both context
+menus ("Lock in place" / "Unlock", multi-select aware). A locked node wears a
+small amber lock badge at rest — without it a thing that will not move reads
+as broken. Clip art has no strip, so its lock is menu-only; the badge shows.
+
+## The plan pane exists from the first frame
+`planPaneOn = planWanted && (detectedPdfId || (fetchingPdf && driveLink))` —
+with a Drive link but no saved plan, the pane used to appear only when
+`findAllPlansPdfsViaBackend` returned (~2s), shoving the layout mid-read. The
+no-file branch of `planPane()` now renders a spinner ("Finding the plan in
+Drive…") inside the pane's own frame, for the side pane and the phone tab
+alike; a folder with no plans folds the pane away once, honestly.
+
+Harness: `scratchpad/lockselect.mjs` (32 checks) — Select/pen/eraser tile
+states, the outline circle's size, the eraser panel, the pen panel's removed
+text, legacy-stroke promotion + whole-mark erase, note/tile lock (drag, resize
+handles, Delete key, unlock, click-opens), and `elementFromPoint` over every
+dropdown row with the board AND with Wolfson's sticky building bars beneath.
+Close the eraser's options via its BACKDROP in tests — Escape also puts the
+armed eraser down (by design) and reads as a failed toggle.

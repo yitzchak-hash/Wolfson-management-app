@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
-import { Mic, X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer, Phone as PhoneIcon } from 'lucide-react';
+import { Mic, X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer, Phone as PhoneIcon, Loader2 } from 'lucide-react';
 import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel } from '../../types';
 import { useStore } from '../../data/store';
 import { usePhone } from '../../data/usePhone';
@@ -434,8 +434,16 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         .sort((a, b) => b.version - a.version)
     : [];
   const latestPlanVersion = planVersions[0];
-  /** Only split the window when there is actually a plan to put on the right. */
-  const planPaneOn = planWanted && !!detectedPdfId;
+  /**
+   * Split the window the moment there COULD be a plan, not once there is one.
+   *
+   * With a Drive link but no saved plan, the pane used to appear only after
+   * `findAllPlansPdfsViaBackend` came back (~2s), shoving the layout sideways
+   * mid-read — which read as buggy. While the hunt runs the pane is there
+   * from the first frame with a spinner; if the folder turns out to hold no
+   * plans it folds away once, honestly.
+   */
+  const planPaneOn = planWanted && (!!detectedPdfId || (fetchingPdf && !!apartment.driveLink));
   /**
    * Splitting the window is a DESKTOP arrangement. A phone has no side to put
    * the plan on — it reaches the same pane through its own Plan tab — so at
@@ -819,17 +827,35 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     const asTab = variant === 'tab';
     const fileId = shownPlanId ?? detectedPdfId;
 
-    // Only the tab can land here — the side pane is gated on there being a
-    // plan. Say which of the three reasons it is, rather than showing a blank.
+    // No file yet — either the hunt is still running (spinner, so the pane is
+    // present from the first frame instead of popping in two seconds later),
+    // or there is genuinely nothing to show, and it says which.
     if (!fileId) {
+      const body = (
+        <div className="h-full flex flex-col items-center justify-center gap-2.5 p-6 text-center">
+          {fetchingPdf ? (
+            <>
+              <Loader2 size={24} className="text-[#4aa8d8] animate-spin" />
+              <p className="text-[12.5px] text-gray-500">Finding the plan in Drive…</p>
+            </>
+          ) : (
+            <>
+              <BookOpen size={22} className="text-gray-300" />
+              <p className="text-[12.5px] text-gray-500">
+                {driveLink ? 'No plans in this folder yet'
+                  : 'Link a Drive folder on the Details tab and the plan shows up here.'}
+              </p>
+            </>
+          )}
+        </div>
+      );
+      if (asTab) return body;
+      // The side pane keeps its frame while it waits, so the split does not
+      // jump when the sheet lands.
       return (
-        <div className="h-full flex flex-col items-center justify-center gap-2 p-6 text-center">
-          <BookOpen size={22} className="text-gray-300" />
-          <p className="text-[12.5px] text-gray-500">
-            {fetchingPdf ? 'Looking for plans…'
-              : driveLink ? 'No plans in this folder yet'
-              : 'Link a Drive folder on the Details tab and the plan shows up here.'}
-          </p>
+        <div className="flex flex-col min-h-0 border-l border-gray-200"
+          style={{ flex: '1 1 54%', backgroundColor: '#f8fafc' }}>
+          {body}
         </div>
       );
     }

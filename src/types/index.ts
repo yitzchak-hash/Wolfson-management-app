@@ -502,6 +502,12 @@ export interface Apartment {
    * everything shows by default and Esther switches off only what is private.
    */
   showOnTv?: boolean;
+  /**
+   * Pinned in place on the board. A locked tile cannot be dragged or swept up
+   * by a group move — a press on it pans the board instead, and a plain click
+   * opens the job. Board furniture, not job content (CANVAS_ONLY in the store).
+   */
+  boardLocked?: boolean;
   stageDates?: Record<string, string>; // stageId → ISO timestamp of when that stage was first set
   driveLink?: string; // Google Drive folder URL for this apartment's files
   plansPdfLink?: string; // Google Drive link to the Engineering Plans PDF
@@ -652,6 +658,8 @@ export interface CanvasElement {
   data?: Record<string, unknown>;
   /** See Apartment.showOnTv — undefined means visible. */
   showOnTv?: boolean;
+  /** See Apartment.boardLocked — a locked node cannot be dragged or resized. */
+  locked?: boolean;
   /**
    * Pinned elements keep their board X (so they pan and zoom sideways with the
    * content they label) but hold a FIXED screen Y, so they stay put vertically

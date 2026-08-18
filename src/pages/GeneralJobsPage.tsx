@@ -5,7 +5,7 @@ import {
   Ghost, ThumbsUp, ThumbsDown, ClipboardPaste, LayoutGrid, Columns3, Archive, CheckCircle2, PlayCircle,
   Image as ImageIcon, ImageOff, History, MoveUpRight, Unlink, FileText, Search, FolderPlus, Printer,
   Settings2 as Settings, BringToFront, SendToBack, ChevronUp, ChevronDown, Eye,
-  Eraser, GripVertical,
+  Eraser, GripVertical, Lock, Unlock,
 } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 import { useStore } from '../data/store';
@@ -141,6 +141,52 @@ function pointsBounds(pts: { x: number; y: number }[]) {
 
 const fmtPoints = (pts: { x: number; y: number }[]) =>
   pts.map(p => `${Math.round(p.x)},${Math.round(p.y)}`).join(' ');
+
+/**
+ * The eraser's outline, following the pointer at the eraser's true size.
+ *
+ * The width is stored in WORLD units (`eraseAt` halves it in world space), so
+ * the circle is scaled by the zoom — what is drawn is exactly the reach of the
+ * next press at this zoom, which is what makes the size buttons mean something
+ * on screen. The div is positioned imperatively from its own window listener,
+ * so a 60fps pointermove never re-renders the board; it hides once the pointer
+ * leaves the viewport, so it cannot hover over the toolbar pretending the rail
+ * is erasable.
+ */
+function EraserCursor({ width, zoom, hostRef }: {
+  width: number; zoom: number; hostRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  const dotRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function onMove(e: PointerEvent) {
+      const dot = dotRef.current, host = hostRef.current;
+      if (!dot || !host) return;
+      const r = host.getBoundingClientRect();
+      const inside = e.clientX >= r.left && e.clientX <= r.right
+        && e.clientY >= r.top && e.clientY <= r.bottom;
+      dot.style.display = inside ? 'block' : 'none';
+      dot.style.transform = `translate(${e.clientX}px, ${e.clientY}px)`;
+    }
+    // Capture phase: a drag with pointer capture retargets events, but they
+    // still pass the window on the way down.
+    window.addEventListener('pointermove', onMove, true);
+    return () => window.removeEventListener('pointermove', onMove, true);
+  }, [hostRef]);
+  const d = Math.max(6, width * zoom);
+  return (
+    <div ref={dotRef} className="fixed left-0 top-0 z-[60] pointer-events-none" style={{ display: 'none' }}>
+      <div
+        className="rounded-full"
+        style={{
+          width: d, height: d, marginLeft: -d / 2, marginTop: -d / 2,
+          border: '1.5px solid rgba(30,58,95,.85)',
+          backgroundColor: 'rgba(255,255,255,.28)',
+          boxShadow: '0 0 0 1px rgba(255,255,255,.7)',
+        }}
+      />
+    </div>
+  );
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface DragState {
@@ -361,7 +407,7 @@ export function GeneralJobsPage() {
   const [docUrlField, setDocUrlField] = useState('');
   const docFileRef = useRef<HTMLInputElement>(null);
   /** Right-clicking the pen or the marker opens its colours and widths. */
-  const [penOpts, setPenOpts] = useState<{ tool: 'pen' | 'highlighter'; x: number; y: number } | null>(null);
+  const [penOpts, setPenOpts] = useState<{ tool: 'pen' | 'highlighter' | 'eraser'; x: number; y: number } | null>(null);
   /** Nib as well as colour and width — a dashed line means something different. */
   const [penStyle, setPenStyle] = useState({ color: '#1e3a5f', width: 3, nib: 'round' as StrokeNib });
   const [markStyle, setMarkStyle] = useState({ color: '#facc15', width: 16, nib: 'chisel' as StrokeNib });
@@ -786,6 +832,18 @@ export function GeneralJobsPage() {
   }
 
   function handleToolPick(next: BoardTool) {
+    /**
+     * The eraser is its own tile now, not a row inside the pen's options.
+     * It stays the separate mode it always was (`eraser.on`, not `tool`) —
+     * the tile toggles it, and the toolbar is told it is armed by the page
+     * passing 'eraser' as the active tool. Handled before the put-the-eraser-
+     * down line below, which would otherwise cancel the toggle it just made.
+     */
+    if (next === 'eraser') {
+      setEraser(v => ({ ...v, on: !v.on }));
+      setTool('select');
+      return;
+    }
     // Picking up any tool puts the eraser down. Two things armed at once is a
     // board where the same press does two different things.
     setEraser(v => (v.on ? { ...v, on: false } : v));
@@ -929,6 +987,7 @@ export function GeneralJobsPage() {
     elSeen: el => live.current.elSeen(el),
     jobDelete: ids => live.current.jobDelete(ids),
     jobTv: j => live.current.jobTv(j),
+    jobLock: j => live.current.jobLock(j),
     jobThumbs: (id, d) => live.current.jobThumbs(id, d),
     jobThumbsDown: (id, d) => live.current.jobThumbsDown(id, d),
     ghostDown: (e, j, gi) => live.current.ghostDown(e, j, gi),
@@ -1004,6 +1063,29 @@ export function GeneralJobsPage() {
     }, 1200);
     return () => clearTimeout(t);
   }, [canvasElements, currentProjectId, addCanvasElement]);
+
+  /**
+   * Promote every legacy flat-ink stroke to a node, once.
+   *
+   * Drawings made before "every stroke becomes its own node" carry no
+   * `data.own` and a stored box that may bear no relation to their ink: they
+   * draw in the flat StrokeLayer, cannot be selected or dragged, and the
+   * eraser's box rejection never let a press near them — the owner's two
+   * immortal scribbles. Promotion writes the true bounds from the points and
+   * sets `data.own`, after which they select, move, resize, erase and delete
+   * like any other drawing. A stroke too short to draw anything is deleted
+   * outright — a polyline of one point is only an invisible thing to trip
+   * over. Converges: a later Firestore echo of an old copy just re-promotes.
+   */
+  useEffect(() => {
+    const legacy = canvasElements.filter(el => el.type === 'stroke' && el.points && !el.data?.own);
+    if (!legacy.length) return;
+    legacy.forEach(el => {
+      const pts = strokePoints(el);
+      if (pts.length < 2) { deleteCanvasElement(el.id); return; }
+      updateCanvasElement(el.id, { ...pointsBounds(pts), data: { ...(el.data ?? {}), own: true } });
+    });
+  }, [canvasElements, deleteCanvasElement, updateCanvasElement]);
 
   const stages = allStages.filter(st => st.projectId === 'general');
   const stageMap = new Map(stages.map(st => [st.id, st]));
@@ -1266,7 +1348,8 @@ export function GeneralJobsPage() {
     if (!g) return;
     // A ghost is the same record shown twice, and the finger rule is the same
     // too: touch pans, a motionless tap opens the job the ghost stands for.
-    if (isFingerTouch(e) && !e.ctrlKey && !e.metaKey) {
+    // A LOCKED job locks its ghosts with it — same pan-instead idiom.
+    if ((isFingerTouch(e) && !e.ctrlKey && !e.metaKey) || job.boardLocked) {
       e.stopPropagation();
       panRef.current = { px: e.clientX, py: e.clientY, ox: pan.x, oy: pan.y };
       setPanning(true);
@@ -1889,8 +1972,13 @@ export function GeneralJobsPage() {
   // ── Delete key ────────────────────────────────────────────────────
   openSearchRef.current = () => setSearchOpen(true);
   deleteRef.current = () => {
-    if (selectedJobIds.size > 0) handleDeleteJobs([...selectedJobIds]);
-    else if (selectedElIds.size > 0) handleDeleteEls([...selectedElIds]);
+    // The keyboard sweep spares anything locked — deleting a locked thing
+    // takes a deliberate route (its own X button or the right-click menu),
+    // the same way the bins are spared as fixtures.
+    const jobIds = [...selectedJobIds].filter(id => !jobs.find(j => j.id === id)?.boardLocked);
+    const elIds = [...selectedElIds].filter(id => !canvasElements.find(c => c.id === id)?.locked);
+    if (jobIds.length > 0) handleDeleteJobs(jobIds);
+    else if (elIds.length > 0) handleDeleteEls(elIds);
   };
 
   useEffect(() => {
@@ -2052,9 +2140,28 @@ export function GeneralJobsPage() {
       return;
     }
 
-    const idsToMove = selectedJobIds.has(job.id) && selectedJobIds.size > 1
+    /**
+     * A LOCKED tile never drags. A press on it pans the board — the view-only
+     * idiom — and the pan-up path already opens the job on a motionless click,
+     * so a locked job is still one click to open. Ctrl-click above still
+     * selects it for colour changes or the menu; only movement is refused.
+     */
+    if (job.boardLocked) {
+      panRef.current = { px: e.clientX, py: e.clientY, ox: pan.x, oy: pan.y };
+      setPanning(true);
+      panFromJob.current = job;
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      return;
+    }
+
+    /**
+     * Locked members of a multi-selection stay put while the rest move —
+     * excluded here, so no commit path can ever write them a new position.
+     */
+    const lockedJobIds = new Set(jobs.filter(j => j.boardLocked).map(j => j.id));
+    const idsToMove = (selectedJobIds.has(job.id) && selectedJobIds.size > 1
       ? [...selectedJobIds]
-      : [job.id];
+      : [job.id]).filter(id => !lockedJobIds.has(id));
     /**
      * Was it ALREADY the picked one before this press?
      *
@@ -2082,6 +2189,7 @@ export function GeneralJobsPage() {
         // Arrows have no position, attached art has its host's, and a pinned
         // title lives half in screen space — none of them can ride a world drag.
         if (elem.type === 'arrow' || elem.attachedTo || (elem.type === 'title' && elem.pinned)) return;
+        if (elem.locked) return;   // locked nodes stand still in a group drag
         carryEls.set(elem.id, { x: elem.x, y: elem.y });
       });
     }
@@ -2386,13 +2494,29 @@ export function GeneralJobsPage() {
       return;
     }
 
-    const idsToMove = selectedElIds.has(el.id) && selectedElIds.size > 1 ? [...selectedElIds] : [el.id];
+    /**
+     * The same lock rule the tiles follow: a press on a locked node pans the
+     * board, and the pan-up path still reads a motionless tap (a locked group
+     * opens its window, anything else is picked out).
+     */
+    if (el.locked) {
+      panRef.current = { px: e.clientX, py: e.clientY, ox: pan.x, oy: pan.y };
+      setPanning(true);
+      panFromEl.current = el;
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      return;
+    }
+
+    const lockedElIds = new Set(canvasElements.filter(c => c.locked).map(c => c.id));
+    const idsToMove = (selectedElIds.has(el.id) && selectedElIds.size > 1 ? [...selectedElIds] : [el.id])
+      .filter(id => !lockedElIds.has(id));
     if (!selectedElIds.has(el.id)) { setSelectedElIds(new Set([el.id])); setSelectedJobIds(new Set()); }
 
     const carryJobs = new Map<string, { x: number; y: number }>();
     if (selectedElIds.has(el.id)) {
       jobs.forEach((j, i) => {
         if (!selectedJobIds.has(j.id)) return;
+        if (j.boardLocked) return;   // locked tiles stand still in a group drag
         carryJobs.set(j.id, typeof j.canvasX === 'number' && typeof j.canvasY === 'number'
           ? { x: j.canvasX, y: j.canvasY } : defaultPos(i));
       });
@@ -2638,8 +2762,14 @@ export function GeneralJobsPage() {
     // Read-only under a finger: bailing BEFORE stopPropagation lets the press
     // bubble to the node, whose own finger rule turns it into a board pan.
     if (isFingerTouch(e)) return;
+    // Locked nodes keep their size. Bailing before stopPropagation (the same
+    // shape as the finger rule) lets the press bubble to the node, whose own
+    // lock branch turns it into a board pan; a group gesture simply resizes
+    // around its locked members, which stand still.
+    const ids = (groupIds && groupIds.length > 1 ? groupIds : [el.id])
+      .filter(id => !canvasElements.find(c => c.id === id)?.locked);
+    if (!ids.length) return;
     e.stopPropagation(); e.preventDefault();
-    const ids = groupIds && groupIds.length > 1 ? groupIds : [el.id];
     const starts = new Map<string, { x: number; y: number; w: number; h: number }>();
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const id of ids) {
@@ -2875,11 +3005,21 @@ export function GeneralJobsPage() {
       if ((el.board ?? '') !== (boardRef.current ?? '')) return;
       const reach = r + (el.strokeWidth ?? 3) / 2;
       // Cheap rejection first: most of the board is nowhere near the pointer.
-      if (p.x < el.x - reach || p.x > el.x + el.w + reach
-        || p.y < el.y - reach || p.y > el.y + el.h + reach) return;
+      // Trusted only for strokes that became nodes — a legacy flat-ink stroke
+      // (drawn before every stroke was promoted) can carry a stored box that
+      // has nothing to do with where its ink actually is, which is exactly how
+      // two old scribbles shrugged the eraser off. Those are box-checked from
+      // their real points below instead.
+      if (el.data?.own && (p.x < el.x - reach || p.x > el.x + el.w + reach
+        || p.y < el.y - reach || p.y > el.y + el.h + reach)) return;
 
       const pts = strokePoints(el);
       if (pts.length < 2) return;
+      if (!el.data?.own) {
+        const b = pointsBounds(pts);
+        if (p.x < b.x - reach || p.x > b.x + b.w + reach
+          || p.y < b.y - reach || p.y > b.y + b.h + reach) return;
+      }
       const hitsSegment = pts.some((pt, i) =>
         i > 0 && distToSegment(p.x, p.y, pts[i - 1].x, pts[i - 1].y, pt.x, pt.y) <= reach);
       if (!hitsSegment) return;
@@ -2900,7 +3040,11 @@ export function GeneralJobsPage() {
       deleteCanvasElement(el.id);
       runs.filter(rn => rn.length > 1).forEach(rn => {
         const box = pointsBounds(rn);
-        addCanvasElement({ ...el, id: genId('CE'), ...box, points: fmtPoints(rn) });
+        // The surviving pieces are always nodes, even when the stroke that was
+        // cut was legacy flat ink — otherwise erasing a scribble would breed
+        // more unerasable ones.
+        addCanvasElement({ ...el, id: genId('CE'), ...box, points: fmtPoints(rn),
+          data: { ...(el.data ?? {}), own: true } });
       });
     });
   }
@@ -3487,6 +3631,11 @@ export function GeneralJobsPage() {
     jobMenu: onJobContextMenu, jobOpen: (j: Apartment) => setSelectedJob(j), jobDelete: handleDeleteJobs,
     elSeen: (el: CanvasElement) => updateCanvasElement(el.id, { addedAt: undefined }),
     jobTv: (j: Apartment) => { if (currentUser) updateApartment(j.id, { showOnTv: j.showOnTv === false }, currentUser); },
+    // undefined rather than false when unlocking, so the field disappears from
+    // the record instead of sitting on hundreds of jobs as `boardLocked: false`.
+    jobLock: (j: Apartment) => {
+      if (currentUser) updateApartment(j.id, { boardLocked: j.boardLocked ? undefined : true }, currentUser);
+    },
     jobThumbs: (id: string, d: number) => bumpThumbs('job', [id], d),
     ghostDown: onGhostPointerDown,
     ghostMove: onGhostPointerMove,
@@ -3748,12 +3897,21 @@ export function GeneralJobsPage() {
         <BoardToolbar
           setup={projectBoard.toolbar}
           onPickWidget={id => { const d = WIDGETS.find(w => w.id === id); if (d) placeWidget(d); }}
-          active={tool}
+          // The eraser is separate state, not a value of `tool` — while it is
+          // armed the toolbar shows IT as the active tool, so its tile lights
+          // and Select goes out, exactly like the pen.
+          active={eraser.on ? 'eraser' : tool}
           onPick={handleToolPick}
           onFit={zoomToFit}
           onOpenStore={() => setStoreOpen(true)}
           onToggleMap={() => setBoardSetting('showMinimap', !(projectBoard.showMinimap ?? false))}
-          onPenOptions={(tool, x, y) => { setTool(tool); setPenOpts({ tool, x, y }); }}
+          onPenOptions={(t, x, y) => {
+            // Right-click arms the tool it configures, so the size you pick is
+            // the size you draw with next press — pen and eraser alike.
+            if (t === 'eraser') setEraser(v => ({ ...v, on: true }));
+            else { setTool(t); setEraser(v => (v.on ? { ...v, on: false } : v)); }
+            setPenOpts({ tool: t, x, y });
+          }}
           mapOn={projectBoard.showMinimap ?? false}
           controlsOpen={showControls}
           onToggleControls={() => setBoardSetting('showControls', !showControls)}
@@ -3769,9 +3927,10 @@ export function GeneralJobsPage() {
           </div>
         )}
 
-        {/* An armed mode says so. The pen and the highlighter light up on the
-            rail; the eraser has no button of its own, so this is where it
-            shows — and it is the way back out of the mode as well as Escape. */}
+        {/* An armed mode says so. The eraser lights its own tile on the rail
+            now, but the banner stays: it is the only visible armed-state on a
+            phone (the rail is folded into the tools sheet there), it names
+            which KIND of rubbing out is armed, and it is a one-press way out. */}
         {eraseMode && (
           <button
             onClick={() => setEraser(v => ({ ...v, on: false }))}
@@ -3782,6 +3941,8 @@ export function GeneralJobsPage() {
             {eraser.whole ? 'Eraser — whole marks' : 'Eraser — rub out'} · click here or Esc to stop
           </button>
         )}
+        {/* The outline that says how much the next press will take. */}
+        {eraseMode && <EraserCursor width={eraser.width} zoom={zoom} hostRef={viewportRef} />}
 
         {boardSettingsOpen && (
           <MovablePanel
@@ -4421,6 +4582,23 @@ export function GeneralJobsPage() {
                     </button>
                   );
                 })()}
+                {(() => {
+                  const anyUnlocked = ctxMenu.ids.some(id => !apartments.find(a => a.id === id)?.boardLocked);
+                  return (
+                    <button onClick={() => {
+                      if (currentUser) ctxMenu.ids.forEach(id =>
+                        updateApartment(id, { boardLocked: anyUnlocked ? true : undefined }, currentUser));
+                      setCtxMenu(null);
+                    }}
+                      className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5"
+                      title="A locked tile stays put — dragging pans the board, a click still opens it">
+                      {anyUnlocked ? <Lock size={14} className="text-gray-400" /> : <Unlock size={14} className="text-gray-400" />}
+                      {anyUnlocked
+                        ? (ctxMenu.ids.length > 1 ? `Lock in place (${ctxMenu.ids.length})` : 'Lock in place')
+                        : (ctxMenu.ids.length > 1 ? `Unlock (${ctxMenu.ids.length})` : 'Unlock')}
+                    </button>
+                  );
+                })()}
                 <button onClick={() => { setColorPicker({ x: ctxMenu.x + 170, y: ctxMenu.y, kind: 'job', ids: ctxMenu.ids }); setCtxMenu(null); }}
                   className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
                   <Palette size={14} className="text-gray-400" /> Change Color
@@ -4527,10 +4705,8 @@ export function GeneralJobsPage() {
                   title="A named group with a board of its own">
                   <FolderPlus size={14} className="text-gray-400" /> Add a group
                 </button>
-                {/* The eraser's second door. Its thickness and its two kinds
-                    live with the pen, which is where you are when you are
-                    drawing — but right-clicking the board is where you look
-                    when you are not. */}
+                {/* The eraser's second door — right-clicking the board is where
+                    you look when the rail is folded away or far off. */}
                 <button
                   onClick={() => {
                     setEraser(v => ({ ...v, on: !v.on }));
@@ -4538,7 +4714,7 @@ export function GeneralJobsPage() {
                     setCtxMenu(null);
                   }}
                   className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5"
-                  title="Right-click the Pen or Mark button for its thickness">
+                  title="Right-click the Eraser tile for its size">
                   <Eraser size={14} className="text-gray-400" />
                   {eraser.on ? 'Put the eraser down' : 'Pick up the eraser'}
                 </button>
@@ -4652,6 +4828,23 @@ export function GeneralJobsPage() {
                   {ctxMenu.ids.length > 1 ? `Duplicate (${ctxMenu.ids.length})` : 'Duplicate'}
                 </button>
                 {(() => {
+                  const anyUnlocked = ctxMenu.ids.some(id => !canvasElements.find(c => c.id === id)?.locked);
+                  return (
+                    <button onClick={() => {
+                      ctxMenu.ids.forEach(id =>
+                        updateCanvasElement(id, { locked: anyUnlocked ? true : undefined }));
+                      setCtxMenu(null);
+                    }}
+                      className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5"
+                      title="A locked piece stays put — dragging pans the board instead">
+                      {anyUnlocked ? <Lock size={14} className="text-gray-400" /> : <Unlock size={14} className="text-gray-400" />}
+                      {anyUnlocked
+                        ? (ctxMenu.ids.length > 1 ? `Lock in place (${ctxMenu.ids.length})` : 'Lock in place')
+                        : (ctxMenu.ids.length > 1 ? `Unlock (${ctxMenu.ids.length})` : 'Unlock')}
+                    </button>
+                  );
+                })()}
+                {(() => {
                   const binEl = ctxMenu.ids.length === 1
                     ? canvasElements.find(e => e.id === ctxMenu.ids[0] && e.type === 'bin')
                     : undefined;
@@ -4697,7 +4890,52 @@ export function GeneralJobsPage() {
       )}
 
       {/* ── Pen & marker settings ── */}
-      {penOpts && (() => {
+      {penOpts && penOpts.tool === 'eraser' && (
+        /**
+         * The eraser's own options, on right-click of its own tile — the same
+         * door the pen's colours open through. It used to be a section at the
+         * bottom of the pen panel; a tool with its own tile gets its own panel.
+         */
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setPenOpts(null)} />
+          <MovablePanel
+            id="eraser-options"
+            title="the eraser options"
+            onClose={() => setPenOpts(null)}
+            className="fixed z-50 bg-white rounded-xl shadow-xl border border-gray-100 p-3 w-[210px]"
+            style={{ left: Math.min(penOpts.x, window.innerWidth - 226), top: Math.min(penOpts.y, window.innerHeight - 220) }}>
+            <div className="text-[10px] font-extrabold text-gray-700 mb-2 tracking-wide pl-4">ERASER</div>
+            <div className="flex items-center gap-2">
+              {[14, 26, 44, 70].map(w => (
+                <button key={w} onClick={() => setEraser(v => ({ ...v, width: w, on: true }))}
+                  title={`${w}px across`}
+                  className="flex-1 h-8 rounded-lg flex items-center justify-center transition-colors"
+                  style={{ backgroundColor: eraser.width === w ? 'rgba(30,58,95,.08)' : '#f8fafc' }}>
+                  <span className="rounded-full block border border-gray-300"
+                    style={{ width: Math.min(w / 2.6, 22), height: Math.min(w / 2.6, 22),
+                             backgroundColor: '#fff' }} />
+                </button>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-1 mt-2">
+              {([[false, 'Rub out'], [true, 'Whole mark']] as const).map(([whole, label]) => (
+                <button key={label} onClick={() => setEraser(v => ({ ...v, whole, on: true }))}
+                  title={whole
+                    ? 'Touch a drawing and the whole of it goes'
+                    : 'Takes a piece out and keeps what is left either side'}
+                  className="px-2 py-1.5 rounded-lg text-[10.5px] font-bold transition-colors"
+                  style={eraser.whole === whole
+                    ? { backgroundColor: '#1e3a5f', color: '#fff' }
+                    : { backgroundColor: '#f8fafc', color: '#64748b' }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </MovablePanel>
+        </>
+      )}
+
+      {penOpts && penOpts.tool !== 'eraser' && (() => {
         const isMark = penOpts.tool === 'highlighter';
         const cur = isMark ? markStyle : penStyle;
         const setCur = (p: Partial<typeof cur>) =>
@@ -4710,7 +4948,6 @@ export function GeneralJobsPage() {
           ? [{ id: 'chisel', label: 'Chisel' }, { id: 'round', label: 'Round' }, { id: 'soft', label: 'Soft' }]
           : [{ id: 'round', label: 'Round' }, { id: 'chisel', label: 'Chisel' },
              { id: 'dashed', label: 'Dashed' }, { id: 'dotted', label: 'Dotted' }];
-        const ERASER_WIDTHS = [14, 26, 44, 70];
         return (
           <>
             <div className="fixed inset-0 z-40" onClick={() => setPenOpts(null)} />
@@ -4754,56 +4991,9 @@ export function GeneralJobsPage() {
                   </button>
                 ))}
               </div>
-              <p className="text-[9.5px] text-gray-400 mt-2 leading-snug">
-                Draw anywhere, tiles included. A drawing that lands in clear space becomes a thing of
-                its own you can move and resize.
-              </p>
-
-              {/*
-                The eraser lives with the pen, because that is where you are
-                when you want it. Two of them, as in the plan editor: rubbing
-                out takes a piece out of a drawing and keeps what is left either
-                side, the whole mark takes the lot. Neither has a colour — an
-                eraser that paints is a pen.
-              */}
-              <div className="h-px bg-gray-100 my-2.5" />
-              <button
-                onClick={() => { setEraser(v => ({ ...v, on: !v.on })); setTool('select'); }}
-                className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[11px] font-bold transition-colors"
-                style={eraser.on
-                  ? { backgroundColor: '#1e3a5f', color: '#fff' }
-                  : { backgroundColor: '#f8fafc', color: '#64748b' }}>
-                <Eraser size={13} /> {eraser.on ? 'Eraser is up — click to put it down' : 'Pick up the eraser'}
-              </button>
-
-              <div className="text-[9.5px] font-bold text-gray-500 mt-2.5 mb-1">Eraser thickness</div>
-              <div className="flex items-center gap-2">
-                {ERASER_WIDTHS.map(w => (
-                  <button key={w} onClick={() => setEraser(v => ({ ...v, width: w, on: true }))}
-                    title={`${w}px across`}
-                    className="flex-1 h-8 rounded-lg flex items-center justify-center transition-colors"
-                    style={{ backgroundColor: eraser.width === w ? 'rgba(30,58,95,.08)' : '#f8fafc' }}>
-                    <span className="rounded-full block border border-gray-300"
-                      style={{ width: Math.min(w / 2.6, 22), height: Math.min(w / 2.6, 22),
-                               backgroundColor: '#fff' }} />
-                  </button>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-2 gap-1 mt-2">
-                {([[false, 'Rub out'], [true, 'Whole mark']] as const).map(([whole, label]) => (
-                  <button key={label} onClick={() => setEraser(v => ({ ...v, whole, on: true }))}
-                    title={whole
-                      ? 'Touch a drawing and the whole of it goes'
-                      : 'Takes a piece out and keeps what is left either side'}
-                    className="px-2 py-1.5 rounded-lg text-[10.5px] font-bold transition-colors"
-                    style={eraser.whole === whole
-                      ? { backgroundColor: '#1e3a5f', color: '#fff' }
-                      : { backgroundColor: '#f8fafc', color: '#64748b' }}>
-                    {label}
-                  </button>
-                ))}
-              </div>
+              {/* No explainer paragraph and no eraser section here any more:
+                  the owner asked the hard-coded text gone, and the eraser has
+                  its own tile with its own right-click panel now. */}
             </MovablePanel>
           </>
         );

@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { LogOut, User, Sun, Moon, AlertTriangle, Loader2, CheckCircle2, Search, CalendarDays, Settings,
          ChevronDown, Check, GripVertical } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../data/store';
+import { usePhone } from '../../data/usePhone';
 import { Project } from '../../types';
 import { Tooltip } from '../ui/Tooltip';
 import { ActivityTicker } from '../ui/ActivityTicker';
@@ -90,6 +92,11 @@ function WorkspacePicker({ light }: { light: boolean }) {
   /** Which row is being dragged up or down the menu. */
   const [dragId, setDragId] = useState<string | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const phone = usePhone();
+  /** Where the button sits, measured when the menu opens — the portal has no
+      anchor of its own. */
+  const [anchor, setAnchor] = useState<{ top: number; left: number; right: number } | null>(null);
 
   /**
    * The workspaces sit in whatever order the office decided.
@@ -107,11 +114,14 @@ function WorkspacePicker({ light }: { light: boolean }) {
 
   // Escape, and a press anywhere else, close it. A panel that stays open behind
   // your next click swallows it — the standing bug CLAUDE.md calls out.
+  // The menu lives in a PORTAL now, so "anywhere else" must check the menu's
+  // own ref too — `wrapRef.contains` alone would close it on its own rows.
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false); }
     function onDown(e: PointerEvent) {
-      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (!wrapRef.current?.contains(t) && !menuRef.current?.contains(t)) setOpen(false);
     }
     document.addEventListener('keydown', onKey);
     // Capture, so a press that another surface stops still closes this.
@@ -120,6 +130,20 @@ function WorkspacePicker({ light }: { light: boolean }) {
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('pointerdown', onDown, true);
     };
+  }, [open]);
+
+  // The portal is positioned from the button's measured rect. Re-measured on
+  // every open and on resize; the header never scrolls, so scroll cannot move
+  // the anchor out from under it.
+  useEffect(() => {
+    if (!open) return;
+    function measure() {
+      const r = wrapRef.current?.getBoundingClientRect();
+      if (r) setAnchor({ top: r.bottom + 6, left: r.left, right: window.innerWidth - r.right });
+    }
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
   }, [open]);
 
   function reorder(from: string, to: string) {
@@ -144,7 +168,11 @@ function WorkspacePicker({ light }: { light: boolean }) {
     // the mark has nothing left to give.
     <div ref={wrapRef} className="relative min-w-0 flex shrink-[0.05] md:shrink">
       <button
-        onClick={() => setOpen(v => !v)}
+        onClick={() => {
+          const r = wrapRef.current?.getBoundingClientRect();
+          if (r) setAnchor({ top: r.bottom + 6, left: r.left, right: window.innerWidth - r.right });
+          setOpen(v => !v);
+        }}
         title={s.switchProject}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -170,18 +198,24 @@ function WorkspacePicker({ light }: { light: boolean }) {
         />
       </button>
 
-      {open && (
-        // Under the header and edge-to-edge on a phone, where there is no room
-        // to hang a 288px panel off a control that already sits a third of the
-        // way across; anchored to the button from `md` up. `start-0` rather than
-        // `left-0` so the panel opens under the button in Hebrew too — and
-        // Tailwind emits `inset-x` BEFORE `start`, so `inset-x-auto` clears the
-        // phone rule without cancelling the anchor.
+      {open && createPortal(
+        // Rendered through a PORTAL at the document root. Inside the header the
+        // menu was capped at the header's own z-30 stacking context, so the
+        // board's floating chrome (z-40/z-50) and any sticky page content drew
+        // straight over it — no z-index ON THE MENU can save a child from its
+        // parent's stacking context, the same disease the drawer tooltips had.
+        // Edge-to-edge under the header on a phone; anchored to the measured
+        // button rect from `md` up (right-edge-anchored under RTL).
         <div
+          ref={menuRef}
           role="menu"
-          className="fixed left-2 right-2 top-[58px] z-[70] rounded-2xl overflow-hidden
-                     md:absolute md:inset-x-auto md:start-0 md:top-full md:mt-1.5 md:w-[288px]"
+          className="fixed z-[100] rounded-2xl overflow-hidden md:w-[288px]"
           style={{
+            ...(phone
+              ? { left: 8, right: 8, top: 58 }
+              : s.isRtl
+                ? { right: Math.max(8, anchor?.right ?? 8), top: anchor?.top ?? 58 }
+                : { left: Math.max(8, Math.min(anchor?.left ?? 8, window.innerWidth - 296)), top: anchor?.top ?? 58 }),
             backgroundColor: light ? '#ffffff' : '#162d4a',
             border: light ? '1px solid #e5e7eb' : '1px solid rgba(255,255,255,0.12)',
             boxShadow: '0 18px 44px -10px rgba(15,23,42,0.45)',
@@ -234,7 +268,8 @@ function WorkspacePicker({ light }: { light: boolean }) {
               );
             })}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

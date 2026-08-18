@@ -140,10 +140,14 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
   function startDrag(e: React.PointerEvent, kind: 'job' | 'el', id: string) {
     if (e.button !== 0) return;
     if ((e.target as HTMLElement).closest('[data-no-drag],[data-el-action]')) return;
+    // The main board's lock rule holds inside a group window too.
+    if (kind === 'el' && nodes.find(n => n.id === id)?.locked) return;
+    if (kind === 'job' && items.find(a => a.id === id)?.boardLocked) return;
     e.stopPropagation();
     setMenu(null);
 
-    const ids = selected.has(id) && selected.size > 1 ? [...selected] : [id];
+    const ids = (selected.has(id) && selected.size > 1 ? [...selected] : [id])
+      .filter(x => !nodes.find(n => n.id === x)?.locked && !items.find(a => a.id === x)?.boardLocked);
     if (!selected.has(id)) setSelected(new Set([id]));
 
     const starts = new Map<string, { x: number; y: number }>();
@@ -266,7 +270,7 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
   const live = useRef<Record<string, (...a: unknown[]) => unknown>>({});
   const H = useRef<BoardHandlers>({
     jobDown: () => {}, jobMove: () => {}, jobUp: () => {}, jobMenu: () => {}, jobOpen: () => {},
-    jobDelete: () => {}, jobTv: () => {}, jobThumbs: () => {}, jobThumbsDown: () => {},
+    jobDelete: () => {}, jobTv: () => {}, jobLock: () => {}, jobThumbs: () => {}, jobThumbsDown: () => {},
     elDown: (e, el) => live.current.elDown(e, el),
     elMove: e => live.current.elMove(e),
     elUp: el => live.current.elUp(el),

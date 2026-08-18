@@ -30,6 +30,57 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-08-18',
+    title: 'Select, a proper eraser, locks, and menus that stay on top',
+    items: [
+      {
+        title: 'Select is back on the toolbar',
+        body: 'One tile at the top of the rail is the default: drag and drop, click to '
+          + 'open, everything as usual. Pick up the pen or the eraser and Select goes '
+          + 'out; press Select and whatever you were holding is put down. Nothing '
+          + 'about the mouse changed — it is simply a visible way back.',
+        demo: 'tap',
+      },
+      {
+        title: 'The eraser is its own tool',
+        body: 'Its own tile beside the pen — no more hunting inside the pen’s '
+          + 'panel. Right-click it for size and kind (rub out a piece, or take the '
+          + 'whole mark), and while it is armed a circle follows your pointer showing '
+          + 'exactly how much the next press will take.',
+        demo: 'tap',
+      },
+      {
+        title: 'Old scribbles finally answer',
+        body: 'Drawings made long ago could refuse the eraser and refuse to be '
+          + 'selected — they were ink with no thing behind it. Every old drawing is '
+          + 'now quietly upgraded the first time the board opens, so it moves, '
+          + 'resizes, erases and deletes like everything else.',
+        demo: 'drag',
+      },
+      {
+        title: 'Lock anything in place',
+        body: 'A little lock sits beside the TV button on every tile and note. '
+          + 'Locked, it cannot be dragged, resized or swept up with a group — '
+          + 'dragging it moves the board instead, and a click still opens it. '
+          + 'The lock shows amber so a pinned thing says why it will not move.',
+        demo: 'pin',
+      },
+      {
+        title: 'The plan section shows up instantly',
+        body: 'Open a job with a Drive folder and the plan pane is there from the '
+          + 'first moment with a spinner while the sheet is found — no more layout '
+          + 'jumping two seconds later.',
+        demo: 'zoom',
+      },
+      {
+        title: 'The workspace menu stays on top',
+        body: 'The dropdown in the header used to slide behind board buttons and '
+          + 'the building names. It now paints above everything, on every page.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2026-08-17',
     title: 'The CRM comes aboard, selections behave, the board fits a phone',
     items: [
