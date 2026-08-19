@@ -2045,3 +2045,79 @@ handles, Delete key, unlock, click-opens), and `elementFromPoint` over every
 dropdown row with the board AND with Wolfson's sticky building bars beneath.
 Close the eraser's options via its BACKDROP in tests — Escape also puts the
 armed eraser down (by design) and reads as a failed toggle.
+
+---
+
+# v2 — invisible groups, the notebook's memory, and a corner that holds
+
+## Invisible groups
+`Apartment.boardGroup` / `CanvasElement.boardGroup` — a shared STRING, not a
+container record, so a grouped tile is still an ordinary tile in every count,
+report, export and backup, and ungrouping one thing is clearing one field.
+Nothing is drawn around a group (the owner asked for grouping you feel, not
+see); the only sign is an indigo chip beside the lock, and pressing that chip
+takes **only that one thing** out. Right-click offers `Group these N` (needs
+two) and `Ungroup`.
+
+- `withGroupJobs` / `withGroupEls` expand a drag's id list to the whole group,
+  and each drag path also gathers the OTHER kind through `groupsMoving` — a
+  group can hold tiles and nodes together.
+- A group left with one member **dissolves**: one thing is not a group, and a
+  lone marked member would silently adopt whatever joined it next.
+- `boardGroup` is in `updateApartment`'s CANVAS_ONLY set — grouping is
+  arranging, not editing, so it must not bump `contentUpdatedAt`.
+- Bins and arrows are refused membership: a fixture and a thing with no
+  position of its own cannot travel as members.
+
+## The notebook's data outlives the notebook
+`BoardSetting.plannerArchive` (inside `boardSettings`, so it inherits persist /
+sync / export / import with **no new state key**). Every delete path goes
+through **`removeEl(id)`**, never `deleteCanvasElement` directly: it archives a
+`rota` / `week-planner` node's data first, releases every job whose
+`inNotebook` pointed at it, and only then deletes. Placing a fresh planner of
+the same kind revives the newest archived contents and says so.
+
+Two faults this fixes, both of which lost work in silence: removing the widget
+took the season's planning with it, and the jobs it was holding were left
+`inNotebook` — not on the board, not in any notebook, gone as far as anyone
+looking could tell.
+
+## A locked edge never asks
+The "Make room above?" modal is gone, with `askRoom` and both dwell checks —
+the owner's ruling: if it is locked, it is locked. `makeRoom` survives as two
+deliberate buttons in board settings.
+
+## The zoom corner
+`clampPanRef` is now ONE continuous range per axis instead of a
+taller-than-viewport branch and a smaller-than-viewport branch that disagreed
+about where the top belongs (one put the world under the floating chrome, the
+other pinned it to the chrome's edge). Crossing between them at a zoom step is
+what shoved the board down on the first press of minus. The rule now: the top
+may never sit below the chrome's edge, and never above the point where the
+world's own bottom reaches the viewport's.
+
+Two supports: `zoomCentre` anchors at the **header's measured bottom**, not the
+viewport's top — the point the clamp actually allows — and the board
+normalises its opening pan through the clamp once on arrival (asking for the
+far top-left, so it lands ON the pinned corner rather than at the bottom of the
+allowed range).
+
+## The group rename box
+`BinSettings` moved to MODULE level. Declared inside `NodeSettings`' render
+body it was a new component TYPE every render, so the first store echo
+remounted it, reset the field and dropped focus — the owner's "it doesn't let
+me type, it disappears after a second". Same declared-in-render trap as the
+plan pane. `BoardItems` also gained `isBin && !isEditing`, or a double-clicked
+group set the editor state and nothing ever drew it.
+
+## The weekly notebook's week controls
+The PUT AWAY strip, its eye chips, "show them all" and both full-width
+AddWeekRow bars are **gone**. Adding, restoring and putting away a week are
+three tiny icons at the end of each week's own label (first week carries
+add-before, last carries add-after; a week put away in that direction turns the
+plus into an eye). Month rules are `textSize + 2` — they are the landmark the
+eye scans for.
+
+Harness: `scratchpad/grouplock.mjs` (19 checks). **Grab the MIDDLE of a tile in
+a harness** — the top strip is buttons now, and a press up there is a button
+press, which reads as "dragging does nothing".

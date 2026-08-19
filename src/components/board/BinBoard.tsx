@@ -271,6 +271,7 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
   const H = useRef<BoardHandlers>({
     jobDown: () => {}, jobMove: () => {}, jobUp: () => {}, jobMenu: () => {}, jobOpen: () => {},
     jobDelete: () => {}, jobTv: () => {}, jobLock: () => {}, jobThumbs: () => {}, jobThumbsDown: () => {},
+    jobUngroup: () => {}, elUngroup: () => {},
     elDown: (e, el) => live.current.elDown(e, el),
     elMove: e => live.current.elMove(e),
     elUp: el => live.current.elUp(el),

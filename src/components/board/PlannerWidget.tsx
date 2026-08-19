@@ -433,18 +433,6 @@ export function PlannerWidget({
     write({ firstWeek: iso(firstWeek), weekCount: weekCount + 1 });
   }
 
-  /** How many cards a week is holding — what showing it would bring back. */
-  function cardsInWeek(wkStart: Date): number {
-    const from = iso(wkStart);
-    const to = iso(addDays(wkStart, span - 1));
-    let n = 0;
-    for (const [key, entries] of Object.entries(cells)) {
-      const day = key.split('|')[1];
-      if (day >= from && day <= to) n += entries.length;
-    }
-    return n;
-  }
-
   const cellRefs = useRef(new Map<string, HTMLElement>());
   const [hover, setHover] = useState<RotaHit | null>(null);
 
@@ -664,61 +652,21 @@ export function PlannerWidget({
             </span>
           </div>
         ) : <>
-        {!readOnly && (
-          <AddWeekRow where="before" size={Math.max(z(8), textSize - z(2))}
-            restoring={hiddenAbove.length > 0} onAdd={() => addWeek('before')} />
-        )}
-
-        {/* Put away, and where to find them. Drawn only for the office: a wall
-            panel and a worker's phone see the week list the office chose, and
-            neither has any business bringing a week back. */}
-        {!readOnly && hiddenInRun.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1 py-1 my-0.5">
-            <span className="uppercase tracking-wider font-bold text-gray-400"
-              style={{ fontSize: Math.max(z(8), textSize - z(3)) }}>
-              Put away — nothing in them was removed
-            </span>
-            {hiddenInRun.map(wk => {
-              const cards = cardsInWeek(wk);
-              const end = addDays(wk, span - 1);
-              return (
-                <button
-                  key={iso(wk)}
-                  data-no-drag data-el-action
-                  onClick={() => showWeek(iso(wk))}
-                  title={`Show the week of ${wk.toLocaleDateString(undefined, {
-                    day: 'numeric', month: 'long', year: 'numeric' })}`}
-                  className="flex items-center gap-1 px-1.5 py-0.5 rounded-full border border-gray-200
-                             text-gray-500 hover:text-[#1e3a5f] hover:border-[#cbd5e1] hover:bg-slate-50"
-                  style={{ fontSize: Math.max(z(8), textSize - z(2)) }}
-                >
-                  <Eye size={Math.max(9, Math.round(z(10)))} />
-                  <span className="tabular-nums">
-                    {wk.toLocaleDateString(undefined, { day: 'numeric' })}–
-                    {end.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
-                  </span>
-                  {cards > 0 && (
-                    <span className="px-1 rounded-full font-bold tabular-nums"
-                      style={{ backgroundColor: '#fef3c7', color: '#92400e' }}
-                      title={`${cards} still in it`}>{cards}</span>
-                  )}
-                </button>
-              );
-            })}
-            {hiddenInRun.length > 1 && (
-              <button data-no-drag data-el-action onClick={() => write({ hiddenWeeks: [] })}
-                className="px-1.5 py-0.5 rounded-full font-bold text-gray-400 hover:text-[#1e3a5f]"
-                style={{ fontSize: Math.max(z(8), textSize - z(2)) }}>
-                show them all
-              </button>
-            )}
-          </div>
-        )}
-
+        {/* The PUT AWAY strip and the two full-width add-week rows are gone,
+            per the owner — a whole banner naming every hidden week was chrome
+            spent on a rare action. Adding and restoring weeks now lives in the
+            tiny icons beside each week's put-away eye; only the pathological
+            everything-is-hidden case still needs a way back drawn here. */}
         {!readOnly && weeks.length === 0 && (
-          <div className="text-center text-gray-400 leading-snug py-6 px-4"
+          <div className="text-center text-gray-400 leading-snug py-6 px-4 flex flex-col items-center gap-2"
             style={{ fontSize: textSize }}>
-            Every week is put away. Nothing in them was removed — bring one back above.
+            <span>Every week is put away. Nothing in them was removed.</span>
+            <button data-no-drag data-el-action onClick={() => write({ hiddenWeeks: [] })}
+              className="px-2.5 py-1 rounded-full border border-gray-200 font-bold text-gray-500
+                         hover:text-[#1e3a5f] hover:border-[#cbd5e1]"
+              style={{ fontSize: Math.max(z(8), textSize - z(1)) }}>
+              Bring them back
+            </button>
           </div>
         )}
 
@@ -738,8 +686,10 @@ export function PlannerWidget({
               {newMonth && (
                 <div className="flex items-center gap-2 my-2">
                   <span className="h-px flex-1" style={{ backgroundColor: '#cbd5e1' }} />
+                  {/* A little bigger than the body text, per the owner — the
+                      month rule is the landmark the eye scans for. */}
                   <span className="font-black tracking-wide text-slate-500"
-                    style={{ fontSize: Math.max(z(8), textSize - z(1)) }}>
+                    style={{ fontSize: Math.max(z(10), textSize + z(2)) }}>
                     {wkStart.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }).toUpperCase()}
                   </span>
                   <span className="h-px flex-1" style={{ backgroundColor: '#cbd5e1' }} />
@@ -751,19 +701,52 @@ export function PlannerWidget({
                   <span className="truncate">
                     {wkStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                   </span>
-                  {/* Putting the week away. Not a delete and never asks: the
-                      cards stay where they are and the plus above or below
-                      brings the week back with all of them. */}
+                  {/* The week's tiny controls, together at the label's end —
+                      the owner asked for exactly this shape: add-a-week as a
+                      little icon RIGHT NEXT to the put-away eye, tooltips and
+                      all, instead of two full-width rows. The first week
+                      carries add-before, the last carries add-after; when a
+                      week was put away in that direction the same press
+                      restores it (Eye instead of Plus, wording says so). */}
                   {!readOnly && (
-                    <button
-                      data-no-drag data-el-action
-                      onClick={() => hideWeek(iso(wkStart))}
-                      title="Put this week away — nothing in it is removed, and adding the week back brings it all with it"
-                      className="flex-shrink-0 text-gray-300 hover:text-[#1e3a5f] transition-opacity
-                                 opacity-0 group-hover/wk:opacity-100"
-                    >
-                      <EyeOff size={Math.max(10, Math.round(z(11)))} />
-                    </button>
+                    <span className="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover/wk:opacity-100 transition-opacity">
+                      {wi === 0 && (
+                        <button
+                          data-no-drag data-el-action
+                          onClick={() => addWeek('before')}
+                          title={hiddenAbove.length
+                            ? 'Bring back the week before — everything in it comes with it'
+                            : 'Add the week before this one'}
+                          className="text-gray-300 hover:text-[#1e3a5f]"
+                        >
+                          {hiddenAbove.length
+                            ? <Eye size={Math.max(10, Math.round(z(11)))} />
+                            : <Plus size={Math.max(10, Math.round(z(11)))} />}
+                        </button>
+                      )}
+                      {wi === weeks.length - 1 && (
+                        <button
+                          data-no-drag data-el-action
+                          onClick={() => addWeek('after')}
+                          title={hiddenBelow.length
+                            ? 'Bring back the next week — everything in it comes with it'
+                            : 'Add the week after this one'}
+                          className="text-gray-300 hover:text-[#1e3a5f]"
+                        >
+                          {hiddenBelow.length
+                            ? <Eye size={Math.max(10, Math.round(z(11)))} />
+                            : <Plus size={Math.max(10, Math.round(z(11)))} />}
+                        </button>
+                      )}
+                      <button
+                        data-no-drag data-el-action
+                        onClick={() => hideWeek(iso(wkStart))}
+                        title="Put this week away — nothing in it is removed, and adding the week back brings it all with it"
+                        className="text-gray-300 hover:text-[#1e3a5f]"
+                      >
+                        <EyeOff size={Math.max(10, Math.round(z(11)))} />
+                      </button>
+                    </span>
                   )}
                 </div>
                 {days.map(dt => {
@@ -924,10 +907,6 @@ export function PlannerWidget({
             </div>
           );
         })}
-        {!readOnly && (
-          <AddWeekRow where="after" size={Math.max(z(8), textSize - z(2))}
-            restoring={hiddenBelow.length > 0} onAdd={() => addWeek('after')} />
-        )}
         </>}
       </div>
     </div>
@@ -939,47 +918,9 @@ function monthKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-/**
- * The plus that lengthens the notebook.
- *
- * One above and one below, rather than a week/month switch: the notebook is a
- * run you extend in the direction you need, and what is already written never
- * moves. Quiet until you go near it, so a long notebook is weeks and not
- * buttons.
- *
- * `restoring` is when a week was put away in that direction — the same press
- * then brings it back, with everything in it, and says so rather than reading
- * as though it were about to open a blank one. `size` is the exact font size,
- * already scaled by the sheet's own setting.
- */
-function AddWeekRow({ where, size, restoring, onAdd }: {
-  where: 'before' | 'after'; size: number; restoring?: boolean; onAdd: () => void;
-}) {
-  const word = restoring
-    ? (where === 'before' ? 'show the week before' : 'show the next week')
-    : (where === 'before' ? 'earlier week' : 'another week');
-  return (
-    <button
-      data-no-drag data-el-action
-      onClick={onAdd}
-      title={restoring
-        ? 'Bring back the week that was put away, with everything that was in it'
-        : where === 'before' ? 'Add the week before' : 'Add the week after'}
-      className="w-full flex items-center gap-2 py-1 my-0.5 group/add"
-    >
-      <span className="h-px flex-1 transition-colors"
-        style={{ backgroundColor: '#e2e8f0' }} />
-      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full border transition-colors
-                       text-gray-400 border-transparent
-                       group-hover/add:text-[#1e3a5f] group-hover/add:border-[#cbd5e1]"
-        style={{ fontSize: size }}>
-        {restoring ? <Eye size={Math.max(9, Math.round(size))} /> : <Plus size={Math.max(9, Math.round(size))} />}
-        {word}
-      </span>
-      <span className="h-px flex-1" style={{ backgroundColor: '#e2e8f0' }} />
-    </button>
-  );
-}
+// AddWeekRow is gone: adding and restoring weeks lives in the tiny icons
+// beside each week's put-away eye, which is where the owner asked for it —
+// two full-width rows of chrome bought nothing the icons do not.
 
 /** The height of one empty slot — sized so a job card sits in it comfortably. */
 const SLOT_H = 58;

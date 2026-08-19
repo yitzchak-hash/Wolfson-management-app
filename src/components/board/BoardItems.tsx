@@ -22,7 +22,7 @@ function withAlpha(color: string, alpha = 0.45): string {
   return color;
 }
 import { MapPin, ClipboardList, Trash2, Palette, Pencil, X, ThumbsUp, ThumbsDown, Ghost,
-  Archive, CheckCircle2, PlayCircle, FolderOpen, Lock, Unlock } from 'lucide-react';
+  Archive, CheckCircle2, PlayCircle, FolderOpen, Lock, Unlock, Group } from 'lucide-react';
 import { Apartment, CanvasElement, Stage, BinKind, BIN_META, binKeyOf, binLabelOf } from '../../types';
 import { Settings2, Mic } from 'lucide-react';
 import { DriveIcon, ZohoIcon, PlanIcon, TvIcon } from '../ui/BrandIcons';
@@ -62,6 +62,10 @@ export interface BoardHandlers {
   jobTv: (job: Apartment) => void;
   /** Toggle boardLocked — a locked tile stays where it is. */
   jobLock: (job: Apartment) => void;
+  /** Take THIS tile out of its invisible group, leaving the rest grouped. */
+  jobUngroup: (job: Apartment) => void;
+  /** Take THIS node out of its invisible group. */
+  elUngroup: (el: CanvasElement) => void;
   jobThumbs: (id: string, delta: number) => void;
   jobThumbsDown: (id: string, delta: number) => void;
   /** Ghosts use the same tile, so they need their own pointer handlers. */
@@ -186,6 +190,22 @@ export const JobTile = React.memo(function JobTile({
         </span>
       )}
 
+
+      {/* Grouped — the ONLY visible sign of an invisible group. Pressing it
+          takes just this tile out and leaves the rest grouped. Shown whenever
+          the tile is in a group, because a thing that drags its neighbours
+          around with no explanation reads as a fault. */}
+      {job.boardGroup && (
+        <button
+          data-no-drag
+          onClick={e => { e.stopPropagation(); H.jobUngroup(job); }}
+          title="Grouped with others — click to take this one out"
+          className="absolute top-1 right-[86px] p-1 rounded-md transition-all"
+          style={{ color: '#4338ca', backgroundColor: '#e0e7ff' }}
+        >
+          <Group size={13} />
+        </button>
+      )}
 
       {/* Lock — a locked tile stays put: dragging pans the board, a click
           still opens the job. Hover-revealed until it is ON, then always
@@ -561,6 +581,17 @@ export const BoardNode = React.memo(function BoardNode({
               <Mic size={13} />
             </button>
           )}
+          {/* Grouped — the invisible group's only visible sign. Takes just
+              this node out; the rest stay grouped. */}
+          {el.boardGroup && (
+            <button data-el-action
+              onClick={e => { e.stopPropagation(); H.elUngroup(el); }}
+              title="Grouped with others — click to take this one out"
+              className="w-7 h-7 rounded-lg flex items-center justify-center shadow-sm border border-gray-100"
+              style={{ color: '#4338ca', backgroundColor: '#e0e7ff' }}>
+              <Group size={13} />
+            </button>
+          )}
           {/* Lock in place: no drag, no resize, until unlocked. `undefined`
               rather than false when unlocking, so the field disappears from
               the record instead of riding every node forever. */}
@@ -597,7 +628,10 @@ export const BoardNode = React.memo(function BoardNode({
       )}
 
       {/* ── Type-specific content ── */}
-      {isBin ? (
+      {/* `!isEditing` so a double-clicked group gives way to the rename
+          textarea below — isBin winning the ternary outright meant the editor
+          state was set and nothing ever drew it (the widget-pencil disease). */}
+      {isBin && !isEditing ? (
         <div className="w-full h-full flex flex-col items-start justify-center px-3 text-left pointer-events-none">
           <span className="flex items-center gap-1.5 font-extrabold text-[12.5px] truncate max-w-full"
             style={{ color: el.color }}>
@@ -734,18 +768,8 @@ export const BoardNode = React.memo(function BoardNode({
         />
       )}
 
-      {/* A locked node says so at rest — without this, a thing that will not
-          move reads as broken rather than as pinned. Clip art shows it too,
-          even though it has no action strip. */}
-      {el.locked && (
-        <span
-          className="absolute -top-1.5 -left-1.5 z-[7] w-[18px] h-[18px] rounded-full flex items-center justify-center pointer-events-none"
-          style={{ backgroundColor: '#fef3c7', color: '#b45309', boxShadow: '0 0 0 1.5px rgba(255,255,255,.9)' }}
-          title="Locked in place"
-        >
-          <Lock size={10} />
-        </span>
-      )}
+      {/* No corner badge for a locked node — the owner found it noise. The
+          lock reads from the strip button itself turning amber. */}
 
       {/* Newly placed, and not yet looked at. Clears when you click it. */}
       {isNew && (

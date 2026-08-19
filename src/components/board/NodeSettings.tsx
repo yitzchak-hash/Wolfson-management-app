@@ -300,93 +300,106 @@ export function NodeSettings({ el, onClose, onDelete }: {
     </>
   );
 
-  function BinSettings({ el, stages }: { el: CanvasElement; stages: Stage[] }) {
-    const [name, setName] = useState(binLabelOf(el));
-    const [makeStage, setMakeStage] = useState(false);
-    useEffect(() => setName(binLabelOf(el)), [el.id]); // eslint-disable-line react-hooks/exhaustive-deps
+}
 
-    /**
-     * A bin can mean a stage, and it does not have to.
-     *
-     * When it is linked, dropping a job into it moves the job to that stage as
-     * well as filing it — which is what "Ready to start" actually means to the
-     * office. Left unlinked it is pure filing, which is what Archive and Trash
-     * want. The two systems stay independent everywhere else.
-     */
-    function linkStage(id: string) {
-      updateCanvasElement(el.id, { stageId: id || undefined });
-    }
+/**
+ * A group's own settings — name, colour, and the stage it can stand for.
+ *
+ * MODULE level, deliberately. It was declared inside NodeSettings' render
+ * body, which makes it a NEW COMPONENT TYPE on every render — so the moment
+ * any store echo re-rendered the panel (the cloud bounce of the very edit
+ * being typed, about a second in), React unmounted and remounted it, resetting
+ * the name field to the stored value and dropping focus. That is the owner's
+ * "it doesn't let me type, it disappears after a second", and it is the same
+ * declared-in-render trap CLAUDE.md already documents for the plan pane.
+ */
+function BinSettings({ el, stages }: { el: CanvasElement; stages: Stage[] }) {
+  const { updateCanvasElement, addStage, currentUser, currentProjectId } = useStore();
+  const [name, setName] = useState(binLabelOf(el));
+  const [makeStage, setMakeStage] = useState(false);
+  useEffect(() => setName(binLabelOf(el)), [el.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    function createStageFromName() {
-      const clean = name.trim();
-      if (!clean || !currentUser) return;
-      const id = 'ST-' + Math.random().toString(36).slice(2, 9);
-      addStage({
-        id,
-        name: clean,
-        nameHe: '',
-        color: el.color || '#1e3a5f',
-        order: stages.length + 1,
-        active: true,
-        description: `Created from the “${clean}” group on the board.`,
-        projectId: currentProjectId,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      } as Stage);
-      updateCanvasElement(el.id, { stageId: id });
-      setMakeStage(false);
-    }
-
-    return (
-      <>
-        <Row label="Name">
-          <input
-            value={name}
-            onChange={e => setName(e.target.value)}
-            onBlur={() => updateCanvasElement(el.id, { text: name.trim() })}
-            onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-            placeholder="Group name"
-            className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 text-[12.5px] outline-none focus:ring-2 focus:ring-[#1e3a5f]/25"
-          />
-        </Row>
-
-        <Row label="Colour">
-          <Swatches value={el.color} onPick={c => updateCanvasElement(el.id, { color: c })} />
-        </Row>
-
-        <Row
-          label="Moving a job here also sets its stage"
-          hint="Leave this off and the group is filing only — a job keeps whatever stage it was at.">
-          <select
-            value={el.stageId ?? ''}
-            onChange={e => linkStage(e.target.value)}
-            className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 text-[12.5px] outline-none bg-white">
-            <option value="">Do not change the stage</option>
-            {stages.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
-          </select>
-
-          {!stages.some(st => st.name.toLowerCase() === name.trim().toLowerCase()) && name.trim() && (
-            makeStage ? (
-              <div className="mt-2 flex items-center gap-1.5">
-                <button onClick={createStageFromName}
-                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold text-white"
-                  style={{ backgroundColor: '#1e3a5f' }}>
-                  <Check size={11} /> Make “{name.trim()}” a stage
-                </button>
-                <button onClick={() => setMakeStage(false)}
-                  className="text-[11px] text-gray-400 hover:text-gray-600">Cancel</button>
-              </div>
-            ) : (
-              <button onClick={() => setMakeStage(true)}
-                className="mt-2 flex items-center gap-1 text-[11px] font-semibold text-[#4aa8d8] hover:underline">
-                <Plus size={11} /> Make this a stage in this workspace
-              </button>
-            )
-          )}
-        </Row>
-      </>
-    );
+  /**
+   * A bin can mean a stage, and it does not have to.
+   *
+   * When it is linked, dropping a job into it moves the job to that stage as
+   * well as filing it — which is what "Ready to start" actually means to the
+   * office. Left unlinked it is pure filing, which is what Archive and Trash
+   * want. The two systems stay independent everywhere else.
+   */
+  function linkStage(id: string) {
+    updateCanvasElement(el.id, { stageId: id || undefined });
   }
+
+  function createStageFromName() {
+    const clean = name.trim();
+    if (!clean || !currentUser) return;
+    const id = 'ST-' + Math.random().toString(36).slice(2, 9);
+    addStage({
+      id,
+      name: clean,
+      nameHe: '',
+      color: el.color || '#1e3a5f',
+      order: stages.length + 1,
+      active: true,
+      description: `Created from the “${clean}” group on the board.`,
+      projectId: currentProjectId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    } as Stage);
+    updateCanvasElement(el.id, { stageId: id });
+    setMakeStage(false);
+  }
+
+  return (
+    <>
+      <Row label="Name">
+        <input
+          value={name}
+          onChange={e => setName(e.target.value)}
+          onBlur={() => updateCanvasElement(el.id, { text: name.trim() })}
+          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+          placeholder="Group name"
+          className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 text-[12.5px] outline-none focus:ring-2 focus:ring-[#1e3a5f]/25"
+        />
+      </Row>
+
+      <Row label="Colour">
+        <Swatches value={el.color} onPick={c => updateCanvasElement(el.id, { color: c })} />
+      </Row>
+
+      <Row
+        label="Moving a job here also sets its stage"
+        hint="Leave this off and the group is filing only — a job keeps whatever stage it was at.">
+        <select
+          value={el.stageId ?? ''}
+          onChange={e => linkStage(e.target.value)}
+          className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 text-[12.5px] outline-none bg-white">
+          <option value="">Do not change the stage</option>
+          {stages.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
+        </select>
+
+        {!stages.some(st => st.name.toLowerCase() === name.trim().toLowerCase()) && name.trim() && (
+          makeStage ? (
+            <div className="mt-2 flex items-center gap-1.5">
+              <button onClick={createStageFromName}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold text-white"
+                style={{ backgroundColor: '#1e3a5f' }}>
+                <Check size={11} /> Make “{name.trim()}” a stage
+              </button>
+              <button onClick={() => setMakeStage(false)}
+                className="text-[11px] text-gray-400 hover:text-gray-600">Cancel</button>
+            </div>
+          ) : (
+            <button onClick={() => setMakeStage(true)}
+              className="mt-2 flex items-center gap-1 text-[11px] font-semibold text-[#4aa8d8] hover:underline">
+              <Plus size={11} /> Make this a stage in this workspace
+            </button>
+          )
+        )}
+      </Row>
+    </>
+  );
 }
 
 // ── pieces ───────────────────────────────────────────────────────────────────

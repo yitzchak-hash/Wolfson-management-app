@@ -5,7 +5,7 @@ import {
   Ghost, ThumbsUp, ThumbsDown, ClipboardPaste, LayoutGrid, Columns3, Archive, CheckCircle2, PlayCircle,
   Image as ImageIcon, ImageOff, History, MoveUpRight, Unlink, FileText, Search, FolderPlus, Printer,
   Settings2 as Settings, BringToFront, SendToBack, ChevronUp, ChevronDown, Eye,
-  Eraser, GripVertical, Lock, Unlock,
+  Eraser, GripVertical, Lock, Unlock, Group, Ungroup,
 } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 import { useStore } from '../data/store';
@@ -14,7 +14,7 @@ import { PlannerEntry, personOf } from '../components/board/PlannerWidget';
 import { PlannerTaskDialog, PlannerRemoveDialog } from '../components/board/PlannerDialogs';
 import { ScheduleWindow } from '../components/board/ScheduleWindow';
 import { boardAccess } from '../types';
-import { Apartment, CanvasElement, BinKind, BIN_KINDS, BIN_META, binKeyOf, binLabelOf, isBuiltInBin, getStageName, relativeTime } from '../types';
+import { Apartment, CanvasElement, BinKind, BIN_KINDS, BIN_META, binKeyOf, binLabelOf, isBuiltInBin, getStageName, relativeTime, PLANNER_ARCHIVE_MAX } from '../types';
 import { printTable, printDot } from '../data/printing';
 import { ApartmentDetailDrawer } from '../components/apartment/ApartmentDetailDrawer';
 import { QuickAddTaskPanel } from '../components/apartment/QuickAddTaskPanel';
@@ -386,7 +386,6 @@ export function GeneralJobsPage() {
    * Held rather than acted on, because making room moves everything already
    * placed — it is not a thing to do behind somebody's back.
    */
-  const [askRoom, setAskRoom] = useState<Side | null>(null);
 
 
   // Subscribed, not read once: `getState()` at render time would show the
@@ -811,6 +810,19 @@ export function GeneralJobsPage() {
       setTimeout(() => setTitleEdit(id), 0);
       return;
     }
+    /**
+     * A planner comes back with what was in the last one.
+     *
+     * Removing a notebook files its contents (see `archivePlanner`), so adding
+     * one again is a restore rather than a blank page — which is what "never,
+     * ever delete notebook's data" has to mean from the office's side. Only
+     * the newest of that kind, and it stays in the archive, so adding a second
+     * planner does not fight over the same week.
+     */
+    const revive = !isArt && (def.id === 'rota' || def.id === 'week-planner')
+      ? projectBoard.plannerArchive?.find(a => a.widget === def.id)
+      : undefined;
+
     addCanvasElement({
       addedAt: new Date().toISOString(),
       id: 'CE-' + Math.random().toString(36).slice(2, 9),
@@ -824,11 +836,15 @@ export function GeneralJobsPage() {
       w: def.w, h: def.h,
       text: '',
       color: isArt ? '#dc2626' : '#ffffff',
-      data: isArt ? {} : (def.data ? JSON.parse(JSON.stringify(def.data)) : {}),
+      data: revive
+        ? JSON.parse(JSON.stringify(revive.data))
+        : isArt ? {} : (def.data ? JSON.parse(JSON.stringify(def.data)) : {}),
     });
     // The store STAYS OPEN. Furnishing a board meant reopening it for every
     // single piece.
-    setToast(`${def.name} added`);
+    setToast(revive
+      ? `${def.name} added — everything that was in the last one is back`
+      : `${def.name} added`);
   }
 
   function handleToolPick(next: BoardTool) {
@@ -963,8 +979,21 @@ export function GeneralJobsPage() {
   const zoomCentre = useCallback((dir: 1 | -1) => {
     const r = viewportRef.current?.getBoundingClientRect();
     if (!r) return;
-    zoomAt(r.left, r.top, dir);
-  }, [zoomAt]);
+    /**
+     * The anchor is the HEADER'S BOTTOM EDGE, not the viewport's top.
+     *
+     * The clamp pins a board to the first line BELOW the floating chrome (so
+     * nothing can hide under it), while the viewport's own top is 70-odd
+     * pixels higher. Anchoring at the viewport top therefore aimed the zoom at
+     * a point the clamp would not allow, and the first press snapped the whole
+     * board down by exactly that gap — the owner's "it moves the canvas down".
+     * Anchoring where the board is actually pinned means the corner you look
+     * at holds still and the new room opens down and to the right.
+     */
+    const hb = headerBarRef.current?.getBoundingClientRect();
+    const anchorY = hb && viewMode !== 'stages' ? Math.max(r.top, hb.bottom + 6) : r.top;
+    zoomAt(r.left, anchorY, dir);
+  }, [zoomAt, viewMode]);
 
   const deleteRef = useRef<() => void>(() => {});
   const openSearchRef = useRef<() => void>(() => {});
@@ -988,6 +1017,8 @@ export function GeneralJobsPage() {
     jobDelete: ids => live.current.jobDelete(ids),
     jobTv: j => live.current.jobTv(j),
     jobLock: j => live.current.jobLock(j),
+    jobUngroup: j => live.current.jobUngroup(j),
+    elUngroup: el => live.current.elUngroup(el),
     jobThumbs: (id, d) => live.current.jobThumbs(id, d),
     jobThumbsDown: (id, d) => live.current.jobThumbsDown(id, d),
     ghostDown: (e, j, gi) => live.current.ghostDown(e, j, gi),
@@ -1121,6 +1152,33 @@ export function GeneralJobsPage() {
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPhoneBoard, jobs.length, canvasElements.length, currentProjectId]);
+
+  /**
+   * The board OPENS where the clamp would put it.
+   *
+   * The pan starts at a literal {0,0} that has never been through the clamp,
+   * so a desktop board opens with its top row tucked under the floating
+   * header — and the first zoom press, which does go through the clamp,
+   * snapped everything down by the height of that chrome. Normalising once on
+   * arrival makes the opening view the settled one, so nothing lurches.
+   * Skipped on a phone, where Fit-on-open has its own framing to do.
+   */
+  const panNormalised = useRef(false);
+  useEffect(() => {
+    if (panNormalised.current || isPhoneBoard) return;
+    const t = setTimeout(() => {
+      if (panNormalised.current) return;
+      panNormalised.current = true;
+      // Asking for the far top-left: the clamp answers with the pinned corner
+      // (the first line below the floating chrome). Clamping the literal 0
+      // would land at the BOTTOM of the allowed range instead, which is the
+      // same off-by-a-header-height the zoom press used to expose.
+      const settled = clampPanRef.current({ x: 0, y: 1e6 });
+      panRef2.current = settled;
+      setPan(settled);
+    }, 80);
+    return () => clearTimeout(t);
+  }, [isPhoneBoard]);
 
   /**
    * A node belongs to exactly one surface.
@@ -1576,6 +1634,140 @@ export function GeneralJobsPage() {
     setToast('Group added — double-click it to rename');
   }
 
+  // ── Invisible groups ──────────────────────────────────────────────
+  /**
+   * Grouping you feel rather than see.
+   *
+   * No box is drawn and no container record exists: members simply share a
+   * `boardGroup` string, so a grouped tile is still an ordinary tile in every
+   * count, report, export and backup. Dragging any member brings the rest;
+   * the only visible sign is a small chip beside the lock, and pressing that
+   * chip on ONE thing takes only that thing out — which is exactly what the
+   * owner asked for.
+   */
+  function withGroupJobs(ids: string[]): string[] {
+    const groups = new Set(ids.map(id => jobs.find(j => j.id === id)?.boardGroup).filter(Boolean) as string[]);
+    if (!groups.size) return ids;
+    const out = new Set(ids);
+    jobs.forEach(j => { if (j.boardGroup && groups.has(j.boardGroup)) out.add(j.id); });
+    return [...out];
+  }
+  function withGroupEls(ids: string[]): string[] {
+    const groups = new Set(
+      ids.map(id => canvasElements.find(c => c.id === id)?.boardGroup).filter(Boolean) as string[]);
+    if (!groups.size) return ids;
+    const out = new Set(ids);
+    canvasElements.forEach(c => { if (c.boardGroup && groups.has(c.boardGroup)) out.add(c.id); });
+    return [...out];
+  }
+
+  /** Tie the current selection together. Needs at least two things. */
+  function groupSelection() {
+    const jobIds = [...selectedJobIds];
+    const elIds = [...selectedElIds].filter(id => {
+      const c = canvasElements.find(x => x.id === id);
+      // Bins are fixtures and arrows have no position of their own; neither
+      // can meaningfully travel as a group member.
+      return c && c.type !== 'bin' && c.type !== 'arrow';
+    });
+    if (jobIds.length + elIds.length < 2) {
+      setToast('Pick at least two things to group');
+      return;
+    }
+    const gid = 'GRP-' + Math.random().toString(36).slice(2, 9);
+    if (currentUser) jobIds.forEach(id => updateApartment(id, { boardGroup: gid }, currentUser));
+    elIds.forEach(id => updateCanvasElement(id, { boardGroup: gid }));
+    setCtxMenu(null);
+    setToast(`Grouped ${jobIds.length + elIds.length} things — they move together now`);
+  }
+
+  /**
+   * Take things out of their group.
+   *
+   * `undefined`, never an empty string, so the field disappears from the
+   * record rather than riding every job forever. A group left with a single
+   * member is dissolved — one thing is not a group, and leaving the last
+   * member marked would make the next thing to join it silently inherit an
+   * old grouping.
+   */
+  function ungroup(ids: { jobs?: string[]; els?: string[] }) {
+    const touched = new Set<string>();
+    (ids.jobs ?? []).forEach(id => {
+      const g = jobs.find(j => j.id === id)?.boardGroup;
+      if (g) touched.add(g);
+      if (currentUser) updateApartment(id, { boardGroup: undefined }, currentUser);
+    });
+    (ids.els ?? []).forEach(id => {
+      const g = canvasElements.find(c => c.id === id)?.boardGroup;
+      if (g) touched.add(g);
+      updateCanvasElement(id, { boardGroup: undefined });
+    });
+    // Dissolve anything now down to one member.
+    touched.forEach(g => {
+      const gone = new Set([...(ids.jobs ?? []), ...(ids.els ?? [])]);
+      const restJobs = jobs.filter(j => j.boardGroup === g && !gone.has(j.id));
+      const restEls = canvasElements.filter(c => c.boardGroup === g && !gone.has(c.id));
+      if (restJobs.length + restEls.length === 1) {
+        if (restJobs[0] && currentUser) updateApartment(restJobs[0].id, { boardGroup: undefined }, currentUser);
+        if (restEls[0]) updateCanvasElement(restEls[0].id, { boardGroup: undefined });
+      }
+    });
+    setCtxMenu(null);
+    setToast('Taken out of the group');
+  }
+
+  /**
+   * A planner's contents outlive the planner.
+   *
+   * People, squares, weeks and everything written in them live in the NODE's
+   * data bag, so removing the node used to take a season's planning with it.
+   * The owner's standing rule: notebook data is never deleted, even when the
+   * widget is. Anything removed is filed into `boardSettings.plannerArchive`
+   * first — which is already persisted, synced and backed up — and placing a
+   * fresh planner of the same kind brings the newest one back.
+   *
+   * Called from EVERY delete path (the strip's X, the menu, the Delete key,
+   * and a group taking its contents with it), because a rule with a hole in
+   * it is the hole.
+   */
+  function archivePlanner(el: CanvasElement | undefined) {
+    if (!el || el.type !== 'widget') return;
+    if (el.widget !== 'rota' && el.widget !== 'week-planner') return;
+    const data = (el.data ?? {}) as Record<string, unknown>;
+    // Nothing written in it yet — an empty planner is not worth keeping, and
+    // filing every one would push the real ones off the end of the list.
+    const cells = data.cells as Record<string, unknown[]> | undefined;
+    const written = (data.people as unknown[] | undefined)?.length
+      || (cells && Object.values(cells).some(v => Array.isArray(v) && v.length))
+      || (data.cols as unknown[] | undefined)?.some(c => String(c ?? '').trim());
+    if (!written) return;
+    const prev = projectBoard.plannerArchive ?? [];
+    setBoardSetting('plannerArchive', [
+      { at: new Date().toISOString(), widget: el.widget, title: String(data.title ?? ''), data },
+      ...prev,
+    ].slice(0, PLANNER_ARCHIVE_MAX));
+  }
+
+  /**
+   * Archive-then-delete. The only way a node should ever be removed.
+   *
+   * A job filed onto a planner carries `inNotebook`, and the board deliberately
+   * does not draw those — it is in the notebook, which is where you go to look
+   * at it. Delete the notebook and those jobs used to be stranded: not on the
+   * board, not in any notebook, gone from the workspace as far as anyone
+   * looking could tell. Every job this node was holding comes back out first.
+   */
+  function removeEl(id: string) {
+    const el = canvasElements.find(e => e.id === id);
+    archivePlanner(el);
+    if (el && currentUser) {
+      apartments
+        .filter(a => a.inNotebook === el.id)
+        .forEach(a => updateApartment(a.id, { inNotebook: undefined }, currentUser));
+    }
+    deleteCanvasElement(id);
+  }
+
   /**
    * Removing a group.
    *
@@ -1586,8 +1778,8 @@ export function GeneralJobsPage() {
     const key = binKeyOf(el);
     const inside = apartments.filter(a => a.boardBin === key);
     inside.forEach(a => moveToBin(a.id, null));
-    canvasElements.filter(n => n.board === key).forEach(n => deleteCanvasElement(n.id));
-    deleteCanvasElement(el.id);
+    canvasElements.filter(n => n.board === key).forEach(n => removeEl(n.id));
+    removeEl(el.id);
     setToast(inside.length
       ? `Group removed — ${inside.length} ${inside.length === 1 ? 'job' : 'jobs'} back on the board`
       : 'Group removed');
@@ -1887,7 +2079,7 @@ export function GeneralJobsPage() {
     const removable = ids.filter(id => canvasElements.find(e => e.id === id)?.type !== 'bin');
     if (removable.length === 0) return;
     if (!window.confirm('Delete selected items?')) return;
-    removable.forEach(id => deleteCanvasElement(id));
+    removable.forEach(id => removeEl(id));
     setSelectedElIds(new Set());
     setCtxMenu(null);
   }
@@ -2157,9 +2349,12 @@ export function GeneralJobsPage() {
     /**
      * Locked members of a multi-selection stay put while the rest move —
      * excluded here, so no commit path can ever write them a new position.
+     * A GROUPED thing brings its whole group whether it was selected or not:
+     * that is what being grouped means, and it is invisible, so the only way
+     * it can be felt is by everything travelling together.
      */
     const lockedJobIds = new Set(jobs.filter(j => j.boardLocked).map(j => j.id));
-    const idsToMove = (selectedJobIds.has(job.id) && selectedJobIds.size > 1
+    const idsToMove = withGroupJobs(selectedJobIds.has(job.id) && selectedJobIds.size > 1
       ? [...selectedJobIds]
       : [job.id]).filter(id => !lockedJobIds.has(id));
     /**
@@ -2182,17 +2377,22 @@ export function GeneralJobsPage() {
       }
     });
 
+    /**
+     * Nodes riding along: the selected ones, plus every node sharing an
+     * invisible group with any job being moved — a group can hold both kinds.
+     */
+    const groupsMoving = new Set(
+      idsToMove.map(id => jobs.find(j => j.id === id)?.boardGroup).filter(Boolean) as string[]);
     const carryEls = new Map<string, { x: number; y: number }>();
-    if (selectedJobIds.has(job.id)) {
-      canvasElements.forEach(elem => {
-        if (!selectedElIds.has(elem.id)) return;
-        // Arrows have no position, attached art has its host's, and a pinned
-        // title lives half in screen space — none of them can ride a world drag.
-        if (elem.type === 'arrow' || elem.attachedTo || (elem.type === 'title' && elem.pinned)) return;
-        if (elem.locked) return;   // locked nodes stand still in a group drag
-        carryEls.set(elem.id, { x: elem.x, y: elem.y });
-      });
-    }
+    canvasElements.forEach(elem => {
+      const inGroupMove = !!elem.boardGroup && groupsMoving.has(elem.boardGroup);
+      if (!inGroupMove && !(selectedJobIds.has(job.id) && selectedElIds.has(elem.id))) return;
+      // Arrows have no position, attached art has its host's, and a pinned
+      // title lives half in screen space — none of them can ride a world drag.
+      if (elem.type === 'arrow' || elem.attachedTo || (elem.type === 'title' && elem.pinned)) return;
+      if (elem.locked) return;   // locked nodes stand still in a group drag
+      carryEls.set(elem.id, { x: elem.x, y: elem.y });
+    });
 
     setDrag({ kind: 'job', ids: idsToMove, starts, carryEls, grabX, grabY, dx: 0, dy: 0, moved: false });
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -2377,30 +2577,14 @@ export function GeneralJobsPage() {
         setSelectedJobIds(new Set());
       } else if (currentUser) {
         /**
-         * Pushed against the top or left edge?
+         * A locked edge is LOCKED — it never asks.
          *
-         * The position is still clamped at the origin — nothing is ever stored
-         * as negative — but the intent is noticed, and the offer to make room
-         * is put up once the drop has landed.
+         * Holding something against the top or left used to raise "make room
+         * above?", which the owner ruled out by name: if it is locked, it is
+         * locked. The position is still clamped at the origin, so nothing is
+         * lost; room is opened deliberately from board settings and nowhere
+         * else.
          */
-        let pushed: Side | null = null;
-        drag.ids.forEach(id => {
-          const st = drag.starts.get(id)!;
-          const rawX = Math.round(st.x + drag.dx);
-          const rawY = Math.round(st.y + drag.dy);
-          const side = edgePushed(rawX, rawY);
-          if (side && !sideAllowed(projectBoard.expand, side)) pushed = pushed ?? side;
-        });
-        /**
-         * Ask only after a DWELL at the edge — 350ms of standing there.
-         *
-         * A fling that ends at the edge is somebody moving fast, not somebody
-         * asking for room; the question popping up mid-flow read as the board
-         * expanding on its own.
-         */
-        const dwelt = drag.edgeSince != null && Date.now() - drag.edgeSince >= 350;
-        if (pushed && dwelt) setAskRoom(pushed);
-
         drag.ids.forEach(id => {
           const st = drag.starts.get(id)!;
           const { x, y } = settleDrop(st.x + drag.dx, st.y + drag.dy);
@@ -2508,19 +2692,23 @@ export function GeneralJobsPage() {
     }
 
     const lockedElIds = new Set(canvasElements.filter(c => c.locked).map(c => c.id));
-    const idsToMove = (selectedElIds.has(el.id) && selectedElIds.size > 1 ? [...selectedElIds] : [el.id])
+    const idsToMove = withGroupEls(
+      selectedElIds.has(el.id) && selectedElIds.size > 1 ? [...selectedElIds] : [el.id])
       .filter(id => !lockedElIds.has(id));
     if (!selectedElIds.has(el.id)) { setSelectedElIds(new Set([el.id])); setSelectedJobIds(new Set()); }
 
+    // The tiles riding along: selected ones, plus every job in an invisible
+    // group any of the moving nodes belongs to.
+    const groupsMoving = new Set(
+      idsToMove.map(id => canvasElements.find(c => c.id === id)?.boardGroup).filter(Boolean) as string[]);
     const carryJobs = new Map<string, { x: number; y: number }>();
-    if (selectedElIds.has(el.id)) {
-      jobs.forEach((j, i) => {
-        if (!selectedJobIds.has(j.id)) return;
-        if (j.boardLocked) return;   // locked tiles stand still in a group drag
-        carryJobs.set(j.id, typeof j.canvasX === 'number' && typeof j.canvasY === 'number'
-          ? { x: j.canvasX, y: j.canvasY } : defaultPos(i));
-      });
-    }
+    jobs.forEach((j, i) => {
+      const inGroupMove = !!j.boardGroup && groupsMoving.has(j.boardGroup);
+      if (!inGroupMove && !(selectedElIds.has(el.id) && selectedJobIds.has(j.id))) return;
+      if (j.boardLocked) return;   // locked tiles stand still in a group drag
+      carryJobs.set(j.id, typeof j.canvasX === 'number' && typeof j.canvasY === 'number'
+        ? { x: j.canvasX, y: j.canvasY } : defaultPos(i));
+    });
 
     const starts = new Map<string, { x: number; y: number }>();
     canvasElements.forEach(elem => {
@@ -2658,17 +2846,8 @@ export function GeneralJobsPage() {
     }
 
     if (drag.moved) {
-      // The same question a tile raises: pushed into a locked corner and held
-      // there, the board offers to make room rather than doing it silently.
-      let pushed: Side | null = null;
-      drag.ids.forEach(id => {
-        const st = drag.starts.get(id);
-        if (!st) return;
-        const side = edgePushed(Math.round(st.x + drag.dx), Math.round(st.y + drag.dy));
-        if (side && !sideAllowed(projectBoard.expand, side)) pushed = pushed ?? side;
-      });
-      if (pushed && drag.edgeSince != null && Date.now() - drag.edgeSince >= 350) setAskRoom(pushed);
-
+      // No make-room question here either — see the tile drop path. A locked
+      // edge simply stops the thing, in silence.
       drag.ids.forEach(id => {
         const st = drag.starts.get(id)!;
         const settled = settleDrop(st.x + drag.dx, st.y + drag.dy);
@@ -3466,15 +3645,30 @@ export function GeneralJobsPage() {
     const hb = headerBarRef.current?.getBoundingClientRect();
     const vr = viewportRef.current?.getBoundingClientRect();
     const hr = hb && vr ? Math.max(0, Math.min(hb.bottom - vr.top, vp.h * 0.4)) : 0;
-    const vpH = vp.h - hr;
-    const yPrime = h <= vpH
-      ? (pinY ? 0 : Math.max(0, Math.min(p.y - hr, vpH - h)))
-      : Math.min(0, Math.max(p.y - hr, vpH - h));
+
+    /**
+     * ONE continuous range, not two branches.
+     *
+     * There used to be a "world taller than the viewport" case and a "world
+     * smaller" case, and they disagreed about where the top belongs: the tall
+     * case made the world cover the whole viewport (top under the chrome), the
+     * small case pinned it to the chrome's bottom edge. Crossing between them
+     * at a zoom step is what made the board LURCH DOWN on the first press of
+     * minus — the owner's report.
+     *
+     * The rule now, in one line each way: the top may never sit lower than the
+     * chrome's edge (no blank above), and never higher than the point where
+     * the world's own bottom reaches the viewport's (no blank below that the
+     * world could have covered). When the world is small both bounds are the
+     * same number, so it simply pins — and zooming can never jump.
+     */
+    const yTop = pinY ? hr : Math.max(hr, vp.h - h);
+    const yBottom = Math.min(yTop, vp.h - h);
+    const xLeft = pinX ? 0 : Math.max(0, vp.w - w);
+    const xRight = Math.min(xLeft, vp.w - w);
     return {
-      x: w <= vp.w
-        ? (pinX ? 0 : Math.max(0, Math.min(p.x, vp.w - w)))
-        : Math.min(0, Math.max(p.x, vp.w - w)),
-      y: yPrime + hr,
+      x: Math.max(xRight, Math.min(xLeft, p.x)),
+      y: Math.max(yBottom, Math.min(yTop, p.y)),
     };
   };
 
@@ -3482,6 +3676,10 @@ export function GeneralJobsPage() {
   function startEdit(el: CanvasElement) {
     // A title's whole purpose is how it reads, so it gets the type editor.
     if (el.type === 'title') { setTitleEdit(el.id); return; }
+    // Double-clicking a built-in group also fired its click-opens-the-window
+    // rule on the first click; renaming with the window over the editor read
+    // as "it disappears". The rename wins — the window closes.
+    if (el.type === 'bin') setOpenBin(null);
     setEditingEl(el.id);
     setEditText(el.text);
     setTimeout(() => editInputRef.current?.focus(), 30);
@@ -3636,6 +3834,8 @@ export function GeneralJobsPage() {
     jobLock: (j: Apartment) => {
       if (currentUser) updateApartment(j.id, { boardLocked: j.boardLocked ? undefined : true }, currentUser);
     },
+    jobUngroup: (j: Apartment) => ungroup({ jobs: [j.id] }),
+    elUngroup: (el: CanvasElement) => ungroup({ els: [el.id] }),
     jobThumbs: (id: string, d: number) => bumpThumbs('job', [id], d),
     ghostDown: onGhostPointerDown,
     ghostMove: onGhostPointerMove,
@@ -3664,7 +3864,7 @@ export function GeneralJobsPage() {
         setToast('Pen picked up');
       }
     },
-    elDelete: (id: string) => deleteCanvasElement(id),
+    elDelete: (id: string) => removeEl(id),
     elColor: (e: React.MouseEvent, id: string) => setColorPicker({ x: e.clientX, y: e.clientY, kind: 'element', ids: [id] }),
     elPatch: (id: string, patch: Partial<CanvasElement>) => updateCanvasElement(id, patch),
     elThumbs: (id: string, d: number) => bumpThumbs('element', [id], d),
@@ -3684,7 +3884,7 @@ export function GeneralJobsPage() {
    * appearing to jump.
    */
   function makeRoom(side: Side, remember: boolean) {
-    if (!currentUser) { setAskRoom(null); return; }
+    if (!currentUser) return;
     const vp = viewportRef.current;
     const amount = roomFor(
       side === 'top' ? (vp?.clientHeight ?? 800) : (vp?.clientWidth ?? 1200), zoom);
@@ -3709,7 +3909,6 @@ export function GeneralJobsPage() {
     if (remember) {
       setBoardSetting('expand', { ...(projectBoard.expand ?? {}), [side]: true });
     }
-    setAskRoom(null);
     setToast(side === 'top' ? 'Room made above' : 'Room made on the left');
   }
 
@@ -4025,9 +4224,10 @@ export function GeneralJobsPage() {
               Which sides may grow.
 
               Down and right are on because that is how the board has always
-              worked. Up and left move everything already placed, so they start
-              off and dragging a node against that edge asks — turning one on
-              here is the same as answering "and stop asking".
+              worked. Up and left move everything already placed, so they stay
+              off — and a locked edge NEVER asks any more (the owner's ruling:
+              if it is locked, it is locked). Room on those sides is opened
+              deliberately, with the two buttons below.
             */}
             <div className="mb-2">
               <span className="block text-[10px] font-bold text-gray-500 mb-1">Let the board grow</span>
@@ -4048,6 +4248,23 @@ export function GeneralJobsPage() {
                   </label>
                 ))}
               </div>
+            </div>
+
+            {/* The deliberate way to gain space on a locked side — everything
+                already placed moves by a screenful, nothing is lost. */}
+            <div className="mb-2 flex items-center gap-1.5">
+              <button
+                onClick={() => makeRoom('top', false)}
+                title="Move everything down by a screenful, opening space above"
+                className="flex-1 py-1.5 rounded-lg text-[10px] font-bold text-gray-600 border border-gray-200 hover:bg-gray-50">
+                Room above
+              </button>
+              <button
+                onClick={() => makeRoom('left', false)}
+                title="Move everything right by a screenful, opening space on the left"
+                className="flex-1 py-1.5 rounded-lg text-[10px] font-bold text-gray-600 border border-gray-200 hover:bg-gray-50">
+                Room on the left
+              </button>
             </div>
             <button
               onClick={() => { setLayoutPanel(true); setBoardSettingsOpen(false); }}
@@ -4441,7 +4658,7 @@ export function GeneralJobsPage() {
                 });
                 setToast('Unstuck');
               }}
-              onDelete={id => deleteCanvasElement(id)}
+              onDelete={id => removeEl(id)}
             />
             {/* Where it would land, while it is on its way there. */}
             {attachHint && (
@@ -4582,6 +4799,24 @@ export function GeneralJobsPage() {
                     </button>
                   );
                 })()}
+                {/* Invisible grouping. Group needs two things picked; the
+                    ungroup row only appears when something in the selection
+                    is actually in a group. */}
+                {(selectedJobIds.size + selectedElIds.size > 1) && (
+                  <button onClick={groupSelection}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5"
+                    title="They move together from now on — nothing is drawn around them">
+                    <Group size={14} className="text-gray-400" />
+                    Group these {selectedJobIds.size + selectedElIds.size}
+                  </button>
+                )}
+                {ctxMenu.ids.some(id => apartments.find(a => a.id === id)?.boardGroup) && (
+                  <button onClick={() => ungroup({ jobs: ctxMenu.ids })}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
+                    <Ungroup size={14} className="text-gray-400" />
+                    {ctxMenu.ids.length > 1 ? `Ungroup (${ctxMenu.ids.length})` : 'Ungroup this one'}
+                  </button>
+                )}
                 {(() => {
                   const anyUnlocked = ctxMenu.ids.some(id => !apartments.find(a => a.id === id)?.boardLocked);
                   return (
@@ -4827,6 +5062,21 @@ export function GeneralJobsPage() {
                   <Copy size={14} className="text-gray-400" />
                   {ctxMenu.ids.length > 1 ? `Duplicate (${ctxMenu.ids.length})` : 'Duplicate'}
                 </button>
+                {(selectedJobIds.size + selectedElIds.size > 1) && (
+                  <button onClick={groupSelection}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5"
+                    title="They move together from now on — nothing is drawn around them">
+                    <Group size={14} className="text-gray-400" />
+                    Group these {selectedJobIds.size + selectedElIds.size}
+                  </button>
+                )}
+                {ctxMenu.ids.some(id => canvasElements.find(c => c.id === id)?.boardGroup) && (
+                  <button onClick={() => ungroup({ els: ctxMenu.ids })}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
+                    <Ungroup size={14} className="text-gray-400" />
+                    {ctxMenu.ids.length > 1 ? `Ungroup (${ctxMenu.ids.length})` : 'Ungroup this one'}
+                  </button>
+                )}
                 {(() => {
                   const anyUnlocked = ctxMenu.ids.some(id => !canvasElements.find(c => c.id === id)?.locked);
                   return (
@@ -5270,7 +5520,7 @@ export function GeneralJobsPage() {
           <NodeSettings
             el={el}
             onClose={() => setSettingsEl(null)}
-            onDelete={id => deleteCanvasElement(id)}
+            onDelete={id => removeEl(id)}
           />
         );
       })()}
@@ -5371,39 +5621,8 @@ export function GeneralJobsPage() {
         </>
       )}
 
-      {/* Making room moves work somebody placed, so it asks. */}
-      {askRoom && (
-        <div className="fixed inset-0 z-[140] flex items-center justify-center p-4"
-          style={{ backgroundColor: 'rgba(15,23,42,.45)' }}
-          onClick={() => setAskRoom(null)}>
-          <div className="bg-white rounded-2xl p-5 w-full max-w-sm shadow-xl"
-            onClick={e => e.stopPropagation()}>
-            <h3 className="font-bold text-gray-900 mb-1">
-              {askRoom === 'top' ? 'Make room above?' : 'Make room on the left?'}
-            </h3>
-            <p className="text-xs text-gray-500 mb-4 leading-snug">
-              The board grows down and to the right. To gain space {askRoom === 'top' ? 'above' : 'to the left'},
-              everything already on it moves {askRoom === 'top' ? 'down' : 'right'} by a screenful — nothing is
-              lost and nothing changes size.
-            </p>
-            <div className="flex flex-col gap-2">
-              <button onClick={() => makeRoom(askRoom, false)}
-                className="w-full py-2 rounded-lg text-sm font-bold text-white"
-                style={{ backgroundColor: '#1e3a5f' }}>
-                Make room, just this once
-              </button>
-              <button onClick={() => makeRoom(askRoom, true)}
-                className="w-full py-2 rounded-lg text-sm font-semibold border border-gray-200 text-gray-700">
-                Make room and stop asking for this side
-              </button>
-              <button onClick={() => setAskRoom(null)}
-                className="w-full py-2 rounded-lg text-sm font-semibold text-gray-500">
-                Leave it
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* The "make room above?" modal is gone. A locked edge is locked — room
+          is opened from board settings, deliberately, or not at all. */}
 
       {/* ── Add Job modal ── */}
       {showAddModal && (

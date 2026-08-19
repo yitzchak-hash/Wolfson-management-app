@@ -30,6 +30,57 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-08-19',
+    title: 'Groups you feel, a notebook that never forgets, and a corner that holds',
+    items: [
+      {
+        title: 'Group things together, invisibly',
+        body: 'Pick a few jobs or notes, right-click, and choose Group. Nothing is '
+          + 'drawn around them — but drag any one of them and the whole group travels. '
+          + 'A small blue chip appears beside the lock; press it on one thing and only '
+          + 'that thing leaves the group.',
+        demo: 'drag',
+      },
+      {
+        title: 'The weekly notebook can never lose your planning',
+        body: 'Taking the notebook off the board used to take the season with it. Now '
+          + 'its contents are kept safe, the jobs that were on it come back to the '
+          + 'board, and adding a notebook again brings everything that was in the last '
+          + 'one straight back.',
+        demo: 'list',
+      },
+      {
+        title: 'More room in the notebook',
+        body: 'The wide "put away" bar and the two add-a-week strips are gone. Each '
+          + 'week now has three tiny icons beside its date — add a week before, add one '
+          + 'after, and put this one away — so the weeks themselves get the space. '
+          + 'Month names are bigger too.',
+        demo: 'zoom',
+      },
+      {
+        title: 'Zooming out holds the corner',
+        body: 'Pressing minus keeps the top-left exactly where it is and opens the new '
+          + 'room down and to the right, instead of dropping the whole board down the '
+          + 'screen.',
+        demo: 'zoom',
+      },
+      {
+        title: 'A locked edge stays locked, quietly',
+        body: 'Pushing something against the top or left no longer asks whether to make '
+          + 'room. If you do want more space that way, there are two buttons in board '
+          + 'settings.',
+        demo: 'tap',
+      },
+      {
+        title: 'Renaming a group works',
+        body: 'The name box used to empty itself and lose focus about a second after you '
+          + 'started typing. It stays put now. The lock is just the amber button — the '
+          + 'little corner badge is gone.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2026-08-18',
     title: 'Select, a proper eraser, locks, and menus that stay on top',
     items: [

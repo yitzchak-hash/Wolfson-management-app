@@ -76,6 +76,27 @@ export interface BoardSetting {
    * actually put. Zooming out must never reveal room nobody asked for.
    */
   expand?: { top?: boolean; left?: boolean; right?: boolean; bottom?: boolean };
+  /**
+   * What was in a planner or notebook that has been removed from a board.
+   *
+   * A widget's people and squares live in the NODE, so taking the node off the
+   * board used to take a season's planning with it — the owner's "God forbid,
+   * it should always be saved and never, ever delete notebook's data".
+   * Removing one now files its contents here first, and placing a fresh
+   * planner of the same kind brings the newest back. It rides inside
+   * `boardSettings`, which is already persisted, synced, exported and
+   * imported, so this needs no new state key anywhere.
+   *
+   * Newest first, capped — see PLANNER_ARCHIVE_MAX.
+   */
+  plannerArchive?: {
+    at: string;
+    /** The widget id it came from: 'rota' or 'week-planner'. */
+    widget: string;
+    /** What the office called it, for the "brought back" message. */
+    title?: string;
+    data: Record<string, unknown>;
+  }[];
   showControls?: boolean;
   /** 'canvas' = the free board, 'stages' = the same jobs in stage columns. */
   viewMode?: 'canvas' | 'stages';
@@ -263,6 +284,14 @@ export function boardAccess(
 
 /** The workspace's original board, which has no record of its own. */
 export const MAIN_BOARD = '';
+
+/**
+ * How many removed planners a workspace keeps.
+ *
+ * Deep enough that a year of tidying up cannot push a real season's planning
+ * off the end, shallow enough that the settings document stays small.
+ */
+export const PLANNER_ARCHIVE_MAX = 20;
 
 /**
  * The dashboard is a board too.
@@ -508,6 +537,16 @@ export interface Apartment {
    * opens the job. Board furniture, not job content (CANVAS_ONLY in the store).
    */
   boardLocked?: boolean;
+  /**
+   * An INVISIBLE grouping: everything sharing this id moves as one thing.
+   *
+   * Nothing is drawn around it — the owner asked for grouping you feel rather
+   * than see, with a small chip beside the lock as the only sign. Membership
+   * is a plain shared string rather than a container record, so a member is
+   * still an ordinary tile in every count, every report and every backup, and
+   * ungrouping one thing is clearing one field.
+   */
+  boardGroup?: string;
   stageDates?: Record<string, string>; // stageId → ISO timestamp of when that stage was first set
   driveLink?: string; // Google Drive folder URL for this apartment's files
   plansPdfLink?: string; // Google Drive link to the Engineering Plans PDF
@@ -660,6 +699,8 @@ export interface CanvasElement {
   showOnTv?: boolean;
   /** See Apartment.boardLocked — a locked node cannot be dragged or resized. */
   locked?: boolean;
+  /** See Apartment.boardGroup — the invisible grouping this node belongs to. */
+  boardGroup?: string;
   /**
    * Pinned elements keep their board X (so they pan and zoom sideways with the
    * content they label) but hold a FIXED screen Y, so they stay put vertically
