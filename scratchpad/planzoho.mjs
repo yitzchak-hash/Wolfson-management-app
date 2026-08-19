@@ -39,13 +39,36 @@ function parseCsv(text) {
 // key = the CRM stage, lower-cased.  stage = the app stage name to set (null =
 // leave the job with no stage).  group = the board group ('' = open board).
 const ROUTES = {
-  'job completed':                { stage: 'Job completed',        group: 'Done' },
-  'collecting remaining balance': { stage: 'Job completed',        group: 'Done' },
-  'collecting extras':            { stage: 'Job completed',        group: 'Done' },
-  'hibernating':                  { stage: null,                   group: 'Ready to Start' },
-  'collecting deposit/key':       { stage: null,                   group: 'Ready to Start' },
-  'being installed':              { stage: 'AC installation',      group: '' },
-  'installation of geves':        { stage: 'Installation of Geves', group: '' },
+  // ── finished work ──
+  'job completed':                { stage: 'Job completed',         group: 'Done' },
+  'collecting remaining balance': { stage: 'Job completed',         group: 'Done' },
+  'collecting extras':            { stage: 'Job completed',         group: 'Done' },
+  'maintenance scheduled':        { stage: null,                    group: 'Done' },
+  'waiting for warranty from provider':   { stage: null,            group: 'Done' },
+  'requesting warranty from provider':    { stage: null,            group: 'Done' },
+  'installed w/balance':          { stage: null,                    group: 'Done' },
+  // ── waiting to start ──
+  'hibernating':                  { stage: null,                    group: 'Ready to Start' },
+  'collecting deposit/key':       { stage: null,                    group: 'Ready to Start' },
+  'pre-job checklist':            { stage: null,                    group: 'Ready to Start' },
+  'schedule job & get key':       { stage: null,                    group: 'Ready to Start' },
+  // ── on site now — their own groups, not the open board ──
+  'being installed':              { stage: 'AC installation',       group: 'Currently in AC' },
+  'installation of geves':        { stage: 'Installation of Geves',  group: 'Currently in Geves' },
+  // ── parked ──
+  'plans ready':                  { stage: null,                    group: 'Archive' },
+  'plans redone':                 { stage: null,                    group: 'Archive' },
+  'plans drawn':                  { stage: null,                    group: 'Archive' },
+  'marking plans - tzvi':         { stage: null,                    group: 'Archive' },
+  'plan waiting for client approval': { stage: null,                group: 'Archive' },
+  'waiting for tzvi approval':    { stage: null,                    group: 'Archive' },
+  'waiting for client to esign':  { stage: null,                    group: 'Archive' },
+  'waiting for supplier price':   { stage: null,                    group: 'Archive' },
+  'issuing invoice':              { stage: null,                    group: 'Archive' },
+  'add items':                    { stage: null,                    group: 'Archive' },
+  'paid deposit':                 { stage: null,                    group: 'Archive' },
+  // ── dropped, but kept ──
+  'receiving plans':              { stage: null,                    group: 'Trash' },
 };
 // Stages he named as "don't import".
 const REFUSED = {

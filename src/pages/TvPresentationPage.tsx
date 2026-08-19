@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useStore, loadAllProjectsTaskData } from '../data/store';
-import { Apartment, CanvasElement, isCountableApartment, BIN_META, getStageName, TV_DASH_BOARD } from '../types';
+import { Apartment, CanvasElement, isCountableApartment, BIN_META, binKeyOf, binLabelOf, getStageName, TV_DASH_BOARD } from '../types';
+import { queryVariants, skeleton } from '../data/translit';
 import { DriveIcon, ZohoIcon, PlanIcon } from '../components/ui/BrandIcons';
 import { getBoardTheme } from '../data/boardThemes';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
@@ -12,7 +13,7 @@ import { TvDashboard } from '../components/board/TvDashboard';
 import { useOrientation } from '../data/useOrientation';
 import { WidgetStore } from '../components/board/WidgetStore';
 import { extractFileId } from '../data/driveApi';
-import { PenLine, Maximize, Minimize, Pencil, X as CloseIcon, Plus, Info } from 'lucide-react';
+import { PenLine, Maximize, Minimize, Pencil, X as CloseIcon, Plus, Info, Search as SearchIcon } from 'lucide-react';
 
 /**
  * Lazy, like everywhere else — the wallboard is the last place that should
@@ -298,6 +299,7 @@ export function TvPresentationPage() {
   const [stageFilter, setStageFilter] = useState<string[]>([]);
   /** A group opened by tapping it — read-only, like everything else here. */
   const [openBin, setOpenBin] = useState<CanvasElement | null>(null);
+  const [binQuery, setBinQuery] = useState('');
   /** Which site photo the carousel is showing. Resets whenever a job opens. */
   const [photoAt, setPhotoAt] = useState(0);
   const [tvStoreOpen, setTvStoreOpen] = useState(false);
@@ -1113,20 +1115,59 @@ export function TvPresentationPage() {
             }}>
             <div className="flex items-center gap-3 px-5 py-3 text-white flex-shrink-0"
               style={{ backgroundColor: openBin.color || '#1e3a5f' }}>
-              <span className="font-extrabold">
-                {openBin.binKind ? BIN_META[openBin.binKind].label : (openBin.text || t('Group', 'קבוצה'))}
-              </span>
+              <span className="font-extrabold">{binLabelOf(openBin)}</span>
               <span className="flex-1" />
               <button onClick={() => setOpenBin(null)} className="p-1.5 rounded-lg hover:bg-white/15">
                 <CloseIcon size={18} />
               </button>
             </div>
+            {/* A group holding six hundred finished jobs is a scroll, not a
+                list. The same forgiving search the board and the job list use —
+                Hebrew against English, a wrong keyboard layout, a near miss. */}
+            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-100 flex-shrink-0">
+              <SearchIcon size={16} className="text-slate-400 flex-shrink-0" />
+              <input
+                autoFocus
+                value={binQuery}
+                onChange={e => setBinQuery(e.target.value)}
+                placeholder={t('Search this group…', 'חיפוש בקבוצה…')}
+                className="flex-1 min-w-0 outline-none bg-transparent text-slate-800
+                           placeholder:text-slate-400"
+                style={{ fontSize: '1em' }}
+              />
+              {binQuery && (
+                <button onClick={() => setBinQuery('')} className="p-1 rounded text-slate-400 hover:text-slate-700">
+                  <CloseIcon size={15} />
+                </button>
+              )}
+            </div>
             <div className="flex-1 overflow-y-auto p-3">
               {(() => {
-                const inside = apartments.filter(a =>
-                  a.boardBin === openBin.binKind && !a.isUnnamed && a.showOnTv !== false);
+                // binKeyOf, never binKind: a group made by hand (or by the
+                // import) has no binKind, so the old test matched nothing and
+                // every custom group opened empty on the wall.
+                const key = binKeyOf(openBin);
+                let inside = apartments.filter(a =>
+                  a.boardBin === key && !a.isUnnamed && a.showOnTv !== false);
+                const query = binQuery.trim();
+                if (query.length >= 2) {
+                  const v = queryVariants(query);
+                  const hit = (text: string) => {
+                    const low = text.toLowerCase();
+                    if (v.plain.some(p => low.includes(p.toLowerCase()))) return true;
+                    if (v.skeletons.length) {
+                      const sk = skeleton(text);
+                      return v.skeletons.some(k => sk.includes(k));
+                    }
+                    return false;
+                  };
+                  inside = inside.filter(a => hit(
+                    `${a.displayName ?? ''} ${a.address ?? ''} ${a.phone ?? ''} ${a.generalNotes ?? ''}`));
+                }
                 if (!inside.length) {
-                  return <p className="text-gray-400 px-2 py-6 text-center">{t('Nothing in here.', 'אין כאן דבר.')}</p>;
+                  return <p className="text-gray-400 px-2 py-6 text-center">
+                    {query ? t('Nothing matches that.', 'אין תוצאות.') : t('Nothing in here.', 'אין כאן דבר.')}
+                  </p>;
                 }
                 return inside.map(job => {
                   const st = stageOf(job);

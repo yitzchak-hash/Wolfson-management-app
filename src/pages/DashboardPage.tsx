@@ -743,6 +743,10 @@ export function DashboardPage() {
       {storeOpen && (
         <WidgetStore
           destLabel="the dashboard"
+          placed={new Map(dashWidgets.reduce((m, el) => {
+            if (el.widget) m.set(el.widget, (m.get(el.widget) ?? 0) + 1);
+            return m;
+          }, new Map<string, number>()))}
           onPick={def => {
             addCanvasElement({
               id: `CE-${Math.random().toString(36).slice(2, 9)}`,

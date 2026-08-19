@@ -87,7 +87,17 @@ export function usePanelDrag(id: string) {
     ? { left: pos.x, top: pos.y, right: 'auto', bottom: 'auto', transform: 'none' }
     : {};
 
-  return { ref, pos, posStyle, handleProps, dragging };
+  /** For a panel that also RESIZES and has to hold a corner still while it does. */
+  const movePos = (dx: number, dy: number) => {
+    setPos(p => {
+      if (!p) return p;
+      const next = { x: p.x + dx, y: p.y + dy };
+      PANEL_POS.set(id, next);
+      return next;
+    });
+  };
+
+  return { ref, pos, posStyle, handleProps, dragging, movePos };
 }
 
 /**

@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { saveAs } from 'file-saver';
 import { useStore } from '../../data/store';
-import { Apartment, CanvasElement, binLabelOf, binKeyOf } from '../../types';
+import { Apartment, CanvasElement, binLabelOf, binKeyOf, BIN_META } from '../../types';
 import {
   extractFolderId, getFolderNameViaBackend, familyNameFromFolderName,
   isUploadBackendConfigured, shareJobFolderSurfacesNow,
@@ -219,7 +219,10 @@ export function ImportJobsCard({ onToast }: { onToast: (msg: string, type?: 'suc
           y: GAP + (4 + gi) * (BIN_H + 12),
           w: BIN_W, h: BIN_H,
           text: name,
-          color: '#f59e0b',
+          // The slate the built-in Archive group wears, not amber. A group the
+          // import made used to be the one yellow thing on the board, which read
+          // as a warning rather than as a group.
+          color: BIN_META.archive.color,
           addedAt: now,
         };
         addCanvasElement(el);

@@ -504,6 +504,77 @@ function Swatches({ value, onPick, clearable }: {
   );
 }
 
+/**
+ * Main or Projection, for a planner.
+ *
+ * Its own control rather than a plain select, because choosing Main is not a
+ * field write on one node: exactly ONE planner in the workspace is the main
+ * one, so the crown moving means every other copy becomes a projection. That is
+ * worth a sentence of warning before it happens — somebody else's screen is
+ * about to change.
+ */
+function PlannerRoleField({ el, label, hint }: {
+  el: CanvasElement; label: string; hint?: string;
+}) {
+  const canvasElements = useStore(s => s.canvasElements);
+  const updateCanvasElement = useStore(s => s.updateCanvasElement);
+  const role = ((el.data ?? {}) as Record<string, unknown>).role === 'projection' ? 'projection' : 'main';
+  const siblings = canvasElements.filter(e =>
+    e.id !== el.id && e.type === 'widget' && e.widget === el.widget);
+  const others = siblings.length;
+  const currentMain = siblings.find(e =>
+    ((e.data ?? {}) as Record<string, unknown>).role !== 'projection');
+
+  function pick(next: 'main' | 'projection') {
+    if (next === role) return;
+    if (next === 'main') {
+      if (currentMain && !window.confirm(
+        'Make this the main notebook?\n\n'
+        + 'The one that is main now, and every other copy, becomes a projection — '
+        + 'read-only, showing whatever is written in this one.')) return;
+      // Demote everybody else FIRST, then crown this one: two planners both
+      // claiming to be main, even for a moment, is a projection with nothing to
+      // point at.
+      siblings.forEach(e => {
+        if (((e.data ?? {}) as Record<string, unknown>).role === 'projection') return;
+        updateCanvasElement(e.id, { data: { ...(e.data ?? {}), role: 'projection' } });
+      });
+      updateCanvasElement(el.id, { data: { ...(el.data ?? {}), role: 'main' } });
+      return;
+    }
+    if (!currentMain && !window.confirm(
+      'Make this a projection?\n\n'
+      + 'There would then be no main notebook, and nothing to show. '
+      + 'Set another one to main first if you can.')) return;
+    updateCanvasElement(el.id, { data: { ...(el.data ?? {}), role: 'projection' } });
+  }
+
+  return (
+    <Row label={label} hint={hint}>
+      <div className="flex rounded-lg overflow-hidden border border-gray-200">
+        {(['main', 'projection'] as const).map(v => (
+          <button key={v} type="button" onClick={() => pick(v)}
+            className="flex-1 px-2 py-1.5 text-[12px] font-semibold transition-colors"
+            style={role === v
+              ? { backgroundColor: '#1e3a5f', color: '#fff' }
+              : { backgroundColor: '#fff', color: '#64748b' }}>
+            {v === 'main' ? 'The main one' : 'A projection'}
+          </button>
+        ))}
+      </div>
+      <p className="text-[10.5px] text-gray-400 mt-1">
+        {others === 0
+          ? 'The only notebook in this workspace.'
+          : role === 'main'
+            ? `${others} other cop${others === 1 ? 'y' : 'ies'} show this one.`
+            : currentMain
+              ? 'Showing the main notebook. Nothing here can be edited.'
+              : 'There is no main notebook to show yet.'}
+      </p>
+    </Row>
+  );
+}
+
 /** Which workspace a widget is about. */
 function ProjectField({ label, hint, value, onChange }: {
   label: string; hint?: string; value: string; onChange: (v: string) => void;
@@ -880,6 +951,10 @@ function Field({ el, field, value, onChange, stages, jobs, contractors }: {
 
   if (f.kind === 'project') {
     return <ProjectField label={f.label} hint={f.hint} value={str} onChange={onChange} />;
+  }
+
+  if (f.kind === 'plannerRole') {
+    return <PlannerRoleField el={el} label={f.label} hint={f.hint} />;
   }
 
   if (f.kind === 'jobs') {

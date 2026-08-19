@@ -18,7 +18,11 @@
 export type WidgetFieldKind =
   | 'text' | 'longtext' | 'number' | 'percent'
   | 'select' | 'colour' | 'url' | 'image' | 'datetime'
-  | 'job' | 'jobs' | 'contractor' | 'stage' | 'people' | 'project';
+  | 'job' | 'jobs' | 'contractor' | 'stage' | 'people' | 'project'
+  /** Main / Projection for a planner: one Main across the workspace, with a
+   *  warning before the crown moves. Its own kind because the write is not a
+   *  field write — choosing Main demotes every other planner. */
+  | 'plannerRole';
 
 export interface WidgetField {
   key: string;
@@ -381,6 +385,12 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
   }],
   rota: [
     title(),
+    {
+      key: 'role', label: 'This copy is', kind: 'plannerRole', group: 'People and days',
+      hint: 'The MAIN notebook is the one that is filled in. Every other copy is a '
+        + 'projection of it — it shows the same week, cannot be written to, and a job '
+        + 'in a square still opens.',
+    },
     {
       key: 'people', label: 'Who is on it', kind: 'people', group: 'People and days',
       hint: 'Contractors and office staff. Drag the handles to reorder the rows; '

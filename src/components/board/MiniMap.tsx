@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { Maximize2, Minimize2, Move } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Maximize2, Move } from 'lucide-react';
 import { Apartment, CanvasElement, Stage } from '../../types';
 import { usePanelDrag } from './MovablePanel';
 
@@ -59,6 +59,31 @@ function faceFor(widget?: string): { bg: string; cells?: string[]; cols?: number
   return { bg: 'rgba(124,58,237,.45)' };
 }
 
+/**
+ * How big the overview is, per MACHINE.
+ *
+ * localStorage rather than the synced board settings, the same rule the tool
+ * rail's size follows: how big a panel wants to be is a property of the screen
+ * it is on, and pushing one person's wallboard-sized overview onto everybody
+ * else's laptop is wrong. It also keeps a new key out of persist/export/import.
+ */
+const OVERVIEW_KEY = 'board_overview_size';
+const OVERVIEW_DEFAULT = { w: 148, h: 104 };
+const clampW = (n: number) => Math.max(120, Math.min(640, Math.round(n)));
+const clampH = (n: number) => Math.max(84, Math.min(520, Math.round(n)));
+function readOverviewSize(): { w: number; h: number } {
+  try {
+    const raw = JSON.parse(localStorage.getItem(OVERVIEW_KEY) || 'null');
+    if (raw && typeof raw.w === 'number' && typeof raw.h === 'number') {
+      return { w: clampW(raw.w), h: clampH(raw.h) };
+    }
+  } catch { /* a corrupt entry is not worth a broken overview */ }
+  return OVERVIEW_DEFAULT;
+}
+function writeOverviewSize(s: { w: number; h: number }) {
+  try { localStorage.setItem(OVERVIEW_KEY, JSON.stringify(s)); } catch { /* private mode */ }
+}
+
 export const MiniMap = React.memo(function MiniMap({
   jobs, elements, stages, worldW, worldH, zoom, pan, viewportW, viewportH, onJump,
   tileW = 215, tileH = 132, force,
@@ -87,10 +112,50 @@ export const MiniMap = React.memo(function MiniMap({
    * until you shrink it again, because somebody rearranging a board wants it big
    * for the whole job rather than for one click.
    */
-  const [big, setBig] = useState(false);
-  const { ref: panelRef, pos, posStyle, handleProps, dragging } = usePanelDrag('board-overview');
-  const W = big ? 340 : 148;
-  const H = big ? 238 : 104;
+  const { ref: panelRef, pos, posStyle, handleProps, dragging, movePos } = usePanelDrag('board-overview');
+  const [size, setSize] = useState(readOverviewSize);
+  const { w: W, h: H } = size;
+  /**
+   * It resizes like anything else on the board, from its top-left corner.
+   *
+   * It used to be a two-step "bigger / smaller" button, which is two sizes,
+   * neither of them the one you wanted. The panel is anchored to the BOTTOM
+   * RIGHT, so the corner that grows it is the opposite one — and once it has
+   * been moved it is anchored top-left instead, so the stored position is
+   * shifted by the same delta to hold that far corner still.
+   */
+  const rz = useRef<{ px: number; py: number; w: number; h: number } | null>(null);
+  const [sizing, setSizing] = useState(false);
+  function sizeDown(e: React.PointerEvent) {
+    e.preventDefault(); e.stopPropagation();
+    rz.current = { px: e.clientX, py: e.clientY, w: W, h: H };
+    setSizing(true);
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+  function sizeMove(e: React.PointerEvent) {
+    const st = rz.current;
+    if (!st) return;
+    e.stopPropagation();
+    const w = clampW(st.w - (e.clientX - st.px));
+    const h = clampH(st.h - (e.clientY - st.py));
+    // Computed outside the updater: a setState callback must be pure, and React
+    // is free to run it twice.
+    if (pos) movePos(W - w, H - h);
+    setSize({ w, h });
+    writeOverviewSize({ w, h });
+  }
+  function sizeUp(e: React.PointerEvent) { e.stopPropagation(); rz.current = null; setSizing(false); }
+  useEffect(() => {
+    if (!sizing) return;
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key !== '0') return;
+      ev.preventDefault();
+      rz.current = null; setSizing(false);
+      setSize(OVERVIEW_DEFAULT); writeOverviewSize(OVERVIEW_DEFAULT);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [sizing]);
   const scale = useMemo(
     () => Math.min(W / Math.max(worldW, 1), H / Math.max(worldH, 1)),
     [worldW, worldH, W, H],
@@ -139,6 +204,7 @@ export const MiniMap = React.memo(function MiniMap({
   return (
     <div
       ref={panelRef}
+      data-board-overview
       className="absolute right-3 z-30 rounded-lg border border-gray-200 bg-gray-200/90 shadow-sm overflow-hidden cursor-pointer"
       /* Clear of the iPad's home indicator, which otherwise sits across the
          overview's bottom edge. env() is 0 on every other device. */
@@ -169,18 +235,26 @@ export const MiniMap = React.memo(function MiniMap({
         </div>
       )}
 
-      {/* TOP-LEFT, opposite the move handle. It used to sit bottom-left as a
-          10px speck, which is why it read as not being there at all. */}
-      <button
+      {/* TOP-LEFT: the corner you pull to size it, opposite the move handle. */}
+      <div
         data-no-drag
-        onPointerDown={e => { e.stopPropagation(); }}
-        onClick={e => { e.stopPropagation(); setBig(v => !v); }}
-        title={big ? 'Make the overview smaller' : 'Make the overview bigger'}
+        onPointerDown={sizeDown}
+        onPointerMove={sizeMove}
+        onPointerUp={sizeUp}
+        onPointerCancel={sizeUp}
+        title="Drag to size the overview"
         className="absolute top-1 left-1 z-20 p-1 rounded-md bg-white/95 text-gray-500
-                   hover:text-[#1e3a5f] shadow ring-1 ring-black/5"
+                   hover:text-[#1e3a5f] shadow ring-1 ring-black/5 cursor-nwse-resize"
+        style={{ touchAction: 'none' }}
       >
-        {big ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
-      </button>
+        <Maximize2 size={13} />
+      </div>
+      {sizing && (
+        <div className="absolute -top-6 left-0 px-1.5 py-0.5 rounded bg-gray-900/85 text-white
+                        text-[10px] whitespace-nowrap pointer-events-none z-20">
+          {W} × {H} · press 0 to reset
+        </div>
+      )}
 
       <div className="absolute inset-0 pointer-events-none">
       {elements.map(el => {

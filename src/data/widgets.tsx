@@ -688,23 +688,7 @@ export const WIDGETS: WidgetDef[] = [
       hebrew: true, holidays: { jewish: true, israeli: true }, askOnDrop: true,
       textSize: 11, dayNameSize: 11,
     },
-    render: (el, c) => (
-      <PlannerWidget
-        el={el}
-        data={(el.data ?? {}) as PlannerData}
-        jobs={c.jobs}
-        contractors={c.contractors}
-        users={c.users}
-        assignments={c.assignments}
-        stages={c.stages}
-        readOnly={c.readOnly}
-        update={c.update}
-        openJob={c.openJob}
-        onShowAll={c.showAllScheduled ? () => c.showAllScheduled!(el.id) : undefined}
-        onRemoveTask={c.askRemoveTask}
-        onLeaveNotebook={c.leaveNotebook}
-      />
-    ),
+    render: (el, c) => <PlannerHost el={el} c={c} />,
   },
   {
     id: 'milestones', rank: 4, name: 'Key dates', category: 'plan', icon: Flag, w: 225, h: 165,
@@ -2556,6 +2540,68 @@ function noteHeadline(text: string, fallback: string): string {
  * store directly because a widget's render is a plain function, not a
  * component — the same reason `NotesBoard` does.
  */
+/**
+ * One notebook is the MAIN one; the rest are projections of it.
+ *
+ * The secretary keeps one planner and everybody else looks at a copy — on a
+ * second screen, on another named board, on the wall. A projection has no
+ * contents of its own: it renders the main one's element, so anything typed
+ * into the main appears in every copy the moment it is saved, and there is no
+ * second version of the week to reconcile.
+ *
+ * The identity it renders is the MAIN's on purpose. Every link a planner makes
+ * — a job's `inNotebook`, the schedule window, the take-off dialogs — points at
+ * a notebook by id, and a projection that answered with its own id would have
+ * quietly built a second set of them.
+ */
+export function isProjection(el: CanvasElement): boolean {
+  return ((el.data ?? {}) as Record<string, unknown>).role === 'projection';
+}
+
+/** The main planner of this kind, or null when this IS the main one. */
+export function mainPlannerFor(el: CanvasElement, all: CanvasElement[]): CanvasElement | null {
+  if (!isProjection(el)) return null;
+  return all.find(e =>
+    e.id !== el.id && e.type === 'widget' && e.widget === el.widget && !isProjection(e)) ?? null;
+}
+
+function PlannerHost({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
+  // Subscribed, not read once: a projection has to redraw when the MAIN
+  // changes, and the main is a different element than the one this node is.
+  const all = useStore(s => s.canvasElements);
+  const projecting = isProjection(el);
+  const main = projecting ? mainPlannerFor(el, c.boardElements ?? all) : null;
+  const src = main ?? el;
+  const orphan = projecting && !main;
+  return (
+    <div className="relative w-full h-full">
+      <PlannerWidget
+        el={src}
+        data={(src.data ?? {}) as PlannerData}
+        jobs={c.jobs}
+        contractors={c.contractors}
+        users={c.users}
+        assignments={c.assignments}
+        stages={c.stages}
+        readOnly={c.readOnly}
+        projection={projecting}
+        update={projecting ? () => {} : c.update}
+        openJob={c.openJob}
+        onShowAll={c.showAllScheduled ? () => c.showAllScheduled!(src.id) : undefined}
+        onRemoveTask={projecting ? undefined : c.askRemoveTask}
+        onLeaveNotebook={projecting ? undefined : c.leaveNotebook}
+      />
+      {projecting && (
+        <span className="absolute top-1 right-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold
+                         pointer-events-none"
+          style={{ backgroundColor: orphan ? '#fee2e2' : '#e2e8f0', color: orphan ? '#b4342a' : '#475569' }}>
+          {orphan ? 'no main planner' : 'projection'}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function spawnStickyBeside(host: CanvasElement, colour = 'yellow'): void {
   const st = useStore.getState();
   const w = 260, h = 300;

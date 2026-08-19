@@ -246,7 +246,7 @@ export interface PendingDrop {
 }
 
 export function PlannerWidget({
-  el, data, jobs, contractors, users, assignments, stages, readOnly,
+  el, data, jobs, contractors, users, assignments, stages, readOnly, projection,
   update, openJob, onDropAsk, onRemoveTask, onShowAll, onLeaveNotebook,
 }: {
   el: CanvasElement;
@@ -257,6 +257,12 @@ export function PlannerWidget({
   assignments: ContractorAssignment[];
   stages: Stage[];
   readOnly?: boolean;
+  /**
+   * A PROJECTION of the main notebook: shows exactly what the secretary's copy
+   * shows and cannot be written to — but a job in a square still opens, which
+   * is the whole reason to put one on a second screen.
+   */
+  projection?: boolean;
   update: (patch: Partial<CanvasElement>) => void;
   openJob: (id: string) => void;
   /** Ask about making a task; only called when the setting is on. */
@@ -267,6 +273,8 @@ export function PlannerWidget({
   /** This job has no squares left anywhere — put it back on the board. */
   onLeaveNotebook?: (jobId: string) => void;
 }) {
+  /** Nothing may be written: either it is inert, or it is a projection. */
+  const ro = !!readOnly || !!projection;
   const mode = data.mode === 'month' ? 'month' : 'week';
   const span = num(data.span, 5, 1, 7);
   const weekStart = Number(data.weekStart) === 1 ? 1 : 0;
@@ -598,7 +606,7 @@ export function PlannerWidget({
         <span className="px-1.5 rounded-full bg-slate-100 text-slate-500 flex-shrink-0 tabular-nums"
           style={{ fontSize: Math.max(z(8), textSize - z(2)) }}>{label}</span>
         <span className="flex-1" />
-        {!readOnly && (
+        {!ro && (
           <>
             {onShowAll && (
               <button data-no-drag data-el-action onClick={onShowAll} title="Show every job in the schedule"
@@ -657,7 +665,7 @@ export function PlannerWidget({
             spent on a rare action. Adding and restoring weeks now lives in the
             tiny icons beside each week's put-away eye; only the pathological
             everything-is-hidden case still needs a way back drawn here. */}
-        {!readOnly && weeks.length === 0 && (
+        {!ro && weeks.length === 0 && (
           <div className="text-center text-gray-400 leading-snug py-6 px-4 flex flex-col items-center gap-2"
             style={{ fontSize: textSize }}>
             <span>Every week is put away. Nothing in them was removed.</span>
@@ -708,7 +716,7 @@ export function PlannerWidget({
                       carries add-before, the last carries add-after; when a
                       week was put away in that direction the same press
                       restores it (Eye instead of Plus, wording says so). */}
-                  {!readOnly && (
+                  {!ro && (
                     <span className="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover/wk:opacity-100 transition-opacity">
                       {wi === 0 && (
                         <button
@@ -870,7 +878,8 @@ export function PlannerWidget({
                               size={textSize}
                               scale={scale}
                               bold={data.bold}
-                              readOnly={readOnly || state === 'ending'}
+                              readOnly={ro || state === 'ending'}
+                              openOnly={!!projection}
                               onOpen={() => en.jobId && openJob(en.jobId)}
                               onText={v => setCell(key, entries.map(x => (x.id === en.id ? { ...x, text: v } : x)))}
                               onRemove={() => {
@@ -886,7 +895,7 @@ export function PlannerWidget({
                               onDragTo={(target, copy) => moveEntry(key, en, target, copy)}
                             />
                           ))}
-                          {!readOnly && state === 'on' && (
+                          {!ro && state === 'on' && (
                             <button
                               data-no-drag data-el-action
                               onClick={() => setCell(key, [...entries, { id: newEntryId(), text: '' }])}
@@ -933,7 +942,7 @@ const SLOT_H = 58;
  * the job — the same rule as the board, so there is one habit to learn.
  */
 function PlannerCard({
-  entry, job, stages, assignments, color, size, scale = 1, bold, readOnly,
+  entry, job, stages, assignments, color, size, scale = 1, bold, readOnly, openOnly,
   onOpen, onText, onRemove, onDragOff, onDragTo,
 }: {
   entry: PlannerEntry;
@@ -946,6 +955,8 @@ function PlannerCard({
   scale?: number;
   bold?: boolean;
   readOnly?: boolean;
+  /** Read-only, but a job still opens on a click — a projection. */
+  openOnly?: boolean;
   onOpen: () => void;
   onText: (v: string) => void;
   onRemove: () => void;
@@ -969,7 +980,19 @@ function PlannerCard({
    */
   const drag = useRef<{ x: number; y: number; live: boolean } | null>(null);
   const [held, setHeld] = useState(false);
-  const dragHandlers = readOnly || !onDragTo ? {} : {
+  /**
+   * A projection gets ONE of the four gestures back.
+   *
+   * Everything that would change the notebook is gone, but a job in a square
+   * still opens on a click — which is the point of putting a second copy on a
+   * screen somebody is standing in front of.
+   */
+  const openHandlers = openOnly && entry.jobId
+    ? { onClick: (e: React.MouseEvent) => {
+        if (!(e.target as HTMLElement).closest('a,[data-card-action]')) onOpen();
+      } }
+    : {};
+  const dragHandlers = readOnly || !onDragTo ? openHandlers : {
     onPointerDown: (e: React.PointerEvent) => {
       // NOT `closest('a,button')`: the job's name is itself a button, so that
       // test refused to start a drag anywhere except the few pixels of padding
@@ -1038,7 +1061,7 @@ function PlannerCard({
         className="group/en rounded-md px-1.5 py-1 min-w-0 planner-card flex-1 flex flex-col justify-center"
         style={{
           backgroundColor: tint(color, 0.16), border: '1px solid rgba(15,23,42,.07)',
-          cursor: readOnly ? undefined : 'pointer', touchAction: 'none',
+          cursor: readOnly && !openOnly ? undefined : 'pointer', touchAction: 'none',
           // See-through while held, so the landing square shows through the hand.
           opacity: held ? 0.45 : undefined,
           transition: 'opacity 120ms ease',

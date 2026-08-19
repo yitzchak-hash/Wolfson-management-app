@@ -175,7 +175,7 @@ function otherIdForPreview(projects: Project[], currentId: string): string {
   return others.find(p => drawable(p.id))?.id ?? currentId;
 }
 
-export function WidgetStore({ onPick, onClose, only, destLabel = 'the board' }: {
+export function WidgetStore({ onPick, onClose, only, destLabel = 'the board', placed }: {
   onPick: (def: WidgetDef) => void;
   /** Where a taken widget lands — 'the board' or 'the dashboard'. The button
       says so, because "Add to the board" pressed on the dashboard reads as
@@ -190,6 +190,15 @@ export function WidgetStore({ onPick, onClose, only, destLabel = 'the board' }: 
    * cannot work.
    */
   only?: Set<string>;
+  /**
+   * What is already standing on the board this store is adding to, by widget
+   * id, with how many of each.
+   *
+   * Labelled, never disabled: putting a second Weekly Planner or a third clock
+   * on a board is a real thing people do, and the store's job is to say what is
+   * already there rather than to refuse.
+   */
+  placed?: Map<string, number>;
 }) {
   const [q, setQ] = useState('');
   /**
@@ -463,7 +472,7 @@ export function WidgetStore({ onPick, onClose, only, destLabel = 'the board' }: 
                 style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${Math.round(CARD_W * scale)}px, 1fr))` }}>
                 {items.map(w => (
                   <WidgetCard key={w.id} def={w} ctx={shownCtx} onPick={take} scale={scale}
-                    destLabel={destLabel}
+                    destLabel={destLabel} onBoard={placed?.get(w.id) ?? 0}
                     taken={taken[w.id] ?? 0} picked={pickedForPreview[w.id]} />
                 ))}
               </div>
@@ -512,7 +521,7 @@ export function WidgetStore({ onPick, onClose, only, destLabel = 'the board' }: 
  * placed widget starts with and is correctly empty — reusing it for the preview
  * is what made half the shelf blank.
  */
-function WidgetCard({ def, ctx, onPick, taken, picked, scale = 1, destLabel = 'the board', nameOverride }: {
+function WidgetCard({ def, ctx, onPick, taken, picked, scale = 1, destLabel = 'the board', nameOverride, onBoard = 0 }: {
   def: WidgetDef; ctx: WidgetCtx; onPick: (d: WidgetDef) => void; taken: number;
   /** A choice the shelf makes on the widget's behalf, for preview only. */
   picked?: Record<string, unknown>;
@@ -521,6 +530,8 @@ function WidgetCard({ def, ctx, onPick, taken, picked, scale = 1, destLabel = 't
   destLabel?: string;
   /** The workspace cards wear the workspace's name, not the widget's. */
   nameOverride?: string;
+  /** How many of this widget are already on the board being added to. */
+  onBoard?: number;
 }) {
   const Icon = def.icon;
   const isArt = def.id.startsWith('art-');
@@ -594,13 +605,25 @@ function WidgetCard({ def, ctx, onPick, taken, picked, scale = 1, destLabel = 't
             style={{ background: 'linear-gradient(transparent, #ffffff)' }} />
         )}
 
-        {/* Taken this visit — so placing five reads as five. */}
-        {taken > 0 && (
-          <span className="absolute left-2 top-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
-            style={{ backgroundColor: '#16a34a' }}>
-            <Check size={10} /> {taken > 1 ? `${taken} added` : 'added'}
-          </span>
-        )}
+        {/* Two different facts, never merged: what is ALREADY on the board,
+            and what you have taken since opening the store. Neither disables
+            anything — a second planner or a third clock is a real thing to
+            want, and a store that refuses is a store you argue with. */}
+        <span className="absolute left-2 top-2 flex items-center gap-1">
+          {onBoard > 0 && (
+            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold"
+              style={{ backgroundColor: '#e2e8f0', color: '#334155' }}
+              title={`Already on ${destLabel}`}>
+              <Check size={10} /> on the board{onBoard > 1 ? ` ×${onBoard}` : ''}
+            </span>
+          )}
+          {taken > 0 && (
+            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
+              style={{ backgroundColor: '#16a34a' }}>
+              <Check size={10} /> {taken > 1 ? `${taken} added` : 'added'}
+            </span>
+          )}
+        </span>
 
         {/* What it is, only for the one you are looking at.
             Seventy-three descriptions on screen at once is not seventy-three

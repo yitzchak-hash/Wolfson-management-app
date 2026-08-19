@@ -2413,3 +2413,56 @@ and draws a one-pixel grid as a sharpness test. A 4K panel reporting 1920×1080
 at ratio 1 is the TV stretching the picture, which no change in this app can
 sharpen; anything more is ours. Read it off the actual TV before touching the
 wall's scaling.
+
+---
+
+# v2 — the board's chrome, and one notebook everybody watches
+
+## The rail lives in a BAND
+`BoardToolbar` takes `topGap` / `bottomGap`, measured in `GeneralJobsPage`
+(`chromeGap`, a `useLayoutEffect` that only writes when the numbers change):
+the floating header's real bottom — whose right-hand end carries **Add job**,
+which the rail used to lie straight across — and whatever the overview is
+currently taking. `alignItems: center`, so the rail floats in the middle of
+what is left rather than starting at the top.
+
+## The overview is a widget now
+No more two-step bigger/smaller. A resize corner **top-left**, the move handle
+**bottom-right** (opposite corners on purpose), `0` while sizing puts it back,
+and the size lives in `board_overview_size` — localStorage, per machine, the
+same rule as the tool rail's size and `board_default_zoom_<pid>`. When the
+panel has been MOVED it is anchored top-left, so resizing also shifts the
+stored position (`movePos` on `usePanelDrag`) to hold the far corner still.
+
+## The store says what is already there
+`WidgetStore` takes `placed: Map<widgetId, count>` — the board passes what is
+on the ACTIVE named board, the dashboard passes its own widgets. Labelled,
+**never disabled**: a second notebook or a third clock is a real thing to want.
+"on the board" (grey) and "added" (green) are two different facts and are drawn
+side by side, never one instead of the other.
+
+## One notebook is MAIN, the rest are projections
+`el.data.role: 'projection'` — absent means main.
+- `PlannerHost` in `widgets.tsx` subscribes to `canvasElements` and renders the
+  MAIN's element for a projection. It must be a real component: the projection
+  has to redraw when a DIFFERENT element changes, which a plain render function
+  in the registry cannot see.
+- It renders the main's **identity**, not just its data — every link a planner
+  makes (`inNotebook`, the schedule window, the take-off dialogs) points at a
+  notebook by id, and a projection answering with its own id would quietly
+  build a second set of them.
+- `projection` is a separate prop from `readOnly` because a projection keeps
+  ONE gesture: a click on a job still opens it (`openOnly` on the entry). That
+  is the whole reason to put a copy on a second screen.
+- The second planner placed on a board defaults to a projection; the pencil's
+  **plannerRole** field moves the crown, demoting every other copy first, after
+  a warning. Demote-then-crown, never the other way round — two mains for even
+  a moment is a projection with nothing to point at.
+
+## Two group bugs the wall showed
+`binKeyOf(openBin)`, never `openBin.binKind` — the documented trap, and it
+meant every group made by hand (or by the import) opened EMPTY on the TV. The
+group window also has the app's forgiving search on top now, because a group
+holding six hundred finished jobs is a scroll, not a list. And a group the
+import creates wears the Archive slate rather than amber: it was the one yellow
+thing on the board and read as a warning.

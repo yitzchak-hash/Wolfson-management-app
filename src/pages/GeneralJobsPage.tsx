@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
 import {
   Plus, Briefcase, MapPin, ExternalLink, Trash2, ClipboardList, FolderOpen,
   Copy, StickyNote, Square, Palette, Pencil, X, AlertTriangle,
@@ -463,6 +463,43 @@ export function GeneralJobsPage() {
   const docFileRef = useRef<HTMLInputElement>(null);
   /** Right-clicking the pen or the marker opens its colours and widths. */
   const [penOpts, setPenOpts] = useState<{ tool: 'pen' | 'highlighter' | 'eraser'; x: number; y: number } | null>(null);
+  /**
+   * The band the tool rail is allowed to live in.
+   *
+   * Measured rather than guessed: the top is the floating header's real bottom,
+   * whose right-hand end carries Add job — the rail used to start at 12px and
+   * lay straight across it — and the bottom is whatever the overview is
+   * currently taking, which changes when it is expanded. Only counted when the
+   * overview is actually down there; once it has been dragged up the rail keeps
+   * its own margin instead of collapsing to nothing.
+   */
+  /**
+   * What is already on THIS board, by widget id — the store labels its cards
+   * with it. Counted on the board being added to, so a widget standing on
+   * another named board does not claim to be here.
+   */
+  const placedWidgets = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const el of canvasElements) {
+      if (el.type !== 'widget' || !el.widget) continue;
+      if ((el.board ?? '') !== (activeBoardView ?? '')) continue;
+      m.set(el.widget, (m.get(el.widget) ?? 0) + 1);
+    }
+    return m;
+  }, [canvasElements, activeBoardView]);
+
+  const [chromeGap, setChromeGap] = useState({ top: 0, bottom: 124 });
+  useLayoutEffect(() => {
+    const vp = viewportRef.current?.getBoundingClientRect();
+    if (!vp) return;
+    const hb = headerBarRef.current?.getBoundingClientRect();
+    const mm = viewportRef.current?.querySelector('[data-board-overview]')?.getBoundingClientRect();
+    const top = hb ? Math.max(0, Math.min(hb.bottom - vp.top, vp.height * 0.4)) : 0;
+    const low = mm && mm.top - vp.top > vp.height * 0.5;
+    const bottom = low ? Math.max(24, vp.bottom - mm!.top) : 24;
+    setChromeGap(g => (Math.abs(g.top - top) < 1 && Math.abs(g.bottom - bottom) < 1
+      ? g : { top, bottom }));
+  });
   /** Nib as well as colour and width — a dashed line means something different. */
   const [penStyle, setPenStyle] = useState({ color: '#1e3a5f', width: 3, nib: 'round' as StrokeNib });
   const [markStyle, setMarkStyle] = useState({ color: '#facc15', width: 16, nib: 'chisel' as StrokeNib });
@@ -883,6 +920,18 @@ export function GeneralJobsPage() {
       ? projectBoard.plannerArchive?.find(a => a.widget === def.id)
       : undefined;
 
+    /**
+     * The FIRST planner is the main one; every one after it is a projection.
+     *
+     * One notebook is the secretary's and the rest are copies of it — so a
+     * second one placed by somebody wanting the week on another screen shows
+     * her week rather than opening a blank one that quietly competes with it.
+     * The role is changed from the pencil, with a warning.
+     */
+    const planner = !isArt && (def.id === 'rota' || def.id === 'week-planner');
+    const alreadyMain = planner && canvasElements.some(e =>
+      e.type === 'widget' && e.widget === def.id && (e.data as Record<string, unknown> | undefined)?.role !== 'projection');
+
     addCanvasElement({
       addedAt: new Date().toISOString(),
       id: 'CE-' + Math.random().toString(36).slice(2, 9),
@@ -896,15 +945,20 @@ export function GeneralJobsPage() {
       w: def.w, h: def.h,
       text: '',
       color: isArt ? '#dc2626' : '#ffffff',
-      data: revive
-        ? JSON.parse(JSON.stringify(revive.data))
-        : isArt ? {} : (def.data ? JSON.parse(JSON.stringify(def.data)) : {}),
+      data: {
+        ...(revive
+          ? JSON.parse(JSON.stringify(revive.data))
+          : isArt ? {} : (def.data ? JSON.parse(JSON.stringify(def.data)) : {})),
+        ...(alreadyMain ? { role: 'projection' } : {}),
+      },
     });
     // The store STAYS OPEN. Furnishing a board meant reopening it for every
     // single piece.
-    setToast(revive
-      ? `${def.name} added — everything that was in the last one is back`
-      : `${def.name} added`);
+    setToast(alreadyMain
+      ? `${def.name} added as a projection — it shows the main one`
+      : revive
+        ? `${def.name} added — everything that was in the last one is back`
+        : `${def.name} added`);
   }
 
   function handleToolPick(next: BoardTool) {
@@ -4454,6 +4508,12 @@ export function GeneralJobsPage() {
           </div>
         ) : (
         <BoardToolbar
+          /* The rail sits in the band between the floating header — whose
+             right-hand end carries Add job — and the overview in the bottom
+             corner, centred in whatever is left. It used to start at the very
+             top and lie across that button. */
+          topGap={chromeGap.top}
+          bottomGap={chromeGap.bottom}
           setup={projectBoard.toolbar}
           onPickWidget={id => { const d = WIDGETS.find(w => w.id === id); if (d) placeWidget(d); }}
           // The eraser is separate state, not a value of `tool` — while it is
@@ -5913,7 +5973,9 @@ export function GeneralJobsPage() {
       })()}
 
       {/* ── Widget store ── */}
-      {storeOpen && <WidgetStore onPick={placeWidget} onClose={() => setStoreOpen(false)} />}
+      {storeOpen && (
+        <WidgetStore onPick={placeWidget} onClose={() => setStoreOpen(false)} placed={placedWidgets} />
+      )}
 
       {/* ── A group, opened as its own board ── */}
       {widgetList && (

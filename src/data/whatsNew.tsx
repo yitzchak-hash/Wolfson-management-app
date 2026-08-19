@@ -30,6 +30,46 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-08-23',
+    title: 'One notebook everybody can watch',
+    items: [
+      {
+        title: 'A second weekly notebook shows the first one',
+        body: 'Put another notebook on a board and it arrives as a projection: the same '
+          + 'week, live, that cannot be written into by mistake — but a job in a square '
+          + 'still opens. The pencil says which copy is the main one, and changing that '
+          + 'warns you first.',
+        demo: 'list',
+      },
+      {
+        title: 'The store says what you already have',
+        body: 'A widget already on the board is labelled as such. You can still add '
+          + 'another — that is the point of the label rather than a locked button.',
+        demo: 'tap',
+      },
+      {
+        title: 'The toolbar stopped covering Add job',
+        body: 'It now sits centred in the space between the header and the board '
+          + 'overview, out of the way of everything.',
+        demo: 'drag',
+      },
+      {
+        title: 'The overview sizes to whatever you want',
+        body: 'Drag its top-left corner to any size instead of choosing between two, '
+          + 'move it by the handle in the opposite corner, and press 0 while doing '
+          + 'either to put it back.',
+        demo: 'drag',
+      },
+      {
+        title: 'Groups on the wall',
+        body: 'Opening a group on the TV now shows what is in it — groups you made '
+          + 'yourself came up empty — and has a search box on top, which matters when a '
+          + 'group holds hundreds of finished jobs.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2026-08-22',
     title: 'Plans that stay sharp, and a sticky note that is one sticky note',
     items: [

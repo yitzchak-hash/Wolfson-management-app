@@ -17,6 +17,15 @@ const routeRows = plan.counts.byRoute.slice().sort((a, b) => b.n - a.n);
 const unroutedRows = plan.counts.byUnrouted.slice().sort((a, b) => b[1] - a[1]);
 const refusedRows = plan.counts.byRefused.slice().sort((a, b) => b[1] - a[1]);
 
+const byGroup = new Map();
+for (const p of plan.planned) {
+  const k = p.group || 'Straight onto the board';
+  byGroup.set(k, (byGroup.get(k) ?? 0) + 1);
+}
+const notRows = plan.unrouted.filter(r => r.crmStage === 'Not');
+const notWithDrive = notRows.filter(r => r.drive).length;
+const notWithPhone = notRows.filter(r => r.phone).length;
+
 const noDrive = plan.planned.filter(p => !p.folderId).length;
 const withPhone = plan.planned.filter(p => p.phone).length;
 const clashRows = plan.planned.filter(p => p.warnings.some(w => w.includes('surname'))).length;
@@ -34,7 +43,7 @@ function plannedRow(p, i) {
   if (p.warnings.some(w => w.includes('another workspace'))) flags.push('<span class="flag hot" title="the name mentions Wolfson or Netiv">other site?</span>');
   if (p.warnings.some(w => w.includes('surname'))) flags.push('<span class="flag" title="another job carries the same surname">shared name</span>');
   const dest = p.group === '' ? 'Board' : p.group;
-  const cls = p.group === 'Done' ? 'done' : p.group === 'Ready to Start' ? 'ready' : 'board';
+  const cls = chipClass(p.group);
   return `<tr data-stage="${esc(p.crmStage)}" data-q="${esc((p.deal + ' ' + p.account + ' ' + p.phone).toLowerCase())}">
 <td class="num">${i + 1}</td>
 <td class="name"><b class="sur">${esc(p.family)}</b><b class="full">${esc(p.fullName)}</b>${p.kind ? `<em>${esc(p.kind)}</em>` : ''}</td>
@@ -55,6 +64,16 @@ function plainRow(r, i, withReason) {
 <td class="dr">${r.drive ? `<a href="${esc(r.drive)}" target="_blank" rel="noopener">open</a>` : '<span class="muted">—</span>'}</td>
 ${withReason ? `<td class="why">${esc(r.reason)}</td>` : ''}
 </tr>`;
+}
+
+/** One colour per destination, so a column of 800 rows reads at a glance. */
+function chipClass(group) {
+  if (group === 'Done') return 'done';
+  if (group === 'Ready to Start') return 'ready';
+  if (group === 'Archive') return 'arch';
+  if (group === 'Trash') return 'trash';
+  if (group.startsWith('Currently')) return 'live';
+  return 'board';
 }
 
 const chips = list => list.map(s => `<button type="button" class="tchip" data-stage="${esc(s)}">${esc(s)}</button>`).join('');
@@ -152,6 +171,11 @@ body[data-names="full"] .sur{display:none}
 .chip.done{background:var(--good-bg); color:var(--good); border-color:color-mix(in srgb, var(--good) 30%, transparent)}
 .chip.ready{background:var(--amber-bg); color:var(--amber); border-color:color-mix(in srgb, var(--amber) 30%, transparent)}
 .chip.board{background:var(--panel-2); color:var(--navy); border-color:var(--line)}
+.chip.live{background:#e4effa; color:#1e3a5f; border-color:#bcd6ef}
+.chip.arch{background:var(--panel-2); color:var(--ink-2); border-color:var(--line)}
+.chip.trash{background:var(--hot-bg); color:var(--hot); border-color:transparent}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .chip.live{background:#17293a; color:#9dc0e2; border-color:#2a3846}}
+:root[data-theme="dark"] .chip.live{background:#17293a; color:#9dc0e2; border-color:#2a3846}
 .flag{display:inline-block; margin-right:5px; padding:1px 6px; border-radius:2px; font-size:10.5px;
   background:var(--panel-2); color:var(--ink-2); border:1px solid var(--line); white-space:nowrap}
 .flag.warn{background:var(--amber-bg); color:var(--amber); border-color:transparent}
@@ -206,18 +230,19 @@ const body = `
 <header class="mast">
   <p class="eyebrow">For approval · before anything is written</p>
   <h1>The past year, sorted onto the board</h1>
-  <p class="sub">Every one of the ${n(plan.rowsRead)} deals in the CRM export, put through the rules you gave me.
-     Nothing has been created yet. Read it, tell me what to change, and I will run it.</p>
+  <p class="sub">Every one of the ${n(plan.rowsRead)} deals in the CRM export, put through the routing you
+     gave me on 22 August. Nothing has been created yet. One stage still needs a word from you; everything
+     else is ready to run.</p>
   <div class="meta">
     <span>Source: ${esc(plan.source)}</span>
     <span>${n(plan.rowsRead)} rows read</span>
-    <span>Prepared 19 Aug 2026</span>
+    <span>Second pass · 22 Aug 2026</span>
   </div>
 </header>
 
 <div class="strip">
   <div class="stat go"><b>${n(plan.counts.planned)}</b><span>jobs I will create</span></div>
-  <div class="stat ask"><b>${n(plan.counts.unrouted)}</b><span>waiting on a rule from you</span></div>
+  <div class="stat ask"><b>${n(plan.counts.unrouted)}</b><span>waiting on one word from you</span></div>
   <div class="stat no"><b>${n(plan.counts.refused)}</b><span>left out, as you said</span></div>
   <div class="stat no"><b>${n(plan.counts.problems)}</b><span>rows I could not read</span></div>
 </div>
@@ -234,7 +259,7 @@ const body = `
           <td class="n">${n(r.n)}</td>
           <td>${esc(r.crmStage)}</td>
           <td class="arrow">→</td>
-          <td><span class="chip ${r.group === 'Done' ? 'done' : r.group === 'Ready to Start' ? 'ready' : 'board'}">${r.group === '' ? 'Straight onto the board' : esc(r.group)}</span></td>
+          <td><span class="chip ${chipClass(r.group)}">${r.group === '' ? 'Straight onto the board' : esc(r.group)}</span></td>
           <td class="st">${r.stage ? esc(r.stage) : '<span class="muted">left with no stage</span>'}</td>
         </tr>`).join('')}
         ${refusedRows.map(([s, c]) => `<tr class="off">
@@ -246,10 +271,16 @@ const body = `
       </tbody>
     </table>
   </div>
-  <p class="note">Of the ${n(plan.counts.planned)} I will create: <strong>${n(toDone)}</strong> go into the
-     <em>Done</em> group, <strong>${n(toReady)}</strong> into <em>Ready&nbsp;to&nbsp;Start</em>, and
-     <strong>${n(toBoard)}</strong> land on the open board where you will see them every day.
-     A job in a group still exists in full — it just stays out of the counts.</p>
+  <p class="note">
+    Where the ${n(plan.counts.planned)} land:
+    ${[...byGroup.entries()].sort((a, b) => b[1] - a[1])
+      .map(([g, c]) => `<strong>${n(c)}</strong> in ${esc(g)}`).join(' · ')}.
+    A job in a group still exists in full — its Drive folder, its phone, its notes.
+    It just stays out of the daily board and the live counts.
+    <br><br>
+    <strong>Two groups do not exist yet and will be created:</strong> Currently in AC and
+    Currently in Geves, beside the four the board ships with.
+  </p>
 </section>
 
 <section>
@@ -257,13 +288,24 @@ const body = `
   <div class="qs">
 
     <div class="q">
-      <h3>478 deals are sitting in stages you did not mention</h3>
-      <p>The biggest by far is a stage the export writes as <strong>“Not”</strong> — 295 deals, many with a
-         Drive folder and a phone number. I do not know what it means, so I have not touched it.</p>
-      <p>The rest are mostly the drawing side of the business: Plans Ready (61), Receiving plans (47),
-         Plans Redone (22), Pre-Job Checklist (14). They look live, not historical.</p>
-      <p class="opt">Say the word for each one — a group, a stage, or “leave it” — and they go in on the next pass.
-         The full list is at the bottom of this page.</p>
+      <h3>One stage left: the ${n(notRows.length)} deals the export calls “Not”</h3>
+      <p>Every other stage you named is now routed. This is the only one still without a rule, and it is
+         the biggest single group in the file. <strong>${n(notWithDrive)} of them have a Drive folder</strong> and
+         <strong>${n(notWithPhone)} have a phone number</strong>, and the job types read like live work rather than
+         junk: 81 VRF, 15 VRF System, 13 Undecided, 10 Central, 9 Central Replacement — and 102 with no
+         job type written at all.</p>
+      <p>You started to say Trash and then changed to Archive, so I have not guessed. Tell me which and
+         they go in with the rest.</p>
+      <p class="opt">Or, if you meant them to stay out entirely, say that instead — but they look too much
+         like real customers for me to assume it.</p>
+    </div>
+
+    <div class="q ok">
+      <h3>The 49 you told me to skip are still skipped</h3>
+      <p>Babysitting (23), Creating Proposal (13), Collecting Information (10) and Closed Lost (3) do not
+         come in, exactly as you said the first time.</p>
+      <p class="opt">If “everything left out should go into Archive” was meant to include these four as
+         well, say so and I will bring them in too.</p>
     </div>
 
     <div class="q">
@@ -307,6 +349,14 @@ const body = `
     </div>
 
     <div class="q ok">
+      <h3>They arrive as ordinary jobs, plans and photos open</h3>
+      <p>Each imported job now has its Engineered Plans and Photos folders opened up in Drive, exactly as
+         if you had pasted the link in by hand — so a worker on site can see the sheet without signing in.
+         That runs during the import, behind a bar that counts through it and holds the screen until it
+         has finished.</p>
+    </div>
+
+    <div class="q ok">
       <h3>If it goes wrong, it comes straight back out</h3>
       <p>The whole import lands as one batch with its own line in the Job Board’s settings — one press
          removes exactly these jobs and nothing else, whenever you like, not just on the day.</p>
@@ -336,8 +386,9 @@ const body = `
 </section>
 
 <section>
-  <h2>The ${n(plan.counts.unrouted)} waiting on your ruling</h2>
-  <p class="lede">Nothing here is being imported. Tell me where a stage belongs and it moves up to the list above.</p>
+  <h2>The ${n(plan.counts.unrouted)} still called “Not”</h2>
+  <p class="lede">The only stage without a rule. Nothing here is being imported yet — say Archive or Trash
+     and every one of them moves up into the list above.</p>
   <div class="controls">
     <input type="search" id="q2" placeholder="Search these…" aria-label="Search the deals awaiting a ruling">
     <span class="count" id="c2"></span>

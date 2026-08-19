@@ -115,6 +115,7 @@ function readSize(): { w: number; h: number } {
 export function BoardToolbar({
   active, onPick, onFit, onToggleSettings, onToggleControls, controlsOpen,
   onOpenStore, onToggleMap, mapOn, onPenOptions, setup, onPickWidget,
+  topGap = 0, bottomGap = 124,
 }: {
   active: BoardTool;
   onPick: (t: BoardTool) => void;
@@ -130,6 +131,10 @@ export function BoardToolbar({
   setup?: ToolbarSetup;
   /** A widget promoted onto the rail, placed straight from it. */
   onPickWidget?: (widgetId: string) => void;
+  /** Where the board's floating header ends — the rail starts below it. */
+  topGap?: number;
+  /** How much the overview takes off the bottom — the rail stops above it. */
+  bottomGap?: number;
 }) {
   // Offset from the default right-edge dock, so the toolbar can be moved anywhere
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -410,13 +415,22 @@ export function BoardToolbar({
 
   return (
     <>
-      {/* Desktop: the floating rail, draggable anywhere. */}
-      {/* Bottom is reserved for the minimap and the zoom readout, so the rail
-          stops short of them and scrolls inside itself instead of overlapping. */}
+      {/* Desktop: the floating rail, draggable anywhere.
+          It lives in the BAND between the header and the overview, centred in
+          it — it used to start at the very top, where it lay across the Add job
+          button at the right-hand end of the header, and stopped short of the
+          overview by a number that had nothing to do with the overview's real
+          height. `topGap` is the header's measured bottom; `bottomGap` clears
+          whatever the overview is currently. */}
       <div
         ref={wrapRef}
         className="hidden md:flex absolute z-40 select-none"
-        style={{ right: 12 - offset.x, top: 12 + offset.y, bottom: 124, alignItems: 'flex-start' }}
+        style={{
+          right: 12 - offset.x,
+          top: topGap + 12 + offset.y,
+          bottom: bottomGap + 12,
+          alignItems: 'center',
+        }}
       >
         {/* Capped and scrollable: the rail grew past the bottom of a laptop
             screen once Store and Map joined it, hiding Setup entirely. Drag the
