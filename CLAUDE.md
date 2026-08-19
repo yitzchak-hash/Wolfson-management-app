@@ -2559,3 +2559,68 @@ names, phone numbers and Drive folder ids, and a Vite bundle is public.
 The export and everything derived from it stay **gitignored**
 (`scratchpad/*.csv`, `import-plan.json`, `import-approval.html`). The tools are
 committed; their output never is.
+
+---
+
+# v2 — the wall's two different kinds of "fuzzy"
+
+## SIZE and SHARPNESS are different faults with different remedies
+The office reported the wall as fuzzy and unreadable. Its own numbers —
+`2560 × 1248`, ratio `0.75`, real `1920 × 936`, screen `1920 × 1080`, board
+scale `112%` — hold two independent problems, and fixing either one alone
+leaves the complaint standing:
+
+- **SIZE.** `112%` is `autoScale 1.6 × boost 0.7`: the wall's OWN zoom was
+  turned down to 70%. Measured on that panel, the smallest text on the board
+  was **8.4 real pixels tall**. Nothing can sharpen writing that small; it has
+  to be bigger. This is the fault that made words unreadable.
+- **SHARPNESS.** A device ratio below 1 is the browser laying the page out
+  wider than the panel and squeezing it down, so a letter is drawn into three
+  quarters of a real pixel.
+
+## The frame lays out in REAL pixels
+`dprFix` in `TvPresentationPage`: when `devicePixelRatio < 0.98`, the frame is
+given an explicit size in **device** pixels and `zoom: 1/dpr`. One CSS pixel
+inside the wall is then exactly one device pixel (asserted:
+`frameZoom × dpr === 1.000`), so text is laid out and rasterised at the size it
+is shown. An inline width beats the `h-screen w-screen` classes, so no
+className changes.
+
+**On the FRAME, never on the root.** Viewport units are not divided by zoom, so
+a `w-screen` frame under a zoomed root lays out 2560 wide and is then zoomed
+again — a third of the wall ran off the side. Screens already at 1:1 are
+untouched; browser zoom on a desktop is somebody's deliberate choice.
+
+**This buys sharpness, not size** — verified: smallest text is 12 real px on
+the compensated 0.75 panel and 12 on a true 1920 screen. Do not present it as
+making anything bigger.
+
+## `autoScale` must watch the FRAME, not the window
+It measured `frameRef.clientWidth` once on mount and thereafter only on a
+window resize — but the frame ALSO changes size when the compensation above
+kicks in, which fires no resize event. The scale stayed at the figure computed
+for the uncompensated frame and the board was silently drawn a third larger
+than the number it reported. Now a `ResizeObserver` attached through a
+**callback ref** (`setFrame`), because the page has four frames and switching
+view swaps the node out from under a plain effect.
+
+## The report reads numbers back off the page
+`ScreenReport` measures rather than assumes: it walks text leaves and reports
+the smallest in real pixels via
+`fontSize × (rect.height / offsetHeight) × dpr`. Confirmed by probe: under
+`zoom`, Chrome keeps `getComputedStyle().fontSize` and `offsetHeight` in the
+element's LOCAL space and scales only `getBoundingClientRect()` — so the ratio
+is required and multiplying computed font-size by `dpr` alone is wrong.
+
+It now shows **Wall zoom** and **Smallest text** on their own lines, says how
+much screen the browser's toolbars are eating, and offers one press that raises
+the wall's zoom to `READABLE_PX / smallest × boost` and goes full screen.
+The old advice to press **Ctrl and 0 was removed as the primary remedy** — it
+is useless to somebody standing in front of a TV with a remote.
+
+Harness: `scratchpad/tvsharp.mjs` — the office's exact geometry, with
+`window.screen` overridden to 1920×1080 because Playwright reports `screen` as
+the viewport and the browser-bar condition cannot otherwise arise. Its own
+trap: `button[title="About this screen"]` must be matched WHOLE — a loose
+`/screen/` hits **Full screen** first, which sits earlier in the bar, so the
+wall went full screen and a working report read as broken.

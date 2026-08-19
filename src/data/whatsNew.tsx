@@ -30,6 +30,35 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-08-26',
+    title: 'The wallboard can tell you why it looks bad',
+    items: [
+      {
+        title: 'It now says how big the writing really is',
+        body: 'The ⓘ button on the wall reports the words’ true height in screen pixels — '
+          + 'anything under about fourteen cannot be read from across a room. It also shows '
+          + 'the wall’s own zoom on its own line, because turning that down is the easiest '
+          + 'way to make everything unreadable without realising that is what happened.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'And one button puts it right',
+        body: 'If the writing is too small the report offers a single press that sets the '
+          + 'wall’s zoom to whatever makes it readable and goes full screen. No keyboard, no '
+          + 'browser settings — it can all be done from in front of the screen.',
+        demo: 'tap',
+      },
+      {
+        title: 'The wall draws in the screen’s own pixels',
+        body: 'When a browser is laying the page out wider than the panel can show, the wall '
+          + 'now lays itself out in the panel’s real pixels instead, so every letter is drawn '
+          + 'at the size it actually appears rather than being shrunk into a fraction of a '
+          + 'pixel. Screens already drawing normally are left exactly as they were.',
+        demo: 'zoom',
+      },
+    ],
+  },
+  {
     date: '2026-08-25',
     title: 'The year’s jobs arrive on the board',
     items: [

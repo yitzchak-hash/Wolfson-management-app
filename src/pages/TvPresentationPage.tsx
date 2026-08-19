@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useStore, loadAllProjectsTaskData } from '../data/store';
 import { Apartment, CanvasElement, isCountableApartment, BIN_META, binKeyOf, binLabelOf, getStageName, TV_DASH_BOARD } from '../types';
@@ -51,36 +51,91 @@ const PlanAnnotator = lazy(() =>
  *    real resolution the lines stay crisp and separate; on a stretched one they
  *    smear together into grey.
  */
-function ScreenReport({ onClose, scale }: { onClose: () => void; scale: number }) {
+/** Comfortable smallest text on a wall panel, in REAL pixels. */
+const READABLE_PX = 16;
+
+/**
+ * What this screen really is, measured rather than assumed.
+ *
+ * "Fuzzy" covers two completely different faults and the remedy for one does
+ * nothing for the other, so the report has to separate them:
+ *
+ *   SIZE — how many REAL pixels tall a letter ends up. This is what decides
+ *          whether it can be read from across the room, and it is governed by
+ *          the wall's own zoom, which somebody can turn down without ever
+ *          realising that is what they did.
+ *   SHARPNESS — whether those pixels are crisp, which at a device ratio below
+ *          1 they cannot be, because the letter is drawn into less than one.
+ *
+ * The old version printed a single "Board scale" that was neither of these (it
+ * showed the automatic figure, not the one the board is actually drawn at) and
+ * then advised pressing Ctrl and 0 — on a screen somebody is standing in front
+ * of with a remote. Every number here is now read back off the rendered page.
+ */
+function ScreenReport({ onClose, boost, onBoost, onFull, t }: {
+  onClose: () => void;
+  boost: number;
+  onBoost: (b: number) => void;
+  onFull: () => void;
+  t: (en: string, he: string) => string;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
   const [tick, setTick] = useState(0);
+  const [seen, setSeen] = useState<{ smallest: number | null; drawn: number } | null>(null);
   useEffect(() => {
-    const on = () => setTick(t => t + 1);
+    const on = () => setTick(v => v + 1);
     window.addEventListener('resize', on);
     return () => window.removeEventListener('resize', on);
   }, []);
+
+  /**
+   * Measure the page as drawn, after a frame, skipping the report's own words.
+   *
+   * `rect.height / offsetHeight` is the ratio the browser is really drawing at:
+   * it folds in every `zoom` between the element and the viewport, which is
+   * exactly what somebody across the room is looking at. Multiplied by the
+   * device ratio it gives the honest answer in real pixels.
+   */
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      const dpr = window.devicePixelRatio || 1;
+      let smallest = Infinity, drawn = 0, n = 0;
+      for (const el of document.querySelectorAll<HTMLElement>('div,span,p,b,strong,h1,h2,h3')) {
+        if (el.children.length || !el.offsetHeight) continue;
+        if (panelRef.current?.contains(el)) continue;
+        if (!el.textContent?.trim()) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width < 3 || r.height < 3) continue;
+        const px = parseFloat(getComputedStyle(el).fontSize) * (r.height / el.offsetHeight) * dpr;
+        if (px > 0) { smallest = Math.min(smallest, px); drawn = Math.max(drawn, px); n++; }
+      }
+      setSeen({ smallest: n ? Math.round(smallest) : null, drawn: Math.round(drawn) });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [tick, boost]);
+
   const dpr = window.devicePixelRatio || 1;
   const w = window.innerWidth, h = window.innerHeight;
-  /**
-   * A ratio below 1 is the browser's own zoom set under 100%.
-   *
-   * It is the worst of the three states and the easiest to miss: the page is
-   * laid out WIDER than the panel and then squeezed down into it, so every
-   * letter is drawn into less than one real pixel. The office's own panel read
-   * 2560x1248 at 0.75 — a 1080p screen being asked to draw 2560 across.
-   */
+  const realW = Math.round(w * dpr), realH = Math.round(h * dpr);
+  /** A ratio below 1 means the browser is laying out wider than the panel. */
   const shrunk = dpr < 0.98;
-  const stretched = !shrunk && dpr <= 1 && screen.width <= 1920 && w <= 1920;
-  const row = (k: string, v: string) => (
+  const stretched = !shrunk && dpr <= 1 && screen.width <= 1920 && realW <= 1920;
+  /** Screen the browser's own toolbars are eating — real pixels, top and bottom. */
+  const lost = screen.height && Math.abs(screen.width - realW) < 40
+    ? Math.max(0, screen.height - realH) : 0;
+  const tooSmall = seen?.smallest != null && seen.smallest < 14;
+  const row = (k: string, v: string, warn = false) => (
     <div className="flex justify-between gap-6 py-0.5">
       <span className="opacity-60">{k}</span>
-      <span className="font-bold tabular-nums">{v}</span>
+      <span className={`font-bold tabular-nums ${warn ? 'text-[#b4342a]' : ''}`}>{v}</span>
     </div>
   );
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60" onClick={onClose}>
       <div
+        ref={panelRef}
         onClick={e => e.stopPropagation()}
-        className="rounded-2xl bg-white text-[#16212e] shadow-2xl px-6 py-5"
+        className="rounded-2xl bg-white text-[#16212e] shadow-2xl px-6 py-5 max-h-[92vh] overflow-y-auto"
         style={{ width: 'min(560px, 92vw)', fontSize: 15 }}
         data-tick={tick}
       >
@@ -88,22 +143,58 @@ function ScreenReport({ onClose, scale }: { onClose: () => void; scale: number }
         <p className="text-[13px] opacity-60 mb-3">Read these out and we will know what to fix.</p>
         <div className="rounded-xl bg-slate-50 px-4 py-3 mb-3">
           {row('Drawing at', `${w} × ${h}`)}
-          {row('Ratio', String(dpr))}
-          {row('Real pixels', `${Math.round(w * dpr)} × ${Math.round(h * dpr)}`)}
+          {row('Ratio', String(dpr), shrunk)}
+          {row('Real pixels', `${realW} × ${realH}`)}
           {row('Screen says', `${screen.width} × ${screen.height}`)}
-          {row('Board scale', `${Math.round(scale * 100)}%`)}
+          {row('Wall zoom', `${Math.round(boost * 100)}%`, boost < 0.95)}
+          {seen?.smallest != null
+            && row('Smallest text', `${seen.smallest} real pixels tall`, tooSmall)}
+          {lost > 30 && row('Lost to browser bars', `${lost} pixels`, true)}
         </div>
+
+        {/* Size first: it is the one that makes words unreadable, the one
+            somebody can change from here, and the one that gets mistaken for
+            fuzziness. */}
+        {tooSmall && (
+          <p className="text-[13px] mb-2">
+            <b>The words on this wall are about {seen?.smallest} real pixels tall.</b> That is too
+            small to read from across a room, and no amount of sharpening will help — it needs to
+            be bigger. {boost < 0.95
+              ? `The wall's own zoom is turned down to ${Math.round(boost * 100)}%.`
+              : 'Turn the wall\'s zoom up with the + beside the clock.'}
+          </p>
+        )}
+        {tooSmall && (
+          <button
+            onClick={() => {
+              const want = seen?.smallest ? (READABLE_PX / seen.smallest) * boost : 1;
+              onBoost(Math.min(2.5, Math.max(1, Math.round(want * 10) / 10)));
+              if (lost > 30) onFull();
+            }}
+            className="w-full mb-3 py-2.5 rounded-xl font-bold text-white"
+            style={{ backgroundColor: '#b4342a' }}
+          >
+            {t('Make the words readable', 'הגדל את הכתב')}
+          </button>
+        )}
+
         <p className="text-[13px] mb-2">
           {shrunk
             ? `The browser's own zoom is at ${Math.round(dpr * 100)}%, so the page is laid out `
-              + `${w} wide and squeezed into ${Math.round(w * dpr)} real pixels — every letter drawn `
-              + 'into less than one pixel. Set the browser zoom back to 100% (Ctrl and 0) and use the '
-              + 'wallboard’s own − and + instead; that is what it is for.'
+              + `${w} wide on a panel with only ${realW} real pixels across. The wall now lays `
+              + 'itself out in real pixels to stay sharp, but the pixels are still all there are: '
+              + 'putting the browser back to 100% would give you a third more of them.'
             : stretched
-              ? 'This looks like a screen drawing at 1080p. If the panel is 4K, the source is sending it '
+              ? 'This screen is drawing at 1080p. If the panel is 4K, the source is sending it '
                 + '1080p — that is a setting on the box or the TV, not something the app can sharpen.'
               : 'This screen is drawing at its real resolution, so anything fuzzy is ours.'}
         </p>
+        {lost > 30 && (
+          <p className="text-[13px] mb-2">
+            {lost} pixels of the screen are browser toolbar. On a panel with {screen.height} to
+            spare that is worth reclaiming — use Full screen in the bar.
+          </p>
+        )}
         <p className="text-[13px] font-semibold mb-1">Sharp test</p>
         <div
           className="rounded-lg border border-slate-200"
@@ -191,16 +282,39 @@ export function TvPresentationPage() {
   const DESIGN_W = 1600;
   const [autoScale, setAutoScale] = useState(1);
 
-  useEffect(() => {
-    const measure = () => {
-      const w = frameRef.current?.clientWidth ?? window.innerWidth;
-      // Never below 1: on a small screen we want the real layout, not a shrunk one.
-      setAutoScale(Math.max(1, w / DESIGN_W));
-    };
-    measure();
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
+  /**
+   * Watch the FRAME, not the window.
+   *
+   * This measured once on mount and then only on a window resize — but the
+   * frame also changes size when the real-pixel compensation below kicks in,
+   * and that fires no resize event. The scale was therefore left at the figure
+   * computed for the uncompensated frame, and the board was silently drawn a
+   * third larger than the number it was reporting. A ResizeObserver answers
+   * whatever the cause, and it is attached through a callback ref because the
+   * page has four different frames and switching view swaps the node out from
+   * under a plain effect.
+   */
+  const measureFrame = useCallback(() => {
+    const w = frameRef.current?.clientWidth ?? window.innerWidth;
+    // Never below 1: on a small screen we want the real layout, not a shrunk one.
+    setAutoScale(Math.max(1, w / DESIGN_W));
   }, []);
+  const roRef = useRef<ResizeObserver | null>(null);
+  const setFrame = useCallback((node: HTMLDivElement | null) => {
+    frameRef.current = node;
+    roRef.current?.disconnect();
+    if (!node) return;
+    roRef.current = new ResizeObserver(measureFrame);
+    roRef.current.observe(node);
+    measureFrame();
+  }, [measureFrame]);
+  useEffect(() => {
+    window.addEventListener('resize', measureFrame);
+    return () => {
+      window.removeEventListener('resize', measureFrame);
+      roRef.current?.disconnect();
+    };
+  }, [measureFrame]);
 
   /**
    * The slider is a MULTIPLIER on the automatic scale, not a replacement for it.
@@ -210,6 +324,45 @@ export function TvPresentationPage() {
    * on a 1080p office TV and a 4K one. A raw pixel number would have to be
    * re-tuned for each screen.
    */
+  /**
+   * A device ratio below 1 is the browser laying the page out WIDER than the
+   * panel and squeezing it down: the office's own screen reported 0.75, so
+   * every letter was being drawn into three quarters of a real pixel.
+   *
+   * Nothing in CSS can add pixels — but the page does not have to throw them
+   * away. Sizing the frame in REAL pixels and zooming it by 1/ratio puts one
+   * CSS pixel back on one device pixel, so text is laid out and rasterised at
+   * the size it is actually shown instead of being resampled down. Measured on
+   * the office's numbers: the smallest text goes from being drawn at 12 device
+   * pixels' worth of detail to a true 16.
+   *
+   * On the FRAME, never on the root: viewport units are not divided by zoom, so
+   * a `w-screen` frame under a zoomed root lays out 2560 wide and is then
+   * zoomed again, running a third of the wall off the side. An inline width
+   * beats the `h-screen w-screen` classes, so nothing else has to change.
+   *
+   * The wall only. Browser zoom on somebody's desktop is a deliberate choice;
+   * on a panel showing one page all day it is nothing but lost resolution.
+   */
+  const [dprFix, setDprFix] = useState<{ zoom: number; w: number; h: number } | null>(null);
+  useEffect(() => {
+    const measure = () => {
+      const dpr = window.devicePixelRatio || 1;
+      if (dpr >= 0.98) { setDprFix(null); return; }
+      setDprFix({
+        zoom: 1 / dpr,
+        w: Math.round(window.innerWidth * dpr),
+        h: Math.round(window.innerHeight * dpr),
+      });
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
+  const frameStyle = dprFix
+    ? { zoom: dprFix.zoom, width: dprFix.w, height: dprFix.h }
+    : undefined;
+
   const boostParam = Number(params.get('scale'));
   const boost = Number.isFinite(boostParam) && boostParam > 0
     ? boostParam
@@ -546,7 +699,15 @@ export function TvPresentationPage() {
         style={diag ? { backgroundColor: '#1e3a5f', color: '#fff' } : off}>
         <Info size={16} />
       </button>
-      {diag && <ScreenReport onClose={() => setDiag(false)} scale={scale} />}
+      {diag && (
+        <ScreenReport
+          onClose={() => setDiag(false)}
+          boost={boost}
+          onBoost={b => { setBoost(b); setDiag(false); }}
+          onFull={() => { if (!document.fullscreenElement) toggleFull(); }}
+          t={t}
+        />
+      )}
 
       {/* Edit mode. Off by default and never sticky — see the note on `editing`. */}
       <button onClick={() => setEditing(v => !v)}
@@ -605,7 +766,7 @@ export function TvPresentationPage() {
       .filter(p => contractorAssignments.some(a => a.id === p.assignmentId && a.apartmentId === openJob.id))
       .sort((a, b) => (b.uploadedAt ?? '').localeCompare(a.uploadedAt ?? ''));
     return (
-      <div ref={frameRef} dir={isRtl ? 'rtl' : 'ltr'} className="h-screen w-screen flex flex-col bg-slate-100 overflow-hidden">
+      <div ref={setFrame} dir={isRtl ? 'rtl' : 'ltr'} style={frameStyle} className="h-screen w-screen flex flex-col bg-slate-100 overflow-hidden">
         {bar}
         {markUp && planId && (
           <Suspense fallback={null}>
@@ -847,7 +1008,7 @@ export function TvPresentationPage() {
      * reflows for a panel turned on its side, because a Flip screen does that.
      */
     return (
-      <div ref={frameRef} dir={isRtl ? 'rtl' : 'ltr'}
+      <div ref={setFrame} dir={isRtl ? 'rtl' : 'ltr'} style={frameStyle}
         className="h-screen w-screen flex flex-col bg-slate-100 overflow-hidden">
         {bar}
         {exitFull}
@@ -887,7 +1048,7 @@ export function TvPresentationPage() {
   // ── A building project: its diagram, scaled to the wall ──
   if (view !== 'general' && projects.some(p => p.id === view)) {
     return (
-      <div ref={frameRef} dir={isRtl ? 'rtl' : 'ltr'} className="h-screen w-screen flex flex-col overflow-hidden bg-white">
+      <div ref={setFrame} dir={isRtl ? 'rtl' : 'ltr'} style={frameStyle} className="h-screen w-screen flex flex-col overflow-hidden bg-white">
         {bar}
         {exitFull}
         {/* Tap a stage to see only it. The legend was already on the wall as
@@ -985,7 +1146,7 @@ export function TvPresentationPage() {
 
   // ── The board itself ──
   return (
-    <div ref={frameRef} dir={isRtl ? 'rtl' : 'ltr'} className="h-screen w-screen flex flex-col overflow-hidden bg-white">
+    <div ref={setFrame} dir={isRtl ? 'rtl' : 'ltr'} style={frameStyle} className="h-screen w-screen flex flex-col overflow-hidden bg-white">
       {bar}
       {/* The board surface is the project's own theme, so the wall matches what
           the office sees on their screens rather than being a second design. */}
