@@ -41,7 +41,7 @@ export function DashboardPage() {
     dashboardWidgetOrder, dashboardHiddenWidgets, setDashboardLayout,
     buildings, currentProjectId, projects, contractors, users,
     canvasElements, addCanvasElement, updateCanvasElement, deleteCanvasElement,
-    contractorPhotos, setCurrentProject,
+    contractorPhotos, setCurrentProject, setPendingFocus,
   } = useStore();
   const stages = allStages.filter(st => currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId);
   // Scope apartments to current project only (guard against stale localStorage)
@@ -113,10 +113,24 @@ export function DashboardPage() {
       setCurrentProject(id);
       navigate(id === 'general' ? '/jobs' : '/project');
     },
+    /**
+     * One unit in another workspace. Switching project is what makes its
+     * records readable at all, and the apartment is handed over as a focus
+     * intent — the same channel search uses — so the arriving page opens it
+     * rather than this one guessing at a route with an id on the end.
+     */
+    openUnit: (pid: string, aptId: string) => {
+      // The switch CLEARS any pending focus — it is part of arriving in a
+      // workspace with nothing left over from the last one. So the intent is
+      // handed over after it, never before, or the unit never opens.
+      if (pid !== currentProjectId) setCurrentProject(pid);
+      setPendingFocus({ kind: 'apartment', id: aptId });
+      navigate(pid === 'general' ? '/jobs' : '/project');
+    },
     showList: (title: string, jobIds: string[]) => setWidgetList({ title, jobIds }),
   }), [apartments, sortedStages, liveAssignments, contractors, users,
        contractorPhotos, activityLogs, currentProjectId, navigate,
-       setPendingOpenAptId, setCurrentProject]);
+       setPendingOpenAptId, setCurrentProject, setPendingFocus]);
 
   /**
    * Home-screen reordering: the dragged card takes the slot it is held over,

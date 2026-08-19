@@ -7,14 +7,14 @@ import {
   Settings2 as Settings, BringToFront, SendToBack, ChevronUp, ChevronDown, Eye,
   Eraser, GripVertical, Lock, Unlock, Group, Ungroup,
 } from 'lucide-react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { useStore } from '../data/store';
 import { rotaCellAt, setRotaHover, anyRota, RotaHit } from '../data/rotaDrop';
 import { PlannerEntry, personOf } from '../components/board/PlannerWidget';
 import { PlannerTaskDialog, PlannerRemoveDialog } from '../components/board/PlannerDialogs';
 import { ScheduleWindow } from '../components/board/ScheduleWindow';
 import { boardAccess } from '../types';
-import { Apartment, CanvasElement, BinKind, BIN_KINDS, BIN_META, binKeyOf, binLabelOf, isBuiltInBin, getStageName, relativeTime, PLANNER_ARCHIVE_MAX } from '../types';
+import { Apartment, CanvasElement, BinKind, BIN_KINDS, BIN_META, binKeyOf, binLabelOf, isBuiltInBin, getStageName, relativeTime, PLANNER_ARCHIVE_MAX, BOARD_MARGIN } from '../types';
 import { printTable, printDot } from '../data/printing';
 import { ApartmentDetailDrawer } from '../components/apartment/ApartmentDetailDrawer';
 import { QuickAddTaskPanel } from '../components/apartment/QuickAddTaskPanel';
@@ -63,6 +63,20 @@ const TILE_W = 215;
 const TILE_H = 132;
 const GAP = 22;
 const PER_ROW = 4;
+
+/**
+ * How big THIS tile is — the single answer, used everywhere a job's box is
+ * needed: snapping, lasso hit-testing, the world's own size, the minimap, the
+ * fly-to and the drag ghosts. A resized tile stores its own size; everything
+ * else falls back to the shared default, so almost every record stays clean.
+ *
+ * `defaultPos`'s grid deliberately does NOT go through this: a board of
+ * resized tiles would re-flow every time one of them changed.
+ */
+const tileSize = (job: { tileW?: number; tileH?: number }) => ({
+  w: job.tileW ?? TILE_W,
+  h: job.tileH ?? TILE_H,
+});
 
 // ─── Color palettes ───────────────────────────────────────────────────────────
 const TILE_PALETTE = [
@@ -305,8 +319,10 @@ export function GeneralJobsPage() {
     restoreBoardLayout,
     deleteBoardLayout,
     pendingFocus,
-    setPendingFocus,
+    setPendingFocus, setCurrentProject,
   } = useStore();
+  /** For the one widget that can send you to another workspace's unit. */
+  const navigate = useNavigate();
 
   /**
    * A board somebody has shared with you to LOOK at.
@@ -482,6 +498,10 @@ export function GeneralJobsPage() {
    * screen describing a gesture that has finished.
    */
   const snapOn = projectBoard.snapToGrid ?? false;
+  /** Advanced guides — size matching on a resize. On unless switched off. */
+  const smartGuides = projectBoard.smartGuides ?? true;
+  /** The gutter kept clear on all four sides, like a page's margins. */
+  const margin = Math.max(0, projectBoard.margin ?? BOARD_MARGIN);
   const [guides, setGuides] = useState<Guide[]>([]);
   /**
    * Everything a moving or resizing box may line itself up with.
@@ -496,7 +516,7 @@ export function GeneralJobsPage() {
     const out: Box[] = [];
     jobs.forEach((j, i) => {
       if (exclude.has(j.id)) return;
-      out.push({ ...jobPos(j, i), w: TILE_W, h: TILE_H });
+      out.push({ ...jobPos(j, i), ...tileSize(j) });
     });
     canvasElements.forEach(el => {
       if (exclude.has(el.id)) return;
@@ -668,7 +688,7 @@ export function GeneralJobsPage() {
     const cy = (vp ? (vp.clientHeight / 2 - pan.y) / zoom : 200) - h / 2;
     const taken = [
       ...canvasElements.filter(e => e.type !== 'stroke').map(e => ({ x: e.x, y: e.y, w: e.w, h: e.h })),
-      ...jobs.map((j, i) => ({ ...jobPos(j, i), w: TILE_W, h: TILE_H })),
+      ...jobs.map((j, i) => ({ ...jobPos(j, i), ...tileSize(j) })),
     ];
     const clear = (x: number, y: number) => !taken.some(t =>
       x < t.x + t.w + 8 && x + w + 8 > t.x && y < t.y + t.h + 8 && y + h + 8 > t.y);
@@ -768,7 +788,7 @@ export function GeneralJobsPage() {
     let y = Math.max(0, Math.round(c.y - h / 2));
     const taken = [
       ...canvasElements.filter(e => (e.board ?? '') === activeBoardView).map(e => ({ x: e.x, y: e.y, w: e.w, h: e.h })),
-      ...jobs.map((j, i) => ({ ...jobPos(j, i), w: TILE_W, h: TILE_H })),
+      ...jobs.map((j, i) => ({ ...jobPos(j, i), ...tileSize(j) })),
     ];
     for (let n = 0; n < 24; n++) {
       const clash = taken.some(t => x < t.x + t.w && x + w > t.x && y < t.y + t.h && y + h > t.y);
@@ -1019,6 +1039,9 @@ export function GeneralJobsPage() {
     jobLock: j => live.current.jobLock(j),
     jobUngroup: j => live.current.jobUngroup(j),
     elUngroup: el => live.current.elUngroup(el),
+    jobResizeDown: (e, j, i) => live.current.jobResizeDown(e, j, i),
+    jobResizeMove: e => live.current.jobResizeMove(e),
+    jobResizeUp: () => live.current.jobResizeUp(),
     jobThumbs: (id, d) => live.current.jobThumbs(id, d),
     jobThumbsDown: (id, d) => live.current.jobThumbsDown(id, d),
     ghostDown: (e, j, gi) => live.current.ghostDown(e, j, gi),
@@ -1276,7 +1299,8 @@ export function GeneralJobsPage() {
     jobs.forEach((j, i) => {
       if (!j.boardGroup || !wanted.has(j.boardGroup)) return;
       const p = jobPos(j, i);
-      add(j.boardGroup, p.x, p.y, TILE_W, TILE_H);
+      const sz = tileSize(j);
+      add(j.boardGroup, p.x, p.y, sz.w, sz.h);
     });
     onThisBoard.forEach(el => {
       if (!el.boardGroup || !wanted.has(el.boardGroup)) return;
@@ -1392,6 +1416,16 @@ export function GeneralJobsPage() {
     // Only what this board can show — see the note in ProjectDiagramPage. An
     // intent for somewhere else is left for the page that can act on it.
     if (f.kind === 'contractor') return;
+    /**
+     * An intent for ANOTHER workspace is not this board's to consume.
+     *
+     * The Building Progress widget can send you to a unit in Wolfson from the
+     * Job Board — and for one commit this board is still mounted with the new
+     * workspace's id, so it swallowed the request and the unit never opened.
+     * The rule the file already states, applied to workspace as well as kind:
+     * consume only what you can actually show.
+     */
+    if (currentProjectId !== 'general') return;
     setPendingFocus(null);
 
     if (f.kind === 'stage') {
@@ -1484,7 +1518,8 @@ export function GeneralJobsPage() {
 
     // A ghost is a tile like any other while it is being carried, so it lines
     // itself up the same way — against the job it belongs to included.
-    const box = { x: ghostDrag.startX + dx, y: ghostDrag.startY + dy, w: TILE_W, h: TILE_H };
+    const gj = apartments.find(a => a.id === ghostDrag.jobId);
+    const box = { x: ghostDrag.startX + dx, y: ghostDrag.startY + dy, ...tileSize(gj ?? {}) };
     const snapped = snapMoving(box, new Set<string>());
     dx += snapped.x - box.x;
     dy += snapped.y - box.y;
@@ -2468,7 +2503,8 @@ export function GeneralJobsPage() {
      */
     if (drag.ids.length === 1 && drag.starts.get(drag.ids[0])) {
       const me = drag.starts.get(drag.ids[0]);
-      const box = { x: (me?.x ?? 0) + dx, y: (me?.y ?? 0) + dy, w: TILE_W, h: TILE_H };
+      const meJob = jobs.find(j => j.id === drag.ids[0]);
+      const box = { x: (me?.x ?? 0) + dx, y: (me?.y ?? 0) + dy, ...tileSize(meJob ?? {}) };
       const snapped = snapMoving(box, new Set(drag.ids));
       dx += snapped.x - box.x;
       dy += snapped.y - box.y;
@@ -2547,8 +2583,16 @@ export function GeneralJobsPage() {
     else if (clientX < r.left + EDGE_BAND) vx = -ramp(r.left + EDGE_BAND - clientX);
     if (clientY > r.bottom - EDGE_BAND) vy = ramp(clientY - (r.bottom - EDGE_BAND));
     else if (clientY < r.top + EDGE_BAND) vy = -ramp(r.top + EDGE_BAND - clientY);
-    if (vx < 0 && !sideAllowed(projectBoard.expand, 'left')) vx = 0;
-    if (vy < 0 && !sideAllowed(projectBoard.expand, 'top')) vy = 0;
+    /**
+     * All four directions.
+     *
+     * Travelling up or left used to be refused unless that side had been
+     * unlocked — a rule borrowed from GROWING the board, which is a different
+     * thing. Panning back toward the origin creates no space and loses
+     * nothing; the clamp stops it at the world's own edge anyway. Refusing it
+     * meant carrying something to the left edge and watching the board sit
+     * still, which is what the owner reported.
+     */
     edgeVel.current = { vx, vy };
     if (!vx && !vy) { stopEdgePush(); return; }
     if (edgeTimer.current === undefined) {
@@ -2582,7 +2626,10 @@ export function GeneralJobsPage() {
    */
   const EDGE_LIP = 10;
   function settleDrop(x: number, y: number): { x: number; y: number } {
-    let minY = EDGE_LIP;
+    // The board's own margin is the floor — page margins, in the owner's
+    // words, so nothing ends up flush against the chrome the way the weekly
+    // planner did. EDGE_LIP is the minimum even when the margin is set to 0.
+    let minY = Math.max(EDGE_LIP, margin);
     const bar = headerBarRef.current;
     const vp = viewportRef.current;
     if (bar && vp && viewMode !== 'stages') {
@@ -2590,7 +2637,7 @@ export function GeneralJobsPage() {
       // The header's line, translated into world coordinates for THIS view.
       minY = Math.max(minY, (barBottom + 6 - panRef2.current.y) / zoomRef.current);
     }
-    return { x: Math.max(EDGE_LIP, Math.round(x)), y: Math.max(minY, Math.round(y)) };
+    return { x: Math.max(Math.max(EDGE_LIP, margin), Math.round(x)), y: Math.max(minY, Math.round(y)) };
   }
 
   function onJobPointerUp(e: React.PointerEvent, job: Apartment) {
@@ -3025,6 +3072,84 @@ export function GeneralJobsPage() {
   }
 
   /**
+   * A job tile resizes from its corner, like everything else on the board.
+   *
+   * Its own small gesture rather than the node one: a tile's size lives on the
+   * apartment (`tileW`/`tileH`), not on a CanvasElement, so the commit is a
+   * different call — but it lines up with its neighbours through the SAME
+   * `snapResize` and shows the same hint, so the two can never feel different.
+   */
+  const [jobResize, setJobResize] = useState<{
+    id: string; x: number; y: number;
+    startW: number; startH: number; startPX: number; startPY: number;
+    dw: number; dh: number; ratio: boolean;
+  } | null>(null);
+  const jobResetDone = useRef(false);
+
+  function onJobResizeDown(e: React.PointerEvent, job: Apartment, index: number) {
+    if (isFingerTouch(e)) return;            // touch navigates, never arranges
+    if (job.boardLocked) return;             // a locked tile keeps its size
+    e.stopPropagation(); e.preventDefault();
+    const p = jobPos(job, index);
+    const sz = tileSize(job);
+    jobResetDone.current = false;
+    setJobResize({
+      id: job.id, x: p.x, y: p.y,
+      startW: sz.w, startH: sz.h,
+      startPX: e.clientX, startPY: e.clientY, dw: 0, dh: 0, ratio: e.shiftKey,
+    });
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onJobResizeMove(e: React.PointerEvent) {
+    if (!jobResize) return;
+    const MIN_W = 120, MIN_H = 84;
+    let w = Math.max(MIN_W, jobResize.startW + (e.clientX - jobResize.startPX) / zoom);
+    let h = Math.max(MIN_H, jobResize.startH + (e.clientY - jobResize.startPY) / zoom);
+    if (e.shiftKey && jobResize.startW > 0 && jobResize.startH > 0) {
+      const k = Math.max(w / jobResize.startW, h / jobResize.startH);
+      w = Math.max(MIN_W, jobResize.startW * k);
+      h = Math.max(MIN_H, jobResize.startH * k);
+    }
+    if (!e.shiftKey) {
+      const snapped = snapResize(
+        { x: jobResize.x, y: jobResize.y, w, h },
+        snapTargetsRef.current(new Set([jobResize.id])),
+        SNAP_REACH / Math.max(0.2, zoom),
+        snapOn ? GAP : 0,
+        smartGuides,
+      );
+      w = Math.max(MIN_W, snapped.w);
+      h = Math.max(MIN_H, snapped.h);
+      setGuides(snapped.guides);
+    } else {
+      setGuides([]);
+    }
+    setJobResize({ ...jobResize, dw: w - jobResize.startW, dh: h - jobResize.startH, ratio: e.shiftKey });
+  }
+
+  function onJobResizeUp() {
+    if (!jobResize) return;
+    if (!jobResetDone.current && currentUser) {
+      updateApartment(jobResize.id, {
+        tileW: Math.round(jobResize.startW + jobResize.dw),
+        tileH: Math.round(jobResize.startH + jobResize.dh),
+      }, currentUser);
+    }
+    setGuides([]);
+    setJobResize(null);
+  }
+
+  /** Press 0 mid-gesture: back to the size a tile ships at. */
+  function resetJobTileSize() {
+    if (!jobResize || !currentUser) return;
+    jobResetDone.current = true;
+    updateApartment(jobResize.id, { tileW: undefined, tileH: undefined }, currentUser);
+    setGuides([]);
+    setJobResize(null);
+  }
+
+  /**
    * The size a node SHIPS at.
    *
    * A widget's own registry entry is the authority — every widget declares the
@@ -3122,6 +3247,7 @@ export function GeneralJobsPage() {
         snapTargetsRef.current(new Set([resize.id])),
         SNAP_REACH / Math.max(0.2, zoom),
         snapOn ? GAP : 0,
+        smartGuides,
       );
       w = Math.max(m.w, snapped.w);
       h = Math.max(m.h, snapped.h);
@@ -3159,6 +3285,19 @@ export function GeneralJobsPage() {
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resize]);
+
+  /** The same 0-to-default for a tile, live only while its corner is held. */
+  useEffect(() => {
+    if (!jobResize) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '0') return;
+      e.preventDefault();
+      resetJobTileSize();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobResize]);
 
   function onResizePointerUp() {
     setGuides([]);
@@ -3394,7 +3533,8 @@ export function GeneralJobsPage() {
       const newEls = new Set<string>();
       jobs.forEach((job, i) => {
         const p = jobPos(job, i);
-        if (p.x < maxX && p.x + TILE_W > minX && p.y < maxY && p.y + TILE_H > minY) newJobs.add(job.id);
+        const sz = tileSize(job);
+        if (p.x < maxX && p.x + sz.w > minX && p.y < maxY && p.y + sz.h > minY) newJobs.add(job.id);
       });
       canvasElements.forEach(el => {
         if (el.x < maxX && el.x + el.w > minX && el.y < maxY && el.y + el.h > minY) newEls.add(el.id);
@@ -3630,7 +3770,8 @@ export function GeneralJobsPage() {
     jobs.forEach((j, i) => {
       const p = jobPos(j, i);
       x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y);
-      x1 = Math.max(x1, p.x + TILE_W); y1 = Math.max(y1, p.y + TILE_H);
+      const sz = tileSize(j);
+      x1 = Math.max(x1, p.x + sz.w); y1 = Math.max(y1, p.y + sz.h);
     });
     canvasElements.forEach(el => {
       // Loose ink has no box worth fitting to; a drawing that became a node
@@ -3750,7 +3891,7 @@ export function GeneralJobsPage() {
     const m = new Map<string, HostBox>();
     jobs.forEach((j, i) => {
       const p = jobPos(j, i);
-      m.set(j.id, { id: j.id, x: p.x, y: p.y, w: TILE_W, h: TILE_H });
+      m.set(j.id, { id: j.id, x: p.x, y: p.y, ...tileSize(j) });
     });
     canvasElements.forEach(el => {
       if (el.type === 'stroke' || el.type === 'arrow' || el.attachedTo || el.board) return;
@@ -3812,6 +3953,15 @@ export function GeneralJobsPage() {
     leaveNotebook: (id: string) => leaveNotebookRef.current(id),
     // Every widget figure opens the records it counted.
     showList: (title: string, jobIds: string[]) => setWidgetList({ title, jobIds }),
+    // A unit in ANOTHER workspace: switch there, and hand the apartment over
+    // as a focus intent so the arriving page opens it.
+    openUnit: (pid: string, aptId: string) => {
+      // See DashboardPage: the switch clears pendingFocus, so the intent goes
+      // in afterwards.
+      if (pid !== currentProjectId) setCurrentProject(pid);
+      setPendingFocus({ kind: 'apartment', id: aptId });
+      navigate(pid === 'general' ? '/jobs' : '/project');
+    },
   }), [apartments, allStages, contractorAssignments, contractors, contractorPhotos, activityLogs,
        users, canvasElements]);
 
@@ -3833,7 +3983,12 @@ export function GeneralJobsPage() {
    */
   const EDGE_PAD = 140;
   let contentX = 0, contentY = 0;
-  jobs.forEach((job, i) => { const p = jobPos(job, i); contentX = Math.max(contentX, p.x + TILE_W); contentY = Math.max(contentY, p.y + TILE_H); });
+  jobs.forEach((job, i) => {
+    const p = jobPos(job, i);
+    const sz = tileSize(job);
+    contentX = Math.max(contentX, p.x + sz.w);
+    contentY = Math.max(contentY, p.y + sz.h);
+  });
   canvasElements.forEach(el => {
     // Nodes filed inside a group, and art stuck to something, have no position
     // on THIS board — counting them stretched the surface to fit coordinates
@@ -3858,8 +4013,25 @@ export function GeneralJobsPage() {
    * empty board is one screen and it grows as you push a tile into a corner.
    */
   const step = (n: number) => Math.ceil(n / 400) * 400;
-  const maxX = Math.max(step(contentX + EDGE_PAD), 1200);
-  const maxY = Math.max(step(contentY + EDGE_PAD), 800);
+  const maxX = Math.max(step(contentX + EDGE_PAD + margin), 1200);
+  const maxY = Math.max(step(contentY + EDGE_PAD + margin), 800);
+
+  /**
+   * The room a widget opened is given back the moment it moves in.
+   *
+   * The world is measured from the content, so dragging something back from
+   * the far corner shrinks it immediately — but the PAN was left where it was,
+   * so you kept staring at empty board until the next gesture re-clamped it.
+   * Re-clamping when the size changes is what makes the space actually
+   * disappear, which is what the owner asked for.
+   */
+  useEffect(() => {
+    setPan(p => {
+      const next = clampPanRef.current(p);
+      return next.x === p.x && next.y === p.y ? p : next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [maxX, maxY, vp.w, vp.h]);
 
   /**
    * Open a job by id — from ANY list, including ones the board is not drawing.
@@ -3884,6 +4056,7 @@ export function GeneralJobsPage() {
       if (currentUser) updateApartment(j.id, { boardLocked: j.boardLocked ? undefined : true }, currentUser);
     },
     jobUngroup: (j: Apartment) => ungroup({ jobs: [j.id] }),
+    jobResizeDown: onJobResizeDown, jobResizeMove: onJobResizeMove, jobResizeUp: onJobResizeUp,
     elUngroup: (el: CanvasElement) => ungroup({ els: [el.id] }),
     jobThumbs: (id: string, d: number) => bumpThumbs('job', [id], d),
     ghostDown: onGhostPointerDown,
@@ -4236,6 +4409,40 @@ export function GeneralJobsPage() {
               22px grid for when there is nothing beside them.
             </p>
 
+            {/* The advanced half of lining things up: matching a neighbour's
+                SIZE while resizing, which no amount of edge snapping can find. */}
+            <label className="flex items-center gap-2 text-[10px] text-gray-600 font-semibold mb-0.5">
+              <input type="checkbox" className="rounded"
+                checked={smartGuides}
+                onChange={e => setBoardSetting('smartGuides', e.target.checked)} />
+              Match sizes while resizing
+            </label>
+            <p className="text-[9px] text-gray-400 leading-snug mb-2">
+              Drag a corner near the size of something nearby and it lands on exactly that
+              size, with a line along both to show the match.
+            </p>
+
+            {/* Page margins. */}
+            <div className="mb-2">
+              <span className="block text-[10px] font-bold text-gray-500 mb-1">
+                Margin round the edges
+              </span>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="range" min={0} max={160} step={4}
+                  value={margin}
+                  onChange={e => setBoardSetting('margin', Number(e.target.value))}
+                  className="flex-1" />
+                <span className="text-[10.5px] font-bold tabular-nums text-gray-500 w-10 text-right">
+                  {margin}px
+                </span>
+              </div>
+              <p className="text-[9px] text-gray-400 leading-snug mt-1">
+                Space kept clear on all four sides, like the margins on a page — nothing
+                lands inside it.
+              </p>
+            </div>
+
             {/* Per machine on purpose — a synced default would push one
                 person's screen onto everybody else's monitor. */}
             <div className="mb-2">
@@ -4555,7 +4762,33 @@ export function GeneralJobsPage() {
                   backgroundColor: 'rgba(15,23,42,.92)', color: '#fff',
                   boxShadow: `0 ${2 / zoom}px ${8 / zoom}px rgba(15,23,42,.35)`,
                 }}>
-                {Math.round(w)} × {Math.round(h)} · Shift keeps the shape · press 0 for the default size
+                {Math.round(w)} × {Math.round(h)} · Shift keeps the shape · press 0 to reset
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* The same hint while a JOB TILE's corner is held. Its size lives on
+            the apartment rather than on a node, so it is its own gesture — but
+            the words, the placement and the 0-to-reset are identical, because
+            a tile resizing differently from a note would be a second thing to
+            learn for no reason. */}
+        {jobResize && (() => {
+          const w = jobResize.startW + jobResize.dw, h = jobResize.startH + jobResize.dh;
+          return (
+            <div className="absolute pointer-events-none" style={{
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+              transformOrigin: '0 0', left: 0, top: 0, width: 1, height: 1, zIndex: 60,
+            }}>
+              <div className="absolute whitespace-nowrap rounded-md font-semibold"
+                style={{
+                  left: jobResize.x + w + 10 / zoom, top: jobResize.y + h + 10 / zoom,
+                  padding: `${4 / zoom}px ${7 / zoom}px`,
+                  fontSize: 11 / zoom,
+                  backgroundColor: 'rgba(15,23,42,.92)', color: '#fff',
+                  boxShadow: `0 ${2 / zoom}px ${8 / zoom}px rgba(15,23,42,.35)`,
+                }}>
+                {Math.round(w)} × {Math.round(h)} · Shift keeps the shape · press 0 to reset
               </div>
             </div>
           );
@@ -4783,7 +5016,7 @@ export function GeneralJobsPage() {
                 <JobTile
                   key={`${job.id}-ghost-${gi}`}
                   job={job} index={gi} ghostIndex={gi}
-                  x={p.x} y={p.y} w={TILE_W} h={TILE_H}
+                  x={p.x} y={p.y} w={tileSize(job).w} h={tileSize(job).h}
                   stage={job.currentStageId ? stageMap.get(job.currentStageId) ?? null : null}
                   pendingTasks={pendingByJob.get(job.id) ?? 0}
                   isSelected={false}
@@ -4804,7 +5037,9 @@ export function GeneralJobsPage() {
                 <JobTile
                   key={job.id}
                   job={job} index={i}
-                  x={pos.x} y={pos.y} w={TILE_W} h={TILE_H}
+                  x={pos.x} y={pos.y}
+                  w={jobResize?.id === job.id ? jobResize.startW + jobResize.dw : tileSize(job).w}
+                  h={jobResize?.id === job.id ? jobResize.startH + jobResize.dh : tileSize(job).h}
                   stage={job.currentStageId ? stageMap.get(job.currentStageId) ?? null : null}
                   pendingTasks={pendingByJob.get(job.id) ?? 0}
                   isSelected={selectedJobIds.has(job.id)}

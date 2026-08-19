@@ -2,7 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Apartment, CanvasElement, Stage, ContractorAssignment, isCountableApartment, getStageName,
-  projectColor, boardsForUser, MAIN_BOARD,
+  projectColor, boardsForUser, MAIN_BOARD, aptLabel,
 } from '../../types';
 import { useStore, loadProjectSnapshot } from '../../data/store';
 
@@ -27,11 +27,13 @@ import { useStore, loadProjectSnapshot } from '../../data/store';
  * same thing from a snapshot: one column per building, one cell per unit, each
  * cell in its stage colour.
  */
-export function ProjectMini({ projectId: chosen, buildingId, onOpen, sample }: {
+export function ProjectMini({ projectId: chosen, buildingId, onOpen, onOpenUnit, sample }: {
   projectId: string;
   /** One building only, or blank for all of them side by side. */
   buildingId?: string;
   onOpen?: (projectId: string) => void;
+  /** Clicking one apartment: switch to that workspace and open that unit. */
+  onOpenUnit?: (projectId: string, apartmentId: string) => void;
   /** Store preview: with nothing stored to draw, show a full FAKE building
       (marked as sample) instead of "not opened on this device". */
   sample?: boolean;
@@ -78,17 +80,27 @@ export function ProjectMini({ projectId: chosen, buildingId, onOpen, sample }: {
   const started = units.filter(a => a.currentStageId).length;
 
   return (
-    <button
-      onClick={() => onOpen?.(projectId)}
+    /**
+     * A DIV, not one big button.
+     *
+     * Every apartment is its own control now — clicking one opens that unit in
+     * its own workspace — and a button inside a button is invalid markup that
+     * browsers quietly flatten, so the outer control had to go. The header
+     * keeps a button of its own for "open the workspace".
+     */
+    <div
       className="w-full h-full text-left flex flex-col px-2.5 py-2 overflow-hidden"
       data-no-drag data-el-action
-      title={`Open ${project?.name ?? 'this workspace'}`}
     >
       <div className="flex items-center gap-1.5 mb-1 flex-shrink-0">
         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: tone }} />
-        <span className="text-[9.5px] font-extrabold tracking-wide truncate" style={{ color: tone }}>
+        <button
+          onClick={() => onOpen?.(projectId)}
+          title={`Open ${project?.name ?? 'this workspace'}`}
+          className="text-[9.5px] font-extrabold tracking-wide truncate hover:underline"
+          style={{ color: tone }}>
           {(project?.name ?? projectId).toUpperCase()}
-        </span>
+        </button>
         <span className="ml-auto text-[9px] text-gray-400 tabular-nums flex-shrink-0">
           {byBuilding.length === 0 && sample ? '42/56' : `${started}/${units.length}`}
         </span>
@@ -132,14 +144,32 @@ export function ProjectMini({ projectId: chosen, buildingId, onOpen, sample }: {
                 style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>
                 {apts.slice(0, 64).map(a => {
                   const st = stageOf(a.currentStageId);
+                  const fill = st?.color ?? '#e2e8f0';
                   return (
-                    <span
+                    /**
+                     * A cell reads like the real diagram: the number, and the
+                     * family name under it when there is room. Bare colour
+                     * squares meant you could see the shape of the work and
+                     * not one thing about WHICH unit — and clicking one now
+                     * takes you to that unit in its own workspace.
+                     */
+                    <button
                       key={a.id}
-                      className="rounded-[2px]"
-                      style={{ backgroundColor: st?.color ?? '#e2e8f0', aspectRatio: '1.35' }}
-                      title={`${a.apartmentNumber || a.displayName || ''} · ${
-                        st ? getStageName(st, !!isRtl) : 'Not started'}`}
-                    />
+                      onClick={e => { e.stopPropagation(); onOpenUnit?.(projectId, a.id); }}
+                      className="rounded-[2px] overflow-hidden flex flex-col items-center justify-center leading-none
+                                 hover:ring-2 hover:ring-[#1e3a5f] transition-shadow px-[1px]"
+                      style={{ backgroundColor: fill, aspectRatio: '1.35', color: readableOn(fill) }}
+                      title={`${aptLabel(a)} · ${st ? getStageName(st, !!isRtl) : 'Not started'}`}
+                    >
+                      <span className="font-bold truncate max-w-full" style={{ fontSize: 7.5 }}>
+                        {a.apartmentNumber || '—'}
+                      </span>
+                      {a.displayName && a.displayName !== a.apartmentNumber && (
+                        <span className="truncate max-w-full" style={{ fontSize: 6, opacity: .85 }}>
+                          {a.displayName}
+                        </span>
+                      )}
+                    </button>
                   );
                 })}
               </div>
@@ -147,8 +177,23 @@ export function ProjectMini({ projectId: chosen, buildingId, onOpen, sample }: {
           ))}
         </div>
       )}
-    </button>
+    </div>
   );
+}
+
+/**
+ * Black or white writing, whichever can be read on this fill.
+ *
+ * The stage palette runs from pale amber to deep navy, so one fixed ink colour
+ * is unreadable on half of it. Rec. 601 luma is the standard cheap answer and
+ * is right for flat UI colours.
+ */
+function readableOn(hex: string): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return '#0f172a';
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return (r * 299 + g * 587 + b * 114) / 1000 > 145 ? '#0f172a' : '#ffffff';
 }
 
 // ── Somebody's board, live and in miniature ─────────────────────────────────

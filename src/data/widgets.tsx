@@ -99,6 +99,12 @@ export interface WidgetCtx {
   openJob: (id: string) => void;
   /** Switch to another workspace. Only the dashboard supplies this. */
   openProject?: (id: string) => void;
+  /**
+   * Open ONE unit in another workspace — switch there and land on it.
+   * Separate from openProject because "show me Wolfson" and "show me
+   * apartment 37 in Wolfson" are different requests.
+   */
+  openUnit?: (projectId: string, apartmentId: string) => void;
   /** Open the whole schedule in a window. Only the board supplies this. */
   showAllScheduled?: (plannerId: string) => void;
   /** Ask what to do with the task behind a planner slot being emptied. */
@@ -1377,7 +1383,7 @@ export const WIDGETS: WidgetDef[] = [
       <ProjectMini projectId={String(d(el).projectId || '')}
         buildingId={String(d(el).buildingId || '') || undefined}
         sample={!!d(el).sample}
-        onOpen={c.openProject} />
+        onOpen={c.openProject} onOpenUnit={c.openUnit} />
     ),
   },
   {

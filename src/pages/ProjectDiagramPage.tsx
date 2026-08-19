@@ -85,11 +85,22 @@ export function ProjectDiagramPage() {
       : f.kind === 'task' || f.kind === 'markup' ? f.apartmentId
       : null;
     if (!id) return;
-    setPendingFocus(null);
+    /**
+     * Consume it only once it can actually be SHOWN.
+     *
+     * Arriving from another workspace — the Building Progress widget's cells
+     * do exactly this — the page can mount a moment before its own
+     * apartments have replaced the last workspace's. Clearing the intent
+     * first and looking the unit up afterwards threw the request away in
+     * that window, and the unit simply never opened. The effect re-runs when
+     * the apartments land, so waiting costs nothing.
+     */
     const apt = apartments.find(a => a.id === id);
-    if (apt) setSelectedApt(apt);
+    if (!apt) return;
+    setPendingFocus(null);
+    setSelectedApt(apt);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingFocus]);
+  }, [pendingFocus, apartments]);
 
   // Bulk update state
   const [bulkMode, setBulkMode] = useState(false);

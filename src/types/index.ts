@@ -97,6 +97,19 @@ export interface BoardSetting {
     title?: string;
     data: Record<string, unknown>;
   }[];
+  /**
+   * Advanced guides: as well as lining edges up, match a neighbour's SIZE
+   * while resizing, so two things can be made the same width or height
+   * without measuring. Absent means on — it only ever helps, and it announces
+   * itself with its own pair of lines.
+   */
+  smartGuides?: boolean;
+  /**
+   * Margin, in board units, kept clear on all four sides — like the margins
+   * on a page. Nothing is dropped inside it, so the work never sits flush
+   * against the chrome. Absent means the default (BOARD_MARGIN).
+   */
+  margin?: number;
   showControls?: boolean;
   /** 'canvas' = the free board, 'stages' = the same jobs in stage columns. */
   viewMode?: 'canvas' | 'stages';
@@ -292,6 +305,9 @@ export const MAIN_BOARD = '';
  * off the end, shallow enough that the settings document stays small.
  */
 export const PLANNER_ARCHIVE_MAX = 20;
+
+/** Default board margin — a comfortable gutter, not a cliff. */
+export const BOARD_MARGIN = 28;
 
 /**
  * The dashboard is a board too.
@@ -547,6 +563,18 @@ export interface Apartment {
    * ungrouping one thing is clearing one field.
    */
   boardGroup?: string;
+  /**
+   * A resized job tile, in board units.
+   *
+   * ABSENT means the shared default (TILE_W × TILE_H), so the field stays
+   * undefined on almost every record rather than writing the same two numbers
+   * onto hundreds of jobs. They ride inside `apartments`, which is already
+   * persisted, exported, imported and synced — no new key anywhere — and both
+   * are CANVAS_ONLY, because sizing a tile is arranging the board, not
+   * editing the job.
+   */
+  tileW?: number;
+  tileH?: number;
   stageDates?: Record<string, string>; // stageId → ISO timestamp of when that stage was first set
   driveLink?: string; // Google Drive folder URL for this apartment's files
   plansPdfLink?: string; // Google Drive link to the Engineering Plans PDF

@@ -2128,3 +2128,78 @@ eye scans for.
 Harness: `scratchpad/grouplock.mjs` (23 checks). **Grab the MIDDLE of a tile in
 a harness** — the top strip is buttons now, and a press up there is a button
 press, which reads as "dragging does nothing".
+
+---
+
+# v2 — the board's own size, margins, and things that resize together
+
+## The board is only as big as its content, and it has margins
+`maxX/maxY` come from the content alone (they always did) — what was missing is
+that the PAN was left where it was, so the room a widget opened stayed on
+screen after the widget moved back in. The board re-clamps whenever its own
+size changes, so the space disappears the moment it is given back.
+
+`BoardSetting.margin` (default `BOARD_MARGIN`, 28) is a gutter kept clear on all
+four sides, like the margins on a page: `settleDrop` refuses to place anything
+inside it and the world adds it beyond the far content edge. It exists because
+the weekly planner sat flush against the chrome.
+
+**Edge auto-pan travels in all four directions.** It used to refuse up and left
+unless that side was unlocked — a rule borrowed from GROWING the board, which
+is a different thing. Panning back toward the origin creates no space and the
+clamp stops it at the world's edge anyway; refusing it meant carrying something
+to the left edge and watching the board sit still.
+
+## A job tile resizes like everything else
+`Apartment.tileW/tileH`, absent meaning the shared default — so the field stays
+undefined on almost every record. They ride inside `apartments` (already
+persisted/exported/imported/synced, no new key) and are in `updateApartment`'s
+CANVAS_ONLY set, because sizing a tile is arranging, not editing.
+
+**`tileSize(job)` is the single answer to "how big is this tile"** and every
+place that needs a job's BOX goes through it — snap targets, lasso hit-testing,
+world bounds, the group outline, host boxes, Fit. `defaultPos`'s grid
+deliberately does NOT, or a board of resized tiles would re-flow every time one
+changed. The gesture is its own small state (`jobResize`) because the commit is
+`updateApartment` rather than `updateCanvasElement`, but it lines up through the
+SAME `snapResize` and shows the same hint, so the two can never feel different.
+Ghosts get no handle: a ghost is the same record shown twice.
+
+The tile also lost its duplicate Drive icon (the header light AND the bottom
+link were both drawn), and every resize hint now ends "press 0 to reset".
+
+## Guides can match SIZES, not just edges
+`snapResize(..., matchSize)` snaps the dragged corner to a neighbour's WIDTH or
+HEIGHT when no edge has already decided that axis, and draws its guide along
+the matched dimension of BOTH boxes — two lines of the same length say "these
+are now the same width" in a way a single edge line cannot. Two boxes of equal
+size that are not in a line share no edge, so edge snapping alone can never
+find it. Settings: `BoardSetting.smartGuides`, on unless switched off.
+
+## Building Progress is a real diagram
+Each cell carries its number and family name (`readableOn()` picks black or
+white ink from the fill's luma) and each cell is a BUTTON that switches
+workspace and opens that unit — `WidgetCtx.openUnit(projectId, apartmentId)`,
+provided by the dashboard and the board. The outer control had to become a div:
+a button inside a button is invalid markup that browsers flatten.
+
+**Two ordering rules this exposed, both now documented in code:**
+- `setCurrentProject` CLEARS `pendingFocus` as part of arriving somewhere new,
+  so the intent is handed over AFTER the switch, never before.
+- **A page consumes an intent only when it can actually show it — workspace as
+  well as kind.** The board stayed mounted for one commit carrying the new
+  workspace's id and swallowed the apartment intent, so the unit never opened;
+  it now ignores any intent while `currentProjectId !== 'general'`. The diagram
+  likewise waits for its own apartments to arrive rather than consuming an
+  intent it cannot yet resolve.
+
+## The map says what it cannot place
+Pins are proper teardrops at 26×34 (an 11px dot read as a speck), red with a
+`!` for a job with no address, and hovering one shows a card with the address,
+the stage, the open-task count, who is booked, and up to three photos back from
+site (photo → assignment → apartment, built once per render, not per hover).
+The no-address badge is legible now and still flies to those pins.
+
+Harnesses: `scratchpad/tilesize.mjs` (tile resize, hint, 0-reset, one Drive
+icon, margin) and `scratchpad/boardsize.mjs` (board shrinks back, edge-pan both
+ways, Building Progress cells and click-through).

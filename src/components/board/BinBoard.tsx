@@ -272,6 +272,7 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
     jobDown: () => {}, jobMove: () => {}, jobUp: () => {}, jobMenu: () => {}, jobOpen: () => {},
     jobDelete: () => {}, jobTv: () => {}, jobLock: () => {}, jobThumbs: () => {}, jobThumbsDown: () => {},
     jobUngroup: () => {}, elUngroup: () => {},
+    jobResizeDown: () => {}, jobResizeMove: () => {}, jobResizeUp: () => {},
     elDown: (e, el) => live.current.elDown(e, el),
     elMove: e => live.current.elMove(e),
     elUp: el => live.current.elUp(el),

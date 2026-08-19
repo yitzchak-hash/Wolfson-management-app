@@ -30,6 +30,59 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-08-20',
+    title: 'Tiles that resize, a board with margins, and a map worth pointing at',
+    items: [
+      {
+        title: 'Job tiles resize from the corner',
+        body: 'Every tile now has the same corner handle a note has — drag it to make a '
+          + 'job bigger or smaller, hold Shift to keep its shape, and press 0 while '
+          + 'dragging to put it back to the normal size. The little label beside your '
+          + 'hand says so while you drag.',
+        demo: 'drag',
+      },
+      {
+        title: 'Resize to match what is next to it',
+        body: 'Drag a corner near the size of something nearby and it lands on exactly '
+          + 'that size, with a line along both to show the match — so two notes can be '
+          + 'made the same width without measuring. Switch it off in board settings if '
+          + 'you would rather it did not.',
+        demo: 'drag',
+      },
+      {
+        title: 'The board gives space back',
+        body: 'Push something out to the far corner and the board grows; bring it back '
+          + 'and the empty space goes away at once instead of leaving you scrolling '
+          + 'through nothing. There is also a margin setting now — a gutter kept clear '
+          + 'on all four sides, like the margins on a page, so nothing sits jammed '
+          + 'against the edge.',
+        demo: 'zoom',
+      },
+      {
+        title: 'Carry something to the edge and the board follows',
+        body: 'Dragging a job, a widget or a whole selection against any edge of the '
+          + 'screen scrolls the board that way — including back to the left and up, '
+          + 'which used to just stop.',
+        demo: 'drag',
+      },
+      {
+        title: 'Building Progress reads like the real diagram',
+        body: 'Each apartment shows its number and family name instead of a bare '
+          + 'colour, and clicking one takes you straight into that apartment in its own '
+          + 'workspace.',
+        demo: 'tap',
+      },
+      {
+        title: 'The map has proper pins',
+        body: 'Big red map pins instead of dots, and hovering one shows the job: its '
+          + 'address, its stage, how many tasks are open, who is booked, and the last '
+          + 'photos back from site. Jobs with no address are counted plainly at the '
+          + 'bottom — press it to fly to them.',
+        demo: 'pin',
+      },
+    ],
+  },
+  {
     date: '2026-08-19',
     title: 'Groups you feel, a notebook that never forgets, and a corner that holds',
     items: [

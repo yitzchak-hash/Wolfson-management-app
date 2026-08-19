@@ -115,18 +115,51 @@ export function snapBox(
 /**
  * The same, for a resize: the moving box's far corner is what is being placed,
  * so its near corner must stay put.
+ *
+ * `matchSize` is the advanced half the owner asked for: as well as lining the
+ * far edge up with a neighbour's edge or middle, the box can snap to a
+ * neighbour's WIDTH or HEIGHT — "resize to certain sizes together with other
+ * objects next to it". Two boxes the same size but not in a line have no edge
+ * in common, so edge snapping alone can never find it.
+ *
+ * A size match draws its guide along the matched dimension of BOTH boxes — two
+ * lines of the same length say "these two are now the same width" in a way a
+ * single line at an edge cannot.
  */
 export function snapResize(
   box: Box,
   others: Box[],
   tolerance = 6,
   gridStep = 0,
+  matchSize = false,
 ): { w: number; h: number; guides: Guide[] } {
   const far = { x: box.x + box.w, y: box.y + box.h, w: 0, h: 0 };
   const snapped = snapBox(far, others, tolerance, gridStep);
-  return {
-    w: Math.max(24, snapped.x - box.x),
-    h: Math.max(24, snapped.y - box.y),
-    guides: snapped.guides,
-  };
+  let w = Math.max(24, snapped.x - box.x);
+  let h = Math.max(24, snapped.y - box.y);
+  const guides = [...snapped.guides];
+
+  if (matchSize) {
+    // The nearest neighbour of nearly the same size wins, so a board of
+    // like-sized cards does not fight over which one is being matched.
+    let bw: Box | null = null, bh: Box | null = null;
+    for (const o of others) {
+      if (Math.abs(o.w - w) <= tolerance && (!bw || Math.abs(o.w - w) < Math.abs(bw.w - w))) bw = o;
+      if (Math.abs(o.h - h) <= tolerance && (!bh || Math.abs(o.h - h) < Math.abs(bh.h - h))) bh = o;
+    }
+    // Only when an edge did not already decide that axis — a real alignment
+    // beats a coincidence of size.
+    if (bw && !guides.some(g => g.axis === 'x')) {
+      w = bw.w;
+      guides.push({ axis: 'y', at: box.y + h / 2, from: box.x, to: box.x + w });
+      guides.push({ axis: 'y', at: bw.y + bw.h / 2, from: bw.x, to: bw.x + bw.w });
+    }
+    if (bh && !guides.some(g => g.axis === 'y')) {
+      h = bh.h;
+      guides.push({ axis: 'x', at: box.x + w / 2, from: box.y, to: box.y + h });
+      guides.push({ axis: 'x', at: bh.x + bh.w / 2, from: bh.y, to: bh.y + bh.h });
+    }
+  }
+
+  return { w, h, guides };
 }

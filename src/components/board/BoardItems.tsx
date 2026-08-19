@@ -33,7 +33,6 @@ function planDownloadUrl(link: string): string {
   const id = extractFileId(link);
   return id ? driveDownloadUrl(id) : link;
 }
-import { DriveStatus } from '../ui/DriveStatus';
 import { CountdownNode, StopwatchNode, ClipArtNode, VoiceMemoNode, StrokeNode } from './BoardNodes';
 import { VoiceMemoPlayer } from '../ui/VoiceMemo';
 import { renderWidget, WidgetCtx, WIDGET_BY_ID } from '../../data/widgets';
@@ -66,6 +65,10 @@ export interface BoardHandlers {
   jobUngroup: (job: Apartment) => void;
   /** Take THIS node out of its invisible group. */
   elUngroup: (el: CanvasElement) => void;
+  /** A job tile resizes from its corner, like every other thing on the board. */
+  jobResizeDown: (e: React.PointerEvent, job: Apartment, index: number) => void;
+  jobResizeMove: (e: React.PointerEvent) => void;
+  jobResizeUp: () => void;
   jobThumbs: (id: string, delta: number) => void;
   jobThumbsDown: (id: string, delta: number) => void;
   /** Ghosts use the same tile, so they need their own pointer handlers. */
@@ -253,8 +256,9 @@ export const JobTile = React.memo(function JobTile({
         <h3 className="font-semibold text-gray-900 text-sm leading-tight line-clamp-2 flex-1">
           {job.displayName || labels.job}
         </h3>
-        {/* Whether this job's Drive folder is set up, without opening it. */}
-        <DriveStatus job={job} />
+        {/* The Drive light used to sit here as well as on the row below, so
+            every tile carried two Drive icons. The one at the bottom is the
+            one you press, so this one goes. */}
       </div>
 
       {stage && (
@@ -340,6 +344,30 @@ export const JobTile = React.memo(function JobTile({
         <span className="absolute top-1.5 left-3 text-[9px] text-gray-400 pointer-events-none">
           {lastEdited}
         </span>
+      )}
+
+      {/* The same corner handle every node has. Not on a ghost — a ghost is
+          the same job shown twice, and the size belongs to the job — and not
+          on a locked tile, where a handle that refuses the drag reads as
+          broken. */}
+      {!isGhost && !job.boardLocked && (
+        <div
+          data-no-drag data-resize
+          onPointerDown={e => H.jobResizeDown(e, job, index)}
+          onPointerMove={H.jobResizeMove}
+          onPointerUp={H.jobResizeUp}
+          onPointerCancel={H.jobResizeUp}
+          title="Drag to resize · press 0 for the default size"
+          className={`absolute -bottom-0.5 -right-0.5 cursor-se-resize transition-opacity z-10 ${
+            isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-80'}`}
+          style={{ width: 26, height: 26,
+                   borderRight: '2px solid currentColor', borderBottom: '2px solid currentColor',
+                   borderRadius: '0 0 5px 0', color: isSelected ? '#4aa8d8' : '#64748b' }}
+        >
+          <span className="absolute bottom-[1px] right-[1px] block rounded-[2px]"
+            style={{ width: 7, height: 7, backgroundColor: isSelected ? '#4aa8d8' : '#94a3b8',
+                     boxShadow: '0 0 0 1.5px rgba(255,255,255,.9)' }} />
+        </div>
       )}
     </div>
   );

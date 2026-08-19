@@ -43,6 +43,12 @@ interface Marker {
   /** True for a job with no usable address — drawn with a warning. */
   unplaced: boolean;
   sub?: string;
+  /** What the hover card shows: the job, in a sentence and a few pictures. */
+  stageName?: string;
+  address?: string;
+  who?: string;
+  openTasks?: number;
+  photos?: string[];
 }
 
 export function MapWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
@@ -128,16 +134,44 @@ export function MapWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
     // should start a run, and moving the node should not.
   }, [addresses.join('|')]);
 
+  /**
+   * The newest pictures back from site, per job.
+   *
+   * A photo knows its TASK, and a task knows its job — so the chain is
+   * photo → assignment → apartment. Built once for every job on the map
+   * rather than per hover, so moving the pointer across a busy map does not
+   * re-walk the whole photo list each time.
+   */
+  const photosByJob = useMemo(() => {
+    const jobOfAssignment = new Map((c.assignments ?? []).map(a => [a.id, a.apartmentId]));
+    const out = new Map<string, string[]>();
+    for (const p of c.photos ?? []) {
+      const jid = p.assignmentId ? jobOfAssignment.get(p.assignmentId) : undefined;
+      if (!jid) continue;
+      const url = p.storageUrl || p.dataUrl || p.driveUrl;
+      if (!url) continue;
+      const list = out.get(jid) ?? [];
+      if (list.length < 3) list.push(url);
+      out.set(jid, list);
+    }
+    return out;
+  }, [c.photos, c.assignments]);
+
   const markers: Marker[] = useMemo(() => jobs.map(j => {
     const address = (j.address ?? '').trim();
     const at = address ? geo[address] : undefined;
     const name = j.displayName?.trim() || j.apartmentNumber || 'Job';
+    const openTasks = (c.assignments ?? []).filter(a => a.apartmentId === j.id && !a.completedAt).length;
+    const booked = (c.assignments ?? []).find(a => a.apartmentId === j.id && !a.completedAt);
+    const bookedWho = booked ? c.contractors.find(x => x.id === booked.contractorId)?.name : undefined;
+    const photos = photosByJob.get(j.id) ?? [];
 
     if (at) {
       const stage = c.stages.find(s => s.id === j.currentStageId);
       return {
         id: j.id, at, jobId: j.id, label: name, sub: address,
         colour: stage?.color ?? '#4aa8d8', unplaced: false,
+        stageName: stage?.name, address, who: bookedWho, openTasks, photos,
       };
     }
 
@@ -160,8 +194,10 @@ export function MapWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
       sub: who ? name : 'no address on it',
       colour: who ? personColor(who.name, who.color) : '#94a3b8',
       unplaced: true,
+      stageName: c.stages.find(s => s.id === j.currentStageId)?.name,
+      address: '', who: bookedWho, openTasks, photos,
     };
-  }), [jobs, geo, c.stages, c.assignments, c.contractors]);
+  }), [jobs, geo, c.stages, c.assignments, c.contractors, photosByJob]);
 
   // ── size, and the first view ──────────────────────────────────────────────
   useEffect(() => {
@@ -470,20 +506,64 @@ export function MapWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
               }}
               title={`${m.label}${m.sub ? ` — ${m.sub}` : ''}`}
               className="absolute -translate-x-1/2 -translate-y-full flex flex-col items-center group/pin"
-              style={{ left: p.left, top: p.top }}
+              style={{ left: p.left, top: p.top, zIndex: 1 }}
             >
-              <span className="px-1 rounded text-[8px] font-bold whitespace-nowrap max-w-[110px] truncate
-                               opacity-0 group-hover/pin:opacity-100 transition-opacity mb-0.5"
-                style={{ backgroundColor: 'rgba(15,23,42,.85)', color: '#fff' }}>
-                {m.label}
-              </span>
-              <span className="relative block rounded-full border-2 border-white"
-                style={{ width: 11, height: 11, backgroundColor: m.colour, boxShadow: '0 1px 3px rgba(0,0,0,.4)' }}>
-                {m.unplaced && (
-                  <span className="absolute -top-[9px] -right-[7px] text-[10px] font-black leading-none"
-                    style={{ color: '#dc2626', textShadow: '0 0 2px #fff, 0 0 2px #fff' }}>!</span>
+              {/* The hover card: everything about the job, and the last
+                  pictures back from site. It is what turns a coloured dot
+                  into something worth pointing at. */}
+              <span className="absolute bottom-full mb-1 w-[168px] rounded-lg overflow-hidden text-left
+                               opacity-0 group-hover/pin:opacity-100 transition-opacity pointer-events-none"
+                style={{ backgroundColor: 'rgba(15,23,42,.95)', color: '#fff', zIndex: 30,
+                         boxShadow: '0 6px 18px rgba(15,23,42,.4)' }}>
+                <span className="block px-2 pt-1.5 text-[10px] font-bold leading-tight">{m.label}</span>
+                {m.address ? (
+                  <span className="block px-2 text-[8.5px] leading-tight" style={{ color: '#cbd5e1' }}>
+                    {m.address}
+                  </span>
+                ) : (
+                  <span className="block px-2 text-[8.5px] leading-tight" style={{ color: '#fca5a5' }}>
+                    No address on this job
+                  </span>
+                )}
+                <span className="flex items-center gap-1 px-2 py-1 flex-wrap">
+                  {m.stageName && (
+                    <span className="px-1 rounded text-[8px] font-bold"
+                      style={{ backgroundColor: m.colour, color: '#fff' }}>{m.stageName}</span>
+                  )}
+                  {!!m.openTasks && (
+                    <span className="px-1 rounded text-[8px] font-bold"
+                      style={{ backgroundColor: 'rgba(255,255,255,.18)' }}>
+                      {m.openTasks} open
+                    </span>
+                  )}
+                  {m.who && (
+                    <span className="text-[8px]" style={{ color: '#cbd5e1' }}>{m.who}</span>
+                  )}
+                </span>
+                {!!m.photos?.length && (
+                  <span className="flex gap-[2px] px-1 pb-1">
+                    {m.photos.map((src, i) => (
+                      <img key={i} src={src} alt=""
+                        className="block rounded object-cover"
+                        style={{ width: 52, height: 40 }} />
+                    ))}
+                  </span>
                 )}
               </span>
+
+              {/* A proper map pin — the teardrop everybody knows — at a size
+                  you can actually aim at. The old 11px dot read as a speck on
+                  a busy map, which is what the owner reported. */}
+              <svg width={26} height={34} viewBox="0 0 26 34" className="block drop-shadow-md"
+                style={{ transform: 'translateY(2px)' }}>
+                <path
+                  d="M13 33C13 33 24.5 19.6 24.5 12.5C24.5 6.15 19.35 1 13 1C6.65 1 1.5 6.15 1.5 12.5C1.5 19.6 13 33 13 33Z"
+                  fill={m.unplaced ? '#dc2626' : m.colour}
+                  stroke="#ffffff" strokeWidth={2} strokeLinejoin="round" />
+                {m.unplaced
+                  ? <text x="13" y="17.5" textAnchor="middle" fontSize="13" fontWeight="900" fill="#fff">!</text>
+                  : <circle cx="13" cy="12.5" r="4.2" fill="#ffffff" fillOpacity={0.92} />}
+              </svg>
             </button>
           );
         })}
@@ -534,10 +614,13 @@ export function MapWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
           </span>
         )}
 
+        {/* How many jobs have no address, said plainly and big enough to read
+            across a room — the owner counted eighteen of them before the map
+            said so. Pressing it flies to where they are shown. */}
         {unplaced > 0 && (
           <button data-no-drag data-el-action
-            className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[8px] font-bold shadow-sm"
-            style={{ backgroundColor: 'rgba(220,38,38,.92)', color: '#fff' }}
+            className="absolute bottom-1 left-1 px-2 py-1 rounded-md text-[10px] font-bold shadow-md"
+            style={{ backgroundColor: 'rgba(220,38,38,.94)', color: '#fff' }}
             title="No address on these — press to fly to where they are shown"
             onClick={ev => {
               /*
@@ -552,7 +635,7 @@ export function MapWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
               setView(next);
               saveViewSoon(next);
             }}>
-            {unplaced} with no address ›
+            {unplaced} {unplaced === 1 ? 'job has' : 'jobs have'} no address ›
           </button>
         )}
 
