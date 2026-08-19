@@ -139,6 +139,7 @@ const shelfOf = (id: string): string =>
 
 /** The layout toggle, remembered per machine. */
 const LAYOUT_KEY = 'widget_store_layout';
+const SHELF_KEY = 'widget_store_shelf';
 
 /**
  * The shelf.
@@ -198,6 +199,9 @@ export function WidgetStore({ onPick, onClose, only, destLabel = 'the board' }: 
   const [layout, setLayout] = useState<'cats' | 'flat'>(() =>
     localStorage.getItem(LAYOUT_KEY) === 'flat' ? 'flat' : 'cats');
   const pickLayout = (v: 'cats' | 'flat') => { setLayout(v); localStorage.setItem(LAYOUT_KEY, v); };
+  /** '' = every shelf at once; otherwise the one shelf being browsed. */
+  const [shelf, setShelf] = useState<string>(() => localStorage.getItem(SHELF_KEY) ?? '');
+  const pickShelf = (v: string) => { setShelf(v); localStorage.setItem(SHELF_KEY, v); };
   const [scale, setScale] = useState(() => {
     const v = Number(localStorage.getItem(SIZE_KEY));
     return v >= 0.7 && v <= 1.5 ? v : 1;
@@ -285,7 +289,7 @@ export function WidgetStore({ onPick, onClose, only, destLabel = 'the board' }: 
    * rather than disappearing. In flat mode the same pool is one grid in the
    * chosen sort.
    */
-  const groups = useMemo(() => {
+  const allGroups = useMemo(() => {
     if (layout === 'flat') {
       return matches.length ? [{ name: '', items: [...matches].sort(order) }] : [];
     }
@@ -299,6 +303,18 @@ export function WidgetStore({ onPick, onClose, only, destLabel = 'the board' }: 
       .filter(name => by.has(name))
       .map(name => ({ name, items: by.get(name)!.sort(order) }));
   }, [matches, layout, order]);
+
+  /**
+   * The shelves as a MENU, not just as headings you scroll past.
+   *
+   * Ten shelves down one long page means nine of the names are somewhere
+   * off-screen, so the only ones you ever see are whichever two the scroll
+   * happens to be sitting on — and it starts at the top again every time the
+   * store is opened. The row of names is always on screen, says how many are on
+   * each shelf, and the one you picked is remembered on this machine.
+   */
+  const shelfPick = shelf && allGroups.some(g => g.name === shelf) ? shelf : '';
+  const groups = shelfPick ? allGroups.filter(g => g.name === shelfPick) : allGroups;
 
   /**
    * Live pieces of the other workspaces.
@@ -376,7 +392,9 @@ export function WidgetStore({ onPick, onClose, only, destLabel = 'the board' }: 
                 </button>
               ))}
             </div>
-            <span className="text-[11.5px] font-semibold text-white/50">{matches.length} widgets</span>
+            <span className="text-[11.5px] font-semibold text-white/50">
+              {shelfPick ? `${groups[0]?.items.length ?? 0} of ${matches.length}` : `${matches.length} widgets`}
+            </span>
             <span className="flex-1" />
             <select value={sort} onChange={e => setSort(e.target.value as typeof sort)}
               title="Sort the shelf"
@@ -396,6 +414,33 @@ export function WidgetStore({ onPick, onClose, only, destLabel = 'the board' }: 
               <span className="text-[14px] font-bold text-white/60">A</span>
             </label>
           </div>
+
+          {/* The shelves, always in view. Scrolls sideways when it must, with
+              the fade that marks a scroller everywhere else in the app. */}
+          {layout === 'cats' && !q.trim() && (
+            <div className="mt-2.5 -mx-1 px-1 flex items-center gap-1.5 overflow-x-auto edge-fade
+                            [&>*]:flex-shrink-0 pb-0.5">
+              <button
+                onClick={() => pickShelf('')}
+                className="px-3 py-1.5 rounded-full text-[12px] font-bold transition-colors"
+                style={!shelfPick
+                  ? { backgroundColor: '#fff', color: '#1e3a5f' }
+                  : { backgroundColor: 'rgba(255,255,255,.12)', color: 'rgba(255,255,255,.8)' }}>
+                Everything
+              </button>
+              {allGroups.map(g => (
+                <button key={g.name}
+                  onClick={() => pickShelf(shelfPick === g.name ? '' : g.name)}
+                  className="px-3 py-1.5 rounded-full text-[12px] font-bold transition-colors"
+                  style={shelfPick === g.name
+                    ? { backgroundColor: '#fff', color: '#1e3a5f' }
+                    : { backgroundColor: 'rgba(255,255,255,.12)', color: 'rgba(255,255,255,.8)' }}>
+                  {g.name}
+                  <span className="ml-1.5 font-semibold opacity-55">{g.items.length}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-5">

@@ -2312,3 +2312,32 @@ touches the app or the cloud.
 **The export and everything derived from it are gitignored** — real family
 names, phone numbers and Drive links. The tools are committed; their output
 never is.
+
+## The overview is a picture of the board, not a violet field
+`FACES` in `MiniMap.tsx` — a painted miniature per widget id (tint plus at most
+a dozen coloured cells): the building diagram reads as a grid of stage colours,
+the planner as ruled rows, the calendar as a month, the map as pins on green.
+**Deliberately painted, never rendered.** Twenty live widgets redrawing on
+every pan is exactly the cost the overview exists to avoid, and the owner asked
+for accurate-not-slow by name. Cells are only drawn once the mark is ≥15×12px.
+
+Its two controls now sit in opposite corners — **expand top-left, move
+bottom-right** — at 13px with a ring, because at 11px in the same corner they
+read as absent.
+
+**A panel's drag handlers must `stopPropagation` on MOVE and UP, not just
+DOWN.** The overview treats a pointermove-with-button-down as "jump the view
+there", so dragging its own handle flung the board across the world while the
+press itself was correctly stopped.
+
+## Building Progress writes only what fits
+The cell is MEASURED (`ResizeObserver` on the grid) and the number appears at
+≥16px, the family name at ≥27px, each sized from the cell. Fixed 7.5px/6px type
+was fine on a dashboard card and turned the store's 250×165 preview into two
+smudges stacked on each other — worse than the plain colour squares it replaced.
+
+## The widget store's shelves are a menu
+A persistent chip row under the search names every shelf with its count and
+filters to one; `widget_store_shelf` remembers it per machine. Ten shelves down
+one scrolling page meant nine names were off-screen and the scroll started at
+the top again on every open.

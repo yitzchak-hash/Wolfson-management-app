@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Apartment, CanvasElement, Stage, ContractorAssignment, isCountableApartment, getStageName,
@@ -79,6 +79,40 @@ export function ProjectMini({ projectId: chosen, buildingId, onOpen, onOpenUnit,
   const stageOf = (id?: string | null) => snap.stages.find(s => s.id === id);
   const started = units.filter(a => a.currentStageId).length;
 
+  /**
+   * Writing only goes in a cell that can hold it.
+   *
+   * The number and the family name were drawn at a fixed 7.5 and 6 pixels
+   * whatever the widget's size, so at the shelf's 250×165 a cell is about ten
+   * pixels across and both lines came out as smudges stacked on each other —
+   * worse than the plain colour squares this replaced. The cell is measured
+   * instead: below 16px it stays pure colour (which still says everything the
+   * stage colours say), then the number, then the family name, each sized from
+   * the cell rather than pinned to a number that only suits one size.
+   */
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [cellW, setCellW] = useState(0);
+  useEffect(() => {
+    const node = gridRef.current;
+    if (!node) return;
+    const measure = () => {
+      const cols = Math.max(1, byBuilding.length);
+      // Four across per building, 2px gaps, 8px between buildings.
+      const per = (node.clientWidth - (cols - 1) * 8) / cols;
+      setCellW(Math.max(0, (per - 6) / 4));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(node);
+    return () => ro.disconnect();
+  }, [byBuilding.length]);
+  const cell = {
+    number: cellW >= 16,
+    name: cellW >= 27,
+    numberPx: Math.max(6, Math.min(13, cellW * 0.42)),
+    namePx: Math.max(5, Math.min(10, cellW * 0.3)),
+  };
+
   return (
     /**
      * A DIV, not one big button.
@@ -136,7 +170,7 @@ export function ProjectMini({ projectId: chosen, buildingId, onOpen, onOpenUnit,
           {projectId === currentProjectId ? 'No units yet' : 'Not opened on this device yet'}
         </span>
       ) : (
-        <div className="flex-1 min-h-0 flex gap-2 overflow-hidden">
+        <div ref={gridRef} className="flex-1 min-h-0 flex gap-2 overflow-hidden">
           {byBuilding.map(([bid, apts]) => (
             <div key={bid} className="flex flex-col min-w-0 flex-1">
               <span className="text-[8px] font-bold text-gray-400 mb-0.5">{bid}</span>
@@ -161,11 +195,13 @@ export function ProjectMini({ projectId: chosen, buildingId, onOpen, onOpenUnit,
                       style={{ backgroundColor: fill, aspectRatio: '1.35', color: readableOn(fill) }}
                       title={`${aptLabel(a)} · ${st ? getStageName(st, !!isRtl) : 'Not started'}`}
                     >
-                      <span className="font-bold truncate max-w-full" style={{ fontSize: 7.5 }}>
-                        {a.apartmentNumber || '—'}
-                      </span>
-                      {a.displayName && a.displayName !== a.apartmentNumber && (
-                        <span className="truncate max-w-full" style={{ fontSize: 6, opacity: .85 }}>
+                      {cell.number && (
+                        <span className="font-bold truncate max-w-full" style={{ fontSize: cell.numberPx }}>
+                          {a.apartmentNumber || '—'}
+                        </span>
+                      )}
+                      {cell.name && a.displayName && a.displayName !== a.apartmentNumber && (
+                        <span className="truncate max-w-full" style={{ fontSize: cell.namePx, opacity: .85 }}>
                           {a.displayName}
                         </span>
                       )}

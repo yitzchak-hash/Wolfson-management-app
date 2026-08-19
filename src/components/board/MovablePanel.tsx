@@ -66,11 +66,16 @@ export function usePanelDrag(id: string) {
   function move(e: React.PointerEvent) {
     const g = grab.current;
     if (!g) return;
+    // The move must not reach the panel underneath. The overview treats a
+    // pointermove with the button down as "jump the view there", so dragging
+    // its handle also flung the board across the world — the press was stopped
+    // and the moves were not.
+    e.stopPropagation();
     const next = { x: g.ox + (e.clientX - g.px), y: g.oy + (e.clientY - g.py) };
     setPos(next);
     PANEL_POS.set(id, next);
   }
-  function up() { grab.current = null; setDragging(false); }
+  function up(e: React.PointerEvent) { e.stopPropagation(); grab.current = null; setDragging(false); }
 
   /** Spread onto whatever is the grab handle. */
   const handleProps = {
