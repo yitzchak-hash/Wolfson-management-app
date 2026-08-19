@@ -5,6 +5,7 @@ import {
   projectColor, boardsForUser, MAIN_BOARD, aptLabel,
 } from '../../types';
 import { useStore, loadProjectSnapshot } from '../../data/store';
+import { usePlannerDrag } from '../../data/plannerDrop';
 
 /**
  * The three widgets the dashboard was asked for.
@@ -27,6 +28,47 @@ import { useStore, loadProjectSnapshot } from '../../data/store';
  * same thing from a snapshot: one column per building, one cell per unit, each
  * cell in its stage colour.
  */
+/**
+ * One unit in the Building Progress grid.
+ *
+ * Its own component only because a hook cannot be called inside a `.map`
+ * callback — and the drag has to be per cell, since each holds a different job.
+ */
+function ProgressCell({ apt, fill, cell, label, canPlan, onOpen }: {
+  apt: Apartment;
+  fill: string;
+  cell: { number: boolean; name: boolean; numberPx: number; namePx: number };
+  label: string;
+  canPlan: boolean;
+  onOpen: () => void;
+}) {
+  const planner = usePlannerDrag(apt.id, { enabled: canPlan });
+  return (
+    <button
+      {...planner.handlers}
+      onClick={e => { e.stopPropagation(); onOpen(); }}
+      className="rounded-[2px] overflow-hidden flex flex-col items-center justify-center leading-none
+                 hover:ring-2 hover:ring-[#1e3a5f] transition-shadow px-[1px]"
+      style={{
+        backgroundColor: fill, aspectRatio: '1.35', color: readableOn(fill),
+        ...planner.style,
+      }}
+      title={planner.draggable ? `${label} · drag it onto a day` : label}
+    >
+      {cell.number && (
+        <span className="font-bold truncate max-w-full" style={{ fontSize: cell.numberPx }}>
+          {apt.apartmentNumber || '—'}
+        </span>
+      )}
+      {cell.name && apt.displayName && apt.displayName !== apt.apartmentNumber && (
+        <span className="truncate max-w-full" style={{ fontSize: cell.namePx, opacity: .85 }}>
+          {apt.displayName}
+        </span>
+      )}
+    </button>
+  );
+}
+
 export function ProjectMini({ projectId: chosen, buildingId, onOpen, onOpenUnit, sample }: {
   projectId: string;
   /** One building only, or blank for all of them side by side. */
@@ -186,26 +228,22 @@ export function ProjectMini({ projectId: chosen, buildingId, onOpen, onOpenUnit,
                      * squares meant you could see the shape of the work and
                      * not one thing about WHICH unit — and clicking one now
                      * takes you to that unit in its own workspace.
+                     *
+                     * It also drags onto a notebook square, like everything
+                     * else that stands for a job — but only when this widget is
+                     * showing the workspace you are actually in. A notebook
+                     * looks its entries up in its OWN workspace, so a unit from
+                     * another one could only ever land as "(job removed)".
                      */
-                    <button
+                    <ProgressCell
                       key={a.id}
-                      onClick={e => { e.stopPropagation(); onOpenUnit?.(projectId, a.id); }}
-                      className="rounded-[2px] overflow-hidden flex flex-col items-center justify-center leading-none
-                                 hover:ring-2 hover:ring-[#1e3a5f] transition-shadow px-[1px]"
-                      style={{ backgroundColor: fill, aspectRatio: '1.35', color: readableOn(fill) }}
-                      title={`${aptLabel(a)} · ${st ? getStageName(st, !!isRtl) : 'Not started'}`}
-                    >
-                      {cell.number && (
-                        <span className="font-bold truncate max-w-full" style={{ fontSize: cell.numberPx }}>
-                          {a.apartmentNumber || '—'}
-                        </span>
-                      )}
-                      {cell.name && a.displayName && a.displayName !== a.apartmentNumber && (
-                        <span className="truncate max-w-full" style={{ fontSize: cell.namePx, opacity: .85 }}>
-                          {a.displayName}
-                        </span>
-                      )}
-                    </button>
+                      apt={a}
+                      fill={fill}
+                      cell={cell}
+                      label={`${aptLabel(a)} · ${st ? getStageName(st, !!isRtl) : 'Not started'}`}
+                      canPlan={projectId === currentProjectId}
+                      onOpen={() => onOpenUnit?.(projectId, a.id)}
+                    />
                   );
                 })}
               </div>

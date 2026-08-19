@@ -210,7 +210,7 @@ for (const [project, key, version] of [
       ],
       canvasElements: [
         {
-          id: 'CE-book', type: 'widget', widget: 'week-planner', x: 340, y: 40, w: 520, h: 360,
+          id: 'CE-book', type: 'widget', widget: 'rota', x: 340, y: 40, w: 520, h: 360,
           text: '', color: '#ffffff',
           data: {
             people: ['n:Moshe'],

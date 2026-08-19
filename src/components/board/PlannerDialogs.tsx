@@ -252,6 +252,91 @@ export function PlannerRemoveDialog({ jobName, taskName, onCancel, onDone }: {
   );
 }
 
+// ── Dragging a card that is already on the notebook ──────────────────────────
+
+export type DropChoice = 'move' | 'copy' | 'off';
+
+/**
+ * What a drag of an existing card MEANT.
+ *
+ * It used to be decided silently by a modifier key: a plain drag moved the
+ * card, Ctrl left a copy behind, and a drag off the edge took the job off the
+ * notebook altogether. Three quite different outcomes, one of them
+ * irreversible-looking, all triggered by the same gesture — so a hand that
+ * slipped while tidying the week took a job off the planner with no way of
+ * knowing it had happened.
+ *
+ * It asks now. The modifier still works as a shortcut for anybody who knows it
+ * (Ctrl-drag copies without a question); a plain drag stops and says what the
+ * three outcomes are, in the words the office uses.
+ */
+/**
+ * One choice in the drop question — at MODULE level, deliberately.
+ *
+ * Declared inside the dialog's render body it was a new component TYPE every
+ * render, so React unmounted and remounted the buttons whenever anything on
+ * the board ticked. A remount between mousedown and mouseup means no `click`
+ * ever fires: the dialog sat there apparently ignoring every press. Same trap
+ * as `BinSettings` and the drawer's plan pane.
+ */
+function DropChoiceButton({ id, title, sub, danger, onPick }: {
+  id: DropChoice; title: string; sub: string; danger?: boolean;
+  onPick: (c: DropChoice) => void;
+}) {
+  return (
+    <button onClick={() => onPick(id)}
+      className="w-full text-left px-3 py-2.5 rounded-lg border transition-colors hover:bg-slate-50"
+      style={{ borderColor: danger ? '#f3c9c4' : '#e2e8f0' }}>
+      <b className="text-[13px]" style={{ color: danger ? '#b4342a' : '#1e293b' }}>{title}</b>
+      <span className="block text-[11.5px] text-slate-500">{sub}</span>
+    </button>
+  );
+}
+
+export function PlannerDropDialog({ jobName, toWhere, canLand, onCancel, onDone }: {
+  jobName: string;
+  /** "Moshe · Tuesday" — absent when the card was dropped off the notebook. */
+  toWhere?: string;
+  /** False when it was let go outside the notebook: there is nowhere to land. */
+  canLand: boolean;
+  onCancel: () => void;
+  onDone: (choice: DropChoice) => void;
+}) {
+  const Choice = (p: { id: DropChoice; title: string; sub: string; danger?: boolean }) =>
+    DropChoiceButton({ ...p, onPick: onDone });
+
+  return (
+    <Shell
+      onCancel={onCancel}
+      title={canLand ? `${jobName} → ${toWhere}` : `Take ${jobName} off the notebook?`}
+    >
+      <div className="grid gap-2">
+        {canLand ? (
+          <>
+            <Choice id="move" title="Move it here"
+              sub="It leaves the day it was on and lands on this one." />
+            <Choice id="copy" title="Put a copy here"
+              sub="It stays where it was as well — one job, on two days." />
+            <Choice id="off" danger title="Take it off the notebook"
+              sub="It goes back to the board, where it was before." />
+          </>
+        ) : (
+          <>
+            <p className="text-[13px] text-gray-600 m-0">
+              You let go outside the notebook. Nothing is deleted either way —
+              the job goes back to the board it came from.
+            </p>
+            <Choice id="off" danger title="Take it off the notebook"
+              sub="Back to the board, in the place it was in before." />
+            <Choice id="move" title="Leave it where it was"
+              sub="Put the card back on the day it came from." />
+          </>
+        )}
+      </div>
+    </Shell>
+  );
+}
+
 // ── Taking somebody off the planner ──────────────────────────────────────────
 
 export type OffScope = 'forward' | 'all' | 'date';
@@ -341,11 +426,34 @@ function Shell({ title, children, onCancel, danger }: {
     return () => window.removeEventListener('keydown', key);
   }, [onCancel]);
 
+  /**
+   * A modal must not leak its pointer events into whatever is hosting it.
+   *
+   * These dialogs can be rendered through a portal from INSIDE a board node —
+   * and a React portal propagates events up the REACT tree, not the DOM one. So
+   * a press on a button here arrived at the board node's own `onPointerDown`,
+   * which captured the pointer: the button saw `pointerdown` and then nothing
+   * at all, no `mouseup`, no `click`. The dialog sat there apparently ignoring
+   * every press while doing exactly what it was told.
+   *
+   * Stopping propagation here does not affect this dialog's own handlers — they
+   * are at or below this element — it only stops the event escaping upwards.
+   */
+  const seal = {
+    onPointerDown: (e: React.PointerEvent) => e.stopPropagation(),
+    onPointerUp: (e: React.PointerEvent) => e.stopPropagation(),
+    onPointerMove: (e: React.PointerEvent) => e.stopPropagation(),
+    onMouseDown: (e: React.MouseEvent) => e.stopPropagation(),
+    onContextMenu: (e: React.MouseEvent) => e.stopPropagation(),
+    onWheel: (e: React.WheelEvent) => e.stopPropagation(),
+  };
+
   return (
     <>
       <div className="fixed inset-0 z-[170]" style={{ backgroundColor: 'rgba(15,23,42,.45)' }}
-        onClick={onCancel} />
+        {...seal} onClick={onCancel} />
       <div className="fixed z-[171] rounded-2xl bg-white overflow-hidden flex flex-col"
+        {...seal}
         style={{
           left: '50%', top: '50%', transform: 'translate(-50%,-50%)',
           width: 'min(460px, 94vw)', maxHeight: '88vh',

@@ -2698,3 +2698,55 @@ copy, which is the trap this file already names: a fix applied to one is
 invisible in the other, and that is exactly how Wolfson's bar spent months a
 z-index behind Netiv's. A padlock on the bar switches pinning off per workspace
 (`BoardSetting.stickyBuildingName`, absent = pinned).
+
+## The plan viewer's Layers selector — broken by the viewer's own speed fix
+`renderPage` skips a redraw when the page and the resolution are already on
+screen (the guard that stopped fitting-on-open rendering twice). Switching a
+layer is exactly that case, so `toggleLayer` changed the optional-content config
+and drew nothing. It clears `drawnAt` first now: the guard is right for zooming
+and wrong here, because what is drawn ON the page has changed even though the
+page and its resolution have not.
+
+`scratchpad/planlayers.mjs` builds a PDF with two real OCGs (the same pdf-lib
+machinery `api/plan-annotate.js` uses) and counts the coloured pixels — verified
+non-vacuous: with the fix reverted the red band stays at 95,130 px.
+
+## The notebook asks what a drag meant
+`PlannerDropDialog` — move it here / put a copy here / take it off. It used to
+be decided silently by a modifier key: three different outcomes from one
+gesture, so a hand that slipped while tidying the week took a job off the
+planner with nothing said. Ctrl/⌘ still copies outright as a shortcut. Dropping
+OUTSIDE the notebook asks too, and says plainly that nothing is deleted either
+way.
+
+## Anything that stands for a job drags onto a day
+`src/data/plannerDrop.ts` — `placeJobsOnPlanner` (the board's own write, lifted
+out) and `usePlannerDrag`, one hook so a list row and a diagram cell cannot end
+up with two versions of the same gesture. `MiniJob` gets it, which covers
+Running late, Due today, Job list, New this week and Find a job; Building
+Progress cells get it through `ProgressCell`.
+
+**`enabled` is load-bearing**: a notebook looks its entries up in ITS OWN
+workspace, so another workspace's unit could only ever land as "(job removed)".
+Building Progress passes false unless it is showing the workspace you are in.
+
+Three traps this round paid for, all of them making a working thing look dead:
+
+- **A drag ends in a `click`.** The row captures the pointer, so releasing over
+  a square still dispatched a click back on the row — which opened the job's
+  drawer every time somebody planned one. `justDragged` swallows it in the
+  CAPTURE phase; React stops dispatching the rest of the path the moment
+  propagation is stopped.
+- **A React portal propagates up the REACT tree, not the DOM one.** These
+  dialogs are portalled from inside a board node, so a press on a button
+  reached the node's own `onPointerDown`, which captured the pointer: the
+  button saw `pointerdown` and then nothing — no mouseup, no click. `Shell`
+  now seals its pointer events. **Any modal rendered from inside a board node
+  must do this.**
+- **A component declared in a render body is a new TYPE every render.** The
+  dialog's choice button was, so it remounted whenever the board ticked. Same
+  trap as `BinSettings` and the drawer's plan pane.
+
+**The weekly notebook's widget id is `rota`.** `week-planner` is a different
+widget — seven free-text columns — and seeding that one draws a row of day
+names with no people and no squares, which reads as a broken planner.

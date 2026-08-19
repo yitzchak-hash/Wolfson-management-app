@@ -1,6 +1,8 @@
 import React from 'react';
 import { Apartment, Stage, ContractorAssignment, getStageName } from '../../types';
 import { DriveStatus } from '../ui/DriveStatus';
+import { anyRota } from '../../data/rotaDrop';
+import { usePlannerDrag } from '../../data/plannerDrop';
 
 /**
  * A job, in one row, everywhere a job is listed.
@@ -14,8 +16,13 @@ import { DriveStatus } from '../ui/DriveStatus';
  * stage as a coloured dot and a word, how many tasks are outstanding, and the
  * Drive light. One component, used by every list, so those readings can never
  * disagree with each other or with the board.
+ *
+ * **And it drags onto the notebook, like a board tile.** Only board tiles could
+ * be planned, so a job noticed in "Running late" or "New this week" — which is
+ * exactly where you notice it needs a day — had to be hunted down on the board
+ * first. Every list that draws a MiniJob now inherits the gesture.
  */
-export function MiniJob({ job, stages, assignments, onOpen, rtl, size = 11, sub }: {
+export function MiniJob({ job, stages, assignments, onOpen, rtl, size = 11, sub, onToast }: {
   job: Apartment;
   stages: Stage[];
   assignments: ContractorAssignment[];
@@ -25,17 +32,24 @@ export function MiniJob({ job, stages, assignments, onOpen, rtl, size = 11, sub 
   size?: number;
   /** An extra line under the name — a due date, a contractor, whatever fits. */
   sub?: React.ReactNode;
+  /** Said after a successful drop. Absent = say nothing. */
+  onToast?: (msg: string) => void;
 }) {
   const stage = stages.find(s => s.id === job.currentStageId);
   const pending = assignments.filter(a => a.apartmentId === job.id && !a.completedAt).length;
 
+  // The same gesture a board tile has, from the one place it is written.
+  const planner = usePlannerDrag(job.id, { onToast });
+
   return (
     <button
       data-no-drag data-el-action
+      {...planner.handlers}
       onClick={() => onOpen(job.id)}
-      title={`Open ${job.displayName || 'this job'}`}
+      title={`Open ${job.displayName || 'this job'}${anyRota() ? ' · drag it onto a day' : ''}`}
       className="group/mj w-full text-left flex items-center gap-1.5 px-1 py-[3px] rounded-md
                  hover:bg-slate-50 transition-colors min-w-0"
+      style={planner.style}
     >
       <span
         className="w-1.5 h-1.5 rounded-full flex-shrink-0"

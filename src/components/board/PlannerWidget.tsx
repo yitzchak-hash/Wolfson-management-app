@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { PlannerDropDialog } from './PlannerDialogs';
 import { ChevronLeft, ChevronRight, Plus, X, CalendarDays, Maximize2, Eye, EyeOff } from 'lucide-react';
 import {
   Apartment, CanvasElement, Contractor, User, ContractorAssignment, Stage, personColor,
@@ -483,6 +485,38 @@ export function PlannerWidget({
   }
 
   /**
+   * A drag of an existing card, waiting to be told what it meant.
+   *
+   * `target` is null when the card was let go outside the notebook. Held as
+   * state rather than acted on, because the three outcomes — move it, copy it,
+   * take it off — are different enough that guessing from a modifier key took
+   * jobs off the planner by accident.
+   */
+  const [dropAsk, setDropAsk] = useState<
+    { fromKey: string; entry: PlannerEntry; target: RotaHit | null } | null>(null);
+
+  /** Carry out whichever the office picked. */
+  function resolveDrop(choice: 'move' | 'copy' | 'off') {
+    const ask = dropAsk;
+    setDropAsk(null);
+    if (!ask) return;
+    if (choice === 'off') {
+      const drop = () => setCell(
+        ask.fromKey,
+        (cells[ask.fromKey] ?? []).filter(x => x.id !== ask.entry.id),
+      );
+      // A task attached to the slot is its own question, asked as it always was.
+      if (ask.entry.taskId && onRemoveTask) onRemoveTask(ask.entry, () => drop());
+      else drop();
+      return;
+    }
+    // "Leave it where it was" for a drop outside: there is nowhere to move to,
+    // so doing nothing IS the answer.
+    if (!ask.target) return;
+    moveEntry(ask.fromKey, ask.entry, ask.target, choice === 'copy');
+  }
+
+  /**
    * Move a card to another square — or leave a ghost behind.
    *
    * Once a job has moved into the notebook there is no tile on the board to
@@ -887,12 +921,15 @@ export function PlannerWidget({
                                 if (en.taskId && onRemoveTask) onRemoveTask(en, () => drop());
                                 else drop();
                               }}
-                              onDragOff={() => {
-                                const drop = () => setCell(key, entries.filter(x => x.id !== en.id));
-                                if (en.taskId && onRemoveTask) onRemoveTask(en, () => drop());
-                                else drop();
+                              onDragOff={() => setDropAsk({ fromKey: key, entry: en, target: null })}
+                              onDragTo={(target, copy) => {
+                                // Ctrl/⌘ still copies outright — a shortcut for
+                                // anybody who knows it. A plain drag asks,
+                                // because the same gesture used to mean three
+                                // very different things with nothing said.
+                                if (copy) { moveEntry(key, en, target, true); return; }
+                                setDropAsk({ fromKey: key, entry: en, target });
                               }}
-                              onDragTo={(target, copy) => moveEntry(key, en, target, copy)}
                             />
                           ))}
                           {!ro && state === 'on' && (
@@ -918,6 +955,27 @@ export function PlannerWidget({
         })}
         </>}
       </div>
+
+      {/* What that drag meant. Rendered through a portal at the top of the
+          page: the notebook is a board node inside a transformed, scrolling
+          world, and a dialog drawn in there is clipped by its own widget. */}
+      {dropAsk && createPortal(
+        <PlannerDropDialog
+          jobName={
+            (dropAsk.entry.jobId ? jobById.get(dropAsk.entry.jobId) : undefined)
+              ?.displayName || 'This job'
+          }
+          canLand={!!dropAsk.target}
+          toWhere={dropAsk.target
+            ? `${personOf(dropAsk.target.person, contractors, users).name} · ${
+              new Date(`${dropAsk.target.day}T00:00:00`)
+                .toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })}`
+            : undefined}
+          onCancel={() => setDropAsk(null)}
+          onDone={resolveDrop}
+        />,
+        document.body,
+      )}
     </div>
   );
 }

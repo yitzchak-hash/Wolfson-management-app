@@ -30,6 +30,60 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-08-27',
+    title: 'Groups open properly, and jobs can be planned from anywhere',
+    items: [
+      {
+        title: 'Your own groups open, and count',
+        body: 'A group you made yourself — or one the import made — showed 0 jobs however '
+          + 'many were in it, would not open when you clicked it, and offered to rename '
+          + 'itself when you double-clicked. All three are fixed, and the same group now '
+          + 'shows properly on the wallboard too.',
+        demo: 'tap',
+      },
+      {
+        title: 'Inside a group is the same board as outside it',
+        body: 'Jobs in a group are drawn as the same tiles you see on the board, with the '
+          + 'same right-click menu, the same lock, the same Drive and plan links. The group '
+          + 'window zooms and can be dragged around, like the board.',
+        demo: 'drag',
+      },
+      {
+        title: 'Drag a job onto a day from any list',
+        body: 'Any job shown in a widget — Running late, Due today, New this week, the job '
+          + 'list, and the squares in Building Progress — can be dragged straight onto a day '
+          + 'in the weekly notebook. You no longer have to find it on the board first.',
+        demo: 'drag',
+      },
+      {
+        title: 'The notebook asks what you meant',
+        body: 'Dragging a job from one day to another now asks whether to move it, leave a '
+          + 'copy on both days, or take it off the notebook — instead of guessing from '
+          + 'whether you were holding a key. Dropping one outside the notebook asks too.',
+        demo: 'list',
+      },
+      {
+        title: 'Deleted jobs leave the notebook with them',
+        body: 'Squares that said "(job removed)" are cleared, and deleting a job from now on '
+          + 'takes it out of every notebook as it goes.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'The building name stays on top',
+        body: 'Scrolling down a building no longer slides the apartments over its name. '
+          + 'There is a small padlock on the name if you would rather have the extra row of '
+          + 'screen — press it and the name scrolls away with everything else.',
+        demo: 'pin',
+      },
+      {
+        title: 'And the plan Layers button works',
+        body: 'Switching one of a drawing’s own layers off really removes it from the sheet '
+          + 'now. It was changing the setting and redrawing nothing.',
+        demo: 'zoom',
+      },
+    ],
+  },
+  {
     date: '2026-08-26',
     title: 'The wallboard can tell you why it looks bad',
     items: [

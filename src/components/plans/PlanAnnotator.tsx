@@ -859,7 +859,16 @@ export function PlanAnnotator({
       try { cfg.setVisibility?.(id, !!row?.on); } catch { /* older build */ }
       return next;
     });
-    // Re-render so the change shows.
+    /**
+     * Invalidate what is painted, THEN re-render.
+     *
+     * `renderPage` skips a redraw when the page and the resolution are already
+     * on screen — which is exactly the case here, so switching a layer changed
+     * the config and drew nothing at all. The guard is right for zooming and
+     * wrong for this: what is drawn ON the page has changed even though the
+     * page and its resolution have not.
+     */
+    drawnAt.current = null;
     setTimeout(() => void renderPage(), 0);
   }
 
