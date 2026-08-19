@@ -60,7 +60,16 @@ function ScreenReport({ onClose, scale }: { onClose: () => void; scale: number }
   }, []);
   const dpr = window.devicePixelRatio || 1;
   const w = window.innerWidth, h = window.innerHeight;
-  const stretched = dpr === 1 && (screen.width <= 1920) && w <= 1920;
+  /**
+   * A ratio below 1 is the browser's own zoom set under 100%.
+   *
+   * It is the worst of the three states and the easiest to miss: the page is
+   * laid out WIDER than the panel and then squeezed down into it, so every
+   * letter is drawn into less than one real pixel. The office's own panel read
+   * 2560x1248 at 0.75 — a 1080p screen being asked to draw 2560 across.
+   */
+  const shrunk = dpr < 0.98;
+  const stretched = !shrunk && dpr <= 1 && screen.width <= 1920 && w <= 1920;
   const row = (k: string, v: string) => (
     <div className="flex justify-between gap-6 py-0.5">
       <span className="opacity-60">{k}</span>
@@ -85,9 +94,15 @@ function ScreenReport({ onClose, scale }: { onClose: () => void; scale: number }
           {row('Board scale', `${Math.round(scale * 100)}%`)}
         </div>
         <p className="text-[13px] mb-2">
-          {stretched
-            ? 'This looks like a screen drawing at 1080p. If the panel is 4K, the TV is stretching the picture — that is a setting on the TV or its browser, not something the app can sharpen.'
-            : 'This screen reports more than 1080p, so the fuzziness is ours to fix in how the wallboard scales.'}
+          {shrunk
+            ? `The browser's own zoom is at ${Math.round(dpr * 100)}%, so the page is laid out `
+              + `${w} wide and squeezed into ${Math.round(w * dpr)} real pixels — every letter drawn `
+              + 'into less than one pixel. Set the browser zoom back to 100% (Ctrl and 0) and use the '
+              + 'wallboard’s own − and + instead; that is what it is for.'
+            : stretched
+              ? 'This looks like a screen drawing at 1080p. If the panel is 4K, the source is sending it '
+                + '1080p — that is a setting on the box or the TV, not something the app can sharpen.'
+              : 'This screen is drawing at its real resolution, so anything fuzzy is ours.'}
         </p>
         <p className="text-[13px] font-semibold mb-1">Sharp test</p>
         <div
@@ -924,9 +939,12 @@ export function TvPresentationPage() {
           directions so that scaling it lands exactly on the frame.
         */}
         <div className="flex-1 overflow-hidden p-3">
+          {/* `zoom`, not a transform — see the note on the board surface. The
+              sizing arithmetic is identical: a percentage inside a zoomed box
+              still resolves against the unzoomed containing block, so 100/scale
+              lands exactly on the frame either way. */}
           <div style={{
-            transform: `scale(${scale})`,
-            transformOrigin: isRtl ? 'top right' : 'top left',
+            zoom: scale,
             width: `${100 / scale}%`,
             height: `${100 / scale}%`,
           }}>
@@ -972,11 +990,23 @@ export function TvPresentationPage() {
       {/* The board surface is the project's own theme, so the wall matches what
           the office sees on their screens rather than being a second design. */}
       <div className="flex-1 relative overflow-hidden" style={theme.surface}>
+        {/**
+          * `zoom`, not `transform: scale()` — this is the fuzziness.
+          *
+          * A transform hands the browser a subtree drawn at its natural size
+          * and stretches the resulting BITMAP. Every letter and every hairline
+          * is then a resampled version of itself, which is exactly what the
+          * office was looking at. `zoom` scales the LAYOUT instead: the text is
+          * laid out and rasterised at the size it will actually appear, so a
+          * 1px line is one real pixel wherever the wall's scale lands.
+          *
+          * The translate stays a transform — moving is not scaling, and it
+          * costs nothing to composite. It is INSIDE the zoom, so it is in
+          * board units and the origin arithmetic is unchanged.
+          */}
         <div className="absolute top-0 left-0" dir="ltr"
-          style={{
-            transform: `scale(${boardScale}) translate(${-boardOrigin.x}px, ${-boardOrigin.y}px)`,
-            transformOrigin: '0 0',
-          }}>
+          style={{ zoom: boardScale }}>
+        <div style={{ transform: `translate(${-boardOrigin.x}px, ${-boardOrigin.y}px)`, transformOrigin: '0 0' }}>
           {/* Notes, boxes, titles, timers and drawings — the same board, minus
               anything switched off for the wall. */}
           <StrokeLayer elements={tvElements} />
@@ -1085,6 +1115,7 @@ export function TvPresentationPage() {
               </button>
             );
           })}
+        </div>
         </div>
 
         {/* While arranging: a way to put something new on the wall. */}

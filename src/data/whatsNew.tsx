@@ -30,6 +30,35 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-08-24',
+    title: 'A sharper wall, and widgets that scroll when you pick them',
+    items: [
+      {
+        title: 'The wallboard draws at the screen’s real size',
+        body: 'It used to draw the board at its normal size and then stretch the picture '
+          + 'to fill the panel, which is what made the TV look soft. Now everything is '
+          + 'laid out at the size it will appear, so text and lines are as sharp as the '
+          + 'screen allows.',
+        demo: 'zoom',
+      },
+      {
+        title: 'And it can tell you if the fuzziness is not ours',
+        body: 'The ⓘ button on the wall bar reads the screen. If the browser’s own zoom '
+          + 'is under 100% — which squeezes the whole page into fewer pixels — it now '
+          + 'says so and tells you to put it back to 100% and use the wallboard’s own '
+          + 'minus and plus instead.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'Click a widget and the wheel is its',
+        body: 'Scrolling a list inside a widget used to work only if you were pointing '
+          + 'exactly at the list. Select the widget and the wheel scrolls it wherever you '
+          + 'point — on its heading, beside the rows, anywhere on it.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2026-08-23',
     title: 'One notebook everybody can watch',
     items: [

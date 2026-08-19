@@ -228,29 +228,27 @@ footer{margin-top:64px; padding-top:22px; border-top:1px solid var(--line); colo
 const body = `
 <div class="wrap">
 <header class="mast">
-  <p class="eyebrow">For approval · before anything is written</p>
+  <p class="eyebrow">Final check · before anything is written</p>
   <h1>The past year, sorted onto the board</h1>
-  <p class="sub">Every one of the ${n(plan.rowsRead)} deals in the CRM export, put through the routing you
-     gave me on 22 August. Nothing has been created yet. One stage still needs a word from you; everything
-     else is ready to run.</p>
+  <p class="sub">Every one of the ${n(plan.rowsRead)} deals in the CRM export, put through your routing.
+     Nothing has been created yet — this is the last look before I run it.</p>
   <div class="meta">
     <span>Source: ${esc(plan.source)}</span>
     <span>${n(plan.rowsRead)} rows read</span>
-    <span>Second pass · 22 Aug 2026</span>
+    <span>Final · 23 Aug 2026</span>
   </div>
 </header>
 
 <div class="strip">
   <div class="stat go"><b>${n(plan.counts.planned)}</b><span>jobs I will create</span></div>
-  <div class="stat ask"><b>${n(plan.counts.unrouted)}</b><span>waiting on one word from you</span></div>
-  <div class="stat no"><b>${n(plan.counts.refused)}</b><span>left out, as you said</span></div>
+  <div class="stat no"><b>${n(plan.counts.unrouted + plan.counts.refused)}</b><span>left out</span></div>
   <div class="stat no"><b>${n(plan.counts.problems)}</b><span>rows I could not read</span></div>
+  <div class="stat go"><b>${n(withPhone)}</b><span>arrive with a phone number</span></div>
 </div>
 
 <section>
   <h2>Where each CRM stage lands</h2>
-  <p class="lede">The first block is your instructions, applied. The second is stages that appear in the export
-     but were not in your list — I have left them out rather than guess.</p>
+  <p class="lede">Your routing, applied. Every CRM stage in the file appears here — nothing is left out.</p>
   <div class="tablewrap">
     <table class="route">
       <thead><tr><th>Jobs</th><th>CRM stage</th><th></th><th>Group on the board</th><th>Stage it gets</th></tr></thead>
@@ -284,28 +282,17 @@ const body = `
 </section>
 
 <section>
-  <h2>What I need from you before I run it</h2>
+  <h2>Worth a look before I run it</h2>
   <div class="qs">
 
-    <div class="q">
-      <h3>One stage left: the ${n(notRows.length)} deals the export calls “Not”</h3>
-      <p>Every other stage you named is now routed. This is the only one still without a rule, and it is
-         the biggest single group in the file. <strong>${n(notWithDrive)} of them have a Drive folder</strong> and
-         <strong>${n(notWithPhone)} have a phone number</strong>, and the job types read like live work rather than
-         junk: 81 VRF, 15 VRF System, 13 Undecided, 10 Central, 9 Central Replacement — and 102 with no
-         job type written at all.</p>
-      <p>You started to say Trash and then changed to Archive, so I have not guessed. Tell me which and
-         they go in with the rest.</p>
-      <p class="opt">Or, if you meant them to stay out entirely, say that instead — but they look too much
-         like real customers for me to assume it.</p>
-    </div>
-
     <div class="q ok">
-      <h3>The 49 you told me to skip are still skipped</h3>
-      <p>Babysitting (23), Creating Proposal (13), Collecting Information (10) and Closed Lost (3) do not
-         come in, exactly as you said the first time.</p>
-      <p class="opt">If “everything left out should go into Archive” was meant to include these four as
-         well, say so and I will bring them in too.</p>
+      <h3>Every deal in the file has a home</h3>
+      <p>All ${n(plan.rowsRead)} rows are routed — nothing is skipped and nothing is waiting on a
+         ruling. The stages you did not name went where you said on 23 August: Babysitting, Creating
+         Proposal and Collecting Information into Archive; Closed&nbsp;Lost and the 295 the export
+         calls “Not” into Trash.</p>
+      <p class="opt">Archive and Trash both keep the job in full — the Drive folder, the phone, the
+         notes. Nothing is destroyed by either, and either can be emptied back onto the board later.</p>
     </div>
 
     <div class="q">
@@ -385,7 +372,7 @@ const body = `
   </div>
 </section>
 
-<section>
+${plan.counts.unrouted === 0 ? '' : `<section>
   <h2>The ${n(plan.counts.unrouted)} still called “Not”</h2>
   <p class="lede">The only stage without a rule. Nothing here is being imported yet — say Archive or Trash
      and every one of them moves up into the list above.</p>
@@ -400,9 +387,9 @@ const body = `
       <tbody>${plan.unrouted.map((r, i) => plainRow(r, i, false)).join('')}</tbody>
     </table>
   </div>
-</section>
+</section>`}
 
-<section>
+${plan.counts.refused === 0 ? '' : `<section>
   <h2>The ${n(plan.counts.refused)} you told me to leave out</h2>
   <p class="lede">Here so you can see what “skip” actually covered.</p>
   <div class="tablewrap">
@@ -411,11 +398,12 @@ const body = `
       <tbody>${plan.refused.map((r, i) => plainRow(r, i, true)).join('')}</tbody>
     </table>
   </div>
-</section>
+</section>`}
 
 <footer>
-  Prepared from ${esc(plan.source)} — ${n(plan.rowsRead)} rows. Nothing in this page has been written to the
-  app. Reply with your rulings and I will run the import.
+  Prepared from ${esc(plan.source)} — ${n(plan.rowsRead)} rows. Nothing in this page has been written to
+  the app yet. Say the word and I will run it; the whole batch comes back out with one press if it is
+  not what you wanted.
 </footer>
 </div>
 

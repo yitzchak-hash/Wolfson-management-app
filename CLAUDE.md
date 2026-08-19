@@ -2466,3 +2466,43 @@ group window also has the app's forgiving search on top now, because a group
 holding six hundred finished jobs is a scroll, not a list. And a group the
 import creates wears the Archive slate rather than amber: it was the one yellow
 thing on the board and read as a warning.
+
+---
+
+# v2 — the wall's real resolution, and a selected widget owns the wheel
+
+## The wallboard lays out; it does not stretch a picture
+The owner's own panel reported **2560 × 1248 at ratio 0.75** — a 1920 × 1080
+screen with the browser's zoom at 75%, so the page is laid out 2560 wide and
+squeezed into 1920 real pixels. On top of that the wall scaled its whole surface
+with `transform: scale()`, which hands the browser a subtree drawn at its
+NATURAL size and stretches the resulting bitmap: every letter and hairline is a
+resampled copy of itself.
+
+**`zoom`, not `transform: scale()`**, on both wall surfaces (the board and the
+building diagram). `zoom` scales the LAYOUT, so text is laid out and rasterised
+at the size it will actually appear. The sizing arithmetic is unchanged — a
+percentage inside a zoomed box still resolves against the unzoomed containing
+block, so `width: 100/scale%` lands on the frame either way — and the translate
+stays a transform, inside the zoom, in board units.
+
+`ScreenReport` now names the third state: a device ratio BELOW 1 is the
+browser's own zoom set under 100%, which is the worst of the three and the
+easiest to miss. It says so and gives the fix (Ctrl+0, then use the wall's own
+− and +).
+
+## A selected widget owns the wheel
+`wheelScroller` only finds a scroller the pointer is actually ON. Press a
+widget on its heading, or in the space beside its rows, and nothing scrollable
+is under the pointer — so the wheel fell through and the board zoomed out from
+under it. `innerScroller(node)` finds the scrolling part INSIDE a node, and the
+board hands it the wheel whenever that node is in `selectedElIds` (read through
+`pickedRef`, because the wheel listener is registered once). A selected widget
+with nothing to scroll still lets the board zoom, so a clock or a photo does not
+swallow the gesture.
+
+Harness: `scratchpad/round13.mjs`. Its own trap, worth remembering: it wheeled
+first and then clicked at the OLD coordinates — the zoom had moved everything,
+the click landed on a job and opened the drawer, and the result read as
+"selecting a widget does nothing". Re-measure after anything that moves the
+board.

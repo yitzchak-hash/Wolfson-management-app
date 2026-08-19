@@ -121,6 +121,35 @@ const BOX_PALETTE = [
  * `data-wheel` counts even when the computed style says otherwise, so the
  * toolbar rail and the notebook keep the behaviour they were written with.
  */
+function scrollsHere(el: HTMLElement, horizontal: boolean, marked: boolean): boolean {
+  if (!marked && el.nodeType === 1) {
+    const style = getComputedStyle(el);
+    const flow = horizontal ? style.overflowX : style.overflowY;
+    if (flow !== 'auto' && flow !== 'scroll' && flow !== 'overlay') return false;
+  }
+  const room = horizontal ? el.scrollWidth - el.clientWidth : el.scrollHeight - el.clientHeight;
+  return room > 1;
+}
+
+/**
+ * The scrolling part INSIDE a node, when the pointer is not on it.
+ *
+ * A widget's list rarely fills its box: press one on its heading, or on the
+ * padding beside a row, and walking UP from the pointer finds nothing that
+ * scrolls — so the wheel went to the board and it zoomed out from under you,
+ * which is exactly what the owner saw on a widget he had just selected.
+ * Selecting a widget hands it the wheel; this is what the wheel is then given
+ * to.
+ */
+function innerScroller(node: HTMLElement, horizontal: boolean): HTMLElement | null {
+  const all = node.querySelectorAll<HTMLElement>('*');
+  for (const el of all) {
+    if (el.hasAttribute('data-wheel-own')) continue;
+    if (scrollsHere(el, horizontal, el.hasAttribute('data-wheel'))) return el;
+  }
+  return null;
+}
+
 function wheelScroller(
   target: Element | null, deltaX: number, deltaY: number, stopAt: Element,
 ): HTMLElement | null {
@@ -413,6 +442,9 @@ export function GeneralJobsPage() {
   /** Whether the pressed job was already the picked one — see onJobPointerDown. */
   const wasPicked = useRef(false);
   const [selectedElIds, setSelectedElIds] = useState<Set<string>>(new Set());
+  /** What is picked, for the wheel listener — which is registered once. */
+  const pickedRef = useRef<Set<string>>(new Set());
+  pickedRef.current = selectedElIds;
   const [drag, setDrag] = useState<DragState | null>(null);
   /** The floating header bar — its bottom edge is the drop ceiling. */
   const headerBarRef = useRef<HTMLDivElement>(null);
@@ -3780,6 +3812,29 @@ export function GeneralJobsPage() {
        * goes back to being the board's, so one flick still carries on zooming.
        */
       if (wheelScroller(e.target as Element | null, e.deltaX, e.deltaY, vp)) return;
+
+      /**
+       * A widget you have SELECTED owns the wheel.
+       *
+       * The walk-up above only finds a scroller the pointer is actually on, so
+       * a press on a widget's heading — or in the space beside its rows — still
+       * fell through and zoomed the board out from under it. Picking a widget
+       * is a plain statement that the wheel is meant for that widget, so the
+       * scrolling part is found INSIDE it and given the event. If it has
+       * nothing to scroll the wheel goes back to being the board's, so a clock
+       * or a photo does not swallow it.
+       */
+      const node = (e.target as Element | null)?.closest?.('[data-node-id]') as HTMLElement | null;
+      const id = node?.dataset.nodeId ?? '';
+      if (id && pickedRef.current.has(id)) {
+        const inner = innerScroller(node!, Math.abs(e.deltaX) > Math.abs(e.deltaY));
+        if (inner) {
+          e.preventDefault();
+          if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) inner.scrollLeft += e.deltaX;
+          else inner.scrollTop += e.deltaY;
+          return;
+        }
+      }
 
       /**
        * The wheel ALWAYS zooms, and always towards the pointer.
