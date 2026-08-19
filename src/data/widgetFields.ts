@@ -74,7 +74,16 @@ export const OUTLINE_FIELDS: WidgetField[] = [
 
 export const TEXT_STYLE_FIELDS: WidgetField[] = [
   {
-    key: 'fontSize', label: 'Text size', kind: 'number', scope: 'element', min: 8, max: 96,
+    /**
+     * The floor is 4, not 8.
+     *
+     * On a widget this number is not a font size at all — it is a multiplier
+     * against 14 that scales the whole drawing, so 8 was a hard stop at just
+     * over half size on a thing somebody was deliberately shrinking to fit a
+     * corner of the board. Text that small is unreadable as prose and perfectly
+     * useful as a dense list you zoom into.
+     */
+    key: 'fontSize', label: 'Text size', kind: 'number', scope: 'element', min: 4, max: 96,
     hint: 'On a widget this scales everything in it. Leave blank to follow the node’s width.',
   },
   {

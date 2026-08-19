@@ -213,12 +213,14 @@ export function TimeClockTab({ onToast }: { onToast: (msg: string, type?: 'succe
           <input
             value={newName} onChange={e => setNewName(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') add(); }}
+            data-enter-own
             placeholder="Name"
             className="flex-1 min-w-[160px] px-3 py-2 rounded-lg border border-gray-200 text-sm outline-none focus:border-[#4aa8d8]"
           />
           <input
             value={newRole} onChange={e => setNewRole(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') add(); }}
+            data-enter-own
             placeholder="Installer, office, driver…"
             className="flex-1 min-w-[140px] px-3 py-2 rounded-lg border border-gray-200 text-sm outline-none focus:border-[#4aa8d8]"
           />

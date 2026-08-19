@@ -12,7 +12,10 @@ import {
   DEFAULT_BUILDINGS, DEFAULT_PROJECTS, DEFAULT_STAGES, DEFAULT_USERS, NETIV_BUILDINGS,
   buildDefaultApartments, buildNetivApartments, buildGroundFirstFloorSlots, migrateNetivApartments, DATA_VERSION,
 } from './initialData';
-import { fsSet, fsDelete, fsBatchSet, fsGetAll, fsListen, isFirebaseConfigured, db, projectCollection } from './firebase';
+import {
+  fsSet, fsDelete, fsBatchSet, fsGetAll, fsListen, isFirebaseConfigured, db, projectCollection,
+  fsTombstone, fsGetTombstones, fsListenTombstones,
+} from './firebase';
 import { DEFAULT_TIME_CLOCK, resolvePunch } from './timeClock';
 import { DEFAULT_WORKER_LEVELS } from './workerLevels';
 
@@ -71,6 +74,23 @@ export function loadProjectSnapshot(projectId: string): {
 // Holds unsubscribe functions for all active Firestore real-time listeners.
 // Stored outside the Zustand state (not serializable) so they survive re-renders.
 let _firebaseUnsubscribers: Array<() => void> = [];
+
+/**
+ * Ids this workspace has deleted on purpose — see fsTombstone in firebase.ts.
+ *
+ * Kept outside the state deliberately: it is a mechanism, not the office's
+ * data, so it has no business in a backup and would only be one more key to
+ * forget in the persist/export/import trio. The cloud copy is the shared
+ * memory; this is the fast local answer used while a listener is firing.
+ */
+let _tombstones = new Set<string>();
+export function isTombstoned(id: string): boolean { return _tombstones.has(id); }
+
+/** Remember a deletion, locally and for every other device. */
+function tombstone(projectId: string, ids: string[]) {
+  ids.forEach(id => _tombstones.add(id));
+  fsTombstone(projectId, ids);
+}
 
 function generateId(): string {
   return Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
@@ -640,6 +660,8 @@ export const useStore = create<AppState>((set, get) => ({
     // Cancel existing Firebase listeners and switch project
     _firebaseUnsubscribers.forEach(u => u());
     _firebaseUnsubscribers = [];
+    // Tombstones are per-workspace; the incoming project's are read by its own sync.
+    _tombstones = new Set();
 
     localStorage.setItem(ACTIVE_PROJECT_KEY, id);
 
@@ -1006,6 +1028,10 @@ export const useStore = create<AppState>((set, get) => ({
     const gone = new Set(doomed);
     set(state => ({ apartments: state.apartments.filter(a => !gone.has(a.id)) }));
     persist(get);
+    // Tombstone BEFORE the deletes: another device still holding these locally
+    // would otherwise re-seed them on its next sync, which is exactly why a
+    // removed import kept coming back.
+    tombstone(pid, doomed);
     doomed.forEach(id => fsDelete(projectCollection(pid, 'apartments'), id));
     return doomed.length;
   },
@@ -1106,6 +1132,7 @@ export const useStore = create<AppState>((set, get) => ({
     persist(get);
 
     // Firestore cascade
+    tombstone(pid, [id]);
     fsDelete(projectCollection(pid, 'apartments'), id);
     linkedAssignments.forEach(a => fsDelete(projectCollection(pid, 'contractorAssignments'), a.id));
     linkedNotes.forEach(n  => fsDelete(projectCollection(pid, 'contractorNotes'), n.id));
@@ -1260,8 +1287,10 @@ export const useStore = create<AppState>((set, get) => ({
     if (updatedEl) fsSet(projectCollection(get().currentProjectId, 'canvasElements'), id, updatedEl);
   },
   deleteCanvasElement: (id) => {
+    const pid = get().currentProjectId;
     set(state => ({ canvasElements: state.canvasElements.filter(el => el.id !== id) }));
-    fsDelete(projectCollection(get().currentProjectId, 'canvasElements'), id);
+    tombstone(pid, [id]);
+    fsDelete(projectCollection(pid, 'canvasElements'), id);
     persist(get);
   },
 
@@ -2221,6 +2250,21 @@ export const useStore = create<AppState>((set, get) => ({
       fsGetAll('workerLevels'),
     ]);
 
+    // What this workspace has deleted on purpose. Read BEFORE anything is
+    // pushed up: a record this device still holds locally but the cloud has
+    // buried must be dropped here, or the "seed anything missing" step below
+    // resurrects it — the reason a removed import kept reappearing.
+    _tombstones = await fsGetTombstones(pid);
+    if (_tombstones.size > 0) {
+      const before = get();
+      const apts = before.apartments.filter(a => !_tombstones.has(a.id));
+      const els  = before.canvasElements.filter(e => !_tombstones.has(e.id));
+      if (apts.length !== before.apartments.length || els.length !== before.canvasElements.length) {
+        set({ apartments: apts, canvasElements: els });
+        persist(get);
+      }
+    }
+
     // Only PROJECT-scoped signals decide whether this project has already been seeded.
     // The global collections (stages/users/contractors) are shared, so they are
     // non-empty as soon as any project has synced and would mask a brand-new project.
@@ -2317,9 +2361,10 @@ export const useStore = create<AppState>((set, get) => ({
         }
       }
 
-      // Seed any apartments that are missing from Firestore (in case the first-run seed was partial)
+      // Seed any apartments that are missing from Firestore (in case the first-run seed was partial).
+      // Anything tombstoned is missing BECAUSE it was deleted, and must stay gone.
       const fbAptIds = new Set((fbApts as unknown as Apartment[]).map(a => a.id));
-      const missingApts = get().apartments.filter(a => !fbAptIds.has(a.id));
+      const missingApts = get().apartments.filter(a => !fbAptIds.has(a.id) && !_tombstones.has(a.id));
       if (missingApts.length > 0) {
         fsBatchSet(col('apartments'), missingApts.map(a => ({ id: a.id, data: a })));
       }
@@ -2327,7 +2372,7 @@ export const useStore = create<AppState>((set, get) => ({
       // Board notes and boxes were localStorage-only until now, so a device that
       // already has them must push them up rather than silently lose them.
       const fbElIds = new Set((fbCanvasElements as unknown as CanvasElement[]).map(e => e.id));
-      const missingEls = get().canvasElements.filter(e => !fbElIds.has(e.id));
+      const missingEls = get().canvasElements.filter(e => !fbElIds.has(e.id) && !_tombstones.has(e.id));
       if (missingEls.length > 0) {
         fsBatchSet(col('canvasElements'), missingEls.map(e => ({ id: e.id, data: e })));
       }
@@ -2393,7 +2438,12 @@ export const useStore = create<AppState>((set, get) => ({
         if (docs.length === 0) return;
         const fbMap = new Map((docs as unknown as Apartment[]).map(a => [a.id, a]));
         set(state => {
-          const updated = state.apartments.map(a => (fbMap.get(a.id) as Apartment | undefined) ?? a);
+          // A record the snapshot does not carry is KEPT — it may simply not be
+          // uploaded yet. Unless it is tombstoned, in which case it is missing
+          // because somebody deleted it, and keeping it is the resurrection bug.
+          const updated = state.apartments
+            .filter(a => !_tombstones.has(a.id))
+            .map(a => (fbMap.get(a.id) as Apartment | undefined) ?? a);
           const localIds = new Set(state.apartments.map(a => a.id));
           (docs as unknown as Apartment[]).forEach(r => { if (!localIds.has(r.id)) updated.push(r as Apartment); });
           // Orphans from a past building rename must not stream back in
@@ -2466,8 +2516,22 @@ export const useStore = create<AppState>((set, get) => ({
         set({ officeNoteFiles: merged }); persist(get);
       }),
       fsListen(col('canvasElements'), (docs) => {
-        set({ canvasElements: docs as unknown as CanvasElement[] });
+        set({ canvasElements: (docs as unknown as CanvasElement[]).filter(e => !_tombstones.has(e.id)) });
         persist(get);
+      }),
+      // A delete on one device reaches the others through here. Without it the
+      // TV and the phones would each keep showing what the office removed until
+      // their next reload.
+      fsListenTombstones(pid, (ids) => {
+        if (ids.size === 0) return;
+        _tombstones = ids;
+        const st = get();
+        const apts = st.apartments.filter(a => !ids.has(a.id));
+        const els  = st.canvasElements.filter(e => !ids.has(e.id));
+        if (apts.length !== st.apartments.length || els.length !== st.canvasElements.length) {
+          set({ apartments: apts, canvasElements: els });
+          persist(get);
+        }
       }),
       fsListen(col('planPins'), (docs) => {
         set({ planPins: docs as unknown as PlanPin[] });

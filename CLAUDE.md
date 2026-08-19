@@ -2203,3 +2203,112 @@ The no-address badge is legible now and still flies to those pins.
 Harnesses: `scratchpad/tilesize.mjs` (tile resize, hint, 0-reset, one Drive
 icon, margin) and `scratchpad/boardsize.mjs` (board shrinks back, edge-pan both
 ways, Building Progress cells and click-through).
+
+---
+
+# v2 — deleted stays deleted, and the wheel goes where you point
+
+## Tombstones — the third state a Firestore snapshot cannot express
+**A missing doc means two different things** — "not uploaded yet" and "deleted
+somewhere else" — and the app treated both as the first. The apartments
+listener KEEPS any local record the snapshot lacks, and `startFirebaseSync`
+then pushes every such record back up as "missing". So a job deleted on the
+office PC came straight back the moment the TV or a phone synced: the owner's
+"deleting previous imports doesn't actually delete, they keep coming back".
+
+`fsTombstone` / `fsGetTombstones` / `fsListenTombstones` in `firebase.ts` — ONE
+document per workspace (`projectCollection(pid,'tombstones')/deleted`) holding
+`{ ids: { [id]: when } }`. Merged, so two devices deleting at once cannot
+clobber each other; pruned to the newest 4000 once it passes 6000, with a
+WHOLE-doc write because a merge cannot remove keys. Ids become MAP KEYS, so
+they must never contain `.` or `/` or start with `__` — everything this app
+mints is safe.
+
+`_tombstones` in `store.ts` is module-level and **deliberately not state**: it
+is a mechanism, not the office's data, so it stays out of persist / export /
+import and out of the backup audit. It is written by `deleteApartment`,
+`removeJobsByIdPrefix` and `deleteCanvasElement`, read at load (local records
+are dropped before anything is seeded), consulted by BOTH missing-seeders and
+BOTH listeners, and cleared on workspace switch.
+
+## The wheel belongs to whatever is under the pointer
+`wheelScroller(target, dx, dy, stopAt)` walks up from the target looking for an
+ancestor that genuinely scrolls in the direction asked for. The old rule needed
+an opt-in `data-wheel` marker, which meant every widget drawn through `Frame` —
+and `Frame` is `overflow-auto`, so most of them — silently lost its wheel to
+the board's zoom. `data-wheel` and `.board-rail` still count as markers, and
+`data-wheel-own` still means "hands off entirely" (the map). At the end of a
+list's travel the wheel goes back to being the board's, so one flick keeps
+zooming.
+
+**A harness that wheels at a node's centre must first assert the point is
+really on it** (`el.contains(document.elementFromPoint(...))`). The first
+version placed its widgets at board x=1400 in a 1300px window, so every wheel
+went nowhere and "the board did not zoom" passed for the wrong reason.
+
+## Zooming out walks home
+Zooming IN holds the point under the pointer — settled, unchanged. Zooming OUT
+pulls the pan part of the way toward the corner the clamp allows (`{x:0,
+y:1e6}` put through `clampPanRef`), by `t = clamp((1 − next/prev) × 2.5, 0, 1)`
+— derived from the step so it stays in proportion if the zoom ladder changes.
+A few steps out and you are back on the view you get when you arrive, instead
+of hanging over the middle of the board.
+
+## Margins are a gutter, not a rule about where things may go
+`clampPanRef` pins `margin × zoom` INSIDE the viewport on a locked edge. The
+right and bottom got their margin from the world's size; the left and top were
+pinned to the origin, so changing the setting did nothing there. Now all four
+edges show the same clear strip whether or not the edge is locked.
+
+## Every theme travels
+`surfaceAtZoom` only offset the pattern by the pan for the DOTS and GRID
+themes. Cork, kraft, steel, linen, manila and chalk were nailed to the screen
+while the work slid across them — "the widgets move above the board and the
+board doesn't come with them". A tile-less surface now gets the same pan offset
+(one `background-position` value; CSS cycles a shorter list over every layer)
+and its `background-size` scaled by the same power-of-two step, one factor for
+every layer so the texture keeps its proportions.
+
+## The overview draws the board's SHAPE
+`MiniMap`'s panel is a fixed box and the board is fitted inside it, so a tall
+board used only a strip of the width — and with the leftover painted the same
+white as the board it read as though dragging the planner DOWN had also grown
+the board to the RIGHT. The panel is grey now with the board's own rectangle
+painted white on top. It also has the shared grip.
+
+## `usePanelDrag` — one drag, three panels
+Lifted out of `MovablePanel` so the tool rail and the overview move exactly the
+way the popovers do. **`0` while the gesture is live puts the panel back on its
+dock**, the same key that resets a size, and the hint says so. Checked against
+a REF and cleared there: the keydown and the pointerup can land in the same
+tick, and a state read would commit the dragged position straight back over the
+reset — the trap the tile resize already paid for.
+
+## Enter saves, once, globally
+`useEnterCommits()` in `App.tsx`: Enter on a single-line `<input>` BLURS it,
+which runs the save the field already has (this app commits on blur nearly
+everywhere). Rather than a key handler on a hundred inputs and a miss on the
+hundred-and-first. Left alone: a textarea, a field inside a real `<form>`,
+anything that already handled the key (`defaultPrevented`), and fields marked
+`data-enter-own` — the repeat-add boxes (add-stage, the time clock) where Enter
+means "add another" and the focus must stay put.
+
+## Words grow with the box
+`nodeGrowth(type, w, h)` in `BoardItems` — the SMALLER of `w/defaultW` and
+`h/defaultH`, so stretching one side alone can never push the words out. Notes,
+headings and section-box titles carried a FIXED font size while every widget
+already scaled through `WidgetSurface`. A section box grows more gently
+(`0.85..1.8`) because it can be enormous. `TEXT_STYLE_FIELDS`' floor is 4, not
+8 — on a widget that number is a multiplier against 14, not a font size.
+
+Harness: `scratchpad/round11.mjs` (16 checks).
+
+## Importing the CRM's own export
+`scratchpad/planzoho.mjs` converts a Zoho deals export into the app's OWN
+import template, applying the owner's routing table, and `buildapproval.mjs`
+turns the plan into a page he approves BEFORE anything is written. Neither
+touches the app or the cloud.
+
+**The export and everything derived from it are gitignored** — real family
+names, phone numbers and Drive links. The tools are committed; their output
+never is.

@@ -23,7 +23,41 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Enter saves. Everywhere.
+ *
+ * Nearly every field in this app commits on BLUR — the drawer's own note says
+ * so — which is right for somebody moving between fields with the mouse and
+ * quietly wrong for somebody typing: you finish a family name, press Enter,
+ * nothing happens, and you cannot tell whether it saved. Rather than adding a
+ * key handler to a hundred inputs and missing the hundred-and-first, Enter on a
+ * single-line field simply takes the focus off it, which runs the save the
+ * field already has.
+ *
+ * Left alone: a textarea (Enter is a new line there), a field inside a real
+ * form (the browser submits it), anything that has already handled the key
+ * itself (`defaultPrevented`), and the type-ahead controls where Enter means
+ * "pick this" rather than "done".
+ */
+function useEnterCommits() {
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' || e.defaultPrevented || e.shiftKey || e.altKey) return;
+      const el = document.activeElement as HTMLElement | null;
+      if (!el || el.tagName !== 'INPUT') return;
+      const input = el as HTMLInputElement;
+      const type = (input.type || 'text').toLowerCase();
+      if (['checkbox', 'radio', 'button', 'submit', 'file', 'range', 'reset'].includes(type)) return;
+      if (input.hasAttribute('data-enter-own') || input.closest('form')) return;
+      input.blur();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+}
+
 export default function App() {
+  useEnterCommits();
   return (
     <BrowserRouter>
       <Routes>

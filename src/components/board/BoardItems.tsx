@@ -33,7 +33,7 @@ function planDownloadUrl(link: string): string {
   const id = extractFileId(link);
   return id ? driveDownloadUrl(id) : link;
 }
-import { CountdownNode, StopwatchNode, ClipArtNode, VoiceMemoNode, StrokeNode } from './BoardNodes';
+import { CountdownNode, StopwatchNode, ClipArtNode, VoiceMemoNode, StrokeNode, NODE_DEFAULT_SIZE } from './BoardNodes';
 import { VoiceMemoPlayer } from '../ui/VoiceMemo';
 import { renderWidget, WidgetCtx, WIDGET_BY_ID } from '../../data/widgets';
 
@@ -393,6 +393,23 @@ export const JobTile = React.memo(function JobTile({
  *
  * `el.fontSize` rides on top as a plain text multiplier.
  */
+/**
+ * How much bigger this node is than the size it ships at.
+ *
+ * A widget's whole drawing already scales with its box through
+ * `WidgetSurface` — but a sticky note, a heading and a section box carried a
+ * FIXED font size, so dragging one to twice the size left 14px type marooned in
+ * the corner of it. Their words follow the box now, by the same idiom.
+ *
+ * The SMALLER of the two ratios, so stretching one side alone can never push
+ * the words out of the box.
+ */
+function nodeGrowth(type: string, w: number, h: number, lo = 0.7, hi = 3): number {
+  const d = NODE_DEFAULT_SIZE[type];
+  if (!d || d.w <= 0 || d.h <= 0) return 1;
+  return Math.max(lo, Math.min(hi, Math.min(w / d.w, h / d.h)));
+}
+
 function WidgetSurface({ el, w, h, children }: {
   el: CanvasElement; w: number; h: number; children: React.ReactNode;
 }) {
@@ -696,7 +713,7 @@ export const BoardNode = React.memo(function BoardNode({
       ) : el.type === 'title' ? (
         <div className="w-full h-full flex items-center px-2 leading-tight overflow-hidden"
           style={{
-            fontSize: el.fontSize ?? 30,
+            fontSize: (el.fontSize ?? 30) * nodeGrowth('title', w, h),
             fontWeight: el.fontWeight ?? 800,
             color: el.color || '#0f172a',
             fontStyle: el.italic ? 'italic' : 'normal',
@@ -723,7 +740,7 @@ export const BoardNode = React.memo(function BoardNode({
             maxHeight: '100%', overflow: 'hidden',
             // A note had no way to change its own type at all. It uses the same
             // controls the heading always had, so one set covers every text node.
-            fontSize: el.fontSize ?? 14,
+            fontSize: (el.fontSize ?? 14) * nodeGrowth('note', w, h),
             fontWeight: el.fontWeight ?? 400,
             textAlign: el.align ?? 'left',
             fontStyle: el.italic ? 'italic' : undefined,
@@ -752,7 +769,9 @@ export const BoardNode = React.memo(function BoardNode({
         <div className="absolute top-0 left-0 right-0 px-3 py-1.5 rounded-t-xl cursor-grab truncate"
           style={{
             backgroundColor: withAlpha(el.color, (el.boxOpacity ?? 0.45) + 0.25),
-            fontSize: el.fontSize ?? 14,
+            // A section box can be enormous, so its name grows more gently
+            // than a note's — a heading three times the size is a banner.
+            fontSize: (el.fontSize ?? 14) * nodeGrowth('box', w, h, 0.85, 1.8),
             fontWeight: el.fontWeight ?? 600,
             textAlign: el.align ?? 'left',
             color: '#334155',

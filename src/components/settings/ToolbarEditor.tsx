@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { GripVertical, Eye, EyeOff, X, Plus, RotateCcw, Search } from 'lucide-react';
+import { GripVertical, Eye, EyeOff, X, Plus, RotateCcw, Search, Info } from 'lucide-react';
 import { useStore } from '../../data/store';
+import { Tooltip } from '../ui/Tooltip';
 import { ToolbarSetup } from '../../types';
 import { TOOL_LABELS } from '../board/BoardToolbar';
 import { WIDGETS } from '../../data/widgets';
@@ -58,6 +59,15 @@ export function ToolbarEditor({ onToast }: { onToast: (m: string, t?: 'success' 
     <div className="bg-white rounded-xl border border-gray-200 p-5">
       <div className="flex items-center gap-2 mb-1">
         <h3 className="text-sm font-semibold text-gray-700">Board toolbar — {workspace}</h3>
+        {/* The instructions live on hover, like every other settings hint —
+            three lines of grey explainer above a panel is read once and then
+            in the way for ever. */}
+        <Tooltip
+          side="bottom"
+          text="Drag to reorder. The eye hides a tool without losing your order. Anything from the widget store can be promoted onto the rail so it is one click instead of three."
+        >
+          <Info size={13} className="text-gray-300 hover:text-gray-500" />
+        </Tooltip>
         <span className="flex-1" />
         {(setup.tools || setup.hidden?.length || setup.widgets?.length) && (
           <button
@@ -67,11 +77,7 @@ export function ToolbarEditor({ onToast }: { onToast: (m: string, t?: 'success' 
           </button>
         )}
       </div>
-      <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-        Drag to reorder. The eye hides a tool without losing your order. Anything
-        from the widget store can be promoted onto the rail so it is one click
-        instead of three.
-      </p>
+      <div className="mb-4" />
 
       {/* One column on a phone. Two 1fr columns of a 390px screen give each
           side ~148px, which is narrower than the widget names that go in it —
@@ -103,15 +109,16 @@ export function ToolbarEditor({ onToast }: { onToast: (m: string, t?: 'success' 
                   <span className="text-[12.5px] font-medium text-gray-700 flex-1 truncate">
                     {TOOL_LABELS[id] ?? id}
                   </span>
-                  <button
-                    onClick={() => write({
-                      hidden: off ? (setup.hidden ?? []).filter(h => h !== id) : [...(setup.hidden ?? []), id],
-                    })}
-                    title={off ? 'Show it' : 'Hide it'}
-                    className="p-2.5 sm:p-1 rounded text-gray-400 hover:text-gray-700"
-                  >
-                    {off ? <EyeOff size={12} /> : <Eye size={12} />}
-                  </button>
+                  <Tooltip text={off ? 'Show it on the rail' : 'Hide it, keeping its place'}>
+                    <button
+                      onClick={() => write({
+                        hidden: off ? (setup.hidden ?? []).filter(h => h !== id) : [...(setup.hidden ?? []), id],
+                      })}
+                      className="p-2.5 sm:p-1 rounded text-gray-400 hover:text-gray-700"
+                    >
+                      {off ? <EyeOff size={12} /> : <Eye size={12} />}
+                    </button>
+                  </Tooltip>
                 </div>
               );
             })}
@@ -128,10 +135,11 @@ export function ToolbarEditor({ onToast }: { onToast: (m: string, t?: 'success' 
                   <span className="text-[12.5px] font-medium text-gray-700 flex-1 truncate">{w.name}</span>
                   <span className="text-[9px] font-bold px-1.5 rounded-full"
                     style={{ backgroundColor: '#dbeafe', color: '#1e40af' }}>widget</span>
-                  <button
-                    onClick={() => write({ widgets: railWidgets.filter(x => x !== wid) })}
-                    title="Take it off the rail"
-                    className="p-1 rounded text-gray-400 hover:text-red-500"><X size={12} /></button>
+                  <Tooltip text="Take it off the rail">
+                    <button
+                      onClick={() => write({ widgets: railWidgets.filter(x => x !== wid) })}
+                      className="p-1 rounded text-gray-400 hover:text-red-500"><X size={12} /></button>
+                  </Tooltip>
                 </div>
               );
             })}
@@ -153,21 +161,21 @@ export function ToolbarEditor({ onToast }: { onToast: (m: string, t?: 'success' 
             {storeMatches.map(w => {
               const WIcon = w.icon;
               return (
-                <button
-                  key={w.id}
-                  onClick={() => {
-                    write({ widgets: [...railWidgets, w.id] });
-                    onToast(`${w.name} added to the toolbar`);
-                  }}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg border border-gray-200 hover:border-[#4aa8d8] text-left transition-colors"
-                >
-                  <WIcon size={13} className="text-[#1e3a5f] flex-shrink-0" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[12.5px] font-medium text-gray-700 truncate">{w.name}</span>
-                    <span className="block text-[10px] text-gray-400 truncate">{w.blurb}</span>
-                  </span>
-                  <Plus size={12} className="text-gray-300 flex-shrink-0" />
-                </button>
+                // The blurb is on HOVER rather than under every name: a wall of
+                // grey second lines is what you read past to reach the list.
+                <Tooltip key={w.id} side="left" text={w.blurb}>
+                  <button
+                    onClick={() => {
+                      write({ widgets: [...railWidgets, w.id] });
+                      onToast(`${w.name} added to the toolbar`);
+                    }}
+                    className="w-full flex items-center gap-2 px-2 py-2 rounded-lg border border-gray-200 hover:border-[#4aa8d8] text-left transition-colors"
+                  >
+                    <WIcon size={13} className="text-[#1e3a5f] flex-shrink-0" />
+                    <span className="min-w-0 flex-1 text-[12.5px] font-medium text-gray-700 truncate">{w.name}</span>
+                    <Plus size={12} className="text-gray-300 flex-shrink-0" />
+                  </button>
+                </Tooltip>
               );
             })}
             {storeMatches.length === 0 && (

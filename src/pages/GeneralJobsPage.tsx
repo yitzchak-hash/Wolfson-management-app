@@ -112,6 +112,45 @@ const BOX_PALETTE = [
   'rgba(254,249,195,0.45)',
 ];
 
+/**
+ * The element under the pointer that should get this wheel, or null for the board.
+ *
+ * Walks up from the target to the viewport looking for something that really
+ * scrolls in the direction being asked for. Anything explicitly marked
+ * `data-wheel` counts even when the computed style says otherwise, so the
+ * toolbar rail and the notebook keep the behaviour they were written with.
+ */
+function wheelScroller(
+  target: Element | null, deltaX: number, deltaY: number, stopAt: Element,
+): HTMLElement | null {
+  const horizontal = Math.abs(deltaX) > Math.abs(deltaY);
+  let el = target as HTMLElement | null;
+  while (el && el !== stopAt) {
+    const marked = el.hasAttribute?.('data-wheel') || el.classList?.contains('board-rail');
+    let scrolls = marked;
+    if (!scrolls && el.nodeType === 1) {
+      const style = getComputedStyle(el);
+      const flow = horizontal ? style.overflowX : style.overflowY;
+      scrolls = flow === 'auto' || flow === 'scroll' || flow === 'overlay';
+    }
+    if (scrolls) {
+      const room = horizontal
+        ? el.scrollWidth - el.clientWidth
+        : el.scrollHeight - el.clientHeight;
+      if (room > 1) {
+        const at = horizontal ? el.scrollLeft : el.scrollTop;
+        const d = horizontal ? deltaX : deltaY;
+        // At the far end in the direction asked for, the wheel goes back to
+        // being the board's — one flick keeps zooming instead of stopping dead.
+        const stuck = (at <= 0 && d < 0) || (at >= room - 1 && d > 0);
+        if (!stuck) return el;
+      }
+    }
+    el = el.parentElement;
+  }
+  return null;
+}
+
 function defaultPos(i: number) {
   const col = i % PER_ROW;
   const row = Math.floor(i / PER_ROW);
@@ -972,10 +1011,33 @@ export function GeneralJobsPage() {
     // The world point under the cursor stays under the cursor: solve the
     // transform for the pan that keeps it fixed at the new scale.
     const cx = clientX - r.left, cy = clientY - r.top;
-    const nextPan = clampPanRef.current({
+    let nextPan = clampPanRef.current({
       x: cx - (cx - prevPan.x) * (next / prevZoom),
       y: cy - (cy - prevPan.y) * (next / prevZoom),
     }, next);
+
+    /**
+     * Zooming OUT walks back to the board's own corner.
+     *
+     * Zooming in is an aimed gesture and holds the point under the pointer —
+     * that is settled and must not change. Coming back out is the opposite
+     * intention: you are asking to see more, and holding the same anchor left
+     * you hanging over the middle of the board with the corner you organise
+     * from somewhere off-screen. Each step out therefore pulls the view part of
+     * the way towards home — the top-left the clamp allows, margin and floating
+     * header included — so a few steps land you on the view you get when you
+     * arrive. The fraction comes from the size of the step itself rather than a
+     * number picked out of the air, so the walk stays in proportion however the
+     * zoom ladder is changed.
+     */
+    if (dir === -1) {
+      const home = clampPanRef.current({ x: 0, y: 1e6 }, next);
+      const t = Math.max(0, Math.min(1, (1 - next / prevZoom) * 2.5));
+      nextPan = clampPanRef.current({
+        x: nextPan.x + (home.x - nextPan.x) * t,
+        y: nextPan.y + (home.y - nextPan.y) * t,
+      }, next);
+    }
 
     zoomRef.current = next;
     panRef2.current = nextPan;
@@ -3575,11 +3637,19 @@ export function GeneralJobsPage() {
        */
       if ((e.target as Element | null)?.closest?.('[data-wheel-own]')) return;
 
-      // Anything with its own scroll — the toolbar rail, a list inside a widget —
-      // keeps its wheel. Swallowing it board-wide meant a rail taller than the
-      // screen could not be scrolled at all.
-      const inner = (e.target as HTMLElement | null)?.closest?.('.board-rail, [data-wheel]');
-      if (inner && inner.scrollHeight > inner.clientHeight + 1) return;
+      /**
+       * Anything the pointer is over that can actually scroll keeps its wheel.
+       *
+       * This used to need an opt-in marker (`data-wheel`), which meant that
+       * every widget drawn through `Frame` — and `Frame` is `overflow-auto`, so
+       * most of them — silently lost its wheel to the board's zoom. You could
+       * see a list continue past the bottom of a widget and had no way to reach
+       * it. The rule is now the browser's own: walk up from what is under the
+       * pointer, and the first ancestor that scrolls IN THIS DIRECTION and has
+       * somewhere left to go gets the event. At the end of its travel the wheel
+       * goes back to being the board's, so one flick still carries on zooming.
+       */
+      if (wheelScroller(e.target as Element | null, e.deltaX, e.deltaY, vp)) return;
 
       /**
        * The wheel ALWAYS zooms, and always towards the pointer.
@@ -3591,25 +3661,6 @@ export function GeneralJobsPage() {
        * wants to move without changing scale.
        */
       const held = leftDown.current || (e.buttons & 1) === 1;
-
-      /**
-       * A widget that scrolls keeps its own wheel.
-       *
-       * This listener is on the viewport and native, so it runs BEFORE any
-       * handler inside a widget and its preventDefault stops the browser
-       * scrolling anything at all — which is why the weekly notebook could not
-       * be wheeled through even though it was plainly a scrollable list.
-       * Anything marked as its own scroller is left alone, and only when it
-       * actually has somewhere to go in that direction: at the top or bottom
-       * of the list the wheel goes back to being the board's.
-       */
-      const scroller = (e.target as Element | null)?.closest?.('[data-wheel]') as HTMLElement | null;
-      if (scroller) {
-        const room = scroller.scrollHeight - scroller.clientHeight;
-        const atTop = scroller.scrollTop <= 0;
-        const atEnd = scroller.scrollTop >= room - 1;
-        if (room > 0 && !((atTop && e.deltaY < 0) || (atEnd && e.deltaY > 0))) return;
-      }
 
       e.preventDefault();
 
@@ -3852,9 +3903,20 @@ export function GeneralJobsPage() {
      * world could have covered). When the world is small both bounds are the
      * same number, so it simply pins — and zooming can never jump.
      */
-    const yTop = pinY ? hr : Math.max(hr, vp.h - h);
+    /**
+     * The margin is a gutter on ALL FOUR sides, locked ones included.
+     *
+     * The right and bottom get theirs from the world's size, which grows by the
+     * margin — but the left and top are pinned to the origin, so changing the
+     * setting did nothing there unless every node happened to be sitting past
+     * it. Pinning `margin` INSIDE the viewport instead gives the same clear
+     * strip whether or not the edge is locked, which is the whole point of a
+     * margin: it is the paper's edge, not a rule about where things may go.
+     */
+    const m = margin * z;
+    const yTop = pinY ? hr + m : Math.max(hr + m, vp.h - h);
     const yBottom = Math.min(yTop, vp.h - h);
-    const xLeft = pinX ? 0 : Math.max(0, vp.w - w);
+    const xLeft = pinX ? m : Math.max(m, vp.w - w);
     const xRight = Math.min(xLeft, vp.w - w);
     return {
       x: Math.max(xRight, Math.min(xLeft, p.x)),

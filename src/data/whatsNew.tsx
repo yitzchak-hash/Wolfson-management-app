@@ -30,6 +30,69 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-08-21',
+    title: 'Deleted stays deleted, Enter saves, and the wheel goes where you point it',
+    items: [
+      {
+        title: 'Anything you delete now stays deleted',
+        body: 'Removing an import — or a single job — used to come back a day later, '
+          + 'because another machine still had its own copy and quietly put it back on '
+          + 'the next sync. Every deletion is now remembered for the whole company, so '
+          + 'the phone, the TV and the office all agree it is gone.',
+        demo: 'list',
+      },
+      {
+        title: 'Enter saves',
+        body: 'Finish typing in any box, press Enter, and it saves — a name, an '
+          + 'address, a link, a group name. It used to only save when you clicked away, '
+          + 'which left you wondering whether it had taken.',
+        demo: 'tap',
+      },
+      {
+        title: 'The wheel scrolls what you are pointing at',
+        body: 'Hover any widget with a list in it and the wheel scrolls that list '
+          + 'instead of zooming the whole board. Reach the end of the list and the wheel '
+          + 'goes back to the board, so one flick still works.',
+        demo: 'zoom',
+      },
+      {
+        title: 'Zoom out and you come back to the corner',
+        body: 'Zooming in still holds the spot under your pointer. Zooming back out now '
+          + 'walks the view home to the top-left, so you end up looking at the board the '
+          + 'way you do when you arrive rather than floating over the middle of it.',
+        demo: 'zoom',
+      },
+      {
+        title: 'Widgets feel stuck to the board',
+        body: 'On every theme — cork, kraft, steel, chalk — the surface now travels and '
+          + 'scales with your work instead of staying nailed to the screen while the '
+          + 'widgets slide over it.',
+        demo: 'drag',
+      },
+      {
+        title: 'Words grow with the box',
+        body: 'Drag a sticky note, a heading or a section box bigger and its writing '
+          + 'grows with it. The text-size setting also goes smaller than it used to, for '
+          + 'a dense list you want tucked in a corner.',
+        demo: 'drag',
+      },
+      {
+        title: 'The board overview shows the board’s real shape',
+        body: 'The little map bottom-right now draws the board at its true proportions '
+          + 'with grey around it, so a board that grew downwards no longer looks as '
+          + 'though it grew sideways too. It has a grip to move it, and pressing 0 while '
+          + 'moving it — or the toolbar — puts it back where it started.',
+        demo: 'drag',
+      },
+      {
+        title: 'Margins mean all four sides',
+        body: 'The margin setting now keeps its gutter on the locked edges as well, '
+          + 'which is the whole point of a margin.',
+        demo: 'zoom',
+      },
+    ],
+  },
+  {
     date: '2026-08-20',
     title: 'Tiles that resize, a board with margins, and a map worth pointing at',
     items: [

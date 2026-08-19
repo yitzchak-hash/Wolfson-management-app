@@ -89,7 +89,7 @@ export function surfaceAtZoom(
 ): React.CSSProperties {
   const tile = surface.tile;
   const { tile: _drop, backgroundColor: _bg, ...rest } = surface;
-  if (!tile || !Number.isFinite(zoom) || zoom <= 0) return rest;
+  if (!Number.isFinite(zoom) || zoom <= 0) return rest;
 
   /** Multiply or divide by two until one tile is a comfortable size on screen. */
   const step = (base: number) => {
@@ -99,6 +99,36 @@ export function surfaceAtZoom(
     while (n > COMFY_MAX) n /= 2;
     return n;
   };
+
+  /**
+   * Every OTHER surface — cork, paper, anything drawn from raw gradients rather
+   * than a dot or grid tile — travels too.
+   *
+   * Only the tiled themes carried a pan offset, so on cork (and the rest) the
+   * texture was nailed to the screen while the work slid across it: the owner's
+   * "the widgets move above the board and the board doesn't come with them".
+   * The texture is stepped by the same powers of two and offset by the same pan,
+   * so a board feels like one surface whichever one you pick.
+   */
+  if (!tile) {
+    if (!rest.backgroundImage) return rest;
+    const sizes = String(rest.backgroundSize ?? '').split(',').map(s => s.trim()).filter(Boolean);
+    // One factor for every layer, chosen from the first, so the texture keeps
+    // its proportions instead of coming apart as you zoom. A theme whose repeat
+    // lives in the gradient's own stops has no size to scale — it still travels.
+    const first = sizes.length ? parseFloat(sizes[0]) : NaN;
+    const k = Number.isFinite(first) && first > 0 ? step(first) / first : 1;
+    return {
+      ...rest,
+      ...(sizes.length ? {
+        backgroundSize: sizes
+          .map(s => s.replace(/-?[\d.]+/g, m => (parseFloat(m) * k).toFixed(2)))
+          .join(', '),
+      } : {}),
+      // CSS cycles a shorter list across every layer, so one value covers them all.
+      backgroundPosition: `${pan.x}px ${pan.y}px`,
+    };
+  }
 
   if (tile.kind === 'dots') {
     const s = step(tile.size);

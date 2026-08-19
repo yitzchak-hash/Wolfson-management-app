@@ -18,6 +18,7 @@ import {
   doc,
   setDoc,
   getDocs,
+  getDoc,
   deleteDoc,
   onSnapshot,
   writeBatch,
@@ -159,6 +160,81 @@ export async function fsDelete(collectionName: string, docId: string) {
     await _trackWrite(deleteDoc(doc(db, collectionName, docId)));
   } catch (e) {
     console.warn(`Firestore delete failed for ${collectionName}/${docId}:`, e);
+  }
+}
+
+/**
+ * Tombstones — "this was deleted on purpose".
+ *
+ * A Firestore snapshot cannot tell "never uploaded yet" from "deleted on
+ * another device": both look like a missing doc. So the apartments listener
+ * KEEPS any local record the snapshot does not carry, and the startup sync then
+ * pushes those local-only records back up as "missing". Between them, a job
+ * deleted on the office PC came straight back the next time the TV or a phone
+ * synced — which is exactly what the owner saw when a removed import kept
+ * reappearing.
+ *
+ * A tombstone is the missing third state. One document per project holds every
+ * deleted id with the moment it went, so every device can tell the two apart
+ * without keeping the record itself.
+ *
+ * Ids are used as MAP KEYS, so they must not contain '.' or '/' or start with
+ * '__'. Every id this app mints (A1-12, G-imp-…, CE-…) is safe.
+ */
+const TOMB_DOC = 'deleted';
+const TOMB_KEEP = 4000;   // prune to this many when the map grows past…
+const TOMB_MAX  = 6000;   // …this. A doc is capped at 1 MiB; an id costs ~40 B.
+
+export function tombstoneCollection(projectId: string): string {
+  return projectCollection(projectId, 'tombstones');
+}
+
+/** Record ids as deleted. Merges, so two devices deleting at once cannot clobber each other. */
+export async function fsTombstone(projectId: string, ids: string[]) {
+  if (!db || ids.length === 0) return;
+  const now = Date.now();
+  await fsSet(tombstoneCollection(projectId), TOMB_DOC, {
+    ids: Object.fromEntries(ids.map(id => [id, now])),
+  });
+}
+
+function tombIds(raw: unknown): Record<string, number> {
+  const ids = (raw as { ids?: Record<string, number> } | undefined)?.ids;
+  return ids && typeof ids === 'object' ? ids : {};
+}
+
+/** Every id deleted in this project. Prunes the oldest when the doc gets fat. */
+export async function fsGetTombstones(projectId: string): Promise<Set<string>> {
+  if (!db) return new Set();
+  try {
+    const snap = await getDoc(doc(db, tombstoneCollection(projectId), TOMB_DOC));
+    const ids = tombIds(snap.data());
+    const keys = Object.keys(ids);
+    if (keys.length > TOMB_MAX) {
+      const kept = keys.sort((a, b) => (ids[b] ?? 0) - (ids[a] ?? 0)).slice(0, TOMB_KEEP);
+      // Whole-doc write, not a merge — a merge cannot remove keys.
+      await _trackWrite(setDoc(doc(db, tombstoneCollection(projectId), TOMB_DOC), {
+        ids: Object.fromEntries(kept.map(k => [k, ids[k]])), _updatedAt: serverTimestamp(),
+      }));
+      return new Set(kept);
+    }
+    return new Set(keys);
+  } catch (e) {
+    console.warn(`Firestore tombstone read failed for ${projectId}:`, e);
+    return new Set();
+  }
+}
+
+/** Live tombstones, so a delete on one device lands on the others straight away. */
+export function fsListenTombstones(projectId: string, callback: (ids: Set<string>) => void): Unsubscribe {
+  if (!db) return () => {};
+  try {
+    return onSnapshot(doc(db, tombstoneCollection(projectId), TOMB_DOC), snap => {
+      callback(new Set(Object.keys(tombIds(snap.data()))));
+    });
+  } catch (e) {
+    console.warn(`Firestore tombstone listener failed for ${projectId}:`, e);
+    return () => {};
   }
 }
 

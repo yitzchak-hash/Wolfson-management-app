@@ -457,10 +457,12 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
           <div className="flex-1 flex flex-col gap-2">
             <input value={newStageName} onChange={e => setNewStageName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleAddStage()}
+              data-enter-own
               placeholder={s.stageName}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
             <input value={newStageNameHe} onChange={e => setNewStageNameHe(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleAddStage()}
+              data-enter-own
               placeholder="שם בעברית (אופציונלי)"
               dir="rtl"
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 text-right" />

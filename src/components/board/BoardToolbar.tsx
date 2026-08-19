@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ToolbarSetup } from '../../types';
 import { WIDGET_BY_ID } from '../../data/widgets';
 import { MovablePanel } from './MovablePanel';
@@ -153,9 +153,11 @@ export function BoardToolbar({
    */
   const [phoneOpen, setPhoneOpen] = useState(false);
 
+  const [gripping, setGripping] = useState(false);
   function onGripDown(e: React.PointerEvent) {
     e.preventDefault();
     dragRef.current = { px: e.clientX, py: e.clientY, ox: offset.x, oy: offset.y };
+    setGripping(true);
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
   function onGripMove(e: React.PointerEvent) {
@@ -163,7 +165,27 @@ export function BoardToolbar({
     if (!st) return;
     setOffset({ x: st.ox + (e.clientX - st.px), y: st.oy + (e.clientY - st.py) });
   }
-  function onGripUp() { dragRef.current = null; }
+  function onGripUp() { dragRef.current = null; setGripping(false); }
+
+  /**
+   * `0` during the drag puts the rail back on its dock — the same key that
+   * resets a size on the board, so one habit covers both. Checked against the
+   * REF and cleared there, because the keydown and the pointerup can land in
+   * the same tick and a state read would commit the dragged offset back over
+   * the reset.
+   */
+  useEffect(() => {
+    if (!gripping) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '0') return;
+      e.preventDefault();
+      dragRef.current = null;
+      setOffset({ x: 0, y: 0 });
+      setGripping(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [gripping]);
 
   function onSizeDown(axis: 'y' | 'xy') {
     return (e: React.PointerEvent) => {
@@ -305,12 +327,18 @@ export function BoardToolbar({
           onPointerMove={onGripMove}
           onPointerUp={onGripUp}
           onPointerCancel={onGripUp}
-          className={`flex items-center justify-center cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-400 ${
+          className={`relative flex items-center justify-center cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-400 ${
             oneLine ? 'h-9' : 'py-0.5'}`}
           style={oneLine ? { width: GRIP_W } : { flexBasis: '100%', gridColumn: '1 / -1' }}
           title="Move toolbar"
         >
           <GripVertical size={13} />
+          {gripping && (
+            <div className="absolute -top-6 right-0 px-1.5 py-0.5 rounded bg-gray-900/85 text-white
+                            text-[10px] whitespace-nowrap pointer-events-none z-20">
+              press 0 to put it back
+            </div>
+          )}
         </div>
 
         {shownGroups.map((group, gi) => (

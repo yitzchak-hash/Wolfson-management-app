@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { Maximize2, Minimize2 } from 'lucide-react';
+import { Maximize2, Minimize2, GripVertical } from 'lucide-react';
 import { Apartment, CanvasElement, Stage } from '../../types';
+import { usePanelDrag } from './MovablePanel';
 
 /**
  * Board overview, bottom-right.
@@ -41,12 +42,24 @@ export const MiniMap = React.memo(function MiniMap({
    * for the whole job rather than for one click.
    */
   const [big, setBig] = useState(false);
+  const { ref: panelRef, pos, posStyle, handleProps, dragging } = usePanelDrag('board-overview');
   const W = big ? 340 : 148;
   const H = big ? 238 : 104;
   const scale = useMemo(
     () => Math.min(W / Math.max(worldW, 1), H / Math.max(worldH, 1)),
     [worldW, worldH, W, H],
   );
+  /**
+   * The board's own shape, drawn at its true ratio inside the panel.
+   *
+   * The panel is a fixed box, so a tall board fills its height and uses only a
+   * strip of its width — and with the leftover drawn in the same white as the
+   * board, it read as though dragging the planner DOWN had also grown the board
+   * to the RIGHT. The board rectangle is now painted explicitly and everything
+   * outside it is grey, so the shape you see is the shape the board is.
+   */
+  const boardW = Math.max(2, worldW * scale);
+  const boardH = Math.max(2, worldH * scale);
 
   // By default it appears only once the board exceeds the screen — but that made
   // it look missing on a board that happens to fit, so the toolbar can pin it on
@@ -79,14 +92,36 @@ export const MiniMap = React.memo(function MiniMap({
 
   return (
     <div
-      className="absolute right-3 z-30 rounded-lg border border-gray-200 bg-white/95 shadow-sm overflow-hidden cursor-pointer"
+      ref={panelRef}
+      className="absolute right-3 z-30 rounded-lg border border-gray-200 bg-gray-200/90 shadow-sm overflow-hidden cursor-pointer"
       /* Clear of the iPad's home indicator, which otherwise sits across the
          overview's bottom edge. env() is 0 on every other device. */
-      style={{ width: W, height: H, bottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
+      style={{ width: W, height: H, bottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))', ...posStyle }}
       onPointerDown={jump}
       onPointerMove={e => { if (e.buttons === 1) jump(e); }}
       title="Board overview — click to jump"
     >
+      {/* The board itself. Everything outside it is the panel's grey. */}
+      <div className="absolute left-0 top-0 bg-white pointer-events-none"
+        style={{ width: boardW, height: boardH }} />
+
+      {/* Same grip as every other floating panel, and the same 0-puts-it-back. */}
+      <div
+        {...handleProps}
+        data-no-drag
+        title="Move the overview"
+        className="absolute top-0.5 left-0.5 z-20 p-0.5 rounded bg-white/90 text-gray-400
+                   hover:text-[#1e3a5f] cursor-grab active:cursor-grabbing shadow-sm"
+      >
+        <GripVertical size={11} />
+      </div>
+      {dragging && pos && (
+        <div className="absolute -top-6 left-0 px-1.5 py-0.5 rounded bg-gray-900/85 text-white
+                        text-[10px] whitespace-nowrap pointer-events-none z-20">
+          press 0 to put it back
+        </div>
+      )}
+
       {/* Bottom-LEFT, and above a drawing that takes no pointer events at all.
           Two things had to be got out of the way: the job rectangles are
           painted after this button, so a job near the board's origin landed

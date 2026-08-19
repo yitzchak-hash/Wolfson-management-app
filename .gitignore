@@ -9,3 +9,11 @@ scratchpad/*.log
 scratchpad/cap-*.html
 scratchpad/phone-preview.html
 scratchpad/import-test.csv
+
+# The CRM export and everything derived from it carry real customer names,
+# phone numbers and Drive links. The tool that makes them is committed; its
+# output never is.
+scratchpad/import-plan.json
+scratchpad/import-approval.html
+scratchpad/tzviair-import.csv
+scratchpad/*.csv
