@@ -43,7 +43,7 @@ import {
   nearestAnchor, anchorOf, attachBox, DEFAULT_ATTACH_SCALE,
 } from '../components/board/AttachLayer';
 import { renderWidget, WidgetDef, WidgetCtx, WIDGET_BY_ID } from '../data/widgets';
-import { JobTile, BoardNode, BoardHandlers } from '../components/board/BoardItems';
+import { JobTile, BoardNode, BoardHandlers, TILE_W, TILE_H, tileSize } from '../components/board/BoardItems';
 import { useTouchGestures, isFingerTouch } from '../hooks/useTouchGestures';
 import { detectPasteIntent, fieldForIntent, canCreateFromIntent, PasteIntent } from '../data/pasteIntent';
 import { StrokeNib, nibDash } from '../components/board/BoardNodes';
@@ -61,24 +61,10 @@ import {
 // relativeTime moved to types/index.ts — the job list page stamps rows with
 // the same words the tiles use, and two copies would drift.
 
-const TILE_W = 215;
-const TILE_H = 132;
+// TILE_W / TILE_H / tileSize live with the TILE, in BoardItems, so the group
+// window draws jobs at the same size the board does — see the note there.
 const GAP = 22;
 const PER_ROW = 4;
-
-/**
- * How big THIS tile is — the single answer, used everywhere a job's box is
- * needed: snapping, lasso hit-testing, the world's own size, the minimap, the
- * fly-to and the drag ghosts. A resized tile stores its own size; everything
- * else falls back to the shared default, so almost every record stays clean.
- *
- * `defaultPos`'s grid deliberately does NOT go through this: a board of
- * resized tiles would re-flow every time one of them changed.
- */
-const tileSize = (job: { tileW?: number; tileH?: number }) => ({
-  w: job.tileW ?? TILE_W,
-  h: job.tileH ?? TILE_H,
-});
 
 // ─── Color palettes ───────────────────────────────────────────────────────────
 const TILE_PALETTE = [

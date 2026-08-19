@@ -5,16 +5,19 @@ import {
 } from 'lucide-react';
 import { useStore } from '../../data/store';
 import {
-  Apartment, CanvasElement, binLabelOf, BIN_META,
+  Apartment, CanvasElement, binLabelOf, binKeyOf, BIN_META, relativeTime,
 } from '../../types';
 import { getBoardTheme } from '../../data/boardThemes';
 import { WidgetStore } from './WidgetStore';
 import { WidgetDef, WidgetCtx, WIDGET_BY_ID } from '../../data/widgets';
 import { NODE_DEFAULT_SIZE, ArtKind } from './BoardNodes';
-import { BoardNode, BoardHandlers } from './BoardItems';
+import { BoardNode, JobTile, BoardHandlers, TILE_W, TILE_H, tileSize } from './BoardItems';
 import { NodeSettings } from './NodeSettings';
+import { isFingerTouch } from '../../hooks/useTouchGestures';
 
-const TILE_W = 190, TILE_H = 116;
+// TILE_W / TILE_H / tileSize come from BoardItems — the group used to carry
+// its own 190x116 pair, which is exactly why a job looked like a different
+// kind of thing depending on which window you were looking at.
 
 /**
  * A bin, opened as a board of its own.
@@ -54,9 +57,34 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
     boardSettings, currentProjectId,
   } = useStore();
 
-  const binKey = bin.binKind ?? bin.id;
+  const binKey = binKeyOf(bin);
+  // The same words the board's tiles use. Read from the strings object, never
+  // written here — a constant carries whatever it was written with for ever,
+  // which is how English survives into a Hebrew screen.
+  const s = useStore(st => st.mainUiStrings);
+  const tileLabels = useMemo(
+    () => ({ job: s.jobLabel, folder: s.openFolderTooltip, plans: s.engineeringPlans }),
+    [s.jobLabel, s.openFolderTooltip, s.engineeringPlans],
+  );
   const theme = getBoardTheme(boardSettings[currentProjectId]?.themeId);
   const accent = bin.color || (bin.binKind ? BIN_META[bin.binKind].color : '#1e3a5f');
+
+  /**
+   * Zoom, the same discrete ladder the main board uses — text renders far
+   * better on whole steps and text editing behaves. Panning is the surface's
+   * own native scroll, and space-or-middle-drag drives that scroll directly,
+   * so there is exactly ONE thing moving the content.
+   */
+  const [zoom, setZoom] = useState(1);
+  const ZOOMS = [0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.25, 1.5, 2, 3];
+  const stepZoom = (dir: 1 | -1) => setZoom(z => {
+    const i = ZOOMS.findIndex(v => Math.abs(v - z) < 0.001);
+    const at = i === -1 ? ZOOMS.indexOf(1) : i;
+    return ZOOMS[Math.min(ZOOMS.length - 1, Math.max(0, at + dir))] ?? z;
+  });
+  /** A grab-pan in progress: where the scroll and the pointer both started. */
+  const panning = useRef<{ px: number; py: number; sx: number; sy: number } | null>(null);
+  const [panMode, setPanMode] = useState(false);
 
   const [query, setQuery] = useState('');
   const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -77,9 +105,39 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
   const frameRef = useRef<HTMLDivElement>(null);
   const [resize, setResize] = useState<
     { id: string; startW: number; startH: number; startPX: number; startPY: number; dw: number; dh: number } | null>(null);
+  /**
+   * A job tile resizes here too, and keeps its own state.
+   *
+   * Separate from `resize` for the same reason the main board keeps them apart:
+   * the commit is `updateApartment` rather than `updateCanvasElement`. The
+   * gesture itself is identical, so the two can never feel different.
+   */
+  const [jobResize, setJobResize] = useState<
+    { id: string; startW: number; startH: number; startPX: number; startPY: number; dw: number; dh: number } | null>(null);
 
   const surfaceRef = useRef<HTMLDivElement>(null);
   const editRef = useRef<HTMLTextAreaElement>(null);
+  /**
+   * What was picked when the press STARTED.
+   *
+   * Recorded in pointerdown, because the very next lines pick this job —
+   * asking on pointerup always answers yes, which opens on the first tap and
+   * leaves no gesture for "I mean this one". The main board pays for exactly
+   * this trap with its own `wasPicked` ref.
+   */
+  const pickedRef = useRef<Set<string>>(new Set());
+  /**
+   * The window has just appeared under the pointer.
+   *
+   * A group is opened with a double-click, and the second click — plus the
+   * `dblclick` that follows it — lands on whatever is now under the cursor,
+   * which is a job tile in the freshly opened window. That threw a job's
+   * drawer open every time somebody looked inside a group. A gesture that
+   * began before this window existed is not aimed at it, so the tiles ignore
+   * anything arriving in the moment after the window is born.
+   */
+  const bornAt = useRef(Date.now());
+  const settling = () => Date.now() - bornAt.current < 400;
 
   const items = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -129,16 +187,30 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
     openJob: (id: string) => { const j = apartments.find(x => x.id === id); if (j) onOpenJob(j); },
   }), [apartments, stages, contractorAssignments, contractors, contractorPhotos, activityLogs, users, onOpenJob]);
 
+  /**
+   * Screen point → board point, INSIDE this window.
+   *
+   * The group scrolls natively and scales with a transform, which is one
+   * movement system rather than two: the scroll does the panning, the scale
+   * does the zooming, and they cannot fight because only one of them moves
+   * anything. Dividing by `zoom` is the part that must never be forgotten —
+   * a raw delta moves tiles at the wrong speed at any zoom but 100%, exactly
+   * as it did on the main board before `toWorld` existed.
+   */
   function toLocal(e: { clientX: number; clientY: number }) {
     const r = surfaceRef.current?.getBoundingClientRect();
-    return r ? { x: e.clientX - r.left + (surfaceRef.current?.scrollLeft ?? 0),
-                 y: e.clientY - r.top + (surfaceRef.current?.scrollTop ?? 0) }
-             : { x: e.clientX, y: e.clientY };
+    if (!r) return { x: e.clientX, y: e.clientY };
+    return {
+      x: (e.clientX - r.left + (surfaceRef.current?.scrollLeft ?? 0)) / zoom,
+      y: (e.clientY - r.top + (surfaceRef.current?.scrollTop ?? 0)) / zoom,
+    };
   }
 
   // ── drag ────────────────────────────────────────────────────────────────
   function startDrag(e: React.PointerEvent, kind: 'job' | 'el', id: string) {
     if (e.button !== 0) return;
+    // Still the tail of the gesture that opened this window — see `settling`.
+    if (settling()) return;
     if ((e.target as HTMLElement).closest('[data-no-drag],[data-el-action]')) return;
     // The main board's lock rule holds inside a group window too.
     if (kind === 'el' && nodes.find(n => n.id === id)?.locked) return;
@@ -146,6 +218,7 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
     e.stopPropagation();
     setMenu(null);
 
+    pickedRef.current = new Set(selected);
     const ids = (selected.has(id) && selected.size > 1 ? [...selected] : [id])
       .filter(x => !nodes.find(n => n.id === x)?.locked && !items.find(a => a.id === x)?.boardLocked);
     if (!selected.has(id)) setSelected(new Set([id]));
@@ -182,7 +255,7 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
     setDrag({ ...drag, dx, dy, out, moved: drag.moved || Math.abs(dx) > 4 || Math.abs(dy) > 4 });
   }
 
-  function endDrag(job?: Apartment) {
+  function endDrag(job?: Apartment, e?: React.PointerEvent) {
     if (!drag) return;
     if (drag.moved && drag.out && drag.kind === 'job') {
       // Released outside the window: the job goes back to the main board, to
@@ -204,7 +277,22 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
         if (drag.kind === 'el') updateCanvasElement(id, { x, y });
       });
     } else if (drag.kind === 'job' && job) {
-      onOpenJob(job);
+      /**
+       * A click SELECTS. Two clicks open — the board's own gesture.
+       *
+       * This used to open the job outright on one click, which is not just a
+       * different rule from the board: opening the group with a double-click
+       * put the second click straight onto whichever tile had appeared under
+       * the pointer, so looking inside a group threw a job's drawer open at
+       * random. The double-click itself arrives through `JobTile`'s own
+       * `onDoubleClick`, exactly as it does outside.
+       *
+       * A finger has no double-click, so the touch rule is the board's too:
+       * tap picks it out, tapping the picked one opens it.
+       */
+      const wasOnly = pickedRef.current.has(job.id) && pickedRef.current.size === 1;
+      if (e && isFingerTouch(e) && wasOnly) onOpenJob(job);
+      else setSelected(new Set([job.id]));
     }
     setDrag(null);
   }
@@ -228,6 +316,29 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
     }
     setResize({ ...resize, dw, dh });
   }
+  /** The tile's own corner — same gesture, different commit. */
+  function jobResizeMove(e: React.PointerEvent) {
+    if (!jobResize) return;
+    let dw = e.clientX - jobResize.startPX;
+    let dh = e.clientY - jobResize.startPY;
+    if (e.shiftKey && jobResize.startW > 0 && jobResize.startH > 0) {
+      const k = Math.max((jobResize.startW + dw) / jobResize.startW,
+                         (jobResize.startH + dh) / jobResize.startH);
+      dw = jobResize.startW * k - jobResize.startW;
+      dh = jobResize.startH * k - jobResize.startH;
+    }
+    setJobResize({ ...jobResize, dw, dh });
+  }
+  function jobResizeUp() {
+    if (jobResize && (jobResize.dw || jobResize.dh) && currentUser) {
+      updateApartment(jobResize.id, {
+        tileW: Math.max(120, Math.round(jobResize.startW + jobResize.dw)),
+        tileH: Math.max(80, Math.round(jobResize.startH + jobResize.dh)),
+      }, currentUser);
+    }
+    setJobResize(null);
+  }
+
   function resizeUp() {
     if (binResetDone.current) { binResetDone.current = false; setResize(null); return; }
     if (resize && (resize.dw || resize.dh)) {
@@ -269,10 +380,28 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
    */
   const live = useRef<Record<string, (...a: unknown[]) => unknown>>({});
   const H = useRef<BoardHandlers>({
-    jobDown: () => {}, jobMove: () => {}, jobUp: () => {}, jobMenu: () => {}, jobOpen: () => {},
-    jobDelete: () => {}, jobTv: () => {}, jobLock: () => {}, jobThumbs: () => {}, jobThumbsDown: () => {},
-    jobUngroup: () => {}, elUngroup: () => {},
-    jobResizeDown: () => {}, jobResizeMove: () => {}, jobResizeUp: () => {},
+    /**
+     * The job handlers were all no-ops, because the group drew its own little
+     * tile and never called them. It draws the board's OWN `JobTile` now, so
+     * every one of these has to be real — the lock, the wallboard switch, the
+     * ungroup chip, the thumbs, the corner resize and the right-click all
+     * arrive here, and a no-op reads as a button that does nothing.
+     */
+    jobDown: (e, j, i) => live.current.jobDown(e, j, i),
+    jobMove: e => live.current.jobMove(e),
+    jobUp: (e, j) => live.current.jobUp(e, j),
+    jobMenu: (e, j) => live.current.jobMenu(e, j),
+    jobOpen: j => live.current.jobOpen(j),
+    jobDelete: ids => live.current.jobDelete(ids),
+    jobTv: j => live.current.jobTv(j),
+    jobLock: j => live.current.jobLock(j),
+    jobThumbs: (id, d) => live.current.jobThumbs(id, d),
+    jobThumbsDown: (id, d) => live.current.jobThumbsDown(id, d),
+    jobUngroup: j => live.current.jobUngroup(j),
+    elUngroup: el => live.current.elUngroup(el),
+    jobResizeDown: (e, j, i) => live.current.jobResizeDown(e, j, i),
+    jobResizeMove: e => live.current.jobResizeMove(e),
+    jobResizeUp: () => live.current.jobResizeUp(),
     elDown: (e, el) => live.current.elDown(e, el),
     elMove: e => live.current.elMove(e),
     elUp: el => live.current.elUp(el),
@@ -297,6 +426,61 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
   } as BoardHandlers).current;
 
   live.current = {
+    jobDown: (e, j) => startDrag(e as React.PointerEvent, 'job', (j as Apartment).id),
+    jobMove: e => moveDrag(e as React.PointerEvent),
+    jobUp: (e, j) => endDrag(j as Apartment, e as React.PointerEvent),
+    jobMenu: (e, j) => {
+      const ev = e as React.MouseEvent;
+      ev.preventDefault(); ev.stopPropagation();
+      const id = (j as Apartment).id;
+      const ids = selected.has(id) && selected.size > 1 ? [...selected] : [id];
+      if (!selected.has(id)) setSelected(new Set([id]));
+      setMenu({ x: ev.clientX, y: ev.clientY, kind: 'job', ids });
+    },
+    jobOpen: j => { if (settling()) return; onOpenJob(j as Apartment); },
+    /**
+     * Filed into Trash, not destroyed — the same thing the X does on the main
+     * board. Permanent deletion stays where it has always been: the confirm
+     * inside the Trash window, which is the only place it is reachable from.
+     */
+    jobDelete: ids => (ids as string[]).forEach(id => moveToBin(id, 'trash')),
+    jobTv: j => {
+      const a = j as Apartment;
+      if (currentUser) updateApartment(a.id, { showOnTv: a.showOnTv === false }, currentUser);
+    },
+    // undefined rather than false when unlocking, so the field disappears from
+    // the record instead of sitting on hundreds of jobs as `boardLocked: false`.
+    jobLock: j => {
+      const a = j as Apartment;
+      if (currentUser) updateApartment(a.id, { boardLocked: a.boardLocked ? undefined : true }, currentUser);
+    },
+    jobUngroup: j => {
+      const a = j as Apartment;
+      if (currentUser) updateApartment(a.id, { boardGroup: undefined }, currentUser);
+    },
+    elUngroup: el => updateCanvasElement((el as CanvasElement).id, { boardGroup: undefined }),
+    jobThumbs: (id, d) => {
+      const a = items.find(x => x.id === id);
+      if (a && currentUser) {
+        updateApartment(a.id, { thumbsUp: Math.max(0, (a.thumbsUp ?? 0) + (d as number)) }, currentUser);
+      }
+    },
+    jobThumbsDown: (id, d) => {
+      const a = items.find(x => x.id === id);
+      if (a && currentUser) {
+        updateApartment(a.id, { thumbsDown: Math.max(0, (a.thumbsDown ?? 0) + (d as number)) }, currentUser);
+      }
+    },
+    jobResizeDown: (e, j) => {
+      const ev = e as React.PointerEvent;
+      ev.stopPropagation(); ev.preventDefault();
+      const a = j as Apartment;
+      const sz = tileSize(a);
+      setJobResize({ id: a.id, startW: sz.w, startH: sz.h, startPX: ev.clientX, startPY: ev.clientY, dw: 0, dh: 0 });
+      (ev.currentTarget as HTMLElement).setPointerCapture(ev.pointerId);
+    },
+    jobResizeMove: e => jobResizeMove(e as React.PointerEvent),
+    jobResizeUp: () => jobResizeUp(),
     elDown: (e, el) => startDrag(e as React.PointerEvent, 'el', (el as CanvasElement).id),
     elMove: e => moveDrag(e as React.PointerEvent),
     elUp: () => endDrag(),
@@ -339,11 +523,53 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
     resizeUp: () => resizeUp(),
   };
 
+  /**
+   * Ctrl/⌘ + wheel zooms; a plain wheel scrolls, which is how you pan here.
+   *
+   * Registered by hand with `{ passive: false }` — React's `onWheel` prop is
+   * passive in several browsers, where `preventDefault()` silently does nothing
+   * and the BROWSER zooms the whole page instead of the group. The main board
+   * learned this the same way.
+   */
+  useEffect(() => {
+    const node = surfaceRef.current;
+    if (!node) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      stepZoom(e.deltaY < 0 ? 1 : -1);
+    };
+    node.addEventListener('wheel', onWheel, { passive: false });
+    return () => node.removeEventListener('wheel', onWheel);
+  }, []);
+
+  /** Space held = the hand. Released anywhere, so it cannot stick on. */
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.code !== 'Space') return;
+      const t = e.target as HTMLElement | null;
+      if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+      if (t?.isContentEditable) return;
+      e.preventDefault();
+      setPanMode(true);
+    };
+    const up = (e: KeyboardEvent) => { if (e.code === 'Space') setPanMode(false); };
+    const blur = () => setPanMode(false);
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    window.addEventListener('blur', blur);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+      window.removeEventListener('blur', blur);
+    };
+  }, []);
+
   /** Somewhere free, so two new nodes never land on top of each other. */
   function freeSpot(w: number, h: number) {
     const taken = [
       ...nodes.map(n => ({ x: n.x, y: n.y, w: n.w, h: n.h })),
-      ...items.map((a, i) => ({ ...jobPos(a, i), w: TILE_W, h: TILE_H })),
+      ...items.map((a, i) => ({ ...jobPos(a, i), ...tileSize(a) })),
     ];
     for (let row = 0; row < 40; row++) {
       for (let col = 0; col < 8; col++) {
@@ -410,7 +636,8 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
     let w = box.w, h = box.h;
     items.forEach((a, i) => {
       const p = jobPos(a, i);
-      w = Math.max(w, p.x + TILE_W + 24); h = Math.max(h, p.y + TILE_H + 24);
+      const sz = tileSize(a);
+      w = Math.max(w, p.x + sz.w + 24); h = Math.max(h, p.y + sz.h + 24);
     });
     nodes.forEach(n => { w = Math.max(w, n.x + n.w + 24); h = Math.max(h, n.y + n.h + 24); });
     return { w, h };
@@ -487,6 +714,20 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
               </span>
             )}
             <span className="flex-1" />
+            {/* Zoom — the same −, %, + the board's header carries, so the
+                control is where the hand already expects it. Pressing the
+                percentage goes back to 100%. */}
+            <span className="flex items-center rounded-full overflow-hidden bg-white/15">
+              <button onClick={() => stepZoom(-1)} title="Smaller"
+                className="px-2 py-0.5 font-black leading-none">−</button>
+              <button onClick={() => setZoom(1)} title="Back to 100%"
+                className="px-1.5 py-0.5 text-[10.5px] font-bold tabular-nums">
+                {Math.round(zoom * 100)}%
+              </button>
+              <button onClick={() => stepZoom(1)} title="Bigger"
+                className="px-2 py-0.5 font-black leading-none">+</button>
+            </span>
+            <span className="w-px h-4 bg-white/25 mx-0.5" />
             <button onClick={() => addSimple('note')} title="Sticky note"
               className="p-1.5 rounded-lg hover:bg-white/15"><StickyNote size={15} /></button>
             <button onClick={() => addSimple('box')} title="Section box"
@@ -511,12 +752,38 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
           <div
             ref={surfaceRef}
             className="flex-1 min-h-0 overflow-auto relative"
-            onPointerMove={e => { moveDrag(e); resizeMove(e); }}
-            onPointerUp={() => { endDrag(); resizeUp(); }}
-            onPointerDown={e => {
-              if (e.target === e.currentTarget || (e.target as HTMLElement).dataset.binSurface) {
-                setSelected(new Set()); setMenu(null);
+            style={{ cursor: panning.current ? 'grabbing' : panMode ? 'grab' : undefined }}
+            onPointerMove={e => {
+              if (panning.current && surfaceRef.current) {
+                surfaceRef.current.scrollLeft = panning.current.sx - (e.clientX - panning.current.px);
+                surfaceRef.current.scrollTop = panning.current.sy - (e.clientY - panning.current.py);
+                return;
               }
+              moveDrag(e); resizeMove(e); jobResizeMove(e);
+            }}
+            onPointerUp={e => {
+              if (panning.current) {
+                panning.current = null;
+                (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+                return;
+              }
+              endDrag(); resizeUp(); jobResizeUp();
+            }}
+            onPointerDown={e => {
+              // Middle-drag, or space held, pans — the board's own bindings, so
+              // the gesture means the same thing in both windows.
+              const onSurface = e.target === e.currentTarget
+                || !!(e.target as HTMLElement).dataset.binSurface;
+              if ((e.button === 1 || (panMode && e.button === 0)) && surfaceRef.current) {
+                e.preventDefault();
+                panning.current = {
+                  px: e.clientX, py: e.clientY,
+                  sx: surfaceRef.current.scrollLeft, sy: surfaceRef.current.scrollTop,
+                };
+                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                return;
+              }
+              if (onSurface) { setSelected(new Set()); setMenu(null); }
             }}
             onContextMenu={e => {
               if (!(e.target as HTMLElement).dataset.binSurface) return;
@@ -537,9 +804,19 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
             */}
             <div data-bin-surface="1" className="relative"
               style={{
-                width: extent.w, height: extent.h,
+                // Sized in SCREEN pixels so the native scrollbars tell the
+                // truth at any zoom, while the content inside is laid out in
+                // board units and scaled from its top-left corner.
+                width: extent.w * zoom, height: extent.h * zoom,
                 minWidth: '100%', minHeight: '100%',
                 ...theme.surface,
+              }}>
+            <div
+              data-bin-world="1"
+              style={{
+                position: 'absolute', top: 0, left: 0,
+                width: extent.w, height: extent.h,
+                transform: `scale(${zoom})`, transformOrigin: '0 0',
               }}>
               {items.length === 0 && nodes.length === 0 && (
                 <div className="absolute inset-0 flex items-center justify-center text-sm pointer-events-none"
@@ -574,71 +851,43 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
                 );
               })}
 
-              {/* The jobs themselves. */}
+              {/*
+                The board's OWN tile.
+
+                A group used to draw a smaller, plainer tile of its own — no
+                right-click, no lock, no wallboard switch, no Drive or Zoho
+                links, no corner resize, no group chip — which is why the inside
+                of a group felt like a different, worse application. Sharing the
+                component means a group can never drift from the board again,
+                and anything added to a tile arrives here for free.
+              */}
               {items.map((a, i) => {
                 const p = jobPos(a, i);
-                const st = stageOf(a);
-                const lit = highlightJobId === a.id;
+                const sz = jobResize?.id === a.id
+                  ? { w: Math.max(120, tileSize(a).w + jobResize.dw),
+                      h: Math.max(80, tileSize(a).h + jobResize.dh) }
+                  : tileSize(a);
                 return (
-                  <div
+                  <JobTile
                     key={a.id}
-                    data-bin-job={a.id}
-                    onPointerDown={e => startDrag(e, 'job', a.id)}
-                    onPointerMove={moveDrag}
-                    onPointerUp={() => endDrag(a)}
-                    onContextMenu={e => {
-                      e.preventDefault(); e.stopPropagation();
-                      setSelected(new Set([a.id]));
-                      setMenu({ x: e.clientX, y: e.clientY, kind: 'job', ids: [a.id] });
-                    }}
-                    className={`absolute rounded-xl p-2.5 cursor-grab select-none group ${lit ? 'search-hit' : ''}`}
-                    style={{
-                      left: p.x, top: p.y, width: TILE_W, height: TILE_H,
-                      ...theme.node,
-                      border: `3px solid ${st?.color ?? '#e2e8f0'}`,
-                      outline: selected.has(a.id) ? '2px solid rgba(74,168,216,.55)' : undefined,
-                      outlineOffset: 2,
-                      touchAction: 'none',
-                      zIndex: drag?.ids.includes(a.id) ? 20 : 5,
-                    }}
-                  >
-                    <div className="font-bold text-[12.5px] leading-tight truncate"
-                      style={{ color: (theme.node.color as string) ?? '#111827' }}>
-                      {a.displayName || 'Job'}
-                    </div>
-                    {a.address && <div className="text-[10.5px] text-gray-500 truncate mt-0.5">{a.address}</div>}
-                    <div className="flex items-center gap-1.5 mt-1.5">
-                      {st && (
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
-                          style={{ backgroundColor: `${st.color}22`, color: st.color }}>{st.name}</span>
-                      )}
-                      {taskCount(a) > 0 && <span className="text-[9px] text-gray-400">{taskCount(a)} tasks</span>}
-                    </div>
-
-                    <div className="absolute bottom-1.5 left-2.5 right-2.5 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button data-no-drag onClick={() => moveToBin(a.id, null)}
-                        className="flex items-center gap-1 text-[10px] font-bold text-[#1e3a5f] px-1.5 py-0.5 rounded-md border border-gray-200 bg-white/90"
-                        title="Put it back on the board">
-                        <Undo2 size={10} /> Restore
-                      </button>
-                      {bin.binKind === 'trash' && (
-                        confirmId === a.id ? (
-                          <button data-no-drag onClick={() => { deleteApartment(a.id); setConfirmId(null); }}
-                            title={impactLine}
-                            className="flex items-center gap-1 text-[10px] font-bold text-white bg-red-600 px-1.5 py-0.5 rounded-md">
-                            <Trash2 size={10} /> Forever{impactLine !== 'nothing else attached' ? ' — ' + impactLine : ''}
-                          </button>
-                        ) : (
-                          <button data-no-drag onClick={() => setConfirmId(a.id)}
-                            className="ml-auto text-gray-300 hover:text-red-500" title="Delete permanently">
-                            <Trash2 size={11} />
-                          </button>
-                        )
-                      )}
-                    </div>
-                  </div>
+                    job={a}
+                    index={i}
+                    x={p.x} y={p.y} w={sz.w} h={sz.h}
+                    stage={stageOf(a) ?? null}
+                    pendingTasks={taskCount(a)}
+                    isSelected={selected.has(a.id)}
+                    isDragging={!!drag && drag.kind === 'job' && drag.ids.includes(a.id) && drag.moved}
+                    translucent={drag?.out && drag.kind === 'job' && drag.ids.includes(a.id) ? true : undefined}
+                    justChanged={false}
+                    searchLit={highlightJobId === a.id}
+                    fallbackBorder="#e2e8f0"
+                    lastEdited={a.contentUpdatedAt ? relativeTime(a.contentUpdatedAt) : ''}
+                    labels={tileLabels}
+                    H={H}
+                  />
                 );
               })}
+            </div>
             </div>
           </div>
 

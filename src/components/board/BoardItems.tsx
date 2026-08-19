@@ -109,6 +109,27 @@ export interface BoardHandlers {
 
 // ─── Job tile ────────────────────────────────────────────────────────────────
 
+/**
+ * How big a job tile is.
+ *
+ * Lives HERE, with the tile itself, so every surface that draws one agrees.
+ * The group window carried its own 190×116 pair, which is why a job looked
+ * like a different kind of thing depending on which window you were in.
+ *
+ * `tileSize` is the single answer for one job's box, used wherever a job's
+ * rectangle is needed: snapping, lasso hit-testing, the world's own size, the
+ * overview, the fly-to and the drag ghosts. A resized tile stores its own size;
+ * everything else falls back to the shared default, so almost every record
+ * stays clean. A layout GRID deliberately does not go through this, or a board
+ * of resized tiles would re-flow every time one of them changed.
+ */
+export const TILE_W = 215;
+export const TILE_H = 132;
+export const tileSize = (job: { tileW?: number; tileH?: number }) => ({
+  w: job.tileW ?? TILE_W,
+  h: job.tileH ?? TILE_H,
+});
+
 export interface JobTileProps {
   job: Apartment;
   index: number;

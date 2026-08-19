@@ -2624,3 +2624,77 @@ the viewport and the browser-bar condition cannot otherwise arise. Its own
 trap: `button[title="About this screen"]` must be matched WHOLE — a loose
 `/screen/` hits **Full screen** first, which sits earlier in the bar, so the
 wall went full screen and a working report read as broken.
+
+---
+
+# v2 — a group is the board, and a deleted job leaves the notebook
+
+## `binKeyOf`, never `el.binKind` — found in four more places
+The documented trap, and it is what made the imported groups read as empty:
+- the board's tile passed `binCount(el.binKind)`, so a group made by hand or by
+  the import counted **0 jobs** however many were filed in it;
+- the click-to-open path guarded on `el.binKind`, so those groups **could not be
+  opened by clicking at all**;
+- the wallboard did not draw them as groups and counted 0;
+- `boardExport` left them out of the picture entirely.
+
+**Double-click on a bin OPENS it.** `BoardItems`' `onDoubleClick` called
+`H.elEdit` for every node, so the one gesture people reach for to look inside a
+group offered to rename it instead. Renaming stays on the pencil (`BinSettings`).
+
+## The group window draws the board's own tile
+`TILE_W` / `TILE_H` / `tileSize` moved to **`BoardItems`**, with the tile.
+`BinBoard` carried its own 190×116 pair, which is why a job looked like a
+different kind of thing inside a group. It now renders `JobTile` with a real
+`BoardHandlers` object — every job handler was a no-op before, so the lock, the
+wallboard switch, the ungroup chip, the thumbs, the corner resize and the
+right-click all arrive for free and can never drift again.
+
+Rules this exposed, each a real fault:
+- **A click SELECTS; two clicks open.** The group opened a job on ONE click, so
+  double-clicking the group put the second click — and the `dblclick` after it —
+  straight onto whichever tile had appeared under the pointer, throwing a job's
+  drawer open at random every time somebody looked inside a group.
+- **`settling()`**: for 400ms after the window is born, tiles ignore presses. A
+  gesture that began before this window existed is not aimed at it.
+- **`pickedRef`** is recorded in pointerDOWN, the same trap the board pays for:
+  asking on pointerup always answers yes, so the first tap would open.
+
+## Zoom and pan inside a group
+Native scroll does the PANNING, a transform does the ZOOMING — one movement
+system, because only one of them moves anything. `toLocal` divides by `zoom`
+(forget it and tiles move at the wrong speed at any zoom but 100%). Ctrl/⌘+wheel
+is bound by hand with `{ passive: false }`; middle-drag and space-drag write
+`scrollLeft`/`scrollTop` directly. **Still missing inside a group**: the
+overview map, lasso select and the drawing tools.
+
+**Harness trap worth remembering** (`scratchpad/groupboard.mjs`): the board's own
+header carries zoom buttons with the SAME titles and sits earlier in the
+document, so a bare `button[title="Bigger"]` drove the board while the test read
+the group. Scope every group-window query to `.bin-window-in`.
+
+## A notebook entry is a reference, so a deleted job must be taken out of it
+`src/data/plannerPurge.ts` — pure, written against the SHAPE of planner data so
+the store never imports a component. Wired into `deleteApartment` and
+`removeJobsByIdPrefix`, covering live `cells`, the `offKept` slots held for
+somebody taken off, and `boardSettings.plannerArchive` (a removed notebook's
+contents come back when a new one is placed, dead references included).
+Only CHANGED notebooks are written, or every delete would touch every notebook
+document on every device.
+
+A one-time sweep in `GeneralJobsPage` clears the ones already there. **It waits
+for the workspace to arrive** — the same settle-first idiom the bin seeding
+uses — because "not in `apartments`" and "nothing has loaded yet" look identical
+for the first second and one of them destroys a season's planning.
+
+## The building name is pinned again, and lockable
+It was `sticky top-0 z-10`, and a highlighted cell carries `z-10` too — cells
+come later in the DOM, so the tie went to the cells and the name was painted
+over as they scrolled past. `z-20` beats them and stays far below any dialog
+(What's New is `z-[260]`).
+
+**Both column components now share ONE `BuildingNameBar`.** They each carried a
+copy, which is the trap this file already names: a fix applied to one is
+invisible in the other, and that is exactly how Wolfson's bar spent months a
+z-index behind Netiv's. A padlock on the bar switches pinning off per workspace
+(`BoardSetting.stickyBuildingName`, absent = pinned).
