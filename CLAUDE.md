@@ -2506,3 +2506,56 @@ first and then clicked at the OLD coordinates — the zoom had moved everything,
 the click landed on a job and opened the drawer, and the result read as
 "selecting a widget does nothing". Re-measure after anything that moves the
 board.
+
+---
+
+# v2 — running the CRM import for real
+
+## The rehearsal (`scratchpad/runimport.mjs`)
+Thirty-two checks driving the REAL wizard end to end on a throwaway profile:
+seed a board (so the four built-in groups exist, which is what makes the file's
+`Done`/`Trash`/`Archive`/`Ready to Start` match rather than create duplicates)
+→ upload → read the preview → Apply → count what landed → take the whole batch
+back out. The verified figures for the prepared file, from the CSV, the plan
+JSON and the landed board alike:
+
+| | |
+|---|---|
+| rows | 1,148, none skipped, 177 worth a look |
+| Done | 546 · stage "Job completed" |
+| Trash | 345 · no stage |
+| Archive | 151 · no stage |
+| Ready to Start | 87 · stage "Ready to start" |
+| Currently in AC | 15 · stage "AC installation" |
+| Currently in Geves | 4 · stage "Installation of Geves" |
+| with a Drive folder | 1,008 · with a phone 459 |
+
+**Read the card's own strings, never guess them.** The first version looked for
+an "Apply" button and a "will be created" summary; the card says
+`Import 1148 jobs` and `1148 will be imported`, so a working card was reported
+as broken and all fifteen downstream checks failed with it.
+
+## A progress bar must be given a frame to draw in
+`paint()` in `ImportJobsCard` — `requestAnimationFrame` **raced against a 60ms
+timeout**, awaited after every `setStep`. React flushes a state change on the
+next microtask, but a PAINT needs a real frame, and with no Drive backend to
+wait on (or a file with no links at all) the whole import ran to completion
+inside one task: the overlay never appeared and the screen simply froze, which
+is the exact failure the bar exists to prevent. The timeout is there because a
+backgrounded tab is never given a frame and an import must not stall because
+somebody switched away from it.
+
+## Where the import has to be run, and why it is not here
+**This container has no credentials** — only `.env.example`, no `.env.local`,
+no `VITE_DRIVE_API_KEY`, no Firebase config. The import's second half opens
+each job's **Engineered Plans** and **Photos** folders through the Drive
+backend, so an import run anywhere without that key creates the records and
+silently skips the sharing — several hundred jobs whose plans open only for
+whoever happens to be signed in, which is the gap that was closed on purpose.
+It therefore has to run in a browser that has the key: the deployed app.
+Do NOT "solve" this by bundling the export into the repo — it is real family
+names, phone numbers and Drive folder ids, and a Vite bundle is public.
+
+The export and everything derived from it stay **gitignored**
+(`scratchpad/*.csv`, `import-plan.json`, `import-approval.html`). The tools are
+committed; their output never is.

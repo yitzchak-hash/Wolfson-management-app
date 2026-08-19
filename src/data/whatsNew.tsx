@@ -30,6 +30,35 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-08-25',
+    title: 'The year’s jobs arrive on the board',
+    items: [
+      {
+        title: '1,148 jobs from the CRM, already in their groups',
+        body: 'Every job from the past year comes in with its family name, address, phone, '
+          + 'Drive folder and Zoho link, filed into Done, Ready to Start, Archive, Trash, '
+          + 'Currently in AC or Currently in Geves — and carrying the right stage. Nothing '
+          + 'you made by hand is touched.',
+        demo: 'list',
+      },
+      {
+        title: 'And the whole import comes back out with one press',
+        body: 'Job Board settings keeps a line for every import — the date, how many jobs, '
+          + 'and how many have been edited since. Remove it and exactly those jobs go, on '
+          + 'every device. Anything typed by hand is never touched.',
+        demo: 'tap',
+      },
+      {
+        title: 'The bar tells you how far it has got',
+        body: 'While an import runs, the screen is held with a bar that names what it is '
+          + 'doing and counts through it — creating the jobs, then opening each one’s plans '
+          + 'and photos in Drive. It used to be able to finish so fast that the bar never '
+          + 'drew at all, which looked like nothing happening.',
+        demo: 'sparkle',
+      },
+    ],
+  },
+  {
     date: '2026-08-24',
     title: 'A sharper wall, and widgets that scroll when you pick them',
     items: [

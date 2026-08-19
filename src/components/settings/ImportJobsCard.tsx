@@ -179,10 +179,30 @@ export function ImportJobsCard({ onToast }: { onToast: (msg: string, type?: 'suc
     });
   }
 
+  /**
+   * Let the browser actually draw the bar.
+   *
+   * A progress bar is only worth anything if it is painted BEFORE the work it
+   * describes. React flushes a state change on the next microtask, but a PAINT
+   * needs a real frame — and when there is no Drive backend to wait on (or a
+   * file with no links in it at all) the whole import runs to completion inside
+   * one task, so the overlay never appeared and the screen simply froze: the
+   * exact failure the bar exists to prevent. The timeout races the frame
+   * because a backgrounded tab is never given one, and an import must not stall
+   * because somebody switched away from it.
+   */
+  const paint = () => new Promise<void>(resolve => {
+    let settled = false;
+    const go = () => { if (!settled) { settled = true; resolve(); } };
+    requestAnimationFrame(() => setTimeout(go, 0));
+    setTimeout(go, 60);
+  });
+
   async function apply() {
     if (!plan || !currentUser || busy) return;
     setBusy(true);
     setStep({ label: 'Reading the file', done: 0, total: 0 });
+    await paint();
     try {
       const taking = plan.planned.filter((_, i) => !excluded.has(i));
       const now = new Date().toISOString();
@@ -258,6 +278,7 @@ export function ImportJobsCard({ onToast }: { onToast: (msg: string, type?: 'suc
       });
 
       setStep({ label: 'Creating the jobs', done: 0, total: jobs.length });
+      await paint();
       importJobs(jobs);
 
       /**
@@ -273,12 +294,14 @@ export function ImportJobsCard({ onToast }: { onToast: (msg: string, type?: 'suc
       const linked = jobs.map(j => j.driveLink).filter((u): u is string => !!u);
       if (linked.length) {
         setStep({ label: 'Opening their plans and photos in Drive', done: 0, total: linked.length });
+        await paint();
         for (let i = 0; i < linked.length; i += 5) {
           await Promise.all(linked.slice(i, i + 5).map(u => shareJobFolderSurfacesNow(u)));
           setStep({
             label: 'Opening their plans and photos in Drive',
             done: Math.min(i + 5, linked.length), total: linked.length,
           });
+          await paint();
         }
       }
 
