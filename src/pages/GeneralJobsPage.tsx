@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useStore } from '../data/store';
+import { isPlannerElement, purgeJobsFromPlanner } from '../data/plannerPurge';
 import { rotaCellAt, setRotaHover, anyRota, RotaHit } from '../data/rotaDrop';
 import { PlannerEntry, personOf } from '../components/board/PlannerWidget';
 import { PlannerTaskDialog, PlannerRemoveDialog } from '../components/board/PlannerDialogs';
@@ -1323,6 +1324,46 @@ export function GeneralJobsPage() {
       }));
     });
   }, [canvasElements, updateCanvasElement, addCanvasElement]);
+
+  /**
+   * Clear notebook entries whose job no longer exists.
+   *
+   * Deleting a job now takes it out of every notebook as it goes, but that does
+   * nothing for the ones already sitting there — the owner's board was full of
+   * cells reading "(job removed)" from jobs deleted before the rule existed.
+   * This sweeps them once.
+   *
+   * **It waits for the workspace to have arrived.** A notebook holds only its
+   * own workspace's jobs, so "the job is not in `apartments`" is a reliable
+   * answer once `apartments` is populated — and a catastrophic one during the
+   * moment before it is, when the honest answer is "nothing has loaded yet".
+   * The same settle-first idiom the bin seeding uses, for the same reason.
+   */
+  const purgedPlanners = useRef(false);
+  useEffect(() => {
+    if (purgedPlanners.current || !apartments.length) return;
+    const planners = canvasElements.filter(isPlannerElement);
+    if (!planners.length) { purgedPlanners.current = true; return; }
+    const t = setTimeout(() => {
+      if (purgedPlanners.current) return;
+      const live = new Set(apartments.map(a => a.id));
+      const dead = new Set<string>();
+      for (const el of planners) {
+        const cells = (el.data as { cells?: Record<string, { jobId?: string }[]> } | undefined)?.cells ?? {};
+        for (const list of Object.values(cells)) {
+          for (const e of list ?? []) if (e?.jobId && !live.has(e.jobId)) dead.add(e.jobId);
+        }
+      }
+      purgedPlanners.current = true;
+      if (!dead.size) return;
+      for (const el of planners) {
+        const r = purgeJobsFromPlanner(el.data as Record<string, unknown> | undefined, dead);
+        if (r) updateCanvasElement(el.id, { data: r.data });
+      }
+      setToast(`Cleared ${dead.size} deleted job${dead.size === 1 ? '' : 's'} from the notebook`);
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [canvasElements, apartments, updateCanvasElement]);
 
   const stages = allStages.filter(st => st.projectId === 'general');
   const stageMap = new Map(stages.map(st => [st.id, st]));
@@ -3190,10 +3231,16 @@ export function GeneralJobsPage() {
           updateApartment(id, { canvasX: x, canvasY: y }, currentUser);
         }
       });
-    } else if (el.type === 'bin' && el.binKind && drag.ids.length === 1 && drag.ids[0] === el.id) {
+    } else if (el.type === 'bin' && drag.ids.length === 1 && drag.ids[0] === el.id) {
       // A press that never became a drag is a click, so the bin opens. Deciding
       // it here rather than with an onClick is what lets a bin be dragged at all.
-      setOpenBin(el.binKind);
+      //
+      // `binKeyOf`, and NO `el.binKind` guard — the documented trap. A group
+      // made by hand or by the import has no `binKind`, so guarding on it meant
+      // exactly those groups could not be opened by clicking at all; combined
+      // with double-click offering a rename, they read as groups with nothing
+      // inside them.
+      setOpenBin(binKeyOf(el));
     } else if (
       // The same rule the job tiles use: a finger has no double-click, so
       // tapping an already-picked node is what opens it for editing.
@@ -4340,7 +4387,9 @@ export function GeneralJobsPage() {
     elThumbsDown: (id: string, d: number) => bumpThumbs('element', [id], d, 'down'),
     editChange: setEditText, editCommit: commitEdit, editCancel: () => setEditingEl(null),
     resizeDown: onResizePointerDown, resizeMove: onResizePointerMove, resizeUp: onResizePointerUp,
-    openBin: (k: BinKind) => setOpenBin(k),
+    // A group KEY, not a BinKind: a group made by hand or by the import is
+    // keyed by its own id and would not typecheck — nor open — as a BinKind.
+    openBin: (k: string) => setOpenBin(k),
     binCount,
   };
 
@@ -5248,7 +5297,10 @@ export function GeneralJobsPage() {
                   isEditing={editingEl === el.id}
                   editText={editingEl === el.id ? editText : ''}
                   binHot={hoverBin === el.id}
-                  binCount={el.binKind ? binCount(el.binKind) : 0}
+                  // binKeyOf, not binKind — a group made by hand or by the
+                  // import counted 0 forever, so it read as empty however many
+                  // jobs were filed in it.
+                  binCount={el.type === 'bin' ? binCount(binKeyOf(el)) : 0}
                   recording={recordingEl === el.id}
                   savingAudio={savingAudio}
                   ctx={widgetCtx}

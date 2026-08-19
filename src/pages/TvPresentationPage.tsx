@@ -1173,9 +1173,12 @@ export function TvPresentationPage() {
           <StrokeLayer elements={tvElements} />
           {tvElements.map(el => {
             if (el.type === 'stroke') return null;
-            const isBin = el.type === 'bin' && !!el.binKind;
+            // `binKeyOf`, never `el.binKind` — the documented trap. A group
+            // made by hand or by the import has no `binKind`, so on the wall it
+            // was not drawn as a group at all and counted 0 jobs.
+            const isBin = el.type === 'bin';
             const binJobs = isBin
-              ? apartments.filter(a => a.boardBin === el.binKind && !a.isUnnamed).length
+              ? apartments.filter(a => a.boardBin === binKeyOf(el) && !a.isUnnamed).length
               : 0;
             const live = dragEl?.id === el.id
               ? { x: dragEl.dx, y: dragEl.dy, w: el.w, h: el.h }

@@ -17,6 +17,7 @@ import {
   fsTombstone, fsGetTombstones, fsListenTombstones,
 } from './firebase';
 import { DEFAULT_TIME_CLOCK, resolvePunch } from './timeClock';
+import { purgeJobsFromPlanner, isPlannerElement } from './plannerPurge';
 import { DEFAULT_WORKER_LEVELS } from './workerLevels';
 
 const WOLFSON_STORAGE_KEY = 'wolfson_app_data';
@@ -90,6 +91,81 @@ export function isTombstoned(id: string): boolean { return _tombstones.has(id); 
 function tombstone(projectId: string, ids: string[]) {
   ids.forEach(id => _tombstones.add(id));
   fsTombstone(projectId, ids);
+}
+
+/**
+ * What deleting these jobs means for every weekly notebook.
+ *
+ * A notebook entry is a REFERENCE to a job, so deleting the job left the entry
+ * behind pointing at nothing — a cell reading "(job removed)". Nothing cleared
+ * them, so removing an import turned a season's planning into a wall of those
+ * three words.
+ *
+ * Computed rather than applied, and reporting only the elements that actually
+ * CHANGED: writing every notebook back on every delete would touch documents on
+ * every device for a job that was never in one. Returns null when no notebook
+ * mentions any of them, which is the common case.
+ */
+function plannerPurgePlan(state: AppState, ids: string[]): {
+  elements: CanvasElement[];
+  changed: CanvasElement[];
+  archive: BoardSetting['plannerArchive'];
+  archiveChanged: boolean;
+  removed: number;
+} | null {
+  const gone = new Set(ids);
+  if (!gone.size) return null;
+  let removed = 0;
+  const changed: CanvasElement[] = [];
+  const elements = state.canvasElements.map(el => {
+    if (!isPlannerElement(el)) return el;
+    const r = purgeJobsFromPlanner(el.data as Record<string, unknown> | undefined, gone);
+    if (!r) return el;
+    removed += r.removed;
+    const next = { ...el, data: r.data };
+    changed.push(next);
+    return next;
+  });
+
+  // A notebook that was removed still holds its planning in the archive, and
+  // placing a fresh one revives it — so a dead reference left in there comes
+  // back to life later. Clean it at the same time.
+  const pid = state.currentProjectId;
+  const oldArchive = state.boardSettings[pid]?.plannerArchive;
+  let archiveChanged = false;
+  const archive = oldArchive?.map(a => {
+    const r = purgeJobsFromPlanner(a.data, gone);
+    if (!r) return a;
+    removed += r.removed;
+    archiveChanged = true;
+    return { ...a, data: r.data };
+  });
+
+  if (!changed.length && !archiveChanged) return null;
+  return { elements, changed, archive, archiveChanged, removed };
+}
+
+/**
+ * Write a planner purge out.
+ *
+ * The elements themselves are set by the caller inside its own `set`, so the
+ * screen updates in one commit with the delete. This does the two things that
+ * have to happen AFTER that: sync the notebooks that changed, and — only if the
+ * archive was touched — put the cleaned archive back.
+ */
+function applyPlannerPurge(
+  get: () => AppState,
+  pid: string,
+  purge: NonNullable<ReturnType<typeof plannerPurgePlan>>,
+) {
+  purge.changed.forEach(el => fsSet(projectCollection(pid, 'canvasElements'), el.id, el));
+  if (!purge.archiveChanged) return;
+  const next = {
+    ...get().boardSettings,
+    [pid]: { ...(get().boardSettings[pid] ?? {}), plannerArchive: purge.archive },
+  };
+  useStore.setState({ boardSettings: next });
+  fsSet('settings', 'app', { boardSettings: next });
 }
 
 function generateId(): string {
@@ -1026,7 +1102,14 @@ export const useStore = create<AppState>((set, get) => ({
       .map(a => a.id);
     if (!doomed.length) return 0;
     const gone = new Set(doomed);
-    set(state => ({ apartments: state.apartments.filter(a => !gone.has(a.id)) }));
+    // Out of the notebooks too, or removing an import leaves a wall of
+    // "(job removed)" where the planning used to be.
+    const purge = plannerPurgePlan(get(), doomed);
+    set(state => ({
+      apartments: state.apartments.filter(a => !gone.has(a.id)),
+      ...(purge ? { canvasElements: purge.elements } : {}),
+    }));
+    if (purge) applyPlannerPurge(get, pid, purge);
     persist(get);
     // Tombstone BEFORE the deletes: another device still holding these locally
     // would otherwise re-seed them on its next sync, which is exactly why a
@@ -1118,10 +1201,15 @@ export const useStore = create<AppState>((set, get) => ({
     // A merged partner keeps living — but its link must not point at a ghost.
     const partnerId = state.apartments.find(a => a.id === id)?.mergedWith;
 
+    // The notebooks hold a REFERENCE to this job, not a copy — clear them, or
+    // the cell is left reading "(job removed)" for ever.
+    const purge = plannerPurgePlan(state, [id]);
+
     set(st => ({
       apartments: st.apartments
         .filter(a => a.id !== id)
         .map(a => (a.id === partnerId ? { ...a, mergedWith: undefined } : a)),
+      ...(purge ? { canvasElements: purge.elements } : {}),
       contractorAssignments: st.contractorAssignments.filter(a => a.apartmentId !== id),
       contractorNotes:       st.contractorNotes.filter(n => !linkedIds.has(n.assignmentId)),
       contractorPhotos:      st.contractorPhotos.filter(p => !linkedIds.has(p.assignmentId)),
@@ -1129,6 +1217,7 @@ export const useStore = create<AppState>((set, get) => ({
       planPins:              st.planPins.filter(p => p.apartmentId !== id),
       planAnnotations:       st.planAnnotations.filter(m => m.apartmentId !== id),
     }));
+    if (purge) applyPlannerPurge(get, pid, purge);
     persist(get);
 
     // Firestore cascade

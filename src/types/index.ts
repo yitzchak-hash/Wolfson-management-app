@@ -105,6 +105,15 @@ export interface BoardSetting {
    */
   smartGuides?: boolean;
   /**
+   * Does the building's name stay on top while the diagram scrolls?
+   *
+   * Absent means yes, which is what it has always done — the point of the bar
+   * is that you can tell which column you are looking at when you are ten
+   * floors down. The padlock on the bar switches it off for anybody who would
+   * rather have the row of screen back.
+   */
+  stickyBuildingName?: boolean;
+  /**
    * Margin, in board units, kept clear on all four sides — like the margins
    * on a page. Nothing is dropped inside it, so the work never sits flush
    * against the chrome. Absent means the default (BOARD_MARGIN).

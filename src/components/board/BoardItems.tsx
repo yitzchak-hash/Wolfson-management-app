@@ -571,7 +571,21 @@ export const BoardNode = React.memo(function BoardNode({
       onPointerMove={H.elMove}
       onPointerUp={e => H.elUp(el, e)}
       onContextMenu={e => H.elMenu(e, el)}
-      onDoubleClick={() => { if (!plain) H.elEdit(el); }}
+      /**
+       * A group OPENS. Everything else edits its words.
+       *
+       * `elEdit` for every node meant double-clicking a group put its name into
+       * an edit box — so the one gesture people reach for to look inside a
+       * group instead offered to rename it, and the group read as having no
+       * inside at all. Renaming lives on the pencil (`BinSettings`), which is
+       * where every other node's settings live too. The touch path already
+       * opened a group on tap; this is the mouse catching up with it.
+       */
+      onDoubleClick={() => {
+        if (plain) return;
+        if (isBin) H.openBin(binKeyOf(el));
+        else H.elEdit(el);
+      }}
       data-node-id={el.id}
       title={isWidget ? 'Drag the strip at the top to move it' : undefined}
       // A drawing's BOX passes the pointer through: only the ink itself (a

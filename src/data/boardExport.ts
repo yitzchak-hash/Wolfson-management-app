@@ -1,4 +1,4 @@
-import { Apartment, CanvasElement, Stage, BIN_META } from '../types';
+import { Apartment, CanvasElement, Stage, BIN_META, binLabelOf } from '../types';
 
 /**
  * Board export.
@@ -111,11 +111,14 @@ export function buildBoardSvg(input: BoardExportInput): { svg: string; width: nu
     );
   });
 
-  elements.filter(e => e.type === 'bin' && e.binKind).forEach(el => {
+  // Every group, not only the four built-in ones: filtering on `binKind` left
+  // groups made by hand or by the import out of the picture entirely — the
+  // documented trap, which here silently drew an incomplete board.
+  elements.filter(e => e.type === 'bin').forEach(el => {
     parts.push(
       `<g transform="${g(el.x, el.y)}">`,
       `<rect width="${el.w}" height="${el.h}" rx="12" fill="#ffffff" stroke="${esc(el.color)}" stroke-width="2" stroke-dasharray="6 4"/>`,
-      `<text x="12" y="30" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="800" fill="${esc(el.color)}">${esc(BIN_META[el.binKind!].label)}</text>`,
+      `<text x="12" y="30" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="800" fill="${esc(el.color)}">${esc(binLabelOf(el))}</text>`,
       `</g>`,
     );
   });

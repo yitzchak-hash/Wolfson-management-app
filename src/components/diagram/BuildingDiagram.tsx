@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Link2 } from 'lucide-react';
+import { Link2, Lock, LockOpen } from 'lucide-react';
 import { Apartment, BuildingId, Stage } from '../../types';
 import { useStore } from '../../data/store';
 
@@ -683,6 +683,49 @@ function FourCellRow({
   );
 }
 
+/**
+ * The building's name above its column.
+ *
+ * ONE component used by both column kinds. They each carried their own copy,
+ * which is the documented two-component trap in this file: a fix applied to one
+ * is invisible in the other, and that is exactly how Wolfson's bar spent months
+ * a z-index behind Netiv's.
+ *
+ * **Pinned by default, and lockable.** It is `sticky`, but at `z-10` it tied
+ * with a highlighted cell's own `z-10` — and cells come later in the DOM, so
+ * the tie went to the cells and the name was scrolled OVER. `z-20` beats the
+ * cells and stays far below any dialog (What's New is z-[260]).
+ *
+ * The padlock switches pinning off for the workspace, for anybody who would
+ * rather have the extra row of screen while scrolling. Stored in
+ * `boardSettings`, so it inherits persist / sync / export / import with no new
+ * state key; absent means pinned, which is the behaviour that was always there.
+ */
+function BuildingNameBar({ buildingId, compact }: { buildingId: string; compact?: boolean }) {
+  const { boardSettings, currentProjectId, setBoardSetting } = useStore();
+  const pinned = boardSettings[currentProjectId]?.stickyBuildingName !== false;
+  return (
+    <div
+      className={`${pinned ? 'sticky top-0 z-20' : 'relative'} group print:static text-center font-bold text-white tracking-widest rounded-t-lg ${
+        compact ? 'py-1 pb-1.5 text-xs' : 'py-2 pb-2.5 text-sm'}`}
+      style={{ backgroundColor: '#1e3a5f' }}
+    >
+      {buildingId}
+      <button
+        onClick={() => setBoardSetting('stickyBuildingName', !pinned)}
+        title={pinned
+          ? 'The building name stays on top while you scroll — press to let it scroll away'
+          : 'The building name scrolls away — press to keep it on top'}
+        className={`absolute top-1/2 -translate-y-1/2 ${compact ? 'right-1' : 'right-2'} p-1 rounded-md transition-opacity ${
+          pinned ? 'opacity-0 group-hover:opacity-100' : 'opacity-100'}`}
+        style={pinned ? { color: '#ffffff99' } : { color: '#fbbf24' }}
+      >
+        {pinned ? <Lock size={compact ? 11 : 13} /> : <LockOpen size={compact ? 11 : 13} />}
+      </button>
+    </div>
+  );
+}
+
 function BuildingColumn({
   buildingId, apartments, mergedLabels, stages, activeStageIds, classFilter, searchQuery,
   onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, aptSubLabels,
@@ -810,14 +853,7 @@ function BuildingColumn({
           the A1/A2/A3 tabs above the diagram already name it, so the bar was a
           navy stripe repeating the selected tab — on desktop the buildings sit
           side by side and this label is the only thing telling them apart. */}
-      {!phone && (
-      <div
-        className={`sticky top-0 z-10 print:static text-center font-bold text-white tracking-widest rounded-t-lg ${compact ? 'py-1 pb-1.5 text-xs' : 'py-2 pb-2.5 text-sm'}`}
-        style={{ backgroundColor: '#1e3a5f' }}
-      >
-        {buildingId}
-      </div>
-      )}
+      {!phone && <BuildingNameBar buildingId={buildingId} compact={compact} />}
 
       <div
         className={`flex flex-col overflow-hidden ${phone ? 'rounded-lg' : 'rounded-b-lg'}`}
@@ -1164,13 +1200,7 @@ function NetivBuildingColumn({
           in the page flow with a lower z — including dialogs. At z-30 the
           building name sat on top of the What's New window. It only ever needs
           to beat the cells it scrolls over. */}
-      {!phone && (
-        <div className={`sticky top-0 z-10 print:static text-center font-bold text-white tracking-widest rounded-t-lg ${
-          compact ? 'py-1 pb-1.5 text-xs' : 'py-2 pb-2.5 text-sm'}`}
-          style={{ backgroundColor: '#1e3a5f' }}>
-          {buildingId}
-        </div>
-      )}
+      {!phone && <BuildingNameBar buildingId={buildingId} compact={compact} />}
       <div className={`flex flex-col overflow-hidden ${phone ? 'rounded-lg' : 'rounded-b-lg'}`} style={{ border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
         {/* Roof */}
         <div className="flex items-stretch" style={{ height: `${roofH}px`, minHeight: `${roofH}px`, borderBottom: '1px solid #e9edf2' }}>
