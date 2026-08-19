@@ -272,6 +272,31 @@ export function PlanAnnotator({
   const [page, setPage] = useState(0);
   const [scale, setScale] = useState(1.25);
   const [fitting, setFitting] = useState(true);
+  /**
+   * Zooming does NOT redraw the sheet. Not straight away.
+   *
+   * Every zoom step used to resize all three canvases — which clears them — and
+   * kick off a fresh pdf.js render of the whole page. On a real A0 drawing that
+   * is a second or more of blank white per step, so holding the zoom made the
+   * plan strobe: the owner's "it refreshes all the layers every three seconds".
+   *
+   * There are two scales now. `scale` is the LAYOUT one and moves instantly:
+   * the canvases keep the bitmap they already have and are simply given a new
+   * CSS size, so the sheet grows under your hand with no work at all, very
+   * slightly soft. `raster` is the DRAWING one and follows a moment after your
+   * hand stops, at which point the page is redrawn at full resolution — once,
+   * off-screen, and blitted in one go so nothing ever goes blank.
+   */
+  const [raster, setRaster] = useState(1.25);
+  /** The page at 100%, so the CSS size can follow the zoom without a render. */
+  const [nat, setNat] = useState<{ w: number; h: number } | null>(null);
+  /** What is actually painted on the canvas right now. */
+  const drawnAt = useRef<{ page: number; s: number } | null>(null);
+  useEffect(() => {
+    if (Math.abs(scale - raster) < 0.001) return;
+    const t = setTimeout(() => setRaster(scale), 170);
+    return () => clearTimeout(t);
+  }, [scale, raster]);
   /** Is the SHEET wider than it is tall? Decides the turn-your-phone hint. */
   const [sheetWide, setSheetWide] = useState(false);
   const screen = useOrientation();
@@ -494,7 +519,7 @@ export function PlanAnnotator({
         const bmp = await createImageBitmap(blob);
         return imageAsDoc(bmp);
       })
-      .then(d => { if (!dead) { setDoc(d as unknown as PdfDoc); setPage(0); } })
+      .then(d => { if (!dead) { drawnAt.current = null; setDoc(d as unknown as PdfDoc); setPage(0); } })
       .catch(e => { if (!dead) setLoadErr(e instanceof Error ? e.message : String(e)); });
     return () => { dead = true; };
   }, [planFileId]);
@@ -508,7 +533,10 @@ export function PlanAnnotator({
     // drawing at 100% is unusable on any screen, and fitting the width alone
     // still left an A0 sheet taller than the stage — so it opened with a scroll
     // bar and you could not see what you were about to mark up.
-    let s = scale;
+    const natVp = p.getViewport({ scale: 1 });
+    setNat({ w: natVp.width, h: natVp.height });
+
+    let s = raster;
     if (fitting && stageRef.current) {
       // The margin the stage keeps round the sheet — 16px a side at the desk,
       // 4px on a phone, where sixteen of them is four per cent of the screen
@@ -516,17 +544,37 @@ export function PlanAnnotator({
       const pad = compact ? 8 : 32;
       const availW = stageRef.current.clientWidth - pad;
       const availH = stageRef.current.clientHeight - pad;
-      const nat = p.getViewport({ scale: 1 });
-      s = Math.max(0.1, Math.min(4, Math.min(availW / nat.width, availH / nat.height)));
-      setScale(s); setFitting(false);
+      s = Math.max(0.1, Math.min(4, Math.min(availW / natVp.width, availH / natVp.height)));
+      setScale(s); setRaster(s); setFitting(false);
     }
+
+    // Nothing to redraw if the page is already on screen at this resolution.
+    // Without this, fitting on open renders the sheet twice — once from the fit
+    // and once when `raster` catches up to the number the fit just chose.
+    if (drawnAt.current && drawnAt.current.page === page
+      && Math.abs(drawnAt.current.s - s) < 0.001) return;
 
     const vp = p.getViewport({ scale: s });
     setSheetWide(vp.width > vp.height * 1.1);
-    // Render above CSS resolution so the linework stays sharp on a 4K panel,
-    // capped so an A0 sheet does not allocate a canvas the browser refuses.
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    /**
+     * Always ABOVE the screen's own resolution, never merely equal to it.
+     *
+     * It used to take the device ratio as it found it, which on an ordinary
+     * desktop monitor is 1 — so the sheet was drawn at exactly the pixels it
+     * occupied and every look closer, every nudge of the zoom before the redraw
+     * catches up, was a soft grey smear. Two is the floor now; the cap is an
+     * AREA, because an A0 sheet at 400% times three is a canvas the browser
+     * simply refuses to allocate, and a refused canvas is a blank plan.
+     */
+    const MAX_PIXELS = 32e6;
+    const want = Math.min(Math.max(window.devicePixelRatio || 1, 2), 3);
+    const area = vp.width * vp.height;
+    const dpr = Math.max(1, Math.min(want, Math.sqrt(MAX_PIXELS / Math.max(1, area))));
     const w = Math.round(vp.width), h = Math.round(vp.height);
+    // The CSS size follows the LAYOUT scale, which may already have moved past
+    // the one being drawn — that is the whole point of the split.
+    const cssW = Math.round(natVp.width * scaleRef.current);
+    const cssH = Math.round(natVp.height * scaleRef.current);
 
     /**
      * The live layer is drawn at a LOWER resolution than the plan.
@@ -541,20 +589,61 @@ export function PlanAnnotator({
      * misaligns — the ink is very slightly softer while the pen is down.
      */
     const LIVE_DPR = Math.min(dpr, 1.5);
+
+    /**
+     * Drawn OFF-SCREEN, then put up in one go.
+     *
+     * Setting a canvas's width clears it, so resizing the visible one and then
+     * waiting for pdf.js is a white flash the length of the render. The page is
+     * drawn into a canvas nobody can see and blitted across when it is finished,
+     * which is why the plan never blinks any more.
+     */
+    renderTask.current?.cancel();
+    const off = document.createElement('canvas');
+    off.width = Math.round(w * dpr);
+    off.height = Math.round(h * dpr);
+    const octx = off.getContext('2d')!;
+    const task = p.render({
+      canvasContext: octx,
+      viewport: p.getViewport({ scale: s * dpr }),
+      // Draw with whatever layers are switched on.
+      ...(ocRef.current ? { optionalContentConfigPromise: Promise.resolve(ocRef.current) } : {}),
+    });
+    renderTask.current = task;
+    try { await task.promise; } catch { return; /* superseded by a newer render */ }
+
     for (const c of [pdfRef.current, inkRef.current, liveRef.current]) {
       if (!c) continue;
       const k = c === liveRef.current ? LIVE_DPR : dpr;
       c.width = Math.round(w * k);
       c.height = Math.round(h * k);
-      c.style.width = `${w}px`;
-      c.style.height = `${h}px`;
+      c.style.width = `${cssW}px`;
+      c.style.height = `${cssH}px`;
     }
+    const ctx = pdfRef.current.getContext('2d')!;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(off, 0, 0);
+    drawnAt.current = { page, s };
+    redrawInk();
+  }, [doc, page, raster, fitting, compact]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Zoom lands on whatever you pointed at. The anchor was taken as a FRACTION
-    // of the content before the scale changed, so now that the canvases have
-    // their new size we can put that same fraction back under the same point on
-    // screen. Reading scrollWidth here is what forces the layout to settle
-    // first — correcting the scroll any later and you see it jump.
+  /**
+   * The zoom itself: pure layout, no drawing.
+   *
+   * The canvases keep whatever bitmap they have and are simply given a new CSS
+   * size, so a zoom step costs one style write instead of a full re-render.
+   * The scroll correction that keeps the point under the pointer still lives
+   * with the size change, because it has to read the new scrollWidth.
+   */
+  useEffect(() => {
+    if (!nat) return;
+    const cssW = Math.round(nat.w * scale);
+    const cssH = Math.round(nat.h * scale);
+    for (const c of [pdfRef.current, inkRef.current, liveRef.current]) {
+      if (!c) continue;
+      c.style.width = `${cssW}px`;
+      c.style.height = `${cssH}px`;
+    }
     const anchor = zoomAnchor.current;
     if (anchor && stageRef.current) {
       const el = stageRef.current;
@@ -562,24 +651,7 @@ export function PlanAnnotator({
       el.scrollTop = anchor.fy * el.scrollHeight - anchor.cy;
       zoomAnchor.current = null;
     }
-
-    renderTask.current?.cancel();
-    const ctx = pdfRef.current.getContext('2d')!;
-    // The canvas is already sized at dpr, so the DPR goes into the viewport
-    // scale and the context transform stays identity — doing both would render
-    // the page at dpr squared and clip it to a corner.
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, pdfRef.current.width, pdfRef.current.height);
-    const task = p.render({
-      canvasContext: ctx,
-      viewport: p.getViewport({ scale: s * dpr }),
-      // Draw with whatever layers are switched on.
-      ...(ocRef.current ? { optionalContentConfigPromise: Promise.resolve(ocRef.current) } : {}),
-    });
-    renderTask.current = task;
-    try { await task.promise; } catch { /* superseded by a newer render */ }
-    redrawInk();
-  }, [doc, page, scale, fitting, compact]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [nat, scale]);
 
   useEffect(() => { void renderPage(); }, [renderPage]);
 
@@ -2208,7 +2280,11 @@ export function PlanAnnotator({
 
         {!compact && <div className="flex-1" />}
 
-        {doc && doc.numPages > 1 && (
+        {/* The pager and the zoom live in the floating bar over the sheet
+            when there is nothing to mark up — one set of controls, where Drive
+            keeps them. Two pagers and two zooms in one window is a choice
+            nobody should have to make. */}
+        {doc && doc.numPages > 1 && !locked && (
           <div className="flex items-center gap-1 text-white/85 text-[12px] mr-1 flex-shrink-0">
             <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
               className={`${iconBtn} hover:bg-white/10 disabled:opacity-30`}><ChevronLeft size={15} /></button>
@@ -2222,15 +2298,19 @@ export function PlanAnnotator({
             move into the ⋯ sheet on a phone — none of them is touched while a
             mark is being drawn, and a pinch does the zooming there anyway. */}
         {!compact && (<>
-          <div className="flex items-center gap-0.5 text-white/85 mr-1">
-            <button onClick={() => setScale(s => Math.max(0.2, s - 0.2))} title="Zoom out"
-              className="p-1.5 rounded-lg hover:bg-white/10"><Minus size={14} /></button>
-            <span className="text-[11px] tabular-nums w-11 text-center">{Math.round(scale * 100)}%</span>
-            <button onClick={() => setScale(s => Math.min(5, s + 0.2))} title="Zoom in"
-              className="p-1.5 rounded-lg hover:bg-white/10"><Plus size={14} /></button>
-            <button onClick={() => setFitting(true)} title="Fit the page"
-              className="p-1.5 rounded-lg hover:bg-white/10"><Maximize2 size={13} /></button>
-          </div>
+          {/* Only while marking up. Reading a plan, the zoom is in the floating
+              bar over the sheet — one set of controls, where Drive keeps them. */}
+          {!locked && (
+            <div className="flex items-center gap-0.5 text-white/85 mr-1">
+              <button onClick={() => setScale(s => Math.max(0.2, s - 0.2))} title="Zoom out"
+                className="p-1.5 rounded-lg hover:bg-white/10"><Minus size={14} /></button>
+              <span className="text-[11px] tabular-nums w-11 text-center">{Math.round(scale * 100)}%</span>
+              <button onClick={() => setScale(s => Math.min(5, s + 0.2))} title="Zoom in"
+                className="p-1.5 rounded-lg hover:bg-white/10"><Plus size={14} /></button>
+              <button onClick={() => setFitting(true)} title="Fit the page"
+                className="p-1.5 rounded-lg hover:bg-white/10"><Maximize2 size={13} /></button>
+            </div>
+          )}
 
           {/* Always offered, not only when there are two.
               The chooser is how you reach ANOTHER FOLDER, so hiding it when the
@@ -2382,7 +2462,7 @@ export function PlanAnnotator({
         )}
 
         {/* Stage */}
-        <div className="flex-1 min-w-0 flex flex-col">
+        <div className="relative flex-1 min-w-0 flex flex-col">
           {!locked && (
             // The TOOL row scrolls sideways on a phone; this one wraps.
             // Scrolling is right for eleven buttons whose order you learn, and
@@ -2521,6 +2601,50 @@ export function PlanAnnotator({
                   {/* The old "· speed" meant nothing to anybody reading it. */}
                 </span>
               </>)}
+            </div>
+          )}
+
+          {/**
+            * The viewer's controls, where Drive puts them.
+            *
+            * The office reads plans in Drive all day, so the muscle memory is
+            * already bought and paid for: a floating bar at the bottom centre
+            * carrying the page count and the zoom, over the sheet rather than
+            * in a strip above it. Only when there is nothing to mark up —
+            * the studio has its own rail and two toolbars of its own.
+            */}
+          {locked && doc && (
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-0.5
+                            rounded-full px-1.5 py-1 shadow-lg backdrop-blur"
+              style={{ backgroundColor: 'rgba(32,33,36,.92)', color: '#e8eaed' }}>
+              {doc.numPages > 1 && (<>
+                <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
+                  title="Previous page"
+                  className="px-2 py-1 rounded-full hover:bg-white/10 disabled:opacity-30">‹</button>
+                <span className="px-1.5 text-[12px] font-semibold tabular-nums select-none">
+                  {page + 1} / {doc.numPages}
+                </span>
+                <button onClick={() => setPage(p => Math.min(doc.numPages - 1, p + 1))}
+                  disabled={page >= doc.numPages - 1} title="Next page"
+                  className="px-2 py-1 rounded-full hover:bg-white/10 disabled:opacity-30">›</button>
+                <span className="mx-1 w-px self-stretch bg-white/20" />
+              </>)}
+              <button onClick={() => setScale(s => Math.max(0.1, Math.round((s - 0.15) * 100) / 100))}
+                title="Zoom out" className="px-2.5 py-1 rounded-full hover:bg-white/10">
+                <Minus size={14} />
+              </button>
+              <button onClick={() => setFitting(true)} title="Fit the sheet to the window"
+                className="px-2 py-1 rounded-full text-[12px] font-semibold tabular-nums hover:bg-white/10">
+                {Math.round(scale * 100)}%
+              </button>
+              <button onClick={() => setScale(s => Math.min(6, Math.round((s + 0.15) * 100) / 100))}
+                title="Zoom in" className="px-2.5 py-1 rounded-full hover:bg-white/10">
+                <Plus size={14} />
+              </button>
+              <button onClick={() => setFitting(true)} title="Fit to window"
+                className="px-2.5 py-1 rounded-full hover:bg-white/10">
+                <Maximize2 size={13} />
+              </button>
             </div>
           )}
 

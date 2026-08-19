@@ -12,7 +12,7 @@ import { TvDashboard } from '../components/board/TvDashboard';
 import { useOrientation } from '../data/useOrientation';
 import { WidgetStore } from '../components/board/WidgetStore';
 import { extractFileId } from '../data/driveApi';
-import { PenLine, Maximize, Minimize, Pencil, X as CloseIcon, Plus } from 'lucide-react';
+import { PenLine, Maximize, Minimize, Pencil, X as CloseIcon, Plus, Info } from 'lucide-react';
 
 /**
  * Lazy, like everywhere else — the wallboard is the last place that should
@@ -34,6 +34,81 @@ const PlanAnnotator = lazy(() =>
  *     stray palm on the touchscreen moved a job and nobody knows".
  *  3. Anything Esther marks hidden never appears here.
  */
+/**
+ * What this screen really is — the wall's own read-out.
+ *
+ * A fuzzy panel has two causes and they need opposite fixes, so before any of
+ * it is worth doing somebody has to read the numbers off the actual TV.
+ *
+ *  · "Drawing at" is what the browser thinks the window is. If a 4K panel says
+ *    1920 x 1080 with a ratio of 1, the browser is drawing at 1080p and the TV
+ *    is stretching it — no change in this app can sharpen that.
+ *  · "Ratio" is devicePixelRatio: 1 on most TV browsers, 2 or 3 on a phone.
+ *    Real pixels are the two multiplied, and that is what the app can actually
+ *    paint into.
+ *  · "Sharp test" draws a one-pixel grid. On a screen that is drawing at its
+ *    real resolution the lines stay crisp and separate; on a stretched one they
+ *    smear together into grey.
+ */
+function ScreenReport({ onClose, scale }: { onClose: () => void; scale: number }) {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const on = () => setTick(t => t + 1);
+    window.addEventListener('resize', on);
+    return () => window.removeEventListener('resize', on);
+  }, []);
+  const dpr = window.devicePixelRatio || 1;
+  const w = window.innerWidth, h = window.innerHeight;
+  const stretched = dpr === 1 && (screen.width <= 1920) && w <= 1920;
+  const row = (k: string, v: string) => (
+    <div className="flex justify-between gap-6 py-0.5">
+      <span className="opacity-60">{k}</span>
+      <span className="font-bold tabular-nums">{v}</span>
+    </div>
+  );
+  return (
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div
+        onClick={e => e.stopPropagation()}
+        className="rounded-2xl bg-white text-[#16212e] shadow-2xl px-6 py-5"
+        style={{ width: 'min(560px, 92vw)', fontSize: 15 }}
+        data-tick={tick}
+      >
+        <h2 className="text-lg font-extrabold mb-1">About this screen</h2>
+        <p className="text-[13px] opacity-60 mb-3">Read these out and we will know what to fix.</p>
+        <div className="rounded-xl bg-slate-50 px-4 py-3 mb-3">
+          {row('Drawing at', `${w} × ${h}`)}
+          {row('Ratio', String(dpr))}
+          {row('Real pixels', `${Math.round(w * dpr)} × ${Math.round(h * dpr)}`)}
+          {row('Screen says', `${screen.width} × ${screen.height}`)}
+          {row('Board scale', `${Math.round(scale * 100)}%`)}
+        </div>
+        <p className="text-[13px] mb-2">
+          {stretched
+            ? 'This looks like a screen drawing at 1080p. If the panel is 4K, the TV is stretching the picture — that is a setting on the TV or its browser, not something the app can sharpen.'
+            : 'This screen reports more than 1080p, so the fuzziness is ours to fix in how the wallboard scales.'}
+        </p>
+        <p className="text-[13px] font-semibold mb-1">Sharp test</p>
+        <div
+          className="rounded-lg border border-slate-200"
+          style={{
+            height: 56,
+            backgroundImage:
+              'repeating-linear-gradient(90deg, #16212e 0 1px, #ffffff 1px 2px),'
+              + 'repeating-linear-gradient(0deg, rgba(22,33,46,.35) 0 1px, transparent 1px 8px)',
+          }}
+        />
+        <p className="text-[12px] opacity-60 mt-1.5">
+          Crisp separate lines = drawing at full resolution. A grey smear = the picture is being stretched.
+        </p>
+        <button onClick={onClose}
+          className="mt-4 w-full py-2.5 rounded-xl font-bold text-white"
+          style={{ backgroundColor: '#1e3a5f' }}>Close</button>
+      </div>
+    </div>
+  );
+}
+
 export function TvPresentationPage() {
   const [params, setParams] = useSearchParams();
   const {
@@ -212,6 +287,7 @@ export function TvPresentationPage() {
    * which is the behaviour you want on a screen nobody logs out of.
    */
   const [editing, setEditing] = useState(false);
+  const [diag, setDiag] = useState(false);
 
   /**
    * The panel turns. Everything below reads this rather than the window
@@ -439,6 +515,21 @@ export function TvPresentationPage() {
              TOUCH_LABEL[String(touchScale)]?.[1] ?? `${Math.round(touchScale * 100)}%`)}
         </span>
       </button>
+
+      {/* What this screen actually IS.
+          A wall panel that looks fuzzy has two completely different causes —
+          the browser drawing at 1080 and the TV stretching it to 4K, which
+          nothing in the app can fix, or our own scaling drawing once and
+          stretching the picture, which we can. They are told apart by what the
+          browser reports, and the only way to read that off a TV in another
+          building is to put it on the screen. */}
+      <button onClick={() => setDiag(v => !v)}
+        title={t('About this screen', 'על המסך הזה')}
+        className={`${barBtn} px-3 py-1.5`}
+        style={diag ? { backgroundColor: '#1e3a5f', color: '#fff' } : off}>
+        <Info size={16} />
+      </button>
+      {diag && <ScreenReport onClose={() => setDiag(false)} scale={scale} />}
 
       {/* Edit mode. Off by default and never sticky — see the note on `editing`. */}
       <button onClick={() => setEditing(v => !v)}

@@ -1264,16 +1264,19 @@ export const WIDGETS: WidgetDef[] = [
      * well so it can be found in the store and put on any board, including the
      * dashboard and the wall.
      */
-    id: 'sticky-pad', rank: 1, name: 'Sticky notes', category: 'visual', icon: StickyNote,
+    id: 'sticky-pad', rank: 1, name: 'Sticky note', category: 'visual', icon: StickyNote,
     w: 260, h: 300,
-    blurb: 'A pad of sticky notes with a cork board behind it. Bold, bullets and tick-boxes, '
-      + 'six colours, and a corner that folds up into a fresh page.',
+    blurb: 'One sticky note, on the board. Bold, bullets and tick-boxes, six colours, and a '
+      + 'corner that folds up to put a fresh note beside it.',
     // '' rather than undefined: fsSet's sanitiser turns a TOP-LEVEL undefined
     // into deleteField(), but this one is nested inside `data`, where it stays
     // undefined — and Firestore rejects the whole write. The note pad would
     // then save on this device and silently never reach any other.
     data: { notes: [], openId: '' },
-    render: (el, c) => <StickyNoteWidget el={el} readOnly={c.readOnly} isRtl={c.isRtl} update={c.update} />,
+    render: (el, c) => (
+      <StickyNoteWidget el={el} readOnly={c.readOnly} isRtl={c.isRtl} update={c.update}
+        onSpawn={c.readOnly ? undefined : colour => spawnStickyBeside(el, colour)} />
+    ),
   },
   {
     /**
@@ -2545,6 +2548,31 @@ function noteHeadline(text: string, fallback: string): string {
  * widget cannot reach — and this only has to put one node next to the thing
  * that made it, not fill a canvas.
  */
+/**
+ * A fresh sticky note on the board, beside the one that asked for it.
+ *
+ * Shared by the note's own folded corner and by the Notes board's + button, so
+ * "a new note" means exactly one thing wherever it is pressed. It reads the
+ * store directly because a widget's render is a plain function, not a
+ * component — the same reason `NotesBoard` does.
+ */
+export function spawnStickyBeside(host: CanvasElement, colour = 'yellow'): void {
+  const st = useStore.getState();
+  const w = 260, h = 300;
+  const at = spotBeside(st.canvasElements, host, w, h);
+  const now = new Date().toISOString();
+  const noteId = `SN-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  st.addCanvasElement({
+    addedAt: now,
+    id: 'CE-' + Math.random().toString(36).slice(2, 9),
+    type: 'widget', widget: 'sticky-pad',
+    ...(host.board ? { board: host.board } : {}),
+    x: Math.round(at.x), y: Math.round(at.y), w, h,
+    text: '', color: 'transparent',
+    data: { notes: [{ id: noteId, text: '', colour, updatedAt: now }], openId: noteId },
+  });
+}
+
 function spotBeside(all: CanvasElement[], host: CanvasElement, w: number, h: number) {
   const gap = 20;
   const x = host.x + host.w + gap;

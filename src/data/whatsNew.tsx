@@ -30,6 +30,49 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-08-22',
+    title: 'Plans that stay sharp, and a sticky note that is one sticky note',
+    items: [
+      {
+        title: 'The plan viewer no longer blinks',
+        body: 'Zooming used to redraw the whole sheet every step, so a big drawing '
+          + 'flashed white while you were still zooming. Now the sheet grows straight '
+          + 'away and is redrawn sharp a moment after you stop — and it is drawn at '
+          + 'twice the screen resolution, so leaning in shows line work rather than a '
+          + 'grey smear.',
+        demo: 'zoom',
+      },
+      {
+        title: 'The plan controls sit where Drive puts them',
+        body: 'Page number and zoom are on a floating bar along the bottom of the sheet, '
+          + 'not in a strip above it, and there is only one of each now.',
+        demo: 'tap',
+      },
+      {
+        title: 'A sticky note is one sticky note',
+        body: 'It used to be a pad hiding a stack of pages and a second cork board '
+          + 'inside it. Every page you had written is now its own note on the board, '
+          + 'and folding the corner puts a fresh one beside it. The Notes board is the '
+          + 'one board.',
+        demo: 'drag',
+      },
+      {
+        title: 'The X asks first',
+        body: 'Removing anything that holds work — a note, a list, a widget you have '
+          + 'filled in — now says what you would lose before it goes. The weekly '
+          + 'planner stays silent because its contents are kept either way.',
+        demo: 'tap',
+      },
+      {
+        title: 'The wallboard can tell you about the screen',
+        body: 'A new button on the wall bar reports what the TV is really drawing at, '
+          + 'with a sharpness test — so a fuzzy panel can be diagnosed instead of '
+          + 'guessed at.',
+        demo: 'sparkle',
+      },
+    ],
+  },
+  {
     date: '2026-08-21',
     title: 'Deleted stays deleted, Enter saves, and the wheel goes where you point it',
     items: [

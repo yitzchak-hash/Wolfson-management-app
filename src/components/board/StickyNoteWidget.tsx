@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Bold, List, CheckSquare, Palette, Undo2, Redo2, Check, X, Trash2, Plus,
+  Bold, List, CheckSquare, Palette, Undo2, Redo2, Check, X, Plus,
 } from 'lucide-react';
 import { CanvasElement } from '../../types';
 
@@ -47,15 +47,6 @@ const COLOUR = (c: string) => NOTE_COLOURS[c] ?? NOTE_COLOURS.yellow;
 
 const newId = () => `SN-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 
-/** The board card's headline: the note's first line with any marker stripped. */
-function titleOf(text: string, fallback: string): string {
-  const line = text
-    .split('\n')
-    .map(l => l.replace(/^[☐☑•]\s*/, '').replace(/\*\*/g, '').trim())
-    .find(Boolean);
-  return line || fallback;
-}
-
 function renderLine(line: string, key: number, onToggle: (i: number) => void) {
   const bolded = line.split(/\*\*(.+?)\*\*/g).map((part, i) =>
     (i % 2 === 1 ? <b key={i}>{part}</b> : part));
@@ -79,11 +70,23 @@ function renderLine(line: string, key: number, onToggle: (i: number) => void) {
   return <div key={key}>{bolded}</div>;
 }
 
-export function StickyNoteWidget({ el, readOnly, isRtl, update }: {
+export function StickyNoteWidget({ el, readOnly, isRtl, update, onSpawn }: {
   el: CanvasElement;
   readOnly?: boolean;
   isRtl?: boolean;
   update: (patch: Partial<CanvasElement>) => void;
+  /**
+   * Put a FRESH sticky note on the board beside this one.
+   *
+   * A sticky note is one sticky note — the owner's ruling. This used to be a
+   * PAD holding many pages with a cork board hidden inside it, while a separate
+   * Notes board widget gathered pages out of every pad: two boards, one of them
+   * invisible until you found the button. Now each note is its own thing on the
+   * board and the Notes board is the only board there is. Folding the corner
+   * therefore makes a NEW note next to this one rather than a second page
+   * inside it.
+   */
+  onSpawn?: (colour: string) => void;
 }) {
   const he = !!isRtl;
   const data = (el.data ?? {}) as { notes?: StickyNoteRecord[]; openId?: string };
@@ -92,7 +95,6 @@ export function StickyNoteWidget({ el, readOnly, isRtl, update }: {
 
   const [editing, setEditing] = useState(false);
   const [palette, setPalette] = useState(false);
-  const [board, setBoard] = useState(false);
   const [folding, setFolding] = useState(false);
   const [saved, setSaved] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -182,120 +184,43 @@ export function StickyNoteWidget({ el, readOnly, isRtl, update }: {
     editOpen({ text: lines.join('\n') });
   }
 
-  /** The folded corner: the page folds up and a fresh one takes its place. */
+  /**
+   * The folded corner: the page folds up and a fresh note lands beside it.
+   *
+   * The fold animation is kept — it is the nicest thing about this widget — but
+   * what it produces is a new sticky note ON THE BOARD, not a second page
+   * hidden inside this one.
+   */
   function newNote() {
     setFolding(true);
     window.setTimeout(() => {
+      setFolding(false);
+      if (onSpawn) { onSpawn(open?.colour ?? 'yellow'); return; }
+      // No host to spawn into (the store's preview): behave as before.
       past.current = []; future.current = [];
       const fresh: StickyNoteRecord = {
         id: newId(), text: '', colour: open?.colour ?? 'yellow',
         updatedAt: new Date().toISOString(),
       };
-      // The one being left is already written — every edit saved it.
-      writeNotes([fresh, ...notes.filter(n => n.text.trim())], fresh.id);
+      writeNotes([fresh], fresh.id);
       setEditing(true);
-      setFolding(false);
     }, 420);
-  }
-
-  function openFromBoard(n: StickyNoteRecord) {
-    past.current = []; future.current = [];
-    update({ data: { ...(el.data ?? {}), notes, openId: n.id } });
-    setBoard(false);
-  }
-
-  function removeFromBoard(n: StickyNoteRecord) {
-    if (!window.confirm(he ? 'להסיר את הפתק?' : 'Take this note down?')) return;
-    const rest = notes.filter(x => x.id !== n.id);
-    writeNotes(rest, rest[0]?.id);
   }
 
   const c = COLOUR(open?.colour ?? 'yellow');
   const iconBtn =
     'rounded p-1 opacity-70 transition hover:bg-black/5 hover:opacity-100 disabled:opacity-25';
 
-  // ── the CORK BOARD ────────────────────────────────────────────────────────
-  if (board) {
-    return (
-      <div
-        data-note-board
-        className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-md"
-        style={{
-          background:
-            'radial-gradient(circle at 20% 25%, #C58A4B 0 2px, transparent 3px), radial-gradient(circle at 62% 68%, #B87C3F 0 2px, transparent 3px), radial-gradient(circle at 85% 20%, #C9925A 0 2px, transparent 3px), linear-gradient(150deg, #C08A50 0%, #B27B41 55%, #A76F38 100%)',
-          backgroundSize: '26px 26px, 34px 34px, 30px 30px, 100% 100%',
-          boxShadow: 'inset 0 0 0 6px #8A5A2B, inset 0 0 22px rgba(0,0,0,.35)',
-        }}
-      >
-        <div className="flex shrink-0 items-center justify-between px-3 py-2">
-          <span className="text-xs font-bold text-amber-50 drop-shadow">
-            {he ? 'לוח הפתקים' : 'The notes board'} · {notes.length}
-          </span>
-          <span className="flex gap-1">
-            {!readOnly && (
-              <button type="button" data-no-drag data-el-action data-board-new
-                title={he ? 'פתק חדש' : 'New note'}
-                onClick={() => { setBoard(false); newNote(); }}
-                className="rounded bg-amber-50/85 p-1 text-amber-900 hover:bg-amber-50">
-                <Plus className="h-3.5 w-3.5" />
-              </button>
-            )}
-            <button type="button" data-no-drag data-el-action data-board-close
-              title={he ? 'חזרה לפתק' : 'Back to the note'}
-              onClick={() => setBoard(false)}
-              className="rounded bg-amber-50/85 p-1 text-amber-900 hover:bg-amber-50">
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </span>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-2" data-no-drag data-wheel>
-          {notes.length === 0 ? (
-            <div className="flex h-full items-center justify-center text-sm text-amber-50/90">
-              {he ? 'אין עדיין פתקים' : 'No notes yet'}
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {notes.map((n, i) => {
-                const cc = COLOUR(n.colour);
-                const tilt = [-2.5, 1.8, -1.2, 2.4, -0.8][i % 5];
-                return (
-                  <div key={n.id} data-board-note={n.id} className="group/pin relative pt-2"
-                    style={{ transform: `rotate(${tilt}deg)` }}>
-                    <span aria-hidden
-                      className="absolute start-1/2 top-0 z-10 h-3.5 w-3.5 -translate-x-1/2 rounded-full rtl:translate-x-1/2"
-                      style={{
-                        background: 'radial-gradient(circle at 32% 30%, #ff8a8a 0 30%, #d92c2c 55%, #8e1414 100%)',
-                        boxShadow: '0 2px 3px rgba(0,0,0,.45)',
-                      }} />
-                    <button type="button" data-no-drag data-el-action data-board-open={n.id}
-                      onClick={() => openFromBoard(n)}
-                      className="block h-24 w-full overflow-hidden rounded-[3px] p-2 text-start text-[11px] leading-5 transition-transform hover:scale-[1.03]"
-                      style={{
-                        background: `linear-gradient(160deg, ${cc.bg} 0%, ${cc.bg} 62%, ${cc.bg2} 100%)`,
-                        color: cc.text,
-                        boxShadow: '0 6px 12px -6px rgba(0,0,0,.55)',
-                      }}>
-                      <span className="line-clamp-4 whitespace-pre-wrap break-words">
-                        {titleOf(n.text, he ? '(פתק ריק)' : '(empty note)')}
-                      </span>
-                    </button>
-                    {!readOnly && (
-                      <button type="button" data-no-drag data-el-action data-board-delete={n.id}
-                        title={he ? 'הסרה' : 'Take down'}
-                        onClick={() => removeFromBoard(n)}
-                        className="absolute -end-1.5 -top-0.5 rounded-full bg-white/90 p-1 text-rose-600 opacity-0 shadow transition group-hover/pin:opacity-100">
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
+  /**
+   * There is no cork board in here any more.
+   *
+   * A sticky note used to carry a hidden board of its own pages, alongside the
+   * separate Notes board widget that gathers notes from every note on the
+   * board — two boards, one of them invisible until you found the button, and
+   * no way to say which one you meant. A sticky note is now one note; the
+   * Notes board widget is the board.
+   */
+
 
   // ── the NOTE ──────────────────────────────────────────────────────────────
   return (
@@ -366,10 +291,6 @@ export function StickyNoteWidget({ el, readOnly, isRtl, update }: {
               <button type="button" data-no-drag data-el-action data-note-redo className={iconBtn}
                 title={he ? 'שחזור' : 'Redo'} disabled={future.current.length === 0} onClick={redo}>
                 <Redo2 className="h-3.5 w-3.5" />
-              </button>
-              <button type="button" data-no-drag data-el-action data-note-board-open className={iconBtn}
-                title={he ? 'לוח הפתקים' : 'The notes board'} onClick={() => setBoard(true)}>
-                <X className="h-3.5 w-3.5" />
               </button>
             </span>
           )}

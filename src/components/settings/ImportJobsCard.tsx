@@ -8,7 +8,7 @@ import { useStore } from '../../data/store';
 import { Apartment, CanvasElement, binLabelOf, binKeyOf } from '../../types';
 import {
   extractFolderId, getFolderNameViaBackend, familyNameFromFolderName,
-  isUploadBackendConfigured,
+  isUploadBackendConfigured, shareJobFolderSurfacesNow,
 } from '../../data/driveApi';
 import {
   templateCsv, parseTemplateCsv, planImport, ImportPlan, PlannedJob, PlanContext,
@@ -47,6 +47,15 @@ export function ImportJobsCard({ onToast }: { onToast: (msg: string, type?: 'suc
   const [showSkipped, setShowSkipped] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /**
+   * What the import is doing right now.
+   *
+   * An import that lands six hundred jobs and opens six hundred Drive folders
+   * takes real time, and a button that just goes quiet for a minute reads as a
+   * failure. The bar names the stage and counts through it, and nothing else on
+   * the card can be touched until it clears.
+   */
+  const [step, setStep] = useState<{ label: string; done: number; total: number } | null>(null);
   const [clearing, setClearing] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState<string | null>(null);
 
@@ -170,9 +179,10 @@ export function ImportJobsCard({ onToast }: { onToast: (msg: string, type?: 'suc
     });
   }
 
-  function apply() {
+  async function apply() {
     if (!plan || !currentUser || busy) return;
     setBusy(true);
+    setStep({ label: 'Reading the file', done: 0, total: 0 });
     try {
       const taking = plan.planned.filter((_, i) => !excluded.has(i));
       const now = new Date().toISOString();
@@ -244,7 +254,31 @@ export function ImportJobsCard({ onToast }: { onToast: (msg: string, type?: 'suc
         };
       });
 
+      setStep({ label: 'Creating the jobs', done: 0, total: jobs.length });
       importJobs(jobs);
+
+      /**
+       * An imported job has to BE a job, and that includes its Drive folder.
+       *
+       * Saving a link by hand opens that job's Engineered Plans and Photos
+       * folders so everyone can see them; the import used to skip it, which
+       * would have left several hundred jobs whose plans only opened for
+       * whoever happened to be signed in. Awaited in small groups, with the
+       * count on screen, because this is the slow half and finishing quietly in
+       * the background is what makes an import feel like it did not work.
+       */
+      const linked = jobs.map(j => j.driveLink).filter((u): u is string => !!u);
+      if (linked.length) {
+        setStep({ label: 'Opening their plans and photos in Drive', done: 0, total: linked.length });
+        for (let i = 0; i < linked.length; i += 5) {
+          await Promise.all(linked.slice(i, i + 5).map(u => shareJobFolderSurfacesNow(u)));
+          setStep({
+            label: 'Opening their plans and photos in Drive',
+            done: Math.min(i + 5, linked.length), total: linked.length,
+          });
+        }
+      }
+
       const summary = `${jobs.length} job${jobs.length === 1 ? '' : 's'} imported`;
       setDone(summary);
       setPlan(null);
@@ -252,6 +286,7 @@ export function ImportJobsCard({ onToast }: { onToast: (msg: string, type?: 'suc
       onToast(summary);
     } finally {
       setBusy(false);
+      setStep(null);
     }
   }
 
@@ -344,6 +379,34 @@ export function ImportJobsCard({ onToast }: { onToast: (msg: string, type?: 'suc
         <div className="mt-3 flex items-center gap-2 text-xs text-gray-600">
           <Loader2 size={13} className="animate-spin" />
           Reading family names from Drive folders… {enriching.done}/{enriching.total}
+        </div>
+      )}
+
+      {/* The import, while it runs. A full-screen hold on purpose: it creates
+          hundreds of records and opens hundreds of Drive folders, and wandering
+          off to the board halfway through is how you end up with half of it. */}
+      {step && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/45 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl px-6 py-5">
+            <div className="flex items-center gap-2 mb-1">
+              <Loader2 size={16} className="animate-spin text-[#1e3a5f]" />
+              <h3 className="text-[15px] font-bold text-gray-900">Importing</h3>
+            </div>
+            <p className="text-[13px] text-gray-600 mb-3">{step.label}…</p>
+            <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden">
+              <div
+                className="h-full rounded-full transition-[width] duration-200"
+                style={{
+                  width: step.total ? `${Math.round((step.done / step.total) * 100)}%` : '35%',
+                  background: 'linear-gradient(90deg, #1e3a5f, #4aa8d8)',
+                }}
+              />
+            </div>
+            <div className="mt-2 flex items-center justify-between text-[12px] text-gray-500 tabular-nums">
+              <span>{step.total ? `${step.done} of ${step.total}` : 'Working…'}</span>
+              <span>Please leave this open until it finishes</span>
+            </div>
+          </div>
         </div>
       )}
 

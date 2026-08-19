@@ -2341,3 +2341,75 @@ A persistent chip row under the search names every shelf with its count and
 filters to one; `widget_store_shelf` remembers it per machine. Ten shelves down
 one scrolling page meant nine names were off-screen and the scroll started at
 the top again on every open.
+
+---
+
+# v2 — the viewer earns its place, and a sticky note is one note
+
+## The plan viewer: two scales, never one
+The owner's report was "blurry, and zooming refreshes all the layers every
+three seconds". Both came from the same thing: every zoom step resized all
+three canvases — which CLEARS them — and started a fresh pdf.js render of the
+whole page. On a real A0 sheet that is a second of white per step.
+
+- **`scale` is the LAYOUT scale and moves instantly**: the canvases keep the
+  bitmap they have and are given a new CSS size, so the sheet grows under your
+  hand for the cost of one style write.
+- **`raster` follows 170ms after your hand stops** and is the only thing that
+  triggers a render.
+- The render happens **off-screen and is blitted in one `drawImage`**, so the
+  plan never blinks. `drawnAt` remembers what is painted, which kills the
+  duplicate render that fitting-on-open used to cause.
+- The device ratio has a **floor of 2**, not "whatever the screen says" — an
+  ordinary monitor reports 1, which drew the sheet at exactly the pixels it
+  occupied and looked like a smear the moment you leaned in. The cap is an
+  AREA (32 MP), because an A0 at 400%×3 is a canvas the browser refuses to
+  allocate, and a refused canvas is a blank plan.
+
+**The viewer's controls are Drive's controls**: a floating pill at the bottom
+centre with the pager, −, the percentage (press to fit) and +. The top bar's
+pager and zoom are hidden while `locked`, so there is one set, not two. Plans /
+Layers / Download / Print stay in the top bar. The studio is untouched — it has
+its own rail and two toolbars.
+
+Harness: `scratchpad/planviewer.mjs` — makes a 3-page PDF with pdf-lib, serves
+it on `/api/drive-fetch`, and asserts the backing canvas is ≥2× its CSS size,
+that five fast zoom steps never leave the canvas blank, and that it re-sharpens
+when the zoom settles.
+
+## A sticky note is ONE sticky note
+`sticky-pad` used to be a pad of many pages with a cork board hidden inside it,
+while a separate `notes-board` widget gathered pages out of every pad — two
+boards, one invisible until you found the button. Now:
+- the widget is **one note** (renamed "Sticky note"); its folded corner calls
+  `spawnStickyBeside`, putting a NEW note on the board;
+- a one-time migration in `GeneralJobsPage` **splits every old multi-page pad**
+  into one note per page, laid out beside the original. Nothing is discarded,
+  and it converges — a Firestore echo of an old pad is split again;
+- `notes-board` is the only board.
+
+## The X asks before it destroys
+`whatIsLost(el)` returns, in words, what a removal would take — the words on a
+note, what is written on a sticky, everything in a widget's bag. `removeEl(id,
+ask = true)` confirms with it. **The weekly planner is exempt**: its contents
+are archived, not destroyed. A multi-select or a group removal asks ONCE for
+the whole sweep (`ask: false` on the children) — a prompt per node on fifteen
+nodes is a prompt nobody reads.
+
+## The import must produce ordinary jobs
+An imported job has to be indistinguishable from one typed by hand, and that
+includes **its Drive folder being opened up**: saving a link by hand fires
+`shareJobFolderSurfaces`, and the import skipped it, which would have left
+several hundred jobs whose plans only opened for whoever was signed in.
+`shareJobFolderSurfacesNow` is the awaitable twin; the import walks the linked
+jobs in fives **with the progress bar on screen**, and a full-screen hold keeps
+anyone from wandering off to the board halfway through. A flat job folder with
+no subfolders now shares the job folder itself.
+
+## The wallboard can say what it is
+`ScreenReport` — the Info button on the wall's bar. Reports what the browser
+thinks the window is, the device ratio, the real pixels, what `screen` says,
+and draws a one-pixel grid as a sharpness test. A 4K panel reporting 1920×1080
+at ratio 1 is the TV stretching the picture, which no change in this app can
+sharpen; anything more is ours. Read it off the actual TV before touching the
+wall's scaling.

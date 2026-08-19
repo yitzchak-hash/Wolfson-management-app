@@ -25,6 +25,7 @@ import { BOARD_THEMES, getBoardTheme, surfaceAtZoom } from '../data/boardThemes'
 import { allowed as sideAllowed, edgePushed, roomFor, shiftFor, shiftJobs, shiftNodes, Side } from '../data/boardExpand';
 import { snapBox, snapResize, Box, Guide } from '../data/snapping';
 import { MiniMap } from '../components/board/MiniMap';
+import type { StickyNoteRecord } from '../components/board/StickyNoteWidget';
 import { DriveDesktopPath } from '../components/apartment/DriveDesktopPath';
 import { DeleteImpact } from '../components/ui/DeleteImpact';
 import { BinBoard } from '../components/board/BinBoard';
@@ -1203,6 +1204,40 @@ export function GeneralJobsPage() {
     });
   }, [canvasElements, deleteCanvasElement, updateCanvasElement]);
 
+  /**
+   * A sticky note is ONE sticky note.
+   *
+   * It used to be a pad holding many pages, so a board that looks like it has
+   * three notes on it could be hiding thirty. The owner's ruling: lift every
+   * page out into its own note, and let the Notes board be the only board.
+   * Each extra page becomes a real note beside the original, keeping its text
+   * and colour — nothing is thrown away. Converges: a later Firestore echo of
+   * an old multi-page pad is split again, and a pad already down to one page is
+   * left alone.
+   */
+  useEffect(() => {
+    const pads = canvasElements.filter(el =>
+      el.type === 'widget' && el.widget === 'sticky-pad'
+      && ((el.data?.notes as StickyNoteRecord[] | undefined)?.length ?? 0) > 1);
+    if (!pads.length) return;
+    pads.forEach(pad => {
+      const notes = (pad.data?.notes ?? []) as StickyNoteRecord[];
+      const [first, ...rest] = notes;
+      updateCanvasElement(pad.id, { data: { ...(pad.data ?? {}), notes: [first], openId: first.id } });
+      rest.forEach((n, i) => addCanvasElement({
+        addedAt: new Date().toISOString(),
+        id: 'CE-' + Math.random().toString(36).slice(2, 9),
+        type: 'widget', widget: 'sticky-pad',
+        ...(pad.board ? { board: pad.board } : {}),
+        x: Math.round(pad.x + (i + 1) * (pad.w + 20)),
+        y: Math.round(pad.y),
+        w: pad.w, h: pad.h,
+        text: '', color: 'transparent',
+        data: { notes: [n], openId: n.id },
+      }));
+    });
+  }, [canvasElements, updateCanvasElement, addCanvasElement]);
+
   const stages = allStages.filter(st => st.projectId === 'general');
   const stageMap = new Map(stages.map(st => [st.id, st]));
   // Jobs in a bin (Done / Ready / Archive / Trash) live in their own window,
@@ -1903,8 +1938,39 @@ export function GeneralJobsPage() {
    * board, not in any notebook, gone from the workspace as far as anyone
    * looking could tell. Every job this node was holding comes back out first.
    */
-  function removeEl(id: string) {
+  /**
+   * How much would be lost if this went — in plain words, or '' for nothing.
+   *
+   * The X used to take a widget and everything in it without a word. A note
+   * somebody wrote, a list somebody kept, a map somebody positioned: gone on
+   * one press of a small button that sits next to Settings. The weekly planner
+   * is the exception and stays silent, because its contents are ARCHIVED rather
+   * than destroyed — putting a fresh one down brings the season's planning back.
+   */
+  function whatIsLost(el: CanvasElement | undefined): string {
+    if (!el) return '';
+    if (el.widget === 'rota' || el.widget === 'week-planner') return '';
+    const d = (el.data ?? {}) as Record<string, unknown>;
+    if (el.widget === 'sticky-pad') {
+      const notes = (d.notes as StickyNoteRecord[] | undefined) ?? [];
+      return notes.some(n => n.text.trim()) ? 'what is written on this note' : '';
+    }
+    if (el.type === 'note' || el.type === 'box' || el.type === 'title') {
+      return el.text?.trim() ? 'the words on it' : '';
+    }
+    if (el.type !== 'widget') return '';
+    // A widget with anything of its own in its bag has something to lose. The
+    // keys a widget is BORN with are not somebody's work, so they do not count.
+    const own = Object.entries(d).filter(([k, v]) =>
+      k !== 'title' && k !== 'sample' && v !== '' && v != null
+      && !(Array.isArray(v) && v.length === 0));
+    return own.length ? 'everything kept inside this widget' : '';
+  }
+
+  function removeEl(id: string, ask = true) {
     const el = canvasElements.find(e => e.id === id);
+    const lost = ask ? whatIsLost(el) : '';
+    if (lost && !window.confirm(`Remove this? You will lose ${lost}, and it cannot be undone.`)) return;
     archivePlanner(el);
     if (el && currentUser) {
       apartments
@@ -1924,8 +1990,8 @@ export function GeneralJobsPage() {
     const key = binKeyOf(el);
     const inside = apartments.filter(a => a.boardBin === key);
     inside.forEach(a => moveToBin(a.id, null));
-    canvasElements.filter(n => n.board === key).forEach(n => removeEl(n.id));
-    removeEl(el.id);
+    canvasElements.filter(n => n.board === key).forEach(n => removeEl(n.id, false));
+    removeEl(el.id, false);
     setToast(inside.length
       ? `Group removed — ${inside.length} ${inside.length === 1 ? 'job' : 'jobs'} back on the board`
       : 'Group removed');
@@ -2224,8 +2290,18 @@ export function GeneralJobsPage() {
     // hidden from the menu — otherwise the Delete key could still remove one.
     const removable = ids.filter(id => canvasElements.find(e => e.id === id)?.type !== 'bin');
     if (removable.length === 0) return;
-    if (!window.confirm('Delete selected items?')) return;
-    removable.forEach(id => removeEl(id));
+    // Asked ONCE for the whole selection, naming what is at stake — a prompt
+    // per node on a sweep of fifteen is a prompt nobody reads.
+    const lost = [...new Set(removable
+      .map(id => whatIsLost(canvasElements.find(e => e.id === id)))
+      .filter(Boolean))];
+    const msg = removable.length === 1
+      ? (lost[0] ? `Remove this? You will lose ${lost[0]}, and it cannot be undone.` : 'Remove this?')
+      : lost.length
+        ? `Remove ${removable.length} things? You will lose ${lost.join(', ')}, and it cannot be undone.`
+        : `Remove ${removable.length} things?`;
+    if (!window.confirm(msg)) return;
+    removable.forEach(id => removeEl(id, false));
     setSelectedElIds(new Set());
     setCtxMenu(null);
   }

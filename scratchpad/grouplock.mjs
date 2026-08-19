@@ -173,8 +173,17 @@ const o1 = await originOf();
 await page.locator('button[title="Zoom out"]').click();
 await page.waitForTimeout(350);
 const o2 = await originOf();
-check(o1.z < o0.z && o1.y === o0.y && o2.y === o0.y,
-  `the corner holds through zoom-out (${o0.y} → ${o1.y} → ${o2.y})`);
+/*
+  The corner still holds — at the MARGIN, which is a board measurement and so
+  shrinks on screen as you zoom out. y = headerBottom + margin x zoom. The old
+  form of this check asserted the raw pan never moved, which was right until the
+  margin started applying to the locked edges too.
+*/
+const MARGIN = 28;
+const hr = o0.y - MARGIN * o0.z;
+const at = o => Math.abs(o.y - (hr + MARGIN * o.z)) <= 1;
+check(o1.z < o0.z && at(o1) && at(o2),
+  `the corner holds through zoom-out (${o0.y} → ${o1.y} → ${o2.y}, margin ${MARGIN}px in board units)`);
 
 // ── A locked edge never asks for room ──
 await page.locator('button[title="Zoom in"]').click();

@@ -431,25 +431,42 @@ export function ensureDriveShared(fileId: string | null | undefined): void {
  * costs nothing.
  */
 export function shareJobFolderSurfaces(driveLink: string | null | undefined): void {
-  if (!driveLink || !DRIVE_API_KEY) return;
+  void shareJobFolderSurfacesNow(driveLink);
+}
+
+/**
+ * The same work, but awaitable.
+ *
+ * The IMPORT needs this: it lands hundreds of jobs at once and the office has
+ * to be told when their plans and photos are actually open, not left guessing
+ * while several hundred fire-and-forget requests trickle out behind a screen
+ * that has already said "done". Resolves true when something was shared.
+ */
+export async function shareJobFolderSurfacesNow(driveLink: string | null | undefined): Promise<boolean> {
+  if (!driveLink || !DRIVE_API_KEY) return false;
   const folderId = extractFolderId(driveLink);
-  if (!folderId) return;
+  if (!folderId) return false;
   let done: string[] = [];
   try { done = JSON.parse(localStorage.getItem('shared_job_folders') ?? '[]'); } catch { /* fresh */ }
-  if (done.includes(folderId)) return;
-  void (async () => {
+  if (done.includes(folderId)) return false;
+  try {
+    const files = await listFolderViaBackend(folderId);
+    const plans = files.find(f => f.mimeType === FOLDER_MIME && isEngineeredPlansFolder(f.name));
+    const photos = files.find(f => f.mimeType === FOLDER_MIME && /^photos?$/i.test(f.name));
+    // Some job folders are flat — no subfolders, the sheets sit in the root.
+    // Sharing the job folder itself is then the only thing that opens them.
+    if (!plans && !photos) await shareFileToDrive(folderId);
+    if (plans) await shareFileToDrive(plans.id);
+    if (photos) await shareFileToDrive(photos.id);
     try {
-      const files = await listFolderViaBackend(folderId);
-      const plans = files.find(f => f.mimeType === FOLDER_MIME && isEngineeredPlansFolder(f.name));
-      const photos = files.find(f => f.mimeType === FOLDER_MIME && /^photos?$/i.test(f.name));
-      if (plans) ensureDriveShared(plans.id);
-      if (photos) ensureDriveShared(photos.id);
-      try {
-        const now: string[] = JSON.parse(localStorage.getItem('shared_job_folders') ?? '[]');
-        if (!now.includes(folderId)) localStorage.setItem('shared_job_folders', JSON.stringify([...now, folderId].slice(-400)));
-      } catch { /* private mode */ }
-    } catch { /* offline — the next save or open retries */ }
-  })();
+      const now: string[] = JSON.parse(localStorage.getItem('shared_job_folders') ?? '[]');
+      if (!now.includes(folderId)) localStorage.setItem('shared_job_folders', JSON.stringify([...now, folderId].slice(-400)));
+    } catch { /* private mode */ }
+    return true;
+  } catch {
+    // Offline or refused — NOT recorded, so the next save or open tries again.
+    return false;
+  }
 }
 
 /** Find or create a subfolder by name under a parent, via the backend service account. */
