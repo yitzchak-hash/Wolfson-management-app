@@ -1243,6 +1243,55 @@ export function GeneralJobsPage() {
     return { x: el.x, y: el.y, w: el.w, h: el.h };
   }
 
+  /**
+   * The outline a group shows WHILE one of its members is picked.
+   *
+   * Invisible at rest is the point of these groups — but a thing that silently
+   * drags its neighbours around is a surprise, so the moment you touch any
+   * member the whole group draws its box. One rectangle per group, from the
+   * union of every member's LIVE rect (`jobPos` / `elPos` already carry a drag
+   * or resize in progress), so the outline travels with the group rather than
+   * being left behind at the old position.
+   */
+  const groupOutlines = useMemo(() => {
+    const wanted = new Set<string>();
+    selectedJobIds.forEach(id => {
+      const g = jobs.find(j => j.id === id)?.boardGroup;
+      if (g) wanted.add(g);
+    });
+    selectedElIds.forEach(id => {
+      const g = canvasElements.find(c => c.id === id)?.boardGroup;
+      if (g) wanted.add(g);
+    });
+    if (!wanted.size) return [];
+
+    const boxes = new Map<string, { x0: number; y0: number; x1: number; y1: number; n: number }>();
+    const add = (g: string, x: number, y: number, w: number, h: number) => {
+      const b = boxes.get(g) ?? { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity, n: 0 };
+      b.x0 = Math.min(b.x0, x); b.y0 = Math.min(b.y0, y);
+      b.x1 = Math.max(b.x1, x + w); b.y1 = Math.max(b.y1, y + h);
+      b.n++;
+      boxes.set(g, b);
+    };
+    jobs.forEach((j, i) => {
+      if (!j.boardGroup || !wanted.has(j.boardGroup)) return;
+      const p = jobPos(j, i);
+      add(j.boardGroup, p.x, p.y, TILE_W, TILE_H);
+    });
+    onThisBoard.forEach(el => {
+      if (!el.boardGroup || !wanted.has(el.boardGroup)) return;
+      // An arrow has no box and attached art wears its host's — neither is a
+      // corner of anything.
+      if (el.type === 'arrow' || el.attachedTo) return;
+      const p = elPos(el);
+      add(el.boardGroup, p.x, p.y, p.w, p.h);
+    });
+    return [...boxes.entries()]
+      .filter(([, b]) => b.n > 1 && Number.isFinite(b.x0))
+      .map(([g, b]) => ({ id: g, x: b.x0, y: b.y0, w: b.x1 - b.x0, h: b.y1 - b.y0, n: b.n }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedJobIds, selectedElIds, jobs, onThisBoard, canvasElements, drag, resize, activeBoardView]);
+
   // ── Bins ──────────────────────────────────────────────────────────
   // Bins are just nodes, so a custom one is as real as a built-in one.
   const binNodes = canvasElements.filter(el => el.type === 'bin' && !el.board);
@@ -4531,6 +4580,31 @@ export function GeneralJobsPage() {
                   ...(g.axis === 'x'
                     ? { left: g.at, top: g.from, width: 1.5 / zoom, height: g.to - g.from }
                     : { left: g.from, top: g.at, height: 1.5 / zoom, width: g.to - g.from }),
+                }} />
+            ))}
+          </div>
+        )}
+
+        {/* A group, while one of its members is picked.
+            Indigo to match the group chip rather than the selection blue, so
+            "these travel together" and "this is what you have hold of" read as
+            two different things. Constant SCREEN thickness and padding — at
+            25% a world-space outline is a hairline, and this is a marker, not
+            part of the drawing. */}
+        {groupOutlines.length > 0 && (
+          <div className="absolute pointer-events-none"
+            style={{
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+              transformOrigin: '0 0', left: 0, top: 0, width: 1, height: 1, zIndex: 44,
+            }}>
+            {groupOutlines.map(g => (
+              <div key={g.id} data-group-outline className="absolute"
+                style={{
+                  left: g.x - 10 / zoom, top: g.y - 10 / zoom,
+                  width: g.w + 20 / zoom, height: g.h + 20 / zoom,
+                  border: `${1.5 / zoom}px dashed #4338ca`,
+                  borderRadius: 14 / zoom,
+                  backgroundColor: 'rgba(67,56,202,.045)',
                 }} />
             ))}
           </div>

@@ -2054,9 +2054,16 @@ armed eraser down (by design) and reads as a failed toggle.
 `Apartment.boardGroup` / `CanvasElement.boardGroup` — a shared STRING, not a
 container record, so a grouped tile is still an ordinary tile in every count,
 report, export and backup, and ungrouping one thing is clearing one field.
-Nothing is drawn around a group (the owner asked for grouping you feel, not
-see); the only sign is an indigo chip beside the lock, and pressing that chip
-takes **only that one thing** out. Right-click offers `Group these N` (needs
+Nothing is drawn around a group AT REST (the owner asked for grouping you feel,
+not see) — but the moment ANY member is selected the whole group draws a dashed
+indigo box (`groupOutlines`, `data-group-outline`), because a thing that
+silently drags its neighbours is otherwise a surprise. The box is the union of
+every member's LIVE rect, read through `jobPos`/`elPos`, so it travels with a
+drag instead of being left behind; its border and padding are divided by zoom
+(a marker, not part of the drawing) and it is indigo rather than the selection
+blue, so "these travel together" and "this is what you have hold of" stay two
+different statements. A chip beside the lock is the per-item sign, and pressing
+that chip takes **only that one thing** out. Right-click offers `Group these N` (needs
 two) and `Ungroup`.
 
 - `withGroupJobs` / `withGroupEls` expand a drag's id list to the whole group,
@@ -2118,6 +2125,6 @@ add-before, last carries add-after; a week put away in that direction turns the
 plus into an eye). Month rules are `textSize + 2` — they are the landmark the
 eye scans for.
 
-Harness: `scratchpad/grouplock.mjs` (19 checks). **Grab the MIDDLE of a tile in
+Harness: `scratchpad/grouplock.mjs` (23 checks). **Grab the MIDDLE of a tile in
 a harness** — the top strip is buttons now, and a press up there is a button
 press, which reads as "dragging does nothing".

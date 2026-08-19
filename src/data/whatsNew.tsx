@@ -36,9 +36,10 @@ export const WHATS_NEW: WhatsNewEntry[] = [
       {
         title: 'Group things together, invisibly',
         body: 'Pick a few jobs or notes, right-click, and choose Group. Nothing is '
-          + 'drawn around them — but drag any one of them and the whole group travels. '
-          + 'A small blue chip appears beside the lock; press it on one thing and only '
-          + 'that thing leaves the group.',
+          + 'drawn around them while you work — but click any one of them and a dashed '
+          + 'outline shows the whole group, so you always know what will travel '
+          + 'together. Drag any member and they all move. A small blue chip appears '
+          + 'beside the lock; press it on one thing and only that thing leaves.',
         demo: 'drag',
       },
       {

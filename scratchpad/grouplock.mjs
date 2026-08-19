@@ -100,9 +100,32 @@ const g = await stored();
 check(!!g.jobs['G-g1'].group && g.jobs['G-g1'].group === g.jobs['G-g2'].group, 'both tiles share one group id');
 check(g.jobs['G-g3'].group === null, 'an unselected tile is left alone');
 
-// Nothing is drawn around it: the group has no box of its own on the board.
-const groupBoxes = await page.locator('[data-group-box]').count();
-check(groupBoxes === 0, 'the group is invisible — no box drawn');
+// Invisible at REST, outlined the moment a member is picked.
+await page.keyboard.press('Escape');
+await page.waitForTimeout(300);
+check(await page.locator('[data-group-outline]').count() === 0,
+  'with nothing selected the group is invisible');
+
+const b1 = await box('G-g1');
+await page.mouse.click(b1.x + b1.width / 2, b1.y + b1.height / 2);
+await page.waitForTimeout(350);
+check(await page.locator('[data-group-outline]').count() === 1,
+  'picking ONE member outlines the group');
+
+// The outline must cover BOTH members, not just the one that was clicked.
+const cover = await page.evaluate(() => {
+  const o = document.querySelector('[data-group-outline]').getBoundingClientRect();
+  const inside = id => {
+    const r = document.querySelector(`[data-node-id="${id}"]`).getBoundingClientRect();
+    return r.left >= o.left - 1 && r.right <= o.right + 1
+      && r.top >= o.top - 1 && r.bottom <= o.bottom + 1;
+  };
+  // BOTH axes: G-g3 sits below the pair but shares their x-range, so a
+  // left/right-only test would call the outline wrong when it is right.
+  return { one: inside('G-g1'), two: inside('G-g2'), holdsOutsider: inside('G-g3') };
+});
+check(cover.one && cover.two, 'the outline covers the whole group, not just what was clicked');
+check(!cover.holdsOutsider, 'and does not swallow a tile outside the group');
 
 // ── Dragging one member carries the other ──
 const before = await stored();
@@ -115,6 +138,14 @@ const moved2 = { dx: after.jobs['G-g2'].x - before.jobs['G-g2'].x, dy: after.job
 check(moved1.dx > 60 && Math.abs(moved1.dx - moved2.dx) <= 2 && Math.abs(moved1.dy - moved2.dy) <= 2,
   `dragging one member carried the other (${JSON.stringify(moved1)} vs ${JSON.stringify(moved2)})`);
 check(after.jobs['G-g3'].x === before.jobs['G-g3'].x, 'a tile outside the group stayed put');
+
+// The outline travels with the group rather than being left behind.
+const followed = await page.evaluate(() => {
+  const o = document.querySelector('[data-group-outline]')?.getBoundingClientRect();
+  const r = document.querySelector('[data-node-id="G-g1"]').getBoundingClientRect();
+  return o ? Math.abs(o.left - r.left) < 40 : false;
+});
+check(followed, 'the outline moved with the group');
 
 // ── The chip beside the lock takes ONE thing out ──
 const j2 = page.locator('[data-node-id="G-g2"]');
