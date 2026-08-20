@@ -22,6 +22,34 @@ The entire admin UI and contractor portal are fully bilingual (English/Hebrew wi
 ## Repository
 `yitzchak-hash/wolfson-management-app` — development branch: `claude/blissful-cray-spTFY`
 
+### STANDING RULE — every round ends on the production branch
+**There is no branch called `main`.** The repo's default branch — the one Vercel
+deploys to `wolfson-management-app.vercel.app` — is
+**`claude/blissful-cray-spTFY`**. When the owner says "push to main", that is
+the branch he means: work sitting anywhere else only ever produces a PREVIEW
+build behind Vercel's sign-in.
+
+So, at the end of every round, without being asked again:
+1. commit everything and push the working branch;
+2. **fast-forward `claude/blissful-cray-spTFY` to it** and push that too.
+
+Before pushing, prove nothing is being dropped — do not assume:
+- `git merge-base --is-ancestor origin/claude/blissful-cray-spTFY HEAD`
+  must succeed. If it does, the push is a fast-forward and no commit can be
+  lost. **If it does NOT, stop and merge** — never force.
+- Check the other live branches for content that exists nowhere else:
+  `comm -23 <(git ls-tree -r --name-only origin/<branch> | sort)
+            <(git ls-tree -r --name-only HEAD | sort)`
+  Old branches carry hundreds of commits whose SHAs differ because they were
+  squashed in — that is not lost work, and a commit count says nothing. The
+  file list is what answers the question.
+
+Audited 2026-08-29: `claude/tzviair-platform` has 205 commits not reachable
+from the production branch and **zero files** missing from it;
+`claude/firebase-save-diagnostics-Px3rx` has 57 and one missing file,
+`SYNC_REPORT.md`, a June diagnostics note rather than code (its fixes — the
+cloud-sync badge, dropping `persistentLocalCache` — are all in the tree).
+
 ## Deployment
 - **Hosting**: Vercel (connected to GitHub repo, auto-deploys on push)
 - **Serverless API**: `/api` folder at repo root — Vercel auto-deploys each `.js` file as a serverless function
