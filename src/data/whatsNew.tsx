@@ -30,6 +30,42 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-08-29',
+    title: 'Groups drag like the board, and the plan bar is one row',
+    items: [
+      {
+        title: 'Drag the canvas inside a group',
+        body: 'A plain drag on empty space inside a group now moves the board around, '
+          + 'exactly as it does outside. Hold Ctrl to draw a selection box instead. The '
+          + 'board also stops shuffling itself while you are still holding something — it '
+          + 'closes up any empty edge once you let go, not during.',
+        demo: 'drag',
+      },
+      {
+        title: 'Only files you can actually open show up as plans',
+        body: 'DWGs and other drawing files no longer appear as chips over the plan — '
+          + 'Drive was labelling them as pictures and they opened onto nothing. Photos '
+          + 'of a riser or a panel do show up and can be marked up like any sheet.',
+        demo: 'list',
+      },
+      {
+        title: 'One bar over the plan',
+        body: 'The file name, the pin, Plans, Layers, Download and Print have moved up '
+          + 'into the blue bar, to the left of the folder picker — so there is one row '
+          + 'over the sheet instead of two, and no scrollbar under the file chips.',
+        demo: 'tap',
+      },
+      {
+        title: 'The TikTok reel plays, and fits its box',
+        body: 'Press play and the video starts. There is a separate button for walking '
+          + 'through the reel by itself, and a setting for starting on its own. The video '
+          + 'is now drawn the right shape for whatever size you have made the widget, '
+          + 'instead of being stretched across it.',
+        demo: 'zoom',
+      },
+    ],
+  },
+  {
     date: '2026-08-28',
     title: 'Drawing inside a group, and spacing that lines itself up',
     items: [

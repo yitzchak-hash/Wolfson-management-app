@@ -103,6 +103,8 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
   });
   /** A grab-pan in progress: where the scroll and the pointer both started. */
   const panning = useRef<{ px: number; py: number; sx: number; sy: number } | null>(null);
+  /** Panning right now — a ref cannot repaint the cursor, so this rides along. */
+  const [grabbing, setGrabbing] = useState(false);
   const [panMode, setPanMode] = useState(false);
   /**
    * Ctrl/⌘ + drag on empty surface picks everything the box touches.
@@ -1168,7 +1170,7 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
             onScroll={readView}
             className="absolute inset-0 overflow-auto"
             style={{
-              cursor: panning.current ? 'grabbing'
+              cursor: grabbing ? 'grabbing'
                 : panMode ? 'grab'
                 : drawMode ? 'crosshair'
                 // The eraser draws its own outline, so the arrow would be a
@@ -1196,6 +1198,7 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
             onPointerUp={e => {
               if (panning.current) {
                 panning.current = null;
+                setGrabbing(false);
                 (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
                 return;
               }
@@ -1239,6 +1242,7 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
                   px: e.clientX, py: e.clientY,
                   sx: surfaceRef.current.scrollLeft, sy: surfaceRef.current.scrollTop,
                 };
+                setGrabbing(true);
                 (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
                 return;
               }
@@ -1254,6 +1258,23 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
                 return;
               }
               setSelected(new Set());
+              /**
+               * A plain left-drag on empty surface MOVES THE BOARD.
+               *
+               * The main board's default, and the gesture everybody arrives
+               * with from every map and every canvas. A group had it only on
+               * the middle button and on space — so "I still can't drag the
+               * canvas, just like I do with the main canvas". Ctrl still turns
+               * it into a lasso, exactly as outside.
+               */
+              if (e.button === 0 && surfaceRef.current) {
+                panning.current = {
+                  px: e.clientX, py: e.clientY,
+                  sx: surfaceRef.current.scrollLeft, sy: surfaceRef.current.scrollTop,
+                };
+                setGrabbing(true);
+                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+              }
             }}
             onContextMenu={e => {
               if (!(e.target as HTMLElement).dataset.binSurface) return;

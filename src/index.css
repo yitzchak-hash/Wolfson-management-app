@@ -560,6 +560,17 @@ main > * { min-width: 0; }
     -webkit-mask-image: linear-gradient(to left, black calc(100% - 14px), transparent);
     mask-image: linear-gradient(to left, black calc(100% - 14px), transparent);
   }
+
+  /**
+   * A scroller with no scrollbar drawn.
+   *
+   * For a short row of chips inside a toolbar, where a grey trough under the
+   * buttons is a second piece of furniture saying what `.edge-fade` already
+   * says. It still scrolls — by wheel, by drag, by keyboard — this only stops
+   * the bar being painted.
+   */
+  .no-bar { scrollbar-width: none; -ms-overflow-style: none; }
+  .no-bar::-webkit-scrollbar { width: 0; height: 0; display: none; }
 }
 
 /**

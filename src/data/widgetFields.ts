@@ -350,6 +350,25 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
       options: [{ value: '1', label: 'Yes' }, { value: '', label: 'Only when I press next' }],
     },
     { key: 'seconds', label: 'Seconds on each', kind: 'number', min: 5, max: 600 },
+    {
+      /**
+       * Whether the VIDEO starts — not the same thing as `auto`, which only
+       * moves on to the next link. The reel could sit there advancing through
+       * a dozen videos without one of them ever playing, which is exactly what
+       * the office saw.
+       */
+      key: 'autoplay', label: 'Start playing on its own', kind: 'select',
+      options: [{ value: '1', label: 'Yes' }, { value: '', label: 'Wait for me to press play' }],
+      hint: 'A browser will usually only start a video with sound after you have pressed '
+        + 'something on the page, so the first one may wait for you.',
+    },
+    {
+      key: 'fill', label: 'How it fits the box', kind: 'select',
+      options: [
+        { value: '', label: 'Whole video, letterboxed' },
+        { value: '1', label: 'Fill the box, cropped' },
+      ],
+    },
   ],
   'btu-hp': [
     title(),

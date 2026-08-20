@@ -2909,3 +2909,69 @@ without it, dragging over one notebook lit the other.
 **A notebook you cannot edit is not a drop target.** A projection, the
 wallboard and the worker's portal all draw a notebook read-only, and none of
 them registers a probe.
+
+---
+
+# v2 — the group drags, the reel plays, and only files that open show up
+
+## A plain left-drag inside a group MOVES THE BOARD
+The group had panning on the middle button and on space, and nothing on plain
+left-drag — so the one gesture everybody arrives with from every map did
+nothing, which is what "I still can't drag the canvas, just like I do with the
+main canvas" was. It is the board's own default now; Ctrl still turns it into a
+lasso, exactly as outside. `grabbing` is a scrap of STATE beside
+`panning.current`, because a ref cannot repaint the cursor.
+
+## Only files that open become chips
+`isViewableFile` in `driveApi.ts` decides by the file's EXTENSION whenever it
+has one, and only consults the mime for a file with none. **Drive's mime lies
+about CAD**: a `.dwg` commonly arrives as `image/vnd.dwg`, which sailed
+straight through the old `image/*` test and put chips in the plan row for
+files that show nothing when pressed. The image list is what a BROWSER can
+draw, not what counts as a picture — HEIC and TIFF are images and neither
+renders in Chrome, so a chip for one opens onto nothing.
+
+`VIEWABLE_EXTENSIONS` is exported and checked offline: a list of file types is
+exactly the kind of thing that rots quietly.
+
+## One bar over the sheet, and the viewer's controls at its left
+`PlanAnnotator` takes `barInto?: HTMLElement | null`. Given a slot, its WHOLE
+bar row is portalled into it and nothing is drawn in place — background and
+padding dropped with it, because it is joining a bar rather than putting a
+second one inside the first. The drawer offers that slot as the FIRST thing in
+`planControls()`, so the file name, the pin, Plans, Layers, Download and Print
+sit ahead of the folder picker and the chips.
+
+Two slots now, and they are not the same thing: `barExtrasRef` is a slot the
+ANNOTATOR offers so the punch-list pin can sit beside the file name;
+`barInto` is a slot the DRAWER offers so the annotator's bar can move into the
+drawer's own row.
+
+`.no-bar` in `index.css` — a scroller that still scrolls but paints no
+scrollbar. For a short row of chips inside a toolbar, where a grey trough is a
+second piece of furniture saying what `.edge-fade` already says.
+
+## The TikTok reel
+Three separate faults, one of which was hiding the others:
+- **Play played nothing.** The button toggled the auto-ADVANCE timer, so a reel
+  could walk through a dozen links without one of them ever playing. The player
+  is a third-party iframe with no transport reachable from outside, so the only
+  lever is to RE-MOUNT it asking for autoplay — `playToken` in the frame's
+  `key`. Pressing the button is itself the user gesture a browser wants before
+  it will start a video. Play (this one) and Repeat (move on by itself) are now
+  two buttons, because they were always two things.
+- **`autoplay` is its own setting**, separate from `auto`, which only advances.
+- **The frame is fitted 9:16 inside the node**, measured with a ResizeObserver
+  and centred, so the video is as big as the box allows and the right shape.
+  `fill` crops to the box instead.
+
+**Not verified end to end**: this container has no internet, so the harness
+stubs tiktok.com. Shape, settings and the autoplay parameter are asserted;
+whether the video actually plays needs a real machine.
+
+Harness: `scratchpad/round17.mjs`. Its own traps, both of which reported a
+working thing as broken: the group's overview panel sits bottom-right, so a
+press aimed at that corner hits the chrome (find empty surface with
+`elementFromPoint` instead of guessing), and sixteen tiles lay out four across
+at 928px — inside a 1080px window, so the surface had nothing to scroll and
+the drag genuinely had nowhere to go.

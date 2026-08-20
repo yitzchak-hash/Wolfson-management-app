@@ -184,6 +184,45 @@ if (layersBtn) {
   check(/Plans/.test(bars.viewerBar) && /Layers/.test(bars.viewerBar)
     && /Download/.test(bars.viewerBar) && /Print/.test(bars.viewerBar),
     'and it still carries Plans, Layers, Download and Print');
+
+  // ── One row, viewer controls at its LEFT-hand end ─────────────────────
+  const order = await page.evaluate(() => {
+    const drawer = document.querySelector('.drawer-panel');
+    // Trimmed: a button's textContent carries the whitespace around its icon,
+    // so an anchored regex against the raw string never matches.
+    const btn = t => [...drawer.querySelectorAll('button')]
+      .find(b2 => new RegExp(t, 'i').test((b2.textContent ?? '').replace(/\s+/g, ' ').trim())
+        || new RegExp(t, 'i').test(b2.getAttribute('title') ?? ''));
+    const x = e => (e ? Math.round(e.getBoundingClientRect().left) : null);
+    const top = e => (e ? Math.round(e.getBoundingClientRect().top) : null);
+    const plans = btn('^Plans$');
+    const layers = btn('^Layers ?\\d*$');
+    const markUp = btn('Mark up');
+    const picker = btn('Choose a folder inside Engineered Plans');
+    return {
+      plans: x(plans), layers: x(layers), markUp: x(markUp), picker: x(picker),
+      tops: [top(plans), top(layers), top(markUp)],
+    };
+  });
+  console.log('       order:', JSON.stringify(order));
+  check(order.plans !== null && order.markUp !== null && order.plans < order.markUp,
+    'the viewer controls sit to the LEFT of Mark up', JSON.stringify(order));
+  check(order.picker === null || order.plans < order.picker,
+    'and to the left of the folder picker when there is one', JSON.stringify(order));
+  const tops = order.tops.filter(t => t !== null);
+  check(tops.length > 1 && Math.max(...tops) - Math.min(...tops) <= 2,
+    'and all of it is one row, not two', JSON.stringify(tops));
+
+  // The chip row scrolls without painting a scrollbar over the sheet.
+  const chipBar = await page.evaluate(() => {
+    const el = document.querySelector('.drawer-panel .no-bar');
+    if (!el) return null;
+    return { scrollable: el.scrollWidth > el.clientWidth,
+             barPx: el.offsetHeight - el.clientHeight };
+  });
+  console.log('       chip row:', JSON.stringify(chipBar));
+  check(chipBar === null || chipBar.barPx === 0,
+    'the chip row draws no scrollbar', JSON.stringify(chipBar));
 }
 
 // ── All layers on and off in one press ────────────────────────────────────

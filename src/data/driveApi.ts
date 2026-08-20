@@ -799,11 +799,47 @@ export async function listMarkableViaBackend(folderId: string): Promise<PlanEntr
   }
 }
 
-const isImageFile = (f: { name: string; mimeType: string }) =>
-  /^image\//i.test(f.mimeType) || /\.(png|jpe?g|webp|gif|bmp|heic)$/i.test(f.name);
+/**
+ * Which files can actually be OPENED and drawn on — and nothing else.
+ *
+ * Decided by the file's EXTENSION whenever it has one, because Drive's own
+ * mime type lies about CAD: a `.dwg` commonly arrives as `image/vnd.dwg`,
+ * which sailed straight through an `image/*` test and put chips in the plan
+ * row for files that show nothing when you press them. The office's words:
+ * "there's no reason for DWG files or files that don't open to show up as
+ * bubbles". The mime is consulted only for a file with no extension at all.
+ *
+ * The image list is what a BROWSER can draw, not what counts as a picture:
+ * HEIC and TIFF are images and neither renders in Chrome, so a chip for one
+ * is a chip that opens onto nothing.
+ *
+ * Exported so the rule can be checked offline — it is a list of file types,
+ * which is exactly the kind of thing that rots quietly.
+ */
+export const VIEWABLE_EXTENSIONS = [
+  'pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif',
+] as const;
+
+const extOf = (name: string): string | null => {
+  const m = /\.([A-Za-z0-9]{1,5})\s*$/.exec(String(name ?? '').trim());
+  return m ? m[1].toLowerCase() : null;
+};
+
+export function isViewableFile(f: { name: string; mimeType: string }): boolean {
+  const ext = extOf(f.name);
+  if (ext) return (VIEWABLE_EXTENSIONS as readonly string[]).includes(ext);
+  const mime = String(f.mimeType ?? '');
+  if (/^application\/pdf$/i.test(mime)) return true;
+  // An `image/*` with no extension to check: still refuse the ones a browser
+  // cannot draw, all of which arrive wearing an image mime.
+  return /^image\//i.test(mime) && !/dwg|dxf|dgn|tiff?|heic|heif|vnd\.adobe/i.test(mime);
+}
+
 const isPdfFile = (f: { name: string; mimeType: string }) =>
-  /pdf/i.test(f.mimeType) || /\.pdf$/i.test(f.name);
-const markable = (f: { name: string; mimeType: string }) => isPdfFile(f) || isImageFile(f);
+  extOf(f.name) === 'pdf' || (!extOf(f.name) && /^application\/pdf$/i.test(f.mimeType));
+const isImageFile = (f: { name: string; mimeType: string }) =>
+  isViewableFile(f) && !isPdfFile(f);
+const markable = isViewableFile;
 
 /**
  * Everything the chip row needs, from the job's own Drive link.

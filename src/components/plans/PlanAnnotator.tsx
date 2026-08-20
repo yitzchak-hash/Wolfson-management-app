@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X, Undo2, Redo2, Trash2, HardDrive, AlertTriangle, SquareDashedMousePointer,
   Save, Printer, Download, ChevronLeft, ChevronRight,
@@ -184,7 +185,7 @@ export interface PlanChoice {
 export function PlanAnnotator({
   planFileId, planName, apartmentId, apartmentLabel, driveFolderUrl, plansFolderId,
   authorName, readOnly = false, askWho = false, people = [], plans = [], embedded = false,
-  barExtrasRef,
+  barExtrasRef, barInto,
   touchScale = 1,
   onClose, onToast, onPickPlan, onStartMarkup,
 }: {
@@ -218,6 +219,18 @@ export function PlanAnnotator({
    * note at the slot itself.
    */
   barExtrasRef?: (el: HTMLElement | null) => void;
+  /**
+   * Draw this bar somewhere else entirely — the host's own bar.
+   *
+   * The drawer used to stack two bars over one sheet: its navy header carrying
+   * the folder picker and the file chips, and this one underneath carrying the
+   * file's name, the pin, Plans, Layers, Download and Print. The owner asked
+   * for one row, with these controls at its LEFT-hand end, ahead of the folder
+   * picker — so when a host offers a slot, the whole row is portalled into it
+   * and nothing is drawn in place. Its own background and padding are dropped
+   * with it: it is joining a bar, not putting a second one inside the first.
+   */
+  barInto?: HTMLElement | null;
   /**
    * The wallboard is shared — whoever walks up to it is not "the office".
    * When this is on, the editor asks who is drawing before it will let anyone
@@ -2305,9 +2318,24 @@ export function PlanAnnotator({
           row — Close — is pushed off the screen with no way to reach it. The
           two that must always be there are pinned to the right-hand edge and
           everything else runs under them. */}
-      <div className={`flex items-center gap-2 py-2 flex-shrink-0 ${
-        compact ? 'px-2 flex-nowrap overflow-x-auto' : 'px-3 flex-wrap'}`}
-        style={{ backgroundColor: NAVY, ...(ui.on ? { zoom: ts } : {}) }}>
+      {/*
+        One bar, wherever the host wants it.
+
+        The drawer used to stack TWO bars over one sheet — its navy header with
+        the folder picker and the file chips, and this one underneath with the
+        file's name, the pin, Plans, Layers, Download and Print. Given a slot,
+        the whole row is portalled into it and nothing is drawn here, so the
+        controls sit at the LEFT-hand end of the host's own bar, ahead of the
+        picker. Its background and padding go with it: it is joining a bar, not
+        putting a second one inside the first.
+      */}
+      {(() => {
+        const row = (
+          <div className={barInto
+            ? 'flex items-center gap-1.5 min-w-0 flex-wrap'
+            : `flex items-center gap-2 py-2 flex-shrink-0 ${
+              compact ? 'px-2 flex-nowrap overflow-x-auto' : 'px-3 flex-wrap'}`}
+            style={barInto ? undefined : { backgroundColor: NAVY, ...(ui.on ? { zoom: ts } : {}) }}>
         {!compact && <Layers size={16} className="text-[#4aa8d8] flex-shrink-0" />}
         <div className={compact ? 'min-w-0 flex-1' : 'min-w-0'}>
           <div className="text-[13px] font-bold text-white truncate">{planName || 'Plan'}</div>
@@ -2508,6 +2536,9 @@ export function PlanAnnotator({
           )}
         </span>
       </div>
+        );
+        return barInto ? createPortal(row, barInto) : row;
+      })()}
 
       <div className="flex-1 min-h-0 flex">
         {/* Tool rail, down the side — the desk, and a phone held sideways,

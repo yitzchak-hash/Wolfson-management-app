@@ -282,6 +282,15 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    * it and the buttons would never appear.
    */
   const [planBarSlot, setPlanBarSlot] = useState<HTMLElement | null>(null);
+  /**
+   * Where the viewer's whole bar goes: the LEFT-hand end of the navy header.
+   *
+   * Two slots, and they are not the same thing. `planBarSlot` is a slot the
+   * ANNOTATOR offers so the punch-list pin can sit beside the file's name;
+   * this one is a slot the DRAWER offers so the annotator's entire bar can
+   * move up into the drawer's own row.
+   */
+  const [viewerBarSlot, setViewerBarSlot] = useState<HTMLElement | null>(null);
   /** The plan picker's folder tree: subfolders of Engineered Plans, which
    *  folder is selected ('' = the plans folder itself), and the picked
    *  folder's own files as chips. Sixteen stamped versions stop spamming
@@ -845,6 +854,13 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     if (!fileId) return null;
     return (
       <span className="flex items-center gap-1.5 min-w-0 flex-wrap">
+        {/*
+          The viewer's own controls land HERE — file name, pin, Plans, Layers,
+          Download, Print — ahead of the folder picker and the chips, which is
+          where the owner asked for them. `PlanAnnotator` portals its whole bar
+          into this span, so there is one row over the sheet instead of two.
+        */}
+        <span ref={setViewerBarSlot} className="flex items-center gap-1.5 min-w-0" />
         {planFolders.length > 0 ? (
           <span className="relative">
             <button
@@ -897,7 +913,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           const chips = planFolderSel ? folderPlans : planSet.plans;
           if (chips.length > 1 || planFolderSel) {
             return (
-              <span className="flex items-center gap-1 min-w-0 max-w-[280px] overflow-x-auto edge-fade">
+              <span className="flex items-center gap-1 min-w-0 max-w-[280px] overflow-x-auto edge-fade no-bar">
                 {chips.map(p => {
                   const on = p.id === fileId;
                   return (
@@ -1050,6 +1066,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               authorName={currentUser?.name ?? ''}
               onClose={() => { /* part of the pane */ }}
               barExtrasRef={setPlanBarSlot}
+              barInto={viewerBarSlot}
             />
           </Suspense>
           <PlanPinOverlay

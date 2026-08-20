@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Music2, ChevronLeft, ChevronRight, Shuffle, Play, Pause, ExternalLink, ClipboardPaste,
+  Music2, ChevronLeft, ChevronRight, Shuffle, Play, Pause, Repeat, ExternalLink, ClipboardPaste,
 } from 'lucide-react';
 import { CanvasElement } from '../../types';
 import { Frame, d, WidgetCtx } from '../../data/widgets';
@@ -77,6 +77,20 @@ export function TikTokWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
 
   const [at, setAt] = useState(0);
   const [playing, setPlaying] = useState(!!data.auto);
+  /**
+   * Pressing play has to actually start the VIDEO.
+   *
+   * The play button used to toggle the auto-ADVANCE timer and nothing else, so
+   * a reel could walk through a dozen links without one of them ever playing —
+   * "the videos aren't playing even if I press play". The player is a
+   * third-party iframe with no transport we can reach from out here, so the
+   * one lever there is is to re-mount it asking for autoplay. Bumping this
+   * changes the frame's key, which is what makes that happen; and pressing the
+   * button is itself the user gesture a browser wants before it will let a
+   * video start.
+   */
+  const [playToken, setPlayToken] = useState(0);
+  const wantAutoplay = !!data.autoplay || playToken > 0;
   const [pasting, setPasting] = useState(false);
   const [draft, setDraft] = useState('');
   const [meta, setMeta] = useState<Record<string, Meta>>(() => (data.meta as Record<string, Meta>) ?? {});
@@ -95,6 +109,45 @@ export function TikTokWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   }, [playing, order.length, seconds]);
 
   useEffect(() => { if (at >= order.length) setAt(0); }, [order.length]);
+  // The setting is the source of truth for the timer; changing it in the
+  // pencil should take effect without having to press the button as well.
+  useEffect(() => { setPlaying(!!data.auto); }, [data.auto]);
+
+  /**
+   * A TikTok is a PORTRAIT video, and the box it is put in is whatever shape
+   * the node was dragged to.
+   *
+   * Stretching the frame to the box gives a squashed video with black bars its
+   * own player draws inside it. The frame is sized to the largest 9:16 box
+   * that fits and centred, so the video is as big as the node allows and the
+   * right shape — "the aspect ratio needs to fit into the widget according to
+   * the size of the widget". `fill` crops to the box instead, for anybody who
+   * would rather have no letterboxing.
+   */
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const node = boxRef.current;
+    if (!node) return;
+    const read = () => setBox({ w: node.clientWidth, h: node.clientHeight });
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(node);
+    return () => ro.disconnect();
+  }, []);
+  const RATIO = 9 / 16;
+  const frame = (() => {
+    if (!box.w || !box.h) return { width: '100%', height: '100%' };
+    const fitH = Math.min(box.h, box.w / RATIO);
+    const fitW = fitH * RATIO;
+    if (data.fill) {
+      // Cover: the smaller side is filled and the overflow is clipped by the
+      // rounded box around it.
+      const coverW = Math.max(box.w, box.h * RATIO);
+      return { width: coverW, height: coverW / RATIO };
+    }
+    return { width: fitW, height: fitH };
+  })();
 
   /**
    * Only short links are ever resolved, and only once each.
@@ -178,16 +231,19 @@ export function TikTokWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
       icon={Music2} tone="#ec4899"
     >
       <div className="h-full flex flex-col min-h-0 gap-1">
-        <div className="flex-1 min-h-0 rounded-lg overflow-hidden bg-black relative">
+        <div ref={boxRef}
+          className="flex-1 min-h-0 rounded-lg overflow-hidden bg-black relative flex items-center justify-center">
           {videoId ? (
             <iframe
-              key={videoId}
+              // The token is part of the key on purpose: re-mounting is the
+              // only way to ask a third-party player to start.
+              key={`${videoId}:${playToken}`}
               // Their own player frame. No script of theirs on our page, and
               // nothing to keep in step when they change their embed script.
-              src={`https://www.tiktok.com/embed/v2/${videoId}`}
+              src={`https://www.tiktok.com/embed/v2/${videoId}`
+                + `?autoplay=${wantAutoplay ? 1 : 0}&music_info=0&description=0`}
               title={known?.title || 'TikTok'}
-              className="w-full h-full"
-              style={{ border: 0 }}
+              style={{ border: 0, ...frame }}
               allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
               // A board node that scrolls is not a place for an iframe to be
               // able to navigate the whole app.
@@ -216,11 +272,18 @@ export function TikTokWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
           <button data-no-drag data-el-action title="Previous"
             onClick={() => setAt(i => (i - 1 + order.length) % order.length)}
             className="p-1 rounded text-gray-500 hover:bg-gray-100"><ChevronLeft size={13} /></button>
+          {/* Plays THIS video. The reel walking on by itself is the separate
+              control beside it — two different things that were one button. */}
+          <button data-no-drag data-el-action title="Play this one"
+            onClick={() => setPlayToken(t => t + 1)}
+            className="p-1 rounded hover:bg-gray-100 text-gray-500">
+            <Play size={13} />
+          </button>
           <button data-no-drag data-el-action title={playing ? 'Stop moving on' : 'Move on by itself'}
             onClick={() => setPlaying(p => !p)}
             className="p-1 rounded hover:bg-gray-100"
             style={{ color: playing ? '#ec4899' : '#94a3b8' }}>
-            {playing ? <Pause size={13} /> : <Play size={13} />}
+            {playing ? <Pause size={13} /> : <Repeat size={13} />}
           </button>
           <button data-no-drag data-el-action title="Next"
             onClick={() => setAt(i => (i + 1) % order.length)}
