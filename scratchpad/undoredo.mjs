@@ -283,6 +283,56 @@ console.log('       start:', JSON.stringify(start.jobs));
   await cancel();
 }
 
+// ── 6. The history list: see what is queued before committing ─────────────
+{
+  // Two arrange steps and one content step, so the list has something to show
+  // and the "asks first" mark has something to mark.
+  const at = await tileAt('G-u0');
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.down();
+  await page.mouse.move(at.x + 60, at.y + 20, { steps: 8 });
+  await page.mouse.up();
+  await page.waitForTimeout(500);
+
+  await page.evaluate(() => document.querySelector('[data-undo-history]')?.click());
+  await page.waitForTimeout(400);
+  const list = await page.evaluate(() => {
+    const panel = [...document.querySelectorAll('div')]
+      .find(d => /What can be undone/.test(d.textContent ?? '') && d.className.includes('fixed'));
+    if (!panel) return null;
+    return {
+      rows: [...panel.querySelectorAll('button')].map(b =>
+        (b.textContent ?? '').replace(/\s+/g, ' ').trim()),
+      next: /next/i.test(panel.textContent ?? ''),
+      asks: /asks first/i.test(panel.textContent ?? ''),
+    };
+  });
+  console.log('       history:', JSON.stringify(list));
+  check(!!list, 'the history list opens');
+  check((list?.rows.length ?? 0) >= 2, 'and lists the steps behind the next one',
+    String(list?.rows.length));
+  check(!!list?.next, 'the one Ctrl+Z would take is marked "next"');
+  check(!!list?.asks, 'and a step that will ask is marked before you press it');
+
+  // Pressing a row further down undoes the whole run — and because that run
+  // contains a content step, it must ask ONCE for the lot.
+  const beforeRows = await state();
+  await page.evaluate(() => {
+    const panel = [...document.querySelectorAll('div')]
+      .find(d => /What can be undone/.test(d.textContent ?? '') && d.className.includes('fixed'));
+    const rows = [...panel.querySelectorAll('button')];
+    rows[Math.min(2, rows.length - 1)].click();
+  });
+  await page.waitForTimeout(500);
+  const q = await asking();
+  check(!!q, 'undoing several at once asks once for the whole run', JSON.stringify(q));
+  check(/steps/i.test(q?.title ?? ''), 'and says how many steps it is', q?.title);
+  await approve();
+  const afterRows = await state();
+  check(JSON.stringify(afterRows) !== JSON.stringify(beforeRows),
+    'and the run really ran');
+}
+
 await page.screenshot({ path: 'scratchpad/undoredo.png' });
 console.log(fails === 0 ? '\nALL PASS' : `\n${fails} FAILED`);
 await b.close();

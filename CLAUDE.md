@@ -3069,7 +3069,22 @@ resizes, and taking a job back out. Keys work on every page (`UndoLayer` is in
 Ctrl+Z, and both go through the SAME `runUndo` door so a press and a keystroke
 can never behave differently on one entry.
 
-Harness: `scratchpad/undoredo.mjs` (25 checks). Two traps it paid for: reading
+### The history list
+The clock icon beside the arrows opens `UndoButtons`' panel: every step, newest
+first, the next one marked, and any `content` step marked "asks first" BEFORE
+it is pressed. Pressing a step further down undoes the whole run back to it and
+asks **once** — naming each content step's own sentence and counting the
+arrange steps rather than listing "Moved 1 thing" ten times. It renders through
+a **portal**: the board header is a flex item with `z-30`, which makes it a
+stacking context, so no z-index on the panel could lift it above the board's
+floating chrome — the workspace picker's disease, cured the same way, and the
+outside-press close therefore checks BOTH refs.
+
+`walk()` is the only thing that calls the store's steppers, and the buttons,
+the list and the keys all reach it through `runUndo` / `runUndoTo` — a press
+and a keystroke can never behave differently on one entry.
+
+Harness: `scratchpad/undoredo.mjs` (31 checks). Two traps it paid for: reading
 the button titles on an exhausted stack answers "Nothing to undo", which is
 correct and tells you nothing; and seeding a planner `cell` without also
 setting the job's `inNotebook` tests half the link and blames the app for the

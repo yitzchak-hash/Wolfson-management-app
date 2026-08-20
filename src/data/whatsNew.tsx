@@ -34,6 +34,14 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     title: 'Undo and redo — and a warning before anything that matters',
     items: [
       {
+        title: 'A list of what is about to be undone',
+        body: 'The clock icon beside the arrows opens the list of everything you can '
+          + 'take back, newest first. The one Ctrl+Z would take is marked "next", and any '
+          + 'step that will stop and ask says so before you press it. Press a step further '
+          + 'down and it undoes everything back to there, asking once for the lot.',
+        demo: 'list',
+      },
+      {
         title: 'Ctrl+Z takes it back',
         body: 'Moved a tile you did not mean to move? Ctrl+Z (⌘Z on a Mac) puts it back '
           + 'exactly where it was, and Ctrl+Shift+Z puts it forward again. It covers '
