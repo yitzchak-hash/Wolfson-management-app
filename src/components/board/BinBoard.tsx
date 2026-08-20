@@ -19,6 +19,8 @@ import { NodeSettings } from './NodeSettings';
 import { MiniMap } from './MiniMap';
 import { EraserCursor, INK_COLOURS, MARKER_COLOURS } from './EraserCursor';
 import { planErase, strokeRecord, InkPoint } from '../../data/boardInk';
+import { snapBox, snapResize, Box, Guide } from '../../data/snapping';
+import { SnapGuides } from './SnapGuides';
 import { isFingerTouch } from '../../hooks/useTouchGestures';
 
 // TILE_W / TILE_H / tileSize come from BoardItems — the group used to carry
@@ -110,6 +112,15 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
    * lasso. Kept in BOARD units, so the maths is the same at any zoom.
    */
   const [lasso, setLasso] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  /**
+   * The snap lines, live during a gesture.
+   *
+   * A group arranges the same things the board does, so it lines them up the
+   * same way — through the same pure module, with the same guides. Written as
+   * a separate piece of state rather than derived, because it is cleared on
+   * pointer-up and a derived version would keep drawing the last answer.
+   */
+  const [guides, setGuides] = useState<Guide[]>([]);
   /**
    * Where the group is scrolled to, and how big its window is.
    *
@@ -420,10 +431,61 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
 
+  /**
+   * Everything else on this board, as boxes — what a snap lines up against.
+   *
+   * Rebuilt per gesture frame rather than memoised: a drag already re-renders
+   * every frame, and a board window holds tens of things, not thousands.
+   */
+  function snapTargets(exclude: Set<string>): Box[] {
+    const out: Box[] = [];
+    items.forEach((a, i) => {
+      if (exclude.has(a.id)) return;
+      out.push({ ...jobPos(a, i), ...tileSize(a) });
+    });
+    nodes.forEach(n => {
+      if (exclude.has(n.id) || n.type === 'stroke') return;
+      out.push({ x: n.x, y: n.y, w: n.w, h: n.h });
+    });
+    return out;
+  }
+  /** In SCREEN pixels over the zoom, or the pull is a magnet at 25% and nothing at 300%. */
+  const SNAP_REACH = 7;
+
   function moveDrag(e: React.PointerEvent) {
     if (!drag) return;
     const p = toLocal(e);
-    const dx = p.x - drag.gx, dy = p.y - drag.gy;
+    let dx = p.x - drag.gx, dy = p.y - drag.gy;
+
+    /**
+     * Line the thing up, and say why.
+     *
+     * The whole selection moves by ONE offset, so the snap is worked out for
+     * the box the gesture is holding and everything else follows it — snapping
+     * each member to its own neighbours would tear an arrangement apart. Held
+     * back until the drag is really a drag, or a press that never travelled
+     * would jump.
+     */
+    if (drag.moved || Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+      const lead = drag.starts.get(drag.ids[0]);
+      const leadJob = drag.kind === 'job' ? items.find(a => a.id === drag.ids[0]) : undefined;
+      const leadNode = drag.kind === 'el' ? nodes.find(n => n.id === drag.ids[0]) : undefined;
+      const size = leadJob ? tileSize(leadJob)
+        : leadNode ? { w: leadNode.w, h: leadNode.h }
+        : null;
+      if (lead && size) {
+        const r = snapBox(
+          { x: lead.x + dx, y: lead.y + dy, ...size },
+          snapTargets(new Set(drag.ids)),
+          SNAP_REACH / Math.max(0.2, zoom),
+          0,
+          true,
+        );
+        dx += r.x - (lead.x + dx);
+        dy += r.y - (lead.y + dy);
+        setGuides(r.guides);
+      }
+    }
     /**
      * Past the window's edge with a job in hand means "back to the board".
      *
@@ -444,6 +506,7 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
   }
 
   function endDrag(job?: Apartment, e?: React.PointerEvent) {
+    setGuides([]);
     if (!drag) return;
     if (drag.moved && drag.out && drag.kind === 'job') {
       // Released outside the window: the job goes back to the main board, to
@@ -500,33 +563,59 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
     setResize({ id: el.id, startW: el.w, startH: el.h, startPX: e.clientX, startPY: e.clientY, dw: 0, dh: 0 });
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
+  /**
+   * Sizes, and the guides that explain them.
+   *
+   * The pointer delta is in SCREEN pixels and the boxes are in board units, so
+   * the delta is divided by the zoom before anything else — forget it and the
+   * corner runs away from the cursor at every zoom but 100%, the trap the tile
+   * drag already paid for. Shift locks the ratio and skips snapping, because
+   * there is no single edge to line up with while the shape is being held.
+   */
+  function sizeWithSnap(
+    id: string, start: { x: number; y: number; w: number; h: number },
+    e: React.PointerEvent, dwRaw: number, dhRaw: number,
+  ) {
+    let dw = dwRaw / zoom, dh = dhRaw / zoom;
+    if (e.shiftKey && start.w > 0 && start.h > 0) {
+      const k = Math.max((start.w + dw) / start.w, (start.h + dh) / start.h);
+      setGuides([]);
+      return { dw: start.w * k - start.w, dh: start.h * k - start.h };
+    }
+    const r = snapResize(
+      { x: start.x, y: start.y, w: Math.max(24, start.w + dw), h: Math.max(24, start.h + dh) },
+      snapTargets(new Set([id])),
+      SNAP_REACH / Math.max(0.2, zoom),
+      0, true, true,
+    );
+    setGuides(r.guides);
+    return { dw: r.w - start.w, dh: r.h - start.h };
+  }
+
   function resizeMove(e: React.PointerEvent) {
     if (!resize) return;
-    let dw = e.clientX - resize.startPX;
-    let dh = e.clientY - resize.startPY;
-    // Shift keeps the shape — the same rule as the main board, or the gesture
-    // means different things depending on which window it happens in.
-    if (e.shiftKey && resize.startW > 0 && resize.startH > 0) {
-      const k = Math.max((resize.startW + dw) / resize.startW, (resize.startH + dh) / resize.startH);
-      dw = resize.startW * k - resize.startW;
-      dh = resize.startH * k - resize.startH;
-    }
-    setResize({ ...resize, dw, dh });
+    const el = nodes.find(n => n.id === resize.id);
+    const d = sizeWithSnap(
+      resize.id,
+      { x: el?.x ?? 0, y: el?.y ?? 0, w: resize.startW, h: resize.startH },
+      e, e.clientX - resize.startPX, e.clientY - resize.startPY,
+    );
+    setResize({ ...resize, ...d });
   }
   /** The tile's own corner — same gesture, different commit. */
   function jobResizeMove(e: React.PointerEvent) {
     if (!jobResize) return;
-    let dw = e.clientX - jobResize.startPX;
-    let dh = e.clientY - jobResize.startPY;
-    if (e.shiftKey && jobResize.startW > 0 && jobResize.startH > 0) {
-      const k = Math.max((jobResize.startW + dw) / jobResize.startW,
-                         (jobResize.startH + dh) / jobResize.startH);
-      dw = jobResize.startW * k - jobResize.startW;
-      dh = jobResize.startH * k - jobResize.startH;
-    }
-    setJobResize({ ...jobResize, dw, dh });
+    const i = items.findIndex(a => a.id === jobResize.id);
+    const p = i >= 0 ? jobPos(items[i], i) : { x: 0, y: 0 };
+    const d = sizeWithSnap(
+      jobResize.id,
+      { ...p, w: jobResize.startW, h: jobResize.startH },
+      e, e.clientX - jobResize.startPX, e.clientY - jobResize.startPY,
+    );
+    setJobResize({ ...jobResize, ...d });
   }
   function jobResizeUp() {
+    setGuides([]);
     if (jobResize && (jobResize.dw || jobResize.dh) && currentUser) {
       updateApartment(jobResize.id, {
         tileW: Math.max(120, Math.round(jobResize.startW + jobResize.dw)),
@@ -537,6 +626,7 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
   }
 
   function resizeUp() {
+    setGuides([]);
     if (binResetDone.current) { binResetDone.current = false; setResize(null); return; }
     if (resize && (resize.dw || resize.dh)) {
       updateCanvasElement(resize.id, {
@@ -1216,6 +1306,7 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
                   />
                 </svg>
               )}
+              <SnapGuides guides={guides} zoom={zoom} />
               {items.length === 0 && nodes.length === 0 && (
                 <div className="absolute inset-0 flex items-center justify-center text-sm pointer-events-none"
                   style={{ color: theme.dark ? 'rgba(255,255,255,.55)' : 'rgba(15,23,42,.45)' }}>

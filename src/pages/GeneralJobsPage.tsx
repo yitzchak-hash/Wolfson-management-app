@@ -25,6 +25,7 @@ import { BoardToolbar, BoardControlsPanel, BoardTool } from '../components/board
 import { BOARD_THEMES, getBoardTheme, surfaceAtZoom } from '../data/boardThemes';
 import { allowed as sideAllowed, edgePushed, roomFor, shiftFor, shiftJobs, shiftNodes, Side } from '../data/boardExpand';
 import { snapBox, snapResize, Box, Guide } from '../data/snapping';
+import { SnapGuides } from '../components/board/SnapGuides';
 import { MiniMap } from '../components/board/MiniMap';
 import type { StickyNoteRecord } from '../components/board/StickyNoteWidget';
 import { DriveDesktopPath } from '../components/apartment/DriveDesktopPath';
@@ -572,13 +573,20 @@ export function GeneralJobsPage() {
   function snapMoving(box: Box, exclude: Set<string>) {
     const tol = SNAP_REACH / Math.max(0.2, zoom);
     const grid = snapOn ? GAP : 0;
-    const r = snapBox(box, snapTargetsRef.current(exclude), tol, grid);
+    const r = snapBox(box, snapTargetsRef.current(exclude), tol, grid, smartGuides);
     const lines = [...r.guides];
     const REACH = 70;
-    if (grid > 0 && !lines.some(g => g.axis === 'x') && Math.abs(r.x - box.x) > 0.01) {
+    // Only for an axis nothing else settled. A spacing bar is drawn ACROSS the
+    // axis it decided, so its `axis` letter is the opposite one — asking the
+    // list the obvious way gets this exactly backwards.
+    const tookX = Math.abs(r.x - box.x) > 0.01
+      && lines.some(g => (g.gap ? g.axis === 'y' : g.axis === 'x'));
+    const tookY = Math.abs(r.y - box.y) > 0.01
+      && lines.some(g => (g.gap ? g.axis === 'x' : g.axis === 'y'));
+    if (grid > 0 && !tookX && Math.abs(r.x - box.x) > 0.01) {
       lines.push({ axis: 'x', at: r.x, from: r.y - REACH, to: r.y + box.h + REACH });
     }
-    if (grid > 0 && !lines.some(g => g.axis === 'y') && Math.abs(r.y - box.y) > 0.01) {
+    if (grid > 0 && !tookY && Math.abs(r.y - box.y) > 0.01) {
       lines.push({ axis: 'y', at: r.y, from: r.x - REACH, to: r.x + box.w + REACH });
     }
     return { x: r.x, y: r.y, guides: lines };
@@ -3351,6 +3359,7 @@ export function GeneralJobsPage() {
         SNAP_REACH / Math.max(0.2, zoom),
         snapOn ? GAP : 0,
         smartGuides,
+        smartGuides,
       );
       w = Math.max(MIN_W, snapped.w);
       h = Math.max(MIN_H, snapped.h);
@@ -3481,6 +3490,7 @@ export function GeneralJobsPage() {
         SNAP_REACH / Math.max(0.2, zoom),
         snapOn ? GAP : 0,
         smartGuides,
+        smartGuides,
       );
       w = Math.max(m.w, snapped.w);
       h = Math.max(m.h, snapped.h);
@@ -3488,10 +3498,14 @@ export function GeneralJobsPage() {
       // edge it just moved — the same rule a move follows.
       const lines = [...snapped.guides];
       const REACH = 70;
-      if (snapOn && !lines.some(g => g.axis === 'x') && Math.abs(w - rawW) > 0.01) {
+      // A spacing bar's `axis` letter is the opposite of the axis it decided,
+      // so each test asks for whichever letter means "this axis is taken".
+      const tookW = lines.some(g => (g.gap ? g.axis === 'y' : g.axis === 'x'));
+      const tookH = lines.some(g => (g.gap ? g.axis === 'x' : g.axis === 'y'));
+      if (snapOn && !tookW && Math.abs(w - rawW) > 0.01) {
         lines.push({ axis: 'x', at: target.x + w, from: target.y - REACH, to: target.y + h + REACH });
       }
-      if (snapOn && !lines.some(g => g.axis === 'y') && Math.abs(h - rawH) > 0.01) {
+      if (snapOn && !tookH && Math.abs(h - rawH) > 0.01) {
         lines.push({ axis: 'y', at: target.y + h, from: target.x - REACH, to: target.x + w + REACH });
       }
       setGuides(lines);
@@ -4599,16 +4613,21 @@ export function GeneralJobsPage() {
             </p>
 
             {/* The advanced half of lining things up: matching a neighbour's
-                SIZE while resizing, which no amount of edge snapping can find. */}
+                SIZE, and matching the SPACE between things — neither of which
+                any amount of edge snapping can find. Two boxes the same size
+                but not in a line share no edge; nor do three cards whose gaps
+                read 18, 41 and 18, which are perfectly lined up and still look
+                wrong. */}
             <label className="flex items-center gap-2 text-[10px] text-gray-600 font-semibold mb-0.5">
               <input type="checkbox" className="rounded"
                 checked={smartGuides}
                 onChange={e => setBoardSetting('smartGuides', e.target.checked)} />
-              Match sizes while resizing
+              Match sizes and spacing
             </label>
             <p className="text-[9px] text-gray-400 leading-snug mb-2">
-              Drag a corner near the size of something nearby and it lands on exactly that
-              size, with a line along both to show the match.
+              Drag a corner near the size of something nearby and it lands on exactly that size.
+              Drop something between two things and it lands with equal space either side, or a
+              gap the same as the one next door — with the measurement shown on it.
             </p>
 
             {/* Page margins. */}
@@ -4994,16 +5013,7 @@ export function GeneralJobsPage() {
               transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
               transformOrigin: '0 0', left: 0, top: 0, width: 1, height: 1, zIndex: 45,
             }}>
-            {guides.map((g, i) => (
-              <div key={i} data-snap-guide className="absolute"
-                style={{
-                  backgroundColor: '#e11d48',
-                  boxShadow: `0 0 0 ${1 / zoom}px rgba(255,255,255,.75)`,
-                  ...(g.axis === 'x'
-                    ? { left: g.at, top: g.from, width: 1.5 / zoom, height: g.to - g.from }
-                    : { left: g.from, top: g.at, height: 1.5 / zoom, width: g.to - g.from }),
-                }} />
-            ))}
+            <SnapGuides guides={guides} zoom={zoom} />
           </div>
         )}
 

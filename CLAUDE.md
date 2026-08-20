@@ -2750,3 +2750,105 @@ Three traps this round paid for, all of them making a working thing look dead:
 **The weekly notebook's widget id is `rota`.** `week-planner` is a different
 widget — seven free-text columns — and seeding that one draws a row of day
 names with no people and no squares, which reads as a broken planner.
+
+
+---
+
+# v2 — drawing in a group, and spacing that lines itself up
+
+## A group window is a board, so it draws
+Pen, highlighter and eraser are MODES inside `BinBoard` exactly as on the main
+board: while one is armed a press anywhere — empty surface or straight across a
+tile — starts a stroke instead of a drag, pressing the armed tool again puts it
+down, and Escape backs out one thing at a time (menu → tool → selection →
+window). The colour/width strip is shown only WHILE a tool is held.
+
+`src/data/boardInk.ts` is the geometry, lifted out of `GeneralJobsPage` rather
+than written twice: `pointsBounds` · `fmtPoints` · `distToSegment` ·
+`strokeRecord` · **`planErase`** (pure — says what a pass of the eraser would
+change; the caller writes). The eraser alone carries three rules that were paid
+for once already — a legacy stroke's stored box is a lie, a surviving run must
+come back as a node (`data.own`), a run of one point draws nothing — and a
+second copy would have fallen into all three again.
+`src/components/board/EraserCursor.tsx` is shared for the same reason.
+
+## A resize handle is not a button
+**A straight stroke's box is one pixel tall, so its own edge handles sit on top
+of the whole of its ink** and swallowed every press aimed at it: such a line
+could not be drawn over and could not be rubbed out, anywhere. With a tool
+armed, a press on a `[data-resize]` handle is INK — in `onElPointerDown`,
+`onJobPointerDown`, `beginResize`, `onJobResizeDown` and the group's own
+`startDrag`. A node's real buttons still take the press: you must be able to
+open settings without putting the pen down.
+
+## The group's world div is also its surface
+`[data-bin-world]` is laid over `[data-bin-surface]` and is at least as big, so
+a press on empty board lands on the WORLD div — and the "is this the empty
+surface?" test never matched. The lasso and the right-click menu were
+unreachable. Both divs carry `data-bin-surface` now.
+
+## Snapping to the SPACE between things
+`gapAxis` in `snapping.ts`, behind the existing `BoardSetting.smartGuides`
+(relabelled **"Match sizes and spacing"**). Two things a hand means:
+- **put it in the middle** — dropped between two neighbours, equal space either
+  side;
+- **the same gap again** — a gap that already exists in the row is offered as
+  the gap to the next thing along, and the bar over the gap that SUPPLIED the
+  number is drawn too, because one bar says "this is 40" and two say "this is
+  the same as that".
+
+Rules:
+- Only boxes sharing a band on the cross axis count (`sameRow`/`sameCol`) — a
+  gap between two things that do not overlap is not a gap anybody can see.
+- **Per axis: alignment first, then spacing, then the grid.** Each axis decides
+  for itself, which is what makes the ordinary case work — a third card takes
+  its spacing from X and its alignment from Y.
+- **A spacing bar's `axis` letter is the OPPOSITE of the axis it decided** (a
+  horizontal bar is `axis: 'y'` — a y and a span of x). Sniffing the guide list
+  to ask "is this axis taken?" therefore gets it backwards in a way that is
+  very easy to write and very hard to see. Every such decision is now recorded
+  in a plain boolean where it is made.
+- **A resize is never offered the gap BEHIND it** (`mode: 'grow'`): the near
+  edge is pinned, so only "the far edge sits a known gap short of the thing
+  ahead" is a resize answer.
+
+`Guide` gained `gap?: boolean` + `label?: string`, and
+`src/components/board/SnapGuides.tsx` draws both kinds for the board AND the
+group — a bar with end caps and its measurement, everything divided by the zoom
+because a guide is a marker, not part of the drawing.
+
+**Fixed on the way**: `snapResize` could never match a width and a height at
+once. A width match pushes guides labelled `axis: 'y'`, which the height's own
+`!guides.some(g => g.axis === 'y')` test then found and refused.
+
+## The group snaps too
+`BinBoard` runs the same `snapBox`/`snapResize` on its drags and both its
+resize gestures, with its own `guides` state and `SnapGuides` inside the world
+div. The whole selection moves by ONE offset — the snap is worked out for the
+box the gesture is holding and everything else follows it, or an arrangement
+tears apart. Its resize deltas are now divided by the zoom (they were raw
+screen pixels, the documented trap).
+
+## Harnesses
+`gapsnap` (the arithmetic, offline, every number worked by hand) ·
+`gapboard` (the wiring: bars on screen during the drag, gone on release, the
+snapped position actually written, and the setting really turning it off) ·
+`groupink` (drawing in a group, reading the STORE — "the eraser cut this in
+two" and "the eraser deleted it" look identical on screen).
+
+Traps these paid for, all of which made a working thing look broken:
+- `/bg-white/` matches `hover:bg-white/15`, so a class-list regex calls every
+  tool button lit. Measure the computed background.
+- A press aimed at world coordinates that sit under the board's floating
+  chrome — the rail on the left, the header on top, the overview bottom-right —
+  hits the chrome. The floating header pushes the world down ~170px, so world
+  y 700 renders past the bottom of a 900px window.
+- Scenery has to be placed where it cannot ALIGN with the answer: a bin whose
+  centre landed exactly on the target's right edge made edge snapping produce
+  the right number for the wrong reason.
+- Escape inside a group backs out one thing at a time, so one press leaves the
+  window standing and it swallows every later click.
+
+`board.mjs` and `lockselect.mjs` carried assertions that predated two shipped
+decisions (the margin gutter pins `margin × zoom` inside the viewport on a
+locked edge; the building name bar moved to z-20). Both updated.

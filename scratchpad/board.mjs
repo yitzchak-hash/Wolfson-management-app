@@ -72,7 +72,22 @@ const headerBottom = await page.evaluate(() => {
   if (!vp || !hb) return 0;
   return Math.max(0, Math.round(hb.getBoundingClientRect().bottom - vp.getBoundingClientRect().top));
 });
-const pinnedOk = (p) => p.x <= 0.5 && p.y <= headerBottom + 1.5;
+/**
+ * The pinned corner is the chrome's edge PLUS the board's margin.
+ *
+ * The margin became a real gutter — `clampPanRef` keeps `margin × zoom` of
+ * clear board inside the viewport on a locked edge — so the pinned pan is no
+ * longer 0 / header-bottom exactly. This test predates that and was failing on
+ * a 7px offset at 25% zoom (28 × 0.25), which is the setting working, not the
+ * board drifting. Read the margin off the page rather than restating 28 here.
+ */
+const margin = await page.evaluate(() => {
+  const raw = localStorage.getItem('board_settings_probe');
+  return raw ? Number(raw) : 28;                     // BOARD_MARGIN
+});
+const zoomNow = (await readPan())?.z ?? 1;
+const slack = margin * zoomNow + 1.5;
+const pinnedOk = (p) => p.x <= slack && p.y <= headerBottom + slack;
 const after = await readPan();
 console.log(`pan after zoom out : ${JSON.stringify(after)} (header bottom ${headerBottom})`);
 if (after && typeof after.x === 'number') {

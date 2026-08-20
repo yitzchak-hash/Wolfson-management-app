@@ -30,6 +30,42 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-08-28',
+    title: 'Drawing inside a group, and spacing that lines itself up',
+    items: [
+      {
+        title: 'The pen, the highlighter and the eraser work inside a group',
+        body: 'A group window is a board, so it draws like one. Pick the pen, the '
+          + 'highlighter or the eraser at the top of the window and a strip appears with '
+          + 'its colours and its thickness; press the same button again — or Escape — to '
+          + 'put it down. Drawing over a job tile draws over it, exactly as on the board.',
+        demo: 'tap',
+      },
+      {
+        title: 'A straight line can be rubbed out again',
+        body: 'A perfectly straight stroke could not be erased anywhere in the app: its own '
+          + 'resize handles sat on top of every pixel of it and swallowed the press. It '
+          + 'erases and draws over now, on the board and inside a group.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'Things space themselves as well as line up',
+        body: 'Drop something between two others and it lands with equal space either side. '
+          + 'Put it at the end of a row and it takes the same gap the row already uses. Each '
+          + 'space is shown with a little bar and the number, so you can see why it went '
+          + 'where it did — and the same happens while you resize.',
+        demo: 'drag',
+      },
+      {
+        title: 'A group lines things up too',
+        body: 'Dragging and resizing inside a group now snaps to its neighbours and shows '
+          + 'the same lines, and its overview map, lasso select and sort control are all '
+          + 'the board’s own.',
+        demo: 'zoom',
+      },
+    ],
+  },
+  {
     date: '2026-08-27',
     title: 'Groups open properly, and jobs can be planned from anywhere',
     items: [
