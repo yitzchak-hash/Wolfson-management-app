@@ -505,18 +505,42 @@ export function PlannerWidget({
   const cellRefs = useRef(new Map<string, HTMLElement>());
   const [hover, setHover] = useState<RotaHit | null>(null);
 
-  useEffect(() => registerRota(el.id, (x, y) => {
-    for (const [key, node] of cellRefs.current) {
-      const r = node.getBoundingClientRect();
-      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
-        const [person, day] = key.split('|');
-        return { elId: el.id, person, day };
-      }
-    }
-    return null;
-  }), [el.id]);
+  /**
+   * This mounted notebook's own identity, which is NOT its element's id.
+   *
+   * A projection draws the MAIN notebook's element, so `el.id` is the same
+   * string on two different nodes. Registering the drop probe under it meant
+   * the second to mount replaced the first and unmounting either deregistered
+   * both — see `registerRota`.
+   */
+  const probeId = useRef(`rota-${Math.random().toString(36).slice(2, 9)}`).current;
 
-  useEffect(() => onRotaHover(h => setHover(h?.elId === el.id ? h : null)), [el.id]);
+  useEffect(() => {
+    /**
+     * A notebook you cannot edit is not a drop target.
+     *
+     * A projection, the wallboard and the worker's portal all draw a notebook
+     * read-only. Registering them meant a drag could be answered by a copy
+     * that is not allowed to accept it — and on a TV, that a job could be
+     * moved from a screen nobody is supposed to be arranging from.
+     */
+    if (ro || projection) return;
+    return registerRota(probeId, (x, y) => {
+      for (const [key, node] of cellRefs.current) {
+        const r = node.getBoundingClientRect();
+        if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+          const [person, day] = key.split('|');
+          return { elId: el.id, probeId, person, day };
+        }
+      }
+      return null;
+    });
+  }, [el.id, probeId, ro, projection]);
+
+  useEffect(
+    () => onRotaHover(h => setHover(h?.probeId === probeId ? h : null)),
+    [probeId],
+  );
 
   const write = useCallback((patch: Partial<PlannerData>) => {
     update({ data: { ...(el.data ?? {}), ...patch } });

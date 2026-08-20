@@ -4208,22 +4208,62 @@ export function GeneralJobsPage() {
    * empty board is one screen and it grows as you push a tile into a corner.
    */
   const step = (n: number) => Math.ceil(n / 400) * 400;
-  const maxX = Math.max(step(contentX + EDGE_PAD + margin), 1200);
-  const maxY = Math.max(step(contentY + EDGE_PAD + margin), 800);
+  const rawX = Math.max(step(contentX + EDGE_PAD + margin), 1200);
+  const rawY = Math.max(step(contentY + EDGE_PAD + margin), 800);
 
   /**
-   * The room a widget opened is given back the moment it moves in.
+   * The board gives space back — but never while your hand is on it.
    *
-   * The world is measured from the content, so dragging something back from
-   * the far corner shrinks it immediately — but the PAN was left where it was,
-   * so you kept staring at empty board until the next gesture re-clamped it.
-   * Re-clamping when the size changes is what makes the space actually
-   * disappear, which is what the owner asked for.
+   * The size comes from the live content, so carrying a widget in from the far
+   * corner shrinks the world as you go. On its own that is right: the room
+   * should disappear when it is given back. The trouble is what shrinking DOES
+   * mid-gesture — the surface gets smaller under the pointer, the pan is
+   * re-clamped to the new edge, and the whole board slides sideways while you
+   * are still holding something. That is the "everything jumps" every canvas
+   * app has to solve, and every one of them solves it the same way:
+   *
+   *   **A gesture is a transaction.** While one is live the world may only
+   *   GROW — it follows a thing dragged outward, so there is always board
+   *   under it — and the size is a HIGH-WATER MARK, so a drag that goes out
+   *   and then comes back does not shrink halfway through either. The moment
+   *   the hand comes off, the true size is taken and the space closes up.
+   *
+   * Held in a ref rather than state: it is read during the same render that
+   * computes the size, and `Math.max` is idempotent, so a repeated render
+   * cannot walk it upward.
    */
+  const sizingGesture = !!drag || !!resize || !!jobResize || !!drawing;
+  const heldWorld = useRef<{ w: number; h: number } | null>(null);
+  if (sizingGesture) {
+    heldWorld.current = {
+      w: Math.max(heldWorld.current?.w ?? 0, rawX),
+      h: Math.max(heldWorld.current?.h ?? 0, rawY),
+    };
+  }
+  const maxX = sizingGesture ? heldWorld.current!.w : rawX;
+  const maxY = sizingGesture ? heldWorld.current!.h : rawY;
+
+  /**
+   * The hand came off: take the true size and close the space up.
+   *
+   * `settling` glides the pan rather than snapping it, because a board that
+   * teleports the instant you let go reads as a mistake — you cannot see that
+   * the empty edge was reclaimed, only that everything moved.
+   */
+  const [settling, setSettling] = useState(false);
+  useEffect(() => {
+    if (sizingGesture) return;
+    heldWorld.current = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sizingGesture]);
+
   useEffect(() => {
     setPan(p => {
       const next = clampPanRef.current(p);
-      return next.x === p.x && next.y === p.y ? p : next;
+      if (next.x === p.x && next.y === p.y) return p;
+      setSettling(true);
+      window.setTimeout(() => setSettling(false), 300);
+      return next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [maxX, maxY, vp.w, vp.h]);
@@ -5064,7 +5104,12 @@ export function GeneralJobsPage() {
             transformOrigin: '0 0',
             // Only while travelling to a search result. A permanent transition
             // would put a lag on every pan and drag.
-            transition: flying ? 'transform 600ms cubic-bezier(.22,.9,.28,1)' : undefined,
+            transition: flying ? 'transform 600ms cubic-bezier(.22,.9,.28,1)'
+              // The short one: the board closing up empty edge after a gesture.
+              // Never while a gesture is live — a transform transition during a
+              // drag makes the board lag the pointer.
+              : settling ? 'transform 280ms cubic-bezier(.22,.9,.28,1)'
+              : undefined,
           }}
         >
         {jobs.length === 0 && canvasElements.length === 0 ? (
@@ -5076,6 +5121,11 @@ export function GeneralJobsPage() {
         ) : (
           <div
             ref={canvasRef}
+            // The board's own surface, by name. Anything measuring how big the
+            // board IS has to find this one and not the tool rail, which is
+            // also a child of the viewport and is what an unnamed
+            // "first child" query picks up.
+            data-board-world="1"
             className="relative"
             style={{
               width: maxX, height: maxY,

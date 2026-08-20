@@ -2852,3 +2852,60 @@ Traps these paid for, all of which made a working thing look broken:
 `board.mjs` and `lockselect.mjs` carried assertions that predated two shipped
 decisions (the margin gutter pins `margin × zoom` inside the viewport on a
 locked edge; the building name bar moved to z-20). Both updated.
+
+
+---
+
+# v2 — a gesture is a transaction
+
+## The board gives space back, but never while your hand is on it
+The size has always come from the LIVE content (`jobPos`/`elPos`), which is
+what lets the board grow to meet a thing dragged outward. The cost was the
+other direction: carrying a widget back in from the far corner shrank the world
+a 400px step at a time UNDER THE POINTER, the pan re-clamped to the new edge,
+and the whole board slid sideways while something was still being held.
+Measured with the rule disabled: 3600 → 2400 → 1600 and the pan lurching 2000px
+across in the middle of one drag.
+
+**While a gesture is live the world may only GROW, and its size is a
+HIGH-WATER MARK** — so a drag that goes out and comes back does not shrink
+halfway through either. The moment the hand comes off, the true size is taken
+and the space closes up, glided (`settling`, 280ms) rather than snapped,
+because a board that teleports the instant you let go reads as a mistake.
+
+`sizingGesture` is `drag || resize || jobResize || drawing` — panning and the
+lasso move nothing, so they are not in it. The held size is a **ref read during
+the same render that computes the size**; `Math.max` is idempotent, so a
+repeated render cannot walk it upward.
+
+**The same rule is in `BinBoard`**, where it matters by a different route: that
+surface is a native SCROLLER, so one that shrinks under the pointer has its
+scroll clamped by the browser and the content lurches.
+
+`data-board-world` names the board's own surface. Anything measuring how big
+the board IS must find it by that name — the tool rail is also a child of the
+viewport, and an unnamed "first child" query reads 116px and reports a healthy
+board as never shrinking.
+
+Harness: `scratchpad/deexpand.mjs`, verified non-vacuous. Its own trap: the
+board's **edge auto-pan** arms within 80px of the viewport edge and moves the
+pan deliberately, so a drag that runs into that band reports a feature as the
+fault. Stop clear of it.
+
+## `registerRota` is keyed by the MOUNTED NOTEBOOK, never by the element id
+A projection renders the MAIN notebook's element, so `el.id` is the same string
+on two different nodes. Registering the drop probe under it meant the second to
+mount silently replaced the first, and unmounting either deregistered both.
+Both of the office's reports came from this one line: a job dragged onto the
+main notebook was hit-tested against the projection's squares somewhere else on
+the board and landed nowhere, and a card dragged between squares found no
+target on release, so it offered to take the job OFF the notebook instead of
+asking move-or-copy. It came and went depending on which notebook mounted last.
+
+`RotaHit` now carries `probeId` (which mounted notebook answered) alongside
+`elId` (which record to write), and the hover highlight compares `probeId` —
+without it, dragging over one notebook lit the other.
+
+**A notebook you cannot edit is not a drop target.** A projection, the
+wallboard and the worker's portal all draw a notebook read-only, and none of
+them registers a probe.

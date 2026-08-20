@@ -920,7 +920,7 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
     return () => window.removeEventListener('resize', measure);
   }, []);
 
-  const extent = useMemo(() => {
+  const raw = useMemo(() => {
     let w = box.w, h = box.h;
     items.forEach((a, i) => {
       const p = jobPos(a, i);
@@ -930,6 +930,27 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
     nodes.forEach(n => { w = Math.max(w, n.x + n.w + 24); h = Math.max(h, n.y + n.h + 24); });
     return { w, h };
   }, [items, nodes, jobPos, box]);
+
+  /**
+   * The group gives space back too — but never mid-gesture.
+   *
+   * Same rule as the main board, and it matters here for a slightly different
+   * reason: this surface is a native SCROLLER, so a surface that shrinks under
+   * the pointer has its `scrollLeft` clamped by the browser and the whole
+   * content lurches while something is still being held. While a gesture is
+   * live the size is a high-water mark; the moment the hand comes off, the
+   * true size is taken.
+   */
+  const sizingGesture = !!drag || !!resize || !!jobResize || !!drawing;
+  const heldExtent = useRef<{ w: number; h: number } | null>(null);
+  if (sizingGesture) {
+    heldExtent.current = {
+      w: Math.max(heldExtent.current?.w ?? 0, raw.w),
+      h: Math.max(heldExtent.current?.h ?? 0, raw.h),
+    };
+  }
+  useEffect(() => { if (!sizingGesture) heldExtent.current = null; }, [sizingGesture]);
+  const extent = sizingGesture ? heldExtent.current! : raw;
 
   const stageOf = (a: Apartment) => stages.find(s => s.id === a.currentStageId) ?? null;
   const taskCount = (a: Apartment) => contractorAssignments.filter(x => x.apartmentId === a.id).length;
