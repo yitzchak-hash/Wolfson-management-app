@@ -3090,3 +3090,38 @@ excuse is how a real key later inherits somebody else's reason. Verified
 non-vacuous by removing `canvasElements` from the export.
 
 `undoState` is excused there, with the reason above.
+
+## Sketching a toolbar with the app's OWN buttons
+`scratchpad/planbar-sketch.html` — a drag-and-drop workbench for arranging the
+plan viewer's bar. The controls in it are the REAL ones: `planbarcap.mjs`
+captures the drawer's header and the compiled stylesheet out of the running
+app, `planbaritems.mjs` splits that into twelve individual controls, and the
+page is generated from the pair. The first version of this was hand-drawn and
+the owner rightly said it was too far off to judge — a mockup of a toolbar is
+not a toolbar.
+
+Rules the workbench keeps, each of which was a real fault on the way:
+- **The app's `html` and `body` rules are stripped** from the injected CSS.
+  Everything else stays — the utility classes are what make the captured
+  buttons look like the real ones — but those two repaint the workbench itself
+  in the app's grey and font.
+- **The chrome is deliberately a different material**: a paper-grey drafting
+  table and a china-marker red, never the app's navy, so what is being
+  arranged and what is doing the arranging can never be confused. Every mark
+  the tool makes is red; no app control is ever recoloured.
+- **The app's markup inside a part is `pointer-events: none`** — it is being
+  arranged, not operated.
+- **Pointer events, not HTML5 drag-and-drop**: this gets used with a finger on
+  an iPad, where native dragging does not exist.
+- **The delete × is always visible**, never hover-revealed (the standing
+  touch rule), which means the bar needs a real `gap` — at 6px every × landed
+  on its neighbour and the top row's was clipped by the bar's own edge.
+- A sketch mark's label is SHORT and `overflow: hidden`. The first gap said
+  "← everything after this goes right →" with `nowrap`, so a squeezed gap
+  printed its words straight through the buttons beside it — the mark meant to
+  describe the layout was the thing breaking it.
+- The per-bar swatch and remove sit in a caption strip ABOVE the bar, in the
+  table's colour. Floated over the bar's top edge they landed on the bar above.
+
+Harness: `scratchpad/planbarsketch.mjs` — both colour schemes, the drag, the
+caret, the ×, Ctrl+Z, the read-out and the draggable left edge.

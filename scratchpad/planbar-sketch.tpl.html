@@ -1,0 +1,863 @@
+<title>Plan Bar Workbench</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style id="app-css">/*__APP_CSS__*/</style>
+
+<style>
+/* ── The workbench ──────────────────────────────────────────────────────
+   A drafting table. Deliberately NOT the app's navy: the bar you are
+   arranging is a foreign object lying on this surface, and the two must
+   never be mistaken for each other. Every mark this tool makes is in
+   china-marker red; the app's own controls are never recoloured.        */
+:root {
+  --table:  #eceae4;
+  --sheet:  #f7f5f0;
+  --rule:   #cdc7ba;
+  --rule-2: #ded9ce;
+  --ink:    #1a1d21;
+  --muted:  #7d766a;
+  --mark:   #c1471f;
+  --mark-soft: rgba(193, 71, 31, .12);
+  --shadow: 0 1px 2px rgba(26,29,33,.08), 0 8px 24px rgba(26,29,33,.10);
+  --radius: 4px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --table:  #14171c;
+    --sheet:  #1b1f25;
+    --rule:   #333a43;
+    --rule-2: #262c33;
+    --ink:    #e6e4de;
+    --muted:  #8d9299;
+    --mark:   #ef7047;
+    --mark-soft: rgba(239, 112, 71, .16);
+    --shadow: 0 1px 2px rgba(0,0,0,.5), 0 10px 28px rgba(0,0,0,.45);
+  }
+}
+:root[data-theme="dark"] {
+  --table:  #14171c;
+  --sheet:  #1b1f25;
+  --rule:   #333a43;
+  --rule-2: #262c33;
+  --ink:    #e6e4de;
+  --muted:  #8d9299;
+  --mark:   #ef7047;
+  --mark-soft: rgba(239, 112, 71, .16);
+  --shadow: 0 1px 2px rgba(0,0,0,.5), 0 10px 28px rgba(0,0,0,.45);
+}
+
+body {
+  margin: 0;
+  background: var(--table);
+  color: var(--ink);
+  font-family: Archivo, "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+.wrap { max-width: 1180px; margin: 0 auto; padding: 22px 20px 80px; }
+
+/* Micro-labels: the drafting-sheet register text. */
+.lbl {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--muted);
+}
+
+/* ── Masthead ───────────────────────────────────────────────────────── */
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px 24px; margin-bottom: 6px; }
+h1 {
+  font-size: 26px; font-weight: 700; letter-spacing: -.018em; margin: 0;
+  text-wrap: balance; color: var(--ink);
+}
+.sub { margin: 6px 0 0; color: var(--muted); font-size: 14px; max-width: 62ch; }
+.rule-line { height: 1px; background: var(--rule); margin: 18px 0 20px; }
+
+/* ── Command rail ───────────────────────────────────────────────────── */
+.rail { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.btn {
+  font: inherit; font-size: 12.5px; font-weight: 500;
+  padding: 7px 12px; border-radius: var(--radius);
+  border: 1px solid var(--rule); background: var(--sheet); color: var(--ink);
+  cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+}
+.btn:hover { border-color: var(--muted); }
+.btn:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; }
+.btn[disabled] { opacity: .38; cursor: default; }
+.btn.mark { color: var(--mark); border-color: var(--mark); background: var(--mark-soft); }
+.rail .spacer { flex: 1 1 20px; }
+
+/* ── The drawer schematic ───────────────────────────────────────────── */
+.stage {
+  margin-top: 20px; background: var(--sheet);
+  border: 1px solid var(--rule); border-radius: 8px; box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.stage-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; border-bottom: 1px solid var(--rule-2);
+}
+.drawer { display: flex; align-items: stretch; min-height: 300px; position: relative; }
+
+/* The left column of the real drawer — details, notes, worker status.
+   Drawn as a schematic on purpose: it is the thing the bar must NOT
+   reach into, so it only needs to be recognisable, not real.          */
+.left-col { flex: 0 0 auto; padding: 14px; min-width: 0; overflow: hidden; }
+.field { height: 9px; border-radius: 2px; background: var(--rule-2); margin-bottom: 9px; }
+.field.short { width: 55%; }
+.field.tall { height: 42px; }
+.col-title { font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 10px; }
+
+/* The draggable edge — this IS the "how far left may the bar go" answer. */
+.edge {
+  flex: 0 0 11px; cursor: col-resize; position: relative;
+  background: var(--rule-2); touch-action: none;
+}
+.edge::after {
+  content: ""; position: absolute; inset: 0 4px; border-radius: 2px; background: var(--mark);
+  opacity: .55;
+}
+.edge:hover::after, .edge.live::after { opacity: 1; }
+.edge-tag {
+  position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
+  font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 10px;
+  white-space: nowrap; color: var(--mark); background: var(--sheet);
+  padding: 1px 5px; border: 1px solid var(--mark); border-radius: 3px;
+  pointer-events: none;
+}
+.pane { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+
+/* ── A bar ──────────────────────────────────────────────────────────── */
+.bar-block { position: relative; }
+/* The bar's own controls sit in a caption strip ABOVE it, in the table's
+   colour. Floating them over the bar's top edge put bar 2's swatch and
+   remove button straight on top of bar 1's buttons. */
+.bar-tools {
+  display: flex; gap: 6px; align-items: center;
+  padding: 4px 10px; background: var(--table);
+  border-top: 1px solid var(--rule-2);
+}
+.bar-tools .n { margin-inline-end: auto; }
+.swatch {
+  width: 17px; height: 17px; border-radius: 3px; border: 1px solid var(--rule);
+  cursor: pointer; padding: 0; background: none;
+}
+.bar-x {
+  height: 17px; padding: 0 6px; border-radius: 3px; border: 1px solid var(--rule);
+  background: none; color: var(--mark); font-size: 10px; font-weight: 600;
+  letter-spacing: .08em; text-transform: uppercase; cursor: pointer;
+  font-family: Archivo, sans-serif;
+}
+.bar-x:hover { border-color: var(--mark); background: var(--mark-soft); }
+/* The gap is what makes an always-visible delete usable: at 6px every ×
+   landed on its neighbour and the top row's was clipped by the bar edge. */
+.bar {
+  display: flex; align-items: center; gap: 15px 11px; flex-wrap: wrap;
+  padding: 14px 12px 10px; min-height: 52px; position: relative;
+}
+.bar.over { box-shadow: inset 0 0 0 2px var(--mark); }
+.bar-empty {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11px; color: rgba(255,255,255,.55); letter-spacing: .04em;
+}
+.sheet-space {
+  flex: 1 1 auto; min-height: 130px; display: grid; place-items: center;
+  background: repeating-linear-gradient(45deg, transparent 0 9px, var(--rule-2) 9px 10px);
+}
+.sheet-space span {
+  font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px;
+  color: var(--muted); background: var(--sheet); padding: 3px 10px; border-radius: 3px;
+}
+
+/* ── A part ─────────────────────────────────────────────────────────── */
+.chip {
+  position: relative; display: inline-flex; align-items: center;
+  border-radius: 5px; cursor: grab; touch-action: none; user-select: none;
+  max-width: 100%;
+}
+.chip.wide { flex: 1 1 140px; min-width: 90px; }
+.chip.picked { box-shadow: 0 0 0 2px var(--mark); }
+.chip.ghosted { opacity: .3; }
+/* The app's own markup, inert: it is being arranged, not operated. */
+.chip-inner { pointer-events: none; display: inline-flex; align-items: center; max-width: 100%; }
+.chip.wide .chip-inner { width: 100%; }
+/* Always visible, never hover-revealed — this gets used with a finger. */
+.chip-x {
+  position: absolute; top: -8px; inset-inline-end: -6px; z-index: 4;
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,.85); background: var(--mark); color: #fff;
+  font-size: 11px; line-height: 1; cursor: pointer; padding: 0;
+  display: grid; place-items: center; font-family: Archivo, sans-serif;
+  opacity: .8;
+}
+.chip-x:hover, .chip:hover .chip-x, .chip.picked .chip-x { opacity: 1; }
+.chip-x:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+
+/* The two sketch marks — my instructions, not the app's buttons, so they
+   wear the china marker and could never be mistaken for a control.     */
+.synth {
+  font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 10.5px;
+  letter-spacing: .06em; text-transform: uppercase;
+  color: #fff; border: 1.5px dashed rgba(255,255,255,.7); border-radius: 4px;
+  padding: 5px 9px; white-space: nowrap; background: rgba(255,255,255,.08);
+  overflow: hidden; text-overflow: clip; box-sizing: border-box;
+}
+.chip.synth-gap { flex: 1 1 70px; min-width: 54px; overflow: hidden; }
+.chip.synth-gap .synth { width: 100%; text-align: center; }
+
+/* The insertion caret — a red tick where the part will land. */
+.caret {
+  width: 3px; align-self: stretch; min-height: 30px; border-radius: 2px;
+  background: var(--mark); flex: 0 0 3px;
+}
+.caret.tray { min-height: 34px; }
+
+/* The floating part while it is in the hand. */
+#fly {
+  position: fixed; z-index: 999; pointer-events: none;
+  opacity: .95; filter: drop-shadow(0 10px 18px rgba(0,0,0,.35));
+}
+#fly .chip-x { display: none; }
+
+/* ── The tray ───────────────────────────────────────────────────────── */
+/* align-items:start, or the tray stretches to the read-out's height and
+   reads as a huge empty box. */
+.grid {
+  display: grid; grid-template-columns: minmax(0,1.35fr) minmax(0,1fr);
+  gap: 18px; margin-top: 22px; align-items: start;
+}
+@media (max-width: 860px) { .grid { grid-template-columns: minmax(0,1fr); } }
+.panel {
+  background: var(--sheet); border: 1px solid var(--rule);
+  border-radius: 8px; box-shadow: var(--shadow); overflow: hidden;
+}
+.panel-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-bottom: 1px solid var(--rule-2);
+}
+.tray {
+  display: flex; flex-wrap: wrap; gap: 12px 10px; padding: 16px 12px;
+  min-height: 74px; align-content: flex-start;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 23px, var(--rule-2) 23px 24px);
+}
+.tray.over { box-shadow: inset 0 0 0 2px var(--mark); }
+/* A part sitting in the tray has no navy behind it, so it needs its own. */
+.tray .chip { background: #1e3a5f; border-radius: 6px; padding: 3px 4px; }
+.tray .chip.wide { flex: 0 0 auto; max-width: 260px; }
+.tray-empty {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11.5px; color: var(--muted); padding: 6px 2px;
+}
+
+/* ── The read-out ───────────────────────────────────────────────────── */
+pre#spec {
+  margin: 0; padding: 14px 14px 18px; font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12px; line-height: 1.65; color: var(--ink);
+  white-space: pre-wrap; word-break: break-word; max-height: 460px; overflow: auto;
+}
+#spec .k { color: var(--mark); font-weight: 600; }
+#spec .d { color: var(--muted); }
+
+.hint {
+  margin: 14px 0 0; font-size: 13px; color: var(--muted); max-width: 70ch;
+}
+.hint kbd {
+  font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px;
+  border: 1px solid var(--rule); border-radius: 3px; padding: 1px 5px;
+  background: var(--table); color: var(--ink);
+}
+.toast {
+  position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+  background: var(--ink); color: var(--table); font-size: 13px; font-weight: 500;
+  padding: 9px 16px; border-radius: 5px; z-index: 500; box-shadow: var(--shadow);
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <div style="flex:1 1 340px; min-width:0">
+      <div class="lbl">Plan viewer · layout sketch</div>
+      <h1>Drag the buttons where you want them</h1>
+      <p class="sub">
+        These are the real controls, lifted straight out of the app with their own
+        styling — not drawings of them. Move any one onto a bar, drag the red edge to
+        say how far left the bar may reach, and press the red × to take something off.
+        Nothing here changes the app; it just tells me what to build.
+      </p>
+    </div>
+  </div>
+
+  <div class="rule-line"></div>
+
+  <div class="rail">
+    <button class="btn" id="add-bar">＋ Add a bar</button>
+    <button class="btn" id="add-gap">＋ Flexible gap</button>
+    <button class="btn" id="add-div">＋ Divider</button>
+    <span class="spacer"></span>
+    <button class="btn" id="undo" disabled>↶ Undo</button>
+    <button class="btn" id="preset-now">How it is today</button>
+    <button class="btn" id="preset-mine">What I proposed</button>
+    <button class="btn" id="clear">Strip both bars</button>
+    <button class="btn mark" id="copy">Copy the layout</button>
+  </div>
+
+  <div class="stage">
+    <div class="stage-head">
+      <span class="lbl">The job drawer</span>
+      <span class="lbl" style="color:var(--mark)" id="edge-read">—</span>
+    </div>
+    <div class="drawer" id="drawer">
+      <div class="left-col" id="left-col">
+        <div class="col-title">Job details · Worker status</div>
+        <div class="field short"></div>
+        <div class="field"></div>
+        <div class="field short"></div>
+        <div class="field tall"></div>
+        <div class="field"></div>
+        <div class="field short"></div>
+      </div>
+      <div class="edge" id="edge" title="Drag: how far left the bar may reach"></div>
+      <div class="pane" id="pane"></div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <div class="panel-head">
+        <span class="lbl">Off the bar</span>
+        <span class="lbl" style="margin-inline-start:auto" id="tray-count"></span>
+      </div>
+      <div class="tray" id="tray" data-zone="tray"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <span class="lbl">What you have asked for</span>
+      </div>
+      <pre id="spec"></pre>
+    </div>
+  </div>
+
+  <p class="hint">
+    Tap a part to pick it out, then <kbd>Delete</kbd> takes it off the bar.
+    <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes. Your sketch is kept on this machine, so you can
+    close the page and come back to it.
+  </p>
+</div>
+
+<script>
+/* eslint-disable */
+const DATA = /*__APP_DATA__*/;
+const KEY = 'planbar_sketch_v1';
+
+/* The two sketch marks are mine, not the app's. Everything else is a real
+   control captured from the running drawer. */
+/* Short labels on purpose: a gap can be squeezed to almost nothing, and a
+   long one printed its words over the buttons beside it. The full meaning
+   lives in the title and in the read-out, where there is room for it. */
+const SYNTH = {
+  gap: {
+    label: 'Flexible gap', text: '↔ gap',
+    hint: 'Flexible gap — everything after this is pushed to the right',
+  },
+  divider: {
+    label: 'Divider', text: '│ divider',
+    hint: 'A dividing line between two groups of buttons',
+  },
+};
+const PARTS = {};
+DATA.items.forEach(function (i) { PARTS[i.key] = i; });
+
+const REAL = DATA.items.map(function (i) { return i.key; });
+
+/* Where things start: the bar exactly as the app draws it today. */
+const PRESET_NOW = {
+  bars: [{ id: 'b1', color: '#1e3a5f',
+           items: ['name', 'pin', 'markup', 'plans', 'layers', 'versions',
+                   'path', 'print', 'download', 'full', 'folder', 'chips'] }],
+  tray: [],
+  left: 0.34,
+};
+/* And the arrangement I read out of your message, for a starting point. */
+const PRESET_MINE = {
+  bars: [
+    { id: 'b1', color: '#1e3a5f',
+      items: ['folder', 'chips', 'gap:1', 'markup', 'path', 'print', 'download', 'full'] },
+    { id: 'b2', color: '#2c4f78',
+      items: ['layers', 'pin', 'name', 'gap:2', 'versions'] },
+  ],
+  tray: ['plans'],
+  left: 0.34,
+};
+
+let S = load() || clone(PRESET_NOW);
+let past = [];
+let picked = null;
+
+function clone(o) { return JSON.parse(JSON.stringify(o)); }
+function load() {
+  try { const r = localStorage.getItem(KEY); return r ? JSON.parse(r) : null; }
+  catch (e) { return null; }
+}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+
+/* One snapshot per finished action — a press, a drop — never per frame. */
+function remember() {
+  past.push(clone(S));
+  if (past.length > 60) past.shift();
+  document.getElementById('undo').disabled = false;
+}
+function undo() {
+  const prev = past.pop();
+  if (!prev) return;
+  S = prev;
+  document.getElementById('undo').disabled = past.length === 0;
+  picked = null;
+  render();
+  toast('Put back');
+}
+
+/* A part's id may carry an instance number (gap:1), because a gap is worth
+   having more than one of and a real control is not. */
+function baseOf(id) { return String(id).split(':')[0]; }
+function labelOf(id) {
+  const b = baseOf(id);
+  return SYNTH[b] ? SYNTH[b].label : (PARTS[b] ? PARTS[b].label : b);
+}
+function nextInstance(base) {
+  let n = 1;
+  const used = allIds();
+  while (used.indexOf(base + ':' + n) !== -1) n++;
+  return base + ':' + n;
+}
+function allIds() {
+  const out = S.tray.slice();
+  S.bars.forEach(function (b) { out.push.apply(out, b.items); });
+  return out;
+}
+
+/* ── Building a part ─────────────────────────────────────────────────── */
+function buildChip(id, inBar) {
+  const base = baseOf(id);
+  const el = document.createElement('div');
+  el.className = 'chip';
+  el.dataset.id = id;
+  if (picked === id) el.className += ' picked';
+
+  const inner = document.createElement('div');
+  inner.className = 'chip-inner';
+
+  if (SYNTH[base]) {
+    el.className += ' synth-' + base;
+    if (base === 'gap') el.className += ' wide';
+    const s = document.createElement('span');
+    s.className = 'synth';
+    s.textContent = SYNTH[base].text;
+    inner.appendChild(s);
+    el.title = SYNTH[base].hint;
+  } else {
+    const p = PARTS[base];
+    if (!p) return null;
+    if (p.wide && inBar) el.className += ' wide';
+    inner.innerHTML = p.html;
+    el.title = p.label;
+  }
+  el.appendChild(inner);
+
+  const x = document.createElement('button');
+  x.className = 'chip-x';
+  x.type = 'button';
+  x.textContent = '×';
+  x.setAttribute('aria-label', 'Take ' + labelOf(id) + ' off the bar');
+  x.addEventListener('click', function (ev) { ev.stopPropagation(); removeId(id); });
+  el.appendChild(x);
+  return el;
+}
+
+function removeId(id) {
+  remember();
+  const base = baseOf(id);
+  S.bars.forEach(function (b) {
+    const i = b.items.indexOf(id);
+    if (i !== -1) b.items.splice(i, 1);
+  });
+  const t = S.tray.indexOf(id);
+  if (t !== -1) S.tray.splice(t, 1);
+  /* A sketch mark simply goes. A real control is only ever PARKED — you may
+     want it back, and losing one silently would be the tool's own fault. */
+  if (!SYNTH[base] && S.tray.indexOf(id) === -1) S.tray.push(id);
+  if (picked === id) picked = null;
+  render();
+  toast(SYNTH[base] ? 'Gone' : labelOf(id) + ' is off the bar');
+}
+
+/* ── Rendering ───────────────────────────────────────────────────────── */
+function render() {
+  const pane = document.getElementById('pane');
+  pane.innerHTML = '';
+
+  S.bars.forEach(function (bar, bi) {
+    const block = document.createElement('div');
+    block.className = 'bar-block';
+
+    const tools = document.createElement('div');
+    tools.className = 'bar-tools';
+
+    const num = document.createElement('span');
+    num.className = 'lbl n';
+    num.textContent = 'Bar ' + (bi + 1);
+    tools.appendChild(num);
+
+    const sw = document.createElement('input');
+    sw.type = 'color';
+    sw.className = 'swatch';
+    sw.value = bar.color;
+    sw.title = 'The colour of this bar';
+    sw.addEventListener('input', function () { bar.color = sw.value; save(); paintSpec(); row.style.backgroundColor = bar.color; });
+    sw.addEventListener('change', function () { remember(); save(); });
+    tools.appendChild(sw);
+
+    if (S.bars.length > 1) {
+      const bx = document.createElement('button');
+      bx.className = 'bar-x';
+      bx.type = 'button';
+      bx.textContent = 'remove bar';
+      bx.title = 'Remove this bar — anything on it goes to Off the bar';
+      bx.addEventListener('click', function () {
+        remember();
+        bar.items.forEach(function (id) {
+          if (!SYNTH[baseOf(id)]) S.tray.push(id);
+        });
+        S.bars.splice(bi, 1);
+        render();
+        toast('Bar removed');
+      });
+      tools.appendChild(bx);
+    }
+
+    const row = document.createElement('div');
+    row.className = 'bar';
+    row.dataset.zone = 'bar';
+    row.dataset.bar = String(bi);
+    row.style.backgroundColor = bar.color;
+
+    if (bar.items.length === 0) {
+      const e = document.createElement('span');
+      e.className = 'bar-empty';
+      e.textContent = 'empty — drag something here';
+      row.appendChild(e);
+    } else {
+      bar.items.forEach(function (id) {
+        const c = buildChip(id, true);
+        if (c) row.appendChild(c);
+      });
+    }
+
+    block.appendChild(tools);
+    block.appendChild(row);
+    pane.appendChild(block);
+  });
+
+  const sheet = document.createElement('div');
+  sheet.className = 'sheet-space';
+  sheet.innerHTML = '<span>the plan itself</span>';
+  pane.appendChild(sheet);
+
+  const tray = document.getElementById('tray');
+  tray.innerHTML = '';
+  if (S.tray.length === 0) {
+    const e = document.createElement('div');
+    e.className = 'tray-empty';
+    e.textContent = 'Nothing parked — every control is on a bar.';
+    tray.appendChild(e);
+  } else {
+    S.tray.forEach(function (id) {
+      const c = buildChip(id, false);
+      if (c) tray.appendChild(c);
+    });
+  }
+  document.getElementById('tray-count').textContent =
+    S.tray.length ? S.tray.length + ' parked' : '';
+
+  applyEdge();
+  paintSpec();
+  save();
+}
+
+/* ── The left edge: how far left the bar may reach ───────────────────── */
+function applyEdge() {
+  const drawer = document.getElementById('drawer');
+  const w = drawer.clientWidth || 900;
+  document.getElementById('left-col').style.flexBasis = Math.round(S.left * w) + 'px';
+  const pct = Math.round(S.left * 100);
+  document.getElementById('edge-read').textContent =
+    'the bar starts ' + pct + '% across, clear of the worker-status column';
+}
+(function edgeDrag() {
+  const edge = document.getElementById('edge');
+  let live = false;
+  edge.addEventListener('pointerdown', function (e) {
+    live = true; remember(); edge.classList.add('live');
+    edge.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  edge.addEventListener('pointermove', function (e) {
+    if (!live) return;
+    const r = document.getElementById('drawer').getBoundingClientRect();
+    S.left = Math.min(0.6, Math.max(0.08, (e.clientX - r.left) / r.width));
+    applyEdge(); paintSpec();
+  });
+  function end() { if (!live) return; live = false; edge.classList.remove('live'); save(); }
+  edge.addEventListener('pointerup', end);
+  edge.addEventListener('pointercancel', end);
+})();
+window.addEventListener('resize', applyEdge);
+
+/* ── Dragging ────────────────────────────────────────────────────────
+   Pointer events, not HTML5 drag-and-drop: this gets used with a finger
+   on an iPad, where native dragging does not exist at all.            */
+let drag = null;
+const fly = document.createElement('div');
+fly.id = 'fly';
+document.body.appendChild(fly);
+const caret = document.createElement('div');
+caret.className = 'caret';
+
+document.addEventListener('pointerdown', function (e) {
+  const chip = e.target.closest ? e.target.closest('.chip') : null;
+  if (!chip || e.target.closest('.chip-x')) return;
+  if (e.button !== undefined && e.button !== 0) return;
+  const r = chip.getBoundingClientRect();
+  drag = {
+    id: chip.dataset.id, el: chip, moved: false,
+    sx: e.clientX, sy: e.clientY,
+    ox: e.clientX - r.left, oy: e.clientY - r.top,
+    w: r.width, h: r.height,
+    pid: e.pointerId,
+  };
+  try { document.body.setPointerCapture(e.pointerId); } catch (err) {}
+  e.preventDefault();
+});
+
+document.addEventListener('pointermove', function (e) {
+  if (!drag) return;
+  if (!drag.moved) {
+    if (Math.abs(e.clientX - drag.sx) < 5 && Math.abs(e.clientY - drag.sy) < 5) return;
+    drag.moved = true;
+    remember();
+    const c = drag.el.cloneNode(true);
+    c.classList.remove('picked');
+    c.style.width = drag.w + 'px';
+    fly.innerHTML = '';
+    /* The clone needs its own ground: lifted off a navy bar it would
+       otherwise be white text on the table. */
+    fly.style.background = '#1e3a5f';
+    fly.style.borderRadius = '6px';
+    fly.style.padding = '3px 4px';
+    fly.appendChild(c);
+    drag.el.classList.add('ghosted');
+  }
+  fly.style.left = (e.clientX - drag.ox) + 'px';
+  fly.style.top = (e.clientY - drag.oy) + 'px';
+  placeCaret(e.clientX, e.clientY);
+});
+
+function zoneAt(x, y) {
+  const el = document.elementFromPoint(x, y);
+  if (!el || !el.closest) return null;
+  return el.closest('[data-zone]');
+}
+
+function placeCaret(x, y) {
+  const zone = zoneAt(x, y);
+  document.querySelectorAll('.over').forEach(function (n) { n.classList.remove('over'); });
+  if (!zone) { if (caret.parentNode) caret.parentNode.removeChild(caret); return; }
+  zone.classList.add('over');
+  caret.className = 'caret' + (zone.dataset.zone === 'tray' ? ' tray' : '');
+
+  const chips = [].slice.call(zone.querySelectorAll('.chip'))
+    .filter(function (c) { return c !== drag.el; });
+  let before = null;
+  for (let i = 0; i < chips.length; i++) {
+    const r = chips[i].getBoundingClientRect();
+    /* Rows wrap, so the row has to be settled before the column: a part
+       on the line below is never "to the right" of this one. */
+    if (y < r.bottom) {
+      if (x < r.left + r.width / 2) { before = chips[i]; break; }
+    }
+  }
+  const empty = zone.querySelector('.bar-empty, .tray-empty');
+  if (empty) empty.style.display = 'none';
+  if (before) zone.insertBefore(caret, before);
+  else zone.appendChild(caret);
+}
+
+document.addEventListener('pointerup', function (e) {
+  if (!drag) return;
+  const d = drag; drag = null;
+  try { document.body.releasePointerCapture(d.pid); } catch (err) {}
+
+  if (!d.moved) {
+    picked = (picked === d.id) ? null : d.id;
+    render();
+    return;
+  }
+
+  fly.innerHTML = '';
+  document.querySelectorAll('.over').forEach(function (n) { n.classList.remove('over'); });
+
+  const zone = caret.parentNode;
+  if (!zone) { past.pop(); render(); return; }   // dropped on nothing: no change
+
+  /* Where the caret sits, in the target's own list. */
+  const order = [].slice.call(zone.children).filter(function (n) {
+    return n.classList && (n.classList.contains('chip') || n === caret);
+  });
+  let index = order.indexOf(caret);
+  const fromSame = zone.dataset.zone === 'bar'
+    ? S.bars[+zone.dataset.bar].items.indexOf(d.id) !== -1
+    : S.tray.indexOf(d.id) !== -1;
+  if (fromSame) {
+    const cur = order.indexOf(d.el);
+    if (cur !== -1 && cur < index) index--;
+  }
+
+  S.bars.forEach(function (b) {
+    const i = b.items.indexOf(d.id);
+    if (i !== -1) b.items.splice(i, 1);
+  });
+  const t = S.tray.indexOf(d.id);
+  if (t !== -1) S.tray.splice(t, 1);
+
+  if (zone.dataset.zone === 'tray') {
+    if (SYNTH[baseOf(d.id)]) { render(); toast('Gone'); return; }  // a mark has no home off the bar
+    S.tray.splice(Math.max(0, index), 0, d.id);
+  } else {
+    S.bars[+zone.dataset.bar].items.splice(Math.max(0, index), 0, d.id);
+  }
+  if (caret.parentNode) caret.parentNode.removeChild(caret);
+  render();
+});
+
+document.addEventListener('pointercancel', function () {
+  if (!drag) return;
+  if (drag.moved) past.pop();
+  drag = null; fly.innerHTML = '';
+  render();
+});
+
+/* ── Keys ────────────────────────────────────────────────────────────── */
+document.addEventListener('keydown', function (e) {
+  const t = e.target;
+  if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && picked) { e.preventDefault(); removeId(picked); return; }
+  if (e.key === 'Escape' && picked) { picked = null; render(); }
+});
+
+/* ── The read-out ────────────────────────────────────────────────────── */
+function specText() {
+  const L = [];
+  S.bars.forEach(function (bar, i) {
+    L.push('BAR ' + (i + 1) + '   ' + bar.color);
+    if (!bar.items.length) { L.push('    (empty)'); }
+    let n = 0;
+    bar.items.forEach(function (id) {
+      const base = baseOf(id);
+      if (SYNTH[base]) {
+        L.push('    ·  ' + (base === 'gap'
+          ? 'flexible gap — everything after this sits at the right end'
+          : 'a dividing line'));
+      } else {
+        n++;
+        L.push('    ' + String(n).padStart(2, ' ') + '. ' + labelOf(id));
+      }
+    });
+    L.push('');
+  });
+  L.push('OFF THE BAR');
+  if (!S.tray.length) L.push('    nothing — every control is on a bar');
+  S.tray.forEach(function (id) { L.push('    –  ' + labelOf(id)); });
+  L.push('');
+  L.push('LEFT EDGE');
+  L.push('    the bar starts ' + Math.round(S.left * 100) + '% across the drawer,');
+  L.push('    clear of the job details and worker status column');
+  return L.join('\n');
+}
+function paintSpec() {
+  const pre = document.getElementById('spec');
+  pre.innerHTML = specText()
+    .replace(/[&<>]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]; })
+    .replace(/^(BAR \d+|OFF THE BAR|LEFT EDGE)/gm, '<span class="k">$1</span>')
+    .replace(/(#[0-9a-fA-F]{6})/g, '<span class="d">$1</span>');
+}
+
+/* ── The rail ────────────────────────────────────────────────────────── */
+document.getElementById('add-bar').addEventListener('click', function () {
+  remember();
+  S.bars.push({ id: 'b' + (S.bars.length + 1), color: '#2c4f78', items: [] });
+  render(); toast('Bar added');
+});
+function addSynth(base) {
+  remember();
+  const id = nextInstance(base);
+  (S.bars[0] || { items: [] }).items.push(id);
+  render(); toast(SYNTH[base].label + ' added to bar 1 — drag it where you want it');
+}
+document.getElementById('add-gap').addEventListener('click', function () { addSynth('gap'); });
+document.getElementById('add-div').addEventListener('click', function () { addSynth('divider'); });
+document.getElementById('undo').addEventListener('click', undo);
+document.getElementById('preset-now').addEventListener('click', function () {
+  remember(); S = clone(PRESET_NOW); render(); toast('Back to how it is today');
+});
+document.getElementById('preset-mine').addEventListener('click', function () {
+  remember(); S = clone(PRESET_MINE); render(); toast('Loaded what I proposed');
+});
+document.getElementById('clear').addEventListener('click', function () {
+  remember();
+  const keep = [];
+  S.bars.forEach(function (b) {
+    b.items.forEach(function (id) { if (!SYNTH[baseOf(id)]) keep.push(id); });
+    b.items = [];
+  });
+  keep.forEach(function (id) { if (S.tray.indexOf(id) === -1) S.tray.push(id); });
+  render(); toast('Everything is off the bar');
+});
+document.getElementById('copy').addEventListener('click', function () {
+  const text = specText();
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(
+      function () { toast('Copied — paste it back to me'); },
+      function () { selectSpec(); });
+  } else selectSpec();
+});
+function selectSpec() {
+  const pre = document.getElementById('spec');
+  const r = document.createRange();
+  r.selectNodeContents(pre);
+  const sel = window.getSelection();
+  sel.removeAllRanges(); sel.addRange(r);
+  toast('Selected — copy it with Ctrl+C');
+}
+
+let toastT = null;
+function toast(msg) {
+  let n = document.querySelector('.toast');
+  if (!n) { n = document.createElement('div'); n.className = 'toast'; document.body.appendChild(n); }
+  n.textContent = msg;
+  clearTimeout(toastT);
+  toastT = setTimeout(function () { if (n.parentNode) n.parentNode.removeChild(n); }, 1600);
+}
+
+/* Any control the sketch has never heard of — one added to the app after
+   this page was made — is parked rather than silently dropped. */
+(function reconcile() {
+  const have = allIds().map(baseOf);
+  REAL.forEach(function (k) { if (have.indexOf(k) === -1) S.tray.push(k); });
+})();
+render();
+</script>
