@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { MapPin, Check, X, Printer, Plus, Trash2, RotateCcw } from 'lucide-react';
 import { useStore } from '../../data/store';
 import { PlanPin } from '../../types';
@@ -19,12 +20,20 @@ import { PlanPin } from '../../types';
  * read them, but the punch list is the office's to write.
  */
 export function PlanPinOverlay({
-  apartmentId, apartmentLabel, readOnly = false, authorName = '',
+  apartmentId, apartmentLabel, readOnly = false, authorName = '', controlsInto = null,
 }: {
   apartmentId: string;
   apartmentLabel: string;
   readOnly?: boolean;
   authorName?: string;
+  /**
+   * A node in the viewer's own bar to put the buttons in.
+   *
+   * Absent (a full-screen studio, say) and they float over the top-left corner
+   * as they always did — which is fine there, and covered the file name in the
+   * drawer's pane.
+   */
+  controlsInto?: HTMLElement | null;
 }) {
   const { planPins, addPlanPin, updatePlanPin, deletePlanPin } = useStore();
   const [placing, setPlacing] = useState(false);
@@ -101,6 +110,47 @@ export function PlanPinOverlay({
     w.focus();
     setTimeout(() => w.print(), 200);
   }
+
+  /**
+   * The buttons, defined once so they can be drawn in either place.
+   * On the viewer's bar they sit on navy, so they keep their own white pills.
+   */
+  const controlRow = (
+    <>
+
+        {!readOnly && (
+          <button
+            onClick={() => { setPlacing(v => !v); setOpen(null); }}
+            title={placing ? 'Click the plan to drop a pin' : 'Add a punch-list pin'}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold shadow-sm border transition-colors"
+            style={placing
+              ? { backgroundColor: '#dc2626', color: '#fff', borderColor: '#dc2626' }
+              : { backgroundColor: 'rgba(255,255,255,.94)', color: '#374151', borderColor: '#e5e7eb' }}
+          >
+            {placing ? <MapPin size={12} /> : <Plus size={12} />}
+            {placing ? 'Click the plan' : 'Pin'}
+          </button>
+        )}
+        {pins.length > 0 && (
+          <>
+            <span
+              className="px-2 py-1 rounded-lg text-[11px] font-bold shadow-sm border border-gray-200"
+              style={{ backgroundColor: 'rgba(255,255,255,.94)', color: openPins.length ? '#b91c1c' : '#166534' }}
+            >
+              {openPins.length ? `${openPins.length} open` : 'All done'}
+            </span>
+            <button
+              onClick={printPunchList}
+              title="Print the punch list"
+              className="p-1.5 rounded-lg shadow-sm border border-gray-200"
+              style={{ backgroundColor: 'rgba(255,255,255,.94)', color: '#374151' }}
+            >
+              <Printer size={12} />
+            </button>
+          </>
+        )}
+    </>
+  );
 
   return (
     <>
@@ -259,40 +309,17 @@ export function PlanPinOverlay({
         })()}
       </div>
 
-      {/* Controls, above the viewer. */}
-      <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5">
-        {!readOnly && (
-          <button
-            onClick={() => { setPlacing(v => !v); setOpen(null); }}
-            title={placing ? 'Click the plan to drop a pin' : 'Add a punch-list pin'}
-            className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold shadow-sm border transition-colors"
-            style={placing
-              ? { backgroundColor: '#dc2626', color: '#fff', borderColor: '#dc2626' }
-              : { backgroundColor: 'rgba(255,255,255,.94)', color: '#374151', borderColor: '#e5e7eb' }}
-          >
-            {placing ? <MapPin size={12} /> : <Plus size={12} />}
-            {placing ? 'Click the plan' : 'Pin'}
-          </button>
-        )}
-        {pins.length > 0 && (
-          <>
-            <span
-              className="px-2 py-1 rounded-lg text-[11px] font-bold shadow-sm border border-gray-200"
-              style={{ backgroundColor: 'rgba(255,255,255,.94)', color: openPins.length ? '#b91c1c' : '#166534' }}
-            >
-              {openPins.length ? `${openPins.length} open` : 'All done'}
-            </span>
-            <button
-              onClick={printPunchList}
-              title="Print the punch list"
-              className="p-1.5 rounded-lg shadow-sm border border-gray-200"
-              style={{ backgroundColor: 'rgba(255,255,255,.94)', color: '#374151' }}
-            >
-              <Printer size={12} />
-            </button>
-          </>
-        )}
-      </div>
+      {/*
+        Controls — in the viewer's own bar when it offers a slot, floating over
+        the top-left corner when it does not.
+
+        Floating there covered the file's name on every plan, which is what the
+        office kept seeing. A portal puts the same buttons in the bar beside the
+        name instead; the pins themselves stay drawn on the sheet either way.
+      */}
+      {controlsInto
+        ? createPortal(<>{controlRow}</>, controlsInto)
+        : <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5">{controlRow}</div>}
     </>
   );
 }

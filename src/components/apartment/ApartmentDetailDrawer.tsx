@@ -274,6 +274,14 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     { plansFolderId: null, plans: [] });
   /** Which chip is showing — an id from planSet, or null for the detected default. */
   const [shownPlanId, setShownPlanId] = useState<string | null>(null);
+  /**
+   * The slot the viewer offers in its own bar.
+   *
+   * State rather than a ref, because the punch-list controls have to RE-RENDER
+   * into it once it exists — a ref would be filled after the render that needed
+   * it and the buttons would never appear.
+   */
+  const [planBarSlot, setPlanBarSlot] = useState<HTMLElement | null>(null);
   /** The plan picker's folder tree: subfolders of Engineered Plans, which
    *  folder is selected ('' = the plans folder itself), and the picked
    *  folder's own files as chips. Sixteen stamped versions stop spamming
@@ -823,6 +831,144 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    * the iframe and re-fetch the whole PDF from Drive every time anything else
    * in the drawer changed.
    */
+  /**
+   * The plan's own controls — the folder, its sheets, Mark up and the path.
+   *
+   * They used to sit in a white strip directly above the viewer, which put TWO
+   * bars between the drawer's header and the drawing: one for choosing what to
+   * look at and one belonging to the viewer itself. The owner's ruling: these
+   * go up onto the drawer's navy header, and the viewer's own bar is the only
+   * one left over the sheet.
+   */
+  function planControls() {
+    const fileId = shownPlanId ?? detectedPdfId;
+    if (!fileId) return null;
+    return (
+      <span className="flex items-center gap-1.5 min-w-0 flex-wrap">
+        {planFolders.length > 0 ? (
+          <span className="relative">
+            <button
+              onClick={() => setFolderMenuOpen(v => !v)}
+              title="Choose a folder inside Engineered Plans"
+              className="flex items-center gap-1 px-2 py-1 min-h-[30px] rounded-lg text-[11px] font-bold
+                         bg-white/12 text-white hover:bg-white/20 max-w-[150px]"
+            >
+              <BookOpen size={12} className="flex-shrink-0" />
+              <span className="truncate">
+                {planFolderSel
+                  ? (planFolders.find(f => f.id === planFolderSel)?.name ?? '…')
+                  : ui.engineeringPlans}
+              </span>
+              <ChevronDown size={11} className="flex-shrink-0" />
+            </button>
+            {folderMenuOpen && (
+              <>
+                <span className="fixed inset-0 z-[145]" onClick={() => setFolderMenuOpen(false)} />
+                <span className="absolute z-[146] top-full mt-1 start-0 w-56 rounded-xl bg-white border border-gray-200 shadow-xl overflow-hidden block">
+                  <button
+                    onClick={() => { setPlanFolderSel(''); setFolderPlans([]); setFolderMenuOpen(false); }}
+                    className={`w-full text-left px-3 py-2 text-[12px] font-semibold hover:bg-gray-50 ${!planFolderSel ? 'text-[#1e3a5f]' : 'text-gray-700'}`}
+                  >
+                    {ui.engineeringPlans}
+                  </button>
+                  {planFolders.map(f => (
+                    <button
+                      key={f.id}
+                      onClick={() => {
+                        setPlanFolderSel(f.id);
+                        setFolderPlans([]);
+                        setFolderMenuOpen(false);
+                        listFolderPlansViaBackend(f.id).then(setFolderPlans).catch(() => {});
+                      }}
+                      className={`w-full text-left px-3 py-2 text-[12px] hover:bg-gray-50 border-t border-gray-50
+                                  flex items-center gap-1.5 ${planFolderSel === f.id ? 'text-[#1e3a5f] font-semibold' : 'text-gray-700'}`}
+                    >
+                      <FolderOpen size={12} className="text-gray-400 flex-shrink-0" />
+                      <span className="truncate">{f.name}</span>
+                    </button>
+                  ))}
+                </span>
+              </>
+            )}
+          </span>
+        ) : null}
+
+        {(() => {
+          const chips = planFolderSel ? folderPlans : planSet.plans;
+          if (chips.length > 1 || planFolderSel) {
+            return (
+              <span className="flex items-center gap-1 min-w-0 max-w-[280px] overflow-x-auto edge-fade">
+                {chips.map(p => {
+                  const on = p.id === fileId;
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        setShownPlanId(p.id);
+                        // Only a plan from the MAIN folder becomes "the" plan
+                        // the contractor sees — viewing a stamped version or a
+                        // side folder's sheet must not overwrite the choice.
+                        if (!planFolderSel && currentUser) {
+                          updateApartment(apartment!.id,
+                            { plansPdfLink: `https://drive.google.com/file/d/${p.id}/view` },
+                            currentUser);
+                        }
+                      }}
+                      title={p.name}
+                      className="px-2 py-1 rounded-full text-[10.5px] font-bold truncate max-w-[130px]
+                                 flex-shrink-0 transition-colors"
+                      style={on
+                        ? { backgroundColor: '#4aa8d8', color: '#fff' }
+                        : { backgroundColor: 'rgba(255,255,255,.12)', color: '#dbeafe' }}
+                    >
+                      {p.name.replace(/\.pdf$/i, '')}
+                    </button>
+                  );
+                })}
+                {planFolderSel && chips.length === 0 && (
+                  <span className="text-[11px] text-white/50">Empty folder</span>
+                )}
+              </span>
+            );
+          }
+          return null;
+        })()}
+
+        <Tooltip text="Mark up this plan">
+          <button onClick={() => setAnnotating('draw')}
+            className="flex items-center gap-1.5 px-2.5 py-1 min-h-[30px] rounded-lg text-[11px] font-bold text-white"
+            style={{ backgroundColor: '#4aa8d8' }}>
+            <PenLine size={11} /> Mark up
+            {planVersionCount > 0 && (
+              <span className="px-1 rounded-full text-[9px]" style={{ backgroundColor: 'rgba(255,255,255,.28)' }}>
+                v{planVersionCount}
+              </span>
+            )}
+          </button>
+        </Tooltip>
+
+        {/* The PLANS folder, not the job folder — an architect opening the
+            drawing wants the folder the sheets are in. */}
+        {planSet.plansFolderId && (
+          <DriveDesktopPath driveLink={planSet.plansFolderId} onToast={onToast} />
+        )}
+
+        <Tooltip text="Full screen" side="left">
+          <button onClick={() => setAnnotating('view')}
+            className="p-1.5 rounded-lg text-white/70 hover:bg-white/15">
+            <Maximize2 size={14} />
+          </button>
+        </Tooltip>
+        {planSideOn && (
+          <Tooltip text="Hide the plan" side="left">
+            <button onClick={() => setPlanPaneOn(false)}
+              className="p-1.5 rounded-lg text-white/70 hover:bg-white/15"><ChevronRight size={15} /></button>
+          </Tooltip>
+        )}
+      </span>
+    );
+  }
+
   function planPane(variant: 'side' | 'tab') {
     const asTab = variant === 'tab';
     const fileId = shownPlanId ?? detectedPdfId;
@@ -867,148 +1013,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           ? { backgroundColor: '#f8fafc' }
           : { flex: '1 1 54%', backgroundColor: '#f8fafc' }}
       >
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-200 flex-shrink-0 bg-white flex-wrap">
-          {/* The folder, then its plans: the book icon grew into a dropdown
-              over Engineered Plans. Pick the main folder and only ITS sheets
-              show as chips; pick Annotated Plans (or any other subfolder) and
-              that folder's files take the row — sixteen stamped versions no
-              longer spam the bar. */}
-          {planFolders.length > 0 ? (
-            <span className="relative">
-              <button
-                onClick={() => setFolderMenuOpen(v => !v)}
-                title="Choose a folder inside Engineered Plans"
-                className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11.5px] font-bold
-                           bg-[#eef2f7] text-[#1e3a5f] hover:bg-[#e2e9f2] max-w-[170px]"
-              >
-                <BookOpen size={12} className="flex-shrink-0" />
-                <span className="truncate">
-                  {planFolderSel
-                    ? (planFolders.find(f => f.id === planFolderSel)?.name ?? '…')
-                    : ui.engineeringPlans}
-                </span>
-                <ChevronDown size={11} className="flex-shrink-0" />
-              </button>
-              {folderMenuOpen && (
-                <>
-                  <span className="fixed inset-0 z-[145]" onClick={() => setFolderMenuOpen(false)} />
-                  <span className="absolute z-[146] top-full mt-1 start-0 w-56 rounded-xl bg-white border border-gray-200 shadow-xl overflow-hidden block">
-                    <button
-                      onClick={() => { setPlanFolderSel(''); setFolderPlans([]); setFolderMenuOpen(false); }}
-                      className={`w-full text-left px-3 py-2 text-[12px] font-semibold hover:bg-gray-50 ${!planFolderSel ? 'text-[#1e3a5f]' : 'text-gray-700'}`}
-                    >
-                      {ui.engineeringPlans}
-                    </button>
-                    {planFolders.map(f => (
-                      <button
-                        key={f.id}
-                        onClick={() => {
-                          setPlanFolderSel(f.id);
-                          setFolderPlans([]);
-                          setFolderMenuOpen(false);
-                          listFolderPlansViaBackend(f.id).then(setFolderPlans).catch(() => {});
-                        }}
-                        className={`w-full text-left px-3 py-2 text-[12px] hover:bg-gray-50 border-t border-gray-50
-                                    flex items-center gap-1.5 ${planFolderSel === f.id ? 'text-[#1e3a5f] font-semibold' : 'text-gray-700'}`}
-                      >
-                        <FolderOpen size={12} className="text-gray-400 flex-shrink-0" />
-                        <span className="truncate">{f.name}</span>
-                      </button>
-                    ))}
-                  </span>
-                </>
-              )}
-            </span>
-          ) : (
-            <BookOpen size={13} className="text-[#1e3a5f]" />
-          )}
-
-          {(() => {
-            const chips = planFolderSel ? folderPlans : planSet.plans;
-            if (chips.length > 1 || planFolderSel) {
-              return (
-                <span className="flex items-center gap-1 flex-wrap min-w-0">
-                  {chips.map(p => {
-                    const on = p.id === fileId;
-                    return (
-                      <button
-                        key={p.id}
-                        onClick={() => {
-                          setShownPlanId(p.id);
-                          // Only a plan from the MAIN folder becomes "the"
-                          // plan the contractor sees — viewing a stamped
-                          // version or a side folder's sheet must not
-                          // overwrite the job's chosen plan.
-                          if (!planFolderSel && currentUser) {
-                            updateApartment(apartment!.id,
-                              { plansPdfLink: `https://drive.google.com/file/d/${p.id}/view` },
-                              currentUser);
-                          }
-                        }}
-                        title={p.name}
-                        /* Taller chips on the tab — the side pane is clicked with a
-                           mouse, the tab is tapped with a finger. */
-                        className={`px-2 rounded-full text-[11px] font-bold truncate max-w-[150px]
-                                   transition-colors ${asTab ? 'py-1.5' : 'py-0.5'}`}
-                        style={on
-                          ? { backgroundColor: '#1e3a5f', color: '#fff' }
-                          : { backgroundColor: '#eef2f7', color: '#475569' }}
-                      >
-                        {p.name.replace(/\.pdf$/i, '')}
-                      </button>
-                    );
-                  })}
-                  {planFolderSel && chips.length === 0 && (
-                    <span className="text-[11px] text-gray-400">Empty folder</span>
-                  )}
-                </span>
-              );
-            }
-            return (
-              <span className="text-[12px] font-bold text-gray-800 truncate">
-                {planSet.plans.find(p => p.id === fileId)?.name?.replace(/\.pdf$/i, '')
-                  ?? ui.engineeringPlans}
-              </span>
-            );
-          })()}
-
-          <span className="flex-1" />
-          <Tooltip text="Mark up this plan" side="left">
-            <button onClick={() => setAnnotating('draw')}
-              /* One conditional per property, never a base class the variant
-                 has to out-rank — which of two same-specificity utilities wins
-                 is decided by Tailwind's output order, not by this string. */
-              className={`flex items-center gap-1.5 py-1 rounded-lg text-[11.5px] font-bold text-white
-                          ${asTab ? 'px-3 min-h-[36px]' : 'px-2.5'}`}
-              style={{ backgroundColor: '#4aa8d8' }}>
-              <PenLine size={11} /> Mark up
-              {planVersionCount > 0 && (
-                <span className="px-1 rounded-full text-[9px]" style={{ backgroundColor: 'rgba(255,255,255,.28)' }}>
-                  v{planVersionCount}
-                </span>
-              )}
-            </button>
-          </Tooltip>
-          {/* The PLANS folder, not the job folder — an architect opening
-              the drawing wants the folder the sheets are in. */}
-          {planSet.plansFolderId && (
-            <DriveDesktopPath driveLink={planSet.plansFolderId} onToast={onToast} />
-          )}
-          <Tooltip text="Full screen" side="left">
-            <button onClick={() => setAnnotating('view')}
-              className={`rounded-lg text-gray-400 hover:text-[#1e3a5f] ${asTab ? 'p-2' : 'p-1'}`}>
-              <Maximize2 size={asTab ? 15 : 13} />
-            </button>
-          </Tooltip>
-          {/* Collapsing is a side-pane idea. On the tab there is nothing left
-              behind to bring it back with, so the plan would simply vanish. */}
-          {!asTab && (
-            <Tooltip text="Hide the plan" side="left">
-              <button onClick={() => setPlanPaneOn(false)}
-                className="p-1 rounded-lg text-gray-400 hover:text-gray-700"><ChevronRight size={15} /></button>
-            </Tooltip>
-          )}
-        </div>
+        {/* No strip of its own any more: the folder, the sheets, Mark up and
+            the path all live on the drawer's navy header, so there is ONE bar
+            between the header and the drawing rather than two. */}
         {/*
           The viewer and the punch-list pins, in one relatively-positioned
           box. The overlay was imported and never mounted after the plan
@@ -1042,12 +1049,14 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               driveFolderUrl={apartment!.driveLink}
               authorName={currentUser?.name ?? ''}
               onClose={() => { /* part of the pane */ }}
+              barExtrasRef={setPlanBarSlot}
             />
           </Suspense>
           <PlanPinOverlay
             apartmentId={apartment!.id}
             apartmentLabel={aptLabel(apartment!)}
             authorName={currentUser?.name ?? ''}
+            controlsInto={planBarSlot}
           />
         </div>
       </div>
@@ -1313,6 +1322,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               </Tooltip>
             )}
                     </div>
+
+          {/* The plan's own controls, between the status chip and the X — the
+              owner's placement. Only while a plan is actually on screen: they
+              are about the thing being shown, not about the job. */}
+          {(planSideOn || (isPhone && activeTab === 'plan')) && planControls()}
+
           <Tooltip text={ui.cancel} side="left">
             <button onClick={closeDrawer} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0">
               <X size={20} />

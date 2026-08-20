@@ -184,6 +184,7 @@ export interface PlanChoice {
 export function PlanAnnotator({
   planFileId, planName, apartmentId, apartmentLabel, driveFolderUrl, plansFolderId,
   authorName, readOnly = false, askWho = false, people = [], plans = [], embedded = false,
+  barExtrasRef,
   touchScale = 1,
   onClose, onToast, onPickPlan, onStartMarkup,
 }: {
@@ -210,6 +211,13 @@ export function PlanAnnotator({
    * not to.
    */
   embedded?: boolean;
+  /**
+   * Where the HOST can put its own buttons in this bar.
+   *
+   * The drawer's punch-list pin lives here, beside the file's name — see the
+   * note at the slot itself.
+   */
+  barExtrasRef?: (el: HTMLElement | null) => void;
   /**
    * The wallboard is shared — whoever walks up to it is not "the office".
    * When this is on, the editor asks who is drawing before it will let anyone
@@ -849,6 +857,29 @@ export function PlanAnnotator({
     });
     return [...by.values()].sort((a, b) => b.last - a.last);
   }, [strokes]);
+
+  /**
+   * Every layer at once.
+   *
+   * A services drawing arrives with twenty of the architect's layers on it, and
+   * the way somebody uses this is "off with the lot, then back on with the one
+   * I need" — twenty presses to ask one question. `drawnAt` is cleared for the
+   * same reason a single toggle clears it: what is drawn ON the page changed
+   * even though the page and its resolution did not.
+   */
+  function setAllLayers(on: boolean) {
+    const cfg = ocRef.current;
+    if (!cfg) return;
+    setLayers(prev => {
+      const next = prev.map(l => ({ ...l, on }));
+      for (const l of next) {
+        try { cfg.setVisibility?.(l.id, on); } catch { /* older build */ }
+      }
+      return next;
+    });
+    drawnAt.current = null;
+    setTimeout(() => void renderPage(), 0);
+  }
 
   function toggleLayer(id: string) {
     const cfg = ocRef.current;
@@ -2287,6 +2318,16 @@ export function PlanAnnotator({
           </div>
         </div>
 
+        {/*
+          The host's own controls, IN the bar rather than floating over it.
+
+          The punch-list Pin button used to sit at the pane's top-left corner,
+          which is exactly where this bar draws the file's name — so the name
+          was covered by a button, on every plan. It belongs beside the name,
+          in the row, where it hides nothing.
+        */}
+        <span ref={barExtrasRef} className="flex items-center gap-1.5 flex-shrink-0" />
+
         {!compact && <div className="flex-1" />}
 
         {/* The pager and the zoom live in the floating bar over the sheet
@@ -2448,15 +2489,23 @@ export function PlanAnnotator({
           {/* Closing before Drive has it asks. There is a window of a few seconds
               where the markup is safe on this machine but not yet filed, and
               walking away inside it is the one way to lose the drawing. */}
-          <button data-close-studio
-            onClick={() => {
-              const risky = !locked && strokes.length > 0
-                && (saveState === 'local' || saveState === 'failed');
-              if (risky) setConfirmClose(true); else onClose();
-            }}
-            title="Close" className={`${iconBtn} text-white/70 hover:bg-white/10`}>
-            <X size={17} />
-          </button>
+          {/*
+            No X on an embedded pane.
+            It is a pane inside the drawer, not a window — there is nothing for
+            it to close, which is why pressing it appeared to do nothing. The
+            drawer's own X closes the drawer, and the pane has a Hide button.
+          */}
+          {!embedded && (
+            <button data-close-studio
+              onClick={() => {
+                const risky = !locked && strokes.length > 0
+                  && (saveState === 'local' || saveState === 'failed');
+                if (risky) setConfirmClose(true); else onClose();
+              }}
+              title="Close" className={`${iconBtn} text-white/70 hover:bg-white/10`}>
+              <X size={17} />
+            </button>
+          )}
         </span>
       </div>
 
@@ -2919,6 +2968,34 @@ export function PlanAnnotator({
                   Your markup still saves as its own layer.
                 </p>
               )}
+              {layers.length > 1 && (() => {
+                const allOn = layers.every(l => l.on);
+                const noneOn = layers.every(l => !l.on);
+                return (
+                  <button
+                    onClick={() => setAllLayers(!allOn)}
+                    className={`w-full flex items-center gap-2 px-2 rounded-lg hover:bg-gray-50 text-left ${
+                      compact ? 'py-2.5' : 'py-1.5'}`}
+                    title={allOn ? 'Turn every layer off' : 'Turn every layer on'}
+                  >
+                    <span className="w-[15px] h-[15px] rounded flex items-center justify-center flex-shrink-0"
+                      style={allOn
+                        ? { backgroundColor: NAVY, color: '#fff' }
+                        : noneOn
+                          ? { border: '1.5px solid #cbd5e1' }
+                          // Some on, some off — a dash, so it does not claim to
+                          // be either.
+                          : { border: `1.5px solid ${NAVY}`, color: NAVY }}>
+                      {allOn ? <Check size={10} />
+                        : noneOn ? null
+                        : <span style={{ width: 7, height: 2, backgroundColor: NAVY, borderRadius: 1 }} />}
+                    </span>
+                    <span className="text-[12px] font-bold text-gray-700">
+                      {allOn ? 'All layers' : noneOn ? 'No layers' : `${layers.filter(l => l.on).length} of ${layers.length}`}
+                    </span>
+                  </button>
+                );
+              })()}
               {layers.map(l => (
                 <button key={l.id} onClick={() => toggleLayer(l.id)}
                   className={`w-full flex items-center gap-2 px-2 rounded-lg hover:bg-gray-50 text-left ${

@@ -149,6 +149,68 @@ if (layersBtn) {
   }
 }
 
+// ── One bar over the sheet, not two ───────────────────────────────────────
+{
+  const bars = await page.evaluate(() => {
+    const drawer = document.querySelector('.drawer-panel');
+    const header = [...drawer.querySelectorAll('div')].find(d =>
+      getComputedStyle(d).backgroundColor === 'rgb(30, 58, 95)' && d.querySelector('button'));
+    const txt = e => (e?.textContent ?? '').replace(/\s+/g, ' ');
+    // The old strip: white, bordered underneath, carrying Mark up.
+    const oldStrip = [...drawer.querySelectorAll('div')].find(d =>
+      /Mark up/.test(txt(d))
+      && getComputedStyle(d).backgroundColor === 'rgb(255, 255, 255)'
+      && getComputedStyle(d).borderBottomWidth !== '0px'
+      && d.querySelectorAll('div').length < 8);
+    const viewerBar = [...drawer.querySelectorAll('div')].find(d =>
+      getComputedStyle(d).backgroundColor === 'rgb(30, 58, 95)' && /Layers/.test(txt(d)));
+    return {
+      headerHasMarkUp: /Mark up/.test(txt(header)),
+      oldStrip: !!oldStrip,
+      viewerBar: txt(viewerBar).slice(0, 150),
+      xInViewerBar: !!viewerBar?.querySelector('[data-close-studio]'),
+      // No \b before Pin: the bar's text runs the file name straight into
+      // it ("...Cohen, DavidPin Plans"), so a word boundary never matches.
+      pinInViewerBar: /Pin/.test(txt(viewerBar)),
+      floatingPin: !!drawer.querySelector('.absolute.top-2.left-2'),
+    };
+  });
+  console.log('       bars:', JSON.stringify(bars));
+  check(bars.headerHasMarkUp, 'Mark up moved onto the drawer’s navy header');
+  check(!bars.oldStrip, 'the white strip above the plan is gone');
+  check(bars.pinInViewerBar, 'the Pin sits in the viewer’s own bar', bars.viewerBar);
+  check(!bars.floatingPin, 'and no longer floats over the file name');
+  check(!bars.xInViewerBar, 'the X that did nothing is gone from that bar');
+  check(/Plans/.test(bars.viewerBar) && /Layers/.test(bars.viewerBar)
+    && /Download/.test(bars.viewerBar) && /Print/.test(bars.viewerBar),
+    'and it still carries Plans, Layers, Download and Print');
+}
+
+// ── All layers on and off in one press ────────────────────────────────────
+{
+  await page.click('button[title*="layers"]').catch(() => {});
+  await page.waitForTimeout(600);
+  const all = await page.$('button[title="Turn every layer off"]');
+  check(!!all, 'the Layers panel offers an all-layers checkbox');
+  if (all) {
+    await all.click({ force: true });
+    await page.waitForTimeout(1400);
+    const off = await inkOf();
+    console.log('       with every layer off:', JSON.stringify(off));
+    check(off.red === 0 && off.blue === 0, 'one press turns them all off',
+      `red ${off.red} blue ${off.blue}`);
+    const back = await page.$('button[title="Turn every layer on"]');
+    check(!!back, 'and offers to turn them all back on');
+    if (back) {
+      await back.click({ force: true });
+      await page.waitForTimeout(1400);
+      const on = await inkOf();
+      check(on.red > 200 && on.blue > 200, 'which brings them all back',
+        `red ${on.red} blue ${on.blue}`);
+    }
+  }
+}
+
 await page.screenshot({ path: 'scratchpad/planlayers.png' });
 console.log(fails === 0 ? '\nALL PASS' : `\n${fails} FAILED`);
 await browser.close();
