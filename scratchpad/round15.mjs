@@ -127,18 +127,21 @@ for (const [id, what, wantWeight] of [['CE-note', 'a note', '400'], ['CE-kpi', '
   }
 }
 
-// ── 2. The board search offers Show on board ──────────────────────────────
+// ── 2. The board search offers Find in board ──────────────────────────────
+// Its own wording: this search only ever covers the board, so "on the board"
+// would be labouring the obvious. The all-app search below keeps "Show it on
+// the board", and each is asserted by the name it actually wears.
 {
   await page.keyboard.press('Control+f');
   await page.waitForTimeout(600);
   await page.keyboard.type('Weinstein');
   await page.waitForTimeout(700);
   const has = await page.evaluate(() =>
-    [...document.querySelectorAll('button[title="Show it on the board"]')].length);
-  check(has > 0, 'every board-search result carries a Show-on-board button', `${has} found`);
+    [...document.querySelectorAll('button[title="Find in board"]')].length);
+  check(has > 0, 'every board-search result carries a Find-in-board button', `${has} found`);
   // And pressing it travels without opening the drawer.
   if (has > 0) {
-    await page.click('button[title="Show it on the board"]');
+    await page.click('button[title="Find in board"]');
     await page.waitForTimeout(1600);
     const st = await page.evaluate(() => ({
       drawer: !!document.querySelector('.drawer-panel'),

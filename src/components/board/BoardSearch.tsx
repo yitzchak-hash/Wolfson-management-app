@@ -272,7 +272,10 @@ export function BoardSearch({
                 */}
                 <button
                   onClick={e => { e.stopPropagation(); onGo({ ...h, reveal: true }); }}
-                  title="Show it on the board"
+                  // "Find in board" here, "Show it on the board" in the
+                  // all-app search: this one only ever searches the board, so
+                  // saying "on the board" would be labouring the obvious.
+                  title="Find in board"
                   className="flex-shrink-0 p-1.5 rounded-lg text-gray-300 hover:text-[#1e3a5f]
                              hover:bg-[#4aa8d8]/12 transition-colors"
                 >
