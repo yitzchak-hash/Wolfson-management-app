@@ -9,7 +9,10 @@ interface ToastProps {
 
 export function Toast({ message, type = 'success', onClose }: ToastProps) {
   useEffect(() => {
-    const t = setTimeout(onClose, 3000);
+    // 1.8s, not 3. A toast is a receipt — you read it in the corner of your
+    // eye and carry on — and three seconds of it sitting over the board was
+    // long enough to be in the way of the next thing.
+    const t = setTimeout(onClose, 1800);
     return () => clearTimeout(t);
   }, [onClose]);
 

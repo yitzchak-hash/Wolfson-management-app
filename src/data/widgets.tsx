@@ -111,6 +111,15 @@ export interface WidgetCtx {
   askRemoveTask?: (entry: PlannerEntry, done: (alsoDelete: boolean) => void) => void;
   /** A job's last square in the notebook was emptied — put it back on the board. */
   leaveNotebook?: (jobId: string) => void;
+  /**
+   * This is a wall panel.
+   *
+   * Separate from `readOnly`, which the wall turns OFF when somebody picks up
+   * its pen to move its own furniture about. The weekly notebook must not
+   * follow that: a TV is walked up to by anyone, and a week's planning is not
+   * something to rearrange by leaning on a screen. Jobs still open from it.
+   */
+  wall?: boolean;
   /** Hebrew, so a widget that writes its own words can turn round. */
   isRtl?: boolean;
   /** The TV passes this: widgets render, but nothing can be changed. */
@@ -2583,7 +2592,8 @@ function PlannerHost({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
         users={c.users}
         assignments={c.assignments}
         stages={c.stages}
-        readOnly={c.readOnly}
+        // The wall is read-only for the notebook whatever its pen says.
+        readOnly={c.readOnly || c.wall}
         projection={projecting}
         update={projecting ? () => {} : c.update}
         openJob={c.openJob}

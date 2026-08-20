@@ -2431,13 +2431,34 @@ export function GeneralJobsPage() {
     ids.forEach(id => {
       const orig = canvasElements.find(e => e.id === id);
       if (!orig) return;
+      /**
+       * A duplicated NOTEBOOK is a projection, never a rival copy.
+       *
+       * Duplicating one used to hand back a second, independent notebook
+       * carrying a snapshot of the same squares — so the two drifted apart the
+       * moment either was touched, and the X on a card in one left the card
+       * sitting in the other. That reads as "the X doesn't work" and as
+       * "nothing on the duplicate syncs", which is exactly what the office
+       * reported.
+       *
+       * A projection draws the MAIN notebook's own element, so there is one
+       * set of squares shown twice and it is live in both. `role: 'projection'`
+       * is the flag `PlannerHost` already reads.
+       */
+      const planner = isPlannerElement(orig);
       addCanvasElement({
         ...orig, id: genId('CE'), x: orig.x + 25, y: orig.y + 25,
         addedAt: new Date().toISOString(),
+        ...(planner
+          ? { data: { ...(orig.data ?? {}), role: 'projection' } }
+          : {}),
       });
     });
     setSelectedElIds(new Set());
     setCtxMenu(null);
+    if (ids.some(id => isPlannerElement(canvasElements.find(e => e.id === id) ?? {}))) {
+      setToast('A second view of the same notebook — both stay in step');
+    }
   }
 
   // ── Color change ──────────────────────────────────────────────────

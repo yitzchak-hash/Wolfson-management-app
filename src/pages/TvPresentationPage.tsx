@@ -565,6 +565,9 @@ export function TvPresentationPage() {
     // A widget on the wall shows live figures and cannot be typed into. Only
     // the pen unlocks arranging, and that moves cards rather than editing them.
     readOnly: !editing,
+    // Every widget on the wall knows it is on a wall. The notebook is the one
+    // that refuses to be edited here even when the pen is out.
+    wall: true,
   }), [apartments, stages, contractorAssignments, contractors, users, contractorPhotos,
        activityLogs, editing]);
 

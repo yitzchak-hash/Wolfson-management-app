@@ -546,6 +546,18 @@ export function PlannerWidget({
     update({ data: { ...(el.data ?? {}), ...patch } });
   }, [el.data, update]);
 
+  /**
+   * How many squares in THIS notebook hold that job.
+   *
+   * The single test for "is this its last one", used by the X and by anything
+   * else that has to know whether a removal takes the job off the notebook
+   * altogether.
+   */
+  function squaresFor(jobId: string): number {
+    return Object.values(cells)
+      .reduce((n, list) => n + (list ?? []).filter(e => e.jobId === jobId).length, 0);
+  }
+
   function setCell(key: string, entries: PlannerEntry[]) {
     const next = { ...cells };
     if (entries.length) next[key] = entries; else delete next[key];
@@ -1070,6 +1082,25 @@ export function PlannerWidget({
                               }}
                               onText={v => setCell(key, entries.map(x => (x.id === en.id ? { ...x, text: v } : x)))}
                               onRemove={() => {
+                                /**
+                                 * The X on a job's LAST square is a decision, so it asks.
+                                 *
+                                 * Taking that square away is the job LEAVING the notebook and
+                                 * going back on the board — a different act from tidying one of
+                                 * several days it sits on, and the office should be told which
+                                 * one is about to happen. With copies elsewhere the job is not
+                                 * going anywhere, so there is nothing to ask about and the
+                                 * square just goes.
+                                 *
+                                 * It raises the SAME question a drag off the notebook raises —
+                                 * `target: null` is the off-the-notebook branch of the drop
+                                 * dialog — so the two ways of doing one thing cannot drift
+                                 * into asking it differently.
+                                 */
+                                if (en.jobId && squaresFor(en.jobId) <= 1) {
+                                  setDropAsk({ fromKey: key, entry: en, target: null });
+                                  return;
+                                }
                                 const drop = () => setCell(key, entries.filter(x => x.id !== en.id));
                                 if (en.taskId && onRemoveTask) onRemoveTask(en, () => drop());
                                 else drop();
