@@ -7,6 +7,7 @@ import {
   aptLabel,
 } from '../../types';
 import { registerRota, onRotaHover, rotaCellAt, setRotaHover, RotaHit } from '../../data/rotaDrop';
+import { useStore, loadProjectSnapshot } from '../../data/store';
 import { holidaysOn, hebrewLabel, Holiday } from '../../data/hebrewDates';
 import { DriveIcon, ZohoIcon, PlanIcon } from '../ui/BrandIcons';
 
@@ -24,6 +25,18 @@ export interface PlannerEntry {
   id: string;
   /** A real job from the board. */
   jobId?: string;
+  /**
+   * Which workspace that job lives in — absent means this one.
+   *
+   * The office plans across all three: a Wolfson apartment sometimes has to go
+   * on the same week as the Job Board's own work. Absent on every entry ever
+   * written before this existed, and absent on nearly all of them after, so the
+   * common case stays exactly as it was.
+   *
+   * A foreign job STAYS PUT (the owner's ruling): nothing leaves its own
+   * building diagram or any count there. The square only points at it.
+   */
+  projectId?: string;
   /** Or plain words. Both can sit in the same cell. */
   text?: string;
   /** The task this slot created, if it made one. */
@@ -595,11 +608,64 @@ export function PlannerWidget({
     write({ start: iso(d) });
   }
 
+  /**
+   * The workspaces, and the two writers a cross-workspace card needs.
+   *
+   * Read here rather than passed in: the notebook is drawn from a widget
+   * registry entry whose context is scoped to ONE workspace on purpose, and
+   * threading these through it would widen that context for every widget.
+   */
+  const projects = useStore(st => st.projects);
+  const currentProjectId = useStore(st => st.currentProjectId);
+  const setCurrentProject = useStore(st => st.setCurrentProject);
+  const setPendingFocus = useStore(st => st.setPendingFocus);
+
   const jobById = useMemo(() => {
     const m = new Map<string, Apartment>();
     for (const j of jobs) m.set(j.id, j);
     return m;
   }, [jobs]);
+
+  /**
+   * Jobs on this sheet that belong to ANOTHER workspace.
+   *
+   * The office plans across all three, so a Wolfson apartment can sit on the
+   * same week as the Job Board's own work. Only the open workspace is live, so
+   * a foreign job is read from that workspace's last stored snapshot — the same
+   * source the Building Progress widget and the all-workspace calendar use, and
+   * the same limitation: it is whatever this machine last saw.
+   *
+   * Keyed by `${projectId}:${jobId}` so two workspaces cannot collide, and
+   * built only from the ids actually referenced — never by loading everything.
+   */
+  const foreign = useMemo(() => {
+    const want = new Map<string, Set<string>>();
+    for (const list of Object.values(data.cells ?? {})) {
+      for (const e of list ?? []) {
+        if (!e?.jobId || !e.projectId) continue;
+        const set = want.get(e.projectId) ?? new Set<string>();
+        set.add(e.jobId);
+        want.set(e.projectId, set);
+      }
+    }
+    const out = new Map<string, { job: Apartment; workspace: string }>();
+    for (const [pid, ids] of want) {
+      const snap = loadProjectSnapshot(pid);
+      const name = projects.find(p => p.id === pid)?.name ?? pid;
+      for (const j of snap.apartments) {
+        if (ids.has(j.id)) out.set(`${pid}:${j.id}`, { job: j, workspace: name });
+      }
+    }
+    return out;
+  }, [data.cells, projects]);
+
+  /** The job a card is pointing at, wherever it lives. */
+  const resolve = (en: PlannerEntry): { job?: Apartment; workspace?: string } => {
+    if (!en.jobId) return {};
+    if (!en.projectId) return { job: jobById.get(en.jobId) };
+    const hit = foreign.get(`${en.projectId}:${en.jobId}`);
+    return { job: hit?.job, workspace: hit?.workspace ?? en.projectId };
+  };
 
   const todayIso = iso(new Date());
 
@@ -955,7 +1021,8 @@ export function PlannerWidget({
                             <PlannerCard
                               key={en.id}
                               entry={en}
-                              job={en.jobId ? jobById.get(en.jobId) : undefined}
+                              job={resolve(en).job}
+                              workspace={resolve(en).workspace}
                               stages={stages}
                               assignments={assignments}
                               color={person.color}
@@ -964,7 +1031,19 @@ export function PlannerWidget({
                               bold={data.bold}
                               readOnly={ro || state === 'ending'}
                               openOnly={!!projection}
-                              onOpen={() => en.jobId && openJob(en.jobId)}
+                              onOpen={() => {
+                                if (!en.jobId) return;
+                                // Another workspace's job opens over there — the
+                                // switch first, then the intent, because
+                                // setCurrentProject clears a pending focus as
+                                // part of arriving somewhere new.
+                                if (en.projectId && en.projectId !== currentProjectId) {
+                                  setCurrentProject(en.projectId);
+                                  setPendingFocus({ kind: 'apartment', id: en.jobId });
+                                  return;
+                                }
+                                openJob(en.jobId);
+                              }}
                               onText={v => setCell(key, entries.map(x => (x.id === en.id ? { ...x, text: v } : x)))}
                               onRemove={() => {
                                 const drop = () => setCell(key, entries.filter(x => x.id !== en.id));
@@ -1050,11 +1129,19 @@ const SLOT_H = 58;
  * the job — the same rule as the board, so there is one habit to learn.
  */
 function PlannerCard({
-  entry, job, stages, assignments, color, size, scale = 1, bold, readOnly, openOnly,
+  entry, job, workspace, stages, assignments, color, size, scale = 1, bold, readOnly, openOnly,
   onOpen, onText, onRemove, onDragOff, onDragTo,
 }: {
   entry: PlannerEntry;
   job?: Apartment;
+  /**
+   * Set when the job belongs to ANOTHER workspace.
+   *
+   * Shown as a small tag on the card, because "Artzi" on the Job Board's sheet
+   * and "Artzi" in Wolfson are two different answers to "where am I going
+   * today", and a card that does not say which is worse than no card.
+   */
+  workspace?: string;
   stages: Stage[];
   assignments: ContractorAssignment[];
   color: string;
@@ -1183,17 +1270,32 @@ function PlannerCard({
           <span
             className="flex-1 min-w-0 text-left"
             style={{ fontSize: size, fontWeight: bold ? 800 : 700, color: '#1e293b' }}
-            title={job ? undefined : 'This job is no longer on the board'}
+            title={job ? undefined
+              : entry.projectId
+                ? `This job is in ${workspace ?? 'another workspace'} — open it once on this computer and it will show here`
+                : 'This job is no longer on the board'}
           >
             <span className="block truncate">
               {/* aptLabel, not displayName: a building-project apartment has a
                   NUMBER and often no family name, and displayName-only drew
                   every one of those as the word "Job". */}
-              {job ? (aptLabel(job) || job.address?.trim() || 'Job') : '(job removed)'}
+              {job
+                ? (aptLabel(job) || job.address?.trim() || 'Job')
+                : entry.projectId
+                  // Not "removed" — this machine simply has not opened that
+                  // workspace yet, so its snapshot is not here to read.
+                  ? 'Open that workspace to see this'
+                  : '(job removed)'}
             </span>
-            {(stage || entry.text || job?.address) && (
+            {(workspace || stage || entry.text || job?.address) && (
               <span className="block truncate font-medium"
                 style={{ fontSize: Math.max(z(7), size - z(2)), color: '#64748b' }}>
+                {/* The workspace FIRST when it is not this one: "Artzi" here and
+                    "Artzi" in Wolfson are two different answers to "where am I
+                    going today". */}
+                {workspace && (
+                  <span className="font-bold" style={{ color: '#7c3aed' }}>{workspace} · </span>
+                )}
                 {[entry.text, stage?.name, job?.address].filter(Boolean).join(' · ')}
               </span>
             )}

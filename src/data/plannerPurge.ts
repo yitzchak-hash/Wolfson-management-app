@@ -19,7 +19,18 @@
 /** The widget ids whose `data` is a planner. */
 export const PLANNER_WIDGET_IDS = ['rota', 'week-planner'];
 
-interface EntryLike { jobId?: string }
+interface EntryLike {
+  jobId?: string;
+  /**
+   * The workspace that job lives in — absent means the one the notebook is in.
+   *
+   * A purge is asked to remove ids that were DELETED HERE, so an entry pointing
+   * at another workspace must be left alone: its job was never in this
+   * workspace's `apartments` to begin with, and "not found" there means nothing
+   * about whether it still exists.
+   */
+  projectId?: string;
+}
 interface PlannerLike {
   cells?: Record<string, EntryLike[]>;
   /** Slots belonging to somebody taken off, kept so they come back intact. */
@@ -42,7 +53,7 @@ function stripCells(
   const next: Record<string, EntryLike[]> = {};
   for (const [key, list] of Object.entries(cells)) {
     if (!Array.isArray(list)) { next[key] = list; continue; }
-    const kept = list.filter(e => !(e?.jobId && gone.has(e.jobId)));
+    const kept = list.filter(e => !(e?.jobId && !e.projectId && gone.has(e.jobId)));
     removed += list.length - kept.length;
     // An emptied cell is dropped rather than left as an empty array: a cell
     // that exists but holds nothing is indistinguishable on screen from one

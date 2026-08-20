@@ -1335,9 +1335,15 @@ export function GeneralJobsPage() {
       const live = new Set(apartments.map(a => a.id));
       const dead = new Set<string>();
       for (const el of planners) {
-        const cells = (el.data as { cells?: Record<string, { jobId?: string }[]> } | undefined)?.cells ?? {};
+        const cells = (el.data as
+          { cells?: Record<string, { jobId?: string; projectId?: string }[]> } | undefined)?.cells ?? {};
         for (const list of Object.values(cells)) {
-          for (const e of list ?? []) if (e?.jobId && !live.has(e.jobId)) dead.add(e.jobId);
+          for (const e of list ?? []) {
+            // A job in ANOTHER workspace is not missing — it was never in this
+            // workspace's records. Sweeping those would delete every
+            // cross-workspace plan the moment the board loaded.
+            if (e?.jobId && !e.projectId && !live.has(e.jobId)) dead.add(e.jobId);
+          }
         }
       }
       purgedPlanners.current = true;

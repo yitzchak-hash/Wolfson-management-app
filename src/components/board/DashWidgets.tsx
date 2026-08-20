@@ -34,15 +34,16 @@ import { usePlannerDrag } from '../../data/plannerDrop';
  * Its own component only because a hook cannot be called inside a `.map`
  * callback — and the drag has to be per cell, since each holds a different job.
  */
-function ProgressCell({ apt, fill, cell, label, canPlan, onOpen }: {
+function ProgressCell({ apt, fill, cell, label, projectId, onOpen }: {
   apt: Apartment;
   fill: string;
   cell: { number: boolean; name: boolean; numberPx: number; namePx: number };
   label: string;
-  canPlan: boolean;
+  /** Which workspace this unit lives in — it travels with the drop. */
+  projectId: string;
   onOpen: () => void;
 }) {
-  const planner = usePlannerDrag(apt.id, { enabled: canPlan });
+  const planner = usePlannerDrag(apt.id, { projectId });
   return (
     <button
       {...planner.handlers}
@@ -230,10 +231,9 @@ export function ProjectMini({ projectId: chosen, buildingId, onOpen, onOpenUnit,
                      * takes you to that unit in its own workspace.
                      *
                      * It also drags onto a notebook square, like everything
-                     * else that stands for a job — but only when this widget is
-                     * showing the workspace you are actually in. A notebook
-                     * looks its entries up in its OWN workspace, so a unit from
-                     * another one could only ever land as "(job removed)".
+                     * else that stands for a job — from ANY workspace. The
+                     * entry remembers which one, and the unit stays exactly
+                     * where it is in its own building diagram.
                      */
                     <ProgressCell
                       key={a.id}
@@ -241,7 +241,7 @@ export function ProjectMini({ projectId: chosen, buildingId, onOpen, onOpenUnit,
                       fill={fill}
                       cell={cell}
                       label={`${aptLabel(a)} · ${st ? getStageName(st, !!isRtl) : 'Not started'}`}
-                      canPlan={projectId === currentProjectId}
+                      projectId={projectId}
                       onOpen={() => onOpenUnit?.(projectId, a.id)}
                     />
                   );

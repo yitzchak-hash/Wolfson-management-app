@@ -33,13 +33,26 @@ export interface DropResult {
  * because a binned job falls out of `isCountableApartment` and every count in
  * the app would drop each time somebody planned some work.
  */
-export function placeJobsOnPlanner(cell: RotaHit, ids: string[]): DropResult {
+export function placeJobsOnPlanner(
+  cell: RotaHit,
+  ids: string[],
+  /**
+   * The workspace those ids belong to. Omit for the one you are in.
+   *
+   * A foreign job STAYS PUT: it is not marked `inNotebook`, nothing leaves its
+   * building diagram, and no count there changes. The square holds a pointer,
+   * which is what lets the office plan Wolfson work on the same week as the
+   * Job Board's without moving anything.
+   */
+  projectId?: string,
+): DropResult {
   setRotaHover(null);
   const st = useStore.getState();
   const el = st.canvasElements.find(c => c.id === cell.elId);
   if (!el) return { added: 0, ghosted: 0 };
+  const foreign = !!projectId && projectId !== st.currentProjectId;
 
-  const wasInNotebook = new Set(
+  const wasInNotebook = foreign ? new Set<string>() : new Set(
     ids.filter(id => st.apartments.find(a => a.id === id)?.inNotebook));
 
   const data = (el.data ?? {}) as Record<string, unknown>;
@@ -49,14 +62,21 @@ export function placeJobsOnPlanner(cell: RotaHit, ids: string[]): DropResult {
 
   const fresh = ids
     .filter(id => !already.some(e => e.jobId === id))
-    .map(id => ({ id: `R-${Math.random().toString(36).slice(2, 8)}`, jobId: id }));
+    .map(id => ({
+      id: `R-${Math.random().toString(36).slice(2, 8)}`,
+      jobId: id,
+      ...(foreign ? { projectId } : {}),
+    }));
   if (!fresh.length) return { added: 0, ghosted: 0 };
 
   cells[key] = [...already, ...fresh];
   st.updateCanvasElement(el.id, { data: { ...data, cells } });
 
+  // Only a job in THIS workspace moves in. A foreign one is pointed at, never
+  // moved — writing `inNotebook` on it would mean reaching into another
+  // workspace's records to take a unit off its own diagram.
   const user = st.currentUser;
-  if (user) {
+  if (user && !foreign) {
     for (const { jobId } of fresh) {
       const j = st.apartments.find(a => a.id === jobId);
       if (j && j.inNotebook !== el.id) st.updateApartment(jobId, { inNotebook: el.id }, user);
@@ -86,15 +106,15 @@ export function dropMessage(r: DropResult): string | null {
  * drag from a press, which is what lets a row keep its click: below that this
  * never fires and the button behaves exactly as it did.
  *
- * `enabled` is not decoration. A notebook holds jobs from ITS OWN workspace —
- * an entry is a `jobId` looked up in the workspace the notebook lives in — so
- * dragging another workspace's unit onto it would write a reference that can
- * only ever render as "(job removed)". Callers showing somebody else's
- * workspace pass false.
+ * A job from ANOTHER workspace is welcome: pass `projectId` and the entry
+ * remembers where it came from, so the card can resolve it and say which
+ * workspace it is in. It stays put over there — see `placeJobsOnPlanner`.
  */
 export function usePlannerDrag(jobId: string, opts?: {
   enabled?: boolean;
   onToast?: (msg: string) => void;
+  /** Which workspace this job lives in. Omit for the one you are in. */
+  projectId?: string;
 }) {
   const enabled = opts?.enabled !== false;
   const drag = useRef<{ x: number; y: number; live: boolean } | null>(null);
@@ -139,7 +159,7 @@ export function usePlannerDrag(jobId: string, opts?: {
       const cell = rotaCellAt(e.clientX, e.clientY);
       setRotaHover(null);
       if (!cell) return;
-      const msg = dropMessage(placeJobsOnPlanner(cell, [jobId]));
+      const msg = dropMessage(placeJobsOnPlanner(cell, [jobId], opts?.projectId));
       if (msg) opts?.onToast?.(msg);
     },
     onPointerCancel: () => { drag.current = null; setHeld(false); setRotaHover(null); },

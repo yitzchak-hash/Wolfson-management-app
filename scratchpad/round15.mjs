@@ -35,7 +35,23 @@ await ctx.addInitScript(() => {
       { id: 'CE-book', type: 'widget', widget: 'rota', x: 560, y: 220, w: 820, h: 380,
         text: '', color: '#ffffff',
         data: { people: ['n:Max', 'n:Vlad 1'], firstWeek: '2026-08-16', weekCount: 1, span: 5, cells: {} } },
+      // Building Progress, pointed at ANOTHER workspace.
+      { id: 'CE-prog', type: 'widget', widget: 'project-mini', x: 60, y: 640, w: 300, h: 220,
+        text: '', color: '#ffffff', data: { projectId: 'wolfson' } },
     ],
+  }));
+  // The other workspace's last snapshot, which is what a cross-workspace card
+  // reads — only the open workspace is live.
+  localStorage.setItem('wolfson_app_version', '3');
+  localStorage.setItem('wolfson_app_data', JSON.stringify({
+    apartments: [
+      { id: 'A1-53', buildingId: 'A1', floor: 15, apartmentNumber: '53', displayName: 'Artzi, Avital',
+        isUnnamed: false, isDuplexApt: false, classification: 'standard', generalNotes: '',
+        currentStageId: null, stageDates: {},
+        createdAt: '2026-01-01', updatedAt: '2026-01-01', updatedBy: 'U', updatedByName: 'U' },
+    ],
+    buildings: [{ id: 'A1', name: 'A1' }],
+    stages: [],
   }));
 });
 const page = await ctx.newPage();
@@ -181,6 +197,69 @@ for (const [id, what, wantWeight] of [['CE-note', 'a note', '400'], ['CE-kpi', '
       `names ${w.first}px vs day ${w.day}px`);
     check(w.first >= 40 && w.first <= 130, 'and is sized to the names, not to a share of the sheet',
       `${w.first}px for "Vlad 1"`);
+  }
+}
+
+// ── 5. A job from ANOTHER workspace goes on the notebook ──────────────────
+{
+  const cellPt = await page.evaluate(() => {
+    const w = document.querySelector('[data-node-id="CE-prog"]');
+    if (!w) return null;
+    const btn = [...w.querySelectorAll('button')].find(b2 => /53|Artzi/.test(b2.textContent ?? ''));
+    if (!btn) return null;
+    const r = btn.getBoundingClientRect();
+    return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+  });
+  check(!!cellPt, 'the Building Progress widget drew another workspace’s unit',
+    cellPt ? '' : 'no cell found');
+
+  const target = await page.evaluate(() => {
+    const w = document.querySelector('[data-node-id="CE-book"]');
+    const cells = [...w.querySelectorAll('div')].filter(d => String(d.className).includes('group/cell'));
+    const c = cells[2];
+    if (!c) return null;
+    const r = c.getBoundingClientRect();
+    return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+  });
+
+  if (cellPt && target) {
+    await page.mouse.move(cellPt.x, cellPt.y);
+    await page.mouse.down();
+    await page.mouse.move(cellPt.x + 20, cellPt.y - 20, { steps: 5 });
+    await page.mouse.move(target.x, target.y, { steps: 12 });
+    await page.mouse.up();
+    await page.waitForTimeout(1400);
+
+    const wrote = await page.evaluate(() => {
+      const d = JSON.parse(localStorage.getItem('general_app_data') ?? '{}');
+      const el = (d.canvasElements ?? []).find(e => e.id === 'CE-book');
+      const all = Object.values(el?.data?.cells ?? {}).flat();
+      return all.map(e => ({ jobId: e.jobId, projectId: e.projectId }));
+    });
+    console.log('       notebook now holds:', JSON.stringify(wrote));
+    check(wrote.some(e => e.jobId === 'A1-53' && e.projectId === 'wolfson'),
+      'the square remembers the job AND which workspace it came from');
+
+    // It STAYS PUT: nothing is written back into the other workspace.
+    const untouched = await page.evaluate(() => {
+      const d = JSON.parse(localStorage.getItem('wolfson_app_data') ?? '{}');
+      const a2 = (d.apartments ?? []).find(x => x.id === 'A1-53');
+      return { exists: !!a2, inNotebook: a2?.inNotebook ?? null };
+    });
+    console.log('       the unit back in Wolfson:', JSON.stringify(untouched));
+    check(untouched.exists && !untouched.inNotebook,
+      'and the unit stays exactly where it was in its own workspace');
+
+    // The card says which workspace, and does not read "(job removed)".
+    const card = await page.evaluate(() => {
+      const w = document.querySelector('[data-node-id="CE-book"]');
+      const c = [...w.querySelectorAll('.planner-card')]
+        .find(x => /Artzi|Wolfson/.test(x.textContent ?? ''));
+      return c ? (c.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 70) : null;
+    });
+    console.log('       the card reads:', JSON.stringify(card));
+    check(!!card && /Wolfson/.test(card), 'the card is tagged with its workspace', card ?? 'no card');
+    check(!!card && !/job removed/.test(card), 'and does not read "(job removed)"');
   }
 }
 
