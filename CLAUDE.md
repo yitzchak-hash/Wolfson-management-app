@@ -3003,3 +3003,90 @@ press aimed at that corner hits the chrome (find empty surface with
 `elementFromPoint` instead of guessing), and sixteen tiles lay out four across
 at 928px — inside a 1080px window, so the surface had nothing to scroll and
 the drag genuinely had nowhere to go.
+
+---
+
+# v2 — undo, and the backup audit that finally exists
+
+## Undo has two weights, and only one of them asks
+The owner's rule, in his words: placements on the board just undo; anything
+sensitive — "moving stuff from the notebooks and entries inside stuff" — must
+"prompt the user with a warning explaining exactly in English what's happening".
+So `UndoEntry.weight` is `arrange | content`, and `UndoLayer` is the only thing
+that reads it. An `arrange` step runs with a one-line toast; a `content` step
+raises a modal quoting the entry's own `explain` sentence — written at the
+moment the action happened, so it names the real job, person and day rather
+than guessing from the board as it stands now.
+
+`src/data/undo.ts` is the pure stack (`remember` · `popUndo` / `popRedo` ·
+`undoKey`). Entries carry the exact `undo`/`redo` CLOSURES built when it
+happened — no diffing of state after the fact, no replaying of actions, no
+reconstructing an inverse: all three are ways of being subtly wrong about what
+changed, and a wrong undo is worse than none.
+
+**Session-only and per-workspace, never persisted.** A stack that survived a
+reload would offer to undo something another device has since changed; the
+entries are closures and cannot be serialised anyway. `setCurrentProject`
+clears it, and every entry carries its `projectId` so a stale one can never
+write into the wrong workspace's collections.
+
+### `useBoardTrack()` — wrap the writes, not the fields
+`track({weight, label, explain}, () => …writes…)` snapshots EVERY board record
+before the body and again after, then keeps only the ones that differ. Nothing
+is enumerated by the caller, which removes the whole class of bug where an
+action grows a fourth thing it writes to and the undo quietly stops covering
+it. It costs two maps of shallow copies **once per finished action** — a
+mouse-up, a menu press — never per frame.
+
+`applySide` restores only the fields that DIFFER between the two sides. Writing
+the whole record back would silently revert anything a colleague changed in
+between: an undo of "I moved a tile" must not also undo "somebody renamed the
+job".
+
+### `elPatch` is two things wearing one name
+The node chrome's buttons (lock, wallboard) write board FURNITURE through it,
+and every widget's `ctx.update` writes its own DATA through it. Only the first
+goes on the stack — gated by `ARRANGE_FIELDS`. A widget that saves on every
+keystroke would otherwise fill the stack with sixty entries for one typed word,
+and the step somebody actually wanted would be sixty presses away. Note text
+IS tracked, as `content`, because it commits on BLUR — once per edit.
+
+### Undoing a delete must lift the tombstone
+`fsUntombstone` (dotted field path + `deleteField()`; a nested map merge
+removes nothing) and the store's `untombstone` / `restoreCanvasElements`.
+Re-adding a record alone is not an undo: the tombstone stands, the next sync
+takes it out again, and the thing blinks back and vanishes on every device.
+**A JOB is never created or destroyed by an undo** — permanent deletion has its
+own confirmation and its own tombstone, and the reversible version of throwing
+a job away is the Trash group, which is an ordinary field change.
+
+### Wired at
+Board: both drags, both resizes, colour, z-order, lock, group/ungroup, node
+placement, node removal, filing into a group, note text. Notebook: the X on a
+card, take-it-off, move/copy between squares. Group window: its drag, both its
+resizes, and taking a job back out. Keys work on every page (`UndoLayer` is in
+`AppLayout`); `UndoButtons` sits in the board header because an iPad has no
+Ctrl+Z, and both go through the SAME `runUndo` door so a press and a keystroke
+can never behave differently on one entry.
+
+Harness: `scratchpad/undoredo.mjs` (25 checks). Two traps it paid for: reading
+the button titles on an exhausted stack answers "Nothing to undo", which is
+correct and tells you nothing; and seeding a planner `cell` without also
+setting the job's `inNotebook` tests half the link and blames the app for the
+other half.
+
+## The backup audit is a real file now
+`scratchpad/backupaudit.mjs`. CLAUDE.md has named it as a standing rule for
+months and it had **never existed in the repo** — so the rule it enforces was
+being kept by hand. It reads `AppState` itself and requires every data key to
+be in persistNow + exportData (top level) + importData, or **excused with a
+reason** in the file. Offline, static, no browser.
+
+Two things it checks that the prose version could not: a key exported inside
+`settings` is fine ONLY if the importer reads it from `data.settings` (exported
+nested and read at the top level is the exact fault the rule was written
+after), and an excuse naming a key that no longer exists is stale — a stale
+excuse is how a real key later inherits somebody else's reason. Verified
+non-vacuous by removing `canvasElements` from the export.
+
+`undoState` is excused there, with the reason above.

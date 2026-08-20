@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useStore } from '../data/store';
+import { useBoardTrack } from '../data/useBoardUndo';
+import { UndoButtons } from '../components/board/UndoLayer';
 import { isPlannerElement, purgeJobsFromPlanner } from '../data/plannerPurge';
 import { rotaCellAt, setRotaHover, anyRota, RotaHit } from '../data/rotaDrop';
 import { PlannerEntry, personOf } from '../components/board/PlannerWidget';
@@ -279,6 +281,18 @@ interface ColorPickerState {
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
+/**
+ * Fields that describe where a node SITS, not what it says.
+ *
+ * A patch made only of these is board furniture and goes on the undo stack as
+ * an `arrange` step; anything else is a widget writing its own data and is left
+ * alone, or one typed word becomes sixty undo steps.
+ */
+const ARRANGE_FIELDS = new Set([
+  'x', 'y', 'w', 'h', 'z', 'color', 'locked', 'showOnTv',
+  'boardGroup', 'outline', 'outlineWidth', 'board', 'addedAt',
+]);
+
 export function GeneralJobsPage() {
   const {
     apartments,
@@ -313,6 +327,50 @@ export function GeneralJobsPage() {
   } = useStore();
   /** For the one widget that can send you to another workspace's unit. */
   const navigate = useNavigate();
+
+  /**
+   * Undo.
+   *
+   * `track` wraps the writes an action performs and works out for itself what
+   * changed, so a call site that grows a fourth thing it writes to stays
+   * covered without anybody remembering to list it. `arrange` — a position, a
+   * size, a colour, a lock — just undoes; `content` stops and asks first,
+   * quoting the sentence given here.
+   */
+  const track = useBoardTrack();
+  /**
+   * Labels for the undo history.
+   *
+   * Inside the component body, not at module level: a constant that outputs a
+   * user-visible string cannot reach the translation store, which is the
+   * recurring bilingual fault this codebase already names by name.
+   */
+  const things = (n: number) => s.isRtl
+    ? (n === 1 ? 'דבר אחד' : `${n} דברים`)
+    : `${n} ${n === 1 ? 'thing' : 'things'}`;
+  const movedLabel = (n: number) => s.isRtl ? `הזזת ${things(n)}` : `Moved ${things(n)}`;
+  const resizedLabel = (n: number) => s.isRtl ? `שינוי גודל של ${things(n)}` : `Resized ${things(n)}`;
+  const colouredLabel = (n: number) => s.isRtl ? `שינוי צבע של ${things(n)}` : `Recoloured ${things(n)}`;
+  const stackedLabel = (n: number) => s.isRtl ? `סידור שכבות של ${things(n)}` : `Restacked ${things(n)}`;
+  const lockedLabel = (on: boolean, n: number) => s.isRtl
+    ? `${on ? 'נעילת' : 'שחרור'} ${things(n)}`
+    : `${on ? 'Locked' : 'Unlocked'} ${things(n)}`;
+  /** A node named as somebody would point at it, for the history line. */
+  const nameOf = (el?: CanvasElement | null) => {
+    if (!el) return s.isRtl ? 'פריט' : 'an item';
+    if (el.type === 'bin') return binLabelOf(el);
+    const words = (el.text ?? '').trim().split(/\s+/).slice(0, 4).join(' ');
+    if (words) return `“${words}${(el.text ?? '').trim().split(/\s+/).length > 4 ? '…' : ''}”`;
+    return el.type === 'widget' && el.widget ? el.widget : el.type;
+  };
+  const changedLabel = (el?: CanvasElement | null) => s.isRtl
+    ? `שינוי ${nameOf(el)}` : `Changed ${nameOf(el)}`;
+  /** The old wording, shortened enough to read inside a sentence. */
+  const quoteOf = (text: string) => {
+    const t = text.trim().replace(/\s+/g, ' ');
+    if (!t) return s.isRtl ? '(ריק)' : 'nothing at all';
+    return `“${t.length > 90 ? t.slice(0, 90) + '…' : t}”`;
+  };
 
   /**
    * A board somebody has shared with you to LOOK at.
@@ -836,6 +894,14 @@ export function GeneralJobsPage() {
   }
 
   function placeWidget(def: WidgetDef) {
+    // Wrapped whole rather than per branch: `track` works out what changed for
+    // itself, so the group branch, the title branch and the ordinary widget
+    // branch are all covered without three near-identical calls.
+    track({ weight: 'arrange', label: s.isRtl ? `הוספת ${def.name}` : `Added ${def.name}` },
+      () => placeWidgetNow(def));
+  }
+
+  function placeWidgetNow(def: WidgetDef) {
     const at = viewCentreSpot(def.w, def.h);
     // Clip art is a first-class node type, not a widget wrapper — that is what
     // lets it stick to a job and travel with it.
@@ -1802,7 +1868,21 @@ export function GeneralJobsPage() {
       .map(id => ({ id: `R-${Math.random().toString(36).slice(2, 8)}`, jobId: id, taskId }));
     if (!fresh.length) return;
     cells[key] = [...already, ...fresh];
-    updateCanvasElement(el.id, { data: { ...data, cells } });
+    const who = personOf(cell.person, contractors, users)?.name ?? cell.person.replace(/^n:/, '');
+    const what = fresh.length === 1
+      ? (apartments.find(a => a.id === fresh[0].jobId)?.displayName || (s.isRtl ? 'עבודה' : 'a job'))
+      : `${fresh.length} ${s.isRtl ? 'עבודות' : 'jobs'}`;
+    track({
+      weight: 'content',
+      label: s.isRtl
+        ? `הוספת ${what} ליום של ${who}`
+        : `Put ${what} on ${who}’s ${cell.day}`,
+      explain: s.isRtl
+        ? `${what} תרד מהיום ${cell.day} של ${who} בלוח השבועי ותחזור ללוח העבודות. שום עבודה לא נמחקת.`
+        : `${what} comes off ${who}’s row on ${cell.day} in the weekly notebook and goes back onto the board. `
+          + 'No job is deleted — only the planning of that day changes.',
+    }, () => {
+      updateCanvasElement(el.id, { data: { ...data, cells } });
 
     /**
      * The job MOVES IN: the board stops drawing it and the square holds it.
@@ -1812,12 +1892,13 @@ export function GeneralJobsPage() {
      * time the office planned some work. Its board position is left alone, so
      * taking it out of the last square puts it back where it was.
      */
-    if (currentUser) {
-      for (const { jobId } of fresh) {
-        const j = apartments.find(a => a.id === jobId);
-        if (j && j.inNotebook !== el.id) updateApartment(jobId!, { inNotebook: el.id }, currentUser);
+      if (currentUser) {
+        for (const { jobId } of fresh) {
+          const j = apartments.find(a => a.id === jobId);
+          if (j && j.inNotebook !== el.id) updateApartment(jobId!, { inNotebook: el.id }, currentUser);
+        }
       }
-    }
+    });
 
     const ghosting = fresh.filter(f => inNotebookAlready.has(f.jobId!)).length;
     setToast(ghosting
@@ -1852,17 +1933,34 @@ export function GeneralJobsPage() {
    * chose in the group's settings, not a coupling.
    */
   function fileInBin(ids: string[], key: string, at?: CanvasElement) {
-    ids.forEach(id => moveToBin(id, key));
-
     const stageId = at?.stageId;
-    if (stageId && currentUser) {
-      ids.forEach(id => updateApartment(id, { currentStageId: stageId }, currentUser));
-    }
+    const where = at ? binLabelOf(at) : key;
+    const stageWord = stageId ? stages.find(st => st.id === stageId)?.name : undefined;
+    /**
+     * Filing is CONTENT, not arranging.
+     *
+     * A job in a group drops out of `isCountableApartment`, so it leaves every
+     * unit total, every task total and every chasing list in the app. Undoing
+     * that quietly would change numbers on four pages without anybody asking.
+     */
+    track({
+      weight: 'content',
+      label: s.isRtl ? `העברת ${things(ids.length)} ל-${where}` : `Filed ${things(ids.length)} into ${where}`,
+      explain: s.isRtl
+        ? `${things(ids.length)} יחזרו מ-${where} ללוח${stageWord ? `, והשלב יחזור למה שהיה לפני "${stageWord}"` : ''}. `
+          + 'עבודה בקבוצה לא נספרת בסך הכל, אז המספרים בדשבורד ישתנו.'
+        : `${things(ids.length)} come back out of ${where} onto the board`
+          + `${stageWord ? `, and the stage goes back to whatever it was before “${stageWord}”` : ''}. `
+          + 'A job sitting in a group is left out of every total, so the counts on the dashboard will change.',
+    }, () => {
+      ids.forEach(id => moveToBin(id, key));
+      if (stageId && currentUser) {
+        ids.forEach(id => updateApartment(id, { currentStageId: stageId }, currentUser));
+      }
+    });
 
     if (at?.binKind === 'done') celebrateAt(at);
-    const label = at ? binLabelOf(at) : key;
-    const stageName = stageId ? stages.find(st => st.id === stageId)?.name : undefined;
-    setToast(stageName ? `Moved to ${label} · stage set to ${stageName}` : `Moved to ${label}`);
+    setToast(stageWord ? `Moved to ${where} · stage set to ${stageWord}` : `Moved to ${where}`);
   }
 
   /**
@@ -1926,8 +2024,12 @@ export function GeneralJobsPage() {
       return;
     }
     const gid = 'GRP-' + Math.random().toString(36).slice(2, 9);
-    if (currentUser) jobIds.forEach(id => updateApartment(id, { boardGroup: gid }, currentUser));
-    elIds.forEach(id => updateCanvasElement(id, { boardGroup: gid }));
+    track({ weight: 'arrange', label: s.isRtl
+      ? `קיבוץ ${things(jobIds.length + elIds.length)}`
+      : `Grouped ${things(jobIds.length + elIds.length)}` }, () => {
+      if (currentUser) jobIds.forEach(id => updateApartment(id, { boardGroup: gid }, currentUser));
+      elIds.forEach(id => updateCanvasElement(id, { boardGroup: gid }));
+    });
     setCtxMenu(null);
     setToast(`Grouped ${jobIds.length + elIds.length} things — they move together now`);
   }
@@ -1942,6 +2044,15 @@ export function GeneralJobsPage() {
    * old grouping.
    */
   function ungroup(ids: { jobs?: string[]; els?: string[] }) {
+    const n = (ids.jobs ?? []).length + (ids.els ?? []).length;
+    track({ weight: 'arrange', label: s.isRtl
+      ? `הוצאת ${things(n)} מהקבוצה`
+      : `Ungrouped ${things(n)}` }, () => ungroupNow(ids));
+    setCtxMenu(null);
+    setToast('Taken out of the group');
+  }
+
+  function ungroupNow(ids: { jobs?: string[]; els?: string[] }) {
     const touched = new Set<string>();
     (ids.jobs ?? []).forEach(id => {
       const g = jobs.find(j => j.id === id)?.boardGroup;
@@ -1963,8 +2074,6 @@ export function GeneralJobsPage() {
         if (restEls[0]) updateCanvasElement(restEls[0].id, { boardGroup: undefined });
       }
     });
-    setCtxMenu(null);
-    setToast('Taken out of the group');
   }
 
   /**
@@ -2040,14 +2149,28 @@ export function GeneralJobsPage() {
   function removeEl(id: string, ask = true) {
     const el = canvasElements.find(e => e.id === id);
     const lost = ask ? whatIsLost(el) : '';
-    if (lost && !window.confirm(`Remove this? You will lose ${lost}, and it cannot be undone.`)) return;
-    archivePlanner(el);
-    if (el && currentUser) {
-      apartments
-        .filter(a => a.inNotebook === el.id)
-        .forEach(a => updateApartment(a.id, { inNotebook: undefined }, currentUser));
-    }
-    deleteCanvasElement(id);
+    // "it cannot be undone" is no longer true — Ctrl+Z puts a removed node
+    // back, tombstone and all. The warning still names what is at stake,
+    // because a removal you did not mean is still worth catching first.
+    if (lost && !window.confirm(`Remove this? You will lose ${lost}.`)) return;
+    const held = el ? apartments.filter(a => a.inNotebook === el.id).length : 0;
+    track({
+      weight: 'content',
+      label: s.isRtl ? `הסרת ${nameOf(el)}` : `Removed ${nameOf(el)}`,
+      explain: s.isRtl
+        ? `${nameOf(el)} יחזור ללוח בדיוק איפה שהיה, עם כל מה שהיה בו`
+          + `${held ? `, ו-${things(held)} יחזרו אליו` : ''}.`
+        : `${nameOf(el)} comes back onto the board exactly where it was, with everything that was in it`
+          + `${held ? `, and ${things(held)} go back inside it` : ''}.`,
+    }, () => {
+      archivePlanner(el);
+      if (el && currentUser) {
+        apartments
+          .filter(a => a.inNotebook === el.id)
+          .forEach(a => updateApartment(a.id, { inNotebook: undefined }, currentUser));
+      }
+      deleteCanvasElement(id);
+    });
   }
 
   /**
@@ -2389,15 +2512,17 @@ export function GeneralJobsPage() {
       .filter(e => !e.board || e.board === activeBoardView)
       .map(e => e.z ?? (e.type === 'box' ? 1 : e.type === 'bin' ? 4 : 5));
     const top = Math.max(5, ...zs), bottom = Math.min(1, ...zs);
-    ids.forEach(id => {
-      const el = canvasElements.find(e => e.id === id);
-      if (!el) return;
-      const cur = el.z ?? (el.type === 'box' ? 1 : el.type === 'bin' ? 4 : 5);
-      const next = how === 'front' ? top + 1
-        : how === 'back' ? bottom - 1
-        : how === 'up' ? cur + 1
-        : cur - 1;
-      updateCanvasElement(id, { z: next });
+    track({ weight: 'arrange', label: stackedLabel(ids.length) }, () => {
+      ids.forEach(id => {
+        const el = canvasElements.find(e => e.id === id);
+        if (!el) return;
+        const cur = el.z ?? (el.type === 'box' ? 1 : el.type === 'bin' ? 4 : 5);
+        const next = how === 'front' ? top + 1
+          : how === 'back' ? bottom - 1
+          : how === 'up' ? cur + 1
+          : cur - 1;
+        updateCanvasElement(id, { z: next });
+      });
     });
     setToast(how === 'front' ? 'Brought to the front'
       : how === 'back' ? 'Sent to the back'
@@ -2463,13 +2588,15 @@ export function GeneralJobsPage() {
 
   // ── Color change ──────────────────────────────────────────────────
   function applyTileColor(ids: string[], color: string | undefined) {
-    if (currentUser) ids.forEach(id => updateApartment(id, { tileColor: color }, currentUser));
+    if (currentUser) track({ weight: 'arrange', label: colouredLabel(ids.length) }, () =>
+      ids.forEach(id => updateApartment(id, { tileColor: color }, currentUser)));
     setColorPicker(null);
     setCtxMenu(null);
   }
 
   function applyElColor(ids: string[], color: string) {
-    ids.forEach(id => updateCanvasElement(id, { color }));
+    track({ weight: 'arrange', label: colouredLabel(ids.length) }, () =>
+      ids.forEach(id => updateCanvasElement(id, { color })));
     setColorPicker(null);
     setCtxMenu(null);
   }
@@ -2562,7 +2689,8 @@ export function GeneralJobsPage() {
       addedAt: new Date().toISOString(),
       data: { notes: [], openId: undefined },
     };
-    addCanvasElement(el);
+    track({ weight: 'arrange', label: s.isRtl ? 'הוספת פתק' : 'Added a sticky note' },
+      () => addCanvasElement(el));
   }
 
   function addBox() {
@@ -2576,7 +2704,8 @@ export function GeneralJobsPage() {
       text: 'Section',
       color: BOX_PALETTE[0],
     };
-    addCanvasElement(el);
+    track({ weight: 'arrange', label: s.isRtl ? 'הוספת מסגרת' : 'Added a section box' },
+      () => addCanvasElement(el));
   }
 
   // ── Job drag ──────────────────────────────────────────────────────
@@ -2914,24 +3043,26 @@ export function GeneralJobsPage() {
          * lost; room is opened deliberately from board settings and nowhere
          * else.
          */
-        drag.ids.forEach(id => {
-          const st = drag.starts.get(id)!;
-          const { x, y } = settleDrop(st.x + drag.dx, st.y + drag.dy);
-          if (activeBoardView) {
-            const job = apartments.find(a => a.id === id);
-            updateApartment(id, {
-              viewPos: { ...(job?.viewPos ?? {}), [activeBoardView]: { x, y } },
-            }, currentUser);
-          } else {
-            updateApartment(id, { canvasX: x, canvasY: y }, currentUser);
-          }
-        });
-        drag.carryEls?.forEach((st, id) => {
-          const settled = settleDrop(st.x + drag.dx, st.y + drag.dy);
-          const node = canvasElements.find(n => n.id === id);
-          updateCanvasElement(id, node && isDrawingNode(node)
-            ? { ...settled, points: relaidPoints(node, { ...settled, w: node.w, h: node.h }) }
-            : settled);
+        track({ weight: 'arrange', label: movedLabel(drag.ids.length + (drag.carryEls?.size ?? 0)) }, () => {
+          drag.ids.forEach(id => {
+            const st = drag.starts.get(id)!;
+            const { x, y } = settleDrop(st.x + drag.dx, st.y + drag.dy);
+            if (activeBoardView) {
+              const job = apartments.find(a => a.id === id);
+              updateApartment(id, {
+                viewPos: { ...(job?.viewPos ?? {}), [activeBoardView]: { x, y } },
+              }, currentUser);
+            } else {
+              updateApartment(id, { canvasX: x, canvasY: y }, currentUser);
+            }
+          });
+          drag.carryEls?.forEach((st, id) => {
+            const settled = settleDrop(st.x + drag.dx, st.y + drag.dy);
+            const node = canvasElements.find(n => n.id === id);
+            updateCanvasElement(id, node && isDrawingNode(node)
+              ? { ...settled, points: relaidPoints(node, { ...settled, w: node.w, h: node.h }) }
+              : settled);
+          });
         });
       }
     } else if (drag.ids.length === 1 && drag.ids[0] === job.id) {
@@ -3189,27 +3320,29 @@ export function GeneralJobsPage() {
     if (drag.moved) {
       // No make-room question here either — see the tile drop path. A locked
       // edge simply stops the thing, in silence.
-      drag.ids.forEach(id => {
-        const st = drag.starts.get(id)!;
-        const settled = settleDrop(st.x + drag.dx, st.y + drag.dy);
-        const node = canvasElements.find(n => n.id === id);
-        // A drawing carries its polyline with it — the points ARE the ink, so
-        // moving the node without them would leave the drawing behind. Still
-        // one record holding one path; only its coordinates change.
-        updateCanvasElement(id, node && isDrawingNode(node)
-          ? { ...settled, points: relaidPoints(node, { ...settled, w: node.w, h: node.h }) }
-          : settled);
-      });
-      if (currentUser) drag.carryJobs?.forEach((st, id) => {
-        const { x, y } = settleDrop(st.x + drag.dx, st.y + drag.dy);
-        if (activeBoardView) {
-          const j = apartments.find(a => a.id === id);
-          updateApartment(id, {
-            viewPos: { ...(j?.viewPos ?? {}), [activeBoardView]: { x, y } },
-          }, currentUser);
-        } else {
-          updateApartment(id, { canvasX: x, canvasY: y }, currentUser);
-        }
+      track({ weight: 'arrange', label: movedLabel(drag.ids.length + (drag.carryJobs?.size ?? 0)) }, () => {
+        drag.ids.forEach(id => {
+          const st = drag.starts.get(id)!;
+          const settled = settleDrop(st.x + drag.dx, st.y + drag.dy);
+          const node = canvasElements.find(n => n.id === id);
+          // A drawing carries its polyline with it — the points ARE the ink, so
+          // moving the node without them would leave the drawing behind. Still
+          // one record holding one path; only its coordinates change.
+          updateCanvasElement(id, node && isDrawingNode(node)
+            ? { ...settled, points: relaidPoints(node, { ...settled, w: node.w, h: node.h }) }
+            : settled);
+        });
+        if (currentUser) drag.carryJobs?.forEach((st, id) => {
+          const { x, y } = settleDrop(st.x + drag.dx, st.y + drag.dy);
+          if (activeBoardView) {
+            const j = apartments.find(a => a.id === id);
+            updateApartment(id, {
+              viewPos: { ...(j?.viewPos ?? {}), [activeBoardView]: { x, y } },
+            }, currentUser);
+          } else {
+            updateApartment(id, { canvasX: x, canvasY: y }, currentUser);
+          }
+        });
       });
     } else if (el.type === 'bin' && drag.ids.length === 1 && drag.ids[0] === el.id) {
       // A press that never became a drag is a click, so the bin opens. Deciding
@@ -3394,10 +3527,12 @@ export function GeneralJobsPage() {
   function onJobResizeUp() {
     if (!jobResize) return;
     if (!jobResetDone.current && currentUser) {
-      updateApartment(jobResize.id, {
-        tileW: Math.round(jobResize.startW + jobResize.dw),
-        tileH: Math.round(jobResize.startH + jobResize.dh),
-      }, currentUser);
+      track({ weight: 'arrange', label: resizedLabel(1) }, () => {
+        updateApartment(jobResize.id, {
+          tileW: Math.round(jobResize.startW + jobResize.dw),
+          tileH: Math.round(jobResize.startH + jobResize.dh),
+        }, currentUser);
+      });
     }
     setGuides([]);
     setJobResize(null);
@@ -3578,24 +3713,26 @@ export function GeneralJobsPage() {
 
       const kx = resize.startW > 0 ? w / resize.startW : 1;
       const ky = resize.startH > 0 ? h / resize.startH : 1;
-      for (const id of resize.ids) {
-        const st = resize.starts.get(id);
-        const el = canvasElements.find(c => c.id === id);
-        if (!st || !el) continue;
-        const mn = minSize(el);
-        // Position AND size scale about the box corner, so the arrangement
-        // inside the selection is preserved rather than every node landing on
-        // the same spot.
-        const box = {
-          x: Math.round(resize.boxX + (st.x - resize.boxX) * kx),
-          y: Math.round(resize.boxY + (st.y - resize.boxY) * ky),
-          w: Math.max(mn.w, Math.round(st.w * kx)),
-          h: Math.max(mn.h, Math.round(st.h * ky)),
-        };
-        updateCanvasElement(id, isDrawingNode(el)
-          ? { ...box, points: relaidPoints(el, box) }
-          : box);
-      }
+      track({ weight: 'arrange', label: resizedLabel(resize.ids.length) }, () => {
+        for (const id of resize.ids) {
+          const st = resize.starts.get(id);
+          const el = canvasElements.find(c => c.id === id);
+          if (!st || !el) continue;
+          const mn = minSize(el);
+          // Position AND size scale about the box corner, so the arrangement
+          // inside the selection is preserved rather than every node landing on
+          // the same spot.
+          const box = {
+            x: Math.round(resize.boxX + (st.x - resize.boxX) * kx),
+            y: Math.round(resize.boxY + (st.y - resize.boxY) * ky),
+            w: Math.max(mn.w, Math.round(st.w * kx)),
+            h: Math.max(mn.h, Math.round(st.h * ky)),
+          };
+          updateCanvasElement(id, isDrawingNode(el)
+            ? { ...box, points: relaidPoints(el, box) }
+            : box);
+        }
+      });
     }
     setResize(null);
   }
@@ -4092,7 +4229,22 @@ export function GeneralJobsPage() {
   }
 
   function commitEdit() {
-    if (editingEl) updateCanvasElement(editingEl, { text: editText });
+    // Words are content, so undoing them asks first — and it asks once per
+    // edit, not once per keystroke, because this runs on blur.
+    if (editingEl) {
+      const before = canvasElements.find(c => c.id === editingEl)?.text ?? '';
+      if (before !== editText) {
+        track({
+          weight: 'content',
+          label: s.isRtl ? 'עריכת מילים על הלוח' : 'Edited the words on a board note',
+          explain: s.isRtl
+            ? `הכתוב יחזור למה שהיה קודם: ${quoteOf(before)}`
+            : `The wording goes back to what it was before you typed: ${quoteOf(before)}`,
+        }, () => updateCanvasElement(editingEl, { text: editText }));
+      } else {
+        updateCanvasElement(editingEl, { text: editText });
+      }
+    }
     setEditingEl(null);
   }
 
@@ -4330,7 +4482,9 @@ export function GeneralJobsPage() {
     // undefined rather than false when unlocking, so the field disappears from
     // the record instead of sitting on hundreds of jobs as `boardLocked: false`.
     jobLock: (j: Apartment) => {
-      if (currentUser) updateApartment(j.id, { boardLocked: j.boardLocked ? undefined : true }, currentUser);
+      if (!currentUser) return;
+      track({ weight: 'arrange', label: lockedLabel(!j.boardLocked, 1) }, () =>
+        updateApartment(j.id, { boardLocked: j.boardLocked ? undefined : true }, currentUser));
     },
     jobUngroup: (j: Apartment) => ungroup({ jobs: [j.id] }),
     jobResizeDown: onJobResizeDown, jobResizeMove: onJobResizeMove, jobResizeUp: onJobResizeUp,
@@ -4365,7 +4519,26 @@ export function GeneralJobsPage() {
     },
     elDelete: (id: string) => removeEl(id),
     elColor: (e: React.MouseEvent, id: string) => setColorPicker({ x: e.clientX, y: e.clientY, kind: 'element', ids: [id] }),
-    elPatch: (id: string, patch: Partial<CanvasElement>) => updateCanvasElement(id, patch),
+    /**
+     * `elPatch` is two different things wearing one name: the node chrome's own
+     * buttons (lock, wallboard) write board FURNITURE through it, and every
+     * widget's `ctx.update` writes its own DATA through it. Only the first
+     * belongs on the undo stack — a widget that saves on every keystroke would
+     * otherwise fill the stack with sixty entries for one typed word, and the
+     * one step back somebody actually wanted would be sixty presses away.
+     */
+    elPatch: (id: string, patch: Partial<CanvasElement>) => {
+      const keys = Object.keys(patch);
+      const furniture = keys.length > 0 && keys.every(k => ARRANGE_FIELDS.has(k));
+      if (!furniture) { updateCanvasElement(id, patch); return; }
+      const el = canvasElements.find(c => c.id === id);
+      const label = 'locked' in patch
+        ? lockedLabel(!!patch.locked, 1)
+        : 'showOnTv' in patch
+          ? (s.isRtl ? 'שינוי הצגה בקיר' : 'Changed what the wall shows')
+          : changedLabel(el);
+      track({ weight: 'arrange', label }, () => updateCanvasElement(id, patch));
+    },
     elThumbs: (id: string, d: number) => bumpThumbs('element', [id], d),
     elThumbsDown: (id: string, d: number) => bumpThumbs('element', [id], d, 'down'),
     editChange: setEditText, editCommit: commitEdit, editCancel: () => setEditingEl(null),
@@ -4472,6 +4645,14 @@ export function GeneralJobsPage() {
         <div className={`flex items-center gap-2 overflow-x-auto edge-fade md:overflow-visible max-w-[72vw] md:max-w-none [&>*]:flex-shrink-0 ${
           floatingHeader ? 'pointer-events-auto rounded-2xl bg-white/75 backdrop-blur-sm px-2 py-1 shadow-sm' : ''
         }`}>
+          {/* Undo and redo. The keys work anywhere in the app; these are here
+              because the board is where an accidental drag happens, and an
+              iPad has no Ctrl+Z at all. Each button names what it would take
+              back, so pressing it is never a guess. */}
+          {!viewOnlyBoard && (
+            <UndoButtons className="rounded-xl border border-gray-200 text-gray-600 px-0.5" />
+          )}
+
           <button
             onClick={() => setSearchOpen(true)}
             title="Find a job — including anything filed into a group (⌘F)"
@@ -5424,8 +5605,9 @@ export function GeneralJobsPage() {
                   const anyUnlocked = ctxMenu.ids.some(id => !apartments.find(a => a.id === id)?.boardLocked);
                   return (
                     <button onClick={() => {
-                      if (currentUser) ctxMenu.ids.forEach(id =>
-                        updateApartment(id, { boardLocked: anyUnlocked ? true : undefined }, currentUser));
+                      if (currentUser) track({ weight: 'arrange', label: lockedLabel(anyUnlocked, ctxMenu.ids.length) }, () =>
+                        ctxMenu.ids.forEach(id =>
+                          updateApartment(id, { boardLocked: anyUnlocked ? true : undefined }, currentUser)));
                       setCtxMenu(null);
                     }}
                       className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5"

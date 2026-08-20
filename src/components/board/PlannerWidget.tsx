@@ -8,6 +8,7 @@ import {
 } from '../../types';
 import { registerRota, onRotaHover, rotaCellAt, setRotaHover, RotaHit } from '../../data/rotaDrop';
 import { useStore, loadProjectSnapshot } from '../../data/store';
+import { useBoardTrack } from '../../data/useBoardUndo';
 import { holidaysOn, hebrewLabel, Holiday } from '../../data/hebrewDates';
 import { DriveIcon, ZohoIcon, PlanIcon } from '../ui/BrandIcons';
 
@@ -547,6 +548,29 @@ export function PlannerWidget({
   }, [el.data, update]);
 
   /**
+   * Undo, for the notebook.
+   *
+   * Everything here is `content` by the owner's rule — a square is somebody's
+   * plan for a day, and putting one back or taking one away changes who is
+   * expected where. So every one of these stops and says what it will do
+   * before it does it, naming the actual job, person and day.
+   */
+  const track = useBoardTrack();
+  /** How this square reads out loud: "Moshe · Tue 18 Aug". */
+  const squareName = (key: string) => {
+    const [person, day] = key.split('|');
+    const who = personOf(person, contractors, users).name;
+    const when = new Date(`${day}T00:00:00`);
+    return `${who} · ${isNaN(when.getTime()) ? day : when.toLocaleDateString(undefined,
+      { weekday: 'short', day: 'numeric', month: 'short' })}`;
+  };
+  /** What a card says: the job's name, or the words written on it. */
+  const cardName = (e: PlannerEntry) =>
+    (e.jobId ? jobById.get(e.jobId)?.displayName : undefined)
+    || (e.text || '').trim()
+    || 'that card';
+
+  /**
    * How many squares in THIS notebook hold that job.
    *
    * The single test for "is this its last one", used by the X and by anything
@@ -596,10 +620,15 @@ export function PlannerWidget({
     setDropAsk(null);
     if (!ask) return;
     if (choice === 'off') {
-      const drop = () => setCell(
+      const drop = () => track({
+        weight: 'content',
+        label: `Took ${cardName(ask.entry)} off the notebook`,
+        explain: `${cardName(ask.entry)} goes back onto ${squareName(ask.fromKey)} in the weekly `
+          + 'notebook, and comes back off the board. Nothing about the job itself changes.',
+      }, () => setCell(
         ask.fromKey,
         (cells[ask.fromKey] ?? []).filter(x => x.id !== ask.entry.id),
-      );
+      ));
       // A task attached to the slot is its own question, asked as it always was.
       if (ask.entry.taskId && onRemoveTask) onRemoveTask(ask.entry, () => drop());
       else drop();
@@ -624,6 +653,22 @@ export function PlannerWidget({
   function moveEntry(fromKey: string, entry: PlannerEntry, target: RotaHit, copy: boolean) {
     const toKey = cellKey(target.person, target.day);
     if (toKey === fromKey) return;
+    track({
+      weight: 'content',
+      label: copy
+        ? `Put a copy of ${cardName(entry)} on ${squareName(toKey)}`
+        : `Moved ${cardName(entry)} to ${squareName(toKey)}`,
+      explain: copy
+        ? `The copy on ${squareName(toKey)} is taken away again. The original on `
+          + `${squareName(fromKey)} stays exactly where it is.`
+        : `${cardName(entry)} goes back to ${squareName(fromKey)} and comes off `
+          + `${squareName(toKey)}. Nothing about the job itself changes.`,
+    }, () => moveEntryNow(fromKey, entry, copy, toKey));
+  }
+
+  function moveEntryNow(
+    fromKey: string, entry: PlannerEntry, copy: boolean, toKey: string,
+  ) {
     const next = { ...cells };
     if (!copy) {
       const left = (next[fromKey] ?? []).filter(x => x.id !== entry.id);
@@ -1101,7 +1146,13 @@ export function PlannerWidget({
                                   setDropAsk({ fromKey: key, entry: en, target: null });
                                   return;
                                 }
-                                const drop = () => setCell(key, entries.filter(x => x.id !== en.id));
+                                const drop = () => track({
+                                  weight: 'content',
+                                  label: `Took ${cardName(en)} off ${squareName(key)}`,
+                                  explain: `${cardName(en)} goes back onto ${squareName(key)} in the weekly `
+                                    + 'notebook, exactly as it was. The job itself is not touched — it is '
+                                    + 'still on the notebook on its other days.',
+                                }, () => setCell(key, entries.filter(x => x.id !== en.id)));
                                 if (en.taskId && onRemoveTask) onRemoveTask(en, () => drop());
                                 else drop();
                               }}

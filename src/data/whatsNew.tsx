@@ -30,6 +30,37 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-08-30',
+    title: 'Undo and redo — and a warning before anything that matters',
+    items: [
+      {
+        title: 'Ctrl+Z takes it back',
+        body: 'Moved a tile you did not mean to move? Ctrl+Z (⌘Z on a Mac) puts it back '
+          + 'exactly where it was, and Ctrl+Shift+Z puts it forward again. It covers '
+          + 'moving, resizing, colours, locks, grouping, and anything you have just '
+          + 'placed on the board. There are arrows in the board bar too, for the iPad.',
+        demo: 'drag',
+      },
+      {
+        title: 'Anything sensitive asks you first',
+        body: 'Taking something back that puts real content in or out — a card on the '
+          + 'weekly notebook, a widget you removed, a job filed into a group — stops and '
+          + 'tells you in plain words exactly what it is about to do, naming the job, the '
+          + 'person and the day. Then you say yes or leave it. Nothing is ever deleted by '
+          + 'an undo, and Redo puts it straight back.',
+        demo: 'tap',
+      },
+      {
+        title: 'A removed widget really does come back',
+        body: 'Removing a note or a widget used to be final. Now it comes back with its '
+          + 'words, its settings and anything it was holding — including the jobs a '
+          + 'notebook had in it. Typing in a box keeps its own undo, so Ctrl+Z inside a '
+          + 'field still just fixes the word you are typing.',
+        demo: 'sparkle',
+      },
+    ],
+  },
+  {
     date: '2026-08-29',
     title: 'Groups drag like the board, and the plan bar is one row',
     items: [

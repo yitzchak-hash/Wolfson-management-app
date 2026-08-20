@@ -24,6 +24,7 @@ import {
   writeBatch,
   serverTimestamp,
   deleteField,
+  updateDoc,
   Unsubscribe,
 } from 'firebase/firestore';
 
@@ -196,6 +197,30 @@ export async function fsTombstone(projectId: string, ids: string[]) {
   await fsSet(tombstoneCollection(projectId), TOMB_DOC, {
     ids: Object.fromEntries(ids.map(id => [id, now])),
   });
+}
+
+/**
+ * Lift a tombstone — the record is NOT deleted after all.
+ *
+ * This exists for undo, and undo is the only caller. Without it, undoing a
+ * delete would put the record back locally and the next sync would take it
+ * straight out again, on every device including this one: the record would
+ * blink back into existence and vanish, which is far worse than the delete
+ * having stood.
+ *
+ * A dotted field path is required. `deleteField()` can only remove a key
+ * addressed directly — sending `{ ids: { [id]: deleteField() } }` through a
+ * merge writes a nested map and removes nothing.
+ */
+export async function fsUntombstone(projectId: string, ids: string[]) {
+  if (!db || ids.length === 0) return;
+  try {
+    await _trackWrite(updateDoc(doc(db, tombstoneCollection(projectId), TOMB_DOC),
+      Object.fromEntries(ids.map(id => [`ids.${id}`, deleteField()]))));
+  } catch (e) {
+    // The doc may not exist yet — which means there is no tombstone to lift.
+    console.warn(`Firestore untombstone failed for ${projectId}:`, e);
+  }
 }
 
 function tombIds(raw: unknown): Record<string, number> {

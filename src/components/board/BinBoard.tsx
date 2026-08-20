@@ -5,6 +5,7 @@ import {
   Pencil, Highlighter, Eraser,
 } from 'lucide-react';
 import { useStore } from '../../data/store';
+import { useBoardTrack } from '../../data/useBoardUndo';
 import {
   Apartment, CanvasElement, binLabelOf, binKeyOf, BIN_META, relativeTime,
 } from '../../types';
@@ -507,6 +508,18 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
     setDrag({ ...drag, dx, dy, out, moved: drag.moved || Math.abs(dx) > 4 || Math.abs(dy) > 4 });
   }
 
+  /**
+   * Undo, inside a group.
+   *
+   * A group window is a board — it draws with the board's own tile, snaps with
+   * the board's own snapping, and it has to take things back the same way too,
+   * or the same gesture would be reversible in one place and permanent in the
+   * other. `track` diffs the store, so this needs no knowledge of what the
+   * gesture wrote.
+   */
+  const track = useBoardTrack();
+  const things = (n: number) => `${n} ${n === 1 ? 'thing' : 'things'}`;
+
   function endDrag(job?: Apartment, e?: React.PointerEvent) {
     setGuides([]);
     if (!drag) return;
@@ -515,19 +528,27 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
       // exactly where it stood before it was filed — moveToBin(null) restores
       // the old canvas position — and the board pulses it so the landing is
       // seen rather than deduced.
-      drag.ids.forEach(id => moveToBin(id, null));
+      track({
+        weight: 'content',
+        label: `Took ${things(drag.ids.length)} out of ${binLabelOf(bin)}`,
+        explain: `${things(drag.ids.length)} go back into ${binLabelOf(bin)} and come off the main board. `
+          + 'A job sitting in a group is left out of every total, so the counts on the '
+          + 'dashboard will change back. Nothing is deleted either way.',
+      }, () => drag.ids.forEach(id => moveToBin(id, null)));
       onRestored?.(drag.ids);
       setDrag(null);
       return;
     }
     if (drag.moved) {
-      drag.ids.forEach(id => {
-        const st = drag.starts.get(id);
-        if (!st) return;
-        const x = Math.max(0, Math.round(st.x + drag.dx));
-        const y = Math.max(0, Math.round(st.y + drag.dy));
-        if (drag.kind === 'job' && currentUser) updateApartment(id, { binX: x, binY: y }, currentUser);
-        if (drag.kind === 'el') updateCanvasElement(id, { x, y });
+      track({ weight: 'arrange', label: `Moved ${things(drag.ids.length)}` }, () => {
+        drag.ids.forEach(id => {
+          const st = drag.starts.get(id);
+          if (!st) return;
+          const x = Math.max(0, Math.round(st.x + drag.dx));
+          const y = Math.max(0, Math.round(st.y + drag.dy));
+          if (drag.kind === 'job' && currentUser) updateApartment(id, { binX: x, binY: y }, currentUser);
+          if (drag.kind === 'el') updateCanvasElement(id, { x, y });
+        });
       });
     } else if (drag.kind === 'job' && job) {
       /**
@@ -619,10 +640,11 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
   function jobResizeUp() {
     setGuides([]);
     if (jobResize && (jobResize.dw || jobResize.dh) && currentUser) {
-      updateApartment(jobResize.id, {
-        tileW: Math.max(120, Math.round(jobResize.startW + jobResize.dw)),
-        tileH: Math.max(80, Math.round(jobResize.startH + jobResize.dh)),
-      }, currentUser);
+      track({ weight: 'arrange', label: `Resized ${things(1)}` }, () =>
+        updateApartment(jobResize.id, {
+          tileW: Math.max(120, Math.round(jobResize.startW + jobResize.dw)),
+          tileH: Math.max(80, Math.round(jobResize.startH + jobResize.dh)),
+        }, currentUser));
     }
     setJobResize(null);
   }
@@ -631,10 +653,11 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
     setGuides([]);
     if (binResetDone.current) { binResetDone.current = false; setResize(null); return; }
     if (resize && (resize.dw || resize.dh)) {
-      updateCanvasElement(resize.id, {
-        w: Math.max(60, Math.round(resize.startW + resize.dw)),
-        h: Math.max(40, Math.round(resize.startH + resize.dh)),
-      });
+      track({ weight: 'arrange', label: `Resized ${things(1)}` }, () =>
+        updateCanvasElement(resize.id, {
+          w: Math.max(60, Math.round(resize.startW + resize.dw)),
+          h: Math.max(40, Math.round(resize.startH + resize.dh)),
+        }));
     }
     setResize(null);
   }

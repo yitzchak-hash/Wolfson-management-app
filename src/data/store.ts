@@ -1,3 +1,6 @@
+import {
+  UndoState, UndoEntry, emptyUndo, remember, popUndo, popRedo,
+} from './undo';
 import { create } from 'zustand';
 import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BoardSetting, BoardSettingKey, BoardLayout, PlanPin, PlanAnnotation, BoardView, Employee, TimePunch, TimeClockSettings, WorkerLevel, FocusIntent } from '../types';
 import { ReportDef } from './reportModel';
@@ -14,7 +17,8 @@ import {
 } from './initialData';
 import {
   fsSet, fsDelete, fsBatchSet, fsGetAll, fsListen, isFirebaseConfigured, db, projectCollection,
-  fsTombstone, fsGetTombstones, fsListenTombstones,
+  fsTombstone,
+  fsUntombstone, fsGetTombstones, fsListenTombstones,
 } from './firebase';
 import { DEFAULT_TIME_CLOCK, resolvePunch } from './timeClock';
 import { purgeJobsFromPlanner, isPlannerElement } from './plannerPurge';
@@ -91,6 +95,19 @@ export function isTombstoned(id: string): boolean { return _tombstones.has(id); 
 function tombstone(projectId: string, ids: string[]) {
   ids.forEach(id => _tombstones.add(id));
   fsTombstone(projectId, ids);
+}
+
+/**
+ * Forget a deletion — for UNDO, and for nothing else.
+ *
+ * Putting a record back without this is not an undo: the tombstone stands, the
+ * next sync takes it out again, and the thing blinks back and vanishes on
+ * every device. Whatever puts a record back must lift its tombstone in the
+ * same breath.
+ */
+function untombstone(projectId: string, ids: string[]) {
+  ids.forEach(id => _tombstones.delete(id));
+  fsUntombstone(projectId, ids);
 }
 
 /**
@@ -388,6 +405,29 @@ interface AppState {
   };
   /** Move a job into a board bin (or back to the board with null). Never destroys anything. */
   moveToBin: (id: string, bin: string | null) => void;
+
+  /**
+   * Undo / redo, for the board and the notebook.
+   *
+   * Session-only and deliberately NOT persisted — see `src/data/undo.ts`. It
+   * is excused in the backup audit for the same reason `pendingFocus` is: it
+   * is a mechanism, not the office's data.
+   */
+  undoState: UndoState;
+  /** Record something that just happened, with the closures to reverse it. */
+  rememberUndo: (entry: Omit<UndoEntry, 'id' | 'at'>) => void;
+  /** Take one step back. Returns the entry acted on, or null. */
+  stepUndo: () => UndoEntry | null;
+  /** …and forward again. */
+  stepRedo: () => UndoEntry | null;
+  /**
+   * Put deleted board records back — the undo of a removal, and nothing else.
+   *
+   * It lifts the tombstone as well as re-adding the record. Re-adding alone is
+   * not an undo: the tombstone stands, the next sync takes the record straight
+   * out again, and it blinks back and vanishes on every device.
+   */
+  restoreCanvasElements: (els: CanvasElement[]) => void;
   /** Extra board position for the SAME job — one record, drawn twice. */
   addGhost: (id: string, x: number, y: number) => void;
   moveGhost: (id: string, index: number, x: number, y: number) => void;
@@ -747,6 +787,11 @@ export const useStore = create<AppState>((set, get) => ({
       pendingOpenAptId: null,
       pendingFocus: null,
       plannerAsk: null,
+      // Arriving somewhere new starts with nothing to take back. An entry from
+      // the previous workspace would write to records that are not in this
+      // one's collections — a write to nowhere, which reads as "undo does
+      // nothing" rather than as an error.
+      undoState: emptyUndo(),
       ...newProjectData,
       ...globalState,  // global settings always win
     });
@@ -1150,6 +1195,37 @@ export const useStore = create<AppState>((set, get) => ({
     persist(get);
     const u = get().apartments.find(a => a.id === id);
     if (u) fsSet(projectCollection(pid, 'apartments'), id, u);
+  },
+
+  undoState: emptyUndo(),
+  rememberUndo: entry => set(st => ({ undoState: remember(st.undoState, entry) })),
+  stepUndo: () => {
+    const { entry, next } = popUndo(get().undoState);
+    if (!entry) return null;
+    // The stack moves FIRST: `entry.undo()` writes to the store, and anything
+    // that re-entered here mid-write would find the entry still on the past.
+    set({ undoState: next });
+    entry.undo();
+    return entry;
+  },
+  stepRedo: () => {
+    const { entry, next } = popRedo(get().undoState);
+    if (!entry) return null;
+    set({ undoState: next });
+    entry.redo();
+    return entry;
+  },
+
+  restoreCanvasElements: (els) => {
+    if (els.length === 0) return;
+    const pid = get().currentProjectId;
+    untombstone(pid, els.map(e => e.id));
+    set(state => {
+      const have = new Set(state.canvasElements.map(e => e.id));
+      return { canvasElements: [...state.canvasElements, ...els.filter(e => !have.has(e.id))] };
+    });
+    els.forEach(e => fsSet(projectCollection(pid, 'canvasElements'), e.id, e));
+    persist(get);
   },
 
   moveToBin: (id, bin) => {

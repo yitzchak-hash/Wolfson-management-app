@@ -5,6 +5,7 @@ import { Sidebar, MobileNav } from './Sidebar';
 import { useStore } from '../../data/store';
 import { isFirebaseConfigured } from '../../data/firebase';
 import { PlannerAskModal } from '../board/PlannerAskModal';
+import { UndoLayer } from '../board/UndoLayer';
 
 export function AppLayout() {
   const { startFirebaseSync, firebaseListening, mainUiStrings } = useStore();
@@ -56,6 +57,11 @@ export function AppLayout() {
           office from any page; the worker portal never mounts this layout,
           so a worker is never asked about the office's planner. */}
       <PlannerAskModal />
+      {/* Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y, and the question that guards anything
+          putting real content back. Here rather than on the board so the keys
+          work on every page, and so a question raised on the board is still
+          answerable after navigating away from it. */}
+      <UndoLayer />
     </div>
   );
 }
