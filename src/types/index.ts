@@ -366,7 +366,15 @@ export interface Building {
  * backups entirely.
  */
 export type FocusIntent =
-  | { kind: 'apartment'; id: string }
+  /**
+   * `reveal` means SHOW me where this is, and nothing else.
+   *
+   * Choosing a search result takes you to the thing and opens it, which is
+   * usually what you wanted. "Show on board" is the other half of the question
+   * — where does this actually sit? — so it travels and pulses and then stops,
+   * leaving the board on screen instead of a drawer over it.
+   */
+  | { kind: 'apartment'; id: string; reveal?: boolean }
   | { kind: 'stage'; id: string }
   | { kind: 'contractor'; id: string }
   | { kind: 'task'; id: string; apartmentId: string }

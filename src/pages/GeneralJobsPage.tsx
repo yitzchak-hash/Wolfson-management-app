@@ -1584,10 +1584,12 @@ export function GeneralJobsPage() {
       setOpenBin(binKeyOf(hit.bin));
       // The group's own board scrolls to it and pulses; opening the job on top
       // of that would hide the group you were just shown, so it waits.
-      setTimeout(() => {
-        const j = apartments.find(a => a.id === job.id);
-        if (j) setSelectedJob(j);
-      }, 900);
+      if (!hit.reveal) {
+        setTimeout(() => {
+          const j = apartments.find(a => a.id === job.id);
+          if (j) setSelectedJob(j);
+        }, 900);
+      }
       setTimeout(() => setSearchHit(null), 2600);
       return;
     }
@@ -1604,10 +1606,15 @@ export function GeneralJobsPage() {
       setTimeout(() => setFlying(false), 620);
     }
     setSelectedJobIds(new Set([job.id]));
-    setTimeout(() => {
-      const j = apartments.find(a => a.id === job.id);
-      if (j) setSelectedJob(j);
-    }, 780);
+    // "Show on board" stops here: it has travelled and it is pulsing, which is
+    // the whole answer to "where is this?". Opening the drawer would cover the
+    // very thing it was asked to show.
+    if (!hit.reveal) {
+      setTimeout(() => {
+        const j = apartments.find(a => a.id === job.id);
+        if (j) setSelectedJob(j);
+      }, 780);
+    }
     setTimeout(() => setSearchHit(null), 2600);
   }
 
@@ -1661,7 +1668,10 @@ export function GeneralJobsPage() {
     const job = apartments.find(a => a.id === jobId);
     if (!job) return;
     const bin = job.boardBin ? binNodes.find(b => binKeyOf(b) === job.boardBin) ?? null : null;
-    goToHit({ kind: 'job', job, bin, title: job.displayName ?? '', why: 'search' });
+    goToHit({
+      kind: 'job', job, bin, title: job.displayName ?? '', why: 'search',
+      reveal: f.kind === 'apartment' && f.reveal,
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingFocus]);
 

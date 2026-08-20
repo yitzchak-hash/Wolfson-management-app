@@ -1,0 +1,190 @@
+// Round 15, part one: settings that show what is in use, a search that says
+// something, a Show-on-board button, and a name column that fits the names.
+import { chromium } from 'playwright';
+
+const APP = 'http://localhost:5173';
+let fails = 0;
+const check = (ok, l, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${l}${extra ? ' — ' + extra : ''}`); if (!ok) fails++; };
+
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+const ctx = await b.newContext({ viewport: { width: 1500, height: 950 } });
+await ctx.addInitScript(() => {
+  localStorage.setItem('active_project', 'general');
+  localStorage.setItem('general_app_version', '3');
+  localStorage.setItem('whats_new_seen', '2099-01-01');
+  if (localStorage.getItem('general_app_data')) return;
+  localStorage.setItem('general_app_data', JSON.stringify({
+    currentUser: { id: 'U-t', name: 'A', code: '999999', role: 'admin', active: true, createdAt: '2026-01-01' },
+    stages: [{ id: 'gs1', name: 'AC installation', color: '#0ea5e9', order: 1, active: true,
+               projectId: 'general', description: '', createdAt: '', updatedAt: '' }],
+    apartments: [
+      { id: 'G-w1', buildingId: 'G', floor: 0, apartmentNumber: '', displayName: 'Weinstein, Steven',
+        address: 'Mekor Chaim 39/6', isUnnamed: false, isDuplexApt: false, classification: 'standard',
+        generalNotes: '', currentStageId: 'gs1', stageDates: {}, canvasX: 40, canvasY: 40,
+        createdAt: '2026-01-01', updatedAt: '2026-01-01', updatedBy: 'U', updatedByName: 'U' },
+      { id: 'G-w2', buildingId: 'G', floor: 0, apartmentNumber: '', displayName: 'Weinberg, Ruth',
+        isUnnamed: false, isDuplexApt: false, classification: 'standard', generalNotes: '',
+        currentStageId: 'gs1', stageDates: {}, boardBin: 'done', binnedAt: '2026-01-01',
+        canvasX: 40, canvasY: 220,
+        createdAt: '2026-01-01', updatedAt: '2026-01-01', updatedBy: 'U', updatedByName: 'U' },
+    ],
+    canvasElements: [
+      { id: 'CE-note', type: 'note', x: 340, y: 40, w: 165, h: 150, text: 'A note', color: '#fef9c3' },
+      { id: 'CE-kpi', type: 'widget', widget: 'kpi', x: 560, y: 40, w: 190, h: 120,
+        text: '', color: '#ffffff', data: {} },
+      { id: 'CE-book', type: 'widget', widget: 'rota', x: 560, y: 220, w: 820, h: 380,
+        text: '', color: '#ffffff',
+        data: { people: ['n:Max', 'n:Vlad 1'], firstWeek: '2026-08-16', weekCount: 1, span: 5, cells: {} } },
+    ],
+  }));
+});
+const page = await ctx.newPage();
+page.on('pageerror', e => { console.log('PAGE ERROR', e.message); fails++; });
+await page.goto(`${APP}/jobs`);
+await page.waitForTimeout(4000);
+
+// ── 1. Widget settings show the value in USE ──────────────────────────────
+async function openSettings(nodeId) {
+  const node = await page.$(`[data-node-id="${nodeId}"]`);
+  if (!node) return false;
+  await node.hover();
+  await page.waitForTimeout(300);
+  const gear = await page.$(`[data-node-id="${nodeId}"] button[title*="ettings"], [data-node-id="${nodeId}"] button[title*="Settings"]`);
+  if (!gear) return false;
+  await gear.click({ force: true });
+  await page.waitForTimeout(700);
+  return true;
+}
+/**
+ * Read the panel by VALUE, not by label.
+ *
+ * The first version took each control's parent's textContent as its label,
+ * which came back as one squashed blob ("NoteA noteText sizeiWeightNo") and
+ * matched nothing — so a panel that was filling every field correctly reported
+ * four failures. The complaint being tested is "a lot of these are empty", and
+ * that is answered by the values themselves.
+ */
+const readPanel = () => page.evaluate(() => {
+  const panel = [...document.querySelectorAll('div')].find(d =>
+    d.className.includes('rounded-2xl') && /Text size/.test(d.textContent ?? ''));
+  if (!panel) return null;
+  return [...panel.querySelectorAll('input, select')].map(el => ({
+    tag: el.tagName,
+    type: el.getAttribute('type') ?? '',
+    ph: el.getAttribute('placeholder') ?? '',
+    value: el.value ?? '',
+  }));
+});
+
+for (const [id, what, wantWeight] of [['CE-note', 'a note', '400'], ['CE-kpi', 'a widget', '400']]) {
+  const opened = await openSettings(id);
+  check(opened, `the settings panel opens for ${what}`);
+  if (opened) {
+    const rows = await readPanel();
+    console.log(`       ${what}:`, JSON.stringify(rows?.map(r => r.value)));
+    const vals = (rows ?? []).map(r => r.value);
+    check(vals.includes('14'), `${what}: text size is filled with its default`, vals.join(' '));
+    check(vals.includes(wantWeight), `${what}: weight is filled`, vals.join(' '));
+    check(vals.includes('left'), `${what}: alignment is filled`);
+    check(vals.includes('#64748b'), `${what}: outline colour is filled`);
+    check(vals.includes('3'), `${what}: outline thickness is filled`);
+
+    // The complaint itself: no empty boxes, except ones that say blank is a
+    // real choice.
+    const blank = (rows ?? []).filter(r =>
+      r.value === '' && !/leave blank|blank shows/i.test(r.ph));
+    check(blank.length === 0, `${what}: nothing in the panel is left blank`,
+      blank.map(r => r.ph || r.tag).join(', ') || 'none');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(400);
+  }
+}
+{
+  // A widget's heading defaults to the widget's own name rather than nothing.
+  const opened = await openSettings('CE-kpi');
+  if (opened) {
+    const rows = await readPanel();
+    const head = rows?.find(r => r.tag === 'INPUT' && r.type !== 'color' && r.value && !/^\d+$/.test(r.value));
+    check(!!head, 'a widget heading shows its own name, not a blank', head?.value ?? 'missing');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(400);
+  }
+}
+
+// ── 2. The board search offers Show on board ──────────────────────────────
+{
+  await page.keyboard.press('Control+f');
+  await page.waitForTimeout(600);
+  await page.keyboard.type('Weinstein');
+  await page.waitForTimeout(700);
+  const has = await page.evaluate(() =>
+    [...document.querySelectorAll('button[title="Show it on the board"]')].length);
+  check(has > 0, 'every board-search result carries a Show-on-board button', `${has} found`);
+  // And pressing it travels without opening the drawer.
+  if (has > 0) {
+    await page.click('button[title="Show it on the board"]');
+    await page.waitForTimeout(1600);
+    const st = await page.evaluate(() => ({
+      drawer: !!document.querySelector('.drawer-panel'),
+      lit: !!document.querySelector('.search-hit'),
+    }));
+    console.log('       after Show on board:', JSON.stringify(st));
+    check(!st.drawer, 'it shows the job on the board instead of opening it');
+    check(st.lit, 'and highlights it');
+  }
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+}
+
+// ── 3. The app-wide search says something meaningful ──────────────────────
+{
+  await page.keyboard.press('Control+k');
+  await page.waitForTimeout(600);
+  await page.keyboard.type('Weinberg');
+  await page.waitForTimeout(900);
+  const rows = await page.evaluate(() => {
+    const out = [];
+    for (const r of document.querySelectorAll('[role="button"]')) {
+      const t = (r.textContent ?? '').trim();
+      if (/Weinberg/.test(t)) out.push(t.replace(/\s+/g, ' ').slice(0, 90));
+    }
+    return out;
+  });
+  console.log('       search rows:', JSON.stringify(rows));
+  check(rows.length > 0, 'the app-wide search found it');
+  check(!rows.some(t => /\bG · Apt\b/.test(t)), 'no result reads "G · Apt"',
+    rows.find(t => /G · Apt/.test(t)) ?? '');
+  check(rows.some(t => /Job Board/.test(t)), 'it says which workspace instead',
+    rows[0] ?? '');
+  check(rows.some(t => /In Done/.test(t)), 'and which group it is filed in');
+  const reveal = await page.evaluate(() =>
+    document.querySelectorAll('button[title="Show it on the board"]').length);
+  check(reveal > 0, 'and offers Show on board', `${reveal} found`);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+}
+
+// ── 4. The notebook's name column fits the names ──────────────────────────
+{
+  const w = await page.evaluate(() => {
+    const book = document.querySelector('[data-node-id="CE-book"]');
+    const grid = [...book.querySelectorAll('div')].find(d =>
+      getComputedStyle(d).gridTemplateColumns.split(' ').length >= 6);
+    if (!grid) return null;
+    const cols = getComputedStyle(grid).gridTemplateColumns.split(' ').map(parseFloat);
+    return { first: Math.round(cols[0]), day: Math.round(cols[1]), all: cols.map(Math.round) };
+  });
+  console.log('       notebook columns:', JSON.stringify(w));
+  check(!!w, 'the notebook drew its grid');
+  if (w) {
+    check(w.first < w.day, 'the name column is narrower than a day column',
+      `names ${w.first}px vs day ${w.day}px`);
+    check(w.first >= 40 && w.first <= 130, 'and is sized to the names, not to a share of the sheet',
+      `${w.first}px for "Vlad 1"`);
+  }
+}
+
+await page.screenshot({ path: 'scratchpad/round15.png' });
+console.log(fails === 0 ? '\nALL PASS' : `\n${fails} FAILED`);
+await b.close();
+process.exit(fails ? 1 : 0);

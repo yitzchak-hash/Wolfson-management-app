@@ -155,6 +155,36 @@ export function personOf(id: string, contractors: Contractor[], users: User[]) {
   return { name, color: personColor(name), contractorId: undefined };
 }
 
+/**
+ * How wide a string is, in ems of the sheet's own font — MEASURED.
+ *
+ * A 2D canvas measures the real face at 1px and hands back ems, so it cannot
+ * drift from what the browser will draw. The diagram uses the same trick for
+ * the same reason: a hand-tuned per-character table undershoots real text and
+ * has no entries at all for Hebrew. Memoised — the same handful of names is
+ * asked for on every row of every week.
+ */
+const nameEmCache = new Map<string, number>();
+let nameCtx: CanvasRenderingContext2D | null | undefined;
+function nameEms(text: string): number {
+  const hit = nameEmCache.get(text);
+  if (hit !== undefined) return hit;
+  if (nameCtx === undefined) {
+    try {
+      nameCtx = document.createElement('canvas').getContext('2d');
+      if (nameCtx) {
+        const family = getComputedStyle(document.body).fontFamily || 'system-ui, sans-serif';
+        nameCtx.font = `700 100px ${family}`;
+      }
+    } catch { nameCtx = null; }
+  }
+  // Generous fallback: over-estimating makes the column a little wide, which is
+  // merely untidy; under-estimating clips somebody's name.
+  const w = nameCtx ? nameCtx.measureText(text).width / 100 : text.length * 0.62;
+  nameEmCache.set(text, w);
+  return w;
+}
+
 const num = (v: unknown, fallback: number, lo: number, hi: number) => {
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? Math.max(lo, Math.min(hi, Math.round(n))) : fallback;
@@ -308,6 +338,22 @@ export function PlannerWidget({
   const daySize = z(baseDay);
   const dateSize = z(baseDate);
   const nameSize = z(baseName);
+  /**
+   * Wide enough for the longest name on the sheet, and no wider.
+   *
+   * Measured rather than guessed, so it follows the text size, the sheet's
+   * scale and whatever somebody types — a long name widens the column instead
+   * of being cut off, and a sheet of short names gives the days their space
+   * back. The chrome is the dot, the two gaps and the row padding; the clamp
+   * stops a pasted paragraph swallowing the week.
+   */
+  const nameColW = useMemo(() => {
+    const widest = (data.people ?? [])
+      .map(pid => personOf(pid, contractors, users).name)
+      .reduce((w, n) => Math.max(w, nameEms(n)), 0);
+    const CHROME = z(6) + z(4) + z(8);        // dot + gap + the row's own padding
+    return Math.round(Math.min(z(220), Math.max(z(56), widest * nameSize + CHROME)));
+  }, [data.people, contractors, users, nameSize, z]);
   const dayBg = String(data.dayBg || '#f1f5f9');
   const offBg = String(data.offBg || '#f5f3ff');
   const todayBg = String(data.todayBg || '#e0f2fe');
@@ -714,7 +760,11 @@ export function PlannerWidget({
 
         {weeks.map((wkStart, wi) => {
           const days = Array.from({ length: span }, (_, i) => addDays(wkStart, i));
-          const cols = `minmax(${z(74)}px, 0.85fr) repeat(${span}, minmax(0, 1fr))`;
+          // The name column is as wide as the NAMES, not a share of the sheet.
+          // It used to be `0.85fr`, so a row of five short names spent a tenth
+          // of the paper saying "Max" — and the days, which are what the sheet
+          // is for, were squeezed to pay for it.
+          const cols = `${nameColW}px repeat(${span}, minmax(0, 1fr))`;
           // A rule wherever the month changes, so the run reads as months
           // rather than as an undifferentiated column of weeks.
           const newMonth = wi > 0 && monthKey(wkStart) !== monthKey(weeks[wi - 1]);

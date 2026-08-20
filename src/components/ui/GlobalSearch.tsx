@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Search, X, Building2, ClipboardList, FileText, MessageSquare,
-  HardHat, Layers, FolderOpen, StickyNote, PenLine,
+  HardHat, Layers, FolderOpen, StickyNote, PenLine, Crosshair,
 } from 'lucide-react';
 import Fuse from 'fuse.js';
 import { queryVariants, skeleton } from '../../data/translit';
@@ -24,6 +24,13 @@ interface SearchResult {
    * question nobody had asked.
    */
   focus: FocusIntent;
+  /**
+   * Does this thing have a PLACE you can be shown?
+   *
+   * A job, a group, a note or a widget sits somewhere; a worker and a stage do
+   * not, so offering to fly to them would be a button that lands nowhere.
+   */
+  onBoard?: boolean;
 }
 
 interface GlobalSearchProps {
@@ -34,7 +41,7 @@ interface GlobalSearchProps {
 export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
   const {
     apartments, contractorAssignments, stageNotes, contractorNotes, contractors, stages,
-    canvasElements, planAnnotations, buildings, currentProjectId, setPendingFocus,
+    canvasElements, planAnnotations, buildings, projects, currentProjectId, setPendingFocus,
   } = useStore();
   const s = useStore(state => state.mainUiStrings);
   const [query, setQuery] = useState('');
@@ -92,19 +99,41 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
       const el = bins.find(b => binKeyOf(b) === a.boardBin);
       return el ? binLabelOf(el) : a.boardBin;
     };
+    /**
+     * Where a unit is, in words somebody recognises.
+     *
+     * Every result used to read `${buildingId} · Apt ${label}` — which on the
+     * Job Board, where every record carries the internal building id `G`, came
+     * out as "G · Apt Weinstein" on every single row. "G" is a storage detail
+     * and "Apt" is wrong for a job. This says the workspace, then the building
+     * when there is one, then the group it is filed in.
+     */
+    const workspace = projects.find(p => p.id === currentProjectId)?.name ?? '';
+    const onBoard = currentProjectId === 'general';
+    const whereIs = (a?: { buildingId?: string; boardBin?: string; floor?: number }): string => {
+      if (!a) return workspace;
+      const bits = [workspace];
+      if (!onBoard && a.buildingId) bits.push(`Building ${a.buildingId}`);
+      const g = groupNameOf(a);
+      if (g) bits.push(`In ${g}`);
+      return bits.filter(Boolean).join(' · ');
+    };
+
     const searchableApts = apartments.filter(a => !a.isUnnamed && a.boardBin !== 'trash');
     const trashed = new Set(apartments.filter(a => a.boardBin === 'trash').map(a => a.id));
 
     // Apartments
     hunt(searchableApts, ['displayName', 'apartmentNumber', 'generalNotes'],
       a => `${a.displayName} ${a.apartmentNumber}`, 5).forEach(a => {
-      const group = groupNameOf(a);
+      const extra = a.generalNotes.trim()
+        ? a.generalNotes.split('\n')[0].slice(0, 60)
+        : (!onBoard && a.floor ? `Floor ${a.floor}` : '');
       found.push({
         id: `apt-${a.id}`, type: 'apartment',
-        title: `${a.buildingId} · Apt ${aptLabel(a)}`,
-        subtitle: group ? `In ${group}`
-          : a.generalNotes.trim() ? a.generalNotes.slice(0, 80) : `Floor ${a.floor}`,
+        title: aptLabel(a) || (onBoard ? 'Job' : 'Unit'),
+        subtitle: [whereIs(a), extra].filter(Boolean).join(' · '),
         focus: { kind: 'apartment', id: a.id },
+        onBoard: true,
       });
     });
 
@@ -116,8 +145,9 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
       found.push({
         id: `task-${a.id}`, type: 'task',
         title: a.taskDescription.slice(0, 60),
-        subtitle: `${a.buildingId} · Apt ${aptLabel(apt)} · ${contractor?.name ?? ''}`,
+        subtitle: [aptLabel(apt), contractor?.name, whereIs(apt)].filter(Boolean).join(' · '),
         focus: { kind: 'task', id: a.id, apartmentId: a.apartmentId },
+        onBoard: true,
       });
     });
 
@@ -129,8 +159,9 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
       found.push({
         id: `note-${n.id}`, type: 'note',
         title: n.noteText.slice(0, 60),
-        subtitle: `${apt?.buildingId} · Apt ${aptLabel(apt)} · ${stage?.name ?? ''}`,
+        subtitle: [aptLabel(apt), stage?.name, whereIs(apt)].filter(Boolean).join(' · '),
         focus: { kind: 'apartment', id: n.apartmentId },
+        onBoard: true,
       });
     });
 
@@ -141,8 +172,9 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
       found.push({
         id: `cnote-${n.id}`, type: 'contractor_note',
         title: n.text.slice(0, 60),
-        subtitle: `${apt?.buildingId} · Apt ${aptLabel(apt)} · ${n.authorName}`,
+        subtitle: [aptLabel(apt), n.authorName, whereIs(apt)].filter(Boolean).join(' · '),
         focus: { kind: 'apartment', id: n.apartmentId },
+        onBoard: true,
       });
     });
 
@@ -178,6 +210,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         title: item.name,
         subtitle: `Group on the job board · ${n} ${n === 1 ? 'job' : 'jobs'}`,
         focus: { kind: 'group', id: item.el.id },
+        onBoard: true,
       });
     });
 
@@ -197,6 +230,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         title: item.text.slice(0, 60) || item.kind,
         subtitle: `${item.kind} on the job board${bin ? ` · in ${binLabelOf(bin)}` : ''}`,
         focus: { kind: 'node', id: item.el.id },
+        onBoard: true,
       });
     });
 
@@ -214,7 +248,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
 
     setResults(found);
   }, [query, apartments, contractorAssignments, stageNotes, contractorNotes, contractors, stages,
-      canvasElements, planAnnotations]);
+      canvasElements, planAnnotations, projects, currentProjectId]);
 
   /**
    * Actually go and SHOW it.
@@ -226,6 +260,23 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
    * anything about the other's internals.
    */
   const board = currentProjectId === 'general';
+
+  /**
+   * Show me where it is, and stop there.
+   *
+   * The row takes you to the thing AND opens it, which is usually what you
+   * wanted. This answers the other question — whereabouts on the board does it
+   * actually sit — by flying there and pulsing, leaving the board on screen.
+   */
+  function handleReveal(result: SearchResult) {
+    onClose();
+    setPendingFocus(
+      result.focus.kind === 'apartment'
+        ? { ...result.focus, reveal: true }
+        : result.focus,
+    );
+    navigate('/jobs');
+  }
 
   function handleSelect(result: SearchResult) {
     onClose();
@@ -284,18 +335,33 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         {results.length > 0 ? (
           <div className="max-h-80 overflow-y-auto divide-y divide-gray-100">
             {results.map(result => (
-              <button
+              // A ROW, not a button — "Show on board" sits inside it, and a
+              // button inside a button is invalid markup browsers flatten.
+              <div
                 key={result.id}
+                role="button"
+                tabIndex={-1}
                 onClick={() => handleSelect(result)}
-                className="w-full flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left"
+                className="w-full flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors
+                           text-left cursor-pointer group/row"
               >
                 <div className="mt-0.5 flex-shrink-0">{TYPE_ICON[result.type]}</div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-gray-800 truncate">{result.title}</div>
                   <div className="text-xs text-gray-400 truncate">{result.subtitle}</div>
                 </div>
+                {result.onBoard && board && (
+                  <button
+                    onClick={e => { e.stopPropagation(); handleReveal(result); }}
+                    title="Show it on the board"
+                    className="flex-shrink-0 p-1.5 -my-0.5 rounded-lg text-gray-300
+                               hover:text-[#1e3a5f] hover:bg-[#4aa8d8]/12 transition-colors"
+                  >
+                    <Crosshair size={14} />
+                  </button>
+                )}
                 <span className="text-[10px] text-gray-300 flex-shrink-0 pt-0.5">{TYPE_LABEL[result.type]}</span>
-              </button>
+              </div>
             ))}
           </div>
         ) : query.trim() ? (

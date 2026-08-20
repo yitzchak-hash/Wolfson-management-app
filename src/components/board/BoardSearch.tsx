@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Search, X, MapPin, CornerDownLeft, Briefcase, FolderOpen, StickyNote,
-  Square, Type, LayoutGrid, Sticker, CornerUpLeft,
+  Square, Type, LayoutGrid, Sticker, CornerUpLeft, Crosshair,
 } from 'lucide-react';
 import {
   Apartment, CanvasElement, Stage, ContractorAssignment, binLabelOf, binKeyOf,
@@ -22,6 +22,15 @@ export interface BoardHit {
   title: string;
   /** Why it matched, so a result never looks arbitrary. */
   why: string;
+  /**
+   * Show me WHERE it is, and stop there.
+   *
+   * The ordinary result travels to the thing and opens it, which is usually
+   * what somebody wanted. "Show on board" is the other half of the question —
+   * where does this actually sit? — so it flies and pulses and leaves the board
+   * on screen instead of a drawer over it.
+   */
+  reveal?: boolean;
 }
 
 const NODE_ICON: Record<string, React.ElementType> = {
@@ -202,12 +211,21 @@ export function BoardSearch({
               : h.kind === 'job' ? (st?.color ?? '#94a3b8')
               : '#64748b';
             return (
-              <button
+              /**
+               * A ROW, not a button.
+               *
+               * "Show on board" has to sit inside it, and a button inside a
+               * button is invalid markup that browsers flatten — the same trap
+               * the Building Progress cell hit. The row keeps its click.
+               */
+              <div
                 key={`${h.kind}-${h.job?.id ?? h.node?.id ?? h.bin?.id ?? i}`}
                 data-on={on || undefined}
+                role="button"
+                tabIndex={-1}
                 onMouseEnter={() => setCursor(i)}
                 onClick={() => onGo(h)}
-                className="w-full text-left px-3 py-2.5 flex items-center gap-3 rounded-xl transition-colors"
+                className="w-full text-left px-3 py-2.5 flex items-center gap-3 rounded-xl transition-colors cursor-pointer"
                 style={{ backgroundColor: on ? 'rgba(74,168,216,.10)' : undefined }}
               >
                 <span className="flex items-center justify-center w-8 h-8 rounded-xl flex-shrink-0"
@@ -245,8 +263,23 @@ export function BoardSearch({
                     group
                   </span>
                 )}
+                {/*
+                  Show me WHERE it is, without opening it.
+                  Choosing the row travels there AND opens the thing, which is
+                  usually what you wanted; this is the other half of the
+                  question — where does it actually sit on the board — so it
+                  flies, pulses and stops.
+                */}
+                <button
+                  onClick={e => { e.stopPropagation(); onGo({ ...h, reveal: true }); }}
+                  title="Show it on the board"
+                  className="flex-shrink-0 p-1.5 rounded-lg text-gray-300 hover:text-[#1e3a5f]
+                             hover:bg-[#4aa8d8]/12 transition-colors"
+                >
+                  <Crosshair size={14} />
+                </button>
                 {on && <CornerDownLeft size={13} className="text-gray-300 flex-shrink-0" />}
-              </button>
+              </div>
             );
           })}
         </div>

@@ -910,3 +910,55 @@ function iso(daysFromNow: number) {
 function isoT(hoursFromNow: number) {
   return new Date(Date.now() + hoursFromNow * 3_600_000).toISOString().slice(0, 16);
 }
+
+/**
+ * What a field is ACTUALLY worth when nobody has set it.
+ *
+ * Every one of these panels showed a blank box for the heading, the text size,
+ * the outline and its thickness — so the panel said "empty" where the board was
+ * plainly drawing something. A blank is not the value; it is the absence of an
+ * override, and the office has no way of knowing what the absence resolves to.
+ *
+ * The numbers here are the SAME ones the render paths fall back to, and they
+ * differ by node type — a heading is 30/800 and a note is 14/400, so one shared
+ * number would be wrong for one of them. When the render default changes, this
+ * changes with it.
+ */
+const TYPE_TEXT_DEFAULTS: Record<string, { fontSize: number; fontWeight: number; align: string }> = {
+  title: { fontSize: 30, fontWeight: 800, align: 'left' },
+  note: { fontSize: 14, fontWeight: 400, align: 'left' },
+  box: { fontSize: 14, fontWeight: 600, align: 'left' },
+};
+const TEXT_FALLBACK = { fontSize: 14, fontWeight: 400, align: 'left' };
+
+/** The outline a node gets the moment one is switched on. */
+export const OUTLINE_DEFAULT_COLOUR = '#64748b';
+export const OUTLINE_DEFAULT_WIDTH = 3;
+
+export function fieldDefault(
+  el: { type?: string; widget?: string; text?: string },
+  field: WidgetField,
+  widgetName?: string,
+  widgetSeed?: Record<string, unknown>,
+): unknown {
+  if (field.scope === 'element') {
+    const t = TYPE_TEXT_DEFAULTS[el.type ?? ''] ?? TEXT_FALLBACK;
+    switch (field.key) {
+      case 'fontSize': return t.fontSize;
+      case 'fontWeight': return String(t.fontWeight);
+      case 'align': return t.align;
+      // A colour, so the picker opens somewhere sensible rather than nowhere.
+      // "None" stays reachable — this is what an outline WOULD be, not a claim
+      // that the node has one.
+      case 'outline': return OUTLINE_DEFAULT_COLOUR;
+      case 'outlineWidth': return OUTLINE_DEFAULT_WIDTH;
+      case 'text': return el.text ?? '';
+      default: return undefined;
+    }
+  }
+  // A widget's own seed is the truthful answer for anything it ships with.
+  if (widgetSeed && widgetSeed[field.key] !== undefined) return widgetSeed[field.key];
+  // The heading a widget draws when nobody has typed one is its own name.
+  if (field.key === 'title' && widgetName) return widgetName;
+  return undefined;
+}

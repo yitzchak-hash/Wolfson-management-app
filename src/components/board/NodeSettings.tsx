@@ -4,7 +4,7 @@ import { X, Trash2, Upload, Check, Plus, ChevronUp, ChevronDown } from 'lucide-r
 import { useStore } from '../../data/store';
 import { CanvasElement, Stage, binLabelOf, isBuiltInBin, personColor } from '../../types';
 import { WIDGET_BY_ID } from '../../data/widgets';
-import { WidgetField, WIDGET_FIELDS, ART_FIELDS, BOX_FIELDS, TEXT_STYLE_FIELDS, OUTLINE_FIELDS } from '../../data/widgetFields';
+import { WidgetField, WIDGET_FIELDS, ART_FIELDS, BOX_FIELDS, TEXT_STYLE_FIELDS, OUTLINE_FIELDS, fieldDefault } from '../../data/widgetFields';
 import { ART_KINDS, ArtKind } from './BoardNodes';
 import {
   PlannerData, takeOffPlanner, putBackOnPlanner, slotsFrom, personOf, iso as plannerIso,
@@ -133,8 +133,26 @@ export function NodeSettings({ el, onClose, onDelete }: {
     updateCanvasElement(el.id, { [key]: value } as Partial<CanvasElement>);
   }
 
-  const readField = (f: WidgetField) =>
-    f.scope === 'element' ? (el as unknown as Record<string, unknown>)[f.key] : data[f.key];
+  /**
+   * Show the value in USE, not the absence of an override.
+   *
+   * An unset field rendered as a blank box, so the panel said "empty" where the
+   * board was plainly drawing a heading at some size in some weight. The
+   * default is what the render path itself falls back to, so what the panel
+   * shows and what the board draws are the same number.
+   *
+   * Nothing is written by looking: the default is only displayed, and the
+   * record stays clean until somebody actually changes something.
+   */
+  const widgetDef = el.widget ? WIDGET_BY_ID.get(el.widget) : undefined;
+  const readField = (f: WidgetField) => {
+    const set = f.scope === 'element'
+      ? (el as unknown as Record<string, unknown>)[f.key]
+      : data[f.key];
+    if (set !== undefined && set !== null && set !== '') return set;
+    return fieldDefault(el, f, widgetDef?.name, widgetDef?.data as Record<string, unknown> | undefined)
+      ?? set;
+  };
   const writeField = (f: WidgetField, v: unknown) =>
     f.scope === 'element' ? setEl(f.key, v) : setData(f.key, v);
 
