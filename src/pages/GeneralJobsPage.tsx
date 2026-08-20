@@ -4228,9 +4228,30 @@ export function GeneralJobsPage() {
    * size now comes from the content alone, with one screen as the floor, so an
    * empty board is one screen and it grows as you push a tile into a corner.
    */
-  const step = (n: number) => Math.ceil(n / 400) * 400;
-  const rawX = Math.max(step(contentX + EDGE_PAD + margin), 1200);
-  const rawY = Math.max(step(contentY + EDGE_PAD + margin), 800);
+  /**
+   * Rounded to a step so the surface does not resize on every pixel of
+   * movement — but a FINE one.
+   *
+   * It was 400, from back when the size was derived partly from the pan and
+   * the churn was per-frame. The size comes from the content alone now, and
+   * during a gesture it is latched (see below), so the coarse step bought
+   * nothing and cost up to 400px of empty board past the last thing —
+   * "it's empty on the whole bottom part and it's still really expanded all
+   * the way down". With the pad that was 568px of nothing.
+   */
+  const step = (n: number) => Math.ceil(n / 100) * 100;
+  /**
+   * The floor is the VIEWPORT, not two magic numbers.
+   *
+   * The board must never be smaller than the window — a surface that stops
+   * partway down leaves a grey void that reads as the end of the world rather
+   * than as empty board. 1200x800 was a guess at a window size and was wrong
+   * on every screen that is not that.
+   */
+  const floorW = Math.max(vp.w || 0, 900);
+  const floorH = Math.max(vp.h || 0, 600);
+  const rawX = Math.max(step(contentX + EDGE_PAD + margin), floorW);
+  const rawY = Math.max(step(contentY + EDGE_PAD + margin), floorH);
 
   /**
    * The board gives space back — but never while your hand is on it.

@@ -208,6 +208,30 @@ check(moved !== null && moved < 2500, 'and the note really did move in', `x ${mo
   }
 }
 
+// ── 5. Nothing low down means no empty bottom ─────────────────────────────
+// "There are currently no widgets on the bottom of the canvas… it's empty on
+// the whole bottom part and it's still really expanded all the way down."
+// The board rounded its size up in 400px chunks on top of a 140px pad, so up
+// to 568px of nothing sat past the lowest thing on it.
+{
+  const fit = await page.evaluate(() => {
+    const d = JSON.parse(localStorage.getItem('general_app_data') ?? '{}');
+    const els = (d.canvasElements ?? []).filter(e => !e.board);
+    const lowest = Math.max(0, ...els.map(e => (e.y ?? 0) + (e.h ?? 0)));
+    const w = document.querySelector('[data-board-world]');
+    const vp = document.querySelector('[data-board-viewport]');
+    return { lowest, worldH: w?.offsetHeight ?? 0, viewportH: vp?.clientHeight ?? 0 };
+  });
+  const slack = fit.worldH - Math.max(fit.lowest, fit.viewportH);
+  console.log('       bottom:', JSON.stringify({ ...fit, slack }));
+  check(slack <= 300,
+    'the board carries no more than a little room past the lowest thing',
+    `${slack}px of empty bottom`);
+  check(fit.worldH >= fit.viewportH,
+    'and it still fills the window rather than stopping partway down',
+    `${fit.worldH} vs ${fit.viewportH}`);
+}
+
 await page.screenshot({ path: 'scratchpad/deexpand.png' });
 console.log(fails === 0 ? '\nALL PASS' : `\n${fails} FAILED`);
 await b.close();

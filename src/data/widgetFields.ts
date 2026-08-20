@@ -369,6 +369,11 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
         { value: '1', label: 'Fill the box, cropped' },
       ],
     },
+    {
+      key: 'chromeCrop', label: 'Hide below the video', kind: 'number', min: 0, max: 400,
+      hint: 'How much of TikTok’s own caption strip to cut off. Raise it if any of their '
+        + 'page still shows under the video; lower it if the video itself is being clipped.',
+    },
   ],
   'btu-hp': [
     title(),

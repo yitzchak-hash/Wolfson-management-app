@@ -90,7 +90,27 @@ export function TikTokWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
    * video start.
    */
   const [playToken, setPlayToken] = useState(0);
-  const wantAutoplay = !!data.autoplay || playToken > 0;
+  /**
+   * A reel plays on its own unless it is told not to.
+   *
+   * It defaulted to off, so every video had to be started by hand — "I keep
+   * having to press play". `undefined` is a reel nobody has been near, and it
+   * should behave the way a reel obviously should; only choosing "wait for me
+   * to press play" ('') turns it off.
+   */
+  const wantAutoplay = (data.autoplay ?? '1') !== '' || playToken > 0;
+
+  /**
+   * How much of their page to hide below the video.
+   *
+   * The embed is a PAGE, not a player: the video, and under it a strip with the
+   * caption, the sound and the buttons — which is what put a scrollbar in the
+   * node and made the reel look like a browser window rather than a video. The
+   * frame is drawn taller than the box and the box clips it, so only the video
+   * survives. A number rather than a boolean because their strip's height is
+   * theirs to change, and this way it can be nudged without a release.
+   */
+  const chromeCrop = Math.max(0, Number(data.chromeCrop ?? 168));
   const [pasting, setPasting] = useState(false);
   const [draft, setDraft] = useState('');
   const [meta, setMeta] = useState<Record<string, Meta>>(() => (data.meta as Record<string, Meta>) ?? {});
@@ -232,7 +252,7 @@ export function TikTokWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
     >
       <div className="h-full flex flex-col min-h-0 gap-1">
         <div ref={boxRef}
-          className="flex-1 min-h-0 rounded-lg overflow-hidden bg-black relative flex items-center justify-center">
+          className="flex-1 min-h-0 rounded-lg overflow-hidden bg-black relative flex items-start justify-center">
           {videoId ? (
             <iframe
               // The token is part of the key on purpose: re-mounting is the
@@ -243,7 +263,17 @@ export function TikTokWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
               src={`https://www.tiktok.com/embed/v2/${videoId}`
                 + `?autoplay=${wantAutoplay ? 1 : 0}&music_info=0&description=0`}
               title={known?.title || 'TikTok'}
-              style={{ border: 0, ...frame }}
+              // No scrollbar, ever: it is a video, and there is nothing in the
+              // node the office is meant to scroll.
+              scrolling="no"
+              style={{
+                border: 0,
+                width: frame.width,
+                // Taller than the box on purpose — the parent clips it, so
+                // their caption strip never appears.
+                height: typeof frame.height === 'number' ? frame.height + chromeCrop : frame.height,
+                overflow: 'hidden',
+              }}
               allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
               // A board node that scrolls is not a place for an iframe to be
               // able to navigate the whole app.
