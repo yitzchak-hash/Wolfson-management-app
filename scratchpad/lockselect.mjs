@@ -10,7 +10,7 @@
 //  · lock: a locked note/tile cannot be dragged or resized, survives the
 //    Delete key, still opens on a click, and unlocking restores everything;
 //  · the workspace dropdown paints ABOVE the board chrome and above the
-//    sticky building headers (the portal fix + BuildingColumn's z-10).
+//    sticky building headers (the portal fix + the shared BuildingNameBar).
 import { chromium } from 'playwright';
 
 const APP = 'http://localhost:5173';
@@ -234,13 +234,19 @@ await page.getByRole('menu').getByText(/Wolfson/).first().click();
 await page.waitForTimeout(2500);
 check(page.url().includes('/project'), 'picking Wolfson lands on the diagram');
 
-// The sticky building bar sits at z-10 (the missed BuildingColumn fix).
+// The sticky building bar sits at z-20.
+//
+// It was z-10 when this was written, which is exactly what was wrong with it:
+// a highlighted cell carries z-10 too and comes LATER in the document, so the
+// tie went to the cells and the building name was painted over as they
+// scrolled past. Both columns now share one `BuildingNameBar` at z-20 — far
+// below any dialog (What's New is z-260).
 const barZ = await page.evaluate(() => {
   const bars = [...document.querySelectorAll('.sticky')]
     .filter(n => /^A\d$/.test(n.textContent?.trim() ?? ''));
   return bars.map(b => getComputedStyle(b).zIndex);
 });
-check(barZ.length > 0 && barZ.every(z => z === '10'), `building name bars are z-10 (${barZ.join(',')})`);
+check(barZ.length > 0 && barZ.every(z => z === '20'), `building name bars are z-20 (${barZ.join(',')})`);
 
 // And the dropdown wins over them.
 await page.locator('header button[aria-haspopup="menu"]').click();

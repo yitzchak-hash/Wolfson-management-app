@@ -1,7 +1,8 @@
 import React, { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { useDeleteImpactLine } from '../ui/DeleteImpact';
 import {
-  X, Undo2, Trash2, Search, StickyNote, Square, LayoutGrid, Settings2, Plus,
+  X, Undo2, Trash2, Search, StickyNote, Square, LayoutGrid, Settings2, Plus, ArrowDownUp,
+  Pencil, Highlighter, Eraser,
 } from 'lucide-react';
 import { useStore } from '../../data/store';
 import {
@@ -10,14 +11,30 @@ import {
 import { getBoardTheme } from '../../data/boardThemes';
 import { WidgetStore } from './WidgetStore';
 import { WidgetDef, WidgetCtx, WIDGET_BY_ID } from '../../data/widgets';
-import { NODE_DEFAULT_SIZE, ArtKind } from './BoardNodes';
+import {
+  NODE_DEFAULT_SIZE, ArtKind, StrokeLayer, StrokeNib, nibDash, isDrawingNode,
+} from './BoardNodes';
 import { BoardNode, JobTile, BoardHandlers, TILE_W, TILE_H, tileSize } from './BoardItems';
 import { NodeSettings } from './NodeSettings';
+import { MiniMap } from './MiniMap';
+import { EraserCursor, INK_COLOURS, MARKER_COLOURS } from './EraserCursor';
+import { planErase, strokeRecord, InkPoint } from '../../data/boardInk';
 import { isFingerTouch } from '../../hooks/useTouchGestures';
 
 // TILE_W / TILE_H / tileSize come from BoardItems — the group used to carry
 // its own 190x116 pair, which is exactly why a job looked like a different
 // kind of thing depending on which window you were looking at.
+
+export type BinSort = 'filed-new' | 'filed-old' | 'edited' | 'name' | 'stage' | 'tasks';
+
+const SORTS: { id: BinSort; label: string }[] = [
+  { id: 'filed-new', label: 'Newest first' },
+  { id: 'filed-old', label: 'Oldest first' },
+  { id: 'edited', label: 'Recently worked on' },
+  { id: 'name', label: 'Name A–Z' },
+  { id: 'stage', label: 'By stage' },
+  { id: 'tasks', label: 'Most open tasks' },
+];
 
 /**
  * A bin, opened as a board of its own.
@@ -85,6 +102,69 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
   /** A grab-pan in progress: where the scroll and the pointer both started. */
   const panning = useRef<{ px: number; py: number; sx: number; sy: number } | null>(null);
   const [panMode, setPanMode] = useState(false);
+  /**
+   * Ctrl/⌘ + drag on empty surface picks everything the box touches.
+   *
+   * The board's own binding, so the gesture means the same thing in both
+   * windows: a plain drag on empty surface pans, and Ctrl turns it into a
+   * lasso. Kept in BOARD units, so the maths is the same at any zoom.
+   */
+  const [lasso, setLasso] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  /**
+   * Where the group is scrolled to, and how big its window is.
+   *
+   * The overview needs both to draw the rectangle for what is on screen. Read
+   * on scroll and on resize rather than every render — a scroll handler that
+   * sets state per event is the cheapest way to make a board feel heavy, so it
+   * is coalesced into one frame.
+   */
+  const [view, setView] = useState({ x: 0, y: 0, w: 0, h: 0 });
+  const viewTick = useRef(0);
+  const readView = useCallback(() => {
+    const el = surfaceRef.current;
+    if (!el) return;
+    cancelAnimationFrame(viewTick.current);
+    viewTick.current = requestAnimationFrame(() => setView({
+      x: el.scrollLeft, y: el.scrollTop, w: el.clientWidth, h: el.clientHeight,
+    }));
+  }, []);
+  useEffect(() => {
+    readView();
+    const el = surfaceRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(readView);
+    ro.observe(el);
+    return () => { ro.disconnect(); cancelAnimationFrame(viewTick.current); };
+  }, [readView]);
+
+  /**
+   * The drawing tools, inside a group.
+   *
+   * Pen and highlighter are MODES, exactly as on the main board: while one is
+   * armed a press anywhere — empty surface or straight across a tile — starts a
+   * stroke rather than a drag. Pressing the armed tool again puts it down and
+   * returns to Select, so the board can never end up holding nothing.
+   *
+   * The geometry is shared with the board (`src/data/boardInk.ts`), so a group
+   * and the board can never disagree about what an eraser does.
+   */
+  const [tool, setTool] = useState<'select' | 'pen' | 'highlighter'>('select');
+  const [eraser, setEraser] = useState({ on: false, width: 26, whole: false });
+  const [penStyle, setPenStyle] = useState({ color: '#1e3a5f', width: 3, nib: 'round' as StrokeNib });
+  const [markStyle, setMarkStyle] = useState({ color: '#facc15', width: 16, nib: 'chisel' as StrokeNib });
+  /** The live stroke, in BOARD units, committed once on pointer-up. */
+  const [drawing, setDrawing] = useState<{ pts: InkPoint[]; marker: boolean } | null>(null);
+  /** True between pointerdown and pointerup while rubbing out. */
+  const erasing = useRef(false);
+  const drawMode = tool === 'pen' || tool === 'highlighter';
+  const eraseMode = eraser.on;
+  /** Picking the tool you are already holding puts it down. */
+  const pickTool = (t: 'pen' | 'highlighter' | 'eraser') => {
+    if (t === 'eraser') { setTool('select'); setEraser(v => ({ ...v, on: !v.on })); return; }
+    setEraser(v => (v.on ? { ...v, on: false } : v));
+    setTool(cur => (cur === t ? 'select' : t));
+  };
+  const putToolsDown = () => { setTool('select'); setEraser(v => ({ ...v, on: false })); };
 
   const [query, setQuery] = useState('');
   const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -139,14 +219,50 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
   const bornAt = useRef(Date.now());
   const settling = () => Date.now() - bornAt.current < 400;
 
+  /**
+   * How the group is ordered.
+   *
+   * A group holding six hundred finished jobs in the order they happened to be
+   * filed is a pile, not a list. The order drives the GRID the un-dragged jobs
+   * lay out in, so re-sorting re-flows them — and anything somebody has
+   * deliberately placed keeps its own position, because that position is stored
+   * on the job.
+   *
+   * Remembered per machine: how you like to read a group is a habit, not
+   * something the whole company should have to agree on.
+   */
+  const [sort, setSort] = useState<BinSort>(() => {
+    const v = localStorage.getItem('bin_sort');
+    return (SORTS.some(s2 => s2.id === v) ? v : 'filed-new') as BinSort;
+  });
+  useEffect(() => { localStorage.setItem('bin_sort', sort); }, [sort]);
+
   const items = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return apartments
+    const openOf = (a: Apartment) =>
+      contractorAssignments.filter(t => t.apartmentId === a.id && !t.completedAt).length;
+    const stageOrder = (a: Apartment) => {
+      const st = stages.find(x => x.id === a.currentStageId);
+      // No stage sorts last rather than first: "not started" is not step zero
+      // of the work, it is the absence of an answer.
+      return st ? st.order : Number.MAX_SAFE_INTEGER;
+    };
+    const rows = apartments
       .filter(a => a.boardBin === binKey && !a.isUnnamed)
       .filter(a => !q || (a.displayName ?? '').toLowerCase().includes(q)
-        || (a.address ?? '').toLowerCase().includes(q))
-      .sort((a, b) => (b.binnedAt ?? '').localeCompare(a.binnedAt ?? ''));
-  }, [apartments, binKey, query]);
+        || (a.address ?? '').toLowerCase().includes(q));
+    const by: Record<BinSort, (a: Apartment, b: Apartment) => number> = {
+      'filed-new': (a, b) => (b.binnedAt ?? '').localeCompare(a.binnedAt ?? ''),
+      'filed-old': (a, b) => (a.binnedAt ?? '').localeCompare(b.binnedAt ?? ''),
+      'edited': (a, b) => (b.contentUpdatedAt ?? b.updatedAt ?? '')
+        .localeCompare(a.contentUpdatedAt ?? a.updatedAt ?? ''),
+      'name': (a, b) => (a.displayName ?? '').localeCompare(b.displayName ?? '', undefined, { numeric: true }),
+      'stage': (a, b) => stageOrder(a) - stageOrder(b)
+        || (a.displayName ?? '').localeCompare(b.displayName ?? ''),
+      'tasks': (a, b) => openOf(b) - openOf(a),
+    };
+    return rows.sort(by[sort] ?? by['filed-new']);
+  }, [apartments, binKey, query, sort, stages, contractorAssignments]);
 
   const nodes = useMemo(
     () => canvasElements.filter(el => el.board === binKey && el.type !== 'bin'),
@@ -206,12 +322,84 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
     };
   }
 
+  // ── ink ─────────────────────────────────────────────────────────────────
+  /**
+   * Begins a freehand stroke wherever the press landed — over a tile included,
+   * which is what "drawing on the board" means.
+   *
+   * The capture goes on the SCROLLER, not on whatever was pressed: a stroke
+   * that began on a tile has to keep receiving moves once the pointer leaves
+   * that tile, and the scroller is the one element the whole surface sits in.
+   */
+  function startStrokeAt(e: React.PointerEvent) {
+    const p = toLocal(e);
+    setMenu(null);
+    setDrawing({ pts: [p], marker: tool === 'highlighter' });
+    surfaceRef.current?.setPointerCapture(e.pointerId);
+  }
+
+  function startEraseAt(e: React.PointerEvent) {
+    setMenu(null);
+    erasing.current = true;
+    surfaceRef.current?.setPointerCapture(e.pointerId);
+    eraseAt(e.clientX, e.clientY);
+  }
+
+  /** One pass of the eraser at a screen point — the board's own rule. */
+  function eraseAt(clientX: number, clientY: number) {
+    const plan = planErase(canvasElements, toLocal({ clientX, clientY }), {
+      width: eraser.width, whole: eraser.whole, board: binKey,
+      newId: () => 'CE-' + Math.random().toString(36).slice(2, 9),
+    });
+    plan.remove.forEach(deleteCanvasElement);
+    plan.add.forEach(addCanvasElement);
+  }
+
+  /** Extends the live stroke, thinning sub-pixel samples out of the record. */
+  function extendStroke(e: React.PointerEvent) {
+    const p = toLocal(e);
+    setDrawing(d => {
+      if (!d) return d;
+      const last = d.pts[d.pts.length - 1];
+      if (Math.hypot(p.x - last.x, p.y - last.y) < 2.5 / zoom) return d;
+      return { ...d, pts: [...d.pts, p] };
+    });
+  }
+
+  /** One record per stroke — never one per point, which would flood the store. */
+  function commitStroke() {
+    if (drawing && drawing.pts.length > 1) {
+      const st = drawing.marker ? markStyle : penStyle;
+      addCanvasElement(strokeRecord({
+        id: 'CE-' + Math.random().toString(36).slice(2, 9),
+        pts: drawing.pts, color: st.color, width: st.width, nib: st.nib,
+        marker: drawing.marker, board: binKey,
+      }));
+    }
+    setDrawing(null);
+  }
+
   // ── drag ────────────────────────────────────────────────────────────────
   function startDrag(e: React.PointerEvent, kind: 'job' | 'el', id: string) {
     if (e.button !== 0) return;
+    /**
+     * A press on a tile or a node while a tool is armed is the START OF A
+     * STROKE, not a drag — the main board's rule, and the whole point of a
+     * drawing tool being a mode.
+     *
+     * A node's own buttons still take the press (you must be able to open
+     * settings without putting the pen down), but a RESIZE HANDLE is not a
+     * button in that sense: a straight stroke's box is one pixel tall, so its
+     * edge handles sit on top of all of its own ink and would swallow every
+     * press aimed at it.
+     */
+    const action = (e.target as HTMLElement).closest('[data-no-drag],[data-el-action]');
+    const inkable = (drawMode || eraseMode) && !!(e.target as HTMLElement).closest('[data-resize]');
+    if (action && !inkable) return;
+    if (drawMode) { startStrokeAt(e); e.stopPropagation(); return; }
+    if (eraseMode) { startEraseAt(e); e.stopPropagation(); return; }
     // Still the tail of the gesture that opened this window — see `settling`.
     if (settling()) return;
-    if ((e.target as HTMLElement).closest('[data-no-drag],[data-el-action]')) return;
     // The main board's lock rule holds inside a group window too.
     if (kind === 'el' && nodes.find(n => n.id === id)?.locked) return;
     if (kind === 'job' && items.find(a => a.id === id)?.boardLocked) return;
@@ -299,6 +487,15 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
 
   // ── resize ──────────────────────────────────────────────────────────────
   function resizeDown(e: React.PointerEvent, el: CanvasElement) {
+    /**
+     * A drawing tool is armed, so this press is INK, not a resize.
+     *
+     * Bailing BEFORE stopPropagation lets the press bubble to the node, whose
+     * own branch starts the stroke. Without it a straight stroke can never be
+     * erased: its box is one pixel tall, so its own edge handles sit on top of
+     * the whole of its ink and swallow every press aimed at it.
+     */
+    if (drawMode || eraseMode) return;
     e.stopPropagation(); e.preventDefault();
     setResize({ id: el.id, startW: el.w, startH: el.h, startPX: e.clientX, startPY: e.clientY, dw: 0, dh: 0 });
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -473,6 +670,7 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
     },
     jobResizeDown: (e, j) => {
       const ev = e as React.PointerEvent;
+      if (drawMode || eraseMode) return;    // armed tool: this press is ink
       ev.stopPropagation(); ev.preventDefault();
       const a = j as Apartment;
       const sz = tileSize(a);
@@ -660,7 +858,16 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
   useEffect(() => {
     function key(e: KeyboardEvent) {
       if ((e.target as HTMLElement)?.tagName?.match(/INPUT|TEXTAREA/)) return;
-      if (e.key === 'Escape') { if (menu) setMenu(null); else if (selected.size) setSelected(new Set()); else onClose(); }
+      // Escape backs out one thing at a time: the menu, then an armed drawing
+      // tool, then the selection, and only then the window. Closing the group
+      // because somebody wanted to put the pen down is the kind of surprise
+      // that makes people stop using a tool.
+      if (e.key === 'Escape') {
+        if (menu) setMenu(null);
+        else if (drawMode || eraseMode) putToolsDown();
+        else if (selected.size) setSelected(new Set());
+        else onClose();
+      }
       if ((e.key === 'Delete' || e.key === 'Backspace') && selected.size) {
         selected.forEach(id => { if (nodes.some(n => n.id === id)) deleteCanvasElement(id); });
         setSelected(new Set());
@@ -728,6 +935,21 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
                 className="px-2 py-0.5 font-black leading-none">+</button>
             </span>
             <span className="w-px h-4 bg-white/25 mx-0.5" />
+            {/* The drawing tools. Modes, like the board's — the armed one is
+                lit, and pressing it again puts it down. */}
+            <button onClick={() => pickTool('pen')} title="Pen"
+              className={`p-1.5 rounded-lg ${tool === 'pen' ? 'bg-white text-slate-900' : 'hover:bg-white/15'}`}>
+              <Pencil size={15} />
+            </button>
+            <button onClick={() => pickTool('highlighter')} title="Highlighter"
+              className={`p-1.5 rounded-lg ${tool === 'highlighter' ? 'bg-white text-slate-900' : 'hover:bg-white/15'}`}>
+              <Highlighter size={15} />
+            </button>
+            <button onClick={() => pickTool('eraser')} title="Eraser"
+              className={`p-1.5 rounded-lg ${eraseMode ? 'bg-white text-slate-900' : 'hover:bg-white/15'}`}>
+              <Eraser size={15} />
+            </button>
+            <span className="w-px h-4 bg-white/25 mx-0.5" />
             <button onClick={() => addSimple('note')} title="Sticky note"
               className="p-1.5 rounded-lg hover:bg-white/15"><StickyNote size={15} /></button>
             <button onClick={() => addSimple('box')} title="Section box"
@@ -746,17 +968,116 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
             <input value={query} onChange={e => setQuery(e.target.value)}
               placeholder="Search inside this group…"
               className="flex-1 text-[12.5px] outline-none bg-transparent" />
-            <span className="text-[10.5px] text-gray-400">drag to arrange · right-click for more</span>
+            {/* How the group is ordered — the answer to a pile of six hundred
+                finished jobs sitting in whatever order they were filed. */}
+            <span className="flex items-center gap-1 flex-shrink-0">
+              <ArrowDownUp size={12} className="text-gray-400" />
+              <select
+                value={sort}
+                onChange={e => setSort(e.target.value as BinSort)}
+                title="How this group is sorted"
+                className="text-[11.5px] font-semibold text-gray-600 bg-transparent outline-none cursor-pointer"
+              >
+                {SORTS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+              </select>
+            </span>
+            <span className="text-[10.5px] text-gray-400 hidden lg:inline">drag to arrange · right-click for more</span>
           </div>
 
+          {/* What the armed tool is set to.
+              Shown only WHILE a tool is held — a permanent strip of colour
+              swatches over a group of jobs is noise, and a control nobody can
+              see while doing the thing is not a control. */}
+          {(drawMode || eraseMode) && (
+            <div className="px-3 py-1.5 flex items-center gap-2 flex-wrap flex-shrink-0"
+              style={{ backgroundColor: 'rgba(241,245,249,.96)', borderBottom: '1px solid rgba(15,23,42,.08)' }}>
+              {eraseMode ? (
+                <>
+                  <span className="text-[11px] font-bold text-gray-600">Eraser</span>
+                  <span className="flex rounded-lg overflow-hidden border border-gray-300">
+                    {([['Rub out', false], ['Whole mark', true]] as const).map(([label, whole]) => (
+                      <button key={label} onClick={() => setEraser(v => ({ ...v, whole }))}
+                        className={`px-2 py-0.5 text-[11px] font-semibold ${
+                          eraser.whole === whole ? 'bg-slate-800 text-white' : 'bg-white text-gray-600'}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </span>
+                  <span className="text-[11px] text-gray-500">Size</span>
+                  <input type="range" min={8} max={90} value={eraser.width}
+                    onChange={e => setEraser(v => ({ ...v, width: +e.target.value }))}
+                    className="w-24" title={`${eraser.width}px`} />
+                </>
+              ) : (
+                <>
+                  <span className="text-[11px] font-bold text-gray-600">
+                    {tool === 'pen' ? 'Pen' : 'Highlighter'}
+                  </span>
+                  {(tool === 'pen' ? INK_COLOURS : MARKER_COLOURS).map(c => {
+                    const cur = tool === 'pen' ? penStyle.color : markStyle.color;
+                    return (
+                      <button key={c} title={c}
+                        onClick={() => (tool === 'pen'
+                          ? setPenStyle(v => ({ ...v, color: c }))
+                          : setMarkStyle(v => ({ ...v, color: c })))}
+                        className="w-5 h-5 rounded-full"
+                        style={{
+                          backgroundColor: c,
+                          boxShadow: cur === c
+                            ? '0 0 0 2px #fff, 0 0 0 4px #0f172a'
+                            : '0 0 0 1px rgba(15,23,42,.18)',
+                        }} />
+                    );
+                  })}
+                  <span className="text-[11px] text-gray-500">Width</span>
+                  <input type="range"
+                    min={tool === 'pen' ? 1 : 6} max={tool === 'pen' ? 20 : 48}
+                    value={tool === 'pen' ? penStyle.width : markStyle.width}
+                    onChange={e => (tool === 'pen'
+                      ? setPenStyle(v => ({ ...v, width: +e.target.value }))
+                      : setMarkStyle(v => ({ ...v, width: +e.target.value })))}
+                    className="w-24" />
+                </>
+              )}
+              <span className="flex-1" />
+              <button onClick={putToolsDown}
+                className="px-2.5 py-0.5 rounded-lg text-[11px] font-bold bg-slate-800 text-white">
+                Done
+              </button>
+            </div>
+          )}
+
+          {/* A frame the overview can sit in.
+              The scroller itself cannot hold it: anything absolute inside a
+              scrolling box scrolls with the content, so the overview would
+              wander off the moment you moved. */}
+          <div className="flex-1 min-h-0 relative">
           <div
             ref={surfaceRef}
-            className="flex-1 min-h-0 overflow-auto relative"
-            style={{ cursor: panning.current ? 'grabbing' : panMode ? 'grab' : undefined }}
+            onScroll={readView}
+            className="absolute inset-0 overflow-auto"
+            style={{
+              cursor: panning.current ? 'grabbing'
+                : panMode ? 'grab'
+                : drawMode ? 'crosshair'
+                // The eraser draws its own outline, so the arrow would be a
+                // second, smaller, wronger cursor sitting inside it.
+                : eraseMode ? 'none' : undefined,
+              // A finger must be able to draw rather than scroll the group away
+              // underneath the stroke.
+              touchAction: drawMode || eraseMode ? 'none' : undefined,
+            }}
             onPointerMove={e => {
               if (panning.current && surfaceRef.current) {
                 surfaceRef.current.scrollLeft = panning.current.sx - (e.clientX - panning.current.px);
                 surfaceRef.current.scrollTop = panning.current.sy - (e.clientY - panning.current.py);
+                return;
+              }
+              if (erasing.current) { eraseAt(e.clientX, e.clientY); return; }
+              if (drawing) { extendStroke(e); return; }
+              if (lasso) {
+                const p = toLocal(e);
+                setLasso({ ...lasso, x1: p.x, y1: p.y });
                 return;
               }
               moveDrag(e); resizeMove(e); jobResizeMove(e);
@@ -764,6 +1085,33 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
             onPointerUp={e => {
               if (panning.current) {
                 panning.current = null;
+                (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+                return;
+              }
+              if (erasing.current) {
+                erasing.current = false;
+                (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+                return;
+              }
+              if (drawing) {
+                commitStroke();
+                (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+                return;
+              }
+              if (lasso) {
+                const minX = Math.min(lasso.x0, lasso.x1), maxX = Math.max(lasso.x0, lasso.x1);
+                const minY = Math.min(lasso.y0, lasso.y1), maxY = Math.max(lasso.y0, lasso.y1);
+                const hit = new Set<string>();
+                items.forEach((a2, i) => {
+                  const p = jobPos(a2, i);
+                  const sz = tileSize(a2);
+                  if (p.x < maxX && p.x + sz.w > minX && p.y < maxY && p.y + sz.h > minY) hit.add(a2.id);
+                });
+                nodes.forEach(n => {
+                  if (n.x < maxX && n.x + n.w > minX && n.y < maxY && n.y + n.h > minY) hit.add(n.id);
+                });
+                setSelected(hit);
+                setLasso(null);
                 (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
                 return;
               }
@@ -783,7 +1131,18 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
                 (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
                 return;
               }
-              if (onSurface) { setSelected(new Set()); setMenu(null); }
+              if (!onSurface) return;
+              setMenu(null);
+              // Pen, highlighter and eraser take the gesture outright while armed.
+              if (e.button === 0 && drawMode) { startStrokeAt(e); return; }
+              if (e.button === 0 && eraseMode) { startEraseAt(e); return; }
+              if (e.ctrlKey || e.metaKey) {
+                const p = toLocal(e);
+                setLasso({ x0: p.x, y0: p.y, x1: p.x, y1: p.y });
+                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                return;
+              }
+              setSelected(new Set());
             }}
             onContextMenu={e => {
               if (!(e.target as HTMLElement).dataset.binSurface) return;
@@ -813,11 +1172,50 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
               }}>
             <div
               data-bin-world="1"
+              // ALSO the surface, for hit-testing purposes.
+              //
+              // This div is laid over the painted one and is at least as big,
+              // so a press on empty board lands HERE — which meant the "is this
+              // the empty surface?" test never matched and the lasso, the
+              // right-click menu and (now) the pen were all silently
+              // unreachable. Both divs answer to the same marker.
+              data-bin-surface="1"
               style={{
                 position: 'absolute', top: 0, left: 0,
                 width: extent.w, height: extent.h,
                 transform: `scale(${zoom})`, transformOrigin: '0 0',
               }}>
+              {lasso && (
+                <div className="absolute pointer-events-none"
+                  style={{
+                    left: Math.min(lasso.x0, lasso.x1),
+                    top: Math.min(lasso.y0, lasso.y1),
+                    width: Math.abs(lasso.x1 - lasso.x0),
+                    height: Math.abs(lasso.y1 - lasso.y0),
+                    border: `${1 / zoom}px solid #4aa8d8`,
+                    backgroundColor: 'rgba(74,168,216,.12)',
+                    zIndex: 40,
+                  }} />
+              )}
+              {/* The ink on this board, minus the drawings that became nodes —
+                  those draw inside their own node and would otherwise be here
+                  twice, with the copy down here failing to follow a move. */}
+              <StrokeLayer elements={nodes.filter(e => !isDrawingNode(e))} />
+              {drawing && drawing.pts.length > 1 && (
+                <svg className="absolute inset-0 pointer-events-none" style={{ overflow: 'visible' }}>
+                  <polyline
+                    points={drawing.pts.map(p => `${p.x},${p.y}`).join(' ')}
+                    fill="none"
+                    stroke={drawing.marker ? markStyle.color : penStyle.color}
+                    strokeWidth={drawing.marker ? markStyle.width : penStyle.width}
+                    strokeDasharray={nibDash(drawing.marker ? markStyle.nib : penStyle.nib,
+                      drawing.marker ? markStyle.width : penStyle.width)}
+                    strokeLinecap={(drawing.marker ? markStyle.nib : penStyle.nib) === 'chisel' ? 'butt' : 'round'}
+                    strokeLinejoin="round"
+                    opacity={drawing.marker ? 0.45 : 1}
+                  />
+                </svg>
+              )}
               {items.length === 0 && nodes.length === 0 && (
                 <div className="absolute inset-0 flex items-center justify-center text-sm pointer-events-none"
                   style={{ color: theme.dark ? 'rgba(255,255,255,.55)' : 'rgba(15,23,42,.45)' }}>
@@ -889,6 +1287,30 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
               })}
             </div>
             </div>
+          </div>
+
+          {eraseMode && <EraserCursor width={eraser.width} zoom={zoom} hostRef={surfaceRef} />}
+
+          {/* The board's own overview, in the group's window. */}
+          <MiniMap
+            panelId="bin-overview"
+            jobs={items}
+            elements={nodes}
+            stages={stages}
+            worldW={extent.w}
+            worldH={extent.h}
+            zoom={zoom}
+            pan={{ x: -view.x, y: -view.y }}
+            viewportW={view.w}
+            viewportH={view.h}
+            onJump={(wx, wy) => {
+              const el = surfaceRef.current;
+              if (!el) return;
+              el.scrollLeft = wx * zoom - el.clientWidth / 2;
+              el.scrollTop = wy * zoom - el.clientHeight / 2;
+              readView();
+            }}
+          />
           </div>
 
           {bin.binKind === 'trash' && (

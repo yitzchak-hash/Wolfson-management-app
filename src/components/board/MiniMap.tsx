@@ -86,7 +86,7 @@ function writeOverviewSize(s: { w: number; h: number }) {
 
 export const MiniMap = React.memo(function MiniMap({
   jobs, elements, stages, worldW, worldH, zoom, pan, viewportW, viewportH, onJump,
-  tileW = 215, tileH = 132, force,
+  tileW = 215, tileH = 132, force, panelId = 'board-overview',
 }: {
   jobs: Apartment[];
   elements: CanvasElement[];
@@ -102,6 +102,13 @@ export const MiniMap = React.memo(function MiniMap({
   tileH?: number;
   /** true = always show, false = never, undefined = only when it is useful. */
   force?: boolean;
+  /**
+   * Which panel's remembered position this is.
+   *
+   * A group window has its own overview, and two overviews sharing one id would
+   * move together — drag the one in a group and the board's jumps with it.
+   */
+  panelId?: string;
 }) {
   /**
    * It expands.
@@ -112,7 +119,7 @@ export const MiniMap = React.memo(function MiniMap({
    * until you shrink it again, because somebody rearranging a board wants it big
    * for the whole job rather than for one click.
    */
-  const { ref: panelRef, pos, posStyle, handleProps, dragging, movePos } = usePanelDrag('board-overview');
+  const { ref: panelRef, pos, posStyle, handleProps, dragging, movePos } = usePanelDrag(panelId);
   const [size, setSize] = useState(readOverviewSize);
   const { w: W, h: H } = size;
   /**

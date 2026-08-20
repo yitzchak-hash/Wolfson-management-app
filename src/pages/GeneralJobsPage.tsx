@@ -47,6 +47,8 @@ import { JobTile, BoardNode, BoardHandlers, TILE_W, TILE_H, tileSize } from '../
 import { useTouchGestures, isFingerTouch } from '../hooks/useTouchGestures';
 import { detectPasteIntent, fieldForIntent, canCreateFromIntent, PasteIntent } from '../data/pasteIntent';
 import { StrokeNib, nibDash } from '../components/board/BoardNodes';
+import { pointsBounds, fmtPoints, planErase, strokeRecord } from '../data/boardInk';
+import { EraserCursor } from '../components/board/EraserCursor';
 import { exportBoardPng, exportBoardPdf } from '../data/boardExport';
 import {
   getFolderNameViaBackend, familyNameFromFolderName, extractFolderId,
@@ -183,80 +185,11 @@ import { MovablePanel } from '../components/board/MovablePanel';
 import { usePhone } from '../data/usePhone';
 
 // ─── Eraser geometry ──────────────────────────────────────────────────────────
-/**
- * How far a point is from a segment.
- *
- * Testing the stored POINTS alone is what made the plan editor's first eraser
- * only work at a stroke's corners: a fast drag leaves a long straight segment
- * with nothing in the middle of it to hit.
- */
-function distToSegment(
-  px: number, py: number,
-  ax: number, ay: number, bx: number, by: number,
-): number {
-  const vx = bx - ax, vy = by - ay;
-  const len = vx * vx + vy * vy;
-  const t = len === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * vx + (py - ay) * vy) / len));
-  return Math.hypot(px - (ax + vx * t), py - (ay + vy * t));
-}
-
-/** The box a polyline occupies, which is also the box its node gets. */
-function pointsBounds(pts: { x: number; y: number }[]) {
-  const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
-  const x = Math.min(...xs), y = Math.min(...ys);
-  // A perfectly straight line has no extent on one axis, and a node with no
-  // height cannot be drawn into or grabbed.
-  return { x, y, w: Math.max(1, Math.max(...xs) - x), h: Math.max(1, Math.max(...ys) - y) };
-}
-
-const fmtPoints = (pts: { x: number; y: number }[]) =>
-  pts.map(p => `${Math.round(p.x)},${Math.round(p.y)}`).join(' ');
-
-/**
- * The eraser's outline, following the pointer at the eraser's true size.
- *
- * The width is stored in WORLD units (`eraseAt` halves it in world space), so
- * the circle is scaled by the zoom — what is drawn is exactly the reach of the
- * next press at this zoom, which is what makes the size buttons mean something
- * on screen. The div is positioned imperatively from its own window listener,
- * so a 60fps pointermove never re-renders the board; it hides once the pointer
- * leaves the viewport, so it cannot hover over the toolbar pretending the rail
- * is erasable.
- */
-function EraserCursor({ width, zoom, hostRef }: {
-  width: number; zoom: number; hostRef: React.RefObject<HTMLDivElement | null>;
-}) {
-  const dotRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    function onMove(e: PointerEvent) {
-      const dot = dotRef.current, host = hostRef.current;
-      if (!dot || !host) return;
-      const r = host.getBoundingClientRect();
-      const inside = e.clientX >= r.left && e.clientX <= r.right
-        && e.clientY >= r.top && e.clientY <= r.bottom;
-      dot.style.display = inside ? 'block' : 'none';
-      dot.style.transform = `translate(${e.clientX}px, ${e.clientY}px)`;
-    }
-    // Capture phase: a drag with pointer capture retargets events, but they
-    // still pass the window on the way down.
-    window.addEventListener('pointermove', onMove, true);
-    return () => window.removeEventListener('pointermove', onMove, true);
-  }, [hostRef]);
-  const d = Math.max(6, width * zoom);
-  return (
-    <div ref={dotRef} className="fixed left-0 top-0 z-[60] pointer-events-none" style={{ display: 'none' }}>
-      <div
-        className="rounded-full"
-        style={{
-          width: d, height: d, marginLeft: -d / 2, marginTop: -d / 2,
-          border: '1.5px solid rgba(30,58,95,.85)',
-          backgroundColor: 'rgba(255,255,255,.28)',
-          boxShadow: '0 0 0 1px rgba(255,255,255,.7)',
-        }}
-      />
-    </div>
-  );
-}
+// The geometry itself lives in `src/data/boardInk.ts`, because a GROUP WINDOW
+// is a board too and drawing had to reach it. Three of the eraser's rules were
+// hard-won (a legacy stroke's stored box is a lie, a surviving run must be
+// re-added as a node, a run of one point draws nothing) and a second copy of
+// them would have fallen into all three again.
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface DragState {
@@ -2644,7 +2577,11 @@ export function GeneralJobsPage() {
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
       return;
     }
-    if ((e.target as HTMLElement).closest('[data-no-drag]')) return;
+    // A RESIZE HANDLE is not a button, so an armed tool may draw over one —
+    // see the note in `onElPointerDown`, where a straight stroke's sliver of a
+    // box makes this the difference between erasable and immortal.
+    if ((e.target as HTMLElement).closest('[data-no-drag]')
+      && !((drawMode || eraseMode) && (e.target as HTMLElement).closest('[data-resize]'))) return;
     // With the pen or highlighter armed, a press starts a stroke wherever it
     // lands — including on top of a tile. Otherwise you could not draw across
     // the board, only in the gaps between jobs. The eraser follows the same
@@ -3014,7 +2951,19 @@ export function GeneralJobsPage() {
     if (e.button !== 0) return;
     if (viewOnlyBoard) return;
     if (arrowFrom) { e.stopPropagation(); finishArrow(el.id); return; }
-    if ((e.target as HTMLElement).closest('[data-el-action]')) return;
+    /**
+     * A RESIZE HANDLE is not a button.
+     *
+     * A node's own action buttons keep working with a tool armed — you must be
+     * able to open settings without putting the pen down. But its edge handles
+     * are not controls in that sense, and for a STRAIGHT stroke they are fatal:
+     * the box is one pixel tall, so the bottom handle sits on top of the whole
+     * of its own ink and swallowed every press aimed at it. Such a line could
+     * not be drawn over and could not be rubbed out, anywhere.
+     */
+    const action = (e.target as HTMLElement).closest('[data-el-action]');
+    const inkable = (drawMode || eraseMode) && !!(e.target as HTMLElement).closest('[data-resize]');
+    if (action && !inkable) return;
     if (drawMode) { startStrokeAt(e); return; }
     if (eraseMode) { startEraseAt(e); return; }
     // The same finger rule the tiles follow: touch navigates, it never moves a
@@ -3310,6 +3259,16 @@ export function GeneralJobsPage() {
     // Read-only under a finger: bailing BEFORE stopPropagation lets the press
     // bubble to the node, whose own finger rule turns it into a board pan.
     if (isFingerTouch(e)) return;
+    /**
+     * A drawing tool is armed, so this press is INK, not a resize.
+     *
+     * Same shape as the two rules below — bail before stopPropagation and the
+     * press bubbles to the node, whose own branch starts the stroke. Without
+     * it a straight stroke is unerasable: its box is one pixel tall, so its
+     * own edge handles sit right on top of the whole of its ink and swallow
+     * every press aimed at it.
+     */
+    if (drawMode || eraseMode) return;
     // Locked nodes keep their size. Bailing before stopPropagation (the same
     // shape as the finger rule) lets the press bubble to the node, whose own
     // lock branch turns it into a board pan; a group gesture simply resizes
@@ -3361,6 +3320,7 @@ export function GeneralJobsPage() {
 
   function onJobResizeDown(e: React.PointerEvent, job: Apartment, index: number) {
     if (isFingerTouch(e)) return;            // touch navigates, never arranges
+    if (drawMode || eraseMode) return;       // a tool is armed: this press is ink
     if (job.boardLocked) return;             // a locked tile keeps its size
     e.stopPropagation(); e.preventDefault();
     const p = jobPos(job, index);
@@ -3628,65 +3588,14 @@ export function GeneralJobsPage() {
     eraseAt(e.clientX, e.clientY);
   }
 
-  /**
-   * One pass of the eraser at a screen point.
-   *
-   * `whole` lifts any mark it touches. Otherwise the stroke is CUT: the points
-   * inside the eraser go, and each run that survives either side becomes a
-   * stroke of its own — still one record per stroke, never one per point.
-   * A run of a single point is dropped, because a polyline of one draws
-   * nothing and would only be an invisible thing to trip over later.
-   */
+  /** One pass of the eraser at a screen point — see `planErase`. */
   function eraseAt(clientX: number, clientY: number) {
-    const p = toWorld(clientX, clientY);
-    const r = eraser.width / 2;
-    canvasElements.forEach(el => {
-      if (el.type !== 'stroke' || !el.points) return;
-      if ((el.board ?? '') !== (boardRef.current ?? '')) return;
-      const reach = r + (el.strokeWidth ?? 3) / 2;
-      // Cheap rejection first: most of the board is nowhere near the pointer.
-      // Trusted only for strokes that became nodes — a legacy flat-ink stroke
-      // (drawn before every stroke was promoted) can carry a stored box that
-      // has nothing to do with where its ink actually is, which is exactly how
-      // two old scribbles shrugged the eraser off. Those are box-checked from
-      // their real points below instead.
-      if (el.data?.own && (p.x < el.x - reach || p.x > el.x + el.w + reach
-        || p.y < el.y - reach || p.y > el.y + el.h + reach)) return;
-
-      const pts = strokePoints(el);
-      if (pts.length < 2) return;
-      if (!el.data?.own) {
-        const b = pointsBounds(pts);
-        if (p.x < b.x - reach || p.x > b.x + b.w + reach
-          || p.y < b.y - reach || p.y > b.y + b.h + reach) return;
-      }
-      const hitsSegment = pts.some((pt, i) =>
-        i > 0 && distToSegment(p.x, p.y, pts[i - 1].x, pts[i - 1].y, pt.x, pt.y) <= reach);
-      if (!hitsSegment) return;
-
-      if (eraser.whole) { deleteCanvasElement(el.id); return; }
-
-      const runs: { x: number; y: number }[][] = [];
-      let run: { x: number; y: number }[] = [];
-      pts.forEach(pt => {
-        if (Math.hypot(pt.x - p.x, pt.y - p.y) <= reach) {
-          if (run.length) { runs.push(run); run = []; }
-        } else {
-          run.push(pt);
-        }
-      });
-      if (run.length) runs.push(run);
-
-      deleteCanvasElement(el.id);
-      runs.filter(rn => rn.length > 1).forEach(rn => {
-        const box = pointsBounds(rn);
-        // The surviving pieces are always nodes, even when the stroke that was
-        // cut was legacy flat ink — otherwise erasing a scribble would breed
-        // more unerasable ones.
-        addCanvasElement({ ...el, id: genId('CE'), ...box, points: fmtPoints(rn),
-          data: { ...(el.data ?? {}), own: true } });
-      });
+    const plan = planErase(canvasElements, toWorld(clientX, clientY), {
+      width: eraser.width, whole: eraser.whole,
+      board: boardRef.current ?? undefined, newId: () => genId('CE'),
     });
+    plan.remove.forEach(deleteCanvasElement);
+    plan.add.forEach(addCanvasElement);
   }
 
   /**
@@ -3763,36 +3672,12 @@ export function GeneralJobsPage() {
     if (drawing) {
       // One record per stroke — never one per point, which would flood the store.
       if (drawing.pts.length > 1) {
-        // Rounded FIRST, so the stored box and the stored path describe exactly
-        // the same rectangle — the node fits one to the other, and a box a
-        // fraction out would draw the ink very slightly stretched.
-        const pts = drawing.pts.map(p => ({ x: Math.round(p.x), y: Math.round(p.y) }));
-        const box = pointsBounds(pts);
-        /**
-         * EVERY finished drawing is a node — movable, resizable, snappable.
-         *
-         * The first rule promoted only ink that overlapped nothing, treating
-         * ink across a tile as annotation. On a real board that read as "my
-         * scribble didn't become anything", because a dense board leaves no
-         * clear space — and at 25% zoom even visually empty screen is crowded
-         * world. The blocking problem the old rule existed to avoid is solved
-         * where it belongs instead: a drawing node's box only catches the
-         * pointer ON THE INK, so a stroke across a tile never stops the tile
-         * being clicked.
-         */
-        addCanvasElement({
-          id: genId('CE'),
-          type: 'stroke',
-          ...(boardRef.current ? { board: boardRef.current } : {}),
-          ...box,
-          text: '',
-          color: drawing.marker ? markStyle.color : penStyle.color,
-          points: fmtPoints(pts),
-          strokeWidth: drawing.marker ? markStyle.width : penStyle.width,
-          nib: drawing.marker ? markStyle.nib : penStyle.nib,
-          ...(drawing.marker ? { art: 'marker' as const } : {}),
-          data: { own: true },
-        });
+        const st = drawing.marker ? markStyle : penStyle;
+        addCanvasElement(strokeRecord({
+          id: genId('CE'), pts: drawing.pts,
+          color: st.color, width: st.width, nib: st.nib,
+          marker: drawing.marker, board: boardRef.current ?? undefined,
+        }));
       }
       setDrawing(null);
       return;
