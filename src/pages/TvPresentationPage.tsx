@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useStore, loadAllProjectsTaskData, ensureProjectSnapshot } from '../data/store';
-import { Apartment, CanvasElement, isCountableApartment, BIN_META, binKeyOf, binLabelOf, getStageName, TV_DASH_BOARD } from '../types';
+import { Apartment, CanvasElement, isCountableApartment, binKeyOf, binLabelOf, getStageName, TV_DASH_BOARD } from '../types';
 import { queryVariants, skeleton } from '../data/translit';
 import { DriveIcon, ZohoIcon, PlanIcon } from '../components/ui/BrandIcons';
 import { getBoardTheme } from '../data/boardThemes';
@@ -214,6 +214,31 @@ function ScreenReport({ onClose, boost, onBoost, onFull, t }: {
       </div>
     </div>
   );
+}
+
+/**
+ * One bad node must never white the whole wall.
+ *
+ * The wall renders every node on the board with no boundary between them, so
+ * a single record the renderer chokes on unmounted the ENTIRE page — which is
+ * exactly how one custom group with no `binKind` turned the production TV
+ * link into a white screen for weeks. The crash is fixed at its site, but a
+ * screen nobody stands next to has to degrade to "this one card is blank",
+ * never to nothing.
+ */
+class WallGuard extends React.Component<{ children?: React.ReactNode }, { dead: boolean }> {
+  state = { dead: false };
+  static getDerivedStateFromError() { return { dead: true }; }
+  render() {
+    if (this.state.dead) {
+      return (
+        <div className="w-full h-full flex items-center justify-center p-2 text-[11px] text-gray-400">
+          Could not draw this one.
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 export function TvPresentationPage() {
@@ -1256,12 +1281,17 @@ export function TvPresentationPage() {
                     ? {}
                     : { backgroundColor: el.color, border: '1px solid rgba(0,0,0,.08)' }),
                 }}>
+                <WallGuard>
                 {isBin ? (
                   <button
                     onClick={() => !editing && setOpenBin(el)}
                     className="w-full h-full flex flex-col justify-center px-3 text-left">
+                    {/* `binLabelOf`, never `BIN_META[el.binKind]` — a group made
+                        by hand has NO binKind, so this one raw access threw on
+                        the first custom group and took the WHOLE wall down with
+                        it: the production "the TV link shows white". */}
                     <span className="font-extrabold text-[12.5px]" style={{ color: el.color }}>
-                      {BIN_META[el.binKind!].label}
+                      {binLabelOf(el)}
                     </span>
                     <span className="text-[11px] text-gray-500">
                       {binJobs} {binJobs === 1 ? t('job', 'עבודה') : t('jobs', 'עבודות')}
@@ -1286,6 +1316,7 @@ export function TvPresentationPage() {
                       {el.text}
                     </div>
                   )}
+                </WallGuard>
 
                 {/* A corner to pull, while arranging. Big enough for a finger
                     on a wall panel — the board's 10px handle is a mouse size. */}
