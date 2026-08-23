@@ -707,6 +707,15 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
     jobDelete: ids => live.current.jobDelete(ids),
     jobTv: j => live.current.jobTv(j),
     jobLock: j => live.current.jobLock(j),
+    /**
+     * Focus inside a group window: the window is a native scroller, so
+     * centring is a scrollIntoView on the node's own element — no board pan
+     * to drive here.
+     */
+    jobFocus: j => document.querySelector(`.bin-window-in [data-node-id="${j.id}"]`)
+      ?.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' }),
+    elFocus: el => document.querySelector(`.bin-window-in [data-node-id="${el.id}"]`)
+      ?.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' }),
     jobThumbs: (id, d) => live.current.jobThumbs(id, d),
     jobThumbsDown: (id, d) => live.current.jobThumbsDown(id, d),
     jobUngroup: j => live.current.jobUngroup(j),

@@ -182,7 +182,10 @@ export function Frame({ title, icon: Icon, children, tone }: {
         on screen said anything was missing. `auto` means a widget that fits
         shows no scrollbar at all and one that does not can still be read.
       */}
-      <div className="flex-1 min-h-0 overflow-auto scrollbar-thin">{children}</div>
+      {/* widget-scroll: the bar only appears under the pointer, in the
+          widget's own grey — a standing scrollbar along the bottom read as
+          broken chrome rather than as "there is more". */}
+      <div className="flex-1 min-h-0 overflow-auto widget-scroll">{children}</div>
     </div>
   );
 }
@@ -1754,7 +1757,7 @@ function CalcWidget() {
       {/* The keypad scrolls rather than losing its bottom row. Squeezed to a
           third of its size it is an awkward calculator, but it is still a
           calculator — before this the clear key simply was not there. */}
-      <div className="grid grid-cols-4 gap-0.5 flex-1 min-h-0 overflow-auto scrollbar-thin">
+      <div className="grid grid-cols-4 gap-0.5 flex-1 min-h-0 overflow-auto widget-scroll">
         {KEYS.map(k => (
           <button key={k} data-no-drag data-el-action
             onClick={() => {

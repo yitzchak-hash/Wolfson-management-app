@@ -58,7 +58,7 @@ function Card({ label, tone, children, right }: {
         rather than losing its last line. On a wall panel nothing is ever
         this small, but the wall widgets are placeable on a board too.
       */}
-      <div className="flex-1 min-h-0 overflow-auto scrollbar-thin">{children}</div>
+      <div className="flex-1 min-h-0 overflow-auto widget-scroll">{children}</div>
     </div>
   );
 }
@@ -238,7 +238,7 @@ export const TV_WIDGETS: WidgetDef[] = [
                   style={{ width: `${(n / total) * 100}%`, backgroundColor: s.color }} />
               ))}
             </div>
-            <div className="flex-1 min-h-0 overflow-auto scrollbar-thin grid gap-1.5 content-start">
+            <div className="flex-1 min-h-0 overflow-auto widget-scroll grid gap-1.5 content-start">
               {rows.filter(r => r.n > 0).map(({ s, n }) => (
                 <div key={s.id} className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
@@ -537,7 +537,7 @@ function WorkspaceCard({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   ];
 
   return (
-    <div className="w-full h-full flex flex-col px-3.5 py-3 overflow-auto scrollbar-thin"
+    <div className="w-full h-full flex flex-col px-3.5 py-3 overflow-auto widget-scroll"
       style={{ borderTop: `4px solid ${tone}` }}>
       <div className="flex items-center gap-2 mb-2">
         <b className="text-[15px] tracking-wide" style={{ color: tone }}>{name.toUpperCase()}</b>
@@ -567,7 +567,7 @@ function WorkspaceCard({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
       </div>
 
       {/* Every unit as a square, in its stage colour. */}
-      <div className="flex-1 min-h-0 mt-2.5 grid gap-[3px] content-start overflow-auto scrollbar-thin"
+      <div className="flex-1 min-h-0 mt-2.5 grid gap-[3px] content-start overflow-auto widget-scroll"
         style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(14px, 1fr))' }}>
         {units.slice(0, 200).map(u => {
           const st = snap.stages.find(s => s.id === u.currentStageId);
@@ -694,7 +694,7 @@ function WallClock() {
   return (
     // Centred when it fits, scrollable when it does not — squeezed short, the
     // holiday line was falling off the bottom with nothing to reach it by.
-    <div className="w-full h-full flex flex-col justify-center px-3.5 py-3 overflow-auto scrollbar-thin">
+    <div className="w-full h-full flex flex-col justify-center px-3.5 py-3 overflow-auto widget-scroll">
       <div className="font-black leading-none tabular-nums text-slate-800 flex-shrink-0" style={{ fontSize: 52 }}>
         {now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
       </div>

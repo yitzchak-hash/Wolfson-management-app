@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
 import {
   Plus, Briefcase, MapPin, ExternalLink, Trash2, ClipboardList, FolderOpen,
-  Copy, StickyNote, Square, Palette, Pencil, X, AlertTriangle,
+  Copy, Scissors, Maximize, Minimize, StickyNote, Square, Palette, Pencil, X, AlertTriangle,
   Ghost, ThumbsUp, ThumbsDown, ClipboardPaste, LayoutGrid, Columns3, Archive, CheckCircle2, PlayCircle,
   Image as ImageIcon, ImageOff, History, MoveUpRight, Unlink, FileText, Search, FolderPlus, Printer,
   Settings2 as Settings, BringToFront, SendToBack, ChevronUp, ChevronDown, Eye,
@@ -534,7 +534,15 @@ export function GeneralJobsPage() {
   const copyRef = useRef<() => void>(() => {});
   const pasteRef = useRef<() => boolean>(() => false);
   /** What Ctrl+C put down: whole node records, not text. */
-  const boardClip = useRef<{ els: CanvasElement[]; jobs: string[] }>({ els: [], jobs: [] });
+  const boardClip = useRef<{ els: CanvasElement[]; jobs: string[]; mode: 'copy' | 'cut' }>(
+    { els: [], jobs: [], mode: 'copy' });
+  const cutRef = useRef<(elIds?: string[], jobIds?: string[]) => void>(() => {});
+  /**
+   * What has been CUT and not yet pasted — those items draw faded, so the
+   * board says "these are in the air" instead of looking untouched until the
+   * paste. Cleared by the paste, by Escape, and by any new copy or cut.
+   */
+  const [cutMark, setCutMark] = useState<Set<string>>(new Set());
   /** Armed arrow: the first end is chosen, waiting for the second. */
   const [arrowFrom, setArrowFrom] = useState<string | null>(null);
   const [arrowTip, setArrowTip] = useState<{ x: number; y: number } | null>(null);
@@ -808,16 +816,98 @@ export function GeneralJobsPage() {
     const els = canvasElements.filter(el => selectedElIds.has(el.id) && el.type !== 'bin');
     const jobIds = [...selectedJobIds];
     if (!els.length && !jobIds.length) return;
-    boardClip.current = { els: els.map(e => ({ ...e })), jobs: jobIds };
+    boardClip.current = { els: els.map(e => ({ ...e })), jobs: jobIds, mode: 'copy' };
+    setCutMark(new Set());          // a new copy stands down any pending cut
     setToast(`Copied ${els.length + jobIds.length} item${els.length + jobIds.length === 1 ? '' : 's'}`);
   };
 
+  /**
+   * Cut: the selection goes into the clipboard as a MOVE. Nothing changes on
+   * the board yet except that the cut items fade, saying "these are in the
+   * air"; the paste is what carries them to the middle of the screen. Explicit
+   * id lists let the context menu cut exactly what was right-clicked.
+   */
+  cutRef.current = (elIdList?: string[], jobIdList?: string[]) => {
+    const elIds = elIdList ?? [...selectedElIds];
+    const els = canvasElements.filter(el => elIds.includes(el.id) && el.type !== 'bin');
+    const jobIds = jobIdList ?? [...selectedJobIds];
+    if (!els.length && !jobIds.length) return;
+    boardClip.current = { els: els.map(e => ({ ...e })), jobs: jobIds, mode: 'cut' };
+    setCutMark(new Set([...els.map(e => e.id), ...jobIds]));
+    const n = els.length + jobIds.length;
+    setToast(`Cut ${n} — paste puts ${n === 1 ? 'it' : 'them'} in the middle of the screen`);
+  };
+
   pasteRef.current = () => {
-    const { els, jobs: jobIds } = boardClip.current;
+    const { els, jobs: jobIds, mode } = boardClip.current;
     if (!els.length && !jobIds.length) return false;
 
-    // Offset so the copy is visibly a copy rather than sitting exactly on top.
-    const OFF = 26;
+    /**
+     * The paste lands CENTRED ON THE SCREEN — the owner's ruling, single item
+     * or a lasso-full alike. The group keeps its own arrangement: its bounds
+     * are measured (live positions for a cut, the snapshot for a copy), and
+     * one shift puts the middle of that box in the middle of the view, run
+     * through settleDrop so nothing lands under the chrome.
+     */
+    const vpEl = viewportRef.current;
+    const vr = vpEl?.getBoundingClientRect();
+    const c = vr
+      ? toWorld(vr.left + vpEl!.clientWidth / 2, vr.top + vpEl!.clientHeight / 2)
+      : { x: 300, y: 300 };
+    const liveEls = mode === 'cut'
+      ? els.map(e => canvasElements.find(x => x.id === e.id) ?? e)
+      : els;
+    const rects: { x: number; y: number; w: number; h: number }[] =
+      liveEls.map(e => ({ x: e.x, y: e.y, w: e.w, h: e.h }));
+    const jobRects = new Map<string, { x: number; y: number; w: number; h: number }>();
+    jobIds.forEach(jid => {
+      const src = apartments.find(a => a.id === jid);
+      if (!src) return;
+      const idx = jobs.findIndex(j => j.id === jid);
+      const base = idx >= 0 ? jobPos(src, idx) : { x: src.canvasX ?? 40, y: src.canvasY ?? 40 };
+      const r = { ...base, ...tileSize(src) };
+      jobRects.set(jid, r);
+      rects.push(r);
+    });
+    if (!rects.length) return false;
+    const bx = Math.min(...rects.map(r => r.x));
+    const by = Math.min(...rects.map(r => r.y));
+    const bw = Math.max(...rects.map(r => r.x + r.w)) - bx;
+    const bh = Math.max(...rects.map(r => r.y + r.h)) - by;
+    const lift = settleDrop(c.x - bw / 2, c.y - bh / 2);
+    const dx = Math.round(lift.x - bx), dy = Math.round(lift.y - by);
+
+    if (mode === 'cut') {
+      // A cut pastes as a MOVE: the same records, carried to the new spot.
+      const n = liveEls.length + jobIds.length;
+      track({ weight: 'arrange', label: `Moved ${n} item${n === 1 ? '' : 's'} to the middle of the screen` }, () => {
+        liveEls.forEach(el => updateCanvasElement(el.id, {
+          x: Math.round(el.x + dx), y: Math.round(el.y + dy),
+          board: boardRef.current || undefined,
+        }));
+        if (currentUser) {
+          jobIds.forEach(jid => {
+            const src = apartments.find(a => a.id === jid);
+            const r = jobRects.get(jid);
+            if (!src || !r) return;
+            if (boardRef.current) {
+              updateApartment(jid, {
+                viewPos: { ...(src.viewPos ?? {}), [boardRef.current]: { x: r.x + dx, y: r.y + dy } },
+              }, currentUser);
+            } else {
+              updateApartment(jid, { canvasX: r.x + dx, canvasY: r.y + dy }, currentUser);
+            }
+          });
+        }
+      });
+      setSelectedElIds(new Set(liveEls.map(e => e.id)));
+      setSelectedJobIds(new Set(jobIds));
+      setCutMark(new Set());
+      boardClip.current = { els: [], jobs: [], mode: 'copy' };   // a cut pastes once
+      setToast(`Moved ${n} item${n === 1 ? '' : 's'} to the middle of the screen`);
+      return true;
+    }
+
     const newElIds = new Set<string>();
     els.forEach(el => {
       const id = 'CE-' + Math.random().toString(36).slice(2, 9);
@@ -830,7 +920,7 @@ export function GeneralJobsPage() {
         // attached to whatever the original was stuck to.
         attachedTo: undefined, attachAnchor: undefined, attachAt: undefined,
         ...(boardRef.current ? { board: boardRef.current } : { board: undefined }),
-        x: Math.round(el.x + OFF), y: Math.round(el.y + OFF),
+        x: Math.round(el.x + dx), y: Math.round(el.y + dy),
       });
     });
 
@@ -838,15 +928,14 @@ export function GeneralJobsPage() {
     if (jobIds.length && currentUser) {
       jobIds.forEach(jid => {
         const src = apartments.find(a => a.id === jid);
-        if (!src) return;
-        const idx = jobs.findIndex(j => j.id === jid);
-        const base = idx >= 0 ? jobPos(src, idx) : { x: src.canvasX ?? 40, y: src.canvasY ?? 40 };
+        const r = jobRects.get(jid);
+        if (!src || !r) return;
         const id = genId('G');
         const now = new Date().toISOString();
         addApartment({
           ...src, id,
           displayName: src.displayName ? `${src.displayName} (copy)` : '',
-          canvasX: base.x + OFF, canvasY: base.y + OFF,
+          canvasX: r.x + dx, canvasY: r.y + dy,
           ghosts: undefined,
           createdAt: now, updatedAt: now,
           updatedBy: currentUser.id, updatedByName: currentUser.name,
@@ -859,7 +948,7 @@ export function GeneralJobsPage() {
     // followed by hunting for what you just made.
     setSelectedElIds(newElIds);
     setSelectedJobIds(newJobIds);
-    setToast(`Pasted ${newElIds.size + newJobIds.size} item${newElIds.size + newJobIds.size === 1 ? '' : 's'}`);
+    setToast(`Pasted ${newElIds.size + newJobIds.size} item${newElIds.size + newJobIds.size === 1 ? '' : 's'} in the middle of the screen`);
     return true;
   };
 
@@ -1098,28 +1187,15 @@ export function GeneralJobsPage() {
     }, next);
 
     /**
-     * Zooming OUT walks back to the board's own corner.
+     * Zooming OUT holds the cursor too now — the walk-home is gone.
      *
-     * Zooming in is an aimed gesture and holds the point under the pointer —
-     * that is settled and must not change. Coming back out is the opposite
-     * intention: you are asking to see more, and holding the same anchor left
-     * you hanging over the middle of the board with the corner you organise
-     * from somewhere off-screen. Each step out therefore pulls the view part of
-     * the way towards home — the top-left the clamp allows, margin and floating
-     * header included — so a few steps land you on the view you get when you
-     * arrive. The fraction comes from the size of the step itself rather than a
-     * number picked out of the air, so the walk stays in proportion however the
-     * zoom ladder is changed.
+     * It used to pull the view toward the board's corner on each step out,
+     * because the old clamp forbade dead space and the anchor had to give the
+     * moment the world's edge met the viewport's. The owner reversed that
+     * ruling (2026-09-02): the clamp allows the grey dead space, so both
+     * directions hold the point under the pointer, which is what every other
+     * canvas does.
      */
-    if (dir === -1) {
-      const home = clampPanRef.current({ x: 0, y: 1e6 }, next);
-      const t = Math.max(0, Math.min(1, (1 - next / prevZoom) * 2.5));
-      nextPan = clampPanRef.current({
-        x: nextPan.x + (home.x - nextPan.x) * t,
-        y: nextPan.y + (home.y - nextPan.y) * t,
-      }, next);
-    }
-
     zoomRef.current = next;
     panRef2.current = nextPan;
     setZoom(next);
@@ -1180,6 +1256,8 @@ export function GeneralJobsPage() {
     jobDelete: ids => live.current.jobDelete(ids),
     jobTv: j => live.current.jobTv(j),
     jobLock: j => live.current.jobLock(j),
+    jobFocus: j => live.current.jobFocus(j),
+    elFocus: el => live.current.elFocus(el),
     jobUngroup: j => live.current.jobUngroup(j),
     elUngroup: el => live.current.elUngroup(el),
     jobResizeDown: (e, j, i) => live.current.jobResizeDown(e, j, i),
@@ -1222,7 +1300,27 @@ export function GeneralJobsPage() {
   const clampPanRef = useRef<
     (p: { x: number; y: number }, atZoom?: number) => { x: number; y: number }
   >(p => p);
+  /** The settled opening framing — see homePan, assigned beside the clamp. */
+  const homePanRef = useRef<(atZoom?: number) => { x: number; y: number }>(() => ({ x: 0, y: 0 }));
   const editInputRef = useRef<HTMLTextAreaElement>(null);
+
+  /**
+   * Full screen, for the whole board page — header and all — so the browser's
+   * own chrome gets out of the way of the wall of work. Tracked through the
+   * fullscreenchange event because Escape leaves full screen without asking
+   * us, and a button stuck on "leave" reads as broken.
+   */
+  const pageRootRef = useRef<HTMLDivElement>(null);
+  const [isFull, setIsFull] = useState(false);
+  useEffect(() => {
+    const on = () => setIsFull(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', on);
+    return () => document.removeEventListener('fullscreenchange', on);
+  }, []);
+  function toggleFullscreen() {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void (pageRootRef.current ?? document.documentElement).requestFullscreen?.();
+  }
 
   /**
    * The four bins exist on every board.
@@ -1472,11 +1570,10 @@ export function GeneralJobsPage() {
     const t = setTimeout(() => {
       if (panNormalised.current) return;
       panNormalised.current = true;
-      // Asking for the far top-left: the clamp answers with the pinned corner
-      // (the first line below the floating chrome). Clamping the literal 0
-      // would land at the BOTTOM of the allowed range instead, which is the
-      // same off-by-a-header-height the zoom press used to expose.
-      const settled = clampPanRef.current({ x: 0, y: 1e6 });
+      // The explicit home framing: the clamp no longer pins a corner (dead
+      // space is allowed now), so opening asks for the settled top-left —
+      // margin in, first line below the floating chrome — by name.
+      const settled = homePanRef.current();
       panRef2.current = settled;
       setPan(settled);
     }, 80);
@@ -2699,6 +2796,12 @@ export function GeneralJobsPage() {
         copyRef.current();
         return;
       }
+      // Cut: the selection fades until the paste carries it to the middle of
+      // the screen. Same clipboard, different meaning on landing.
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'x' || e.key === 'X')) {
+        cutRef.current();
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && (e.key === 'v' || e.key === 'V')) {
         if (pasteRef.current()) e.preventDefault();
         return;
@@ -2713,6 +2816,11 @@ export function GeneralJobsPage() {
         setSelectedJobIds(new Set()); setSelectedElIds(new Set());
         setCtxMenu(null); setColorPicker(null);
         setArrowFrom(null); setArrowTip(null);
+        // A pending cut is a mode too: Escape puts everything back to solid.
+        setCutMark(prev => {
+          if (prev.size) boardClip.current = { els: [], jobs: [], mode: 'copy' };
+          return prev.size ? new Set() : prev;
+        });
         // An armed eraser is a mode, and a mode you cannot put down with
         // Escape is a trap — the same reason the pen answers to it.
         setEraser(v => (v.on ? { ...v, on: false } : v));
@@ -4207,88 +4315,44 @@ export function GeneralJobsPage() {
     const z = atZoom ?? zoom;
     const w = maxX * z, h = maxY * z;
     /**
-     * Zooming out must never reveal room nobody asked for.
+     * OWNER REVERSAL (2026-09-02): dead space is allowed, on every side.
      *
-     * Once the scaled world is SMALLER than the viewport, the old clamp let the
-     * pan range over 0..(viewport − world) on each axis — a positive offset,
-     * which is blank space above and to the left of the board's own origin.
-     * So zooming out drifted everything down-right off the corner and opened
-     * emptiness over the planner, whatever the expand toggles said.
+     * The old clamp pinned the board's corner so zooming out could "never
+     * reveal room nobody asked for" — and that pin is exactly why zooming out
+     * could not hold the point under the cursor: the moment the world's edge
+     * met the viewport's, the anchor had to give. The owner asked for the
+     * opposite by name: show the grey dead space around the board, so a zoom
+     * out stays centred on the mouse all the way down. The board's own paper
+     * is drawn only over the world now, so the edge reads as a sheet on a
+     * grey desk instead of paper without end.
      *
-     * Pinned to the corner instead, unless that side has actually been unlocked
-     * — which is the same rule `sideAllowed` applies to dragging, so the toggle
-     * finally means one thing in both places.
+     * The one rule left standing: the board can never be flung entirely off
+     * screen — a bite of it stays visible on each axis, so there is always
+     * something to grab and pan back with.
      */
-    const pinX = !sideAllowed(projectBoard.expand, 'left');
-    const pinY = !sideAllowed(projectBoard.expand, 'top');
-    /**
-     * The floating header is the top boundary, not the viewport edge.
-     *
-     * The header floats OVER the viewport, so "world pinned to y=0" parked the
-     * first row of the board underneath the chrome — and the first pan after a
-     * header-aware Fit yanked it back under. The y-clamp therefore runs in the
-     * space BELOW the header's measured bottom: the world's top rests at the
-     * chrome's edge, and panning can never hide content behind it. In stage
-     * view the header is in the flow above the viewport and hr clamps to 0.
-     */
-    const hb = headerBarRef.current?.getBoundingClientRect();
-    const vr = viewportRef.current?.getBoundingClientRect();
-    const hr = hb && vr ? Math.max(0, Math.min(hb.bottom - vr.top, vp.h * 0.4)) : 0;
-
-    /**
-     * The tool rail is the right boundary, the same way the header is the top.
-     *
-     * The rail floats over the viewport's right side, so when the board gives
-     * space back after a widget is carried in from the right, clamping the
-     * world's right edge to the VIEWPORT's right edge parked that widget — the
-     * rightmost thing on the board — squarely underneath the toolbar. The
-     * x-clamp therefore runs in the space LEFT of the rail's measured edge.
-     * Only honoured while the rail is actually docked on the right half; a
-     * rail somebody dragged into the middle of the screen is furniture they
-     * chose to park there, not a wall.
-     */
-    const rail = document.querySelector('[data-board-toolrail]')?.getBoundingClientRect();
-    const rr = rail && vr && rail.width > 0 && rail.left > vr.left + vp.w * 0.5
-      ? Math.max(0, Math.min(vr.right - rail.left + 12, vp.w * 0.35)) : 0;
-
-    /**
-     * ONE continuous range, not two branches.
-     *
-     * There used to be a "world taller than the viewport" case and a "world
-     * smaller" case, and they disagreed about where the top belongs: the tall
-     * case made the world cover the whole viewport (top under the chrome), the
-     * small case pinned it to the chrome's bottom edge. Crossing between them
-     * at a zoom step is what made the board LURCH DOWN on the first press of
-     * minus — the owner's report.
-     *
-     * The rule now, in one line each way: the top may never sit lower than the
-     * chrome's edge (no blank above), and never higher than the point where
-     * the world's own bottom reaches the viewport's (no blank below that the
-     * world could have covered). When the world is small both bounds are the
-     * same number, so it simply pins — and zooming can never jump.
-     */
-    /**
-     * The margin is a gutter on ALL FOUR sides, locked ones included.
-     *
-     * The right and bottom get theirs from the world's size, which grows by the
-     * margin — but the left and top are pinned to the origin, so changing the
-     * setting did nothing there unless every node happened to be sitting past
-     * it. Pinning `margin` INSIDE the viewport instead gives the same clear
-     * strip whether or not the edge is locked, which is the whole point of a
-     * margin: it is the paper's edge, not a rule about where things may go.
-     */
-    const m = margin * z;
-    const yTop = pinY ? hr + m : Math.max(hr + m, vp.h - h);
-    const yBottom = Math.min(yTop, vp.h - h);
-    const xLeft = pinX ? m : Math.max(m, vp.w - w);
-    // `- rr`: panning to the far right rests the world's right edge against
-    // the rail's left edge, never under the rail itself.
-    const xRight = Math.min(xLeft, vp.w - rr - w);
+    const VIS = 160;
+    const visX = Math.min(VIS, w * 0.5), visY = Math.min(VIS, h * 0.5);
     return {
-      x: Math.max(xRight, Math.min(xLeft, p.x)),
-      y: Math.max(yBottom, Math.min(yTop, p.y)),
+      x: Math.max(visX - w, Math.min(vp.w - visX, p.x)),
+      y: Math.max(visY - h, Math.min(vp.h - visY, p.y)),
     };
   };
+
+  /**
+   * The settled opening view — the world's top-left under the floating
+   * chrome, a margin in. The CLAMP no longer produces this (it allows dead
+   * space everywhere), so the framing gestures that used to lean on it —
+   * opening, the header zoom buttons — ask for home explicitly.
+   */
+  const homePan = (atZoom?: number): { x: number; y: number } => {
+    const z = atZoom ?? zoom;
+    const hb = headerBarRef.current?.getBoundingClientRect();
+    const vr = viewportRef.current?.getBoundingClientRect();
+    const hr = hb && vr && viewMode !== 'stages'
+      ? Math.max(0, Math.min(hb.bottom - vr.top, vp.h * 0.4)) : 0;
+    return { x: margin * z, y: hr + margin * z };
+  };
+  homePanRef.current = homePan;
 
   // ── Start text edit for element ───────────────────────────────────
   function startEdit(el: CanvasElement) {
@@ -4620,6 +4684,33 @@ export function GeneralJobsPage() {
       track({ weight: 'arrange', label: lockedLabel(!j.boardLocked, 1) }, () =>
         updateApartment(j.id, { boardLocked: j.boardLocked ? undefined : true }, currentUser));
     },
+    /**
+     * Focus: glide the view so the thing sits in the middle of the screen —
+     * the same flight the search's fly-to uses, at the current zoom.
+     */
+    jobFocus: (j: Apartment) => {
+      const vpEl = viewportRef.current;
+      const i = jobs.findIndex(x => x.id === j.id);
+      if (!vpEl || i < 0) return;
+      const p = jobPos(j, i), sz = tileSize(j);
+      setFlying(true);
+      setPan(clampPanRef.current({
+        x: vpEl.clientWidth / 2 - (p.x + sz.w / 2) * zoom,
+        y: vpEl.clientHeight / 2 - (p.y + sz.h / 2) * zoom,
+      }));
+      setTimeout(() => setFlying(false), 620);
+    },
+    elFocus: (el: CanvasElement) => {
+      const vpEl = viewportRef.current;
+      if (!vpEl) return;
+      const p = elPos(el);
+      setFlying(true);
+      setPan(clampPanRef.current({
+        x: vpEl.clientWidth / 2 - (p.x + p.w / 2) * zoom,
+        y: vpEl.clientHeight / 2 - (p.y + p.h / 2) * zoom,
+      }));
+      setTimeout(() => setFlying(false), 620);
+    },
     jobUngroup: (j: Apartment) => ungroup({ jobs: [j.id] }),
     jobResizeDown: onJobResizeDown, jobResizeMove: onJobResizeMove, jobResizeUp: onJobResizeUp,
     elUngroup: (el: CanvasElement) => ungroup({ els: [el.id] }),
@@ -4742,7 +4833,7 @@ export function GeneralJobsPage() {
   const floatingHeader = viewMode !== 'stages';
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-gray-50 relative">
+    <div ref={pageRootRef} className="flex-1 flex flex-col min-h-0 bg-gray-50 relative">
       {/* ── Header ── */}
       <div ref={headerBarRef} className={`flex items-center justify-between px-2 md:px-5 py-2 md:py-3 flex-shrink-0 gap-2 ${
         floatingHeader
@@ -4811,6 +4902,19 @@ export function GeneralJobsPage() {
             <TvIcon size={15} /> <span className="hidden md:inline">TV</span>
           </button>
 
+          {/* Full screen — the whole board page, browser chrome away. Between
+              the TV button and the zoom, where the owner asked for it. */}
+          <button
+            onClick={toggleFullscreen}
+            title={isFull ? 'Leave full screen' : 'Board full screen'}
+            className="flex items-center px-2.5 py-2 rounded-xl text-sm font-medium border transition-colors"
+            style={isFull
+              ? { backgroundColor: '#1e3a5f', borderColor: '#1e3a5f', color: '#fff' }
+              : { borderColor: '#e5e7eb', color: '#4b5563' }}
+          >
+            {isFull ? <Minimize size={15} /> : <Maximize size={15} />}
+          </button>
+
           {/* Zoom, where it can be reached without hunting the corner. The
               percentage is typeable — "150" is faster than five clicks. */}
           {/* On a phone this keeps −, + and Fit and drops the typeable % —
@@ -4831,7 +4935,7 @@ export function GeneralJobsPage() {
             <button onClick={() => zoomCentre(1)} title="Zoom in"
               className="w-8 h-9 text-gray-500 hover:bg-gray-50 text-base font-bold">+</button>
             <span className="hidden sm:block w-px h-5 bg-gray-200" />
-            <button onClick={() => { setZoom(1); setPan(clampPanRef.current({ x: 0, y: 0 })); }}
+            <button onClick={() => { setZoom(1); setPan(homePanRef.current(1)); }}
               title="Back to 100%"
               className="hidden sm:block px-2.5 h-9 text-[11px] font-bold text-gray-500 hover:bg-gray-50">100%</button>
             <button onClick={zoomToFit} title="Fit the whole board"
@@ -4893,6 +4997,9 @@ export function GeneralJobsPage() {
             : drawMode || eraseMode || arrowFrom ? 'crosshair'
             : 'grab',
           touchAction: 'none',
+          // The desk the paper sits on — what shows as dead space when the
+          // board is zoomed out past the window or panned aside.
+          backgroundColor: '#d7dce3',
         }}
         onPointerDown={onViewportPointerDown}
         onPointerMove={onViewportPointerMove}
@@ -5439,18 +5546,28 @@ export function GeneralJobsPage() {
           </div>
         )}
 
-        {/* The paper, drawn in SCREEN space under everything.
-            It used to live inside the world, so it was scaled with it: at 25%
-            a 22px dot grid landed 5px apart and turned to fog, and further out
-            there was nothing at all — the board stopped feeling like a board
-            exactly when being lost was easiest. Here the spacing is stepped by
-            powers of two to stay legible at any zoom, and offset by the pan so
-            it still travels with the work. */}
+        {/* The paper, drawn in SCREEN space under everything — but only over
+            the WORLD's own footprint now, not the whole window. The pattern's
+            spacing is still stepped by powers of two so it stays legible at
+            any zoom (that lesson stands); what changed is its extent: with
+            dead space allowed around the board, paper without end made the
+            board's edge invisible, and the owner asked to SEE the grey desk
+            beyond it. The pattern anchors to this layer's own origin (pan
+            {0,0}) because the layer itself already travels with the pan; the
+            transition matches the world div's, so the sheet never detaches
+            from the work during the settle glide or a search flight. */}
         <div
-          className="absolute inset-0 pointer-events-none"
+          className="absolute top-0 left-0 pointer-events-none"
           style={{
+            transform: `translate(${pan.x}px, ${pan.y}px)`,
+            width: maxX * zoom,
+            height: maxY * zoom,
             backgroundColor: (theme.surface as { backgroundColor?: string }).backgroundColor,
-            ...surfaceAtZoom(theme.surface, zoom, pan),
+            ...surfaceAtZoom(theme.surface, zoom, { x: 0, y: 0 }),
+            boxShadow: '0 0 0 1px rgba(15,23,42,.10), 0 12px 44px rgba(15,23,42,.16)',
+            transition: flying ? 'all 600ms cubic-bezier(.22,.9,.28,1)'
+              : settling ? 'all 280ms cubic-bezier(.22,.9,.28,1)'
+              : undefined,
           }}
         />
 
@@ -5613,6 +5730,7 @@ export function GeneralJobsPage() {
                   onRecord={startRecording}
                   onStopRecord={stopRecording}
                   onUploadAudio={uploadAudio}
+                  faded={cutMark.has(el.id)}
                 />
               );
             })}
@@ -5661,6 +5779,7 @@ export function GeneralJobsPage() {
                   lastEdited={relativeTime(changedAt)}
                   labels={tileLabels}
                   H={H}
+                  faded={cutMark.has(job.id)}
                 />
               );
             })}
@@ -5683,6 +5802,12 @@ export function GeneralJobsPage() {
                   className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
                   <Copy size={14} className="text-gray-400" />
                   {ctxMenu.ids.length > 1 ? `Duplicate (${ctxMenu.ids.length})` : 'Duplicate'}
+                </button>
+                <button onClick={() => { cutRef.current(undefined, ctxMenu.ids); setCtxMenu(null); }}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5"
+                  title="They fade until you paste — the paste puts them in the middle of the screen">
+                  <Scissors size={14} className="text-gray-400" />
+                  {ctxMenu.ids.length > 1 ? `Cut (${ctxMenu.ids.length})` : 'Cut'}
                 </button>
                 <button onClick={() => startArrow(ctxMenu.ids[0])}
                   className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5"
@@ -5881,6 +6006,22 @@ export function GeneralJobsPage() {
                   <ClipboardPaste size={14} className={canCreateFromIntent(clip.kind) ? 'text-gray-400' : 'text-gray-200'} />
                   {canCreateFromIntent(clip.kind) ? 'Create job from this link' : 'Paste'}
                 </button>
+                {/* The board's OWN clipboard — what Ctrl+C or Cut put down.
+                    Lands centred on the middle of the screen, cut or copy,
+                    one thing or a lasso-full. */}
+                {(boardClip.current.els.length + boardClip.current.jobs.length) > 0 && (
+                  <button
+                    onClick={() => { pasteRef.current(); setCtxMenu(null); }}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
+                    <ClipboardPaste size={14} className="text-gray-400" />
+                    {(() => {
+                      const n = boardClip.current.els.length + boardClip.current.jobs.length;
+                      return boardClip.current.mode === 'cut'
+                        ? `Move the cut ${n === 1 ? 'item' : `${n} items`} here`
+                        : `Paste ${n === 1 ? 'the copied item' : `${n} copied items`}`;
+                    })()}
+                  </button>
+                )}
               </>
             ) : (
               <>
@@ -5980,6 +6121,12 @@ export function GeneralJobsPage() {
                   className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
                   <Copy size={14} className="text-gray-400" />
                   {ctxMenu.ids.length > 1 ? `Duplicate (${ctxMenu.ids.length})` : 'Duplicate'}
+                </button>
+                <button onClick={() => { cutRef.current(ctxMenu.ids, undefined); setCtxMenu(null); }}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5"
+                  title="They fade until you paste — the paste puts them in the middle of the screen">
+                  <Scissors size={14} className="text-gray-400" />
+                  {ctxMenu.ids.length > 1 ? `Cut (${ctxMenu.ids.length})` : 'Cut'}
                 </button>
                 {(selectedJobIds.size + selectedElIds.size > 1) && (
                   <button onClick={groupSelection}

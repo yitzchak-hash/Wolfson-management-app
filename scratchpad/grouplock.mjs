@@ -160,9 +160,10 @@ check(un.jobs['G-g1'].group === null, 'the last member left is released too');
 
 // ── Zoom − holds the corner ──
 const originOf = () => page.evaluate(() => {
-  const vp = document.querySelector('[data-board-viewport]');
-  const world = [...(vp?.querySelectorAll('div') ?? [])]
-    .find(n => /matrix/.test(getComputedStyle(n).transform) && n.parentElement === vp);
+  // The WORLD's own wrapper — not "any transformed child of the viewport":
+  // the paper sheet is also one now (translate-only), and matching it reads
+  // a scale that never changes.
+  const world = document.querySelector('[data-board-world]').parentElement;
   const m = new DOMMatrix(getComputedStyle(world).transform);
   return { y: Math.round(m.f), z: +m.a.toFixed(2) };
 });
@@ -174,16 +175,21 @@ await page.locator('button[title="Zoom out"]').click();
 await page.waitForTimeout(350);
 const o2 = await originOf();
 /*
-  The corner still holds — at the MARGIN, which is a board measurement and so
-  shrinks on screen as you zoom out. y = headerBottom + margin x zoom. The old
-  form of this check asserted the raw pan never moved, which was right until the
-  margin started applying to the locked edges too.
+  OWNER REVERSAL (2026-09-02): the zoom buttons hold their ANCHOR POINT — the
+  first line below the floating header — rather than walking the corner to a
+  margin-scaled home. Dead space is allowed now, so the anchor is exact: the
+  world point at the anchor is the same before and after each step.
 */
-const MARGIN = 28;
-const hr = o0.y - MARGIN * o0.z;
-const at = o => Math.abs(o.y - (hr + MARGIN * o.z)) <= 1;
-check(o1.z < o0.z && at(o1) && at(o2),
-  `the corner holds through zoom-out (${o0.y} → ${o1.y} → ${o2.y}, margin ${MARGIN}px in board units)`);
+const anchorY = await page.evaluate(() => {
+  const vp = document.querySelector('[data-board-viewport]').getBoundingClientRect();
+  const hb = [...document.querySelectorAll('div')].find(d =>
+    d.className?.includes?.('absolute') && d.querySelector?.('button[title="Zoom out"]'));
+  return hb ? hb.getBoundingClientRect().bottom - vp.top + 6 : 76;
+});
+const worldAtAnchor = o => (anchorY - o.y) / o.z;
+const held = (a, b) => Math.abs(worldAtAnchor(a) - worldAtAnchor(b)) * b.z <= 2;
+check(o1.z < o0.z && held(o0, o1) && held(o0, o2),
+  `zoom-out holds its anchor point (${o0.y}@${o0.z} → ${o1.y}@${o1.z} → ${o2.y}@${o2.z})`);
 
 // ── A locked edge never asks for room ──
 await page.locator('button[title="Zoom in"]').click();

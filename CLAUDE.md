@@ -3390,3 +3390,100 @@ a boundary rather than getting lucky.
 **Note:** `scratchpad/mobdiagram.mjs` fails on a stale assertion (a sticky
 per-building bar the phone now deliberately hides). Verified pre-existing —
 it fails identically with these changes stashed.
+
+
+---
+
+# v2 — the desk under the paper, and a search that learns
+
+## OWNER REVERSAL (2026-09-02): dead space is ALLOWED, on every side
+The earlier ruling — "zooming out must never reveal room nobody asked for" —
+is reversed by the owner, by name: he asked to SEE the grey dead space around
+the board so a zoom out can stay centred on the mouse all the way down.
+Consequences, all in `GeneralJobsPage`:
+- `clampPanRef` is a MIN-VISIBILITY clamp only: at least ~160px of world stays
+  on screen per axis; everything else — corner pins, `sideAllowed`, the header
+  and rail reserves, the margin gutter — is gone from the clamp. The board's
+  own size (grow/de-expand) is untouched.
+- The zoom-out **walk-home is removed**: both directions hold the point under
+  the pointer. The header zoom buttons hold their anchor (the line below the
+  chrome) exactly.
+- Framing gestures that leaned on the clamp to produce the settled corner ask
+  for it explicitly: `homePan()` / `homePanRef` (opening normalisation, the
+  100% button). The clamp can no longer answer "home".
+- **The paper is drawn only over the WORLD's footprint** (screen-space pattern
+  as before, but the layer is positioned at the pan and sized to the world,
+  with the world's own transition so it never detaches during the settle
+  glide or a search flight; the pattern anchors at pan {0,0} because the layer
+  itself travels). The viewport behind it is the grey desk (`#d7dce3`), with a
+  soft edge shadow so the board reads as a sheet on a desk.
+- De-expand no longer yanks the pan at all (a shrunken world is simply valid
+  where it is), which supersedes the previous round's rail reserve — the
+  widget carried in from the right just stays under your hand.
+- Harnesses updated to the new contract: `board.mjs` (cursor-anchored zoom out
+  + dead-space-opens + min-visibility), `round11.mjs`, `round19.mjs`,
+  `grouplock.mjs` (which also had to stop matching "any transformed child of
+  the viewport" — the paper sheet is one now; find the world by
+  `[data-board-world].parentElement`).
+
+## The search ranks, and remembers what you pick
+`GlobalSearch` again. The list used to be INSERTION order — workers and stages
+pushed before any workspace's jobs — so "Concealed Units" (one letter off
+"lev" at the 0.45 fuzzy threshold, "conceaLED") sat above the job literally
+named "Lev". Now:
+- `hunt` returns RANKED matches, tiers checked outright (Fuse cannot tell a
+  real prefix from a one-letter fuzz): 0 starts-with · 5 word-starts-with ·
+  100 contains · 200 fuzzy · 300 skeleton/translit. Small in-tier biases:
+  kind (`KIND`: apartment first, stage last) and open-workspace-first.
+- One stable sort over everything at the end.
+- **Learning** (`search_picks` in localStorage, per machine like
+  `search_recent`): every chosen result is remembered with count, recency and
+  the queries that led to it. Picked before for the query being typed →
+  straight to the top (−10000); picked before at all → a nudge. `notePick` in
+  `goTo`, `pickBoost` at sort. Capped at 150 by recency.
+
+## Cut, and a paste that lands in the middle of the screen
+`boardClip` carries `mode: 'copy' | 'cut'`; `cutRef` (Ctrl+X, and Cut in both
+context menus) fades the selection (`cutMark` state → `faded` prop on
+JobTile/BoardNode, opacity .35) and nothing moves until the paste. Paste
+(Ctrl+V, and the board-clipboard row in the canvas menu) measures the group's
+bounds — live positions for a cut, the snapshot for a copy — and lands the
+group CENTRED on the middle of the view through `settleDrop`, arrangement
+kept. A cut MOVES the records (named-board aware: `viewPos` vs `canvasX`) and
+pastes once; a copy duplicates, "(copy)" suffix as before. Escape stands a
+pending cut down; so does any new copy or cut.
+
+## Focus, everywhere; and full screen
+`BoardHandlers.jobFocus`/`elFocus` — a crosshair button beside the lock on
+every tile (right-[110px]) and on every node's action strip: the search
+fly-to's own glide, centring the thing at the current zoom. Inside a group
+window it is a `scrollIntoView({block:'center'})` on the node — the window is
+a native scroller. A fullscreen toggle sits between the TV button and the
+zoom group in the board header (`pageRootRef.requestFullscreen`, tracked via
+`fullscreenchange` because Escape leaves without asking). A browser window
+CANNOT span two monitors — fullscreen fills one screen; stretching the window
+across both by hand is the only way, and that is the honest answer given.
+
+## The window's first moment belongs to the gesture that opened it
+`ApartmentDetailDrawer` ignores mousedown/click (capture, preventDefault) for
+its first 400ms — the settle rule the group window already had. Found by
+`touchpan.mjs`: on a touch screen the tap that opens the drawer dispatches a
+compatibility click a beat later, at the same spot — INSIDE the new
+full-screen window, where it focused whatever field lay under the finger, and
+a focused field eats the first Escape (the guard blurs instead of closing).
+"The window will not close" was a ghost click focusing the Zoho field.
+
+## Widget chrome
+- `.widget-scroll` (index.css): scrollbars invisible until the pointer is
+  over the widget, thin and grey — replaced `scrollbar-thin` throughout the
+  widget surfaces (Frame, tvWidgets, planner header, DashWidgets); the
+  planner's `.planner-scroll` got the same manner. The standing bar along a
+  widget's bottom read as broken chrome.
+- `MiniJob` rows wear their stage as a background tint (`tint(stage.color,
+  .12)`, the planner-card idiom) — a list reads as colour-coded work.
+
+Harness: `scratchpad/round20.mjs` — search tiers + the learned pick, cut
+fade / paste-to-centre / copy-to-centre, the focus glide, fullscreen on and
+off. Its own trap: the paste-centre landed exactly on a seeded tile's spot,
+burying it under the pasted pair — hover the FREE tile, or the harness blames
+the app for its own geometry.

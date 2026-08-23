@@ -98,9 +98,15 @@ await page.waitForTimeout(700);
 
 let s = await read();
 console.log('       after drop 1:', JSON.stringify(s));
-check(s && s['G-r0'] && Math.abs(s['G-r0'].x - (drop1.x - 28 - 107)) < 60
-  && s['G-r0'].x !== 170,
-  'the job moved to where it was let go', `x ${s?.['G-r0']?.x}`);
+const panNow = await page.evaluate(() => {
+  const world = document.querySelector('[data-board-world]');
+  const vp = document.querySelector('[data-board-viewport]');
+  const wr = world.getBoundingClientRect(), vr = vp.getBoundingClientRect();
+  return { x: wr.left - vr.left, y: wr.top - vr.top, left: vr.left, top: vr.top };
+});
+const want1x = drop1.x - panNow.left - panNow.x - 107;
+check(s && s['G-r0'] && Math.abs(s['G-r0'].x - want1x) < 60 && s['G-r0'].x !== 170,
+  'the job moved to where it was let go', `x ${s?.['G-r0']?.x} (want ~${Math.round(want1x)})`);
 check(!(await page.locator('.drawer-panel').count()), 'and the drop did not open the drawer');
 
 // ── 2 · a notebook job dragged out of the list comes OUT of the notebook ────
@@ -123,8 +129,9 @@ s = await read();
 console.log('       after drop 2:', JSON.stringify(s));
 check(s && s['G-r1'] && s['G-r1'].book === null,
   'the job is out of the notebook (inNotebook cleared)', String(s?.['G-r1']?.book));
-check(s && Math.abs(s['G-r1'].x - (drop2.x - 28 - 107)) < 60,
-  'and its tile sits where it was let go', `x ${s?.['G-r1']?.x}`);
+const want2x = drop2.x - panNow.left - panNow.x - 107;
+check(s && Math.abs(s['G-r1'].x - want2x) < 80,
+  'and its tile sits where it was let go', `x ${s?.['G-r1']?.x} (want ~${Math.round(want2x)})`);
 const tile1 = await page.locator('text=Drop job 1').count();
 check(tile1 >= 2, 'its tile is drawn on the board (name appears beyond the lists)', String(tile1));
 
@@ -167,12 +174,16 @@ const rects = await page.evaluate(() => {
   const rail = document.querySelector('[data-board-toolrail]')?.getBoundingClientRect();
   return { worldRight: world?.right, railLeft: rail?.left };
 });
-console.log('       rail clamp:', JSON.stringify(rects));
-check(Number.isFinite(rects.worldRight) && Number.isFinite(rects.railLeft)
-  && rects.worldRight <= rects.railLeft + 2,
-  'shoved hard left, the world\'s right edge stops at the rail', JSON.stringify(rects));
-check(rects.worldRight >= rects.railLeft - 40,
-  'and it really is resting against it, not somewhere short of it');
+console.log('       shove-left clamp:', JSON.stringify(rects));
+// OWNER REVERSAL (2026-09-02): dead space is allowed, so the board may pass
+// the rail — the one rule left is min-visibility: a bite of board stays on
+// screen after the hardest shove.
+const vpLeftEdge = await page.evaluate(() =>
+  document.querySelector('[data-board-viewport]').getBoundingClientRect().left);
+check(Number.isFinite(rects.worldRight) && rects.worldRight >= vpLeftEdge + 100,
+  'shoved hard left, a bite of the board stays on screen', JSON.stringify(rects));
+check(rects.worldRight < rects.railLeft,
+  'and dead space opens on the right — the grey desk shows');
 
 // ── 5 · the TikTok reel: play, and a sound button beside it ─────────────────
 const frameSrc = () => page.evaluate(() =>

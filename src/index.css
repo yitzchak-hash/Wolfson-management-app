@@ -210,6 +210,23 @@ html, body {
 /* Fades at the ends, so a scrolled rail reads as continuing rather than cut. */
 .board-rail { -webkit-mask-image: linear-gradient(transparent 0, #000 10px, #000 calc(100% - 10px), transparent 100%); }
 
+/* ── Widget scrollbars ──
+   Invisible until the pointer is over the widget, then a thin quiet thumb in
+   the widget's own grey — the same manner as the tool rail. The always-on
+   slab (`scrollbar-thin`) put a permanent bar along the bottom of any widget
+   whose rows ran a pixel wide, which read as broken chrome, not as "more". */
+.widget-scroll { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+.widget-scroll:hover { scrollbar-color: rgba(100,116,139,.4) transparent; }
+.widget-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.widget-scroll::-webkit-scrollbar-track { background: transparent; }
+.widget-scroll::-webkit-scrollbar-corner { background: transparent; }
+.widget-scroll::-webkit-scrollbar-thumb {
+  background: transparent; border-radius: 999px;
+  transition: background .18s ease;
+}
+.widget-scroll:hover::-webkit-scrollbar-thumb { background: rgba(100,116,139,.35); }
+.widget-scroll::-webkit-scrollbar-thumb:hover { background: rgba(100,116,139,.6); }
+
 /* ── Selected-item treatment ──
    One look for "this is the one you're on", used by the sidebar, the header
    project chips, the settings tabs and the board's view toggle. The fill grows
@@ -438,7 +455,17 @@ html, body {
 .planner-scroll {
   scrollbar-gutter: stable;
   padding-inline-end: 2px;
+  /* Same manner as widget-scroll: the bar appears under the pointer only. */
+  scrollbar-width: thin; scrollbar-color: transparent transparent;
 }
+.planner-scroll:hover { scrollbar-color: rgba(100,116,139,.4) transparent; }
+.planner-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.planner-scroll::-webkit-scrollbar-track { background: transparent; }
+.planner-scroll::-webkit-scrollbar-thumb {
+  background: transparent; border-radius: 999px; transition: background .18s ease;
+}
+.planner-scroll:hover::-webkit-scrollbar-thumb { background: rgba(100,116,139,.35); }
+.planner-scroll::-webkit-scrollbar-thumb:hover { background: rgba(100,116,139,.6); }
 
 /* ── What's-new vignettes ─────────────────────────────────────────────────────
    Small CSS scenes acting out a gesture — a tile carried to a slot, a finger

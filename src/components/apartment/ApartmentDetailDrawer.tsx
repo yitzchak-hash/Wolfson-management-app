@@ -209,6 +209,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     onClose();
   }
 
+  /** When this window was born — see the settle guard on the panel below. */
+  const bornAt = useRef(Date.now());
   useEffect(() => {
     function key(e: KeyboardEvent) {
       if (e.key !== 'Escape') return;
@@ -1186,6 +1188,23 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       <div
         className={`drawer-panel fixed bg-white shadow-2xl z-[120] flex flex-col overflow-hidden ${
           isPhone ? '' : 'rounded-2xl'}`}
+        /**
+         * The tap that OPENED this window is not aimed at it.
+         *
+         * On a touch screen the tap on the tile also dispatches a
+         * compatibility click a beat later, at the same spot — which is now
+         * INSIDE the freshly-opened window, where it can land on a field and
+         * focus it. A focused field then eats the first Escape (the guard
+         * blurs instead of closing) and the window reads as refusing to
+         * close. Same settle rule the group window uses: a press in the first
+         * moments of the window's life belongs to the gesture that opened it.
+         */
+        onMouseDownCapture={e => {
+          if (Date.now() - bornAt.current < 400) { e.preventDefault(); e.stopPropagation(); }
+        }}
+        onClickCapture={e => {
+          if (Date.now() - bornAt.current < 400) { e.preventDefault(); e.stopPropagation(); }
+        }}
         style={isPhone
           // On a phone it is a FULL SCREEN, not a shrunken desktop window.
           // Centred at 94vw × 93vh it left a useless margin all round while the

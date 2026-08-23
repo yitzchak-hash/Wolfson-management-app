@@ -162,23 +162,32 @@ if (mini) {
   }
 }
 
-// ── 5. zooming out walks back to the corner ────────────────────────────────
+// ── 5. zooming out holds the cursor (OWNER REVERSAL 2026-09-02) ─────────────
+// The walk-home is gone: dead space is allowed, so zoom-out anchors at the
+// pointer exactly like zoom-in. Assert the world point under the cursor is
+// the same before and after a zoom in-and-back-out at an off-centre point.
 {
-  // Zoom IN hard at the far bottom-right, then come back out.
-  await page.mouse.move(1100, 700);
+  const at = { x: 1100, y: 700 };
+  const worldUnder = async () => {
+    const st = await state();
+    const r = await page.evaluate(() => {
+      const v = document.querySelector('[data-board-viewport]').getBoundingClientRect();
+      return { left: v.left, top: v.top };
+    });
+    return { x: (at.x - r.left - st.x) / st.z, y: (at.y - r.top - st.y) / st.z, z: st.z };
+  };
+  await page.mouse.move(at.x, at.y);
+  const w0 = await worldUnder();
   for (let i = 0; i < 4; i++) { await page.mouse.wheel(0, -120); await page.waitForTimeout(120); }
-  const inState = await state();
-  check(inState.z > 1, 'zoomed in', `z=${inState.z}`);
-  // Non-vacuous: zooming in must actually have carried the view off the corner,
-  // or "it came back to the corner" would pass without the walk-home doing a thing.
-  check(inState.x < -300 || inState.y < -300, 'zooming in carried the view off the corner',
-    `pan=${Math.round(inState.x)},${Math.round(inState.y)}`);
-  for (let i = 0; i < 6; i++) { await page.mouse.wheel(0, 120); await page.waitForTimeout(120); }
-  const outState = await state();
-  check(outState.z <= inState.z, 'zoomed back out', `z=${outState.z}`);
-  // Home is the pinned corner: pan.x is the margin, pan.y the chrome + margin.
-  check(outState.x < 60, 'zooming out lands back on the left edge', `pan.x=${Math.round(outState.x)}`);
-  check(outState.y < 200, 'zooming out lands back at the top', `pan.y=${Math.round(outState.y)}`);
+  const wIn = await worldUnder();
+  check(wIn.z > w0.z, 'zoomed in', `z=${w0.z} → ${wIn.z}`);
+  check(Math.abs(wIn.x - w0.x) * wIn.z < 4 && Math.abs(wIn.y - w0.y) * wIn.z < 4,
+    'zooming in held the point under the cursor', `${Math.round(w0.x)} → ${Math.round(wIn.x)}`);
+  for (let i = 0; i < 4; i++) { await page.mouse.wheel(0, 120); await page.waitForTimeout(120); }
+  const wOut = await worldUnder();
+  check(wOut.z < wIn.z, 'zoomed back out', `z=${wOut.z}`);
+  check(Math.abs(wOut.x - w0.x) * wOut.z < 4 && Math.abs(wOut.y - w0.y) * wOut.z < 4,
+    'zooming out held it too — no walk-home', `${Math.round(w0.x)} → ${Math.round(wOut.x)}`);
 }
 
 // ── 6. a note's words grow with the box ────────────────────────────────────

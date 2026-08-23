@@ -39,6 +39,17 @@ interface SearchResult {
    * not, so offering to fly to them would be a button that lands nowhere.
    */
   onBoard?: boolean;
+  /**
+   * How well it matched — LOWER is better, and the tier dominates.
+   *
+   * The list used to be insertion order: workers and stages were pushed before
+   * any workspace's jobs, so a stage that scraped past the fuzzy threshold
+   * ("concealed" is one letter off "lev") sat ABOVE the job literally named
+   * "Lev". Every result now carries a rank — name-prefix first, then word
+   * prefix, then substring, then fuzzy, then the other-alphabet passes — and
+   * the whole list is sorted by it once, whatever order it was gathered in.
+   */
+  rank: number;
 }
 
 interface GlobalSearchProps {
@@ -55,6 +66,57 @@ interface GlobalSearchProps {
  */
 const RECENT_KEY = 'search_recent';
 const RECENT_MAX = 8;
+
+/**
+ * What was PICKED, so the search learns — the way Drive's does.
+ *
+ * Every chosen result is remembered with how often, how recently, and which
+ * queries led to it. A result picked before for the query being typed goes
+ * straight to the top; one picked before at all gets a nudge ahead of its
+ * tier-mates. Per machine, like the recent searches, and for the same reason.
+ */
+const PICKS_KEY = 'search_picks';
+const PICKS_MAX = 150;
+
+interface PickMemory { n: number; last: number; qs: string[] }
+
+function readPicks(): Record<string, PickMemory> {
+  try {
+    const raw = localStorage.getItem(PICKS_KEY);
+    const obj = raw ? JSON.parse(raw) : {};
+    return obj && typeof obj === 'object' ? obj : {};
+  } catch { return {}; }
+}
+
+function notePick(id: string, query: string) {
+  try {
+    const picks = readPicks();
+    const q = query.trim().toLowerCase();
+    const p = picks[id] ?? { n: 0, last: 0, qs: [] };
+    p.n += 1;
+    p.last = Date.now();
+    if (q.length >= 2) p.qs = [q, ...p.qs.filter(x => x !== q)].slice(0, 6);
+    picks[id] = p;
+    const ids = Object.keys(picks);
+    if (ids.length > PICKS_MAX) {
+      ids.sort((a, b) => picks[a].last - picks[b].last)
+        .slice(0, ids.length - PICKS_MAX)
+        .forEach(k => delete picks[k]);
+    }
+    localStorage.setItem(PICKS_KEY, JSON.stringify(picks));
+  } catch { /* private window */ }
+}
+
+/** The learned adjustment for one result against one query. Negative = up. */
+function pickBoost(id: string, query: string, picks: Record<string, PickMemory>): number {
+  const p = picks[id];
+  if (!p) return 0;
+  const q = query.trim().toLowerCase();
+  // Picked before while typing this very thing — the answer they meant.
+  if (q.length >= 2 && p.qs.some(x => x.startsWith(q) || q.startsWith(x))) return -10000 - p.n;
+  // Picked before at all — ahead of strangers in its own tier.
+  return -Math.min(p.n, 5) * 8;
+}
 
 function readRecent(): string[] {
   try {
@@ -122,17 +184,58 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
      * spelling alone did not find.
      */
     const V = queryVariants(query);
-    function hunt<T>(items: T[], keys: string[], textOf: (t: T) => string, limit: number): T[] {
-      const f = new Fuse(items, { keys, threshold: 0.45, ignoreLocation: true, minMatchCharLength: 2 });
+    /**
+     * Every match comes back RANKED, lower first:
+     *
+     *   0   the text starts with what was typed        ("Lev" → "Levine")
+     *   5   a word of it does                          ("lev" → "Molly Lev")
+     *   100 it appears somewhere inside                ("lev" → "Shalev")
+     *   200 fuzzy — a misspelling within the threshold ("tedet" → "Tester")
+     *   300 the other-alphabet / wrong-keyboard passes
+     *
+     * The prefix tiers are checked outright rather than through Fuse, because
+     * a fuzzy score cannot tell "Levine" (really starts with it) from
+     * "concealed" (one letter off "lev") — and that difference is the whole
+     * complaint. Fuzzy and skeleton only ADD what the plain tiers missed.
+     */
+    function hunt<T>(items: T[], keys: string[], textOf: (t: T) => string, limit: number): { it: T; rank: number }[] {
+      const f = new Fuse(items, { keys, threshold: 0.45, ignoreLocation: true, minMatchCharLength: 2, includeScore: true });
       const rows = items.map(it => ({ it, s: skeleton(textOf(it)) })).filter(r => r.s.length >= 2);
-      const fs = new Fuse(rows, { keys: ['s'], threshold: 0.34, ignoreLocation: true, minMatchCharLength: 2 });
-      const out: T[] = [];
-      const seen = new Set<T>();
-      const take = (it: T) => { if (!seen.has(it)) { seen.add(it); out.push(it); } };
-      V.plain.forEach(q => f.search(q).forEach(r => take(r.item)));
-      V.skeletons.forEach(q => fs.search(q).forEach(r => take(r.item.it)));
-      return out.slice(0, limit);
+      const fs = new Fuse(rows, { keys: ['s'], threshold: 0.34, ignoreLocation: true, minMatchCharLength: 2, includeScore: true });
+      const best = new Map<T, number>();
+      const put = (it: T, rank: number) => {
+        const b = best.get(it);
+        if (b === undefined || rank < b) best.set(it, rank);
+      };
+      for (const q of V.plain) {
+        const ql = q.toLowerCase();
+        if (ql.length < 2) continue;
+        for (const it of items) {
+          const text = textOf(it).toLowerCase();
+          if (!text) continue;
+          if (text.startsWith(ql)) put(it, 0);
+          else if (text.split(/[\s,.·—/()-]+/).some(w => w.startsWith(ql))) put(it, 5);
+          else if (text.includes(ql)) put(it, 100);
+        }
+      }
+      V.plain.forEach(q => f.search(q).forEach(r => put(r.item, 200 + (r.score ?? 0.45) * 90)));
+      V.skeletons.forEach(q => fs.search(q).forEach(r => put(r.item.it, 300 + (r.score ?? 0.34) * 90)));
+      return [...best.entries()]
+        .sort((a, b) => a[1] - b[1])
+        .slice(0, limit)
+        .map(([it, rank]) => ({ it, rank }));
     }
+
+    /**
+     * A small, per-kind nudge INSIDE a tier: with the same quality of match, a
+     * job outranks a group, a group a worker, and a stage comes last — a stage
+     * is the rarest thing anybody is hunting for by name. Deliberately smaller
+     * than a tier step, so it can never lift a fuzzy match over a real one.
+     */
+    const KIND: Record<SearchResult['type'], number> = {
+      apartment: 0, group: 1, contractor: 2, task: 3, board: 4,
+      note: 5, contractor_note: 6, markup: 7, stage: 8,
+    };
 
     const found: SearchResult[] = [];
 
@@ -176,6 +279,8 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
      * when there is one, then the group it is filed in.
      */
     const onBoard = pid === 'general';
+    // With the same quality of match, the workspace in front of you first.
+    const wsBias = pid === currentProjectId ? 0 : 2;
     const whereIs = (a?: { buildingId?: string; boardBin?: string; floor?: number }): string => {
       if (!a) return workspace;
       const bits = [workspace];
@@ -190,7 +295,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
 
     // Apartments
     hunt(searchableApts, ['displayName', 'apartmentNumber', 'generalNotes'],
-      a => `${a.displayName} ${a.apartmentNumber}`, 4).forEach(a => {
+      a => `${a.displayName} ${a.apartmentNumber}`, 6).forEach(({ it: a, rank }) => {
       const extra = a.generalNotes.trim()
         ? a.generalNotes.split('\n')[0].slice(0, 60)
         : (!onBoard && a.floor ? `Floor ${a.floor}` : '');
@@ -201,12 +306,13 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         focus: { kind: 'apartment', id: a.id },
         projectId: pid,
         onBoard: true,
+        rank: rank + KIND.apartment + wsBias,
       });
     });
 
     // Tasks — a task on a trashed job left every list; it leaves this one too.
     hunt(contractorAssignments.filter(t => !trashed.has(t.apartmentId)),
-      ['taskDescription'], t => t.taskDescription, 3).forEach(a => {
+      ['taskDescription'], t => t.taskDescription, 3).forEach(({ it: a, rank }) => {
       const apt = apartments.find(ap => ap.id === a.apartmentId);
       const contractor = contractors.find(c => c.id === a.contractorId);
       found.push({
@@ -216,12 +322,13 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         focus: { kind: 'task', id: a.id, apartmentId: a.apartmentId },
         projectId: pid,
         onBoard: true,
+        rank: rank + KIND.task + wsBias,
       });
     });
 
     // Stage notes
     hunt(stageNotes.filter(n => !trashed.has(n.apartmentId)),
-      ['noteText'], n => n.noteText, 3).forEach(n => {
+      ['noteText'], n => n.noteText, 3).forEach(({ it: n, rank }) => {
       const apt = apartments.find(a => a.id === n.apartmentId);
       const stage = stages.find(st => st.id === n.stageId);
       found.push({
@@ -231,12 +338,13 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         focus: { kind: 'apartment', id: n.apartmentId },
         projectId: pid,
         onBoard: true,
+        rank: rank + KIND.note + wsBias,
       });
     });
 
     // Contractor notes
     hunt(contractorNotes.filter(n => !trashed.has(n.apartmentId)),
-      ['text'], n => n.text, 3).forEach(n => {
+      ['text'], n => n.text, 3).forEach(({ it: n, rank }) => {
       const apt = apartments.find(a => a.id === n.apartmentId);
       found.push({
         id: `cnote-${n.id}`, type: 'contractor_note',
@@ -245,12 +353,13 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         focus: { kind: 'apartment', id: n.apartmentId },
         projectId: pid,
         onBoard: true,
+        rank: rank + KIND.contractor_note + wsBias,
       });
     });
 
     // ── Groups on the board, and everything placed on it ──
     hunt(bins.map(b => ({ el: b, name: binLabelOf(b) })), ['name'], b => b.name, 4)
-      .forEach(item => {
+      .forEach(({ it: item, rank }) => {
       const n = apartments.filter(a => a.boardBin === binKeyOf(item.el)).length;
       found.push({
         id: `bin-${item.el.id}`, type: 'group',
@@ -259,6 +368,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         focus: { kind: 'group', id: item.el.id },
         projectId: pid,
         onBoard: true,
+        rank: rank + KIND.group + wsBias,
       });
     });
 
@@ -271,7 +381,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         kind: el.widget ? (WIDGET_BY_ID.get(el.widget)?.name ?? 'Widget') : el.type,
       }))
       .filter(r => r.text);
-    hunt(nodeRows, ['text', 'kind'], r => r.text, 3).forEach(item => {
+    hunt(nodeRows, ['text', 'kind'], r => r.text, 3).forEach(({ it: item, rank }) => {
       const bin = item.el.board ? bins.find(b => binKeyOf(b) === item.el.board) : undefined;
       found.push({
         id: `node-${item.el.id}`, type: 'board',
@@ -280,12 +390,13 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         focus: { kind: 'node', id: item.el.id },
         projectId: pid,
         onBoard: true,
+        rank: rank + KIND.board + wsBias,
       });
     });
 
     // ── Marked-up plans ──
     hunt(planAnnotations.filter(m => !trashed.has(m.apartmentId)),
-      ['planName', 'createdBy', 'note'], m => m.planName ?? '', 4).forEach(m => {
+      ['planName', 'createdBy', 'note'], m => m.planName ?? '', 4).forEach(({ it: m, rank }) => {
       const apt = apartments.find(a => a.id === m.apartmentId);
       found.push({
         id: `mark-${m.id}`, type: 'markup',
@@ -293,6 +404,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         subtitle: `${apt ? aptLabel(apt) : 'Job'} · marked up by ${m.createdBy || 'the office'}`,
         focus: { kind: 'markup', apartmentId: m.apartmentId },
         projectId: pid,
+        rank: rank + KIND.markup + wsBias,
       });
     });
 
@@ -309,7 +421,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
     // ── Workers ──
     // A worker belongs to the company, not to a workspace, and choosing one
     // shows their task list — which is the one you are standing in.
-    hunt(contractors.filter(c => c.active), ['name', 'email'], c => c.name, 4).forEach(c => {
+    hunt(contractors.filter(c => c.active), ['name', 'email'], c => c.name, 4).forEach(({ it: c, rank }) => {
       const open = contractorAssignments.filter(a => a.contractorId === c.id && !a.completedAt).length;
       found.push({
         id: `con-${c.id}`, type: 'contractor',
@@ -317,6 +429,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         subtitle: `${c.category} · ${open} open ${open === 1 ? 'task' : 'tasks'} here`,
         focus: { kind: 'contractor', id: c.id },
         projectId: currentProjectId,
+        rank: rank + KIND.contractor,
       });
     });
 
@@ -324,7 +437,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
     // A stage carrying `projectId: 'general'` is the Job Board's own; anything
     // else is shared, so it is shown where you are.
     hunt(stages.filter(st => st.active), ['name', 'nameHe', 'description'],
-      st => `${st.name} ${st.nameHe ?? ''}`, 4).forEach(st => {
+      st => `${st.name} ${st.nameHe ?? ''}`, 4).forEach(({ it: st, rank }) => {
       const pid = st.projectId === 'general' ? 'general' : currentProjectId;
       const n = aptsOf(pid).filter(a => a.currentStageId === st.id).length;
       const where = projects.find(p => p.id === pid)?.name ?? '';
@@ -334,6 +447,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         subtitle: `${where} · ${n} ${n === 1 ? 'unit' : 'units'} at this stage`,
         focus: { kind: 'stage', id: st.id },
         projectId: pid,
+        rank: rank + KIND.stage,
       });
     });
 
@@ -355,7 +469,14 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
       searchOne(p.id, p.name, W);
     });
 
-    setResults(found);
+    /**
+     * ONE sort over everything, whatever order it was gathered in — the tiers
+     * first, the learned picks on top of them. A stable sort, so two results
+     * with the same rank keep the gather order (open workspace first).
+     */
+    const picks = readPicks();
+    found.sort((a, b) =>
+      (a.rank + pickBoost(a.id, query, picks)) - (b.rank + pickBoost(b.id, query, picks)));
     setResults(found);
   }, [query, apartments, contractorAssignments, stageNotes, contractorNotes, contractors, stages,
       canvasElements, planAnnotations, projects, currentProjectId, snaps]);
@@ -389,6 +510,9 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
   function goTo(result: SearchResult, focus: FocusIntent) {
     onClose();
     remember(query);
+    // The learning half: what was chosen, for what was typed. Next time the
+    // same few letters go in, this result is the first answer.
+    notePick(result.id, query);
     if (result.projectId !== currentProjectId) setCurrentProject(result.projectId);
     setPendingFocus(focus);
     const jobBoard = result.projectId === 'general';

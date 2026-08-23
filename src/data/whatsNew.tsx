@@ -30,6 +30,46 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-09-03',
+    title: 'The board breathes, the search learns',
+    items: [
+      {
+        title: 'Zooming out stays under your mouse',
+        body: 'The board now shows the grey desk around its edge, so zooming out '
+          + 'holds the point under the cursor all the way down instead of hitting '
+          + 'the corner and sliding away. The board still grows and shrinks with '
+          + 'what is on it, exactly as before.',
+        demo: 'zoom',
+      },
+      {
+        title: 'Search results in the right order — and it remembers',
+        body: 'A name that starts with what you typed comes first, then names that '
+          + 'contain it, and only then the maybe-you-meant guesses — a stage can '
+          + 'no longer sit above the job actually called that. And when you pick a '
+          + 'result, the search remembers: type the same few letters again and '
+          + 'your pick is the first answer, the way Drive does it.',
+        demo: 'list',
+      },
+      {
+        title: 'Cut, and paste to the middle of the screen',
+        body: 'Select things and press Ctrl+X — they fade, waiting. Paste (Ctrl+V '
+          + 'or right-click) carries them to the middle of what you are looking '
+          + 'at, keeping their arrangement. Copy does the same but duplicates. '
+          + 'One thing or a whole lasso-full.',
+        demo: 'drag',
+      },
+      {
+        title: 'A focus button on everything, and full screen',
+        body: 'Every tile and widget has a crosshair button beside its lock: press '
+          + 'it and the board glides that thing to the centre of the screen. And a '
+          + 'full-screen button sits beside the zoom controls, for a wall of work '
+          + 'with no browser chrome. Job rows in widgets now wear their stage '
+          + 'colour, and widget scrollbars only appear under the pointer.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2026-09-02',
     title: 'Drag a job anywhere, and the plan follows your hand',
     items: [

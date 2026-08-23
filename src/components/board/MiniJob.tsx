@@ -3,6 +3,7 @@ import { Apartment, Stage, ContractorAssignment, getStageName } from '../../type
 import { DriveStatus } from '../ui/DriveStatus';
 import { anyRota } from '../../data/rotaDrop';
 import { usePlannerDrag } from '../../data/plannerDrop';
+import { tint } from './PlannerWidget';
 
 /**
  * A job, in one row, everywhere a job is listed.
@@ -47,9 +48,15 @@ export function MiniJob({ job, stages, assignments, onOpen, rtl, size = 11, sub,
       {...planner.handlers}
       onClick={() => onOpen(job.id)}
       title={`Open ${job.displayName || 'this job'}${anyRota() ? ' · drag it onto a day' : ''}`}
-      className="group/mj w-full text-left flex items-center gap-1.5 px-1 py-[3px] rounded-md
+      className="group/mj w-full text-left flex items-center gap-1.5 px-1.5 py-[3px] rounded-md
                  hover:bg-slate-50 transition-colors min-w-0"
-      style={planner.style}
+      style={{
+        ...planner.style,
+        // The row wears its stage — the same tint idiom as a planner card, so
+        // a list reads as colour-coded work rather than a column of grey text.
+        backgroundColor: stage ? tint(stage.color, 0.12) : undefined,
+        boxShadow: stage ? 'inset 0 0 0 1px rgba(15,23,42,.05)' : undefined,
+      }}
     >
       <span
         className="w-1.5 h-1.5 rounded-full flex-shrink-0"

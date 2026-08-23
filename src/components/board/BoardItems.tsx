@@ -24,7 +24,7 @@ function withAlpha(color: string, alpha = 0.45): string {
 import { MapPin, ClipboardList, Trash2, Palette, Pencil, X, ThumbsUp, ThumbsDown, Ghost,
   Archive, CheckCircle2, PlayCircle, FolderOpen, Lock, Unlock, Group } from 'lucide-react';
 import { Apartment, CanvasElement, Stage, BinKind, BIN_META, binKeyOf, binLabelOf } from '../../types';
-import { Settings2, Mic } from 'lucide-react';
+import { Settings2, Mic, Crosshair } from 'lucide-react';
 import { DriveIcon, ZohoIcon, PlanIcon, TvIcon } from '../ui/BrandIcons';
 import { extractFileId, driveDownloadUrl } from '../../data/driveApi';
 
@@ -61,6 +61,10 @@ export interface BoardHandlers {
   jobTv: (job: Apartment) => void;
   /** Toggle boardLocked — a locked tile stays where it is. */
   jobLock: (job: Apartment) => void;
+  /** Glide the view so this tile sits in the middle of the screen. */
+  jobFocus: (job: Apartment) => void;
+  /** Glide the view so this node sits in the middle of the screen. */
+  elFocus: (el: CanvasElement) => void;
   /** Take THIS tile out of its invisible group, leaving the rest grouped. */
   jobUngroup: (job: Apartment) => void;
   /** Take THIS node out of its invisible group. */
@@ -161,11 +165,13 @@ export interface JobTileProps {
    * one component draws both and they cannot drift apart.
    */
   ghostIndex?: number;
+  /** CUT and not yet pasted — drawn faded, "in the air". */
+  faded?: boolean;
 }
 
 export const JobTile = React.memo(function JobTile({
   job, index, x, y, w, h, stage, pendingTasks, isSelected, isDragging,
-  justChanged, searchLit, fallbackBorder, lastEdited, labels, H, ghostIndex, translucent,
+  justChanged, searchLit, fallbackBorder, lastEdited, labels, H, ghostIndex, translucent, faded,
 }: JobTileProps) {
   const isGhost = ghostIndex !== undefined;
   return (
@@ -184,8 +190,9 @@ export const JobTile = React.memo(function JobTile({
       style={{
         left: x, top: y, width: w, height: h,
         touchAction: 'none',
-        opacity: translucent ? 0.45 : undefined,
-        transition: translucent !== undefined ? 'opacity 120ms ease' : undefined,
+        // `faded`: cut and waiting for its paste — visibly "in the air".
+        opacity: translucent ? 0.45 : faded ? 0.35 : undefined,
+        transition: 'opacity 140ms ease',
         // The stage colour is a THICK BORDER, never a fill. Flooding the tile
         // made the name, address and buttons unreadable at some stages; the
         // border carries the same information and leaves the content legible.
@@ -230,6 +237,18 @@ export const JobTile = React.memo(function JobTile({
           <Group size={13} />
         </button>
       )}
+
+      {/* Focus — glide the view so this tile sits in the middle of the
+          screen. Beside the lock, on every tile, per the owner. */}
+      <button
+        data-no-drag
+        onClick={e => { e.stopPropagation(); H.jobFocus(job); }}
+        title="Centre this on the screen"
+        className="absolute top-1 right-[110px] p-1 rounded-md transition-all text-gray-400
+                   hover:text-[#1e3a5f] opacity-0 group-hover:opacity-100"
+      >
+        <Crosshair size={13} />
+      </button>
 
       {/* Lock — a locked tile stays put: dragging pans the board, a click
           still opens the job. Hover-revealed until it is ON, then always
@@ -500,11 +519,13 @@ export interface BoardNodeProps {
   onRecord: (id: string) => void;
   onStopRecord: () => void;
   onUploadAudio: (id: string, file: File) => void;
+  /** CUT and not yet pasted — drawn faded, "in the air". */
+  faded?: boolean;
 }
 
 export const BoardNode = React.memo(function BoardNode({
   el, x, y, w, h, isSelected, isDragging, isEditing, editText, binHot, binCount, inGroup,
-  recording, savingAudio, ctx, editRef, H, onRecord, onStopRecord, onUploadAudio,
+  recording, savingAudio, ctx, editRef, H, onRecord, onStopRecord, onUploadAudio, faded,
 }: BoardNodeProps) {
   // Any bin node, built-in or one you made.
   const isBin = el.type === 'bin';
@@ -623,6 +644,8 @@ export const BoardNode = React.memo(function BoardNode({
         outline: isSelected && !isDragging ? '2px solid rgba(74,168,216,0.5)' : undefined,
         outlineOffset: '2px',
         touchAction: 'none',
+        // Cut and waiting for its paste — visibly "in the air".
+        opacity: faded ? 0.35 : undefined,
         // An explicit layer wins; otherwise the type decides, as it always has.
         zIndex: el.z ?? (el.type === 'box' ? 1 : isBin ? 4 : 5),
       }}
@@ -672,6 +695,14 @@ export const BoardNode = React.memo(function BoardNode({
               <Group size={13} />
             </button>
           )}
+          {/* Focus — glide the view so this node sits in the middle of the
+              screen. On every node, beside the lock, per the owner. */}
+          <button data-el-action
+            onClick={e => { e.stopPropagation(); H.elFocus(el); }}
+            title="Centre this on the screen"
+            className="w-7 h-7 rounded-lg bg-white/95 hover:bg-white flex items-center justify-center shadow-sm border border-gray-100 text-gray-400 hover:text-[#1e3a5f]">
+            <Crosshair size={13} />
+          </button>
           {/* Lock in place: no drag, no resize, until unlocked. `undefined`
               rather than false when unlocking, so the field disappears from
               the record instead of riding every node forever. */}
