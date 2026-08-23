@@ -88,6 +88,63 @@ export function loadProjectSnapshot(projectId: string): {
   };
 }
 
+/**
+ * Fetch a workspace's snapshot down from the CLOUD when this machine has none.
+ *
+ * Everything cross-workspace — Building Progress, the workspace miniatures,
+ * unit cards, the notebook's foreign entries — reads `loadProjectSnapshot`,
+ * which is whatever `persist()` last wrote on THIS machine. Clear the
+ * browser's storage (or sit at a brand-new computer) and every one of them
+ * says "not opened on this device yet" even though the data is sitting in
+ * Firestore. This pulls the project-scoped collections once per session for a
+ * workspace whose local snapshot is missing, writes them to the same
+ * localStorage key `persist()` uses, and bumps `snapshotTick` so consumers
+ * look again. Opening the workspace properly later overwrites all of it with
+ * the live sync, so this can never fight the real thing.
+ */
+const _snapFetched = new Set<string>();
+export async function ensureProjectSnapshot(projectId: string): Promise<void> {
+  if (!isFirebaseConfigured || !db || !projectId) return;
+  if (_snapFetched.has(projectId)) return;
+  _snapFetched.add(projectId);
+  const key = getProjectStorageKey(projectId);
+  const existing = loadFromStorage(key, null) as Record<string, unknown> | null;
+  // A snapshot with rooms in it is this machine's own memory — leave it be.
+  if (existing && Array.isArray(existing.apartments) && (existing.apartments as unknown[]).length > 0) return;
+  try {
+    const col = (base: string) => projectCollection(projectId, base);
+    const [apartments, assignments, stageNotes, contractorNotes, canvasElements, planAnnotations, stages] =
+      await Promise.all([
+        fsGetAll(col('apartments')),
+        fsGetAll(col('contractorAssignments')),
+        fsGetAll(col('stageNotes')),
+        fsGetAll(col('contractorNotes')),
+        fsGetAll(col('canvasElements')),
+        fsGetAll(col('planAnnotations')),
+        fsGetAll('stages'),
+      ]);
+    if (!apartments.length) return;
+    // Buildings are not a Firestore collection — the built-ins are seeded.
+    const buildings = getDefaultBuildings(projectId);
+    const scoped = scopeApartmentsToProject(projectId, apartments as unknown as Apartment[], buildings);
+    saveToStorage(key, {
+      ...(existing ?? {}),
+      apartments: scoped,
+      buildings,
+      stages,
+      contractorAssignments: assignments,
+      stageNotes,
+      contractorNotes,
+      canvasElements,
+      planAnnotations,
+    });
+    useStore.setState(st => ({ snapshotTick: st.snapshotTick + 1 }));
+  } catch {
+    // A failed fetch is allowed to retry the next time somebody asks.
+    _snapFetched.delete(projectId);
+  }
+}
+
 // Holds unsubscribe functions for all active Firestore real-time listeners.
 // Stored outside the Zustand state (not serializable) so they survive re-renders.
 let _firebaseUnsubscribers: Array<() => void> = [];
@@ -530,6 +587,14 @@ interface AppState {
   setPendingFocus: (f: FocusIntent | null) => void;
 
   /**
+   * Bumped when `ensureProjectSnapshot` writes a workspace's snapshot down
+   * from the cloud, so everything that reads `loadProjectSnapshot` re-renders
+   * and picks it up. Session-only mechanism, never persisted — the snapshots
+   * themselves live in localStorage, this is only the "look again" signal.
+   */
+  snapshotTick: number;
+
+  /**
    * "This job is on the planner and just got a dated task" — the queued
    * question. Session-only. Answered by answerPlannerAsk with one of the
    * three confirmed choices.
@@ -671,6 +736,7 @@ export const useStore = create<AppState>((set, get) => ({
   mainUiStrings: mergeFreshMainUi(stored?.mainUiStrings as Partial<MainUiStrings> | null),
   pendingOpenAptId: null,
   pendingFocus: null,
+  snapshotTick: 0,
   plannerAsk: null,
   dashboardWidgetOrder: (stored?.dashboardWidgetOrder as string[] | null) ?? ['apt-stats', 'task-stats', 'stage-progress', 'building-progress', 'activity'],
   dashboardHiddenWidgets: (stored?.dashboardHiddenWidgets as string[] | null) ?? [],

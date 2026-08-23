@@ -671,11 +671,11 @@ export const BoardNode = React.memo(function BoardNode({
         <div className={`absolute right-0 flex gap-1 z-20 transition-opacity ${
             isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'}`}
           style={{ bottom: '100%', marginBottom: 4, pointerEvents: 'auto' }}>
-          {/* Talk into a note. Every note on the board takes a memo the same
-              way the office and worker notes do — a spoken sentence is often
-              faster and clearer than typing on site, and the record already
-              carries audioUrl, so nothing new has to be stored or synced. */}
-          {(el.type === 'note' || el.type === 'box') && !el.audioUrl && (
+          {/* Talk into a NOTE. A section box lost its mic by the owner's ask —
+              a box is furniture that groups things, not a note anybody speaks
+              into, and the button there read as clutter. A box that already
+              carries a memo still plays it below. */}
+          {el.type === 'note' && !el.audioUrl && (
             <button data-el-action
               onClick={e => { e.stopPropagation(); recording ? onStopRecord() : onRecord(el.id); }}
               title={recording ? 'Stop recording' : 'Record a voice memo on this note'}

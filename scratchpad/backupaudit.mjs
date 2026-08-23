@@ -44,6 +44,8 @@ const EXCUSED = {
   firebaseSyncError: 'a live connection flag',
   authReady: 'a live gate on the login flow',
   pendingFocus: 'transient — "show me this", consumed by the next page',
+  snapshotTick: 'session-only signal: bumped when a missing workspace snapshot '
+    + 'is hydrated from the cloud, so consumers re-read localStorage',
   plannerAsk: 'transient — a question on screen right now',
   undoState: 'session-only by design: an undo stack that survived a reload would '
     + 'offer to undo something another device has since changed. Its entries are '

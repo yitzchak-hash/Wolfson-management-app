@@ -144,11 +144,29 @@ await page.waitForTimeout(900);
 const tb = await far.boundingBox();
 const vpBox = await page.evaluate(() => {
   const r = document.querySelector('[data-board-viewport]').getBoundingClientRect();
-  return { cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
+  return { l: r.left, t: r.top, r: r.right, b: r.bottom, cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
 });
 console.log('       focused tile centre:', JSON.stringify({ x: tb.x + tb.width / 2, y: tb.y + tb.height / 2 }), 'viewport centre', JSON.stringify(vpBox));
-check(Math.abs(tb.x + tb.width / 2 - vpBox.cx) < 30 && Math.abs(tb.y + tb.height / 2 - vpBox.cy) < 30,
-  'pressing it glides the tile to the middle of the screen');
+/**
+ * ROUND-6 REFINEMENT: the top and left edges are pinned again, so centring a
+ * tile that sits near the board's own corner is not always possible — the
+ * glide goes as far as the clamp allows and stops at the corner rather than
+ * opening grey above-left (the owner's explicit correction). The contract is
+ * therefore "fully on screen, as centred as the pinned edges permit", not
+ * "always dead centre". This seed's tile IS near the corner, so what is
+ * asserted is visibility plus the corner holding.
+ */
+check(tb.x >= vpBox.l - 1 && tb.y >= vpBox.t - 1 && tb.x + tb.width <= vpBox.r + 1 && tb.y + tb.height <= vpBox.b + 1,
+  'pressing it brings the tile fully onto the screen');
+const focusPan = await page.evaluate(() => {
+  const world = document.querySelector('[data-board-world]');
+  const m = /translate\(([-\d.]+)px,\s*([-\d.]+)px\)\s*scale\(([\d.]+)\)/
+    .exec(world.parentElement.style.transform);
+  return { x: +m[1], z: +m[3] };
+});
+check(focusPan.x <= 28 * focusPan.z + 4,
+  'and the glide respects the pinned corner — no grey opens left of the board',
+  JSON.stringify(focusPan));
 
 // ── 6 · the fullscreen button ───────────────────────────────────────────────
 const fsBtn = page.locator('button[title="Board full screen"]');

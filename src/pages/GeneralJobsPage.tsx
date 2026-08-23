@@ -39,6 +39,7 @@ import { BoardViewPicker } from '../components/board/BoardViewPicker';
 import { StageBoard } from '../components/board/StageBoard';
 import { WidgetStore } from '../components/board/WidgetStore';
 import { WidgetListPopup } from '../components/board/WidgetListPopup';
+import { UnitPeek } from '../components/board/UnitPeek';
 import { WIDGETS } from '../data/widgets';
 import { TitleEditor } from '../components/board/TitleEditor';
 import {
@@ -429,6 +430,8 @@ export function GeneralJobsPage() {
   const headerBarRef = useRef<HTMLDivElement>(null);
   /** A widget number clicked open: the list behind it. */
   const [widgetList, setWidgetList] = useState<{ title: string; jobIds: string[] } | null>(null);
+  /** A unit from another workspace, peeked at without leaving the board. */
+  const [unitPeek, setUnitPeek] = useState<{ pid: string; aptId: string } | null>(null);
   const [resize, setResize] = useState<ResizeState | null>(null);
   const [lasso, setLasso] = useState<LassoState | null>(null);
   const [ctxMenu, setCtxMenu] = useState<CtxMenu | null>(null);
@@ -656,6 +659,56 @@ export function GeneralJobsPage() {
       lines.push({ axis: 'y', at: r.y, from: r.x - REACH, to: r.x + box.w + REACH });
     }
     return { x: r.x, y: r.y, guides: lines };
+  }
+
+  /**
+   * The ONE snap offset for a whole selection.
+   *
+   * Snapping used to be skipped outright with several things held — "no one
+   * box to line up" — and the owner reversed it: the guide lines should show
+   * for a group too. The group stays RIGID: its combined bounding box is what
+   * lines up, and a single offset moves every member, so nothing inside the
+   * arrangement can be pulled about by whichever member happened to pass a
+   * magnet. Every moving id — the dragged kind AND the carried other kind —
+   * is excluded from the targets, or the group would snap to itself.
+   */
+  function snapDragUnion(
+    d: {
+      kind: string; ids: string[]; starts: Map<string, { x: number; y: number }>;
+      carryJobs?: Map<string, { x: number; y: number }>;
+      carryEls?: Map<string, { x: number; y: number }>;
+    },
+    dx: number, dy: number,
+  ): { dx: number; dy: number; guides: Guide[] } | null {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    const moving = new Set<string>();
+    const grow = (id: string, sx: number, sy: number, w: number, h: number) => {
+      moving.add(id);
+      if (w <= 0 || h <= 0) return;
+      x0 = Math.min(x0, sx); y0 = Math.min(y0, sy);
+      x1 = Math.max(x1, sx + w); y1 = Math.max(y1, sy + h);
+    };
+    const addJob = (id: string, st: { x: number; y: number }) => {
+      const j = apartments.find(a => a.id === id);
+      const sz = tileSize(j ?? {});
+      grow(id, st.x, st.y, sz.w, sz.h);
+    };
+    const addEl = (id: string, st: { x: number; y: number }) => {
+      const el = canvasElements.find(e => e.id === id);
+      if (!el || el.type === 'arrow' || el.attachedTo) { moving.add(id); return; }
+      grow(id, st.x, st.y, el.w, el.h);
+    };
+    d.ids.forEach(id => {
+      const st = d.starts.get(id);
+      if (!st) return;
+      if (d.kind === 'job') addJob(id, st); else addEl(id, st);
+    });
+    d.carryJobs?.forEach((st, id) => addJob(id, st));
+    d.carryEls?.forEach((st, id) => addEl(id, st));
+    if (!Number.isFinite(x0) || x1 <= x0 || y1 <= y0) return null;
+    const box = { x: x0 + dx, y: y0 + dy, w: x1 - x0, h: y1 - y0 };
+    const snapped = snapMoving(box, moving);
+    return { dx: dx + snapped.x - box.x, dy: dy + snapped.y - box.y, guides: snapped.guides };
   }
 
   const theme = getBoardTheme(projectBoard.themeId);
@@ -1570,15 +1623,47 @@ export function GeneralJobsPage() {
     const t = setTimeout(() => {
       if (panNormalised.current) return;
       panNormalised.current = true;
-      // The explicit home framing: the clamp no longer pins a corner (dead
-      // space is allowed now), so opening asks for the settled top-left —
-      // margin in, first line below the floating chrome — by name.
+      /**
+       * The board REMEMBERS where you left it — pan and zoom, per workspace
+       * and per named board, on this machine. Come back and you are where
+       * you were, not at the top-left. With nothing remembered, the explicit
+       * home framing: the settled top-left, margin in, below the chrome.
+       */
+      try {
+        const raw = localStorage.getItem(`board_view_${currentProjectId}_${activeBoardView ?? 'main'}`);
+        const saved = raw ? JSON.parse(raw) : null;
+        if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)
+            && Number.isFinite(saved.z) && saved.z > 0) {
+          const zSnap = ZOOM_STEPS.reduce((b, zz) =>
+            Math.abs(zz - saved.z) < Math.abs(b - saved.z) ? zz : b, ZOOM_STEPS[0]);
+          zoomRef.current = zSnap;
+          setZoom(zSnap);
+          const p = clampPanRef.current({ x: saved.x, y: saved.y }, zSnap);
+          panRef2.current = p;
+          setPan(p);
+          return;
+        }
+      } catch { /* a bad save falls through to home */ }
       const settled = homePanRef.current();
       panRef2.current = settled;
       setPan(settled);
     }, 80);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPhoneBoard]);
+
+  /** Save where the board is, debounced — the other half of the memory. */
+  useEffect(() => {
+    if (isPhoneBoard || !panNormalised.current) return;
+    const t = setTimeout(() => {
+      try {
+        localStorage.setItem(
+          `board_view_${currentProjectId}_${activeBoardView ?? 'main'}`,
+          JSON.stringify({ x: Math.round(pan.x), y: Math.round(pan.y), z: zoom }));
+      } catch { /* storage full — the memory is a convenience */ }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [pan.x, pan.y, zoom, currentProjectId, activeBoardView, isPhoneBoard]);
 
   /**
    * A node belongs to exactly one surface.
@@ -2704,14 +2789,30 @@ export function GeneralJobsPage() {
       .map(e => e.z ?? (e.type === 'box' ? 1 : e.type === 'bin' ? 4 : 5));
     const top = Math.max(5, ...zs), bottom = Math.min(1, ...zs);
     track({ weight: 'arrange', label: stackedLabel(ids.length) }, () => {
+      /**
+       * z never goes NEGATIVE. A child with a negative z-index paints behind
+       * its parent's background, and the world div is its parent — hit
+       * testing then lands on the world, so a node sent to the back a couple
+       * of times could never be clicked again ("if I send to back I can't
+       * select it"). When the floor is reached, everything ELSE is lifted by
+       * one instead, which is the same relative order with room underneath.
+       */
+      const lift = how === 'back' && bottom - 1 < 0 ? 1 - bottom : 0;
+      if (lift) {
+        canvasElements
+          .filter(e => (!e.board || e.board === activeBoardView) && !ids.includes(e.id))
+          .forEach(e => updateCanvasElement(e.id, {
+            z: (e.z ?? (e.type === 'box' ? 1 : e.type === 'bin' ? 4 : 5)) + lift,
+          }));
+      }
       ids.forEach(id => {
         const el = canvasElements.find(e => e.id === id);
         if (!el) return;
         const cur = el.z ?? (el.type === 'box' ? 1 : el.type === 'bin' ? 4 : 5);
         const next = how === 'front' ? top + 1
-          : how === 'back' ? bottom - 1
+          : how === 'back' ? Math.max(0, bottom - 1 + lift)
           : how === 'up' ? cur + 1
-          : cur - 1;
+          : Math.max(0, cur - 1);
         updateCanvasElement(id, { z: next });
       });
     });
@@ -2792,6 +2893,52 @@ export function GeneralJobsPage() {
     setCtxMenu(null);
   }
 
+  /**
+   * Arrow keys NUDGE whatever is selected — the owner's ask: anything on the
+   * board that can move, moves by keyboard too. One pixel a press, ten with
+   * Shift; locked things, arrows and attached art stay put, exactly as they
+   * do under a drag. Returns whether anything moved, so the key handler only
+   * swallows the arrow when it actually meant something.
+   */
+  const nudgeRef = useRef<(ndx: number, ndy: number, repeat: boolean) => boolean>(() => false);
+  nudgeRef.current = (ndx, ndy, repeat) => {
+    if (!currentUser) return false;
+    const jobIds = [...selectedJobIds].filter(id => !apartments.find(a => a.id === id)?.boardLocked);
+    const elIds = [...selectedElIds].filter(id => {
+      const el = canvasElements.find(c => c.id === id);
+      return !!el && !el.locked && el.type !== 'arrow' && !el.attachedTo;
+    });
+    if (!jobIds.length && !elIds.length) return false;
+    const move = () => {
+      jobIds.forEach(id => {
+        const job = apartments.find(a => a.id === id);
+        if (!job) return;
+        const i = jobs.findIndex(j => j.id === id);
+        const p = i >= 0 ? jobPos(job, i) : { x: job.canvasX ?? 0, y: job.canvasY ?? 0 };
+        const x = Math.max(0, Math.round(p.x + ndx));
+        const y = Math.max(0, Math.round(p.y + ndy));
+        if (activeBoardView) {
+          updateApartment(id, { viewPos: { ...(job.viewPos ?? {}), [activeBoardView]: { x, y } } }, currentUser);
+        } else {
+          updateApartment(id, { canvasX: x, canvasY: y }, currentUser);
+        }
+      });
+      elIds.forEach(id => {
+        const el = canvasElements.find(c => c.id === id);
+        if (!el) return;
+        updateCanvasElement(id, {
+          x: Math.max(0, Math.round(el.x + ndx)),
+          y: Math.max(0, Math.round(el.y + ndy)),
+        });
+      });
+    };
+    // A held key repeats thirty times a second; one undo entry per burst is
+    // the step somebody would actually want back, not one per pixel.
+    if (repeat) move();
+    else track({ weight: 'arrange', label: movedLabel(jobIds.length + elIds.length) }, move);
+    return true;
+  };
+
   // ── Delete key ────────────────────────────────────────────────────
   openSearchRef.current = () => setSearchOpen(true);
   deleteRef.current = () => {
@@ -2815,6 +2962,19 @@ export function GeneralJobsPage() {
       }
       if (viewOnlyRef.current) return;          // read-only board: no shortcuts that change it
       if (e.key === 'Delete' || e.key === 'Backspace') deleteRef.current();
+
+      // Arrows nudge the selection. Only swallowed when something moved.
+      const ARROW: Record<string, [number, number]> = {
+        ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1],
+      };
+      if (ARROW[e.key] && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const [ax, ay] = ARROW[e.key];
+        const step = e.shiftKey ? 10 : 1;
+        if (nudgeRef.current(ax * step, ay * step, e.repeat)) {
+          e.preventDefault();
+          return;
+        }
+      }
 
       /**
        * Copy and paste on the board.
@@ -3059,20 +3219,13 @@ export function GeneralJobsPage() {
     let dy = w0.y - drag.grabY;
 
     /**
-     * Line it up with what is already there.
-     *
-     * Only while a single tile is being moved: with several selected there is
-     * no one box to line up, and pulling the group by whichever member happened
-     * to be nearest something would rearrange the rest behind your back.
+     * Line it up with what is already there — one thing held or a lasso-full.
+     * The selection's COMBINED box is what snaps, by one offset, so the
+     * arrangement inside it never tears (see snapDragUnion).
      */
-    if (drag.ids.length === 1 && drag.starts.get(drag.ids[0])) {
-      const me = drag.starts.get(drag.ids[0]);
-      const meJob = jobs.find(j => j.id === drag.ids[0]);
-      const box = { x: (me?.x ?? 0) + dx, y: (me?.y ?? 0) + dy, ...tileSize(meJob ?? {}) };
-      const snapped = snapMoving(box, new Set(drag.ids));
-      dx += snapped.x - box.x;
-      dy += snapped.y - box.y;
-      setGuides(snapped.guides);
+    {
+      const uni = snapDragUnion(drag, dx, dy);
+      if (uni) { dx = uni.dx; dy = uni.dy; setGuides(uni.guides); }
     }
 
     const moved = drag.moved || Math.abs(dx) > 4 || Math.abs(dy) > 4;
@@ -3420,19 +3573,15 @@ export function GeneralJobsPage() {
 
     /**
      * The same lining-up the tiles get, for every other kind of thing on the
-     * board — a note, a heading, a widget, a group, a drawing.
+     * board — single or a whole selection, snapped as one rigid box.
      *
      * Skipped while a piece of clip art is over something it would stick to:
      * there the answer is the anchor it is about to land on, and a magnet
      * pulling it a few pixels sideways would only fight that.
      */
-    if (only && !host) {
-      const st = drag.starts.get(only.id);
-      const box = { x: (st?.x ?? only.x) + dx, y: (st?.y ?? only.y) + dy, w: only.w, h: only.h };
-      const snapped = snapMoving(box, new Set(drag.ids));
-      dx += snapped.x - box.x;
-      dy += snapped.y - box.y;
-      setGuides(snapped.guides);
+    if (!host) {
+      const uni = snapDragUnion(drag, dx, dy);
+      if (uni) { dx = uni.dx; dy = uni.dy; setGuides(uni.guides); }
     }
 
     if (moved) edgePush(e.clientX, e.clientY); else stopEdgePush();
@@ -4352,26 +4501,41 @@ export function GeneralJobsPage() {
     const z = atZoom ?? zoom;
     const w = maxX * z, h = maxY * z;
     /**
-     * OWNER REVERSAL (2026-09-02): dead space is allowed, on every side.
+     * The grey desk shows only where it was MEANT to (the owner's 2026-09-04
+     * refinement of the dead-space ruling): beyond the board's RIGHT and
+     * BOTTOM edges — which happens by itself whenever the scaled world is
+     * smaller than the window, since the paper covers only the world — and
+     * on a side whose expansion is UNLOCKED in board settings. The TOP and
+     * LEFT pin again, exactly as before the reversal: the world's top rests
+     * at the chrome's edge and its left at the margin, so zooming out lands
+     * the whole board on screen against its own corner with the desk showing
+     * past its far edges, never blank space above or left of it.
      *
-     * The old clamp pinned the board's corner so zooming out could "never
-     * reveal room nobody asked for" — and that pin is exactly why zooming out
-     * could not hold the point under the cursor: the moment the world's edge
-     * met the viewport's, the anchor had to give. The owner asked for the
-     * opposite by name: show the grey dead space around the board, so a zoom
-     * out stays centred on the mouse all the way down. The board's own paper
-     * is drawn only over the world now, so the edge reads as a sheet on a
-     * grey desk instead of paper without end.
-     *
-     * The one rule left standing: the board can never be flung entirely off
-     * screen — a bite of it stays visible on each axis, so there is always
-     * something to grab and pan back with.
+     * Zoom stays cursor-anchored in both directions; near a pinned side the
+     * clamp is simply the wall the anchor gives way to. An UNLOCKED side gets
+     * the loose bound instead, with a bite of board always kept on screen.
      */
     const VIS = 160;
-    const visX = Math.min(VIS, w * 0.5), visY = Math.min(VIS, h * 0.5);
+    const hb = headerBarRef.current?.getBoundingClientRect();
+    const vr = viewportRef.current?.getBoundingClientRect();
+    const hr = hb && vr && viewMode !== 'stages'
+      ? Math.max(0, Math.min(hb.bottom - vr.top, vp.h * 0.4)) : 0;
+    // The tool rail floats over the right side: a board panned (or settled
+    // after a de-expand) to its far right rests against the rail's left edge,
+    // never underneath it.
+    const rail = document.querySelector('[data-board-toolrail]')?.getBoundingClientRect();
+    const rr = rail && vr && rail.width > 0 && rail.left > vr.left + vp.w * 0.5
+      ? Math.max(0, Math.min(vr.right - rail.left + 12, vp.w * 0.35)) : 0;
+    const m = margin * z;
+    const freeL = sideAllowed(projectBoard.expand, 'left');
+    const freeT = sideAllowed(projectBoard.expand, 'top');
+    const xMax = m;
+    const yMax = hr + m;
+    const xMin = freeL ? Math.min(VIS, w * 0.5) - w : Math.min(xMax, vp.w - rr - w);
+    const yMin = freeT ? Math.min(VIS, h * 0.5) - h : Math.min(yMax, vp.h - h);
     return {
-      x: Math.max(visX - w, Math.min(vp.w - visX, p.x)),
-      y: Math.max(visY - h, Math.min(vp.h - visY, p.y)),
+      x: Math.max(xMin, Math.min(xMax, p.x)),
+      y: Math.max(yMin, Math.min(yMax, p.y)),
     };
   };
 
@@ -4587,14 +4751,14 @@ export function GeneralJobsPage() {
     leaveNotebook: (id: string) => leaveNotebookRef.current(id),
     // Every widget figure opens the records it counted.
     showList: (title: string, jobIds: string[]) => setWidgetList({ title, jobIds }),
-    // A unit in ANOTHER workspace: switch there, and hand the apartment over
-    // as a focus intent so the arriving page opens it.
+    // A unit in ANOTHER workspace opens as a PEEK, not a journey: the board
+    // stays where it is, and closing the peek leaves you standing on it. The
+    // old behaviour — switch workspace, open the drawer there — meant X-ing
+    // out of a Wolfson apartment stranded you in Wolfson. The peek's own
+    // "Open in …" button does the travel for whoever actually wants it.
     openUnit: (pid: string, aptId: string) => {
-      // See DashboardPage: the switch clears pendingFocus, so the intent goes
-      // in afterwards.
-      if (pid !== currentProjectId) setCurrentProject(pid);
-      setPendingFocus({ kind: 'apartment', id: aptId });
-      navigate(pid === 'general' ? '/jobs' : '/project');
+      if (pid === currentProjectId) { openJobRef.current(aptId); return; }
+      setUnitPeek({ pid, aptId });
     },
   }), [apartments, allStages, contractorAssignments, contractors, contractorPhotos, activityLogs,
        users, canvasElements]);
@@ -6611,6 +6775,23 @@ export function GeneralJobsPage() {
           jobIds={widgetList.jobIds}
           onOpenJob={id => openJobRef.current(id)}
           onClose={() => setWidgetList(null)}
+        />
+      )}
+
+      {/* ── A unit in ANOTHER workspace, peeked at without leaving this one ── */}
+      {unitPeek && (
+        <UnitPeek
+          pid={unitPeek.pid}
+          aptId={unitPeek.aptId}
+          onClose={() => setUnitPeek(null)}
+          onOpenFull={() => {
+            const { pid, aptId } = unitPeek;
+            setUnitPeek(null);
+            // The switch clears pendingFocus, so the intent goes in afterwards.
+            if (pid !== currentProjectId) setCurrentProject(pid);
+            setPendingFocus({ kind: 'apartment', id: aptId });
+            navigate(pid === 'general' ? '/jobs' : '/project');
+          }}
         />
       )}
 

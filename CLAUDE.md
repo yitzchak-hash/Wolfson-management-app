@@ -3601,3 +3601,119 @@ Remove X must be clicked via the DOM (`evaluate(b => b.click())`) — the
 synthetic pointer sequence tangles with the node's pointer capture in a way
 a real hand does not, and a force-click that lands on the svg path inside
 the button never reaches React's onClick.
+
+---
+
+# v2 — the board settles down, the TV shows up, and other workspaces peek
+
+## OWNER REFINEMENT (2026-09-04): the desk shows only where it was meant to
+Supersedes the 2026-09-02 "dead space everywhere" ruling, per the owner's own
+correction. `clampPanRef` in `GeneralJobsPage`: the TOP and LEFT pin again
+(x ≤ `margin·z`, y ≤ header bottom + `margin·z`) — UNLESS that side's
+expansion is unlocked in board settings (`sideAllowed`), which grants the
+loose min-visibility bound instead. The grey desk therefore shows past the
+board's right/bottom edges and on unlocked sides only; zooming out lands the
+whole board against its corner; 100% comes home flush (`homePan`). The tool
+rail reserve on the x-axis is back (`[data-board-toolrail]`, right-docked
+only, capped 35%). Near a pinned side the cursor-anchored zoom simply gives
+way to the wall. `board.mjs`, `round20.mjs` (focus glide is now "fully on
+screen, as centred as the pins allow") and `deexpand.mjs` encode the new
+contract — deexpand's group section must press 100% first, because a drag
+that carried the view far right now STAYS there (a valid pan is not sprung
+back), leaving the origin-side group off-screen.
+
+## The board remembers where you left it
+`board_view_<pid>_<viewId|main>` in localStorage (per machine): pan+zoom
+saved debounced 400ms after rest, restored on arrival (zoom snapped to
+`ZOOM_STEPS`, pan re-clamped), `homePanRef` only when nothing is stored.
+Skipped on the phone board — it has its own fit-on-open.
+
+## Arranging: nudge, union snap, a floor under z
+- **Arrow keys nudge the selection** (`nudgeRef`): 1px, Shift 10px, every
+  movable selected thing (locked filtered), named-board aware. The first
+  keydown opens ONE undo entry; repeats ride inside it (`e.repeat` skips
+  `track`), so holding a key is one step to undo.
+- **`snapDragUnion`**: a multi-drag snaps the UNION box of everything
+  carried — one `snapMoving` call, one delta for the whole selection — so
+  guides appear for a group exactly as for one tile.
+- **`arrange('back')` lifts instead of sinking**: negative z paints behind
+  the world div and the node becomes unclickable (the owner's "IF I SENT TO
+  BACK I CANT SELECT IT"). Send-to-back now floors at 0 and, when the floor
+  is taken, bumps everything else up by the difference.
+
+## Foreign units PEEK (`src/components/board/UnitPeek.tsx`)
+The board's `widgetCtx.openUnit` no longer travels: a unit in another
+workspace opens as a read-only modal over the board (snapshot data — name,
+stage, address, phone, links, notes, open tasks), and closing it leaves you
+standing on `/jobs`. The peek's own "Open in <workspace>" button does the
+old switch-then-intent journey. Same-workspace ids still open the real
+drawer. The z is 120/121 — above the board's floating chrome. Harnesses
+round21/boardsize assert the peek, then travel through
+`[data-peek-open-full]`.
+
+## Missing workspace snapshots hydrate from the cloud
+`ensureProjectSnapshot(pid)` in `store.ts`: when `${pid}_app_data` has no
+apartments and Firebase is configured, the project-scoped collections are
+fetched once per session (`fsGetAll` through `projectCollection`), scoped
+(`scopeApartmentsToProject`), and written to the SAME localStorage key
+`persist()` uses — so a cleared browser or a new computer stops showing
+"not opened on this device yet" everywhere. Buildings are not a Firestore
+collection: the built-ins come from `getDefaultBuildings`. `snapshotTick`
+(state, session-only, excused in the backup audit) is bumped after a write;
+every `loadProjectSnapshot` consumer (ProjectMini, BoardMini, UnitCard,
+UnitPeek, the planner's foreign lookups and task chips, WorkspaceCard,
+GlobalSearch) subscribes to it and re-reads. AppLayout and the TV page fire
+the hydration for every non-current workspace on mount. A failed fetch may
+retry; a snapshot WITH rooms is never touched — opening the workspace
+properly overwrites all of it with live sync.
+
+## The TV: fits by default, and the region is always the screen's shape
+- **`TvPresentationPage`**: with no `tvView`, the wall now fits the board's
+  CONTENT bounds (jobs via `viewPos`/`canvasX`, elements, padded) to the
+  frame — the fixed top-left at autoScale showed NOTHING on a board whose
+  tiles sit away from the origin, which was the production "nothing shows on
+  the link". A saved region that no longer intersects any content is treated
+  as unset for the same reason. Both region and fallback are centred in the
+  frame.
+- **`BoardRegionPicker`** draws an APRON: the desk-grey beyond the world,
+  sized so a screen-shaped box can contain the whole board even when the
+  board is another shape (`ax/ay` from the ratio) plus 6% slack. The box is
+  HARD-LOCKED to `screenRatio` (resize drives width, height follows), the
+  default region is "everything, in the screen's shape", clamps run against
+  the apron, and the standing hint texts ("ON THE TV", the drag sentence,
+  the fills-everything warning) are gone — "Show the whole board" remains.
+- **The shape is chosen in settings and SAVED**: `TV_SHAPES` buttons above
+  the picker write `setTvSetting('tvShape', …)` (same ids the TV page's own
+  buttons use); changing shape reshapes an existing region around its
+  top-left. `ratioOfShape(tv.tvShape)` feeds the picker.
+
+## The wall dashboard arranges like the main one
+`TvDashboard` dropped the arrow/± buttons for the home-screen gestures the
+DashboardPage already has: a move handle top-left (carry a card over another
+to take its slot — `placeOver` rewrites the order dense, per SHAPE through
+`patchPlace`), a resize handle bottom-right snapping to whole columns and
+40px rows, `0` during a resize resets. Cards register live rects in a ref
+because the grid reflows mid-drag; drag deltas divide by the display
+multiplier so stored sizes stay screen-independent.
+
+## Printing a plan prints the PLAN
+Ctrl/⌘+P while `PlanAnnotator` is mounted (studio, drawer pane, viewer) is
+intercepted and routed to the composited print — the browser's own print
+grabs the running app, which was "printing a plan prints the webpage". The
+print popup also fires on its load event (with a 2.5s backstop) instead of a
+fixed 500ms, so a big sheet's images have actually decoded before the
+preview is captured.
+
+## TikTok keeps your sound choice
+`mutedRef` in `TikTokWidget`: each new frame's `onPlayerReady` re-asserts
+`unMute` when sound was on — autoplay always starts muted by browser rule,
+so advancing videos silently turned the sound off every time.
+
+Harness: `scratchpad/round23.mjs` (20 checks: nudge, union guides + one-delta
+landing, z-floor + clickability, view memory across reload, mic note-only,
+peek open/close/travel, shape buttons saving, picker strings/lock/apron span,
+wall content-fit). Its traps: the unit card must be clicked via
+`button.w-full` (a bare `button` first-matches the node's action strip), and
+a nudge moves the union's TOP tile to the anchor while the rest keep their
+offsets — asserting both at the anchor blames the app for the harness's own
+seed.

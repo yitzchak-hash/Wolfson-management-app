@@ -719,6 +719,8 @@ export function PlannerWidget({
   const currentProjectId = useStore(st => st.currentProjectId);
   const setCurrentProject = useStore(st => st.setCurrentProject);
   const setPendingFocus = useStore(st => st.setPendingFocus);
+  // Re-read foreign snapshots when a missing one arrives from the cloud.
+  const snapTick = useStore(st => st.snapshotTick);
 
   const jobById = useMemo(() => {
     const m = new Map<string, Apartment>();
@@ -757,7 +759,7 @@ export function PlannerWidget({
       }
     }
     return out;
-  }, [data.cells, projects]);
+  }, [data.cells, projects, snapTick]);
 
   /** The job a card is pointing at, wherever it lives. */
   const resolve = (en: PlannerEntry): { job?: Apartment; workspace?: string } => {
@@ -817,7 +819,7 @@ export function PlannerWidget({
       (snap.assignments ?? []).forEach(a => put(a, snap.apartments, p.id, p.name));
     }
     return map;
-  }, [tasksOn, people, cells, assignments, jobs, projects, currentProjectId]);
+  }, [tasksOn, people, cells, assignments, jobs, projects, currentProjectId, snapTick]);
 
   const todayIso = iso(new Date());
 

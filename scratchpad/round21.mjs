@@ -108,18 +108,31 @@ const cardText = await page.evaluate(id => {
 check(!!cardText, 'the card is drawn: workspace, name, stage', cardText);
 check(/Piping/.test(cardText), 'including the unit\'s stage from the snapshot');
 
-// ── 4 · clicking the card travels to Wolfson and opens the unit ─────────────
+// ── 4 · clicking the card PEEKS; the peek's own button travels ──────────────
+// ROUND-6 CHANGE: opening a foreign unit from the job board no longer leaves
+// the board — the click opens a read-only peek window ON /jobs, and only the
+// peek's "Open in …" button does the workspace switch.
 const card = page.locator('[data-node-id] button', { hasText: 'Artzi' }).last();
 await card.click();
+await page.waitForTimeout(800);
+const peeked = await page.evaluate(() => ({
+  path: location.pathname,
+  active: localStorage.getItem('active_project'),
+  open: !!document.querySelector('[data-unit-peek]'),
+}));
+console.log('       after click:', JSON.stringify(peeked));
+check(peeked.open && peeked.path === '/jobs' && peeked.active === 'general',
+  'clicking the card opens a PEEK and stays on the job board', JSON.stringify(peeked));
+await page.locator('[data-peek-open-full]').click();
 await page.waitForTimeout(2500);
 const where = await page.evaluate(() => ({
   path: location.pathname,
   active: localStorage.getItem('active_project'),
   drawer: document.querySelectorAll('.drawer-panel').length,
 }));
-console.log('       after click:', JSON.stringify(where));
+console.log('       after Open in Wolfson:', JSON.stringify(where));
 check(where.path === '/project' && where.active === 'wolfson',
-  'clicking it switches to the unit\'s own workspace', JSON.stringify(where));
+  'the peek\'s Open button switches to the unit\'s own workspace', JSON.stringify(where));
 check(where.drawer > 0, 'and opens that unit');
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASS');

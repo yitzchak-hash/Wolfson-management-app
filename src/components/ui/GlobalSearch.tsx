@@ -167,6 +167,17 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
     }
   }, [open, projects, currentProjectId]);
 
+  // A workspace snapshot that arrived from the cloud after the dialog opened
+  // is folded in — its own effect, so refreshing the snaps can never clear
+  // what somebody is mid-way through typing.
+  const snapTick = useStore(state => state.snapshotTick);
+  useEffect(() => {
+    if (!open) return;
+    const got: Record<string, ReturnType<typeof loadProjectSnapshot>> = {};
+    projects.forEach(p => { if (p.id !== currentProjectId) got[p.id] = loadProjectSnapshot(p.id); });
+    setSnaps(got);
+  }, [snapTick]);
+
   useEffect(() => {
     if (query.trim().length < 2) { setResults([]); return; }
 

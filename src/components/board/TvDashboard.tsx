@@ -1,5 +1,5 @@
-import React, { useMemo, useRef, useState } from 'react';
-import { Plus, Pencil, Trash2, ArrowLeft, ArrowRight, RotateCcw } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Plus, Trash2, Move } from 'lucide-react';
 import { CanvasElement, TV_DASH_BOARD } from '../../types';
 import { useStore } from '../../data/store';
 import { WidgetCtx, renderWidget, WIDGET_BY_ID } from '../../data/widgets';
@@ -61,18 +61,29 @@ export function TvDashboard({ ctx, shape, scale, editing, onSpawn, ratio }: {
    */
   const columns = (ratio?.orientation ?? shape.orientation) === 'portrait' ? 6 : 12;
 
-  function move(id: string, dir: -1 | 1) {
+  /**
+   * Home-screen reordering, the dashboard's own idiom: carry a card over
+   * another and it takes that card's slot, the whole order rewritten dense so
+   * two cards can never share a z. Per SHAPE, through `patchPlace` — what
+   * reads best first across a wide screen is often not what should lead on a
+   * tall one.
+   */
+  function placeOver(id: string, overId: string) {
+    if (id === overId) return;
     const ids = widgets.map(w => w.id);
-    const i = ids.indexOf(id);
-    const j = i + dir;
-    if (i < 0 || j < 0 || j >= ids.length) return;
-    const a = widgets[i], b = widgets[j];
-    // Reordering is per shape too: what reads best first across a wide screen
-    // is often not what should lead on a tall one.
-    const az = placeOn(a, shapeKey).z, bz = placeOn(b, shapeKey).z;
-    updateCanvasElement(a.id, patchPlace(a, shapeKey, { z: bz === az ? j : bz }));
-    updateCanvasElement(b.id, patchPlace(b, shapeKey, { z: bz === az ? i : az }));
+    const from = ids.indexOf(id), to = ids.indexOf(overId);
+    if (from < 0 || to < 0) return;
+    ids.splice(to, 0, ...ids.splice(from, 1));
+    ids.forEach((wid, i) => {
+      const el = widgets.find(w => w.id === wid);
+      if (el && placeOn(el, shapeKey).z !== i) {
+        updateCanvasElement(wid, patchPlace(el, shapeKey, { z: i }));
+      }
+    });
   }
+
+  /** Live card rectangles, measured at drag time — the grid reflows under us. */
+  const rects = useRef(new Map<string, HTMLDivElement>());
 
   if (widgets.length === 0) {
     return (
@@ -110,9 +121,9 @@ export function TvDashboard({ ctx, shape, scale, editing, onSpawn, ratio }: {
           scale={scale}
           editing={editing}
           shapeKey={shapeKey}
-          onSpan={n => updateCanvasElement(el.id, patchPlace(el, shapeKey, { w: n * 100 }))}
-          onTall={n => updateCanvasElement(el.id, patchPlace(el, shapeKey, { h: n }))}
-          onMove={dir => move(el.id, dir)}
+          registry={rects}
+          onSize={(cols, h) => updateCanvasElement(el.id, patchPlace(el, shapeKey, { w: cols * 100, h }))}
+          onPlaceOver={overId => placeOver(el.id, overId)}
           onRemove={() => deleteCanvasElement(el.id)}
         />
       ))}
@@ -120,16 +131,16 @@ export function TvDashboard({ ctx, shape, scale, editing, onSpawn, ratio }: {
   );
 }
 
-function TvCard({ el, ctx, columns, scale, editing, shapeKey, onSpan, onTall, onMove, onRemove }: {
+function TvCard({ el, ctx, columns, scale, editing, shapeKey, registry, onSize, onPlaceOver, onRemove }: {
   el: CanvasElement;
   ctx: WidgetCtx;
   columns: number;
   scale: number;
   editing: boolean;
   shapeKey: string;
-  onSpan: (cols: number) => void;
-  onTall: (px: number) => void;
-  onMove: (dir: -1 | 1) => void;
+  registry: React.MutableRefObject<Map<string, HTMLDivElement>>;
+  onSize: (cols: number, h: number) => void;
+  onPlaceOver: (overId: string) => void;
   onRemove: () => void;
 }) {
   const def = el.widget ? WIDGET_BY_ID.get(el.widget) : undefined;
@@ -139,6 +150,92 @@ function TvCard({ el, ctx, columns, scale, editing, shapeKey, onSpan, onTall, on
   const place = placeOn(el, shapeKey);
   const span = Math.max(2, Math.min(columns, Math.round((place.w || 400) / 100)));
   const height = Math.max(120, place.h || 200);
+  /** The display multiplier the card is drawn at — drag deltas arrive in
+      SCREEN pixels and the stored height is before this, so divide. */
+  const mult = Math.min(scale, 1.6);
+
+  /**
+   * Home-screen editing, two handles and nothing else — the same gestures the
+   * main dashboard already has, so arranging the wall feels like arranging
+   * anything else:
+   *  · the MOVE handle at the top-left — hold it and carry the card; whichever
+   *    card you hold it over gives up its slot and the grid reflows live;
+   *  · the RESIZE handle at the bottom-right — snapping to whole columns and
+   *    40px rows so cards line up with each other by construction.
+   */
+  const [lift, setLift] = useState<{ dx: number; dy: number } | null>(null);
+  const moveRef = useRef<{ x: number; y: number } | null>(null);
+  function moveDown(e: React.PointerEvent) {
+    e.preventDefault(); e.stopPropagation();
+    moveRef.current = { x: e.clientX, y: e.clientY };
+    setLift({ dx: 0, dy: 0 });
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+  function moveMove(e: React.PointerEvent) {
+    const st = moveRef.current;
+    if (!st) return;
+    setLift({ dx: e.clientX - st.x, dy: e.clientY - st.y });
+    // What is the hand over? Measured live, because the grid reflows under us.
+    for (const [id, node] of registry.current) {
+      if (id === el.id) continue;
+      const r = node.getBoundingClientRect();
+      if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+        onPlaceOver(id);
+        // The card we displaced moves; our translation stays anchored to the
+        // pointer, so re-baseline the grab point to avoid a visual jump.
+        moveRef.current = { x: e.clientX, y: e.clientY };
+        setLift({ dx: 0, dy: 0 });
+        break;
+      }
+    }
+  }
+  function moveUp() { moveRef.current = null; setLift(null); }
+
+  const sizeRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [preview, setPreview] = useState<{ span: number; h: number } | null>(null);
+  function sizeDown(e: React.PointerEvent) {
+    e.preventDefault(); e.stopPropagation();
+    sizeRef.current = { x: e.clientX, y: e.clientY, w: span * 100, h: height };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+  function sizeMove(e: React.PointerEvent) {
+    const st = sizeRef.current;
+    if (!st) return;
+    // A column measured from our own card, so the snap follows the real
+    // rendered width at any preview size; deltas divided by the display
+    // multiplier so the stored numbers stay screen-independent.
+    const node = registry.current.get(el.id);
+    const colPx = node ? node.getBoundingClientRect().width / span : 100;
+    const nextSpan = Math.max(2, Math.min(columns,
+      Math.round((st.w / 100) + (e.clientX - st.x) / Math.max(1, colPx))));
+    const nextH = Math.max(120, Math.min(900,
+      Math.round((st.h + (e.clientY - st.y) / mult) / 40) * 40));
+    setPreview({ span: nextSpan, h: nextH });
+  }
+  function sizeUp() {
+    const p = preview;
+    sizeRef.current = null;
+    setPreview(null);
+    if (p) onSize(p.span, p.h);
+  }
+
+  // 0 during a resize puts the card back to the shape's default footprint.
+  useEffect(() => {
+    if (!preview) return;
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key !== '0') return;
+      ev.preventDefault();
+      sizeRef.current = null;
+      setPreview(null);
+      onSize(4, 200);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preview]);
+
+  const shownSpan = Math.max(2, Math.min(columns, preview?.span ?? span));
+  const shownH = Math.max(120, preview?.h ?? height);
 
   /**
    * The widget is drawn at its natural size and SCALED into the card.
@@ -169,13 +266,19 @@ function TvCard({ el, ctx, columns, scale, editing, shapeKey, onSpan, onTall, on
 
   return (
     <div
+      ref={node => { if (node) registry.current.set(el.id, node); else registry.current.delete(el.id); }}
       className="relative group bg-white rounded-2xl border overflow-hidden"
       style={{
-        gridColumn: `span ${span} / span ${span}`,
-        height: height * Math.min(scale, 1.6),
+        gridColumn: `span ${shownSpan} / span ${shownSpan}`,
+        height: shownH * mult,
         borderColor: el.outline || '#e2e8f0',
         borderWidth: el.outline ? (el.outlineWidth ?? 3) : 1,
         backgroundColor: el.color || '#ffffff',
+        transform: lift ? `translate(${lift.dx}px, ${lift.dy}px) scale(1.02)` : undefined,
+        boxShadow: lift ? '0 14px 34px rgba(15,23,42,.25)' : undefined,
+        zIndex: lift ? 30 : undefined,
+        transition: lift ? 'none' : 'box-shadow 150ms ease',
+        outline: preview ? '2px dashed #4aa8d8' : undefined,
       }}
     >
       <div ref={ref} className="w-full h-full overflow-hidden">
@@ -191,30 +294,40 @@ function TvCard({ el, ctx, columns, scale, editing, shapeKey, onSpan, onTall, on
 
       {editing && (
         <>
+          {/* The MOVE handle: top-left, like picking an app up by its corner. */}
+          <button
+            onPointerDown={moveDown} onPointerMove={moveMove}
+            onPointerUp={moveUp} onPointerCancel={moveUp}
+            title="Hold and drag to rearrange"
+            className="absolute top-1.5 left-1.5 p-1.5 rounded-lg bg-white/95 border border-gray-200
+                       text-gray-400 hover:text-[#1e3a5f] cursor-grab active:cursor-grabbing"
+            style={{ touchAction: 'none' }}
+          >
+            <Move size={14} />
+          </button>
           <div className="absolute top-1.5 right-1.5 flex items-center gap-1">
             <button onClick={onRemove} title="Take it off the wall"
               className="p-1.5 rounded-lg bg-white/95 border border-gray-200 text-gray-400 hover:text-red-500">
               <Trash2 size={14} />
             </button>
           </div>
-          <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1 bg-white/95 rounded-lg
-                          border border-gray-200 px-1.5 py-1">
-            <button onClick={() => onMove(-1)} title="Earlier"
-              className="p-0.5 text-gray-400 hover:text-[#1e3a5f]"><ArrowLeft size={13} /></button>
-            <button onClick={() => onMove(1)} title="Later"
-              className="p-0.5 text-gray-400 hover:text-[#1e3a5f]"><ArrowRight size={13} /></button>
-            <span className="w-px h-3.5 bg-gray-200" />
-            <button onClick={() => onSpan(Math.max(2, span - 1))} title="Narrower"
-              className="px-1 text-[13px] font-bold text-gray-400 hover:text-[#1e3a5f]">−</button>
-            <span className="text-[11px] tabular-nums text-gray-400 w-8 text-center">{span}/{columns}</span>
-            <button onClick={() => onSpan(Math.min(columns, span + 1))} title="Wider"
-              className="px-1 text-[13px] font-bold text-gray-400 hover:text-[#1e3a5f]">+</button>
-            <span className="w-px h-3.5 bg-gray-200" />
-            <button onClick={() => onTall(Math.max(120, height - 40))} title="Shorter"
-              className="px-1 text-[13px] font-bold text-gray-400 hover:text-[#1e3a5f]">↑</button>
-            <button onClick={() => onTall(Math.min(900, height + 40))} title="Taller"
-              className="px-1 text-[13px] font-bold text-gray-400 hover:text-[#1e3a5f]">↓</button>
-          </div>
+          {/* The RESIZE handle: bottom-right, the only corner that resizes. */}
+          <button
+            onPointerDown={sizeDown} onPointerMove={sizeMove}
+            onPointerUp={sizeUp} onPointerCancel={sizeUp}
+            title="Drag to resize — snaps to the grid; 0 resets"
+            className="absolute bottom-1 right-1 w-5 h-5 rounded-sm cursor-nwse-resize"
+            style={{
+              touchAction: 'none',
+              backgroundImage: 'linear-gradient(135deg, transparent 45%, #94a3b8 45%, #94a3b8 55%, transparent 55%, transparent 70%, #94a3b8 70%, #94a3b8 80%, transparent 80%)',
+            }}
+          />
+          {preview && (
+            <span className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold
+                             bg-[#1e3a5f] text-white tabular-nums">
+              {preview.span}/{columns} · {preview.h}px
+            </span>
+          )}
         </>
       )}
     </div>

@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Header } from './Header';
 import { Sidebar, MobileNav } from './Sidebar';
-import { useStore } from '../../data/store';
+import { useStore, ensureProjectSnapshot } from '../../data/store';
 import { isFirebaseConfigured } from '../../data/firebase';
 import { PlannerAskModal } from '../board/PlannerAskModal';
 import { UndoLayer } from '../board/UndoLayer';
@@ -16,6 +16,19 @@ export function AppLayout() {
     if (isFirebaseConfigured && !firebaseListening) {
       startFirebaseSync();
     }
+  }, []);
+
+  /**
+   * Pull down the OTHER workspaces' snapshots when this machine has none —
+   * a cleared browser or a brand-new computer otherwise leaves Building
+   * Progress, the workspace miniatures and every unit card saying "not opened
+   * on this device yet" while the data sits in Firestore. Once per session;
+   * a workspace already cached locally is left untouched.
+   */
+  useEffect(() => {
+    const { projects, currentProjectId } = useStore.getState();
+    projects.filter(p => p.id !== currentProjectId)
+      .forEach(p => void ensureProjectSnapshot(p.id));
   }, []);
 
   return (

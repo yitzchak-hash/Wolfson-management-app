@@ -30,6 +30,64 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-09-05',
+    title: 'The board behaves, the TV shows up, and other workspaces peek',
+    items: [
+      {
+        title: 'The grey desk knows its place — and the board remembers yours',
+        body: 'Grey space shows only past the board’s right and bottom edges (and '
+          + 'on a side you have unlocked); the top and left pin to the corner '
+          + 'again, so 100% comes back flush and zooming out lands the whole '
+          + 'board on screen. And the board now reopens exactly where you left '
+          + 'it — same spot, same zoom.',
+        demo: 'zoom',
+      },
+      {
+        title: 'Arranging got hands',
+        body: 'Arrow keys nudge whatever is selected (hold Shift for bigger '
+          + 'steps). Dragging several things at once draws the same alignment '
+          + 'guides a single drag gets. And “Send to back” can no longer push a '
+          + 'note somewhere unclickable.',
+        demo: 'drag',
+      },
+      {
+        title: 'A unit from another workspace opens WITHOUT leaving the board',
+        body: 'Click a square in Building Progress or a unit card and a small '
+          + 'window shows the unit — stage, address, phone, links, notes, open '
+          + 'tasks — right on the job board. Close it and you are still on the '
+          + 'board. “Open in …” is there for when you really do want to travel.',
+        demo: 'tap',
+      },
+      {
+        title: 'The TV works out of the box',
+        body: 'The wall now fits the whole board to the screen when no region is '
+          + 'chosen — a fresh TV never opens on blank space again. In settings, '
+          + 'the “What the TV shows” box has aspect-ratio buttons that SAVE your '
+          + 'panel’s shape, and the box is locked to that shape — it can even '
+          + 'reach past the board’s edges so the whole board fits any screen.',
+        demo: 'pin',
+      },
+      {
+        title: 'The wall dashboard arranges like everything else',
+        body: 'Pick a card up by its corner handle and carry it where you want; '
+          + 'resize from the bottom-right, snapping to the grid. The arrow '
+          + 'buttons are gone.',
+        demo: 'drag',
+      },
+      {
+        title: 'Small fixes with big tempers',
+        body: 'The TikTok widget keeps your sound choice when it moves to the '
+          + 'next video. Ctrl+P while a plan is open prints THE PLAN — the sheet '
+          + 'with its markup — never the webpage. The section box lost the voice '
+          + 'memo mic it never should have had. And on a new computer (or after '
+          + 'clearing the browser), the other workspaces’ widgets fill '
+          + 'themselves from the cloud instead of saying “not opened on this '
+          + 'device yet”.',
+        demo: 'sparkle',
+      },
+    ],
+  },
+  {
     date: '2026-09-04',
     title: 'The notebook reads like a diary, and tasks walk onto it',
     items: [

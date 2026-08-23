@@ -40,6 +40,15 @@ function ratioOfShape(id?: string): number {
   return w > 0 && h > 0 ? w / h : 16 / 9;
 }
 
+/** The shapes a wall panel comes in. Same ids the TV page's own buttons use. */
+const TV_SHAPES: { id: string; label: string; note: string }[] = [
+  { id: '16:9',  label: '16:9',  note: 'Almost every TV' },
+  { id: '16:10', label: '16:10', note: 'Some monitors' },
+  { id: '4:3',   label: '4:3',   note: 'Older panels' },
+  { id: '21:9',  label: '21:9',  note: 'Ultrawide' },
+  { id: '9:16',  label: '9:16',  note: 'Turned upright' },
+];
+
 type Tab = 'stages' | 'users' | 'contractors' | 'timeclock' | 'app' | 'language' | 'buildings' | 'sheet' | 'tv' | 'workspaces';
 
 /**
@@ -1717,10 +1726,36 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
 
       {/* Aim the TV at part of the board. */}
       <label className="block text-xs font-semibold text-gray-600 mb-1">What the TV shows</label>
-      <p className="text-[11px] text-gray-400 mb-2 leading-snug">
-        The board keeps growing, and the corner worth showing is rarely the top-left one. Drag the box
-        over the map below to choose what appears on the wall; drag its corner to take in more or less.
-      </p>
+      {/*
+        The panel's shape, chosen here and SAVED (`tvShape` in the __tv bag) —
+        the box below is hard-locked to it, so what gets dragged out is always
+        the shape the wall will fill rather than a rectangle that letterboxes.
+        Changing the shape reshapes an already-saved region around its own
+        top-left, so the aim survives the shape change.
+      */}
+      <div className="flex items-center gap-1.5 mb-2">
+        {TV_SHAPES.map(sh => {
+          const on = (tv.tvShape ?? '16:9') === sh.id;
+          return (
+            <button key={sh.id} data-tv-shape={sh.id}
+              title={sh.note}
+              onClick={() => {
+                setTvSetting('tvShape', sh.id);
+                const r = tv.tvView;
+                if (r && r.w > 0) {
+                  setTvSetting('tvView', { ...r, h: Math.round(r.w / ratioOfShape(sh.id)) });
+                }
+                onToast(`TV shape saved — ${sh.label}`);
+              }}
+              className="px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors"
+              style={on
+                ? { backgroundColor: '#1e3a5f', color: '#fff', borderColor: '#1e3a5f' }
+                : { backgroundColor: '#fff', color: '#475569', borderColor: '#e2e8f0' }}>
+              {sh.label}
+            </button>
+          );
+        })}
+      </div>
       <div className="mb-5">
         <BoardRegionPicker
           jobs={boardJobs}

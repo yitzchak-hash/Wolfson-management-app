@@ -130,6 +130,9 @@ export function TikTokWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   const [ready, setReady] = useState(false);
   const [vidPlaying, setVidPlaying] = useState(false);
   const [muted, setMuted] = useState(true);
+  /** The live mute choice, for the once-registered message listener. */
+  const mutedRef = useRef(true);
+  mutedRef.current = muted;
   const [pasting, setPasting] = useState(false);
   const [draft, setDraft] = useState('');
   const [meta, setMeta] = useState<Record<string, Meta>>(() => (data.meta as Record<string, Meta>) ?? {});
@@ -180,7 +183,24 @@ export function TikTokWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
       if (typeof msg === 'string') { try { msg = JSON.parse(msg); } catch { return; } }
       if (!msg || typeof msg !== 'object' || !('x-tiktok-player' in (msg as object))) return;
       const m = msg as { type?: string; value?: unknown };
-      if (m.type === 'onPlayerReady') setReady(true);
+      if (m.type === 'onPlayerReady') {
+        setReady(true);
+        /**
+         * Re-assert the SOUND the moment a fresh frame introduces itself.
+         *
+         * The mute choice lives out here, but every video change mounts a new
+         * frame — and a frame asked to autoplay UNMUTED is refused by the
+         * browser, so the reel went silent on every advance however many
+         * times the sound was turned on. The URL still asks for the safe
+         * silent start; this message right after ready is what carries the
+         * choice across videos. Through a ref, because this listener is
+         * registered once and would otherwise hold the first render's value.
+         */
+        if (!mutedRef.current) {
+          iframeRef.current?.contentWindow?.postMessage(
+            { 'x-tiktok-player': true, type: 'unMute' }, '*');
+        }
+      }
       if (m.type === 'onStateChange') {
         const v = Number(m.value);
         if (v === 1) setVidPlaying(true);

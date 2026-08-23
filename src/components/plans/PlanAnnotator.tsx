@@ -1973,6 +1973,18 @@ export function PlanAnnotator({
         e.preventDefault(); e.shiftKey ? redoOne() : undo();
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redoOne(); }
+      /**
+       * Ctrl/⌘+P while a plan is open prints THE PLAN, not the webpage.
+       *
+       * The browser's own print grabs the running app — dark chrome, the
+       * drawer, the sheet clipped to its scroll box — which is what "printing
+       * a plan prints the webpage" was. The habit of pressing Ctrl+P is fine;
+       * it just has to land on the composited sheet the Print button builds.
+       */
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        void print();
+      }
       // Escape backs out one step at a time. Closing the whole studio because a
       // panel happened to be open loses the sketch's context for no reason.
       //
@@ -2168,7 +2180,18 @@ export function PlanAnnotator({
       ${imgs.map(src => `<img src="${src}">`).join('')}`);
     w.document.close();
     w.focus();
-    setTimeout(() => w.print(), 500);
+    /**
+     * Print once the pictures have actually decoded. A fixed 500ms was fine on
+     * a two-page detail and a race on a real A0 set — Chrome captures the
+     * preview with the images still blank, which reads as "it printed the
+     * page, not the plan". The load event is the truth; the timeout is only
+     * the backstop for a browser that never fires it on an about:blank child.
+     */
+    let fired = false;
+    const fire = () => { if (fired) return; fired = true; try { w.focus(); w.print(); } catch { /* window closed */ } };
+    if (w.document.readyState === 'complete') setTimeout(fire, 150);
+    else w.addEventListener('load', () => setTimeout(fire, 150));
+    setTimeout(fire, 2500);
   }
 
   // ---- download ----------------------------------------------------------

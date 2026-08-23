@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useStore, loadAllProjectsTaskData } from '../data/store';
+import { useStore, loadAllProjectsTaskData, ensureProjectSnapshot } from '../data/store';
 import { Apartment, CanvasElement, isCountableApartment, BIN_META, binKeyOf, binLabelOf, getStageName, TV_DASH_BOARD } from '../types';
 import { queryVariants, skeleton } from '../data/translit';
 import { DriveIcon, ZohoIcon, PlanIcon } from '../components/ui/BrandIcons';
@@ -234,6 +234,13 @@ export function TvPresentationPage() {
   useEffect(() => {
     if (!firebaseListening) startFirebaseSync();
   }, [firebaseListening, startFirebaseSync]);
+
+  // A fresh TV browser has no other workspace cached — pull their snapshots
+  // down so the wall's cross-workspace widgets have something to draw.
+  useEffect(() => {
+    const { projects: ps, currentProjectId: cur } = useStore.getState();
+    ps.filter(p => p.id !== cur).forEach(p => void ensureProjectSnapshot(p.id));
+  }, []);
 
   const view = params.get('view') ?? currentProjectId;
   const setView = (v: string) => {
@@ -1142,10 +1149,52 @@ export function TvPresentationPage() {
   const tvRegion = tvSettings.tvView;
   const frameW = frameRef.current?.clientWidth ?? window.innerWidth;
   const frameH = (frameRef.current?.clientHeight ?? window.innerHeight) - 56;
-  const boardScale = tvRegion && tvRegion.w > 0 && tvRegion.h > 0
-    ? Math.min(frameW / tvRegion.w, frameH / tvRegion.h) * boost
+  /**
+   * Where the board's content actually IS, in board coordinates.
+   *
+   * With no region set the wall used to show the fixed top-left corner at the
+   * automatic scale — and a board whose tiles have drifted (or been imported)
+   * away from the origin then shows NOTHING, which was exactly the production
+   * report "you go to the TV and nothing shows on the link". Unset now means
+   * "fit everything on the wall": the content's own bounds, padded, fitted to
+   * the frame. A saved region that no longer touches any content is treated
+   * the same way — it describes a place on a board that has since moved, and
+   * aiming a wall at guaranteed emptiness helps nobody.
+   */
+  const contentBox = (() => {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    jobs.forEach((job, i) => {
+      const at = tvBoard ? job.viewPos?.[tvBoard] : undefined;
+      const x = at?.x ?? job.canvasX ?? 24 + (i % 6) * 240;
+      const y = at?.y ?? job.canvasY ?? 24 + Math.floor(i / 6) * 150;
+      minX = Math.min(minX, x); minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x + 215); maxY = Math.max(maxY, y + 132);
+    });
+    tvElements.forEach(el => {
+      if (el.type === 'stroke') return;
+      minX = Math.min(minX, el.x); minY = Math.min(minY, el.y);
+      maxX = Math.max(maxX, el.x + el.w); maxY = Math.max(maxY, el.y + el.h);
+    });
+    if (minX === Infinity) return null;
+    const pad = 40;
+    return { x: minX - pad, y: minY - pad, w: maxX - minX + pad * 2, h: maxY - minY + pad * 2 };
+  })();
+  const regionAlive = !!(tvRegion && tvRegion.w > 0 && tvRegion.h > 0
+    && (!contentBox
+      || (tvRegion.x < contentBox.x + contentBox.w && tvRegion.x + tvRegion.w > contentBox.x
+        && tvRegion.y < contentBox.y + contentBox.h && tvRegion.y + tvRegion.h > contentBox.y)));
+  const frameBox = regionAlive ? tvRegion! : contentBox;
+  const boardScale = frameBox
+    ? Math.min(frameW / frameBox.w, frameH / frameBox.h) * boost
     : scale;
-  const boardOrigin = tvRegion ? { x: tvRegion.x, y: tvRegion.y } : { x: 0, y: 0 };
+  // Centred in the frame: the leftover axis (the shape mismatch, or a boost
+  // under 1) splits evenly instead of piling up on the right and bottom.
+  const boardOrigin = frameBox
+    ? {
+        x: frameBox.x - Math.max(0, frameW / boardScale - frameBox.w) / 2,
+        y: frameBox.y - Math.max(0, frameH / boardScale - frameBox.h) / 2,
+      }
+    : { x: 0, y: 0 };
 
   // ── The board itself ──
   return (

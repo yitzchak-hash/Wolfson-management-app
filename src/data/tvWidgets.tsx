@@ -514,12 +514,14 @@ function WorkspaceCard({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   const isRtl = useStore(st => st.mainUiStrings.isRtl);
   const chosen = String(d(el).projectId || '') || currentProjectId;
   const live = chosen === currentProjectId;
+  // Re-read when a missing workspace snapshot arrives from the cloud.
+  const snapTick = useStore(st => st.snapshotTick);
 
   const snap = useMemo(
     () => (live ? { apartments: c.jobs, stages: c.stages } : loadProjectSnapshot(chosen)),
-    [live, chosen, c.jobs, c.stages],
+    [live, chosen, c.jobs, c.stages, snapTick],
   );
-  const cached = useMemo(() => loadAllProjectsTaskData().find(x => x.projectId === chosen), [chosen]);
+  const cached = useMemo(() => loadAllProjectsTaskData().find(x => x.projectId === chosen), [chosen, snapTick]);
 
   const units = snap.apartments.filter(isCountableApartment);
   const liveIds = new Set(units.map(u => u.id));

@@ -10,12 +10,17 @@ export interface Region { x: number; y: number; w: number; h: number }
  *
  * A shrunk drawing of the whole board with a rectangle over it: drag the
  * rectangle to move what the TV displays, drag its corner to change how much
- * fits. That is the only sane way to aim a wallboard — the board keeps growing,
- * and the corner worth showing is rarely the top-left one.
+ * fits. Everything here is in BOARD coordinates and converted through a single
+ * scale factor, so the rectangle you drag and the region the TV renders are
+ * the same numbers.
  *
- * Everything here is in BOARD coordinates and converted through a single scale
- * factor, so the rectangle you drag and the region the TV renders are the same
- * numbers. No second coordinate system to keep in step.
+ * The map is drawn with an APRON — the desk-grey beyond the board's own edges.
+ * The rectangle is hard-locked to the screen's shape, and a screen-shaped box
+ * that takes in ALL of a board the other shape must reach past the board's
+ * edge: a 16:9 box over a tall board is wider than the board is. Clamping the
+ * box inside the board (the old rule) made "show me everything" impossible for
+ * any board that was not already TV-shaped. The apron is exactly the room that
+ * needs, plus a little slack so the default box has somewhere to be dragged.
  */
 export function BoardRegionPicker({
   jobs, elements, stages, value, onChange, width = 420, height = 240, screenRatio = 16 / 9,
@@ -27,14 +32,7 @@ export function BoardRegionPicker({
   onChange: (r: Region | undefined) => void;
   width?: number;
   height?: number;
-  /**
-   * The panel's shape, so the box can say whether what it takes in will fit.
-   *
-   * A region that is not the screen's shape gets letterboxed on the wall — the
-   * board is shown smaller than it needed to be, with bars. Rather than warning
-   * about that in a sentence nobody reads, the box itself goes green when it
-   * matches and red when it does not, and snaps to the shape when it is close.
-   */
+  /** The panel's shape. The box only ever IS this shape — resizing keeps it. */
   screenRatio?: number;
 }) {
   const boxRef = useRef<HTMLDivElement>(null);
@@ -42,11 +40,8 @@ export function BoardRegionPicker({
   const [live, setLive] = useState<Region | null>(null);
 
   /**
-   * The map tracks the board.
-   *
-   * Sized from the same content the board is, plus the same kind of margin, so
-   * as jobs spread out the map grows with them and the rectangle keeps meaning
-   * the same thing. A floor keeps an empty board drawable.
+   * The board's own footprint, from the same content the board sizes itself
+   * by. A floor keeps an empty board drawable.
    */
   const world = useMemo(() => {
     let w = 0, h = 0;
@@ -62,29 +57,38 @@ export function BoardRegionPicker({
     return { w: Math.max(w + 160, 1200), h: Math.max(h + 160, 800) };
   }, [jobs, elements]);
 
-  // The drawing keeps the board's real proportions, so the rectangle you drag
+  /**
+   * The apron. `ax`/`ay` is the ratio's own requirement — the overhang a
+   * screen-shaped box needs to contain the whole board, split evenly so the
+   * board sits centred in it. `pad` is slack on top of that, so even the
+   * everything-box has room to be dragged and the map reads as a sheet on a
+   * desk rather than a wall-to-wall diagram.
+   */
+  const ax = Math.max(0, (world.h * screenRatio - world.w) / 2);
+  const ay = Math.max(0, (world.w / screenRatio - world.h) / 2);
+  const pad = Math.max(world.w + 2 * ax, world.h + 2 * ay) * 0.06;
+  const outer = { x: -ax - pad, y: -ay - pad, w: world.w + 2 * (ax + pad), h: world.h + 2 * (ay + pad) };
+
+  // The drawing keeps the map's real proportions, so the rectangle you drag
   // is not a differently-shaped approximation of what the TV will show.
-  const k = Math.min(width / world.w, height / world.h);
-  const drawW = world.w * k, drawH = world.h * k;
+  const k = Math.min(width / outer.w, height / outer.h);
+  const drawW = outer.w * k, drawH = outer.h * k;
+  /** Board coordinate -> pixels inside the drawn map. */
+  const px = (x: number) => (x - outer.x) * k;
+  const py = (y: number) => (y - outer.y) * k;
 
   /**
-   * Why the box would not move.
-   *
-   * The default region was the WHOLE board, and a box that already fills
-   * everything has nowhere to go — every drag clamped straight back to where it
-   * started, which reads as broken rather than as "already showing everything".
-   * The default is now a screen-shaped slice of it, so it can be dragged the
-   * moment you see it. "Show the whole board" is still one click away.
+   * The default is the whole board, in the screen's shape — the ratio apron
+   * without the slack. Unset therefore MEANS "show me everything", which is
+   * also what the wall itself falls back to, so the picker and the panel
+   * agree before anybody has dragged anything.
    */
-  const defaultRegion = useMemo(() => {
-    const w = Math.min(world.w, Math.max(900, world.w * 0.66));
-    const h = Math.min(world.h, w * (9 / 16));
-    return { x: 0, y: 0, w: Math.round(w), h: Math.round(h) };
-  }, [world]);
+  const defaultRegion = useMemo(() => ({
+    x: Math.round(-ax), y: Math.round(-ay),
+    w: Math.round(world.w + 2 * ax), h: Math.round(world.h + 2 * ay),
+  }), [world, ax, ay]);
 
   const region = live ?? value ?? defaultRegion;
-  /** No room to move means the box covers everything — worth saying out loud. */
-  const fillsEverything = region.w >= world.w - 1 && region.h >= world.h - 1;
   const stageColor = (id?: string | null) => stages.find(s => s.id === id)?.color ?? '#cbd5e1';
 
   function down(mode: 'move' | 'resize') {
@@ -106,33 +110,25 @@ export function BoardRegionPicker({
     if (st.mode === 'move') {
       setLive({
         ...st.start,
-        x: Math.max(0, Math.min(world.w - st.start.w, st.start.x + dx)),
-        y: Math.max(0, Math.min(world.h - st.start.h, st.start.y + dy)),
+        x: Math.max(outer.x, Math.min(outer.x + outer.w - st.start.w, st.start.x + dx)),
+        y: Math.max(outer.y, Math.min(outer.y + outer.h - st.start.h, st.start.y + dy)),
       });
     } else {
-      setLive({
-        ...st.start,
-        w: Math.max(320, Math.min(world.w - st.start.x, st.start.w + dx)),
-        h: Math.max(200, Math.min(world.h - st.start.y, st.start.h + dy)),
-      });
+      // Locked to the screen's shape: the corner drives the width (whichever
+      // axis the hand pulled harder), and the height follows the ratio. A box
+      // that is not the screen's shape gets letterboxed on the wall, so there
+      // is no reason to let one be made.
+      const wanted = Math.max(st.start.w + dx, (st.start.h + dy) * screenRatio);
+      const maxW = Math.min(outer.x + outer.w - st.start.x, (outer.y + outer.h - st.start.y) * screenRatio);
+      const w = Math.max(320, Math.min(maxW, wanted));
+      setLive({ ...st.start, w, h: w / screenRatio });
     }
   }
-  /** Within this much of the screen's shape counts as meaning to match it. */
-  const SNAP = 0.06;
-  const ratioOf = (r: Region) => r.w / Math.max(1, r.h);
-  const fits = (r: Region) => Math.abs(ratioOf(r) - screenRatio) / screenRatio <= SNAP;
-
   function up() {
     if (dragRef.current && live) {
-      // Close enough to the screen's shape is taken to MEAN the screen's
-      // shape: the height is pulled to match the width, so what the wall shows
-      // fills it instead of sitting in bars.
-      const snapped = fits(live)
-        ? { ...live, h: Math.min(world.h - live.y, Math.round(live.w / screenRatio)) }
-        : live;
       onChange({
-        x: Math.round(snapped.x), y: Math.round(snapped.y),
-        w: Math.round(snapped.w), h: Math.round(snapped.h),
+        x: Math.round(live.x), y: Math.round(live.y),
+        w: Math.round(live.w), h: Math.round(live.h),
       });
     }
     dragRef.current = null;
@@ -143,16 +139,21 @@ export function BoardRegionPicker({
     <div>
       <div
         ref={boxRef}
-        className="relative rounded-xl border border-gray-200 overflow-hidden bg-slate-50"
-        style={{ width: drawW, height: drawH }}
+        className="relative rounded-xl border border-gray-200 overflow-hidden"
+        // The desk grey the board itself sits on, so the apron reads as the
+        // same dead space the office already knows from zooming out.
+        style={{ width: drawW, height: drawH, backgroundColor: '#d7dce3' }}
         onPointerMove={move}
         onPointerUp={up}
         onPointerCancel={up}
       >
+        {/* The board's own sheet, white on the desk. */}
+        <div className="absolute bg-slate-50 rounded-[3px] shadow-sm"
+          style={{ left: px(0), top: py(0), width: world.w * k, height: world.h * k }} />
         {elements.map(el => (
           <div key={el.id} className="absolute rounded-[2px]"
             style={{
-              left: el.x * k, top: el.y * k,
+              left: px(el.x), top: py(el.y),
               width: Math.max(2, el.w * k), height: Math.max(2, el.h * k),
               backgroundColor: el.type === 'box' ? 'rgba(148,163,184,.30)'
                 : el.type === 'bin' ? 'rgba(203,213,225,.55)'
@@ -163,8 +164,8 @@ export function BoardRegionPicker({
         {jobs.map((j, i) => (
           <div key={j.id} className="absolute rounded-[2px]"
             style={{
-              left: (j.canvasX ?? 24 + (i % 4) * 240) * k,
-              top: (j.canvasY ?? 24 + Math.floor(i / 4) * 150) * k,
+              left: px(j.canvasX ?? 24 + (i % 4) * 240),
+              top: py(j.canvasY ?? 24 + Math.floor(i / 4) * 150),
               width: Math.max(3, TILE_W * k), height: Math.max(2, TILE_H * k),
               backgroundColor: stageColor(j.currentStageId),
             }} />
@@ -175,8 +176,8 @@ export function BoardRegionPicker({
             clip-path hole — the polygon form silently fails to cut the hole in
             some engines and dims the whole map, which is exactly backwards. */}
         {(() => {
-          const L = region.x * k, T = region.y * k;
-          const R = (region.x + region.w) * k, B = (region.y + region.h) * k;
+          const L = px(region.x), T = py(region.y);
+          const R = px(region.x + region.w), B = py(region.y + region.h);
           const dim = 'rgba(15,23,42,.45)';
           const parts: React.CSSProperties[] = [
             { left: 0, top: 0, width: '100%', height: T },
@@ -194,36 +195,23 @@ export function BoardRegionPicker({
           onPointerDown={down('move')}
           className="absolute cursor-move"
           style={{
-            left: region.x * k, top: region.y * k,
+            left: px(region.x), top: py(region.y),
             width: region.w * k, height: region.h * k,
-            // Green when what it takes in is the screen's shape, red when it is
-            // not. No sentence: the colour IS the message, and it is live while
-            // you drag rather than after you let go.
-            border: `2px solid ${fits(region) ? '#16a34a' : '#dc2626'}`,
-            boxShadow: `0 0 0 1px rgba(255,255,255,.7), 0 0 0 4px ${fits(region) ? 'rgba(22,163,74,.16)' : 'rgba(220,38,38,.14)'}`,
+            border: '2px solid #16a34a',
+            boxShadow: '0 0 0 1px rgba(255,255,255,.7), 0 0 0 4px rgba(22,163,74,.16)',
             borderRadius: 3,
           }}
-          data-region-fits={fits(region) ? 'yes' : 'no'}
+          data-region-fits="yes"
         >
-          <span className="absolute -top-0.5 left-1 text-[8.5px] font-black bg-white/85 px-1 rounded"
-            style={{ color: fits(region) ? '#15803d' : '#b91c1c' }}>
-            ON THE TV
-          </span>
           <div
             onPointerDown={down('resize')}
             className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-sm cursor-se-resize"
-            style={{ backgroundColor: fits(region) ? '#16a34a' : '#dc2626', border: '2px solid #fff' }}
+            style={{ backgroundColor: '#16a34a', border: '2px solid #fff' }}
           />
         </div>
       </div>
 
-      <div className="flex items-center gap-2 mt-2" style={{ width: drawW }}>
-        <span className="text-[10.5px] flex-1"
-          style={{ color: fillsEverything ? '#b45309' : '#94a3b8' }}>
-          {fillsEverything
-            ? 'The box covers the whole board, so there is nowhere to drag it — pull its corner in first.'
-            : 'Drag the box to aim the TV; drag its corner to take in more or less. The map grows as the board does.'}
-        </span>
+      <div className="flex items-center justify-end mt-2" style={{ width: drawW }}>
         <button
           onClick={() => onChange(undefined)}
           className="text-[10.5px] font-bold text-[#1e3a5f] whitespace-nowrap"

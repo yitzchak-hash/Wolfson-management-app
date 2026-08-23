@@ -160,6 +160,12 @@ check(moved !== null && moved < 2500, 'and the note really did move in', `x ${mo
   const bin = await page.$('[data-node-id="CE-bin-x"]');
   check(!!bin, 'the group is on the board');
   if (bin) {
+    // ROUND-6: the drag above left the view panned far right (the pinned-edge
+    // clamp keeps a valid pan where the hand left it, it no longer springs
+    // back), so the group near the origin is OFF-SCREEN. Come home with the
+    // board's own 100% button before reaching for it, and let the glide land.
+    await page.locator('button', { hasText: /^100%$/ }).first().click();
+    await page.waitForTimeout(700);
     const bb = await bin.boundingBox();
     await page.mouse.dblclick(bb.x + bb.width / 2, bb.y + bb.height / 2);
     await page.waitForTimeout(1100);

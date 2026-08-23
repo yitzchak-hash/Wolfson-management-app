@@ -27,6 +27,8 @@ export function UnitCard({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   const currentProjectId = useStore(st => st.currentProjectId);
   const liveApartments = useStore(st => st.apartments);
   const liveStages = useStore(st => st.stages);
+  // Re-resolve when a missing workspace snapshot arrives from the cloud.
+  const snapTick = useStore(st => st.snapshotTick);
 
   const { apt, stage, wsName, color } = useMemo(() => {
     const wsName = projects.find(p => p.id === pid)?.name ?? (pid || 'Workspace');
@@ -48,7 +50,7 @@ export function UnitCard({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
       ? (src.stages ?? []).find(s => s.id === apt.currentStageId)
       : undefined;
     return { apt, stage, wsName, color };
-  }, [pid, aptId, currentProjectId, liveApartments, liveStages, projects, isSample]);
+  }, [pid, aptId, currentProjectId, liveApartments, liveStages, projects, isSample, snapTick]);
 
   return (
     <button

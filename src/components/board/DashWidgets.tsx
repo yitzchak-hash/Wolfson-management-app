@@ -89,6 +89,9 @@ export function ProjectMini({ projectId: chosen, buildingId, onOpen, onOpenUnit,
   // Unset means "wherever I am", so a freshly placed one shows something.
   const projectId = chosen || currentProjectId;
 
+  // Bumped when a missing workspace snapshot arrives from the cloud, so the
+  // miniature stops saying "not opened on this device yet" the moment it has.
+  const snapTick = useStore(st => st.snapshotTick);
   const snap = useMemo(() => {
     // The workspace you are in is live; the others are their last cache.
     if (projectId === currentProjectId) {
@@ -99,7 +102,7 @@ export function ProjectMini({ projectId: chosen, buildingId, onOpen, onOpenUnit,
       };
     }
     return loadProjectSnapshot(projectId);
-  }, [projectId, currentProjectId, liveApartments, liveStages]);
+  }, [projectId, currentProjectId, liveApartments, liveStages, snapTick]);
 
   const project = projects.find(p => p.id === projectId);
   const tone = projectColor(projects, projectId);
@@ -331,11 +334,13 @@ export function BoardMini({ el, jobs, stages, onOpen, update, readOnly }: {
   const needsPicking = !chosenProject || chosenBoard === undefined;
 
   const sameWorkspace = chosenProject === currentProjectId;
+  // Re-read when a missing snapshot arrives from the cloud mid-session.
+  const snapTick = useStore(st => st.snapshotTick);
   const snap = useMemo(() => {
     if (!chosenProject) return { apartments: [] as Apartment[], stages: [] as Stage[] };
     if (sameWorkspace) return { apartments: liveApartments, stages };
     return loadProjectSnapshot(chosenProject);
-  }, [chosenProject, sameWorkspace, liveApartments, stages]);
+  }, [chosenProject, sameWorkspace, liveApartments, stages, snapTick]);
 
   /** The nodes and tiles ON that board. */
   const nodes = useMemo(
