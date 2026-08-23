@@ -359,8 +359,8 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
        */
       key: 'autoplay', label: 'Start playing on its own', kind: 'select',
       options: [{ value: '1', label: 'Yes' }, { value: '', label: 'Wait for me to press play' }],
-      hint: 'A browser will usually only start a video with sound after you have pressed '
-        + 'something on the page, so the first one may wait for you.',
+      hint: 'It starts silent — a browser only allows a video to start with sound after '
+        + 'a press. The sound button beside play turns it up.',
     },
     {
       key: 'fill', label: 'How it fits the box', kind: 'select',
@@ -368,11 +368,6 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
         { value: '', label: 'Whole video, letterboxed' },
         { value: '1', label: 'Fill the box, cropped' },
       ],
-    },
-    {
-      key: 'chromeCrop', label: 'Hide below the video', kind: 'number', min: 0, max: 400,
-      hint: 'How much of TikTok’s own caption strip to cut off. Raise it if any of their '
-        + 'page still shows under the video; lower it if the video itself is being clipped.',
     },
   ],
   'btu-hp': [

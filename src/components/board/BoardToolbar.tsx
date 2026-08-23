@@ -424,6 +424,11 @@ export function BoardToolbar({
           whatever the overview is currently. */}
       <div
         ref={wrapRef}
+        // Named so the board's pan clamp can measure the band it occupies —
+        // the world's right edge must rest at the rail's LEFT edge when the
+        // board de-expands, or a widget carried in from the right settles
+        // underneath the toolbar. See clampPanRef in GeneralJobsPage.
+        data-board-toolrail
         className="hidden md:flex absolute z-40 select-none"
         style={{
           right: 12 - offset.x,

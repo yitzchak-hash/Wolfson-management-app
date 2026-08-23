@@ -13,7 +13,7 @@
  */
 import React, { useRef, useState } from 'react';
 import { useStore } from './store';
-import { RotaHit, setRotaHover, rotaCellAt, anyRota } from './rotaDrop';
+import { RotaHit, setRotaHover, rotaCellAt, anyRota, anyBoardDrop, boardDropAt } from './rotaDrop';
 import type { PlannerEntry } from '../components/board/PlannerWidget';
 
 export interface DropResult {
@@ -138,7 +138,7 @@ export function usePlannerDrag(jobId: string, opts?: {
       e.stopPropagation();
     },
     onPointerDown: (e: React.PointerEvent) => {
-      if (!enabled || e.button !== 0 || !anyRota()) return;
+      if (!enabled || e.button !== 0 || (!anyRota() && !anyBoardDrop())) return;
       drag.current = { x: e.clientX, y: e.clientY, live: false };
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     },
@@ -158,9 +158,24 @@ export function usePlannerDrag(jobId: string, opts?: {
       justDragged.current = true;
       const cell = rotaCellAt(e.clientX, e.clientY);
       setRotaHover(null);
-      if (!cell) return;
-      const msg = dropMessage(placeJobsOnPlanner(cell, [jobId], opts?.projectId));
-      if (msg) opts?.onToast?.(msg);
+      if (cell) {
+        const msg = dropMessage(placeJobsOnPlanner(cell, [jobId], opts?.projectId));
+        if (msg) opts?.onToast?.(msg);
+        return;
+      }
+      /**
+       * No notebook square under the hand — maybe the BOARD itself is.
+       *
+       * Every list that draws a job can now put its tile down: let go over
+       * empty board and the job lands there, out of whatever notebook or
+       * group was holding it. The board's own probe decides whether the point
+       * really is its empty surface, so a release over a widget or a tile
+       * places nothing.
+       */
+      const place = boardDropAt(e.clientX, e.clientY);
+      if (!place) return;
+      const boardMsg = place([jobId], opts?.projectId);
+      if (boardMsg) opts?.onToast?.(boardMsg);
     },
     onPointerCancel: () => { drag.current = null; setHeld(false); setRotaHover(null); },
   };
@@ -172,5 +187,5 @@ export function usePlannerDrag(jobId: string, opts?: {
     touchAction: 'none',
   };
 
-  return { handlers, held, style, draggable: enabled && anyRota() };
+  return { handlers, held, style, draggable: enabled && (anyRota() || anyBoardDrop()) };
 }

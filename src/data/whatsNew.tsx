@@ -30,6 +30,44 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-09-02',
+    title: 'Drag a job anywhere, and the plan follows your hand',
+    items: [
+      {
+        title: 'Any list of jobs drags onto the board',
+        body: 'A job in "New this week", the Job list, "Running late" or a progress '
+          + 'square can be dragged straight onto the board — let go over empty board '
+          + 'and its tile lands right there, out of whatever notebook or group was '
+          + 'holding it. The same rows still drag onto a notebook day, exactly as before.',
+        demo: 'drag',
+      },
+      {
+        title: 'The plan zooms to your mouse, and Move drags the view',
+        body: 'Zooming a plan now goes to the point under the mouse, from the very '
+          + 'first step. And with the Move tool held, dragging on empty sheet slides '
+          + 'the plan around — no need to switch to Pan and back.',
+        demo: 'zoom',
+      },
+      {
+        title: 'The board settles clear of the toolbar',
+        body: 'Carrying a widget in from the far right used to end with the board '
+          + 'sliding its edge — and your widget — underneath the tool rail. The board '
+          + 'now rests its edge against the rail instead, so what you just put down '
+          + 'stays in view.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'The TikTok reel really plays, and has a sound button',
+        body: 'The play button at the bottom starts and pauses the video itself, a '
+          + 'sound button right beside it turns the volume on and off, and the reel '
+          + 'only moves on when a video finishes — not on a timer that cut them off '
+          + 'mid-clip. Videos start silent because browsers insist; one press of the '
+          + 'sound button fixes that.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2026-09-01',
     title: 'A second weekly notebook is a real notebook',
     items: [

@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Music2, ChevronLeft, ChevronRight, Shuffle, Play, Pause, Repeat, ExternalLink, ClipboardPaste,
+  Volume2, VolumeX,
 } from 'lucide-react';
 import { CanvasElement } from '../../types';
 import { Frame, d, WidgetCtx } from '../../data/widgets';
@@ -14,11 +15,21 @@ import { Frame, d, WidgetCtx } from '../../data/widgets';
  * somebody already has the links to. Pasting the links is the whole interface:
  * copy them out of the app, drop them in, done.
  *
- * The player is TikTok's own `/embed/v2/<id>` frame, which needs no script of
- * theirs on the page and no key. Everything the widget needs to build it — the
- * video id — is already in a full link, so a board full of full links plays
- * with no network call of our own at all. A short share link from the phone
- * has no id in it, and only then is the resolver asked.
+ * The player is TikTok's own EMBEDDED PLAYER — `/player/v1/<id>` — which needs
+ * no script of theirs on the page and no key. Everything the widget needs to
+ * build it — the video id — is already in a full link, so a board full of full
+ * links plays with no network call of our own at all. A short share link from
+ * the phone has no id in it, and only then is the resolver asked.
+ *
+ * `/player/v1` and not the older `/embed/v2`: the old frame is a whole PAGE —
+ * video plus caption strip — with no way in from outside, so our play button
+ * could only tear the frame down and remount it, and the sound could not be
+ * touched at all. The player frame is a bare video that speaks the documented
+ * postMessage protocol (`{"x-tiktok-player": true, type: "play"|"pause"|
+ * "mute"|"unMute"}` in, `onPlayerReady`/`onStateChange` out), which is what
+ * makes the bottom play button and the sound toggle real controls rather than
+ * remount tricks. The remount-with-autoplay path is kept as the FALLBACK for a
+ * player that never says ready.
  */
 
 interface Meta { videoId?: string; title?: string; author?: string; thumbnail?: string; url?: string }
@@ -101,16 +112,24 @@ export function TikTokWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   const wantAutoplay = (data.autoplay ?? '1') !== '' || playToken > 0;
 
   /**
-   * How much of their page to hide below the video.
+   * The player's own answers, and the sound.
    *
-   * The embed is a PAGE, not a player: the video, and under it a strip with the
-   * caption, the sound and the buttons — which is what put a scrollbar in the
-   * node and made the reel look like a browser window rather than a video. The
-   * frame is drawn taller than the box and the box clips it, so only the video
-   * survives. A number rather than a boolean because their strip's height is
-   * theirs to change, and this way it can be nudged without a release.
+   * `ready` — the frame has said `onPlayerReady`, so postMessage is a real
+   * transport and the buttons drive the video directly. Until then the play
+   * button falls back to the remount trick, which always works but starts the
+   * video over. `vidPlaying` follows `onStateChange`, so the button shows
+   * pause while the video really is playing.
+   *
+   * `muted` starts TRUE because that is the only autoplay a browser allows: an
+   * unmuted autoplay is refused and the frame sits there with its centre play
+   * button — "it keeps asking me to press the play button in the middle". The
+   * video starts silent and the sound button beside play turns it up, which is
+   * a user gesture and is allowed.
    */
-  const chromeCrop = Math.max(0, Number(data.chromeCrop ?? 168));
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [ready, setReady] = useState(false);
+  const [vidPlaying, setVidPlaying] = useState(false);
+  const [muted, setMuted] = useState(true);
   const [pasting, setPasting] = useState(false);
   const [draft, setDraft] = useState('');
   const [meta, setMeta] = useState<Record<string, Meta>>(() => (data.meta as Record<string, Meta>) ?? {});
@@ -122,16 +141,56 @@ export function TikTokWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   const videoId = directId ?? known?.videoId ?? null;
 
   // ── auto-advance ──────────────────────────────────────────────────────────
+  //
+  // The timer is only the FALLBACK, for a player that never says ready. A
+  // ready player reports when its video ENDS, and that is what moves the reel
+  // on — the timer walking blind is what cut videos off mid-clip and read as
+  // "it keeps switching videos randomly".
   useEffect(() => {
-    if (!playing || order.length < 2) return;
+    if (!playing || order.length < 2 || ready) return;
     const t = setInterval(() => setAt(i => (i + 1) % order.length), seconds * 1000);
     return () => clearInterval(t);
-  }, [playing, order.length, seconds]);
+  }, [playing, order.length, seconds, ready]);
 
   useEffect(() => { if (at >= order.length) setAt(0); }, [order.length]);
   // The setting is the source of truth for the timer; changing it in the
   // pencil should take effect without having to press the button as well.
   useEffect(() => { setPlaying(!!data.auto); }, [data.auto]);
+
+  /**
+   * Speak the player's protocol.
+   *
+   * One send helper and one listener. The listener filters on the frame's own
+   * window and the `x-tiktok-player` stamp, so a message from any other iframe
+   * on the board can never drive the reel. `onStateChange` uses the player's
+   * numeric states (1 playing, 2 paused, 0 ended); ended moves the reel on
+   * when it is in move-on-by-itself mode, so the reel walks at the pace of the
+   * videos instead of a blind timer cutting them off mid-clip.
+   */
+  const post = useCallback((type: string, value?: unknown) => {
+    iframeRef.current?.contentWindow?.postMessage(
+      { 'x-tiktok-player': true, type, ...(value !== undefined ? { value } : {}) }, '*');
+  }, []);
+  const playingAuto = useRef(false);
+  playingAuto.current = playing && order.length > 1;
+  useEffect(() => {
+    const onMsg = (e: MessageEvent) => {
+      if (!iframeRef.current || e.source !== iframeRef.current.contentWindow) return;
+      let msg: unknown = e.data;
+      if (typeof msg === 'string') { try { msg = JSON.parse(msg); } catch { return; } }
+      if (!msg || typeof msg !== 'object' || !('x-tiktok-player' in (msg as object))) return;
+      const m = msg as { type?: string; value?: unknown };
+      if (m.type === 'onPlayerReady') setReady(true);
+      if (m.type === 'onStateChange') {
+        const v = Number(m.value);
+        if (v === 1) setVidPlaying(true);
+        if (v === 0 || v === 2) setVidPlaying(false);
+        if (v === 0 && playingAuto.current) setAt(i => (i + 1) % Math.max(1, order.length));
+      }
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, [order.length]);
 
   /**
    * A TikTok is a PORTRAIT video, and the box it is put in is whatever shape
@@ -255,29 +314,33 @@ export function TikTokWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
           className="flex-1 min-h-0 rounded-lg overflow-hidden bg-black relative flex items-start justify-center">
           {videoId ? (
             <iframe
-              // The token is part of the key on purpose: re-mounting is the
-              // only way to ask a third-party player to start.
+              ref={iframeRef}
+              // The token stays in the key as the FALLBACK: for a player that
+              // never says ready, re-mounting asking for autoplay is still the
+              // one lever that starts it.
               key={`${videoId}:${playToken}`}
-              // Their own player frame. No script of theirs on our page, and
-              // nothing to keep in step when they change their embed script.
-              src={`https://www.tiktok.com/embed/v2/${videoId}`
-                + `?autoplay=${wantAutoplay ? 1 : 0}&music_info=0&description=0`}
+              // TikTok's documented embedded player — a bare video that
+              // answers postMessage, not the old embed page with its caption
+              // strip. `loop` when the reel is NOT walking on by itself, so a
+              // finished video plays again instead of freezing on its last
+              // frame; when it IS walking, the ended event is what advances.
+              src={`https://www.tiktok.com/player/v1/${videoId}`
+                + `?autoplay=${wantAutoplay ? 1 : 0}&muted=${muted ? 1 : 0}`
+                + `&loop=${playing && order.length > 1 ? 0 : 1}`
+                + '&music_info=0&description=0&rel=0&native_context_menu=0'
+                + '&closed_caption=0&fullscreen_button=0&timestamp=0'}
               title={known?.title || 'TikTok'}
               // No scrollbar, ever: it is a video, and there is nothing in the
               // node the office is meant to scroll.
               scrolling="no"
-              style={{
-                border: 0,
-                width: frame.width,
-                // Taller than the box on purpose — the parent clips it, so
-                // their caption strip never appears.
-                height: typeof frame.height === 'number' ? frame.height + chromeCrop : frame.height,
-                overflow: 'hidden',
-              }}
+              style={{ border: 0, width: frame.width, height: frame.height, overflow: 'hidden' }}
               allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
               // A board node that scrolls is not a place for an iframe to be
               // able to navigate the whole app.
               sandbox="allow-scripts allow-same-origin allow-popups allow-presentation"
+              // A fresh frame has said nothing yet — the buttons fall back to
+              // the remount path until it introduces itself.
+              onLoad={() => { setReady(false); setVidPlaying(wantAutoplay); }}
             />
           ) : (
             <a
@@ -302,18 +365,42 @@ export function TikTokWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
           <button data-no-drag data-el-action title="Previous"
             onClick={() => setAt(i => (i - 1 + order.length) % order.length)}
             className="p-1 rounded text-gray-500 hover:bg-gray-100"><ChevronLeft size={13} /></button>
-          {/* Plays THIS video. The reel walking on by itself is the separate
-              control beside it — two different things that were one button. */}
-          <button data-no-drag data-el-action title="Play this one"
-            onClick={() => setPlayToken(t => t + 1)}
+          {/* Plays and pauses THIS video — through the player's own protocol
+              when the frame has said ready, by remounting with autoplay when
+              it has not. The reel walking on by itself is the separate Repeat
+              control further along — two different things that were one
+              button. */}
+          <button data-no-drag data-el-action
+            title={vidPlaying ? 'Pause' : 'Play this one'}
+            onClick={() => {
+              if (ready) { post(vidPlaying ? 'pause' : 'play'); setVidPlaying(p => !p); }
+              else setPlayToken(t => t + 1);
+            }}
             className="p-1 rounded hover:bg-gray-100 text-gray-500">
-            <Play size={13} />
+            {vidPlaying ? <Pause size={13} /> : <Play size={13} />}
+          </button>
+          {/* The sound, right beside play — the video starts silent because
+              that is the only start a browser allows without a press, and this
+              press is what turns it up. */}
+          <button data-no-drag data-el-action
+            title={muted ? 'Turn the sound on' : 'Turn the sound off'}
+            onClick={() => {
+              const next = !muted;
+              setMuted(next);
+              if (ready) post(next ? 'mute' : 'unMute');
+              // Not ready: the muted flag is in the frame's URL, so remount —
+              // the press is the user gesture an unmuted start needs.
+              else setPlayToken(t => t + 1);
+            }}
+            className="p-1 rounded hover:bg-gray-100"
+            style={{ color: muted ? '#94a3b8' : '#ec4899' }}>
+            {muted ? <VolumeX size={13} /> : <Volume2 size={13} />}
           </button>
           <button data-no-drag data-el-action title={playing ? 'Stop moving on' : 'Move on by itself'}
             onClick={() => setPlaying(p => !p)}
             className="p-1 rounded hover:bg-gray-100"
             style={{ color: playing ? '#ec4899' : '#94a3b8' }}>
-            {playing ? <Pause size={13} /> : <Repeat size={13} />}
+            <Repeat size={13} />
           </button>
           <button data-no-drag data-el-action title="Next"
             onClick={() => setAt(i => (i + 1) % order.length)}

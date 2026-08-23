@@ -65,6 +65,39 @@ export function rotaCellAt(clientX: number, clientY: number): RotaHit | null {
 /** True when at least one rota is on the board — lets the drag skip the work. */
 export const anyRota = () => probes.size > 0;
 
+// ── Dropping a job on the BOARD itself ──────────────────────────────────────
+//
+// The same registry idea as the rota probes, for the board's own surface: a
+// job dragged out of any list — New this week, the job list, a progress cell —
+// and let go over EMPTY board lands there as its tile. The board registers one
+// probe answering "is this screen point on my empty surface?", and hands back
+// the placer that knows how to write a position in the current view. The list
+// doing the dragging never learns the board's coordinate system.
+
+/**
+ * Places the given jobs around the drop point. Returns the toast to show, or
+ * null when nothing could be placed (a foreign workspace's job, no user).
+ */
+export type BoardPlacer = (ids: string[], projectId?: string) => string | null;
+
+type BoardProbe = (clientX: number, clientY: number) => BoardPlacer | null;
+
+let boardProbe: BoardProbe | null = null;
+
+/** The open board announces itself while it is on screen. Returns the unregister. */
+export function registerBoardDrop(probe: BoardProbe): () => void {
+  boardProbe = probe;
+  return () => { if (boardProbe === probe) boardProbe = null; };
+}
+
+/** The board placer for a screen point, when the point is on empty board. */
+export function boardDropAt(clientX: number, clientY: number): BoardPlacer | null {
+  return boardProbe?.(clientX, clientY) ?? null;
+}
+
+/** True when a board is mounted and can take job drops. */
+export const anyBoardDrop = () => !!boardProbe;
+
 // ── Where the drag currently is, so the cell under it can light up ──────────
 //
 // A plain module-level value with subscribers, rather than Zustand state: this

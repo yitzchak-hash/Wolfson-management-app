@@ -12,7 +12,7 @@ import { useStore } from '../data/store';
 import { useBoardTrack } from '../data/useBoardUndo';
 import { UndoButtons } from '../components/board/UndoLayer';
 import { isPlannerElement, purgeJobsFromPlanner } from '../data/plannerPurge';
-import { rotaCellAt, setRotaHover, anyRota, RotaHit } from '../data/rotaDrop';
+import { rotaCellAt, setRotaHover, anyRota, RotaHit, registerBoardDrop, BoardPlacer } from '../data/rotaDrop';
 import { PlannerEntry, personOf } from '../components/board/PlannerWidget';
 import { PlannerTaskDialog, PlannerRemoveDialog } from '../components/board/PlannerDialogs';
 import { ScheduleWindow } from '../components/board/ScheduleWindow';
@@ -4236,6 +4236,22 @@ export function GeneralJobsPage() {
     const hr = hb && vr ? Math.max(0, Math.min(hb.bottom - vr.top, vp.h * 0.4)) : 0;
 
     /**
+     * The tool rail is the right boundary, the same way the header is the top.
+     *
+     * The rail floats over the viewport's right side, so when the board gives
+     * space back after a widget is carried in from the right, clamping the
+     * world's right edge to the VIEWPORT's right edge parked that widget — the
+     * rightmost thing on the board — squarely underneath the toolbar. The
+     * x-clamp therefore runs in the space LEFT of the rail's measured edge.
+     * Only honoured while the rail is actually docked on the right half; a
+     * rail somebody dragged into the middle of the screen is furniture they
+     * chose to park there, not a wall.
+     */
+    const rail = document.querySelector('[data-board-toolrail]')?.getBoundingClientRect();
+    const rr = rail && vr && rail.width > 0 && rail.left > vr.left + vp.w * 0.5
+      ? Math.max(0, Math.min(vr.right - rail.left + 12, vp.w * 0.35)) : 0;
+
+    /**
      * ONE continuous range, not two branches.
      *
      * There used to be a "world taller than the viewport" case and a "world
@@ -4265,7 +4281,9 @@ export function GeneralJobsPage() {
     const yTop = pinY ? hr + m : Math.max(hr + m, vp.h - h);
     const yBottom = Math.min(yTop, vp.h - h);
     const xLeft = pinX ? m : Math.max(m, vp.w - w);
-    const xRight = Math.min(xLeft, vp.w - w);
+    // `- rr`: panning to the far right rests the world's right edge against
+    // the rail's left edge, never under the rail itself.
+    const xRight = Math.min(xLeft, vp.w - rr - w);
     return {
       x: Math.max(xRight, Math.min(xLeft, p.x)),
       y: Math.max(yBottom, Math.min(yTop, p.y)),
@@ -4360,6 +4378,65 @@ export function GeneralJobsPage() {
     updateApartment(id, { inNotebook: undefined }, currentUser);
     setToast('Back on the board');
   };
+
+  /**
+   * A job dragged out of any LIST lands on the board as its tile.
+   *
+   * Every widget that shows jobs draws them through `MiniJob` (or a progress
+   * cell), and those already drag onto a notebook square. This is the other
+   * half the owner asked for: let go over EMPTY board and the job's tile is
+   * placed there — out of whatever notebook or group was holding it, at the
+   * point under the hand. The probe answers only for the board's own bare
+   * surface (the world div or the viewport itself), so a release over a
+   * widget, a tile or the chrome places nothing.
+   *
+   * A ref re-assigned every render, registered once — the same idiom as
+   * `leaveNotebookRef`: the registry is module-level and must not be
+   * re-registered per render, but the placer needs this render's state.
+   */
+  const boardDropRef = useRef<(cx: number, cy: number) => BoardPlacer | null>(() => null);
+  boardDropRef.current = (cx, cy) => {
+    if (viewMode === 'stages') return null;         // no free canvas to land on
+    const vpEl = viewportRef.current;
+    if (!vpEl) return null;
+    const r = vpEl.getBoundingClientRect();
+    if (cx < r.left || cx > r.right || cy < r.top || cy > r.bottom) return null;
+    const at = document.elementFromPoint(cx, cy) as HTMLElement | null;
+    if (!at || !vpEl.contains(at)) return null;
+    if (at !== vpEl && !at.hasAttribute('data-board-world')) return null;
+    return (ids, pid) => {
+      if (!currentUser) return null;
+      // Another workspace's job stays put — there is no tile of it here.
+      if (pid && pid !== currentProjectId) return null;
+      const w = toWorld(cx, cy);
+      let placed = 0;
+      track({
+        weight: 'arrange',
+        label: ids.length === 1 ? 'Put a job on the board' : `Put ${ids.length} jobs on the board`,
+      }, () => {
+        ids.forEach((id, i) => {
+          const job = apartments.find(a => a.id === id);
+          if (!job) return;
+          // Centred under the hand; a handful cascades so none hides another.
+          const spot = settleDrop(w.x - TILE_W / 2 + i * 26, w.y - TILE_H / 2 + i * 26);
+          const patch: Partial<Apartment> = {
+            inNotebook: undefined, boardBin: undefined, binnedAt: undefined,
+          };
+          if (activeBoardView) {
+            patch.viewPos = { ...(job.viewPos ?? {}), [activeBoardView]: { x: spot.x, y: spot.y } };
+          } else {
+            patch.canvasX = spot.x;
+            patch.canvasY = spot.y;
+          }
+          updateApartment(id, patch, currentUser);
+          placed++;
+        });
+      });
+      if (!placed) return null;
+      return placed === 1 ? 'On the board' : `${placed} on the board`;
+    };
+  };
+  useEffect(() => registerBoardDrop((cx, cy) => boardDropRef.current(cx, cy)), []);
 
   const widgetCtx: WidgetCtx = useMemo(() => ({
     jobs: apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed),

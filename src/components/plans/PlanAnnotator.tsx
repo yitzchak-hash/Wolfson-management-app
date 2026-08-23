@@ -405,6 +405,15 @@ export function PlanAnnotator({
     /** A finger's second tap on the mark it already picked — see onDown. */
     tapOpens?: boolean;
   } | null>(null);
+  /**
+   * A move-tool drag that began on EMPTY sheet — it pans the view.
+   *
+   * Move used to answer a press on nothing with nothing, so getting around the
+   * sheet meant switching to Pan and back, twice per look. A drag that starts
+   * on a mark still moves the mark; only a drag that starts on blank plan
+   * scrolls it. A click that never travels still just clears the pick.
+   */
+  const stagePan = useRef<{ x: number; y: number; sl: number; st: number } | null>(null);
   const erased = useRef<Set<string>>(new Set());
   const textRef = useRef<HTMLTextAreaElement>(null);
   /**
@@ -442,6 +451,7 @@ export function PlanAnnotator({
   const cancelStroke = useCallback(() => {
     drawing.current = null;
     moving.current = null;
+    stagePan.current = null;
     if (liveFrame.current) { cancelAnimationFrame(liveFrame.current); liveFrame.current = 0; }
     releaseLiveBuffer();
     const c = liveRef.current;
@@ -677,10 +687,23 @@ export function PlanAnnotator({
       c.style.height = `${cssH}px`;
     }
     const anchor = zoomAnchor.current;
-    if (anchor && stageRef.current) {
+    if (anchor && stageRef.current && pdfRef.current) {
       const el = stageRef.current;
-      el.scrollLeft = anchor.fx * el.scrollWidth - anchor.cx;
-      el.scrollTop = anchor.fy * el.scrollHeight - anchor.cy;
+      /**
+       * The anchor is a fraction of the SHEET, so it is applied against the
+       * sheet's own rect — measured fresh here, after the new CSS size above
+       * has taken effect. Working in fractions of the scroller was wrong in
+       * the commonest case: a fitted sheet is SMALLER than the stage and
+       * flex-centred in it, so `scrollLeft + cx` was measuring blank stage,
+       * and the first several zoom steps went to the middle instead of the
+       * point under the mouse — "it doesn't zoom to where the mouse is".
+       */
+      const er = el.getBoundingClientRect();
+      const sr = pdfRef.current.getBoundingClientRect();
+      const offX = sr.left - er.left + el.scrollLeft;
+      const offY = sr.top - er.top + el.scrollTop;
+      el.scrollLeft = offX + anchor.fx * sr.width - anchor.cx;
+      el.scrollTop = offY + anchor.fy * sr.height - anchor.cy;
       zoomAnchor.current = null;
     }
   }, [nat, scale]);
@@ -727,19 +750,31 @@ export function PlanAnnotator({
    * `{ passive: false }` is the only way to claim the gesture, and it is the
    * same lesson the job board learned.
    */
-  const zoomAt = useCallback((clientX: number, clientY: number, factor: number) => {
-    const el = stageRef.current;
+  /**
+   * Remember which SHEET point sits under (clientX, clientY), so the zoom that
+   * follows can put it back there. A fraction of the sheet, never of the
+   * scroller: a fitted sheet is centred in a bigger stage, and a scroller
+   * fraction there points at blank padding rather than at the drawing.
+   */
+  const anchorZoomAt = useCallback((clientX: number, clientY: number) => {
+    const el = stageRef.current, sheet = pdfRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
     const cx = clientX - r.left, cy = clientY - r.top;
+    const sr = sheet?.getBoundingClientRect();
+    if (!sr || sr.width <= 0 || sr.height <= 0) return;
     zoomAnchor.current = {
-      fx: el.scrollWidth ? (el.scrollLeft + cx) / el.scrollWidth : 0.5,
-      fy: el.scrollHeight ? (el.scrollTop + cy) / el.scrollHeight : 0.5,
+      fx: Math.min(1, Math.max(0, (clientX - sr.left) / sr.width)),
+      fy: Math.min(1, Math.max(0, (clientY - sr.top) / sr.height)),
       cx, cy,
     };
+  }, []);
+
+  const zoomAt = useCallback((clientX: number, clientY: number, factor: number) => {
+    anchorZoomAt(clientX, clientY);
     setFitting(false);
     setScale(z => Math.min(6, Math.max(0.1, Math.round(z * factor * 100) / 100)));
-  }, []);
+  }, [anchorZoomAt]);
 
   useEffect(() => {
     const el = stageRef.current;
@@ -802,14 +837,7 @@ export function PlanAnnotator({
       const d = gap(e.touches);
       if (base.dist < 8) return;
       const want = Math.min(6, Math.max(0.1, base.scale * (d / base.dist)));
-      const r = el!.getBoundingClientRect();
-      const cx = m.x - r.left;
-      const cy = m.y - r.top;
-      zoomAnchor.current = {
-        fx: el!.scrollWidth ? (el!.scrollLeft + cx) / el!.scrollWidth : 0.5,
-        fy: el!.scrollHeight ? (el!.scrollTop + cy) / el!.scrollHeight : 0.5,
-        cx, cy,
-      };
+      anchorZoomAt(m.x, m.y);
       setFitting(false);
       setScale(Math.round(want * 100) / 100);
     }
@@ -1398,6 +1426,14 @@ export function PlanAnnotator({
           id: hit.id, nx: dnx, ny: dny, pts: [...hit.pts],
           tapOpens: already && e.pointerType === 'touch' && hit.tool === 'bubble',
         };
+      } else if (stageRef.current) {
+        // Empty sheet under the hand: the drag pans. See stagePan.
+        (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
+        e.preventDefault();
+        stagePan.current = {
+          x: e.clientX, y: e.clientY,
+          sl: stageRef.current.scrollLeft, st: stageRef.current.scrollTop,
+        };
       }
       return;
     }
@@ -1495,6 +1531,15 @@ export function PlanAnnotator({
         ghost.style.left = `${e.clientX}px`;
         ghost.style.top = `${e.clientY}px`;
       } else setNibAt({ x: e.clientX, y: e.clientY });
+    }
+
+    // A move-tool drag that began on empty sheet pans the view.
+    const sp = stagePan.current;
+    if (sp && stageRef.current) {
+      e.preventDefault();
+      stageRef.current.scrollLeft = sp.sl - (e.clientX - sp.x);
+      stageRef.current.scrollTop = sp.st - (e.clientY - sp.y);
+      return;
     }
 
     // Dragging something already drawn.
@@ -1633,6 +1678,7 @@ export function PlanAnnotator({
    * wherever the first finger happened to land every time somebody pinches.
    */
   function onCancelDraw(e: React.PointerEvent<HTMLCanvasElement>) {
+    stagePan.current = null;
     try { (e.target as HTMLCanvasElement).releasePointerCapture(e.pointerId); } catch { /* gone */ }
     // What had already landed in the marks stays — a cancel abandons the
     // stroke in the air, it is not an undo — so a drag or a rub that was
@@ -1644,6 +1690,11 @@ export function PlanAnnotator({
   }
 
   function onUp(e: React.PointerEvent<HTMLCanvasElement>) {
+    if (stagePan.current) {
+      stagePan.current = null;
+      try { (e.target as HTMLCanvasElement).releasePointerCapture(e.pointerId); } catch { /* gone */ }
+      return;
+    }
     const m = moving.current;
     if (m) {
       moving.current = null;
@@ -2772,19 +2823,22 @@ export function PlanAnnotator({
               the same handler, or it zooms the page instead. */}
           <div ref={stageRef}
             /*
-              `items-center`, not `items-start`.
-
-              A landscape sheet on an upright phone fits to WIDTH — 382px across
-              and about 270 tall — inside a stage some 1400 tall, so it sat
-              pinned to the top with two thirds of the screen empty navy below
-              it. Centred, the drawing lands under the thumb and the space reads
-              as margin rather than as something failing to load.
+              Centred by AUTO MARGINS on the sheet, not by items-center on the
+              stage. The visual rule is unchanged — a landscape sheet on an
+              upright phone still lands mid-screen, where the space reads as
+              margin rather than as something failing to load. But a
+              flex-centred child that OVERFLOWS its scroller hangs out both
+              sides and the left/top overhang cannot be scrolled to — which is
+              what clamped the zoom's scroll correction and made zooming drift
+              off the point under the mouse, and what made the left edge of a
+              zoomed sheet unreachable. `m-auto` centres exactly the same while
+              it fits and behaves like a normal scroll child once it does not.
             */
-            className={`flex-1 min-h-0 overflow-auto flex items-center justify-center ${
+            className={`flex-1 min-h-0 overflow-auto flex ${
               compact ? 'p-1' : 'p-4'}`}
             style={{ touchAction: 'pan-x pan-y' }}>
             {loadErr ? (
-              <div className="text-center text-gray-300 text-[13px] mt-16 max-w-md">
+              <div className="m-auto text-center text-gray-300 text-[13px] max-w-md">
                 <p className="font-semibold mb-1">This plan would not open.</p>
                 <p className="text-gray-500 text-[12px]">{loadErr}</p>
                 <p className="text-gray-500 text-[12px] mt-2">
@@ -2793,7 +2847,7 @@ export function PlanAnnotator({
                 </p>
               </div>
             ) : !doc ? (
-              <div className="flex flex-col items-center gap-2 text-gray-400 text-[13px] mt-16">
+              <div className="m-auto flex flex-col items-center gap-2 text-gray-400 text-[13px]">
                 <div className="flex items-center gap-2">
                   <Loader2 size={16} className="animate-spin" /> Opening the plan…
                 </div>
@@ -2815,7 +2869,7 @@ export function PlanAnnotator({
                 )}
               </div>
             ) : (
-              <div className="relative shadow-2xl" style={{ backgroundColor: '#fff' }}>
+              <div className="relative shadow-2xl m-auto" style={{ backgroundColor: '#fff' }}>
                 {/*
                   A wide sheet on an upright phone fits to width and comes out
                   about a third of the screen tall — big enough to see, too
@@ -2876,7 +2930,7 @@ export function PlanAnnotator({
                     // the way — two crosshairs is one too many.
                     cursor: locked || tool === 'pan' ? 'grab'
                       : tool === 'text' ? 'text'
-                      : tool === 'move' ? (picked ? 'move' : 'default')
+                      : tool === 'move' ? (picked ? 'move' : 'grab')
                       : showNib ? 'none' : 'crosshair',
                     pointerEvents: locked || tool === 'pan' ? 'none' : 'auto',
                   }}

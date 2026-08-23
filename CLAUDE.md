@@ -3252,3 +3252,79 @@ at board y=1000 is below a 1000px window — both made the app look broken when
 the drag simply started on nothing. And the standing one: patching localStorage
 then reloading is overwritten by the app's own flush-on-unload, so the
 two-mains case needed its own context with its own init script.
+
+
+---
+
+# v2 — a job lands anywhere, and the chrome is a wall the board respects
+
+## Any list of jobs drags onto the BOARD, not only onto a notebook day
+`registerBoardDrop` / `boardDropAt` in `rotaDrop.ts` — the same probe idea as
+the rota cells, for the board's own empty surface. `GeneralJobsPage` registers
+one probe (a ref re-assigned per render, registered once, the
+`leaveNotebookRef` idiom): the point must be inside the viewport and
+`document.elementFromPoint` must land on the viewport itself or the
+`[data-board-world]` div — a release over a widget, a tile or the chrome
+places nothing. The placer clears `inNotebook`/`boardBin`/`binnedAt`, writes
+`canvasX/canvasY` (or `viewPos[activeBoardView]` on a named board) through
+`settleDrop`, and tracks as an `arrange` undo step. `usePlannerDrag` asks the
+rota registry FIRST — a notebook square is the more specific target — and the
+board only when no cell answered. The drag now arms when either registry has a
+member (`anyRota() || anyBoardDrop()`), so lists drag on boards with no
+notebook at all. A job from ANOTHER workspace is refused silently: there is no
+tile of it here.
+
+## The tool rail is the right boundary, as the header is the top
+`clampPanRef` measures `[data-board-toolrail]` (a data attribute on the rail's
+wrap in `BoardToolbar`) and reserves its band on the x-axis: panning — or the
+de-expand settle after a widget is carried in from the right — rests the
+world's right edge against the rail's LEFT edge, never underneath it. Honoured
+only while the rail is docked on the right half of the viewport (somebody who
+parked it mid-screen chose that), capped at 35% of the width. The vertical
+de-expand needed nothing: `deexpand.mjs` proves the board already gives the
+bottom back.
+
+## The plan viewer zooms to the mouse — the stage centres by AUTO MARGINS
+Two faults, one screen:
+- The zoom anchor was a fraction of the SCROLLER (`scrollLeft + cx /
+  scrollWidth`). A fitted sheet is smaller than the stage and flex-centred, so
+  that fraction measured blank padding and the first several steps zoomed to
+  the middle — "it doesn't zoom to where the mouse is". `anchorZoomAt` records
+  a fraction of the SHEET (the pdf canvas's rect), and the apply step in the
+  layout effect re-measures the sheet at its new size and scrolls it back
+  under the cursor. Wheel and pinch share it.
+- The stage was `flex items-center justify-center`, and a flex-centred child
+  that OVERFLOWS its scroller hangs out both sides with the left/top overhang
+  unreachable — which clamped the scroll correction (the residual drift) and
+  made a zoomed sheet's left edge unpannable. The stage keeps `flex` and the
+  sheet wrapper (and the loading/error blocks) carry `m-auto`: identical
+  centring while it fits, an ordinary scroll child once it does not. The
+  planphone "centred stage" rule is a VISUAL rule and still holds.
+
+**Move pans on empty sheet.** `stagePan` ref in `PlanAnnotator`: with the Move
+tool held, a press that hits no mark and no handle drags the stage's scroll
+(cursor `grab`); a press on a mark still moves the mark, and a motionless
+click still just clears the pick. Cleared in onUp, onCancelDraw and
+`cancelStroke` (the pinch path).
+
+## The TikTok reel speaks the player's protocol
+`/player/v1/<id>`, not the old `/embed/v2` page — TikTok's documented embedded
+player answers postMessage (`{"x-tiktok-player": true, type: "play"|"pause"|
+"mute"|"unMute"}`) and reports back (`onPlayerReady`, `onStateChange` with 1
+playing · 2 paused · 0 ended). The bottom play button drives the video through
+it once the frame has said ready; until then it falls back to the old
+remount-with-autoplay. A sound button sits beside play; `muted` starts TRUE
+because a browser only allows a SILENT autoplay — unmuted autoplay is refused
+and the frame sits behind its centre play button, which was the owner's exact
+report. The blind auto-advance timer runs ONLY while the player has not said
+ready; a ready player advances on its own `ended`, so clips are never cut off
+mid-video ("switching videos randomly"). `loop=1` except when the reel is
+walking on by itself. The caption-strip crop (`chromeCrop`) is gone — the
+player frame has no caption strip. NOT verified against tiktok.com end to end:
+this container has no internet, so the protocol wiring needs one look on a
+real machine.
+
+Harnesses: `scratchpad/round19.mjs` (list→board drag, over-a-widget refusal,
+rail clamp, TikTok controls) · `scratchpad/planzoom.mjs` (wheel anchor from
+the FITTED view — an off-centre point, because a centre-anchored zoom passes
+at 0.5/0.5 — and Move-mode panning in the studio).
