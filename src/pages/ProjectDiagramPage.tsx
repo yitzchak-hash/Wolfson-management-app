@@ -98,9 +98,42 @@ export function ProjectDiagramPage() {
     const apt = apartments.find(a => a.id === id);
     if (!apt) return;
     setPendingFocus(null);
+    /**
+     * `reveal` means SHOW me where it is, and stop there.
+     *
+     * The search's row opens the unit; its crosshair asks the other question —
+     * whereabouts is it — so the cell is scrolled to and pulsed and the
+     * diagram is left on screen rather than a drawer over it. It used to be
+     * offered only on the Job Board, so on a building workspace the button
+     * simply was not there.
+     */
+    if (f.kind === 'apartment' && f.reveal) {
+      // Clear whatever is filtering the board, or the cell being revealed can
+      // be one of the ones currently hidden.
+      setActiveStageIds([]);
+      setClassFilter('all');
+      setSearchQuery('');
+      setRevealId(apt.id);
+      return;
+    }
     setSelectedApt(apt);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingFocus, apartments]);
+
+  /**
+   * The unit the search asked to be SHOWN, pulsed for a few seconds.
+   *
+   * Cleared on a timer rather than on the next click: a highlight that stays
+   * until you happen to press something is a highlight you stop trusting.
+   */
+  const [revealId, setRevealId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!revealId) return;
+    const el = document.querySelector(`[data-apt-id="${revealId}"]`);
+    el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    const t = setTimeout(() => setRevealId(null), 4000);
+    return () => clearTimeout(t);
+  }, [revealId]);
 
   // Bulk update state
   const [bulkMode, setBulkMode] = useState(false);
@@ -501,6 +534,7 @@ export function ProjectDiagramPage() {
             selectedBuilding={effectiveBuilding}
             phone={isPhone}
             onApartmentClick={handleAptClick}
+            highlightedApartmentIds={revealId ? new Set([revealId]) : undefined}
             showShinuiBadge={showShinuiBadge}
             bulkMode={bulkMode}
             bulkSelected={bulkSelected}

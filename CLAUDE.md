@@ -3328,3 +3328,65 @@ Harnesses: `scratchpad/round19.mjs` (list→board drag, over-a-widget refusal,
 rail clamp, TikTok controls) · `scratchpad/planzoom.mjs` (wheel anchor from
 the FITTED view — an off-centre point, because a centre-anchored zoom passes
 at 0.5/0.5 — and Move-mode panning in the studio).
+
+---
+
+# v2 — the header search looks everywhere
+
+## It read the live store, so it saw one workspace
+`GlobalSearch` destructured `apartments`, `contractorAssignments`, `stageNotes`
+… straight off the store, which holds **only the open workspace**. So the
+search beside the settings button found nothing outside whichever workspace you
+happened to be standing in — the reported fault, and it was the whole design
+rather than a bug in it.
+
+The body is now `searchOne(pid, workspace, W)`, called once per workspace: the
+open one from the live store, the rest from `loadProjectSnapshot(pid)`.
+
+- **Snapshots load once, when the dialog OPENS** — not per keystroke. Each is a
+  `JSON.parse` of a whole workspace, and three of those per letter typed
+  stutters on a board of a thousand jobs.
+- `loadProjectSnapshot` grew `assignments` / `stageNotes` / `contractorNotes` /
+  `canvasElements` / `planAnnotations`. Same single parse, so the callers that
+  only want the rooms pay nothing.
+- **Workers and stages are searched ONCE, not per workspace** — they are global
+  bare collections, and looping them would return the same worker three times.
+  A stage carrying `projectId: 'general'` belongs to the Job Board; anything
+  else is shown where you are.
+- Per-category limits came down (5 → 3 or 4): five of everything from each of
+  three workspaces is fifteen rows before the second category.
+- The open workspace is searched **first**, so what is in front of you ranks
+  above what is not.
+- A footer says the unopened workspaces show what this machine last saw of
+  them. Only the open one is live; without saying so, a job somebody knows
+  exists is simply missing with no explanation.
+
+## Every result carries its own workspace
+`SearchResult.projectId`, and `goTo()` is the single door: it switches
+workspace when the result is elsewhere, **then** hands over the intent —
+`setCurrentProject` clears `pendingFocus` as part of arriving somewhere new, so
+the other order throws the request away and the row appears to do nothing. The
+page it lands on follows the RESULT's workspace (`/jobs` for the board,
+`/project` for a building one), not the one you left.
+
+## The crosshair works outside the Job Board
+It was gated `result.onBoard && board` — `board` being "is the OPEN workspace
+the Job Board" — so on Wolfson or Netiv the button simply was not drawn. It is
+offered on every result that has a place now, and `ProjectDiagramPage` learned
+what `reveal` means: clear the filters (the cell may be one of the hidden
+ones), scroll to it, pick it out for four seconds, and **do not** open the
+drawer. `AptCell` gained `data-apt-id` so the cell can be addressed at all.
+
+## Recent searches
+`search_recent` in localStorage, eight deep, newest first, never twice. Per
+machine and never synced: what you searched for is about the hunt you were on
+at this desk, not the office's data, so it stays out of the store, the export
+and Firestore — and therefore out of the backup audit.
+
+Harness: `scratchpad/gsearch.mjs` (16 checks) — seeded with a name that exists
+in all three workspaces, so a result appearing at all proves the search crossed
+a boundary rather than getting lucky.
+
+**Note:** `scratchpad/mobdiagram.mjs` fails on a stale assertion (a sticky
+per-building bar the phone now deliberately hides). Verified pre-existing —
+it fails identically with these changes stashed.

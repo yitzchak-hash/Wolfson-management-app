@@ -67,12 +67,24 @@ export function loadAllProjectsTaskData(): ProjectTaskData[] {
  */
 export function loadProjectSnapshot(projectId: string): {
   apartments: Apartment[]; buildings: { id: string; name?: string }[]; stages: Stage[];
+  // Everything else the global search needs. One JSON.parse either way, so a
+  // caller that only wants the rooms pays nothing for these being here.
+  assignments: ContractorAssignment[];
+  stageNotes: StageNote[];
+  contractorNotes: ContractorNote[];
+  canvasElements: CanvasElement[];
+  planAnnotations: PlanAnnotation[];
 } {
   const data = loadFromStorage(getProjectStorageKey(projectId), null) as Record<string, unknown> | null;
   return {
     apartments: (data?.apartments as Apartment[] | null) ?? [],
     buildings: (data?.buildings as { id: string; name?: string }[] | null) ?? [],
     stages: (data?.stages as Stage[] | null) ?? [],
+    assignments: (data?.contractorAssignments as ContractorAssignment[] | null) ?? [],
+    stageNotes: (data?.stageNotes as StageNote[] | null) ?? [],
+    contractorNotes: (data?.contractorNotes as ContractorNote[] | null) ?? [],
+    canvasElements: (data?.canvasElements as CanvasElement[] | null) ?? [],
+    planAnnotations: (data?.planAnnotations as PlanAnnotation[] | null) ?? [],
   };
 }
 

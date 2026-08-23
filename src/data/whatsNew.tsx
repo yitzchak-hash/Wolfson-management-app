@@ -68,6 +68,33 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     ],
   },
   {
+    date: '2026-09-02',
+    title: 'The search at the top looks everywhere',
+    items: [
+      {
+        title: 'Every workspace, not just the one you are in',
+        body: 'The search beside the settings button only ever looked in whichever '
+          + 'workspace was open. It now searches Wolfson, Netiv and the Job Board '
+          + 'together, and every row says which one it came from and which building. '
+          + 'Choosing a result takes you there \u2014 it switches workspace for you.',
+        demo: 'list',
+      },
+      {
+        title: 'What you looked for last',
+        body: 'Open the search with nothing typed and it shows your recent searches. '
+          + 'Press one to run it again. Kept on this computer only.',
+        demo: 'tap',
+      },
+      {
+        title: 'Show me where it is',
+        body: 'The crosshair beside a result used to appear only on the Job Board. It is '
+          + 'on every result that has a place now \u2014 press it on a Wolfson unit and '
+          + 'the diagram scrolls to that apartment and picks it out, without opening it.',
+        demo: 'pin',
+      },
+    ],
+  },
+  {
     date: '2026-09-01',
     title: 'A second weekly notebook is a real notebook',
     items: [

@@ -284,6 +284,9 @@ function AptCell({
     // between two linked apartments. It also carries the duplex two-row span.
     <div className="relative flex" style={{ flex: 1, minWidth: 0, ...extraStyle }}>
     <div
+      // Addressable by id, so "show me where it is" can scroll to the cell and
+      // a harness can reach one without matching on its text.
+      data-apt-id={apt?.id}
       className={`relative flex flex-col items-center justify-center cursor-pointer select-none rounded-md overflow-hidden transition-all duration-100 ${scale}`}
       onMouseEnter={() => apt && onHover?.(apt.id)}
       onMouseLeave={() => onHover?.(null)}
