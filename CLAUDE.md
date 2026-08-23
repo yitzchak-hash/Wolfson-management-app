@@ -3140,3 +3140,57 @@ Rules the workbench keeps, each of which was a real fault on the way:
 
 Harness: `scratchpad/planbarsketch.mjs` — both colour schemes, the drag, the
 caret, the ×, Ctrl+Z, the read-out and the draggable left edge.
+
+
+---
+
+# v2 — the plan's own two bars
+
+## The plan's controls belong to the PANE, not the drawer's header
+`planControls()` rendered inside the drawer's navy header, between the
+worker-status chip and the X. That is what "it shouldn't go into the
+contractor status area" was about, and no amount of reordering inside that
+row could fix it: the controls for one sheet were laid across the full width
+of the drawer, over a column about the job. They render at the top of
+`planPane()` now, so they begin at the pane's own left edge — measured, not
+assumed: bar left 591 against a drawer left of 30.
+
+## Two bars, and how the annotator splits across them
+`PlanAnnotator` takes `barInto2` alongside `barInto`. Given BOTH, it portals
+its bar in two pieces — the file's name into the first, everything else (the
+pin slot, the pager, Plans, Layers, Download, Print) into the second — and
+moves its `flex-1` from after the name to **after Plans**, which is where the
+owner drew the gap. Given only `barInto` it portals the whole row as before,
+so the full-screen studio is untouched.
+
+| | |
+|---|---|
+| BAR 1 `#1e3a5f` | plan name · gap · copy folder path · Mark up |
+| BAR 2 `#2c4f78` | Pin · Plans · gap · Layers · Download · Print · full screen |
+
+## Plans is the chooser, and the only one
+The drawer's folder dropdown and its standing row of plan bubbles are gone,
+along with Saved versions: `PlanPicker` already walks the job's folders AND
+lists the Annotated Plans child, so all three were second doors to one room.
+The drawer passes `plans`, `plansFolderId` and **`onPickPlan`**, which is what
+carries the picked sheet back — and it keeps the chip row's rule exactly:
+only a `kind === 'original'` sheet writes `plansPdfLink`, so opening a stamped
+version or a side folder's drawing is looking, never choosing what the
+contractor sees.
+
+`pickedPlanName` exists because the bar read the name out of `planSet.plans`,
+which holds only the main folder's sheets — a drawing chosen from a side
+folder had no name and fell back to "Engineering Plans". The picker knew it
+and had nowhere to put it.
+
+Four pieces of dead state went with the picker, one of them a
+`listPlanSubfoldersViaBackend` call on **every drawer open** whose result
+nothing read any more.
+
+## A harness owns ONE concern
+`planlayers.mjs` carried its own copy of the bar-arrangement assertions and
+went red on four of them the moment the two bars shipped — all four describing
+the layout that had just been replaced. The arrangement belongs to
+`scratchpad/planbars2.mjs` (17 checks, including that neither bar reaches into
+the details column); `planlayers.mjs` is about layers again. A second copy of a
+rule is a second place to forget to change it.

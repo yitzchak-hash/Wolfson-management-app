@@ -185,7 +185,7 @@ export interface PlanChoice {
 export function PlanAnnotator({
   planFileId, planName, apartmentId, apartmentLabel, driveFolderUrl, plansFolderId,
   authorName, readOnly = false, askWho = false, people = [], plans = [], embedded = false,
-  barExtrasRef, barInto,
+  barExtrasRef, barInto, barInto2,
   touchScale = 1,
   onClose, onToast, onPickPlan, onStartMarkup,
 }: {
@@ -231,6 +231,17 @@ export function PlanAnnotator({
    * with it: it is joining a bar, not putting a second one inside the first.
    */
   barInto?: HTMLElement | null;
+  /**
+   * A SECOND slot, which splits this bar across two rows.
+   *
+   * With both given, the file's name goes into `barInto` and everything else
+   * — the pin, the pager, Plans, Layers, Download, Print — goes into
+   * `barInto2`. That is the owner's own arrangement, drawn on the workbench:
+   * what the sheet IS on the top row, what you can DO to it underneath.
+   *
+   * With only `barInto`, the whole row goes there as before.
+   */
+  barInto2?: HTMLElement | null;
   /**
    * The wallboard is shared — whoever walks up to it is not "the office".
    * When this is on, the editor asks who is drawing before it will let anyone
@@ -2330,21 +2341,20 @@ export function PlanAnnotator({
         putting a second one inside the first.
       */}
       {(() => {
-        const row = (
-          <div className={barInto
-            ? 'flex items-center gap-1.5 min-w-0 flex-wrap'
-            : `flex items-center gap-2 py-2 flex-shrink-0 ${
-              compact ? 'px-2 flex-nowrap overflow-x-auto' : 'px-3 flex-wrap'}`}
-            style={barInto ? undefined : { backgroundColor: NAVY, ...(ui.on ? { zoom: ts } : {}) }}>
-        {!compact && <Layers size={16} className="text-[#4aa8d8] flex-shrink-0" />}
-        <div className={compact ? 'min-w-0 flex-1' : 'min-w-0'}>
-          <div className="text-[13px] font-bold text-white truncate">{planName || 'Plan'}</div>
-          <div className="text-[10.5px] text-gray-400 truncate">
-            {apartmentLabel}
-            {basedOn ? ` · carrying on from v${basedOn}` : ''}
-            {dirty ? ' · unsaved' : ''}
+        /** Two slots given: the name goes up top, everything else underneath. */
+        const twoRow = !!barInto && !!barInto2;
+        const head = (<>
+          {!compact && <Layers size={16} className="text-[#4aa8d8] flex-shrink-0" />}
+          <div className={compact ? 'min-w-0 flex-1' : 'min-w-0'}>
+            <div className="text-[13px] font-bold text-white truncate">{planName || 'Plan'}</div>
+            <div className="text-[10.5px] text-gray-400 truncate">
+              {apartmentLabel}
+              {basedOn ? ` · carrying on from v${basedOn}` : ''}
+              {dirty ? ' · unsaved' : ''}
+            </div>
           </div>
-        </div>
+        </>);
+        const rest = (<>
 
         {/*
           The host's own controls, IN the bar rather than floating over it.
@@ -2356,7 +2366,7 @@ export function PlanAnnotator({
         */}
         <span ref={barExtrasRef} className="flex items-center gap-1.5 flex-shrink-0" />
 
-        {!compact && <div className="flex-1" />}
+        {!compact && !twoRow && <div className="flex-1" />}
 
         {/* The pager and the zoom live in the floating bar over the sheet
             when there is nothing to mark up — one set of controls, where Drive
@@ -2398,6 +2408,10 @@ export function PlanAnnotator({
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold text-white/85 hover:bg-white/10">
             <ChevronsUpDown size={13} /> Plans
           </button>
+
+          {/* The gap the owner drew: Plans belongs with the sheet you are
+              choosing, the rest belongs at the far end. */}
+          {twoRow && <div className="flex-1" />}
 
           <button onClick={() => setShowLayers(v => !v)}
             disabled={isImagePlan}
@@ -2478,7 +2492,7 @@ export function PlanAnnotator({
           </button>
         )}
 
-        {!compact && (
+        {!compact && !twoRow && (
           <button onClick={() => setShowVersions(v => !v)} title="Saved versions"
             className={`p-1.5 rounded-lg ${showVersions ? 'bg-white/15 text-white' : 'text-white/70 hover:bg-white/10'}`}>
             <FileDown size={15} />
@@ -2486,7 +2500,7 @@ export function PlanAnnotator({
         )}
         {/* Looking at it should be one step away from marking it up — closing
             and reopening through a different button is friction for nothing. */}
-        {readOnly && !askWho && onStartMarkup && (
+        {readOnly && !askWho && onStartMarkup && !twoRow && (
           <button onClick={onStartMarkup}
             className={`flex items-center gap-1.5 rounded-lg text-[12px] font-bold text-white flex-shrink-0 ${
               compact ? 'px-2.5 min-h-[38px]' : 'px-3 py-1.5'}`}
@@ -2535,7 +2549,23 @@ export function PlanAnnotator({
             </button>
           )}
         </span>
-      </div>
+        </>);
+
+        if (twoRow) {
+          return (<>
+            {createPortal(head, barInto!)}
+            {createPortal(rest, barInto2!)}
+          </>);
+        }
+        const row = (
+          <div className={barInto
+            ? 'flex items-center gap-1.5 min-w-0 flex-wrap'
+            : `flex items-center gap-2 py-2 flex-shrink-0 ${
+              compact ? 'px-2 flex-nowrap overflow-x-auto' : 'px-3 flex-wrap'}`}
+            style={barInto ? undefined : { backgroundColor: NAVY, ...(ui.on ? { zoom: ts } : {}) }}>
+            {head}
+            {rest}
+          </div>
         );
         return barInto ? createPortal(row, barInto) : row;
       })()}

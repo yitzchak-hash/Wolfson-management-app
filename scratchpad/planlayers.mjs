@@ -149,81 +149,10 @@ if (layersBtn) {
   }
 }
 
-// ── One bar over the sheet, not two ───────────────────────────────────────
-{
-  const bars = await page.evaluate(() => {
-    const drawer = document.querySelector('.drawer-panel');
-    const header = [...drawer.querySelectorAll('div')].find(d =>
-      getComputedStyle(d).backgroundColor === 'rgb(30, 58, 95)' && d.querySelector('button'));
-    const txt = e => (e?.textContent ?? '').replace(/\s+/g, ' ');
-    // The old strip: white, bordered underneath, carrying Mark up.
-    const oldStrip = [...drawer.querySelectorAll('div')].find(d =>
-      /Mark up/.test(txt(d))
-      && getComputedStyle(d).backgroundColor === 'rgb(255, 255, 255)'
-      && getComputedStyle(d).borderBottomWidth !== '0px'
-      && d.querySelectorAll('div').length < 8);
-    const viewerBar = [...drawer.querySelectorAll('div')].find(d =>
-      getComputedStyle(d).backgroundColor === 'rgb(30, 58, 95)' && /Layers/.test(txt(d)));
-    return {
-      headerHasMarkUp: /Mark up/.test(txt(header)),
-      oldStrip: !!oldStrip,
-      viewerBar: txt(viewerBar).slice(0, 150),
-      xInViewerBar: !!viewerBar?.querySelector('[data-close-studio]'),
-      // No \b before Pin: the bar's text runs the file name straight into
-      // it ("...Cohen, DavidPin Plans"), so a word boundary never matches.
-      pinInViewerBar: /Pin/.test(txt(viewerBar)),
-      floatingPin: !!drawer.querySelector('.absolute.top-2.left-2'),
-    };
-  });
-  console.log('       bars:', JSON.stringify(bars));
-  check(bars.headerHasMarkUp, 'Mark up moved onto the drawer’s navy header');
-  check(!bars.oldStrip, 'the white strip above the plan is gone');
-  check(bars.pinInViewerBar, 'the Pin sits in the viewer’s own bar', bars.viewerBar);
-  check(!bars.floatingPin, 'and no longer floats over the file name');
-  check(!bars.xInViewerBar, 'the X that did nothing is gone from that bar');
-  check(/Plans/.test(bars.viewerBar) && /Layers/.test(bars.viewerBar)
-    && /Download/.test(bars.viewerBar) && /Print/.test(bars.viewerBar),
-    'and it still carries Plans, Layers, Download and Print');
-
-  // ── One row, viewer controls at its LEFT-hand end ─────────────────────
-  const order = await page.evaluate(() => {
-    const drawer = document.querySelector('.drawer-panel');
-    // Trimmed: a button's textContent carries the whitespace around its icon,
-    // so an anchored regex against the raw string never matches.
-    const btn = t => [...drawer.querySelectorAll('button')]
-      .find(b2 => new RegExp(t, 'i').test((b2.textContent ?? '').replace(/\s+/g, ' ').trim())
-        || new RegExp(t, 'i').test(b2.getAttribute('title') ?? ''));
-    const x = e => (e ? Math.round(e.getBoundingClientRect().left) : null);
-    const top = e => (e ? Math.round(e.getBoundingClientRect().top) : null);
-    const plans = btn('^Plans$');
-    const layers = btn('^Layers ?\\d*$');
-    const markUp = btn('Mark up');
-    const picker = btn('Choose a folder inside Engineered Plans');
-    return {
-      plans: x(plans), layers: x(layers), markUp: x(markUp), picker: x(picker),
-      tops: [top(plans), top(layers), top(markUp)],
-    };
-  });
-  console.log('       order:', JSON.stringify(order));
-  check(order.plans !== null && order.markUp !== null && order.plans < order.markUp,
-    'the viewer controls sit to the LEFT of Mark up', JSON.stringify(order));
-  check(order.picker === null || order.plans < order.picker,
-    'and to the left of the folder picker when there is one', JSON.stringify(order));
-  const tops = order.tops.filter(t => t !== null);
-  check(tops.length > 1 && Math.max(...tops) - Math.min(...tops) <= 2,
-    'and all of it is one row, not two', JSON.stringify(tops));
-
-  // The chip row scrolls without painting a scrollbar over the sheet.
-  const chipBar = await page.evaluate(() => {
-    const el = document.querySelector('.drawer-panel .no-bar');
-    if (!el) return null;
-    return { scrollable: el.scrollWidth > el.clientWidth,
-             barPx: el.offsetHeight - el.clientHeight };
-  });
-  console.log('       chip row:', JSON.stringify(chipBar));
-  check(chipBar === null || chipBar.barPx === 0,
-    'the chip row draws no scrollbar', JSON.stringify(chipBar));
-}
+// The bar's ARRANGEMENT is asserted by scratchpad/planbars2.mjs, which owns
+// it. It used to be checked here too, and when the two bars shipped this
+// harness went red on four assertions describing the layout they replaced —
+// a second copy of a rule is a second place to forget to change it.
 
 // ── All layers on and off in one press ────────────────────────────────────
 {

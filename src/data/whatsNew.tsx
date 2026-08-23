@@ -30,6 +30,35 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-08-31',
+    title: 'The plan gets its own two bars, over the plan',
+    items: [
+      {
+        title: 'The plan\u2019s buttons no longer sit across the job',
+        body: 'They used to run along the top of the whole drawer, over the family name '
+          + 'and the worker-status button \u2014 controls for the sheet laid across a '
+          + 'column that has nothing to do with it. They now start at the plan\u2019s own '
+          + 'left edge and stay there.',
+        demo: 'tap',
+      },
+      {
+        title: 'Two rows: what the sheet is, and what you can do to it',
+        body: 'Top row: the plan\u2019s name, then the folder path and Mark up at the right. '
+          + 'Row underneath: Pin and Plans on the left, then Layers, Download, Print and '
+          + 'full screen at the right.',
+        demo: 'list',
+      },
+      {
+        title: 'Plans is the only chooser now',
+        body: 'Press Plans and it switches which sheet you are looking at \u2014 the main '
+          + 'folder, any folder beside it, and the saved markup versions, all in one place. '
+          + 'The separate folder dropdown, the row of sheet bubbles and the Saved-versions '
+          + 'button are gone, because Plans reaches all three.',
+        demo: 'sparkle',
+      },
+    ],
+  },
+  {
     date: '2026-08-30',
     title: 'Undo and redo — and a warning before anything that matters',
     items: [
