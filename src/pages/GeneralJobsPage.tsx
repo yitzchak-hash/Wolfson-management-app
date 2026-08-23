@@ -2313,6 +2313,22 @@ export function GeneralJobsPage() {
     // back, tombstone and all. The warning still names what is at stake,
     // because a removal you did not mean is still worth catching first.
     if (lost && !window.confirm(`Remove this? You will lose ${lost}.`)) return;
+    /**
+     * Removing the MAIN notebook while a projection stands: the projection
+     * INHERITS — the owner's ruling that the data inside a notebook is never
+     * deleted with the widget. The book moves into the window: the survivor
+     * gets the main's full data (crown included), every job filed in the
+     * notebook is re-pointed at it, and nothing is archived because nothing
+     * is going away. With no projection standing, the contents are filed into
+     * the planner archive as before, and the next notebook placed brings
+     * them back.
+     */
+    const isPlanner = el?.type === 'widget'
+      && (el.widget === 'rota' || el.widget === 'week-planner');
+    const heir = isPlanner && el && !isProjection(el)
+      ? canvasElements.find(e =>
+          e.id !== el.id && e.type === 'widget' && e.widget === el.widget && isProjection(e))
+      : undefined;
     const held = el ? apartments.filter(a => a.inNotebook === el.id).length : 0;
     track({
       weight: 'content',
@@ -2323,6 +2339,18 @@ export function GeneralJobsPage() {
         : `${nameOf(el)} comes back onto the board exactly where it was, with everything that was in it`
           + `${held ? `, and ${things(held)} go back inside it` : ''}.`,
     }, () => {
+      if (heir && el) {
+        const { role: _crowned, ...mainData } = (el.data ?? {}) as Record<string, unknown>;
+        updateCanvasElement(heir.id, { data: mainData });
+        if (currentUser) {
+          apartments
+            .filter(a => a.inNotebook === el.id)
+            .forEach(a => updateApartment(a.id, { inNotebook: heir.id }, currentUser));
+        }
+        deleteCanvasElement(id);
+        setToast('The other notebook is the main one now — every week and card moved with it');
+        return;
+      }
       archivePlanner(el);
       if (el && currentUser) {
         apartments
@@ -2330,6 +2358,9 @@ export function GeneralJobsPage() {
           .forEach(a => updateApartment(a.id, { inNotebook: undefined }, currentUser));
       }
       deleteCanvasElement(id);
+      if (isPlanner) {
+        setToast('Notebook removed — its planning is kept, and comes back with the next notebook you place');
+      }
     });
   }
 

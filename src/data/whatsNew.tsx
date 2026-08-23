@@ -30,6 +30,39 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-09-04',
+    title: 'The notebook reads like a diary, and tasks walk onto it',
+    items: [
+      {
+        title: 'Newest week on top',
+        body: 'The week being worked sits at the top when the notebook opens; '
+          + 'history stacks away below it. The little plus at the top adds the '
+          + 'NEXT week; the one at the bottom adds an earlier one. Nothing '
+          + 'already written moved.',
+        demo: 'list',
+      },
+      {
+        title: 'Assigned tasks show themselves',
+        body: 'Give a worker a task with a due date — in any workspace — and it '
+          + 'appears in that worker’s square on that day, drawn dashed so you can '
+          + 'tell it from a card you placed. Change the task’s date or worker and '
+          + 'the chip follows; finish the task and it leaves. A task you already '
+          + 'placed by hand is never shown twice. Turn it off in the pencil if '
+          + 'you want a quiet sheet.',
+        demo: 'tap',
+      },
+      {
+        title: 'Removing the main notebook cannot lose the planning',
+        body: 'Remove the main while a second copy stands and the copy inherits '
+          + 'everything — every week, every card, every job filed in it — and '
+          + 'becomes the main. Remove the last one and the planning is filed '
+          + 'away, coming back with the next notebook you place. The only way to '
+          + 'delete what is written is to delete it card by card.',
+        demo: 'sparkle',
+      },
+    ],
+  },
+  {
     date: '2026-09-03',
     title: 'The notebook finally lets go — the cloud bug is found',
     items: [

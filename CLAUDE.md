@@ -3555,3 +3555,49 @@ Harness: `scratchpad/round21.mjs` (ghost mid-drag, unit card created and
 drawn with the snapshot's stage, click travels and opens). Its trap: find
 the created card by its OWN element id — a text match hits the Building
 Progress widget first, which also says WOLFSON and Artzi.
+
+
+---
+
+# v2 — the notebook reads like a diary
+
+## Weeks draw NEWEST FIRST — the drawing, never the data
+`drawn = [...weeks].reverse()` in `PlannerWidget`. The run is still stored
+oldest-first (`firstWeek` + `weekCount`), so nothing written moves and the
+month arithmetic is untouched; only the render order flips. The TOP week's
+plus is `addWeek('after')` (newer) and shows `hiddenBelow`'s eye; the BOTTOM
+week's is `addWeek('before')` / `hiddenAbove` — the buttons follow the
+direction the eye now reads the stack in. `shownMonth` seeds from the NEWEST
+visible week; `readMonth`, Today and the month jumps all work off `weekRefs`
+node offsets and needed nothing.
+
+## Assigned tasks show themselves on the notebook — derived, never stored
+`taskChips` in `PlannerWidget`: an OPEN assignment with a `dueDate` and a
+`contractorId` whose person is on the sheet draws as a dashed chip in that
+person's square on that day — the open workspace live from the `assignments`
+prop, every other workspace from `loadProjectSnapshot` (workers are global,
+so one person's row collects all of it). Rules:
+- **Derived means the task is the record.** The chip moves by editing the
+  task's date/worker where the task lives, and leaves when the task is done.
+  Nothing is written into `cells`, so nothing can go stale or double-sync.
+- **A task placed BY HAND is drawn once**: any planner entry carrying that
+  `taskId` suppresses its chip, notebook-wide.
+- Clicking a chip opens the job — switching workspace first for a foreign
+  one (the settled switch-then-intent order).
+- `data.showTasks` ('1' default) in the pencil turns the layer off.
+
+## Removing the MAIN notebook can never lose the planning
+In `removeEl`: a main `rota`/`week-planner` with a projection standing makes
+the projection INHERIT — the main's full data (role stripped) is written onto
+it, every job whose `inNotebook` pointed at the main is re-pointed, and
+nothing is archived because nothing is going away. Only when NO projection
+stands does the planner archive take the contents (as before, revived by the
+next placed notebook). Both paths toast what happened to the data. The
+undo entry needs nothing special — `useBoardTrack` diffs every record, so
+Ctrl+Z restores the main, demotes the heir and re-points the jobs by itself.
+
+Harness: `scratchpad/round22.mjs` (13 checks). Its trap: the node strip's
+Remove X must be clicked via the DOM (`evaluate(b => b.click())`) — the
+synthetic pointer sequence tangles with the node's pointer capture in a way
+a real hand does not, and a force-click that lands on the svg path inside
+the button never reaches React's onClick.

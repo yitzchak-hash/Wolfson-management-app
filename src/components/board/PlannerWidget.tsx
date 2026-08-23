@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { PlannerDropDialog } from './PlannerDialogs';
-import { ChevronLeft, ChevronRight, Plus, X, CalendarDays, Maximize2, Eye, EyeOff } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, X, CalendarDays, Maximize2, Eye, EyeOff, ClipboardList } from 'lucide-react';
 import {
   Apartment, CanvasElement, Contractor, User, ContractorAssignment, Stage, personColor,
   aptLabel,
@@ -463,6 +463,15 @@ export function PlannerWidget({
 
   /** What is drawn. */
   const weeks = useMemo(() => runWeeks.filter(w => !hidden.has(iso(w))), [runWeeks, hidden]);
+  /**
+   * Drawn NEWEST FIRST — the owner's ruling. The week being worked is the one
+   * at the top when the notebook opens; history stacks away below it instead
+   * of the current week living at the bottom of a season of scroll. Only the
+   * DRAWING reverses: the run is still stored oldest-first (`firstWeek` +
+   * `weekCount`), so nothing already written moves and the month arithmetic
+   * is untouched.
+   */
+  const drawn = useMemo(() => [...weeks].reverse(), [weeks]);
   /** What has been put away, oldest first. */
   const hiddenInRun = useMemo(() => runWeeks.filter(w => hidden.has(iso(w))), [runWeeks, hidden]);
 
@@ -758,6 +767,58 @@ export function PlannerWidget({
     return { job: hit?.job, workspace: hit?.workspace ?? en.projectId };
   };
 
+  /**
+   * ASSIGNED TASKS appear on the notebook by themselves — the owner's ask:
+   * "if I assign a task to someone, it should show up in the weekly notebook".
+   *
+   * DERIVED, never stored: an open task with a due date and a worker is drawn
+   * as a chip in that worker's square on that day, from EVERY workspace — the
+   * open one live, the others from their snapshots on this machine (workers
+   * are global, so the same person's row collects all of it). A chip is the
+   * task showing itself, not a planner card: it moves by changing the task's
+   * date or worker where the task lives, and it disappears when the task is
+   * done. A task the office already placed BY HAND carries its taskId on a
+   * planner entry, and that task gets no chip — one thing, drawn once.
+   * `showTasks` in the pencil turns the whole layer off.
+   */
+  const tasksOn = flag(d.showTasks, true);
+  const taskChips = useMemo(() => {
+    const map = new Map<string, {
+      id: string; desc: string; label: string; jobId: string;
+      projectId?: string; workspace?: string;
+    }[]>();
+    if (!tasksOn) return map;
+    const rows = new Set(people.filter(p => p.startsWith('c:')).map(p => p.slice(2)));
+    if (!rows.size) return map;
+    const linked = new Set<string>();
+    for (const list of Object.values(cells)) {
+      for (const e of list ?? []) if (e?.taskId) linked.add(e.taskId);
+    }
+    const put = (a: ContractorAssignment, apts: Apartment[], pid?: string, ws?: string) => {
+      if (!a.dueDate || a.completedAt || !a.contractorId) return;
+      if (!rows.has(a.contractorId) || linked.has(a.id)) return;
+      const day = String(a.dueDate).slice(0, 10);
+      const apt = apts.find(x => x.id === a.apartmentId);
+      const key = `c:${a.contractorId}|${day}`;
+      const list = map.get(key) ?? [];
+      list.push({
+        id: a.id,
+        desc: (a.taskDescription ?? '').trim(),
+        label: apt ? (aptLabel(apt) || apt.address?.trim() || 'Job') : 'Job',
+        jobId: a.apartmentId,
+        projectId: pid, workspace: ws,
+      });
+      map.set(key, list);
+    };
+    assignments.forEach(a => put(a, jobs));
+    for (const p of projects) {
+      if (p.id === currentProjectId) continue;
+      const snap = loadProjectSnapshot(p.id);
+      (snap.assignments ?? []).forEach(a => put(a, snap.apartments, p.id, p.name));
+    }
+    return map;
+  }, [tasksOn, people, cells, assignments, jobs, projects, currentProjectId]);
+
   const todayIso = iso(new Date());
 
   /** Somebody who came off shows for the rest of that week, then not at all. */
@@ -786,7 +847,9 @@ export function PlannerWidget({
   const weekRefs = useRef(new Map<string, HTMLElement>());
   // `weeks[0]` can be missing — every week can be put away — so the run's own
   // first week stands in rather than the label reading "Invalid Date".
-  const [shownMonth, setShownMonth] = useState<string>(() => monthKey(weeks[0] ?? firstWeek));
+  // The NEWEST visible week — that is the one at the top now.
+  const [shownMonth, setShownMonth] = useState<string>(
+    () => monthKey(weeks[weeks.length - 1] ?? firstWeek));
 
   const readMonth = useCallback(() => {
     const box = scrollRef.current?.getBoundingClientRect();
@@ -915,7 +978,7 @@ export function PlannerWidget({
           </div>
         )}
 
-        {weeks.map((wkStart, wi) => {
+        {drawn.map((wkStart, wi) => {
           const days = Array.from({ length: span }, (_, i) => addDays(wkStart, i));
           // The name column is as wide as the NAMES, not a share of the sheet.
           // It used to be `0.85fr`, so a row of five short names spent a tenth
@@ -924,7 +987,7 @@ export function PlannerWidget({
           const cols = `${nameColW}px repeat(${span}, minmax(0, 1fr))`;
           // A rule wherever the month changes, so the run reads as months
           // rather than as an undifferentiated column of weeks.
-          const newMonth = wi > 0 && monthKey(wkStart) !== monthKey(weeks[wi - 1]);
+          const newMonth = wi > 0 && monthKey(wkStart) !== monthKey(drawn[wi - 1]);
           return (
             <div
               key={iso(wkStart)}
@@ -951,29 +1014,15 @@ export function PlannerWidget({
                     {wkStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                   </span>
                   {/* The week's tiny controls, together at the label's end —
-                      the owner asked for exactly this shape: add-a-week as a
-                      little icon RIGHT NEXT to the put-away eye, tooltips and
-                      all, instead of two full-width rows. The first week
-                      carries add-before, the last carries add-after; when a
-                      week was put away in that direction the same press
-                      restores it (Eye instead of Plus, wording says so). */}
+                      add-a-week as a little icon right next to the put-away
+                      eye. NEWEST FIRST now, so the TOP week (drawn index 0)
+                      carries the plus that adds a NEWER week, and the BOTTOM
+                      one adds an OLDER week — the direction the eye reads the
+                      stack in. A week put away in that direction turns the
+                      plus into an eye that restores it, wording and all. */}
                   {!ro && (
                     <span className="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover/wk:opacity-100 transition-opacity">
                       {wi === 0 && (
-                        <button
-                          data-no-drag data-el-action
-                          onClick={() => addWeek('before')}
-                          title={hiddenAbove.length
-                            ? 'Bring back the week before — everything in it comes with it'
-                            : 'Add the week before this one'}
-                          className="text-gray-300 hover:text-[#1e3a5f]"
-                        >
-                          {hiddenAbove.length
-                            ? <Eye size={Math.max(10, Math.round(z(11)))} />
-                            : <Plus size={Math.max(10, Math.round(z(11)))} />}
-                        </button>
-                      )}
-                      {wi === weeks.length - 1 && (
                         <button
                           data-no-drag data-el-action
                           onClick={() => addWeek('after')}
@@ -983,6 +1032,20 @@ export function PlannerWidget({
                           className="text-gray-300 hover:text-[#1e3a5f]"
                         >
                           {hiddenBelow.length
+                            ? <Eye size={Math.max(10, Math.round(z(11)))} />
+                            : <Plus size={Math.max(10, Math.round(z(11)))} />}
+                        </button>
+                      )}
+                      {wi === drawn.length - 1 && (
+                        <button
+                          data-no-drag data-el-action
+                          onClick={() => addWeek('before')}
+                          title={hiddenAbove.length
+                            ? 'Bring back the week before — everything in it comes with it'
+                            : 'Add the week before this one'}
+                          className="text-gray-300 hover:text-[#1e3a5f]"
+                        >
+                          {hiddenAbove.length
                             ? <Eye size={Math.max(10, Math.round(z(11)))} />
                             : <Plus size={Math.max(10, Math.round(z(11)))} />}
                         </button>
@@ -1176,6 +1239,54 @@ export function PlannerWidget({
                                 setDropAsk({ fromKey: key, entry: en, target });
                               }}
                             />
+                          ))}
+                          {/* Tasks with this day and this worker on them —
+                              drawn dashed, because they are the TASK showing
+                              itself, not a planner card: change the task's
+                              date or worker where the task lives and the chip
+                              follows. Clicking opens the job, travelling to
+                              its workspace when it is not this one. */}
+                          {(taskChips.get(key) ?? []).map(t => (
+                            <button
+                              key={t.id}
+                              data-no-drag data-el-action
+                              onClick={() => {
+                                if (t.projectId && t.projectId !== currentProjectId) {
+                                  setCurrentProject(t.projectId);
+                                  setPendingFocus({ kind: 'apartment', id: t.jobId });
+                                  return;
+                                }
+                                openJob(t.jobId);
+                              }}
+                              title="From the task list — change its day or worker on the task itself"
+                              className="w-full text-left rounded-md px-1.5 py-1 min-w-0"
+                              style={{
+                                border: '1px dashed rgba(15,23,42,.28)',
+                                backgroundColor: 'rgba(255,255,255,.65)',
+                              }}
+                            >
+                              <span className="flex items-start gap-1 min-w-0">
+                                <ClipboardList
+                                  size={Math.max(9, Math.round(z(10)))}
+                                  className="flex-shrink-0 mt-0.5 text-slate-400"
+                                />
+                                <span className="flex-1 min-w-0">
+                                  <span className="block truncate"
+                                    style={{ fontSize: textSize, fontWeight: 700, color: '#334155' }}>
+                                    {t.workspace && (
+                                      <span style={{ color: '#7c3aed' }}>{t.workspace} · </span>
+                                    )}
+                                    {t.label}
+                                  </span>
+                                  {t.desc && (
+                                    <span className="block truncate font-medium"
+                                      style={{ fontSize: Math.max(z(7), textSize - z(2)), color: '#64748b' }}>
+                                      {t.desc}
+                                    </span>
+                                  )}
+                                </span>
+                              </span>
+                            </button>
                           ))}
                           {!ro && state === 'on' && (
                             <button

@@ -406,9 +406,16 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
     title(),
     {
       key: 'role', label: 'This copy is', kind: 'plannerRole', group: 'People and days',
-      hint: 'The MAIN notebook is the one that is filled in. Every other copy is a '
-        + 'projection of it — it shows the same week, cannot be written to, and a job '
-        + 'in a square still opens.',
+      hint: 'The MAIN notebook is the record that holds the week; every other copy is a '
+        + 'window onto it. Both carry every control and stay in step — the label only '
+        + 'says which one owns the data when a copy is removed.',
+    },
+    {
+      key: 'showTasks', label: 'Show assigned tasks', kind: 'select', group: 'People and days',
+      options: [{ value: '1', label: 'Yes — a task appears on its day' }, { value: '0', label: 'No' }],
+      hint: 'An open task with a due date and a worker shows itself in that worker’s '
+        + 'square, from every workspace. Drawn dashed — change the task’s date or '
+        + 'worker on the task itself and the chip follows.',
     },
     {
       key: 'people', label: 'Who is on it', kind: 'people', group: 'People and days',
