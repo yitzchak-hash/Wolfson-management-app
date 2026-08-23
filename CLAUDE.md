@@ -3843,3 +3843,36 @@ Harness: `scratchpad/tvscreens.mjs` — the header bar on the wall, the minted
 id surviving reload, the live-TVs section standing in settings with the
 honest no-Firebase message. The heartbeat/settings round-trip needs real
 Firestore and was verified by REST probe against production rules instead.
+
+---
+
+# v2 — the TV scaling disease, cured at the root
+
+## The wall renders widgets through `WidgetSurface` now
+THE scaling bug: `TvPresentationPage` called `renderWidget` RAW, with no
+`WidgetSurface` (now exported from BoardItems) around it — so a widget the
+office had stretched to double size on the board drew its 11px labels at
+11px in a big empty card, and the region zoom then shrank those to a smudge.
+No display-size boost could recover words that were small BEFORE the zoom,
+which is why "make the words readable" couldn't. The surface scales each
+widget's natural drawing to fill its own box first, the same as every other
+screen. `tvcrash.mjs` re-run: every widget renders through it.
+
+## The panel's size buttons write the panel's SAVED setting
+`setBoost` wrote a `?scale=` URL param — local to the tab, dead on reload,
+and OUTRANKING the per-screen setting, so after one press on the TV every
+later change from the office silently did nothing on that panel. It now
+writes `tvScreens[thisPanel].scale` (settings sees it live) and clears the
+masking param; the param survives only as the no-Firebase fallback.
+
+## Before → after, measured by the panel itself
+`TvScreensPanel` keeps a `fixes` record per press: the button says what it
+is about to do (90% → 140%), the polling tightens to 3s while a fix is
+pending, and when a report NEWER than the press arrives the card shows the
+words' real size before and after — green past `READABLE`, red with "raise
+the size bar further" when one press wasn't enough. Dismissable. Pressing a
+button that changed nothing visible was the owner's exact complaint.
+
+Harness: `scratchpad/tvscreens.mjs` grew the WidgetSurface check — a widget
+seeded at 2× natural width must draw `scale(2)` on the wall. Frame
+UPPERCASES titles, so match the surface transform, not the title text.

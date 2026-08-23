@@ -30,6 +30,41 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-09-07',
+    title: 'The TV scaling disease, cured at the root',
+    items: [
+      {
+        title: 'Widgets on the wall finally scale like the board',
+        body: 'The wall was drawing every widget at its factory size inside '
+          + 'whatever box you gave it — stretch a widget to double size on the '
+          + 'board and the TV showed small print floating in a big empty card, '
+          + 'then zoomed THAT down to fit the region. No size button could '
+          + 'rescue words that started small. Widgets now scale their contents '
+          + 'to their boxes on the wall exactly as they do on the board, which '
+          + 'is most of why the TV text was unreadable.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'The size buttons on the TV stick — and settings sees them',
+        body: 'The TV’s own − / + and "make the words readable" used to change '
+          + 'a private setting that died with the tab AND silently blocked every '
+          + 'later change from the office. They now write the panel’s own saved '
+          + 'size — the same one its card in settings shows — so pressing a '
+          + 'button on either end is visible on both, live.',
+        demo: 'tap',
+      },
+      {
+        title: 'Before and after, in the TV’s own measurements',
+        body: 'Press "Make the words readable" on a TV’s card and it tells you '
+          + 'what it is doing — 90% → 140% — then the panel re-measures itself '
+          + 'and the card shows the words’ real size before and after, green '
+          + 'when they cleared the readable line, red with advice when they '
+          + 'have not. No more pressing a button and seeing nothing change.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2026-09-06',
     title: 'Every TV, live in settings — each with its own view and size',
     items: [

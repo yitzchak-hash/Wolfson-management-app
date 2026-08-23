@@ -450,7 +450,7 @@ function nodeGrowth(type: string, w: number, h: number, lo = 0.7, hi = 3): numbe
   return Math.max(lo, Math.min(hi, Math.min(w / d.w, h / d.h)));
 }
 
-function WidgetSurface({ el, w, h, children }: {
+export function WidgetSurface({ el, w, h, children }: {
   el: CanvasElement; w: number; h: number; children: React.ReactNode;
 }) {
   const def = el.widget ? WIDGET_BY_ID.get(el.widget) : undefined;

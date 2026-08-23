@@ -62,16 +62,30 @@ function TvScreensPanel({ tv, setTvSetting, jobs, elements, stages, onToast }: {
 }) {
   const [screens, setScreens] = useState<TvScreenPresence[]>([]);
   const [loadedOnce, setLoadedOnce] = useState(false);
+  /**
+   * The before-and-after the owner asked to SEE. Pressing "make the words
+   * readable" records what the panel had just measured; the panel re-reports
+   * within a few seconds at the new size, and the card then shows both
+   * measurements side by side. While the fresh report is on its way the
+   * polling tightens to every 3 seconds, so the answer arrives while you are
+   * still looking, not on the next half-minute tick.
+   */
+  const [fixes, setFixes] = useState<Record<string, {
+    at: number;
+    scaleBefore: number; smallestBefore: number | null;
+    scaleAfter: number;
+  }>>({});
+  const fixPending = Object.values(fixes).some(f => Date.now() - f.at < 60_000);
   const refresh = async () => {
     setScreens(await loadTvScreens());
     setLoadedOnce(true);
   };
   useEffect(() => {
     refresh();
-    const t = setInterval(refresh, 30_000);
+    const t = setInterval(refresh, fixPending ? 3_000 : 30_000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fixPending]);
 
   const stored = tv.tvScreens ?? {};
   const patchScreen = (id: string, patch: Partial<NonNullable<BoardSetting['tvScreens']>[string]>) => {
@@ -137,19 +151,62 @@ function TvScreensPanel({ tv, setTvSetting, jobs, elements, stages, onToast }: {
                 </span>
               )}
             </div>
-            {tooSmall && (
+            {tooSmall && !fixes[s.id] && (
               <button
+                data-tv-fix={s.id}
                 onClick={() => {
                   const want = Math.min(2.5, Math.max(0.6,
                     Math.round(((READABLE / Math.max(1, s.smallest ?? READABLE)) * s.scale) * 10) / 10));
                   patchScreen(s.id, { scale: want });
-                  onToast('Text size raised — the TV follows within a few seconds');
+                  setFixes(f => ({ ...f, [s.id]: {
+                    at: Date.now(), scaleBefore: s.scale, smallestBefore: s.smallest, scaleAfter: want,
+                  } }));
+                  onToast('Text size raised — the TV is re-measuring');
                 }}
                 className="mb-2 px-3 py-1.5 rounded-xl text-[11px] font-bold text-white"
                 style={{ backgroundColor: '#b4342a' }}>
-                Make the words readable on this TV
+                Make the words readable · {Math.round(s.scale * 100)}% → {
+                  Math.min(250, Math.max(60,
+                    Math.round(((READABLE / Math.max(1, s.smallest ?? READABLE)) * s.scale) * 10) * 10))}%
               </button>
             )}
+            {(() => {
+              /**
+               * The before → after, in the panel's own measurements. "Before"
+               * is what it reported at the press; "after" arrives with the
+               * first report newer than the press. Until then the card says
+               * plainly that it is waiting — pressing a button that changes
+               * nothing visible was the owner's exact complaint.
+               */
+              const fix = fixes[s.id];
+              if (!fix) return null;
+              const fresh = Date.parse(s.lastSeen ?? '') > fix.at + 2000;
+              return (
+                <div data-tv-fix-result className="mb-2 rounded-xl px-3 py-2 text-[11px]"
+                  style={{ backgroundColor: fresh ? 'rgba(22,163,74,.08)' : 'rgba(180,52,42,.06)' }}>
+                  <div className="text-gray-600">
+                    <b>Before:</b> words {fix.smallestBefore ?? '?'}px at {Math.round(fix.scaleBefore * 100)}%
+                  </div>
+                  {fresh ? (
+                    <div style={{ color: (s.smallest ?? 0) >= READABLE - 2 ? '#15803d' : '#b4342a' }}>
+                      <b>Now:</b> words {s.smallest ?? '?'}px at {Math.round(s.scale * 100)}%
+                      {(s.smallest ?? 0) >= READABLE - 2
+                        ? ' — readable'
+                        : ' — still small; raise the size bar below further'}
+                    </div>
+                  ) : (
+                    <div className="text-gray-400">
+                      Raised to {Math.round(fix.scaleAfter * 100)}% — waiting for the TV to re-measure
+                      (a few seconds while it is showing)…
+                    </div>
+                  )}
+                  <button onClick={() => setFixes(f => { const n = { ...f }; delete n[s.id]; return n; })}
+                    className="mt-1 text-[10px] font-bold text-gray-400 hover:text-gray-600">
+                    Dismiss
+                  </button>
+                </div>
+              );
+            })()}
 
             {/* Its own slice of the board, drawn at ITS real shape. */}
             <BoardRegionPicker

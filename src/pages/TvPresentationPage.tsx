@@ -2,8 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspens
 import { useSearchParams } from 'react-router-dom';
 import { useStore, loadAllProjectsTaskData, ensureProjectSnapshot } from '../data/store';
 import { Apartment, CanvasElement, isCountableApartment, binKeyOf, binLabelOf, getStageName, TV_DASH_BOARD } from '../types';
-import { withAlpha } from '../components/board/BoardItems';
+import { withAlpha, WidgetSurface } from '../components/board/BoardItems';
 import { tvScreenId, reportTvScreen } from '../data/tvScreens';
+import { isFirebaseConfigured } from '../data/firebase';
 import { queryVariants, skeleton } from '../data/translit';
 import { DriveIcon, ZohoIcon, PlanIcon } from '../components/ui/BrandIcons';
 import { getBoardTheme } from '../data/boardThemes';
@@ -429,9 +430,33 @@ export function TvPresentationPage() {
     window.addEventListener('resize', beat);
     return () => { stop = true; clearTimeout(first); clearInterval(t); window.removeEventListener('resize', beat); };
   }, [view, boost]);
+  /**
+   * The panel's own size buttons write THE PANEL'S OWN SETTING, not a URL.
+   *
+   * They used to write a ?scale= param — which is local to this tab, dies
+   * with the address bar, and, worse, OUTRANKS the per-screen setting: press
+   * the size button on the TV once and every later change made from the
+   * office silently did nothing on that panel, which read as "I pressed the
+   * button and nothing changed anywhere". Now the button writes
+   * `tvScreens[thisPanel].scale` (so settings sees it too, live) and clears
+   * the masking param. The param survives as a read-only override for a
+   * panel without Firebase.
+   */
   const setBoost = (b: number) => {
+    const v = Number(b.toFixed(2));
+    if (isFirebaseConfigured) {
+      const map = { ...(tvSettings.tvScreens ?? {}) };
+      map[screenId] = { ...(map[screenId] ?? {}), scale: v };
+      setTvSetting('tvScreens', map);
+      if (params.get('scale')) {
+        const p = new URLSearchParams(params);
+        p.delete('scale');
+        setParams(p, { replace: true });
+      }
+      return;
+    }
     const p = new URLSearchParams(params);
-    p.set('scale', String(Number(b.toFixed(2))));
+    p.set('scale', String(v));
     setParams(p, { replace: true });
   };
   /**
@@ -1336,12 +1361,27 @@ export function TvPresentationPage() {
                       {binJobs} {binJobs === 1 ? t('job', 'עבודה') : t('jobs', 'עבודות')}
                     </span>
                   </button>
-                ) : el.type === 'widget' ? renderWidget(el, {
-                    jobs: apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed),
-                    stages, assignments: contractorAssignments, contractors, users,
-                    photos: contractorPhotos, logs: [],
-                    update: () => {}, openJob: () => {}, readOnly: true,
-                  })
+                ) : el.type === 'widget' ? (
+                  /**
+                   * Through `WidgetSurface`, exactly as the board draws it —
+                   * THE wall scaling bug. Widgets were rendered raw, so one
+                   * the office had stretched to double size on the board drew
+                   * its 11px labels at 11px in a big empty card, and then the
+                   * region zoom shrank those to a smudge. No display-size
+                   * boost could recover that, which is why "make the words
+                   * readable" could not: the words were small BEFORE the
+                   * zoom. The surface scales each widget's natural drawing to
+                   * fill its own box first, the same as every other screen.
+                   */
+                  <WidgetSurface el={el} w={live.w} h={live.h}>
+                    {renderWidget(el, {
+                      jobs: apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed),
+                      stages, assignments: contractorAssignments, contractors, users,
+                      photos: contractorPhotos, logs: [],
+                      update: () => {}, openJob: () => {}, readOnly: true,
+                    })}
+                  </WidgetSurface>
+                )
                   : el.type === 'countdown' ? <CountdownNode el={el} />
                   : el.type === 'stopwatch' ? <StopwatchNode el={el} />
                   : el.type === 'clipart' ? <ClipArtNode el={el} />

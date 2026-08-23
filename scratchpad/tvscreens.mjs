@@ -17,6 +17,10 @@ await ctx.addInitScript(() => {
       apartments: [], stages: [], contractors: [], contractorAssignments: [],
       canvasElements: [
         { id: 'CE-orange', type: 'box', x: 300, y: 120, w: 900, h: 600, text: 'TV area', color: '#f97316' },
+        // A widget stretched to DOUBLE its natural width — on the wall it must
+        // draw through WidgetSurface and scale its content up to match.
+        { id: 'CE-wc', type: 'widget', widget: 'world-clocks', x: 1300, y: 120, w: 420, h: 330,
+          text: '', color: '#ffffff', data: { cities: ['il', 'ny'] } },
       ],
     }));
   }
@@ -40,6 +44,20 @@ await page.reload();
 await page.waitForTimeout(2000);
 const id2 = await page.evaluate(() => localStorage.getItem('tv_screen_id'));
 check(id2 === wall.id1, 'and the id survives a reload — this panel is always this panel');
+
+// ── the wall scales a widget's content to its box, like the board ───────────
+const surf = await page.evaluate(() => {
+  // Frame uppercases its titles, so match the SURFACE itself: the widget is
+  // seeded at exactly double its natural width, so a scale(~2) transform on
+  // the wall is WidgetSurface doing its job.
+  const scaled = [...document.querySelectorAll('div')]
+    .map(d => /scale\(([\d.]+)\)/.exec(d.style.transform || ''))
+    .filter(Boolean).map(m => +m[1]);
+  return { found: scaled.length > 0, k: Math.max(0, ...scaled, 0) };
+});
+check(!!surf && surf.found && surf.k > 1.5,
+  'a widget stretched on the board draws SCALED UP on the wall (WidgetSurface)',
+  JSON.stringify(surf));
 
 // ── settings: the live-TVs section stands, honest with no Firebase ──────────
 await page.goto('http://localhost:5173/app-settings');
