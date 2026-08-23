@@ -1,0 +1,222 @@
+<title>The TV Size Plan</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800;900&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<style>
+  /* Deliberately ONE bright look — the slow-plan pages are the plan's warm,
+     bright home whatever the reader's theme, so every colour is painted. */
+  :root{
+    --paper:#FBF8F1; --card:#FFFFFF; --ink:#1C2B3A; --soft:#5B6B7C;
+    --navy:#1E3A5F; --sky:#4AA8D8; --sky-soft:#E3F1F9;
+    --amber:#D9820B; --amber-soft:#FBF0DC;
+    --green:#2E7D4F; --green-soft:#E4F2E9;
+    --line:#E5DFD2;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{
+    background:var(--paper); color:var(--ink);
+    font-family:'Source Serif 4', Georgia, serif;
+    font-size:17px; line-height:1.6;
+    padding:0 20px 90px;
+  }
+  .wrap{max-width:880px;margin:0 auto}
+  h1,h2,h3,.label,.pickno,.opt b,.strip *{font-family:Archivo,'Helvetica Neue',Arial,sans-serif}
+  h1{font-size:44px;font-weight:900;letter-spacing:-.02em;line-height:1.05;text-wrap:balance}
+  h2{font-size:15px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--navy);margin:0 0 14px}
+  .label{font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--soft)}
+
+  /* ── 1 · journey strip ── */
+  .strip{display:flex;gap:10px;align-items:stretch;margin:34px 0 10px;flex-wrap:wrap}
+  .leg{flex:1;min-width:200px;border-radius:14px;padding:12px 16px;border:2px solid var(--line);background:var(--card)}
+  .leg.now{border-color:var(--sky);background:var(--sky-soft)}
+  .leg.ahead{opacity:.75}
+  .leg .k{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--soft)}
+  .leg.now .k{color:var(--sky)}
+  .leg .t{font-size:15px;font-weight:800;margin-top:2px}
+  .leg .d{font-family:'Source Serif 4',serif;font-size:13.5px;color:var(--soft);text-transform:none;letter-spacing:0;margin-top:2px}
+
+  section{margin-top:52px}
+  .card{background:var(--card);border:1.5px solid var(--line);border-radius:18px;padding:26px 28px}
+
+  /* ── 2 · the picture so far ── */
+  .flow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap;margin:18px 0 8px}
+  .fbox{background:var(--navy);color:#fff;border-radius:14px;padding:14px 18px;flex:1;min-width:170px}
+  .fbox .fh{font-family:Archivo;font-weight:800;font-size:14px}
+  .fbox .fs{font-size:13px;opacity:.85;margin-top:3px;line-height:1.45}
+  .farrow{align-self:center;padding:0 10px;color:var(--sky);font-family:Archivo;font-weight:900;font-size:22px}
+  .fout{display:flex;gap:10px;flex:1.4;min-width:230px}
+  .fview{flex:1;background:var(--sky-soft);border:1.5px solid var(--sky);color:var(--navy);border-radius:12px;
+         padding:10px 8px;text-align:center;font-family:Archivo;font-weight:700;font-size:12.5px;align-self:stretch;
+         display:flex;align-items:center;justify-content:center}
+  .locked{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;margin-top:20px}
+  .pick{background:var(--green-soft);border:1.5px solid var(--green);border-radius:14px;padding:14px 16px;display:flex;gap:12px}
+  .pickno{background:var(--green);color:#fff;font-weight:900;font-size:14px;border-radius:9px;
+          min-width:52px;height:32px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .pick p{font-size:14.5px;line-height:1.5}
+  .pick b{font-family:Archivo;font-size:14px}
+
+  /* diagnosis */
+  .diag{border-inline-start:5px solid var(--amber);background:var(--amber-soft);border-radius:12px;padding:16px 20px;margin-top:22px}
+  .diag p{font-size:15px}
+  .diag .n{font-family:Archivo;font-weight:800;font-size:13px;color:var(--amber);letter-spacing:.05em;text-transform:uppercase}
+  .diag table{border-collapse:collapse;margin-top:10px;font-family:Archivo;font-size:13.5px}
+  .diag td,.diag th{padding:4px 14px 4px 0;text-align:left;font-variant-numeric:tabular-nums}
+  .diag th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--soft)}
+
+  /* ── 4 · questions ── */
+  .q{background:var(--card);border:1.5px solid var(--line);border-radius:18px;padding:22px 24px;margin-top:18px}
+  .q .qhead{display:flex;gap:14px;align-items:baseline}
+  .q .qno{font-family:Archivo;font-weight:900;font-size:22px;color:var(--sky);flex-shrink:0}
+  .q h3{font-size:19px;font-weight:800;line-height:1.3;text-wrap:balance}
+  .q .why{color:var(--soft);font-size:15px;margin:8px 0 14px}
+  .opt{display:flex;gap:12px;padding:10px 14px;border-radius:12px;border:1.5px solid var(--line);margin-top:8px;align-items:baseline}
+  .opt b{font-size:14px;flex-shrink:0}
+  .opt p{font-size:15px}
+  .opt.star{border-color:var(--amber);background:var(--amber-soft)}
+  .opt.star .rec{display:block;font-family:Archivo;font-weight:700;font-size:12.5px;color:var(--amber);margin-top:3px}
+
+  .how{background:var(--navy);color:#fff;border-radius:18px;padding:22px 26px;margin-top:40px}
+  .how p{font-size:15.5px}
+  .how b{font-family:Archivo}
+  .how .ex{font-family:Archivo;font-weight:700;background:rgba(255,255,255,.12);border-radius:8px;padding:2px 10px}
+  footer{margin-top:46px;color:var(--soft);font-size:13.5px;font-family:Archivo}
+</style>
+
+<div class="wrap">
+  <p class="label" style="margin-top:46px">Wolfson Management · planning together, one sitting at a time</p>
+  <h1>The TV Size Plan</h1>
+  <p style="margin-top:12px;max-width:640px">One honest sizing system for every wall panel — so the dial always
+  moves the picture, the picture is measured back to you, and no hidden ceiling ever eats a press again.</p>
+
+  <!-- 1 · journey -->
+  <div class="strip">
+    <div class="leg now"><div class="k">Sitting 1 · today</div><div class="t">The engine and its dials</div>
+      <div class="d">4 picks already locked · 6 questions below</div></div>
+    <div class="leg ahead"><div class="k">Sitting 2</div><div class="t">Anything your answers open</div>
+      <div class="d">follow-ups, if there are any</div></div>
+    <div class="leg ahead"><div class="k">Sitting 3</div><div class="t">The seal</div>
+      <div class="d">master plan + build order</div></div>
+  </div>
+  <p style="font-size:13.5px;color:var(--soft)">This map is yours — say the word to add, drop or reorder sittings.</p>
+
+  <!-- 2 · picture so far -->
+  <section>
+    <h2>The picture so far</h2>
+    <div class="card">
+      <div class="flow">
+        <div class="fbox"><div class="fh">The TV measures itself</div>
+          <div class="fs">real pixels · shape · smallest words on its glass</div></div>
+        <div class="farrow">→</div>
+        <div class="fbox"><div class="fh">One number</div>
+          <div class="fs">its automatic base size × the size YOU saved for that panel</div></div>
+        <div class="farrow">→</div>
+        <div class="fout">
+          <div class="fview">Job Board view</div>
+          <div class="fview">Building diagram</div>
+          <div class="fview">Dashboard</div>
+        </div>
+      </div>
+      <p style="font-size:14.5px;color:var(--soft)">The number is applied <b>once</b>, at the root of whichever view the
+      panel is showing, with the sharp layout-zoom the board already uses. Nothing inside carries its own little
+      formula any more.</p>
+
+      <div class="locked">
+        <div class="pick"><span class="pickno">✓ 1</span><p><b>True zoom.</b> 160% means everything is genuinely
+          1.6× bigger — cards, graphs, words. Fewer cards fit and the grid reflows; that is what bigger means.</p></div>
+        <div class="pick"><span class="pickno">✓ 2</span><p><b>All views, one pipeline.</b> Board, diagram and
+          dashboard all ride the same system, so they can never drift apart again.</p></div>
+        <div class="pick"><span class="pickno">✓ 3</span><p><b>The TV answers you.</b> Change a panel from the
+          office and it briefly shows “Display size 90% → 160%” — visible from across the room.</p></div>
+        <div class="pick"><span class="pickno">✓ 4</span><p><b>The red button walks.</b> Each press is one bounded
+          step; the TV re-measures; the card says “still 11px — press again” until the words clear the line.</p></div>
+      </div>
+
+      <div class="diag">
+        <div class="n">Why the button was dead — measured at your panel’s real width</div>
+        <p>The dashboard’s drawing code had hidden ceilings (contents stop at 1.5×, card heights at 1.6×, text at
+        1.9×), and your wide panel <em>starts</em> at 1.6×. So the label climbed and the picture was forbidden to
+        follow. A second trap: an old TV tab can carry a stale size in its web address that overrules settings
+        forever. Both go.</p>
+        <table>
+          <tr><th>You pressed to</th><th>The label said</th><th>A card actually grew</th></tr>
+          <tr><td>90% → 160%</td><td>+78%</td><td>+11%, then frozen at the ceiling</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 · topic -->
+  <section>
+    <h2>This sitting: the engine’s remaining dials</h2>
+    <p style="max-width:660px">The core is locked above. What’s left are the knobs on it — what the limits are, who
+    wins when two settings disagree, and how the button paces itself. Six questions, most important first. The ⭐
+    row is my recommendation with the reason; nod or push back, either is fast.</p>
+  </section>
+
+  <!-- 4 · batch -->
+  <section>
+    <div class="q"><div class="qhead"><span class="qno">5</span>
+      <h3>A TV is showing a chosen slice of the board and you turn its size up. Who wins — the slice or the dial?</h3></div>
+      <p class="why">Today the slice is fitted to the screen and the dial multiplies on top, so turning it up crops
+      into the slice. That has to be a decision, not an accident.</p>
+      <div class="opt star"><b>A</b><p>The dial wins: the picture grows past the slice’s edges and the outer parts
+        crop away. The slice is the framing at 100%.<span class="rec">⭐ Recommended — “bigger” stays one promise
+        everywhere; checked against how the region maths already behaves, so nothing saved changes meaning.</span></p></div>
+      <div class="opt"><b>B</b><p>The slice always fits exactly; the size dial does nothing on a panel that has a
+        slice chosen (it only affects whole-board panels).</p></div>
+    </div>
+
+    <div class="q"><div class="qhead"><span class="qno">6</span>
+      <h3>Once panels have their own sizes, what is the old shared “display size” slider for?</h3></div>
+      <p class="why">Every panel you touch gets its own saved size. The shared one is left over.</p>
+      <div class="opt star"><b>A</b><p>It becomes the default for a brand-new panel only — the first time a TV opens
+        the link it uses the shared size until you give it its own.<span class="rec">⭐ Recommended — a new panel
+        shows up sane instead of at 100% on a huge screen.</span></p></div>
+      <div class="opt"><b>B</b><p>Retire it — every panel must be set up individually, the shared slider disappears.</p></div>
+    </div>
+
+    <div class="q"><div class="qhead"><span class="qno">7</span>
+      <h3>How high can the size dial go?</h3></div>
+      <p class="why">Today it stops at 250%, which is part of why a far-gone panel couldn’t be rescued.</p>
+      <div class="opt star"><b>A</b><p>300% — enough to rescue any real panel we’ve measured, and past that the
+        wall is showing three words.<span class="rec">⭐ Recommended — computed from your own panel’s numbers:
+        8px words need ~2× on top of a 1.4× start.</span></p></div>
+      <div class="opt"><b>B</b><p>Keep 250%.</p></div>
+      <div class="opt"><b>C</b><p>No ceiling at all.</p></div>
+    </div>
+
+    <div class="q"><div class="qhead"><span class="qno">8</span>
+      <h3>How big is one press of the step-by-step red button?</h3></div>
+      <p class="why">You chose walking over leaping — this sets the stride. Every press still shows the measured
+      before → after.</p>
+      <div class="opt star"><b>A</b><p>Up to +25% of the current size per press — lands in 2–3 presses.
+        <span class="rec">⭐ Recommended — big enough to see from the couch, small enough never to overshoot.</span></p></div>
+      <div class="opt"><b>B</b><p>+10% per press — gentler, more presses.</p></div>
+      <div class="opt"><b>C</b><p>+50% per press — usually one press, occasionally too far.</p></div>
+    </div>
+
+    <div class="q"><div class="qhead"><span class="qno">9</span>
+      <h3>Should the top bar of the TV grow with the picture, or keep its own size?</h3></div>
+      <p class="why">The bar already has its own “button size” dial made for fingers on the panel.</p>
+      <div class="opt star"><b>A</b><p>The bar keeps its own dial; the size dial moves only the content below it.
+        <span class="rec">⭐ Recommended — buttons are for the hand at the panel, content is for the eyes across
+        the room; two different jobs, two dials.</span></p></div>
+      <div class="opt"><b>B</b><p>One dial moves everything, bar included.</p></div>
+    </div>
+
+    <div class="q"><div class="qhead"><span class="qno">10</span>
+      <h3>Add a one-press test pattern on the wall?</h3></div>
+      <p class="why">A button that draws rulers and sample words at known real sizes for a few seconds — so you can
+      judge a panel from the couch, the way TV calibration screens do it.</p>
+      <div class="opt star"><b>A</b><p>Yes — small, and it reuses the measuring machinery that already exists.
+        <span class="rec">⭐ Recommended — it turns “is this readable?” from an argument into a glance.</span></p></div>
+      <div class="opt"><b>B</b><p>Skip it.</p></div>
+    </div>
+  </section>
+
+  <div class="how">
+    <p><b>Answer right here in chat, any way you like</b> — for example <span class="ex">5A 6A 7A 8A 9A 10A</span>,
+    or “5A, 6B, 7 — let’s talk”. Each answer becomes a numbered locked pick on the next page. Nothing is built
+    until you’ve sealed the plan.</p>
+  </div>
+
+  <footer>📍 Sitting 1 of 3 · 4 picks locked · this batch: the engine’s dials (picks 5–10) · next: your follow-ups, then the seal</footer>
+</div>
