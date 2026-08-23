@@ -3,7 +3,12 @@ dist/
 .DS_Store
 *.local
 -.xml
-.claude/
+# Local Claude Code state stays out of the repo, but the SKILLS in it are
+# shared working method and travel with the project. Git cannot re-include a
+# file whose parent directory is excluded, so exclude the CONTENTS of .claude
+# and re-include the skills directory.
+.claude/*
+!.claude/skills/
 scratchpad/*.png
 scratchpad/*.log
 scratchpad/cap-*.html

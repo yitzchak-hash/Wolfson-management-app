@@ -69,6 +69,19 @@ cloud-sync badge, dropping `persistentLocalCache` — are all in the tree).
 - `VITE_DRIVE_API_KEY` must equal the backend's `API_KEY`; it lives in the public bundle (deters casual abuse, not a true secret — real protection is the Contributor-only service account)
 - **SECURITY**: The service account JSON key must NEVER be committed to the repository. It lives in Vercel env vars only.
 
+## Skills live in the repo, local Claude state does not
+`.claude/skills/<name>/SKILL.md` is tracked and travels with the project — a
+skill is shared working method, the same as anything else in here. Everything
+else under `.claude/` (settings, permissions, per-machine state) stays ignored.
+
+Git cannot re-include a file whose parent directory is excluded, so `.gitignore`
+excludes the CONTENTS (`.claude/*`) and re-includes `!.claude/skills/`. Writing
+it as `.claude/` would make the exception impossible.
+
+Installed so far: **slow-plan** — planning any large piece of work one small
+visual sitting at a time, a batch of starred questions per page, every answer a
+permanently numbered locked pick, ending in a sealed master plan.
+
 ## Directory Layout
 ```
 src/
