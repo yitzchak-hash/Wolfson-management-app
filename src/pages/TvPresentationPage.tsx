@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspens
 import { useSearchParams } from 'react-router-dom';
 import { useStore, loadAllProjectsTaskData, ensureProjectSnapshot } from '../data/store';
 import { Apartment, CanvasElement, isCountableApartment, binKeyOf, binLabelOf, getStageName, TV_DASH_BOARD } from '../types';
+import { withAlpha } from '../components/board/BoardItems';
 import { queryVariants, skeleton } from '../data/translit';
 import { DriveIcon, ZohoIcon, PlanIcon } from '../components/ui/BrandIcons';
 import { getBoardTheme } from '../data/boardThemes';
@@ -1279,6 +1280,15 @@ export function TvPresentationPage() {
                     ? { backgroundColor: el.color || '#ffffff', border: '1px solid #e2e8f0' }
                     : el.type === 'clipart'
                     ? {}
+                    // A section box is TINTED, exactly as the board tints it.
+                    // Painted raw, the owner's big orange section covered the
+                    // whole wall as a solid slab with everything vanishing
+                    // behind it — a box is a region marker, not a poster.
+                    : el.type === 'box'
+                    ? {
+                        backgroundColor: withAlpha(el.color, el.boxOpacity ?? 0.45),
+                        border: `1px solid ${withAlpha(el.color, (el.boxOpacity ?? 0.45) + 0.35)}`,
+                      }
                     : { backgroundColor: el.color, border: '1px solid rgba(0,0,0,.08)' }),
                 }}>
                 <WallGuard>

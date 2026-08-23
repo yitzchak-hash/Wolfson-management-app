@@ -55,9 +55,14 @@ export function edgePushed(x: number, y: number): Side | null {
   return null;
 }
 
-/** A screenful, rounded to something tidy, and never less than a good margin. */
-export const roomFor = (viewport: number, zoom: number): number =>
-  Math.max(400, Math.round((viewport / Math.max(zoom, 0.1)) / 100) * 100);
+/**
+ * A LITTLE room at a time — the owner's ruling. A whole screenful per press
+ * teleported the board: press once and everything you were looking at is
+ * gone. 300 world units is about a tile and a half; press it again for more.
+ * The caller compensates the pan by the same amount, so nothing on screen
+ * appears to move — the board simply gains space.
+ */
+export const roomFor = (_viewport: number, _zoom: number): number => 300;
 
 export interface Shift { dx: number; dy: number }
 

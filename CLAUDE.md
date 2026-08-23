@@ -3717,3 +3717,84 @@ wall content-fit). Its traps: the unit card must be clicked via
 a nudge moves the union's TOP tile to the anchor while the rest keep their
 offsets — asserting both at the anchor blames the app for the harness's own
 seed.
+
+---
+
+# v2 — the white TV found, the whole-board view, and widget polish
+
+## THE WHITE TV: one custom group crashed the whole wall
+The production "/tv shows nothing but white" was a CRASH, reproduced by
+pulling the live board's own records from Firestore (public rules, REST API —
+`scratchpad/tvhis.mjs` replays them against the built bundle):
+`TvPresentationPage` read `BIN_META[el.binKind].label`, and a group made by
+hand has no `binKind` — the documented trap, missed on this ONE line. The
+first custom group threw, React unmounted the page, white screen — for weeks,
+which is why every region/scale fix "didn't work". `binLabelOf(el)` fixes it,
+and every node on the wall now renders inside **`WallGuard`** (an error
+boundary): a record the renderer chokes on blanks its own card, never the
+wall. A wall nobody stands next to must degrade, not vanish.
+Also: a section box is TINTED on the wall (`withAlpha`, now exported from
+BoardItems, honouring `boxOpacity`) — painted raw, the owner's big orange
+section covered the entire TV as a solid slab.
+
+## OWNER RE-CORRECTION (2026-09-05): desk LEFT and BOTTOM; TOP and RIGHT flush
+Flips the previous round's left-pin. `clampPanRef`: RIGHT is flush
+(`xMin = vp.w − w`, no grey strip right, the rail reserve is gone), TOP is
+flush at the chrome (`yMax = hr`, no margin strip of desk — unless
+`expand.top` unlocks it), LEFT and BOTTOM show desk with the VIS=160
+min-visibility bite. The margins are PAPER inside the world (settleDrop's
+gutter + the world extending a margin past far content), so a flush edge
+still shows a margin. `homePan` is flush `{0, hr}`. **The clamp bails on an
+unmeasured viewport** (`vp.w < 50`) — its bounds anchor to the RIGHT edge
+now, and vp.w = 0 read every valid saved pan as out of range, which broke
+the board's view-memory restore on arrival.
+
+## Zoom out until the ENTIRE board shows
+`fitZoomRef` (written each render from the live world size) + `zoomSteps()`:
+when the whole-board fit is below 25%, the ladder extends down ~×0.8 a rung,
+ending exactly on the fit. Small boards keep the old 25% floor. The BOTTOM
+rung is the framed whole-board view, not just the right scale: `zoomAt` asks
+the clamp for the far corner (`{x: −1e9, y: 1e9}` — right-flush, top-flush)
+so nothing hangs off-screen. `commitZoomField`, the view-memory snap and
+`zoomToFit`'s rung snap all go through `zoomSteps()`. Step lookup is
+nearest-rung, not exact-or-100% — the dynamic low rungs move as the board
+grows.
+
+## Make-room: a little at a time, and the view holds still
+`roomFor` returns a flat 300 world units (was a screenful — press once and
+everything you were looking at was gone). The pan compensation the caller
+already did now survives (it used to be swallowed by the old clamp), so the
+widgets stay visually put and the board simply gains space. Press again for
+more.
+
+## Widget round (`scratchpad/round24.mjs`, 13 checks)
+- **Search results FLOAT** (`ResultsOverlay` + `useSearchOpen` in
+  `widgets.tsx`): both Find-a-job widgets portal their results to
+  `document.body` — the widget body is overflow-clipped inside the scaled
+  `WidgetSurface`, so no z-index can escape it (the tooltip's disease). The
+  panel SEALS pointer events (portal-in-a-node trap) and preventDefaults its
+  pointerdown so the input keeps focus through a result click; it re-measures
+  its anchor on a slow tick; it draws at CSS size, readable at any board
+  zoom. `readOnly` (shelf, wall) keeps the inline list — a portal has no
+  business in a preview.
+- **World clocks fill their box**: the list is measured and each row takes an
+  equal share of the height, every size in the row derived from that share
+  (`f = clamp(rowPx/24, 1, 2.8)`). WidgetSurface already scales with width;
+  this is the taller-only growth it deliberately does not do.
+- **Link tile wears the site's logo**: `SiteLogo` — Google's favicon service
+  (`s2/favicons?domain=…&sz=64`), fallback to the link glyph on a bad host or
+  a failed load, so never a broken-image square.
+- **A resize that loses its release ends itself**: `onResizePointerMove` /
+  `onJobResizeMove` (page and BinBoard) commit-and-stand-down on
+  `e.buttons === 0` — a buttonless move means pointerup was missed
+  (pointercancel, or the handle remounted and its capture died), and without
+  the guard the gesture chased the bare mouse forever ("it sticks to the
+  mouse and keeps resizing after I let go"). All three element handles also
+  carry `onPointerCancel` now, as the job handle already did.
+
+Harnesses: `round24.mjs` (widgets) · `round25.mjs` (wall tint, zoom-to-fit
+ladder + framed bottom rung, gentle make-room) · `board.mjs`/`round20.mjs`
+re-encode the flipped edge contract. `tvcrash.mjs` (every widget on /tv,
+bisecting) and `tvwhite.mjs`/`tvhis.mjs`/`tvprod.mjs` are the white-TV
+diagnosis tools — tvhis reads real records fetched to the /tmp scratchpad,
+which never enters the repo.

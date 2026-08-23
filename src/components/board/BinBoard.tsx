@@ -617,6 +617,9 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
 
   function resizeMove(e: React.PointerEvent) {
     if (!resize) return;
+    // The release was missed (pointercancel / a remounted handle losing its
+    // capture) — end the gesture rather than follow the bare mouse.
+    if (e.buttons === 0) { resizeUp(); return; }
     const el = nodes.find(n => n.id === resize.id);
     const d = sizeWithSnap(
       resize.id,
@@ -628,6 +631,7 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
   /** The tile's own corner — same gesture, different commit. */
   function jobResizeMove(e: React.PointerEvent) {
     if (!jobResize) return;
+    if (e.buttons === 0) { jobResizeUp(); return; }
     const i = items.findIndex(a => a.id === jobResize.id);
     const p = i >= 0 ? jobPos(items[i], i) : { x: 0, y: 0 };
     const d = sizeWithSnap(

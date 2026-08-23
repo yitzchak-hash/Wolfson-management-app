@@ -61,65 +61,63 @@ const readPan = () => page.evaluate(() => {
 console.log('pan before zoom out:', JSON.stringify(await readPan()));
 
 /**
- * OWNER REFINEMENT (2026-09-04, superseding the 2026-09-02 "dead space
- * everywhere" ruling): the grey desk shows ONLY past the board's right and
- * bottom edges — and on a side whose expansion is UNLOCKED in board settings.
- * The default locks are top and left, so out of the box:
- *   1. zooming out lands the board against its own top-left corner (the
- *      chrome's edge plus the margin) — never blank space above or left;
- *   2. shoving the board down-right clamps at that same corner;
- *   3. pressing 100% returns flush to it, no grey on the pinned sides.
+ * OWNER RE-CORRECTION (2026-09-05): the desk shows on the LEFT and BOTTOM;
+ * the TOP and RIGHT are flush — no grey above or right of the board, ever.
+ * Zooming out may continue until the WHOLE board is on screen, landing it
+ * against the top-right corner with the leftover viewport as desk on the
+ * left and below.
  */
-const chrome = await page.evaluate(() => {
+const geom = () => page.evaluate(() => {
   const v = document.querySelector('[data-board-viewport]').getBoundingClientRect();
-  // The floating header the clamp measures — the deepest bar inside the viewport's top.
-  const hb = document.querySelector('[data-board-viewport] .absolute.top-0, [data-board-viewport] > div');
-  return { left: v.left, top: v.top, w: v.width, h: v.height };
+  const w = document.querySelector('[data-board-world]').getBoundingClientRect();
+  const hb = document.querySelector('[data-board-viewport] [class*="absolute"]');
+  return {
+    vp: { left: v.left, top: v.top, right: v.right, bottom: v.bottom },
+    world: { left: w.left, top: w.top, right: w.right, bottom: w.bottom },
+  };
 });
 
 await page.mouse.move(700, 450);
 await page.keyboard.down('Control');
-for (let i = 0; i < 4; i++) { await page.mouse.wheel(0, 120); await page.waitForTimeout(180); }
+for (let i = 0; i < 6; i++) { await page.mouse.wheel(0, 120); await page.waitForTimeout(180); }
 await page.keyboard.up('Control');
-await page.waitForTimeout(300);
-const zoomedOut = await readPan();
-console.log('pan after zooming far out:', JSON.stringify(zoomedOut));
-if (zoomedOut && typeof zoomedOut.x === 'number') {
-  // margin defaults to 28 world units; the header band is measured live, so the
-  // bound is generous: nothing may sit meaningfully past corner + margin.
-  console.log(zoomedOut.x <= 28 * zoomedOut.z + 4
-    ? 'PASS zooming out never opens grey LEFT of the board (x pinned at the margin)'
-    : `FAIL grey opened left of the board on zoom out (x=${zoomedOut.x})`);
-  console.log(zoomedOut.y <= chrome.h * 0.4 + 28 * zoomedOut.z + 4
-    ? 'PASS zooming out never opens grey ABOVE the board'
-    : `FAIL grey opened above the board on zoom out (y=${zoomedOut.y})`);
-}
+await page.waitForTimeout(400);
+const zo = await geom();
+const zoPan = await readPan();
+console.log('zoomed out:', JSON.stringify({ pan: zoPan, world: zo.world }));
+console.log(zo.world.right >= zo.vp.right - 3
+  ? 'PASS zoomed out, the board is flush RIGHT — no grey strip there'
+  : `FAIL grey opened right of the board (world.right=${zo.world.right} vp.right=${zo.vp.right})`);
+console.log(zo.world.left >= zo.vp.left - 3 && zo.world.bottom <= zo.vp.bottom + 3
+  ? 'PASS the WHOLE board is on screen, desk showing left and below'
+  : `FAIL the board does not fully fit at the ladder floor: ${JSON.stringify(zo.world)}`);
+console.log(zo.world.top >= zo.vp.top - 3
+  ? 'PASS and no grey above the board'
+  : `FAIL the board slid above the viewport (top=${zo.world.top})`);
 
-// Shove the board hard down-right: the pinned top-left must hold — the old
-// clamp allowed a positive offset here, which is exactly what the owner
-// reported as "gray on the top and left sides".
+// Shove the board down-right: grey may open LEFT (a free side now), and the
+// min-visibility clamp keeps a bite of board on screen.
 await page.mouse.move(700, 450);
 await page.mouse.down({ button: 'middle' });
 await page.mouse.move(1150, 800, { steps: 12 });
 await page.mouse.up({ button: 'middle' });
 await page.waitForTimeout(300);
-const dragged = await readPan();
-console.log('pan after shoving down-right:', JSON.stringify(dragged));
-if (dragged && typeof dragged.x === 'number') {
-  console.log(dragged.x <= 28 * dragged.z + 4 && dragged.y <= chrome.h * 0.4 + 28 * dragged.z + 4
-    ? 'PASS shoving down-right clamps at the board corner — no grey above or left'
-    : `FAIL the shove opened space on a pinned side (x=${dragged.x}, y=${dragged.y})`);
-}
+const dragged = await geom();
+console.log('after shoving down-right:', JSON.stringify(dragged.world));
+console.log(dragged.world.left <= dragged.vp.right - 100
+  ? 'PASS the min-visibility clamp keeps the board on screen'
+  : `FAIL the board can be flung fully off screen (left=${dragged.world.left})`);
 
-// 100% returns flush: the board's own corner at the chrome's edge, no grey.
+// 100% returns flush: the world's own corner at the chrome's edge — x at 0,
+// no desk strip held open on the pinned top.
 const hundred = page.locator('button', { hasText: /^100%$/ }).first();
 if (await hundred.count()) {
   await hundred.click();
   await page.waitForTimeout(400);
   const home = await readPan();
   console.log('pan after 100%:', JSON.stringify(home));
-  console.log(home && home.z === 1 && Math.abs(home.x - 28) <= 4
-    ? 'PASS 100% comes home flush — margin in, no grey on the pinned sides'
+  console.log(home && home.z === 1 && Math.abs(home.x) <= 3
+    ? 'PASS 100% comes home flush to the corner'
     : `FAIL 100% did not settle on the corner: ${JSON.stringify(home)}`);
 } else {
   console.log('SKIP no 100% button found');

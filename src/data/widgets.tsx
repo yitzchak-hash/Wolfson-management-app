@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Gauge, ListChecks, Hash, BarChart3, Table2, ShoppingCart, CalendarRange,
   Flag, User2, Link2, MapPin, Clock3, Megaphone, Image as ImageIcon,
@@ -769,21 +770,7 @@ export const WIDGETS: WidgetDef[] = [
     id: 'link', rank: 2, name: 'Link tile', category: 'ref', icon: Link2, w: 185, h: 90,
     blurb: 'A labelled shortcut to anything — a sheet, a supplier, a portal.',
     data: { label: 'Open', url: '' },
-    render: (el, c) => (
-      <Frame title="Link" icon={Link2}>
-        <div className="h-full flex flex-col justify-center gap-0.5">
-          <Line value={d(el).label ?? ''} readOnly={c.readOnly} placeholder="Label"
-            onChange={v => c.update({ data: { ...d(el), label: v } })}
-            className="text-[12px] font-bold text-gray-900" />
-          {d(el).url
-            ? <a data-no-drag data-el-action href={d(el).url} target="_blank" rel="noopener noreferrer"
-                className="text-[10px] text-[#4aa8d8] truncate">{d(el).url}</a>
-            : <Line value="" readOnly={c.readOnly} placeholder="https://…"
-                onChange={v => c.update({ data: { ...d(el), url: v } })}
-                className="text-[10px] text-gray-400" />}
-        </div>
-      </Frame>
-    ),
+    render: (el, c) => <LinkTile el={el} c={c} />,
   },
   {
     id: 'address', rank: 3, name: 'Address', category: 'ref', icon: MapPin, w: 200, h: 100,
@@ -989,7 +976,7 @@ export const WIDGETS: WidgetDef[] = [
     blurb: 'Type a name and jump straight to the job.',
     render: (el, c) => (
       <JobSearch jobs={c.jobs} openJob={c.openJob} stages={c.stages} assignments={c.assignments}
-        preset={String(d(el).sampleQuery ?? '') || undefined} />
+        preset={String(d(el).sampleQuery ?? '') || undefined} readOnly={c.readOnly} />
     ),
   },
   {
@@ -1685,32 +1672,192 @@ function ContractorLinks({ contractors, assignments }: {
   );
 }
 
-function JobSearch({ jobs, openJob, stages, assignments, preset }: {
+/**
+ * The search widget's results, floating OVER the neighbouring widgets.
+ *
+ * A result list clipped inside the widget's own box turns into a two-row
+ * peephole the moment the widget is small — the owner's ask was for the
+ * results "to be able to hover over other widgets", i.e. a dropdown. That
+ * needs a PORTAL: the widget body is `overflow`-clipped and drawn inside the
+ * scaled `WidgetSurface`, so no z-index on a child can escape its parent's
+ * scissors (the tooltip's disease, cured the same way).
+ *
+ * Three rules paid for elsewhere and kept here:
+ *  - The panel SEALS its pointer events — portalled from inside a board node,
+ *    a press would otherwise bubble up the REACT tree into the node's own
+ *    handlers, which capture the pointer and swallow the click. The
+ *    pointerdown also preventDefaults so the search input keeps focus while a
+ *    result is clicked.
+ *  - It re-measures its anchor on a slow tick — the board can pan or zoom
+ *    under an open dropdown, and a panel nailed to stale coordinates reads as
+ *    detached.
+ *  - It draws at ordinary CSS size, NOT the board's zoom: a dropdown is
+ *    chrome, and results you can read at 33% zoom are the point.
+ */
+function ResultsOverlay({ anchor, open, onHold, children }: {
+  anchor: React.RefObject<HTMLElement | null>;
+  open: boolean;
+  /** Called while the pointer presses inside the panel, so blur-to-close waits. */
+  onHold?: () => void;
+  children: React.ReactNode;
+}) {
+  const [rect, setRect] = useState<{ left: number; top: number; width: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!open) { setRect(null); return; }
+    const measure = () => {
+      const r = anchor.current?.getBoundingClientRect();
+      if (r && r.width > 0) {
+        setRect(prev => (prev && prev.left === r.left && prev.top === r.bottom && prev.width === r.width)
+          ? prev : { left: r.left, top: r.bottom, width: r.width });
+      }
+    };
+    measure();
+    const t = setInterval(measure, 250);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  if (!open || !rect) return null;
+  const width = Math.max(280, Math.min(420, rect.width));
+  return createPortal(
+    <div
+      data-search-overlay data-no-drag
+      onPointerDown={e => { e.preventDefault(); e.stopPropagation(); onHold?.(); }}
+      onPointerUp={e => e.stopPropagation()}
+      onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
+      onClick={e => e.stopPropagation()}
+      onWheel={e => e.stopPropagation()}
+      className="fixed z-[95] bg-white rounded-xl border border-gray-200 overflow-y-auto p-1"
+      style={{
+        left: Math.min(rect.left, window.innerWidth - width - 8),
+        top: Math.min(rect.top + 4, window.innerHeight - 60),
+        width,
+        maxHeight: Math.min(340, window.innerHeight - rect.top - 16),
+        boxShadow: '0 18px 44px -10px rgba(15,23,42,.35)',
+      }}
+    >
+      {children}
+    </div>,
+    document.body,
+  );
+}
+
+/** Focus + query decide whether the dropdown shows; a click inside holds it. */
+function useSearchOpen(q: string) {
+  const [focused, setFocused] = useState(false);
+  const holdRef = useRef(0);
+  const onFocus = () => setFocused(true);
+  const onBlur = () => {
+    // A press in the overlay preventDefaults, so blur rarely fires from it —
+    // but a stray one (touch) must not kill the click it belongs to.
+    setTimeout(() => { if (Date.now() - holdRef.current > 250) setFocused(false); }, 120);
+  };
+  const onHold = () => { holdRef.current = Date.now(); };
+  return { open: focused && q.trim().length > 0, onFocus, onBlur, onHold };
+}
+
+function JobSearch({ jobs, openJob, stages, assignments, preset, readOnly }: {
   jobs: Apartment[]; openJob: (id: string) => void;
   stages: Stage[]; assignments: ContractorAssignment[];
   /** The store seeds a query so the preview shows results, not an empty box. */
   preset?: string;
+  /** Shelf and wall: keep the results inline — a portal has no business there. */
+  readOnly?: boolean;
 }) {
   const [q, setQ] = useState(preset ?? '');
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const drop = useSearchOpen(q);
   const needle = q.trim().toLowerCase();
   const hits = needle
     ? jobs.filter(j => (j.displayName ?? '').toLowerCase().includes(needle)
         || (j.address ?? '').toLowerCase().includes(needle)).slice(0, 8)
     : [];
+  const rows = (
+    <>
+      {hits.map(j => (
+        <MiniJob key={j.id} job={j} stages={stages} assignments={assignments} onOpen={openJob}
+          sub={j.address || undefined} />
+      ))}
+      {needle && hits.length === 0 && <span className="text-[10px] text-gray-400 px-2">No match</span>}
+    </>
+  );
   return (
     <Frame title="Find a job" icon={Search}>
       <div className="h-full flex flex-col gap-1">
-        <input
-          data-no-drag data-el-action value={q} onChange={e => setQ(e.target.value)}
-          placeholder="Name or address…"
-          className="text-[11px] bg-slate-50 rounded px-2 py-1 outline-none flex-shrink-0"
-        />
-        <div className="flex-1 min-h-0 overflow-y-auto pr-1 flex flex-col gap-0.5">
-          {hits.map(j => (
-            <MiniJob key={j.id} job={j} stages={stages} assignments={assignments} onOpen={openJob}
-              sub={j.address || undefined} />
-          ))}
-          {needle && hits.length === 0 && <span className="text-[10px] text-gray-400">No match</span>}
+        <div ref={anchorRef} className="flex-shrink-0">
+          <input
+            data-no-drag data-el-action value={q} onChange={e => setQ(e.target.value)}
+            onFocus={drop.onFocus} onBlur={drop.onBlur}
+            onKeyDown={e => { if (e.key === 'Escape') { setQ(''); (e.target as HTMLElement).blur(); } }}
+            placeholder="Name or address…"
+            className="w-full text-[11px] bg-slate-50 rounded px-2 py-1 outline-none"
+          />
+        </div>
+        {readOnly ? (
+          <div className="flex-1 min-h-0 overflow-y-auto pr-1 flex flex-col gap-0.5">{rows}</div>
+        ) : (
+          <ResultsOverlay anchor={anchorRef} open={drop.open} onHold={drop.onHold}>{rows}</ResultsOverlay>
+        )}
+      </div>
+    </Frame>
+  );
+}
+
+/**
+ * The website's own logo on a link.
+ *
+ * Google's favicon service answers for any host with the site's real icon —
+ * one plain <img>, no key, cached by the browser. A link with no readable
+ * host, or an icon that fails to load, falls back to the neutral link glyph
+ * so the tile never shows a broken-image square.
+ */
+function SiteLogo({ url, size = 26 }: { url: string; size?: number }) {
+  const [dead, setDead] = useState(false);
+  let host = '';
+  try { host = new URL(url).hostname; } catch { /* not a full URL yet */ }
+  useEffect(() => { setDead(false); }, [host]);
+  if (!host || dead) {
+    return (
+      <span className="flex items-center justify-center rounded-lg bg-slate-100 text-slate-400 flex-shrink-0"
+        style={{ width: size, height: size }}>
+        <Link2 size={Math.round(size * 0.55)} />
+      </span>
+    );
+  }
+  return (
+    <img
+      src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`}
+      width={size} height={size} alt=""
+      className="rounded-lg flex-shrink-0 bg-white"
+      style={{ width: size, height: size }}
+      onError={() => setDead(true)}
+    />
+  );
+}
+
+function LinkTile({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
+  const data = d(el);
+  const url = String(data.url ?? '');
+  let host = '';
+  try { host = new URL(url).hostname.replace(/^www\./, ''); } catch { /* shown as typed */ }
+  return (
+    <Frame title="Link" icon={Link2}>
+      <div className="h-full flex items-center gap-2.5">
+        {url && (
+          <a data-no-drag data-el-action href={url} target="_blank" rel="noopener noreferrer"
+            title={url} className="flex-shrink-0">
+            <SiteLogo url={url} size={30} />
+          </a>
+        )}
+        <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
+          <Line value={data.label ?? ''} readOnly={c.readOnly} placeholder="Label"
+            onChange={v => c.update({ data: { ...data, label: v } })}
+            className="text-[12px] font-bold text-gray-900" />
+          {url
+            ? <a data-no-drag data-el-action href={url} target="_blank" rel="noopener noreferrer"
+                title={url} className="text-[10px] text-[#4aa8d8] truncate">{host || url}</a>
+            : <Line value="" readOnly={c.readOnly} placeholder="https://…"
+                onChange={v => c.update({ data: { ...data, url: v } })}
+                className="text-[10px] text-gray-400" />}
         </div>
       </div>
     </Frame>
@@ -2463,14 +2610,39 @@ function JobFinder({ el, ctx }: { el: CanvasElement; ctx: WidgetCtx }) {
       .slice(0, 40);
   }, [q, ctx.jobs]);
 
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const drop = useSearchOpen(q);
+
+  const rows = (
+    <>
+      {q.trim() && hits.length === 0 && (
+        <p className="px-2 py-3 text-gray-400" style={{ fontSize: size - 1 }}>
+          Nothing close to “{q.trim()}”.
+        </p>
+      )}
+      {hits.map(({ job }: { job: Apartment }) => (
+        <MiniJob
+          key={job.id}
+          job={job}
+          stages={ctx.stages}
+          assignments={ctx.assignments}
+          onOpen={ctx.openJob}
+          size={size}
+        />
+      ))}
+    </>
+  );
+
   return (
     <div className="w-full h-full flex flex-col overflow-hidden">
-      <div className="flex items-center gap-1.5 px-2 pt-2 pb-1.5 flex-shrink-0">
+      <div ref={anchorRef} className="flex items-center gap-1.5 px-2 pt-2 pb-1.5 flex-shrink-0">
         <Search size={13} className="text-gray-400 flex-shrink-0" />
         <input
           data-no-drag data-el-action data-job-find
           value={q}
           onChange={e => setQ(e.target.value)}
+          onFocus={drop.onFocus} onBlur={drop.onBlur}
+          onKeyDown={e => { if (e.key === 'Escape') { setQ(''); (e.target as HTMLElement).blur(); } }}
           placeholder="Name, number or address"
           className="flex-1 min-w-0 outline-none bg-transparent text-slate-700 placeholder:text-slate-400"
           style={{ fontSize: size }}
@@ -2487,22 +2659,14 @@ function JobFinder({ el, ctx }: { el: CanvasElement; ctx: WidgetCtx }) {
             {ctx.jobs.length} jobs. Type a family name in either language.
           </p>
         )}
-        {q.trim() && hits.length === 0 && (
-          <p className="px-2 py-3 text-gray-400" style={{ fontSize: size - 1 }}>
-            Nothing close to “{q.trim()}”.
-          </p>
-        )}
-        {hits.map(({ job }: { job: Apartment }) => (
-          <MiniJob
-            key={job.id}
-            job={job}
-            stages={ctx.stages}
-            assignments={ctx.assignments}
-            onOpen={ctx.openJob}
-            size={size}
-          />
-        ))}
+        {/* Live board: the results float over the neighbours instead of being
+            clipped to however small this widget happens to be. The shelf and
+            the wall keep them inline — a portal has no business in a preview. */}
+        {ctx.readOnly ? rows : null}
       </div>
+      {!ctx.readOnly && (
+        <ResultsOverlay anchor={anchorRef} open={drop.open} onHold={drop.onHold}>{rows}</ResultsOverlay>
+      )}
     </div>
   );
 }

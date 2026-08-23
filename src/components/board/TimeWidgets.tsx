@@ -116,24 +116,57 @@ export function WorldClocks({ el }: { el: CanvasElement }) {
       return { city, p, atDesk, off, day };
     });
 
+  /**
+   * The type follows the BOX, not a constant.
+   *
+   * `WidgetSurface` already scales everything with the widget's WIDTH; what it
+   * deliberately does not do is grow the type when the widget is only made
+   * TALLER — a list normally wants more rows, not bigger rows. A clock list is
+   * the exception: the cities are fixed, so a taller widget used to be four
+   * small rows floating in blank space. The list is measured and each row
+   * takes an equal share of the height, with every size in the row derived
+   * from that share — bigger box, bigger clocks, always fitting.
+   */
+  const listRef = React.useRef<HTMLDivElement>(null);
+  const [rowPx, setRowPx] = React.useState(0);
+  React.useEffect(() => {
+    const node = listRef.current;
+    if (!node) return;
+    const measure = () => setRowPx(node.clientHeight / Math.max(1, ids.length));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(node);
+    return () => ro.disconnect();
+  }, [ids.length]);
+  const f = Math.max(1, Math.min(2.8, rowPx / 24));
+
   return (
     <Frame title={data.title || 'World clocks'} icon={Globe2}>
-      <div className="h-full overflow-y-auto pr-1 flex flex-col gap-[3px]">
+      <div ref={listRef} className="h-full overflow-y-auto pr-1 flex flex-col gap-[3px]">
         {rows.map(({ city, p, atDesk, off, day }) => (
-          <div key={city.id} className="flex items-center gap-1.5 min-w-0 rounded-md px-1 py-[2px]"
-            style={{ backgroundColor: day ? 'rgba(254,243,199,.55)' : 'rgba(30,58,95,.06)' }}>
-            <span className="text-[11px] flex-shrink-0" title={day ? 'daylight there' : 'dark there'}>
+          <div key={city.id} className="flex items-center min-w-0 rounded-md flex-1"
+            style={{
+              backgroundColor: day ? 'rgba(254,243,199,.55)' : 'rgba(30,58,95,.06)',
+              gap: 6 * f, paddingLeft: 4 * f, paddingRight: 4 * f, paddingTop: 2, paddingBottom: 2,
+            }}>
+            <span className="flex-shrink-0" style={{ fontSize: 11 * f }}
+              title={day ? 'daylight there' : 'dark there'}>
               {day ? '☀️' : '🌙'}
             </span>
-            <span className="text-[10.5px] font-semibold text-slate-700 flex-1 truncate">{city.name}</span>
+            <span className="font-semibold text-slate-700 flex-1 truncate" style={{ fontSize: 10.5 * f }}>
+              {city.name}
+            </span>
             {/* A green dot means somebody is likely to pick up. */}
-            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-              style={{ backgroundColor: atDesk ? '#16a34a' : off ? '#cbd5e1' : '#f59e0b' }}
+            <span className="rounded-full flex-shrink-0"
+              style={{ width: 6 * f, height: 6 * f,
+                       backgroundColor: atDesk ? '#16a34a' : off ? '#cbd5e1' : '#f59e0b' }}
               title={off ? 'their weekend' : atDesk ? 'working hours there' : 'outside working hours'} />
-            <span className="text-[11px] font-black tabular-nums text-slate-800 flex-shrink-0">
+            <span className="font-black tabular-nums text-slate-800 flex-shrink-0" style={{ fontSize: 11 * f }}>
               {p.label}
             </span>
-            <span className="text-[8px] text-slate-400 w-[22px] flex-shrink-0">{p.weekday}</span>
+            <span className="text-slate-400 flex-shrink-0" style={{ fontSize: 8 * f, width: 22 * f }}>
+              {p.weekday}
+            </span>
           </div>
         ))}
         {rows.length === 0 && <span className="text-[10px] text-gray-400">Pick some cities in the settings.</span>}

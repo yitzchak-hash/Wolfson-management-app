@@ -1207,6 +1207,26 @@ export function GeneralJobsPage() {
 
   /** Discrete steps: text renders far better and "am I at 100%?" is answerable. */
   const ZOOM_STEPS = [0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.25, 1.5, 2, 3];
+  /** The zoom the whole board fits at, written each render from the live world size. */
+  const fitZoomRef = useRef(0.25);
+  /**
+   * The ladder, extended BELOW 25% when the board is too big to fit there —
+   * ~×0.8 a step, ending exactly on the fit. On a small board this is the
+   * plain ladder; on the owner's wide one it keeps stepping down until the
+   * entire board, desk edges and all, is on screen.
+   */
+  const zoomSteps = (): number[] => {
+    const fitZ = fitZoomRef.current;
+    if (fitZ >= ZOOM_STEPS[0] - 0.001) return ZOOM_STEPS;
+    const extra: number[] = [];
+    let z = ZOOM_STEPS[0];
+    while (z * 0.8 > fitZ * 1.04) {
+      z = Math.round(z * 0.8 * 1000) / 1000;
+      extra.push(z);
+    }
+    extra.push(Math.round(fitZ * 1000) / 1000);
+    return [...extra.reverse(), ...ZOOM_STEPS];
+  };
 
   /**
    * Screen point -> WORLD point. Every pointer handler must go through this:
@@ -1226,9 +1246,15 @@ export function GeneralJobsPage() {
     const prevZoom = zoomRef.current;
     const prevPan = panRef2.current;
 
-    const i = ZOOM_STEPS.findIndex(z => Math.abs(z - prevZoom) < 0.001);
-    const next = ZOOM_STEPS[Math.min(ZOOM_STEPS.length - 1, Math.max(0,
-      (i === -1 ? ZOOM_STEPS.indexOf(1) : i) + dir))];
+    const steps = zoomSteps();
+    // Nearest rung, not exact-match-or-100%: the dynamic low rungs move as
+    // the board grows, so the zoom can be standing between two of them.
+    let i = steps.findIndex(z => Math.abs(z - prevZoom) < 0.001);
+    if (i === -1) {
+      i = steps.reduce((bi, z, idx) =>
+        Math.abs(z - prevZoom) < Math.abs(steps[bi] - prevZoom) ? idx : bi, 0);
+    }
+    const next = steps[Math.min(steps.length - 1, Math.max(0, i + dir))];
     if (next === prevZoom) return;
 
     // The world point under the cursor stays under the cursor: solve the
@@ -1238,6 +1264,20 @@ export function GeneralJobsPage() {
       x: cx - (cx - prevPan.x) * (next / prevZoom),
       y: cy - (cy - prevPan.y) * (next / prevZoom),
     }, next);
+    /**
+     * The BOTTOM rung is the whole-board view, framed, not just reachable.
+     *
+     * At the fit zoom the clamp is a range, so a cursor-anchored step could
+     * land with part of the board still hanging off one side — technically at
+     * the right scale, visibly not "the entire board". The last step asks the
+     * clamp for the far corner outright: flush top-right, desk on the left
+     * and below, everything on screen.
+     */
+    if (dir === -1 && next <= fitZoomRef.current + 0.002) {
+      // Far LEFT of the x-range is the right-flush corner; far UP the y-range
+      // is the chrome's edge — the clamp's own walls do the framing.
+      nextPan = clampPanRef.current({ x: -1e9, y: 1e9 }, next);
+    }
 
     /**
      * Zooming OUT holds the cursor too now — the walk-home is gone.
@@ -1634,8 +1674,9 @@ export function GeneralJobsPage() {
         const saved = raw ? JSON.parse(raw) : null;
         if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)
             && Number.isFinite(saved.z) && saved.z > 0) {
-          const zSnap = ZOOM_STEPS.reduce((b, zz) =>
-            Math.abs(zz - saved.z) < Math.abs(b - saved.z) ? zz : b, ZOOM_STEPS[0]);
+          const rungs = zoomSteps();
+          const zSnap = rungs.reduce((b, zz) =>
+            Math.abs(zz - saved.z) < Math.abs(b - saved.z) ? zz : b, rungs[0]);
           zoomRef.current = zSnap;
           setZoom(zSnap);
           const p = clampPanRef.current({ x: saved.x, y: saved.y }, zSnap);
@@ -3849,6 +3890,10 @@ export function GeneralJobsPage() {
 
   function onJobResizeMove(e: React.PointerEvent) {
     if (!jobResize) return;
+    // No button held = the release was missed (pointercancel, or the handle
+    // remounted and its capture died). End the gesture instead of following
+    // the bare mouse — the same rule as onResizePointerMove.
+    if (e.buttons === 0) { onJobResizeUp(); return; }
     const MIN_W = 120, MIN_H = 84;
     let w = Math.max(MIN_W, jobResize.startW + (e.clientX - jobResize.startPX) / zoom);
     let h = Math.max(MIN_H, jobResize.startH + (e.clientY - jobResize.startPY) / zoom);
@@ -3960,6 +4005,14 @@ export function GeneralJobsPage() {
 
   function onResizePointerMove(e: React.PointerEvent) {
     if (!resize) return;
+    /**
+     * A move with NO button held means the release was missed — the browser
+     * fired pointercancel, or the handle remounted mid-gesture and its pointer
+     * capture died with it, so pointerup never reached us. Without this the
+     * gesture never ends: the box keeps following the bare mouse ("it sticks
+     * to the mouse and keeps resizing after I let go"). Commit and stand down.
+     */
+    if (e.buttons === 0) { onResizePointerUp(); return; }
     const target = resizeBox(resize);
     const m = target?.min ?? { w: 120, h: 80 };
     // Local only. Writing to the store here serialised the entire project to
@@ -4442,7 +4495,8 @@ export function GeneralJobsPage() {
     const raw = Math.min(r.width / (b.w + 48), (r.height - headroom) / (b.h + 48), 1);
     const MIN = r.width < 700 ? 0.5 : 0.25;
     const s = Math.max(raw, MIN);
-    const step = [...ZOOM_STEPS].reverse().find(z => z <= s) ?? ZOOM_STEPS[0];
+    const rungs = zoomSteps();
+    const step = [...rungs].reverse().find(z => z <= s) ?? rungs[0];
     setZoom(step);
     // Through the clamp like every other pan — the clamp itself now knows the
     // floating header is the top boundary, so the fitted content lands below
@@ -4483,8 +4537,9 @@ export function GeneralJobsPage() {
   function commitZoomField() {
     const want = Number(zoomField) / 100;
     if (!Number.isFinite(want) || want <= 0) { setZoomField(String(Math.round(zoom * 100))); return; }
-    const step = ZOOM_STEPS.reduce((best, z) =>
-      Math.abs(z - want) < Math.abs(best - want) ? z : best, ZOOM_STEPS[0]);
+    const all = zoomSteps();
+    const step = all.reduce((best, z) =>
+      Math.abs(z - want) < Math.abs(best - want) ? z : best, all[0]);
     setZoom(step);
     setPan(p => clampPanRef.current(p));
   }
@@ -4515,24 +4570,35 @@ export function GeneralJobsPage() {
      * clamp is simply the wall the anchor gives way to. An UNLOCKED side gets
      * the loose bound instead, with a bite of board always kept on screen.
      */
+    /**
+     * OWNER RE-CORRECTION (2026-09-05): the desk shows on the LEFT and the
+     * BOTTOM; the TOP and the RIGHT are flush — no grey strip above or right
+     * of the board, ever. This flips the previous round's left-pin: zooming
+     * out now lands the whole board against the top-RIGHT corner, with the
+     * leftover viewport (the shape mismatch) showing as desk on the left and
+     * below — "zoom out until the entire board, grey edges on left and
+     * bottom, shows". The margins live INSIDE the world as paper (settleDrop
+     * keeps the gutter clear and the world extends a margin past the far
+     * content), so a flush edge still shows a margin — of paper, not desk.
+     */
     const VIS = 160;
+    // An unmeasured viewport (first paint, restore-on-arrival) must not
+    // clamp: these bounds are anchored to the RIGHT edge now, and vp.w = 0
+    // reads every valid pan as far out of range.
+    if (vp.w < 50 || vp.h < 50) return { ...p };
     const hb = headerBarRef.current?.getBoundingClientRect();
     const vr = viewportRef.current?.getBoundingClientRect();
     const hr = hb && vr && viewMode !== 'stages'
       ? Math.max(0, Math.min(hb.bottom - vr.top, vp.h * 0.4)) : 0;
-    // The tool rail floats over the right side: a board panned (or settled
-    // after a de-expand) to its far right rests against the rail's left edge,
-    // never underneath it.
-    const rail = document.querySelector('[data-board-toolrail]')?.getBoundingClientRect();
-    const rr = rail && vr && rail.width > 0 && rail.left > vr.left + vp.w * 0.5
-      ? Math.max(0, Math.min(vr.right - rail.left + 12, vp.w * 0.35)) : 0;
-    const m = margin * z;
-    const freeL = sideAllowed(projectBoard.expand, 'left');
     const freeT = sideAllowed(projectBoard.expand, 'top');
-    const xMax = m;
-    const yMax = hr + m;
-    const xMin = freeL ? Math.min(VIS, w * 0.5) - w : Math.min(xMax, vp.w - rr - w);
-    const yMin = freeT ? Math.min(VIS, h * 0.5) - h : Math.min(yMax, vp.h - h);
+    // RIGHT flush: the world's right edge never comes left of the viewport's.
+    const xMin = vp.w - w;
+    // LEFT open: desk may show, with a bite of board always kept on screen.
+    const xMax = Math.max(xMin, vp.w - Math.min(VIS, w));
+    // TOP flush at the chrome's edge, unless that side is unlocked in settings.
+    const yMax = freeT ? vp.h - Math.min(VIS, h) : hr;
+    // BOTTOM open: same min-visibility rule as the left.
+    const yMin = Math.min(yMax, hr + Math.min(VIS, h) - h);
     return {
       x: Math.max(xMin, Math.min(xMax, p.x)),
       y: Math.max(yMin, Math.min(yMax, p.y)),
@@ -4546,12 +4612,14 @@ export function GeneralJobsPage() {
    * opening, the header zoom buttons — ask for home explicitly.
    */
   const homePan = (atZoom?: number): { x: number; y: number } => {
-    const z = atZoom ?? zoom;
+    void atZoom;
     const hb = headerBarRef.current?.getBoundingClientRect();
     const vr = viewportRef.current?.getBoundingClientRect();
     const hr = hb && vr && viewMode !== 'stages'
       ? Math.max(0, Math.min(hb.bottom - vr.top, vp.h * 0.4)) : 0;
-    return { x: margin * z, y: hr + margin * z };
+    // Flush: the world's own corner at the chrome's edge. The margin is PAPER
+    // inside the world now, not a strip of desk held open beside it.
+    return { x: 0, y: hr };
   };
   homePanRef.current = homePan;
 
@@ -4866,6 +4934,16 @@ export function GeneralJobsPage() {
   }
   const maxX = sizingGesture ? heldWorld.current!.w : rawX;
   const maxY = sizingGesture ? heldWorld.current!.h : rawY;
+  /**
+   * The zoom the WHOLE board fits at — the floor the zoom-out ladder may walk
+   * down to. A ref, because `zoomAt` is a stable callback: the ladder used to
+   * stop at 25%, which on a wide board left most of it forever off-screen
+   * ("it should let me zoom out until the entire board shows").
+   */
+  fitZoomRef.current = Math.max(0.02, Math.min(
+    vp.w / Math.max(1, maxX),
+    (vp.h - (headerBarRef.current?.getBoundingClientRect().height ?? 0)) / Math.max(1, maxY),
+  ));
 
   /**
    * The hand came off: take the true size and close the space up.
@@ -5450,18 +5528,21 @@ export function GeneralJobsPage() {
               </div>
             </div>
 
-            {/* The deliberate way to gain space on a locked side — everything
-                already placed moves by a screenful, nothing is lost. */}
+            {/* The deliberate way to gain space on a locked side. A LITTLE at
+                a time (owner's ruling — a screenful per press teleported the
+                board), and the view holds still: the pan is compensated by the
+                same amount, so the board gains space without anything on
+                screen appearing to move. Press again for more. */}
             <div className="mb-2 flex items-center gap-1.5">
               <button
                 onClick={() => makeRoom('top', false)}
-                title="Move everything down by a screenful, opening space above"
+                title="Add a little board space above — press again for more"
                 className="flex-1 py-1.5 rounded-lg text-[10px] font-bold text-gray-600 border border-gray-200 hover:bg-gray-50">
                 Room above
               </button>
               <button
                 onClick={() => makeRoom('left', false)}
-                title="Move everything right by a screenful, opening space on the left"
+                title="Add a little board space on the left — press again for more"
                 className="flex-1 py-1.5 rounded-lg text-[10px] font-bold text-gray-600 border border-gray-200 hover:bg-gray-50">
                 Room on the left
               </button>
@@ -5664,6 +5745,7 @@ export function GeneralJobsPage() {
                 }}
                 onPointerMove={onResizePointerMove}
                 onPointerUp={onResizePointerUp}
+                onPointerCancel={onResizePointerUp}
                 className="absolute pointer-events-auto cursor-se-resize"
                 style={{
                   left: x1 - grip / 2, top: y1 - grip / 2, width: grip, height: grip,

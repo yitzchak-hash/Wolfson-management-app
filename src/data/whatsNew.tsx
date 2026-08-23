@@ -30,6 +30,53 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-09-06',
+    title: 'The white TV found, the whole board in one view, and sharper widgets',
+    items: [
+      {
+        title: 'The white TV screen — found and fixed',
+        body: 'One hand-made group on the board crashed the whole wall page, '
+          + 'which is why the TV link showed nothing but white. Fixed — and the '
+          + 'wall now has a safety net, so a record it cannot draw blanks only '
+          + 'its own card, never the screen. Your big section box also draws '
+          + 'tinted on the wall now instead of as a solid slab over everything.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'Zoom out and see EVERYTHING',
+        body: 'The zoom keeps stepping down past 25% until the entire board is '
+          + 'on screen — flush to the top and right, with the grey desk showing '
+          + 'on the left and below. 100% still comes back flush with no grey on '
+          + 'the pinned sides, and the margins around your work are part of the '
+          + 'board again.',
+        demo: 'zoom',
+      },
+      {
+        title: 'Room above, a little at a time',
+        body: 'The Room above / Room on the left buttons add a modest slice of '
+          + 'board space per press instead of a whole screenful — and nothing '
+          + 'on screen moves while they do it. Press again for more.',
+        demo: 'tap',
+      },
+      {
+        title: 'Search results float over the board',
+        body: 'Type in a Find-a-job widget and the results drop down OVER the '
+          + 'neighbouring widgets, full size and readable at any zoom, instead '
+          + 'of being squeezed inside the widget’s own box. Click a result to '
+          + 'open it; Escape puts it away.',
+        demo: 'list',
+      },
+      {
+        title: 'Clocks that fill their box, links that show their site',
+        body: 'Make the world clocks bigger and the type grows with it, always '
+          + 'fitting. A link tile now wears the website’s own logo. And '
+          + 'resizing a widget can no longer stick to the mouse and keep '
+          + 'resizing after you let go.',
+        demo: 'drag',
+      },
+    ],
+  },
+  {
     date: '2026-09-05',
     title: 'The board behaves, the TV shows up, and other workspaces peek',
     items: [

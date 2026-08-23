@@ -7,7 +7,7 @@ import React, { useMemo } from 'react';
  * shades by string-replacing "0.45", which broke the moment anybody picked a
  * different colour.
  */
-function withAlpha(color: string, alpha = 0.45): string {
+export function withAlpha(color: string, alpha = 0.45): string {
   const a = Math.max(0, Math.min(1, alpha));
   const rgba = /^rgba?\(([^)]+)\)$/i.exec(color.trim());
   if (rgba) {
@@ -915,6 +915,7 @@ export const BoardNode = React.memo(function BoardNode({
         onPointerDown={e => H.resizeDown(e, el)}
         onPointerMove={H.resizeMove}
         onPointerUp={H.resizeUp}
+        onPointerCancel={H.resizeUp}
         className={`pointer-events-auto absolute right-0 top-3 bottom-6 w-2 cursor-ew-resize z-10 transition-opacity ${
           isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
         style={{ background: 'linear-gradient(90deg, rgba(74,168,216,0), rgba(74,168,216,.30))' }}
@@ -923,6 +924,7 @@ export const BoardNode = React.memo(function BoardNode({
         onPointerDown={e => H.resizeDown(e, el)}
         onPointerMove={H.resizeMove}
         onPointerUp={H.resizeUp}
+        onPointerCancel={H.resizeUp}
         className={`pointer-events-auto absolute bottom-0 left-3 right-6 h-2 cursor-ns-resize z-10 transition-opacity ${
           isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
         style={{ background: 'linear-gradient(180deg, rgba(74,168,216,0), rgba(74,168,216,.30))' }}
@@ -931,6 +933,7 @@ export const BoardNode = React.memo(function BoardNode({
         onPointerDown={e => H.resizeDown(e, el)}
         onPointerMove={H.resizeMove}
         onPointerUp={H.resizeUp}
+        onPointerCancel={H.resizeUp}
         title="Drag to resize"
         className={`pointer-events-auto absolute -bottom-0.5 -right-0.5 cursor-se-resize transition-opacity z-10 ${
           isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-80'}`}
