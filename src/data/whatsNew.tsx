@@ -30,6 +30,29 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-09-01',
+    title: 'A second weekly notebook is a real notebook',
+    items: [
+      {
+        title: 'Every control, on both of them',
+        body: 'A second notebook used to be a picture of the first — no X on its cards, '
+          + 'nothing could be dropped on it, nothing dragged. It now has everything the '
+          + 'first one has: drag a card between days, drop a job on it, the X, and the '
+          + 'same move-or-copy question. Whichever one you work on, both change.',
+        demo: 'drag',
+      },
+      {
+        title: 'If you had two that were not talking, they are one now',
+        body: 'A notebook added before this existed kept its own separate copy of the '
+          + 'week. The two looked the same and shared nothing, so taking a card off one '
+          + 'left it standing on the other. The app now joins them on its own, keeping '
+          + 'whichever holds more, and files the other one\u2019s week away rather than '
+          + 'dropping it \u2014 nothing is lost.',
+        demo: 'sparkle',
+      },
+    ],
+  },
+  {
     date: '2026-08-31',
     title: 'The plan gets its own two bars, over the plan',
     items: [

@@ -320,7 +320,16 @@ export function PlannerWidget({
   onLeaveNotebook?: (jobId: string) => void;
 }) {
   /** Nothing may be written: either it is inert, or it is a projection. */
-  const ro = !!readOnly || !!projection;
+  /**
+   * A PROJECTION is not read-only.
+   *
+   * It was, and that made a second notebook a picture of the first: no X on
+   * its cards, nothing droppable onto it, no drag. The owner's ruling is that
+   * a copy carries every control the original does and the two stay in step —
+   * so `projection` now says only WHERE the writes go (the main's element),
+   * never whether they are allowed.
+   */
+  const ro = !!readOnly;
   const mode = data.mode === 'month' ? 'month' : 'week';
   const span = num(data.span, 5, 1, 7);
   const weekStart = Number(data.weekStart) === 1 ? 1 : 0;
@@ -520,12 +529,13 @@ export function PlannerWidget({
     /**
      * A notebook you cannot edit is not a drop target.
      *
-     * A projection, the wallboard and the worker's portal all draw a notebook
-     * read-only. Registering them meant a drag could be answered by a copy
-     * that is not allowed to accept it — and on a TV, that a job could be
-     * moved from a screen nobody is supposed to be arranging from.
+     * The wallboard and the worker's portal both draw a notebook read-only,
+     * and registering them meant a job could be moved from a screen nobody is
+     * supposed to be arranging from. A PROJECTION is no longer in that
+     * company: it takes drops like any other notebook and the write lands on
+     * the main's element, which is what makes two of them one notebook.
      */
-    if (ro || projection) return;
+    if (ro) return;
     return registerRota(probeId, (x, y) => {
       for (const [key, node] of cellRefs.current) {
         const r = node.getBoundingClientRect();

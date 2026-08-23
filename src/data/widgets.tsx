@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Gauge, ListChecks, Hash, BarChart3, Table2, ShoppingCart, CalendarRange,
   Flag, User2, Link2, MapPin, Clock3, Megaphone, Image as ImageIcon,
@@ -2582,6 +2582,26 @@ function PlannerHost({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   const main = projecting ? mainPlannerFor(el, c.boardElements ?? all) : null;
   const src = main ?? el;
   const orphan = projecting && !main;
+
+  /**
+   * A second notebook is a FULL notebook, not a picture of one.
+   *
+   * It used to be read-only with `update` stubbed to `() => {}` — the exact
+   * fault this codebase has already paid for once, where a widget silently
+   * discarded every edit. So a copy could be looked at and nothing else: no X
+   * on its cards, nothing could be dropped on it, and nothing done on either
+   * one reached the other. The owner's ruling: the second one gets every
+   * control the first has, and the two stay in step.
+   *
+   * The writes go to the MAIN's element, which is the whole point — one set of
+   * data, shown twice. `c.update` cannot be used for that: `BoardNode` binds
+   * it to the node being rendered, which here is the projection, so it would
+   * quietly write the main's data onto the copy and they would drift apart.
+   */
+  const updateMain = useCallback((patch: Partial<CanvasElement>) => {
+    if (!main) return;
+    useStore.getState().updateCanvasElement(main.id, patch);
+  }, [main?.id]);
   return (
     <div className="relative w-full h-full">
       <PlannerWidget
@@ -2593,13 +2613,16 @@ function PlannerHost({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
         assignments={c.assignments}
         stages={c.stages}
         // The wall is read-only for the notebook whatever its pen says.
-        readOnly={c.readOnly || c.wall}
+        // An ORPHAN is read-only too: there is no main to write to, and
+        // letting somebody plan a week into a node that points at nothing is
+        // the one way this can still lose work.
+        readOnly={c.readOnly || c.wall || orphan}
         projection={projecting}
-        update={projecting ? () => {} : c.update}
+        update={projecting ? updateMain : c.update}
         openJob={c.openJob}
         onShowAll={c.showAllScheduled ? () => c.showAllScheduled!(src.id) : undefined}
-        onRemoveTask={projecting ? undefined : c.askRemoveTask}
-        onLeaveNotebook={projecting ? undefined : c.leaveNotebook}
+        onRemoveTask={c.askRemoveTask}
+        onLeaveNotebook={c.leaveNotebook}
       />
       {projecting && (
         <span className="absolute top-1 right-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold

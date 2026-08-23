@@ -3194,3 +3194,61 @@ the layout that had just been replaced. The arrangement belongs to
 `scratchpad/planbars2.mjs` (17 checks, including that neither bar reaches into
 the details column); `planlayers.mjs` is about layers again. A second copy of a
 rule is a second place to forget to change it.
+
+
+---
+
+# v2 — a second notebook is a real notebook
+
+## A projection is no longer read-only
+`update={projecting ? () => {} : c.update}` — a projection's writes went to a
+**stub**, the exact fault this file already names ("`WidgetCtx.update` was
+`() => {}` … every interactive widget silently discarded every edit"), and
+`ro = readOnly || projection` hid the X, the drag and the drop probe on top of
+it. So a copy could be looked at and nothing else.
+
+The owner's ruling reverses the earlier "a projection keeps ONE gesture"
+decision: **a copy carries every control the original has, and the two stay in
+step.** `projection` now says only WHERE the writes go, never whether they are
+allowed:
+
+- `update` for a projection is `updateMain`, which writes to **`main.id`**
+  through the store. `c.update` cannot be used — `BoardNode` binds it to the
+  node being rendered, which here is the copy, so it would write the main's
+  data onto the projection and the two would drift apart.
+- `ro = !!readOnly`. The wallboard and the portal are still read-only, and an
+  **orphan** (a projection whose main is gone) is too: there is nothing to
+  write to, and letting somebody plan a week into it is the one way this can
+  still lose work.
+- `registerRota` runs for a projection, so a job can be dropped on either one.
+  `RotaHit.elId` is already the MAIN's id (`el={src}`), and `probeId` already
+  distinguishes the two mounts — that is why the probe keying had to be fixed
+  before this was possible.
+
+## Two mains is the state that made all three reports one fault
+A notebook placed or duplicated before projections existed is a **second
+main**: its own copy of the people, the weeks and every card. The two look
+identical and share nothing, so taking a card off one leaves it standing on the
+other — which reads as "the X doesn't work", and is the same thing as "there is
+no two-way sync".
+
+A one-time reconcile in `GeneralJobsPage` heals it: the **richest** notebook
+keeps the crown (losing planning is the outcome that must never happen), ties
+go to the oldest, and every demoted one's contents are filed into
+`plannerArchive` **before** demoting — the same place a removed notebook's
+contents go, so a fresh notebook of that kind brings them back. Jobs whose
+`inNotebook` pointed at a demoted one are re-pointed at the survivor. It waits
+for `apartments` to arrive, the same settle-first idiom the purge sweep uses,
+and it converges.
+
+**Not reproduced:** the X failing on a SINGLE main notebook. It removes the
+card in every arrangement the harness can build — with a projection present,
+with an entry carrying no `id`, with two cards in one square. The two-mains
+state is the only one that produces the reported behaviour.
+
+Harness: `scratchpad/notebook2way.mjs` (12 checks). Two traps it paid for: a
+job that is IN the notebook has no tile on the board to drag, and a tile seeded
+at board y=1000 is below a 1000px window — both made the app look broken when
+the drag simply started on nothing. And the standing one: patching localStorage
+then reloading is overwritten by the app's own flush-on-unload, so the
+two-mains case needed its own context with its own init script.

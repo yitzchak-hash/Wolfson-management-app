@@ -45,7 +45,7 @@ import {
   AttachedArtLayer, ArrowLayer, ArrowDraft, AnchorHints, HostBox, Anchor,
   nearestAnchor, anchorOf, attachBox, DEFAULT_ATTACH_SCALE,
 } from '../components/board/AttachLayer';
-import { renderWidget, WidgetDef, WidgetCtx, WIDGET_BY_ID } from '../data/widgets';
+import { renderWidget, WidgetDef, WidgetCtx, WIDGET_BY_ID, isProjection } from '../data/widgets';
 import { JobTile, BoardNode, BoardHandlers, TILE_W, TILE_H, tileSize } from '../components/board/BoardItems';
 import { useTouchGestures, isFingerTouch } from '../hooks/useTouchGestures';
 import { detectPasteIntent, fieldForIntent, canCreateFromIntent, PasteIntent } from '../data/pasteIntent';
@@ -1317,6 +1317,63 @@ export function GeneralJobsPage() {
       }));
     });
   }, [canvasElements, updateCanvasElement, addCanvasElement]);
+
+  /**
+   * One notebook per kind. The rest are projections of it.
+   *
+   * A second notebook placed or duplicated before that rule existed is a
+   * SECOND MAIN: its own copy of the people, the weeks and every card. The two
+   * look identical on the board and share nothing, so taking a card off one
+   * leaves it standing on the other — which reads exactly as "the X does not
+   * work", and is the same fault as "there is no two-way sync". They are one
+   * problem with two faces.
+   *
+   * The richest one keeps the crown, because losing planning is the outcome
+   * that must never happen; ties go to the oldest. **Nothing is thrown away**:
+   * every demoted notebook's contents are filed into `plannerArchive` first,
+   * the same place a removed notebook's contents go, so a fresh notebook of
+   * that kind brings them back.
+   *
+   * Converges: once there is one main, the filter finds nothing.
+   */
+  useEffect(() => {
+    if (!apartments.length) return;              // the workspace has not landed yet
+    const KINDS = ['rota', 'week-planner'];
+    for (const kind of KINDS) {
+      const mains = canvasElements.filter(el =>
+        el.type === 'widget' && el.widget === kind && !isProjection(el));
+      if (mains.length < 2) continue;
+
+      const weight = (el: CanvasElement) => {
+        const cells = ((el.data ?? {}) as Record<string, unknown>).cells as
+          Record<string, unknown[]> | undefined;
+        return Object.values(cells ?? {}).reduce((t, list) => t + (list?.length ?? 0), 0);
+      };
+      const ranked = [...mains].sort((a, b) =>
+        weight(b) - weight(a)
+        || String(a.addedAt ?? '').localeCompare(String(b.addedAt ?? '')));
+      const [keep, ...demote] = ranked;
+
+      demote.forEach(el => {
+        // File its contents before demoting, so a week planned on the copy is
+        // recoverable rather than simply stopping being drawn.
+        archivePlanner(el);
+        updateCanvasElement(el.id, {
+          data: { ...((el.data ?? {}) as Record<string, unknown>), role: 'projection' },
+        });
+      });
+      setToast(demote.length === 1
+        ? 'Two notebooks were keeping separate copies — they are one notebook now'
+        : `${demote.length + 1} notebooks were keeping separate copies — they are one now`);
+      // Any job that pointed at a demoted notebook now points at the one left.
+      if (currentUser) {
+        const gone = new Set(demote.map(el => el.id));
+        apartments
+          .filter(a => a.inNotebook && gone.has(a.inNotebook))
+          .forEach(a => updateApartment(a.id, { inNotebook: keep.id }, currentUser));
+      }
+    }
+  }, [canvasElements, apartments, currentUser, updateCanvasElement, updateApartment]);
 
   /**
    * Clear notebook entries whose job no longer exists.
