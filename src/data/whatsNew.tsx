@@ -30,6 +30,39 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-09-08',
+    title: 'The corner settled, layouts you can try on, and redo that stays',
+    items: [
+      {
+        title: 'The board’s corner is the top-left, full stop',
+        body: 'The starting corner — top-left, where the canvas begins — is '
+          + 'locked to the screen. Zoom all the way out and the whole board '
+          + 'lands against it, with the grey desk showing past the right and '
+          + 'bottom edges only. 100% comes home flush.',
+        demo: 'zoom',
+      },
+      {
+        title: 'Try a layout on before restoring it',
+        body: 'Every snapshot in Layout history now has a Preview: the board '
+          + 'draws exactly as it was then — pan and zoom around it, nothing is '
+          + 'written — with a banner offering Restore or Back to now. And each '
+          + 'snapshot says plainly what restoring would do: how many things '
+          + 'move back (with names), what was added since and keeps its spot, '
+          + 'and what it remembers that no longer exists. Restoring is one '
+          + 'undo step.',
+        demo: 'list',
+      },
+      {
+        title: 'Undo no longer eats your redos',
+        body: 'Undo five times and all five redos are still there — the redo '
+          + 'trail only clears when you genuinely do something NEW after an '
+          + 'undo. Anything the undo itself touches along the way can no '
+          + 'longer wipe it.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2026-09-07',
     title: 'The TV scaling disease, cured at the root',
     items: [

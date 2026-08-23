@@ -160,6 +160,9 @@ let _firebaseUnsubscribers: Array<() => void> = [];
 let _tombstones = new Set<string>();
 export function isTombstoned(id: string): boolean { return _tombstones.has(id); }
 
+/** True while an undo/redo entry's closure is executing — see rememberUndo. */
+let _undoWalking = false;
+
 /** Remember a deletion, locally and for every other device. */
 function tombstone(projectId: string, ids: string[]) {
   ids.forEach(id => _tombstones.add(id));
@@ -1276,21 +1279,34 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   undoState: emptyUndo(),
-  rememberUndo: entry => set(st => ({ undoState: remember(st.undoState, entry) })),
+  /**
+   * A write that happens BECAUSE an undo/redo is executing must never be
+   * recorded as a new action — recording it would clear the redo stack (the
+   * classic new-action rule), which is exactly the owner's "I undo five times
+   * and my redos disappear". The steppers raise the flag around the entry's
+   * own closure, so any tracked side-effect a restore triggers downstream is
+   * treated as part of the step, not as a different turn taken.
+   */
+  rememberUndo: entry => {
+    if (_undoWalking) return;
+    set(st => ({ undoState: remember(st.undoState, entry) }));
+  },
   stepUndo: () => {
     const { entry, next } = popUndo(get().undoState);
     if (!entry) return null;
     // The stack moves FIRST: `entry.undo()` writes to the store, and anything
     // that re-entered here mid-write would find the entry still on the past.
     set({ undoState: next });
-    entry.undo();
+    _undoWalking = true;
+    try { entry.undo(); } finally { _undoWalking = false; }
     return entry;
   },
   stepRedo: () => {
     const { entry, next } = popRedo(get().undoState);
     if (!entry) return null;
     set({ undoState: next });
-    entry.redo();
+    _undoWalking = true;
+    try { entry.redo(); } finally { _undoWalking = false; }
     return entry;
   },
 

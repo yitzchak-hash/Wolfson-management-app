@@ -3876,3 +3876,47 @@ button that changed nothing visible was the owner's exact complaint.
 Harness: `scratchpad/tvscreens.mjs` grew the WidgetSurface check — a widget
 seeded at 2× natural width must draw `scale(2)` on the wall. Frame
 UPPERCASES titles, so match the surface transform, not the title text.
+
+---
+
+# v2 — the corner settled, layouts tried on, redo that stays
+
+## OWNER FINAL RULING (2026-09-07): the STARTING corner is TOP-LEFT
+Supersedes both earlier flips — his words: "the left side and the top side
+should be locked to the canvas as that's the starting corner". `clampPanRef`:
+LEFT pinned flush (`xMax = 0`) and TOP pinned at the chrome (`yMax = hr`),
+each loosened only by its `expand` unlock; the desk shows past the RIGHT and
+BOTTOM edges with the VIS=160 bite. The zoom-out bottom rung frames the whole
+board flush top-left (`{x: 1e9, y: 1e9}` through the clamp); `homePan` stays
+`{0, hr}`. `board.mjs` / `round20.mjs` / `round25.mjs` encode this — round20's
+focus glide is again "fully on screen, pinned corner holds".
+
+## Layout history: preview first, ripple counted
+- `src/data/layoutDiff.ts` — PURE: `layoutRipple(layout, apartments, els)`
+  counts what Restore would actually do (jobs/nodes that move back, with up
+  to three names; things added since that keep their spots; snapshot entries
+  whose record is gone and stays gone) and `rippleSentence` says it in one
+  line on each snapshot card. Same MOVED=2 threshold as nothing — plain
+  arithmetic, no store, no clock.
+- **Preview is a look, never a write**: `previewLayout` state; `jobPos` /
+  `elPos` read the snapshot's positions through `previewMaps` (jobs only on
+  the MAIN board — layouts are main-board positions), the world div goes
+  `pointer-events: none` (presses fall through to the viewport, so pan and
+  zoom still work — the view-only idiom), the keyboard is gated to Escape,
+  and an amber banner offers "Restore this layout" / "Back to now".
+- **Restore is tracked**: wrapped in `track({weight:'arrange'})`, so it is
+  ONE undo step and Ctrl+Z puts everything back.
+
+## Undo cannot eat the redo stack
+`_undoWalking` (module flag in store.ts): raised around `entry.undo()` /
+`entry.redo()` in the steppers; `rememberUndo` is a no-op while it is up. A
+tracked write fired BY a restore in progress used to be recorded as a new
+action, and a new action clears the future stack (the classic rule) — which
+was the owner's "I undo five times and my redos disappear". The classic rule
+itself stands: a genuinely new action after an undo still clears redo.
+
+Harness: `scratchpad/round26.mjs` (13 checks): ripple sentence by name,
+preview draws snapshot positions and writes nothing, banner Restore/Back,
+restore as one undo step, redo surviving undo, and five undos → five redos.
+Its trap: the "Layout history" button carries an icon, so `hasText` must not
+anchor (`/^…$/` misses the composite text).

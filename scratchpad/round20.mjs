@@ -148,15 +148,21 @@ const vpBox = await page.evaluate(() => {
 });
 console.log('       focused tile centre:', JSON.stringify({ x: tb.x + tb.width / 2, y: tb.y + tb.height / 2 }), 'viewport centre', JSON.stringify(vpBox));
 /**
- * 2026-09-05 contract: LEFT and BOTTOM are free (desk may show), TOP and
- * RIGHT are flush. Centring a near-origin tile horizontally is possible now
- * (grey opens on the left); vertically the glide stops where the top pin
- * holds. So: x centred, tile fully on screen, and never above the chrome.
+ * 2026-09-07 final contract: TOP and LEFT pinned (the starting corner), desk
+ * on the right and below. Centring a near-origin tile is therefore capped by
+ * the pins — the glide goes as far as the clamp allows. What must hold: the
+ * tile ends fully on screen, and no grey opens above or left.
  */
-check(Math.abs(tb.x + tb.width / 2 - vpBox.cx) < 30,
-  'pressing it glides the tile to the middle horizontally');
 check(tb.x >= vpBox.l - 1 && tb.y >= vpBox.t - 1 && tb.x + tb.width <= vpBox.r + 1 && tb.y + tb.height <= vpBox.b + 1,
-  'and the tile is fully on the screen, as centred as the top pin allows');
+  'pressing it brings the tile fully onto the screen');
+const focusPan = await page.evaluate(() => {
+  const world = document.querySelector('[data-board-world]');
+  const m = /translate\(([-\d.]+)px,\s*([-\d.]+)px\)\s*scale\(([\d.]+)\)/
+    .exec(world.parentElement.style.transform);
+  return { x: +m[1], z: +m[3] };
+});
+check(focusPan.x <= 3,
+  'and the glide respects the pinned corner — no grey opens left', JSON.stringify(focusPan));
 
 // ── 6 · the fullscreen button ───────────────────────────────────────────────
 const fsBtn = page.locator('button[title="Board full screen"]');

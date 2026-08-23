@@ -61,11 +61,10 @@ const readPan = () => page.evaluate(() => {
 console.log('pan before zoom out:', JSON.stringify(await readPan()));
 
 /**
- * OWNER RE-CORRECTION (2026-09-05): the desk shows on the LEFT and BOTTOM;
- * the TOP and RIGHT are flush — no grey above or right of the board, ever.
- * Zooming out may continue until the WHOLE board is on screen, landing it
- * against the top-right corner with the leftover viewport as desk on the
- * left and below.
+ * OWNER FINAL RULING (2026-09-07): the STARTING corner — top-left — is
+ * locked to the viewport; the desk shows past the RIGHT and BOTTOM edges.
+ * Zooming out continues until the WHOLE board is on screen, landing it
+ * against the top-left corner with desk right and below.
  */
 const geom = () => page.evaluate(() => {
   const v = document.querySelector('[data-board-viewport]').getBoundingClientRect();
@@ -85,18 +84,18 @@ await page.waitForTimeout(400);
 const zo = await geom();
 const zoPan = await readPan();
 console.log('zoomed out:', JSON.stringify({ pan: zoPan, world: zo.world }));
-console.log(zo.world.right >= zo.vp.right - 3
-  ? 'PASS zoomed out, the board is flush RIGHT — no grey strip there'
-  : `FAIL grey opened right of the board (world.right=${zo.world.right} vp.right=${zo.vp.right})`);
-console.log(zo.world.left >= zo.vp.left - 3 && zo.world.bottom <= zo.vp.bottom + 3
-  ? 'PASS the WHOLE board is on screen, desk showing left and below'
+console.log(Math.abs(zo.world.left - zo.vp.left) <= 3
+  ? 'PASS zoomed out, the board is flush LEFT — no grey strip there'
+  : `FAIL grey opened left of the board (world.left=${zo.world.left} vp.left=${zo.vp.left})`);
+console.log(zo.world.right <= zo.vp.right + 3 && zo.world.bottom <= zo.vp.bottom + 3
+  ? 'PASS the WHOLE board is on screen, desk showing right and below'
   : `FAIL the board does not fully fit at the ladder floor: ${JSON.stringify(zo.world)}`);
 console.log(zo.world.top >= zo.vp.top - 3
   ? 'PASS and no grey above the board'
   : `FAIL the board slid above the viewport (top=${zo.world.top})`);
 
-// Shove the board down-right: grey may open LEFT (a free side now), and the
-// min-visibility clamp keeps a bite of board on screen.
+// Shove the board down-right: the pinned LEFT edge holds (no grey opens
+// left), and the min-visibility clamp keeps a bite of board on screen.
 await page.mouse.move(700, 450);
 await page.mouse.down({ button: 'middle' });
 await page.mouse.move(1150, 800, { steps: 12 });
@@ -104,9 +103,9 @@ await page.mouse.up({ button: 'middle' });
 await page.waitForTimeout(300);
 const dragged = await geom();
 console.log('after shoving down-right:', JSON.stringify(dragged.world));
-console.log(dragged.world.left <= dragged.vp.right - 100
-  ? 'PASS the min-visibility clamp keeps the board on screen'
-  : `FAIL the board can be flung fully off screen (left=${dragged.world.left})`);
+console.log(dragged.world.left <= dragged.vp.left + 3
+  ? 'PASS the pinned left edge holds — no grey opens left of the board'
+  : `FAIL the shove opened grey left of the board (left=${dragged.world.left})`);
 
 // 100% returns flush: the world's own corner at the chrome's edge — x at 0,
 // no desk strip held open on the pinned top.

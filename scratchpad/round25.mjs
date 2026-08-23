@@ -85,8 +85,8 @@ const seed = () => {
   check(zo.z < 0.25, 'the ladder steps BELOW 25% on a board too wide for it', `z=${zo.z}`);
   check(zo.world.l >= zo.vp.l - 3 && zo.world.b <= zo.vp.b + 3 && zo.world.t >= zo.vp.t - 3
     && zo.world.r <= zo.vp.r + 3,
-    'the ENTIRE board is on screen — desk on the left and below only', JSON.stringify(zo.world));
-  check(Math.abs(zo.world.r - zo.vp.r) <= 3, 'and the board lands flush right', `right=${zo.world.r} vs ${zo.vp.r}`);
+    'the ENTIRE board is on screen — desk on the right and below only', JSON.stringify(zo.world));
+  check(Math.abs(zo.world.l - zo.vp.l) <= 3, 'and the board lands flush LEFT (the starting corner)', `left=${zo.world.l} vs ${zo.vp.l}`);
 
   // Back to 100% for a stable make-room measurement.
   await page.locator('button', { hasText: /^100%$/ }).first().click();

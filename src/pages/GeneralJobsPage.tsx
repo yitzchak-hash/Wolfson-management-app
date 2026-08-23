@@ -17,7 +17,8 @@ import { PlannerEntry, personOf } from '../components/board/PlannerWidget';
 import { PlannerTaskDialog, PlannerRemoveDialog } from '../components/board/PlannerDialogs';
 import { ScheduleWindow } from '../components/board/ScheduleWindow';
 import { boardAccess } from '../types';
-import { Apartment, CanvasElement, BinKind, BIN_KINDS, BIN_META, binKeyOf, binLabelOf, isBuiltInBin, getStageName, relativeTime, PLANNER_ARCHIVE_MAX, BOARD_MARGIN } from '../types';
+import { Apartment, CanvasElement, BinKind, BIN_KINDS, BIN_META, binKeyOf, binLabelOf, isBuiltInBin, getStageName, relativeTime, PLANNER_ARCHIVE_MAX, BOARD_MARGIN, BoardLayout } from '../types';
+import { layoutRipple, rippleSentence } from '../data/layoutDiff';
 import { printTable, printDot } from '../data/printing';
 import { ApartmentDetailDrawer } from '../components/apartment/ApartmentDetailDrawer';
 import { QuickAddTaskPanel } from '../components/apartment/QuickAddTaskPanel';
@@ -551,6 +552,22 @@ export function GeneralJobsPage() {
   const [arrowTip, setArrowTip] = useState<{ x: number; y: number } | null>(null);
   const [storeOpen, setStoreOpen] = useState(false);
   const [layoutPanel, setLayoutPanel] = useState(false);
+  /**
+   * A saved layout being PREVIEWED — a look, never a write. While set, the
+   * board draws every job and node at the snapshot's positions (jobPos and
+   * elPos read through it), the world stops taking presses (a preview you can
+   * accidentally drag inside would write the preview), and a banner offers
+   * Restore or Back. Escape backs out.
+   */
+  const [previewLayout, setPreviewLayout] = useState<BoardLayout | null>(null);
+  const previewMaps = useMemo(() => previewLayout ? {
+    jobs: new Map(previewLayout.jobs.map(j => [j.id, j])),
+    els: new Map(previewLayout.els.map(e => [e.id, e])),
+  } : null, [previewLayout]);
+  const previewRef = useRef(false);
+  previewRef.current = !!previewLayout;
+  const setPreviewLayoutRef = useRef(setPreviewLayout);
+  setPreviewLayoutRef.current = setPreviewLayout;
   /** A finished job briefly celebrates, at the point on the board it landed. */
   const [celebrate, setCelebrate] = useState<{ x: number; y: number; key: number } | null>(null);
   /**
@@ -1274,9 +1291,10 @@ export function GeneralJobsPage() {
      * and below, everything on screen.
      */
     if (dir === -1 && next <= fitZoomRef.current + 0.002) {
-      // Far LEFT of the x-range is the right-flush corner; far UP the y-range
-      // is the chrome's edge — the clamp's own walls do the framing.
-      nextPan = clampPanRef.current({ x: -1e9, y: 1e9 }, next);
+      // The top of both ranges is the pinned STARTING corner — top-left at
+      // the chrome's edge. The clamp's own walls do the framing; the desk
+      // shows past the right and bottom edges.
+      nextPan = clampPanRef.current({ x: 1e9, y: 1e9 }, next);
     }
 
     /**
@@ -1729,6 +1747,11 @@ export function GeneralJobsPage() {
       const s = drag.starts.get(job.id)!;
       return { x: s.x + drag.dx, y: s.y + drag.dy };
     }
+    // A layout preview shows the snapshot's positions without writing them.
+    if (previewMaps && !activeBoardView) {
+      const p = previewMaps.jobs.get(job.id);
+      if (p) return { x: p.x, y: p.y };
+    }
     // A job sits in a different place on each board. The main board keeps using
     // canvasX/canvasY, so nothing that already exists moves.
     if (activeBoardView) {
@@ -1741,6 +1764,10 @@ export function GeneralJobsPage() {
   }
 
   function elPos(el: CanvasElement): { x: number; y: number; w: number; h: number } {
+    if (previewMaps) {
+      const p = previewMaps.els.get(el.id);
+      if (p) return { x: p.x, y: p.y, w: p.w, h: p.h };
+    }
     if (drag?.kind === 'element' && drag.ids.includes(el.id)) {
       const st = drag.starts.get(el.id)!;
       return { x: st.x + drag.dx, y: st.y + drag.dy, w: el.w, h: el.h };
@@ -2999,6 +3026,11 @@ export function GeneralJobsPage() {
       if ((e.key === 'f' || e.key === 'F') && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         openSearchRef.current();
+        return;
+      }
+      // A layout preview is read-only: Escape leaves it, nothing else bites.
+      if (previewRef.current) {
+        if (e.key === 'Escape') setPreviewLayoutRef.current(null);
         return;
       }
       if (viewOnlyRef.current) return;          // read-only board: no shortcuts that change it
@@ -4571,33 +4603,34 @@ export function GeneralJobsPage() {
      * the loose bound instead, with a bite of board always kept on screen.
      */
     /**
-     * OWNER RE-CORRECTION (2026-09-05): the desk shows on the LEFT and the
-     * BOTTOM; the TOP and the RIGHT are flush — no grey strip above or right
-     * of the board, ever. This flips the previous round's left-pin: zooming
-     * out now lands the whole board against the top-RIGHT corner, with the
-     * leftover viewport (the shape mismatch) showing as desk on the left and
-     * below — "zoom out until the entire board, grey edges on left and
-     * bottom, shows". The margins live INSIDE the world as paper (settleDrop
-     * keeps the gutter clear and the world extends a margin past the far
-     * content), so a flush edge still shows a margin — of paper, not desk.
+     * OWNER FINAL RULING (2026-09-07): the board's STARTING CORNER — top-left,
+     * where the canvas begins — is locked to the viewport: no desk above or
+     * left of the board, ever. The desk shows past the RIGHT and BOTTOM edges,
+     * which is where a zoomed-out board's leftover viewport belongs. (The
+     * 09-05 flip read his earlier note backwards; this is the corrected and
+     * confirmed orientation.) Zooming all the way out lands the whole board
+     * against the top-left corner with grey right and below. The margins live
+     * INSIDE the world as paper (settleDrop keeps the gutter clear and the
+     * world extends a margin past the far content), so a flush edge still
+     * shows a margin — of paper, not desk.
      */
     const VIS = 160;
     // An unmeasured viewport (first paint, restore-on-arrival) must not
-    // clamp: these bounds are anchored to the RIGHT edge now, and vp.w = 0
-    // reads every valid pan as far out of range.
+    // clamp: vp.w = 0 reads every valid pan as far out of range.
     if (vp.w < 50 || vp.h < 50) return { ...p };
     const hb = headerBarRef.current?.getBoundingClientRect();
     const vr = viewportRef.current?.getBoundingClientRect();
     const hr = hb && vr && viewMode !== 'stages'
       ? Math.max(0, Math.min(hb.bottom - vr.top, vp.h * 0.4)) : 0;
+    const freeL = sideAllowed(projectBoard.expand, 'left');
     const freeT = sideAllowed(projectBoard.expand, 'top');
-    // RIGHT flush: the world's right edge never comes left of the viewport's.
-    const xMin = vp.w - w;
-    // LEFT open: desk may show, with a bite of board always kept on screen.
-    const xMax = Math.max(xMin, vp.w - Math.min(VIS, w));
-    // TOP flush at the chrome's edge, unless that side is unlocked in settings.
+    // LEFT pinned flush at the viewport's edge, unless unlocked in settings.
+    const xMax = freeL ? vp.w - Math.min(VIS, w) : 0;
+    // RIGHT open: desk may show, with a bite of board always kept on screen.
+    const xMin = Math.min(xMax, Math.min(VIS, w) - w);
+    // TOP pinned flush at the chrome's edge, unless unlocked.
     const yMax = freeT ? vp.h - Math.min(VIS, h) : hr;
-    // BOTTOM open: same min-visibility rule as the left.
+    // BOTTOM open: same min-visibility rule as the right.
     const yMin = Math.min(yMax, hr + Math.min(VIS, h) - h);
     return {
       x: Math.max(xMin, Math.min(xMax, p.x)),
@@ -5559,6 +5592,40 @@ export function GeneralJobsPage() {
             Positions only, and a preview of every snapshot before anything is
             restored — so pressing Restore can never be a surprise, and can
             never bring back or remove a job. */}
+        {previewLayout && (
+          <div
+            data-layout-preview-banner
+            className="absolute left-1/2 -translate-x-1/2 z-[60] flex items-center gap-2.5 px-4 py-2.5
+                       rounded-2xl shadow-2xl border"
+            style={{ top: 12, backgroundColor: '#fffbeb', borderColor: '#f59e0b' }}
+            onPointerDown={e => e.stopPropagation()}
+          >
+            <span className="text-[12px] text-amber-900">
+              <b>Previewing “{previewLayout.label}”</b> — just a look, nothing is written.
+              Pan and zoom to inspect it.
+            </span>
+            <button
+              data-layout-banner-restore
+              onClick={() => {
+                const L = previewLayout;
+                setPreviewLayout(null);
+                track({ weight: 'arrange', label: `Restored layout “${L.label}”` },
+                  () => restoreBoardLayout(L.id));
+                setToast('Layout restored — Ctrl+Z puts everything back');
+              }}
+              className="px-3 py-1.5 rounded-xl text-[11.5px] font-bold text-white flex-shrink-0"
+              style={{ background: 'linear-gradient(135deg, #1e3a5f, #2d5a8e)' }}>
+              Restore this layout
+            </button>
+            <button
+              data-layout-banner-back
+              onClick={() => setPreviewLayout(null)}
+              className="px-3 py-1.5 rounded-xl text-[11.5px] font-bold text-gray-600 border border-gray-300 flex-shrink-0 bg-white">
+              Back to now
+            </button>
+          </div>
+        )}
+
         {layoutPanel && (
           <MovablePanel
             id="layout-history"
@@ -5610,16 +5677,36 @@ export function GeneralJobsPage() {
                       );
                     })}
                   </div>
-                  <div className="flex items-center gap-1.5 px-2 py-1.5">
-                    <span className="text-[9.5px] text-gray-500 truncate flex-1" title={L.label}>{L.label}</span>
-                    <button
-                      onClick={() => { restoreBoardLayout(L.id); setToast('Layout restored'); }}
-                      className="text-[10px] font-bold text-[#1e3a5f] hover:underline">Restore</button>
-                    <button
-                      onClick={() => deleteBoardLayout(L.id)}
-                      className="text-gray-300 hover:text-red-500" title="Forget this snapshot">
-                      <X size={11} />
-                    </button>
+                  <div className="px-2 pt-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[9.5px] text-gray-500 truncate flex-1" title={L.label}>{L.label}</span>
+                      <button
+                        data-layout-preview={L.id}
+                        onClick={() => setPreviewLayout(previewLayout?.id === L.id ? null : L)}
+                        className="text-[10px] font-bold hover:underline"
+                        style={{ color: previewLayout?.id === L.id ? '#b45309' : '#1e3a5f' }}>
+                        {previewLayout?.id === L.id ? 'Stop preview' : 'Preview'}
+                      </button>
+                      <button
+                        data-layout-restore={L.id}
+                        onClick={() => {
+                          setPreviewLayout(null);
+                          track({ weight: 'arrange', label: `Restored layout “${L.label}”` },
+                            () => restoreBoardLayout(L.id));
+                          setToast('Layout restored — Ctrl+Z puts everything back');
+                        }}
+                        className="text-[10px] font-bold text-[#1e3a5f] hover:underline">Restore</button>
+                      <button
+                        onClick={() => deleteBoardLayout(L.id)}
+                        className="text-gray-300 hover:text-red-500" title="Forget this snapshot">
+                        <X size={11} />
+                      </button>
+                    </div>
+                    {/* The RIPPLE: what pressing Restore would actually do,
+                        counted against the board as it stands right now. */}
+                    <p data-layout-ripple className="text-[9px] text-gray-400 leading-snug pb-1.5 pt-0.5">
+                      {rippleSentence(layoutRipple(L, apartments, canvasElements))}
+                    </p>
                   </div>
                 </div>
               );
@@ -5917,6 +6004,11 @@ export function GeneralJobsPage() {
             className="relative"
             style={{
               width: maxX, height: maxY,
+              // Previewing a layout: the world takes no presses (a drag in a
+              // preview would write the preview); presses fall through to the
+              // viewport, so panning and zooming still work — the view-only
+              // idiom.
+              pointerEvents: previewLayout ? 'none' : undefined,
               // The paper is painted by the screen-space layer above; painting
               // it here as well would show a second, zoomed copy through it.
               userSelect: 'none',
