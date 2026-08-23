@@ -10,14 +10,28 @@ import { Tooltip } from '../ui/Tooltip';
 import { ActivityTicker } from '../ui/ActivityTicker';
 import { WhatsNewButton } from '../ui/WhatsNew';
 import { GlobalSearch } from '../ui/GlobalSearch';
-import { subscribeCloudSync, isFirebaseConfigured } from '../../data/firebase';
+import { subscribeCloudSync, isFirebaseConfigured, SyncStatus } from '../../data/firebase';
 
 function CloudSyncBadge({ light }: { light: boolean }) {
-  const [status, setStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [status, setStatus] = useState<SyncStatus>('idle');
   const s = useStore(state => state.mainUiStrings);
   useEffect(() => subscribeCloudSync(setStatus), []);
   if (!isFirebaseConfigured) return null;
   if (status === 'idle') return null;
+  /**
+   * A FAILED write shows red and says so. It used to show "Saved" — the
+   * promise had settled, and only the DevTools console knew the truth, which
+   * is how a notebook that could not save read as everyone else's fault for
+   * weeks. Red here means: what you just did is on THIS machine only.
+   */
+  if (status === 'error') {
+    return (
+      <div className="flex items-center gap-1.5 text-xs font-bold text-red-500"
+        title="The last change could not reach the cloud — it is saved on this computer only. Check the connection and try the edit again.">
+        <AlertTriangle size={13} /> {s.isRtl ? 'לא נשמר בענן' : 'Not saved to cloud'}
+      </div>
+    );
+  }
   return (
     <div className={`flex items-center gap-1.5 text-xs font-medium transition-all ${status === 'saved' ? 'text-green-400' : light ? 'text-gray-400' : 'text-gray-300'}`}>
       {status === 'saving'

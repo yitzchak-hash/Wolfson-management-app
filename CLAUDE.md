@@ -3487,3 +3487,71 @@ fade / paste-to-centre / copy-to-centre, the focus glide, fullscreen on and
 off. Its own trap: the paste-centre landed exactly on a seeded tile's spot,
 burying it under the pasted pair — hover the FREE tile, or the harness blames
 the app for its own geometry.
+
+
+---
+
+# v2 — THE FROZEN NOTEBOOK: the cloud merge could add but never remove
+
+## Root cause, proven against a real Firestore
+The months of "the X doesn't work", "drag-off doesn't take it off" and "no
+two-way sync" were ONE bug, invisible to every localStorage harness:
+`fsSet` wrote with `{ merge: true }`, and **Firestore's merge deep-merges
+nested maps — it never removes keys**. The planner's squares are map keys
+under `data.cells`, so removing the LAST card of a square deleted the key
+locally, the merge write kept it on the server, and the next sync
+resurrected it — on every device, forever. Add-only operations worked
+(arrays are replaced, new keys merge in), which is why dropping jobs IN
+worked and taking them OFF did not. The tombstone code already knew the rule
+("a merge cannot remove keys" — whole-doc write); the generic writes did not.
+
+**Fix**: `fsSet` and `fsBatchSet` write with
+`{ mergeFields: Object.keys(payload).map(k => new FieldPath(k)) }` — each
+top-level field in the payload REPLACES the server's field wholesale, fields
+not in the payload stay untouched. That is what every caller means: audited —
+every map writer (`boardSettings`, `contractorSheetLinks`, `savedReports`,
+`customProjects`, …) sends the FULL map, and record writers send whole
+records. `FieldPath` per key so a dotted key can never be read as a nested
+path. Top-level `undefined` → `deleteField()` unchanged.
+
+**Proof**: `scratchpad/mergeproof.mjs` runs the REAL Firestore emulator
+(firebase-tools + Java, port 8085): seeds a two-square notebook, removes one
+with `merge:true` (bug reproduced — the square survives), removes it with
+`mergeFields` (gone), and checks unmentioned fields survive. Run it after any
+change to fsSet's write options.
+
+## Failures are visible now
+`_notifySyncError` in firebase.ts: any catch on a write path flips the
+header's CloudSyncBadge to a red **"Not saved to cloud"** for 10s instead of
+letting the green "Saved ✓" lie. The silent catch is how a rejected write
+masqueraded as saved for weeks.
+
+## Defence in depth
+`src/data/deepClean.ts` — `stripUndefinedDeep`, applied to every fsSet /
+fsBatchSet payload below the top level (Firestore's
+`ignoreUndefinedProperties` is already on in init; this survives that flag
+ever being lost). And `placeOnPlanner` no longer writes `taskId: undefined`
+into entries.
+
+## A Building Progress square drags onto the board as a UNIT CARD
+`unit-card` widget (`src/components/board/UnitCard.tsx`, registered in
+`moreWidgets`, shelf "Other workspaces", preview `sample: 1`): the board twin
+of the notebook's cross-workspace entry — a POINTER at `{projectId, aptId}`,
+never a copy. Resolved live for the open workspace, from
+`loadProjectSnapshot` otherwise; unresolvable says "open that workspace once
+on this computer", the planner-card idiom. Clicking travels via
+`ctx.openUnit`. The board's drop placer creates one for a foreign
+`projectId` instead of the old silent refusal — which read as "dragging does
+nothing at all".
+
+## The drag shows a ghost
+`usePlannerDrag` draws a small navy card under the hand (`opts.label` — the
+job's name) — ONE singleton DOM node written imperatively per pointermove,
+so it re-renders nothing. From a 30px progress square, the translucent
+source was invisible and the whole gesture read as dead. Hidden on up and on
+cancel.
+
+Harness: `scratchpad/round21.mjs` (ghost mid-drag, unit card created and
+drawn with the snapshot's stage, click travels and opens). Its trap: find
+the created card by its OWN element id — a text match hits the Building
+Progress widget first, which also says WOLFSON and Artzi.

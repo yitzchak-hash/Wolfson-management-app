@@ -2019,7 +2019,13 @@ export function GeneralJobsPage() {
      */
     const fresh = ids
       .filter(id => !already.some(e => e.jobId === id))
-      .map(id => ({ id: `R-${Math.random().toString(36).slice(2, 8)}`, jobId: id, taskId }));
+      // `...(taskId ? ...)`, never `taskId` bare: an entry must not carry a
+      // literal `taskId: undefined` — clean records, and one less thing for a
+      // cloud write to trip on.
+      .map(id => ({
+        id: `R-${Math.random().toString(36).slice(2, 8)}`, jobId: id,
+        ...(taskId ? { taskId } : {}),
+      }));
     if (!fresh.length) return;
     cells[key] = [...already, ...fresh];
     const who = personOf(cell.person, contractors, users)?.name ?? cell.person.replace(/^n:/, '');
@@ -4470,8 +4476,39 @@ export function GeneralJobsPage() {
     if (at !== vpEl && !at.hasAttribute('data-board-world')) return null;
     return (ids, pid) => {
       if (!currentUser) return null;
-      // Another workspace's job stays put — there is no tile of it here.
-      if (pid && pid !== currentProjectId) return null;
+      /**
+       * Another workspace's unit becomes a UNIT CARD — a pointer tile.
+       *
+       * It used to be refused outright, silently — dragging a Wolfson square
+       * out of Building Progress onto the board just did nothing, which read
+       * as broken. The unit itself stays put in its own workspace (nothing
+       * leaves a diagram, no count changes anywhere); the card shows it here
+       * and clicking it travels there. The board twin of the notebook's
+       * cross-workspace entry.
+       */
+      if (pid && pid !== currentProjectId) {
+        const w0 = toWorld(cx, cy);
+        let made = 0;
+        track({
+          weight: 'arrange',
+          label: ids.length === 1 ? 'Put a unit card on the board' : `Put ${ids.length} unit cards on the board`,
+        }, () => {
+          ids.forEach((aptId, i) => {
+            const spot = settleDrop(w0.x - 110 + i * 26, w0.y - 48 + i * 26);
+            addCanvasElement({
+              id: 'CE-' + Math.random().toString(36).slice(2, 9),
+              type: 'widget', widget: 'unit-card',
+              ...(activeBoardView ? { board: activeBoardView } : {}),
+              x: Math.round(spot.x), y: Math.round(spot.y), w: 220, h: 96,
+              text: '', color: '#ffffff',
+              data: { projectId: pid, aptId },
+              addedAt: new Date().toISOString(),
+            });
+            made++;
+          });
+        });
+        return made === 1 ? 'On the board — a card pointing at that unit' : `${made} unit cards on the board`;
+      }
       const w = toWorld(cx, cy);
       let placed = 0;
       track({

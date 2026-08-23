@@ -31,6 +31,36 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     date: '2026-09-03',
+    title: 'The notebook finally lets go — the cloud bug is found',
+    items: [
+      {
+        title: 'Taking a job off the notebook STICKS now',
+        body: 'Found it: the cloud save could add to a notebook but never truly '
+          + 'remove from it, so every X and every drag-off looked done and came '
+          + 'back on the next sync — on every device. That is fixed at the root, '
+          + 'and proven against a real database. If a save ever fails now, the '
+          + 'header says "Not saved to cloud" in red instead of pretending.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'Drag a unit out of Building Progress onto the board',
+        body: 'A square from another workspace’s diagram now lands on the board '
+          + 'as a UNIT CARD — the workspace, the unit, its stage and address. The '
+          + 'unit itself stays where it lives; clicking the card travels there and '
+          + 'opens it.',
+        demo: 'drag',
+      },
+      {
+        title: 'You can see what you are dragging',
+        body: 'Dragging a job out of any list or square now shows a little card '
+          + 'under your hand with the job’s name, so the drag reads as a drag '
+          + 'instead of nothing happening until you let go.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
+    date: '2026-09-03',
     title: 'The board breathes, the search learns',
     items: [
       {

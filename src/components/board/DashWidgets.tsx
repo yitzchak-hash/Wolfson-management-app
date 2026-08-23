@@ -43,7 +43,7 @@ function ProgressCell({ apt, fill, cell, label, projectId, onOpen }: {
   projectId: string;
   onOpen: () => void;
 }) {
-  const planner = usePlannerDrag(apt.id, { projectId });
+  const planner = usePlannerDrag(apt.id, { projectId, label });
   return (
     <button
       {...planner.handlers}

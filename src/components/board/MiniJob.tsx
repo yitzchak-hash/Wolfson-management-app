@@ -40,7 +40,10 @@ export function MiniJob({ job, stages, assignments, onOpen, rtl, size = 11, sub,
   const pending = assignments.filter(a => a.apartmentId === job.id && !a.completedAt).length;
 
   // The same gesture a board tile has, from the one place it is written.
-  const planner = usePlannerDrag(job.id, { onToast });
+  const planner = usePlannerDrag(job.id, {
+    onToast,
+    label: job.displayName?.trim() || job.address?.trim() || 'Job',
+  });
 
   return (
     <button

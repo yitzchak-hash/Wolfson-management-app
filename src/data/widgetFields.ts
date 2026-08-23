@@ -864,6 +864,8 @@ export const WIDGET_PREVIEW: Record<string, Record<string, unknown>> = {
    * widget's fault state, not its picture. These coordinates match the sample
    * addresses in widgets.tsx.
    */
+  // A canned unit — the shelf has no other workspace's snapshot to read.
+  'unit-card': { sample: 1, projectId: 'wolfson' },
   // Three real, long-standing TikTok links, so the card plays rather than
   // showing its own paste box — which is what a shopper would otherwise see.
   tiktok: {

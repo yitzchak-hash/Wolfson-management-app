@@ -125,6 +125,7 @@ const SHELF: Record<string, string> = {
   // Looking across workspaces.
   'project-mini': 'Other workspaces', 'project-glance': 'Other workspaces',
   'board-mini': 'Other workspaces', 'tv-workspace': 'Other workspaces',
+  'unit-card': 'Other workspaces',
   // The rest is for the eyes.
   'w-title': 'Decoration and fun', banner: 'Decoration and fun',
   divider: 'Decoration and fun', quote: 'Decoration and fun',

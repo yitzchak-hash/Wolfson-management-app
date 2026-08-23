@@ -110,11 +110,43 @@ export function dropMessage(r: DropResult): string | null {
  * remembers where it came from, so the card can resolve it and say which
  * workspace it is in. It stays put over there — see `placeJobsOnPlanner`.
  */
+/**
+ * The little card that follows the hand during a drag.
+ *
+ * Without it the only sign a drag was live was the source row going faintly
+ * see-through — from a 30px Building Progress square that read as nothing at
+ * all, and "I don't see a job moving forward" was the report. One singleton
+ * DOM node, written imperatively on pointermove, so sixty updates a second
+ * re-render nothing.
+ */
+let dragGhost: HTMLDivElement | null = null;
+function showDragGhost(label: string, x: number, y: number) {
+  if (!dragGhost) {
+    dragGhost = document.createElement('div');
+    dragGhost.style.cssText =
+      'position:fixed;z-index:9999;pointer-events:none;padding:6px 11px;'
+      + 'border-radius:10px;background:#1e3a5f;color:#fff;font-size:12px;'
+      + 'font-weight:700;box-shadow:0 10px 28px rgba(15,23,42,.4);'
+      + 'transform:translate(14px,16px);max-width:230px;overflow:hidden;'
+      + 'text-overflow:ellipsis;white-space:nowrap;opacity:.95';
+    document.body.appendChild(dragGhost);
+  }
+  dragGhost.textContent = label;
+  dragGhost.style.left = `${x}px`;
+  dragGhost.style.top = `${y}px`;
+}
+function hideDragGhost() {
+  dragGhost?.remove();
+  dragGhost = null;
+}
+
 export function usePlannerDrag(jobId: string, opts?: {
   enabled?: boolean;
   onToast?: (msg: string) => void;
   /** Which workspace this job lives in. Omit for the one you are in. */
   projectId?: string;
+  /** What the drag ghost says — the job's name, ideally. */
+  label?: string;
 }) {
   const enabled = opts?.enabled !== false;
   const drag = useRef<{ x: number; y: number; live: boolean } | null>(null);
@@ -147,12 +179,14 @@ export function usePlannerDrag(jobId: string, opts?: {
       if (!d) return;
       if (!d.live && Math.abs(e.clientX - d.x) < 4 && Math.abs(e.clientY - d.y) < 4) return;
       if (!d.live) { d.live = true; setHeld(true); }
+      showDragGhost(opts?.label?.trim() || 'Job', e.clientX, e.clientY);
       setRotaHover(rotaCellAt(e.clientX, e.clientY));
     },
     onPointerUp: (e: React.PointerEvent) => {
       const d = drag.current;
       drag.current = null;
       setHeld(false);
+      hideDragGhost();
       (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
       if (!d?.live) return;              // never travelled: the click still runs
       justDragged.current = true;
@@ -177,7 +211,7 @@ export function usePlannerDrag(jobId: string, opts?: {
       const boardMsg = place([jobId], opts?.projectId);
       if (boardMsg) opts?.onToast?.(boardMsg);
     },
-    onPointerCancel: () => { drag.current = null; setHeld(false); setRotaHover(null); },
+    onPointerCancel: () => { drag.current = null; setHeld(false); hideDragGhost(); setRotaHover(null); },
   };
 
   /** See-through while held, so the landing square shows through the hand. */

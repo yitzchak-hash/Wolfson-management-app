@@ -1,8 +1,9 @@
 import React from 'react';
 import {
   Globe2, Flame, Images, Rows3, Trophy, Disc3, Grid3x3, PartyPopper, Calculator,
-  Fingerprint, Map as MapIcon, CloudSun, Music2,
+  Fingerprint, Map as MapIcon, CloudSun, Music2, Building2,
 } from 'lucide-react';
+import { UnitCard } from '../components/board/UnitCard';
 import { WidgetDef } from './widgets';
 import { WorldClocks, ShabbatClock } from '../components/board/TimeWidgets';
 import { BeforeAfter, SplitFlap, CrewRace } from '../components/board/TactileWidgets';
@@ -20,6 +21,20 @@ import { TikTokWidget } from '../components/board/TikTokWidget';
  * after that file has finished defining them rather than sitting inside it.
  */
 export const MORE_WIDGETS: WidgetDef[] = [
+  {
+    /**
+     * One apartment from another workspace, standing on this board — the
+     * board twin of the notebook's cross-workspace entry. Mostly created by
+     * DROPPING a unit out of a Building Progress square onto the board, but
+     * placeable from the store too. A pointer, never a copy: clicking it
+     * travels to that workspace and opens the unit.
+     */
+    id: 'unit-card', rank: 19, name: 'Unit card', category: 'live',
+    icon: Building2, w: 220, h: 96,
+    blurb: 'One apartment from another workspace. Click it to travel there and open it.',
+    data: {},
+    render: (el, c) => <UnitCard el={el} c={c} />,
+  },
   {
     id: 'world-clocks', rank: 20, name: 'World clocks', category: 'live',
     icon: Globe2, w: 210, h: 165,

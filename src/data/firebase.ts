@@ -11,6 +11,7 @@
 // If these are not set, the app falls back to localStorage only.
 
 import { initializeApp, FirebaseApp } from 'firebase/app';
+import { stripUndefinedDeep } from './deepClean';
 import {
   initializeFirestore,
   Firestore,
@@ -25,6 +26,7 @@ import {
   serverTimestamp,
   deleteField,
   updateDoc,
+  FieldPath,
   Unsubscribe,
 } from 'firebase/firestore';
 
@@ -79,11 +81,13 @@ export { db };
 
 // ── Cloud-sync status tracker ─────────────────────────────────────────────
 // Lets the UI show "Saving…" / "Saved ✓" without threading state through the store.
-type SyncStatus = 'idle' | 'saving' | 'saved';
+export type SyncStatus = 'idle' | 'saving' | 'saved' | 'error';
 type SyncListener = (s: SyncStatus) => void;
 const _syncListeners: SyncListener[] = [];
 let _pendingWrites = 0;
 let _savedTimer: ReturnType<typeof setTimeout> | null = null;
+/** A write failed in this batch — the badge must say so, not "Saved ✓". */
+let _writeFailed = false;
 
 export function subscribeCloudSync(fn: SyncListener): () => void {
   _syncListeners.push(fn);
@@ -92,13 +96,30 @@ export function subscribeCloudSync(fn: SyncListener): () => void {
 
 function _notifySyncListeners(s: SyncStatus) { _syncListeners.forEach(fn => fn(s)); }
 
+/**
+ * A cloud write FAILED. Silence here is what let a rejected notebook write
+ * masquerade as saved for weeks — the badge went green because the promise
+ * settled, and only the DevTools console knew the truth. The badge now shows
+ * a red "not saved" for a while instead of "Saved ✓".
+ */
+function _notifySyncError() {
+  _writeFailed = true;
+  if (_savedTimer) { clearTimeout(_savedTimer); _savedTimer = null; }
+  _notifySyncListeners('error');
+  _savedTimer = setTimeout(() => {
+    _writeFailed = false;
+    _notifySyncListeners('idle');
+    _savedTimer = null;
+  }, 10_000);
+}
+
 function _trackWrite<T>(promise: Promise<T>): Promise<T> {
   _pendingWrites++;
   if (_savedTimer) { clearTimeout(_savedTimer); _savedTimer = null; }
-  _notifySyncListeners('saving');
+  if (!_writeFailed) _notifySyncListeners('saving');
   return promise.finally(() => {
     _pendingWrites = Math.max(0, _pendingWrites - 1);
-    if (_pendingWrites === 0) {
+    if (_pendingWrites === 0 && !_writeFailed) {
       _notifySyncListeners('saved');
       _savedTimer = setTimeout(() => { _notifySyncListeners('idle'); _savedTimer = null; }, 3000);
     }
@@ -116,13 +137,34 @@ export function projectCollection(projectId: string, base: string): string {
 export async function fsSet(collectionName: string, docId: string, data: object) {
   if (!db) return;
   try {
-    // Replace undefined values with deleteField() so merge:true actually removes them from Firestore
+    // Top-level undefined becomes deleteField() so clearing an optional field
+    // actually removes it; nested undefined is stripped outright (defence in
+    // depth beside ignoreUndefinedProperties).
     const sanitized = Object.fromEntries(
-      Object.entries({ ...data, _updatedAt: serverTimestamp() }).map(([k, v]) => [k, v === undefined ? deleteField() : v])
+      Object.entries({ ...data, _updatedAt: serverTimestamp() })
+        .map(([k, v]) => [k, v === undefined ? deleteField() : stripUndefinedDeep(v)])
     );
-    await _trackWrite(setDoc(doc(db, collectionName, docId), sanitized, { merge: true }));
+    /**
+     * `mergeFields`, NOT `merge: true` — this is the frozen-notebook fix.
+     *
+     * `merge: true` DEEP-MERGES nested maps: a map key deleted locally is
+     * simply absent from the payload, so the server KEEPS it, and the next
+     * sync resurrects it on every device. The weekly notebook's squares are
+     * map keys under `data.cells`, so taking the last card off a day — the X,
+     * a drag off the notebook, taking a person off — looked done and came
+     * back, for weeks. The tombstone code already knew this rule ("a merge
+     * cannot remove keys"); now every generic write follows it: each
+     * top-level field in the payload REPLACES the server's field wholesale,
+     * and fields not in the payload stay untouched — which is what every
+     * caller actually means, since they all send whole records or whole maps.
+     * FieldPath per key, so a key with a dot in it can never be read as a
+     * nested path.
+     */
+    await _trackWrite(setDoc(doc(db, collectionName, docId), sanitized,
+      { mergeFields: Object.keys(sanitized).map(k => new FieldPath(k)) }));
   } catch (e) {
     console.warn(`Firestore write failed for ${collectionName}/${docId}:`, e);
+    _notifySyncError();
   }
 }
 
@@ -161,6 +203,7 @@ export async function fsDelete(collectionName: string, docId: string) {
     await _trackWrite(deleteDoc(doc(db, collectionName, docId)));
   } catch (e) {
     console.warn(`Firestore delete failed for ${collectionName}/${docId}:`, e);
+    _notifySyncError();
   }
 }
 
@@ -220,6 +263,7 @@ export async function fsUntombstone(projectId: string, ids: string[]) {
   } catch (e) {
     // The doc may not exist yet — which means there is no tombstone to lift.
     console.warn(`Firestore untombstone failed for ${projectId}:`, e);
+    _notifySyncError();
   }
 }
 
@@ -274,14 +318,20 @@ export async function fsBatchSet(collectionName: string, items: Array<{ id: stri
     for (let i = 0; i < items.length; i += 450) {
       const batch = writeBatch(db);
       items.slice(i, i + 450).forEach(({ id, data }) => {
+        // Same rules as fsSet: deleteField for cleared top-level fields,
+        // nested undefined stripped, and mergeFields so a nested map is
+        // REPLACED rather than deep-merged — a merge cannot remove keys.
         const sanitized = Object.fromEntries(
-          Object.entries({ ...data, _updatedAt: serverTimestamp() }).map(([k, v]) => [k, v === undefined ? deleteField() : v])
+          Object.entries({ ...data, _updatedAt: serverTimestamp() })
+            .map(([k, v]) => [k, v === undefined ? deleteField() : stripUndefinedDeep(v)])
         );
-        batch.set(doc(db!, collectionName, id), sanitized, { merge: true });
+        batch.set(doc(db!, collectionName, id), sanitized,
+          { mergeFields: Object.keys(sanitized).map(k => new FieldPath(k)) });
       });
       await _trackWrite(batch.commit());
     }
   } catch (e) {
     console.warn(`Firestore batch write failed for ${collectionName}:`, e);
+    _notifySyncError();
   }
 }
