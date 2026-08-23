@@ -31,6 +31,44 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     date: '2026-09-06',
+    title: 'Every TV, live in settings — each with its own view and size',
+    items: [
+      {
+        title: 'Your TVs report themselves',
+        body: 'Open the TV link on any panel and it appears in Settings → TV '
+          + 'under "Your TVs, live" — with its real resolution, its real shape, '
+          + 'whether it is showing right now, and how big the smallest words on '
+          + 'it actually are. No more guessing an aspect ratio from across the '
+          + 'building.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'Each TV gets its own setup',
+        body: 'Name each panel, drag its own green box over the board to choose '
+          + 'what THAT panel shows, and set its own display size — two TVs can '
+          + 'show two different slices at two different sizes. The box is drawn '
+          + 'at the panel’s real shape, so what you frame is what it fills. '
+          + 'Changes reach an open panel within seconds.',
+        demo: 'drag',
+      },
+      {
+        title: 'One press to make the words readable',
+        body: 'When a panel reports its text is too small to read from across a '
+          + 'room, its card shows a red button that raises that panel’s size by '
+          + 'exactly the amount it measured it needs.',
+        demo: 'tap',
+      },
+      {
+        title: 'The section box looks right on the wall',
+        body: 'A section draws on the TV the way it draws on the board — a '
+          + 'light tint with its name on a header bar — instead of a solid slab '
+          + 'of colour over everything.',
+        demo: 'pin',
+      },
+    ],
+  },
+  {
+    date: '2026-09-06',
     title: 'The white TV found, the whole board in one view, and sharper widgets',
     items: [
       {

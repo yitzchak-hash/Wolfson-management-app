@@ -175,6 +175,19 @@ export interface BoardSetting {
    * rarely the top-left one. Absent means "the whole board, fitted".
    */
   tvView?: { x: number; y: number; w: number; h: number };
+  /**
+   * EACH wall panel's own setup, keyed by the id the panel minted for itself
+   * (`tvScreenId` in tvScreens.ts). The office runs more than one TV, and one
+   * shared region/scale meant every panel showed the same slice at the same
+   * size whatever its shape. A panel with an entry here uses it; without one
+   * it falls back to the shared `tvView`/`tvScale`. Lives in the __tv bag so
+   * it inherits persist/sync/export with no new state key.
+   */
+  tvScreens?: Record<string, {
+    name?: string;
+    view?: { x: number; y: number; w: number; h: number };
+    scale?: number;
+  }>;
 }
 
 export type BoardSettingKey = keyof BoardSetting;

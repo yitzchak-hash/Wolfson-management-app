@@ -3798,3 +3798,48 @@ re-encode the flipped edge contract. `tvcrash.mjs` (every widget on /tv,
 bisecting) and `tvwhite.mjs`/`tvhis.mjs`/`tvprod.mjs` are the white-TV
 diagnosis tools — tvhis reads real records fetched to the /tmp scratchpad,
 which never enters the repo.
+
+---
+
+# v2 — every TV, live in settings
+
+## The live feed (`src/data/tvScreens.ts`)
+The owner's "get back the live feed from the TV", made practical: every open
+/tv page mints a PERMANENT id (`tv_screen_id`, localStorage — this panel is
+always this panel) and heartbeats a doc into the global bare Firestore
+collection **`tvScreens`** (on mount after first paint, on resize, every
+45s): CSS viewport, dpr, REAL pixels, which workspace it is showing, the
+scale in effect, and `measureSmallestText()` — the ScreenReport's own
+real-pixel measurement, extracted. A pixel screenshot is deliberately not
+attempted; the numbers plus the settings page's miniature of the chosen
+region are the picture that matters. Presence only — it is NOT app data: not
+in persist/export/import, and `forgetTvScreen` deletes a dead panel's doc.
+Verified against production rules by REST probe: writes to the new
+collection pass.
+
+## Per-screen setup (`BoardSetting.tvScreens`, inside the __tv bag)
+`Record<screenId, { name?, view?, scale? }>` — in the __tv bag so it
+inherits persist/sync/export with NO new state key (the portalDomain
+precedent). The TV resolves ITS OWN entry first (`mine?.view ?? tvView`,
+`mine?.scale ?? tvScale`); the shared settings are the fallback for a panel
+without one. Settings → TV renders `TvScreensPanel`: one card per reported
+panel — editable name, live dot (heartbeat < 2min), real resolution +
+`shapeNameOf()`, smallest-text readout with a red one-press "Make the words
+readable" (scale = READABLE/smallest × the scale the panel reported), its
+OWN BoardRegionPicker at the panel's REAL live ratio, its own display-size
+slider, and Forget. The old shared section below is relabelled "(default)".
+An open panel picks changes up through the settings/app listener within
+seconds.
+
+## The wall draws a section like the board does
+The box was `backgroundColor: el.color` raw — the owner's orange section
+covered the entire TV as a solid slab. It is `withAlpha(el.color,
+boxOpacity ?? 0.45)` now (withAlpha exported from BoardItems), border one
+step stronger, and the box's NAME renders on a tinted header BAR
+(`rounded-t-xl`, +0.25 alpha) exactly as the board draws it, not as words
+floating in the field.
+
+Harness: `scratchpad/tvscreens.mjs` — the header bar on the wall, the minted
+id surviving reload, the live-TVs section standing in settings with the
+honest no-Firebase message. The heartbeat/settings round-trip needs real
+Firestore and was verified by REST probe against production rules instead.

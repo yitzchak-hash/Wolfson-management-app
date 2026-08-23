@@ -14,7 +14,8 @@ import { TimeClockTab } from '../components/settings/TimeClockTab';
 import { TV_DASH_BOARD } from '../types';
 import { portalLink, bareDomain, looksLikePreviewHost } from '../data/portalLink';
 import type { BoardAccess } from '../types';
-import { personColor, projectColor, BoardView, Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency, getStageName, Apartment, isCountableApartment } from '../types';
+import { personColor, projectColor, BoardView, Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency, getStageName, Apartment, isCountableApartment, BoardSetting, CanvasElement } from '../types';
+import { loadTvScreens, forgetTvScreen, screenIsLive, shapeNameOf, TvScreenPresence } from '../data/tvScreens';
 import { Tooltip } from '../components/ui/Tooltip';
 import { Toast } from '../components/ui/Toast';
 import { BoardRegionPicker } from '../components/board/BoardRegionPicker';
@@ -38,6 +39,152 @@ import { ProjectLayout, layoutToApartments, newSlot, joinSlots, areNeighbours } 
 function ratioOfShape(id?: string): number {
   const [w, h] = (id ?? '16:9').split(':').map(Number);
   return w > 0 && h > 0 ? w / h : 16 / 9;
+}
+
+/**
+ * The wall panels, LIVE.
+ *
+ * Every open /tv page reports itself (id, real resolution, shape, the
+ * smallest text actually on its screen) to the `tvScreens` collection — the
+ * owner's "live feed from the TV". Each panel gets its own card here: name
+ * it, aim its own green box at its own slice of the board, set its own
+ * display size, and press one button to make its words readable — computed
+ * from what THAT panel measured, not from a guess. A panel with no card of
+ * its own follows the shared default below.
+ */
+function TvScreensPanel({ tv, setTvSetting, jobs, elements, stages, onToast }: {
+  tv: BoardSetting;
+  setTvSetting: <K extends keyof BoardSetting>(key: K, value: BoardSetting[K]) => void;
+  jobs: Apartment[];
+  elements: CanvasElement[];
+  stages: Stage[];
+  onToast: (m: string) => void;
+}) {
+  const [screens, setScreens] = useState<TvScreenPresence[]>([]);
+  const [loadedOnce, setLoadedOnce] = useState(false);
+  const refresh = async () => {
+    setScreens(await loadTvScreens());
+    setLoadedOnce(true);
+  };
+  useEffect(() => {
+    refresh();
+    const t = setInterval(refresh, 30_000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const stored = tv.tvScreens ?? {};
+  const patchScreen = (id: string, patch: Partial<NonNullable<BoardSetting['tvScreens']>[string]>) => {
+    setTvSetting('tvScreens', { ...stored, [id]: { ...(stored[id] ?? {}), ...patch } });
+  };
+
+  if (!isFirebaseConfigured) return null;
+  if (!screens.length) {
+    return (
+      <p className="text-[11px] text-gray-400 mb-4">
+        {loadedOnce
+          ? 'No TV has reported yet. Open the TV link on a panel and it will appear here within a minute, with its real shape and size.'
+          : 'Looking for TVs…'}
+      </p>
+    );
+  }
+
+  const READABLE = 16;
+  return (
+    <div className="mb-5 space-y-4">
+      {screens.map(s => {
+        const live = screenIsLive(s);
+        const mine = stored[s.id] ?? {};
+        const tooSmall = s.smallest != null && s.smallest < READABLE - 2;
+        const scale = mine.scale ?? tv.tvScale ?? 1;
+        return (
+          <div key={s.id} data-tv-screen={s.id}
+            className="rounded-2xl border border-gray-200 p-3.5">
+            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+              <span className="w-2 h-2 rounded-full flex-shrink-0"
+                style={{ backgroundColor: live ? '#16a34a' : '#cbd5e1' }}
+                title={live ? 'Showing right now' : 'Not open right now'} />
+              <input
+                value={mine.name ?? ''}
+                onChange={e => patchScreen(s.id, { name: e.target.value })}
+                placeholder={`TV ${s.id.slice(4, 8).toUpperCase()}`}
+                className="font-bold text-[13px] text-gray-800 bg-transparent outline-none
+                           border-b border-transparent focus:border-gray-300 min-w-0 w-40"
+              />
+              <span className="text-[11px] text-gray-400">
+                {live ? 'showing now' : `last seen ${new Date(s.lastSeen).toLocaleString()}`}
+              </span>
+              <span className="flex-1" />
+              <button
+                onClick={() => {
+                  const next = { ...stored }; delete next[s.id];
+                  setTvSetting('tvScreens', next);
+                  forgetTvScreen(s.id);
+                  setScreens(sc => sc.filter(x => x.id !== s.id));
+                }}
+                className="text-[10.5px] font-bold text-gray-300 hover:text-red-500">
+                Forget
+              </button>
+            </div>
+
+            {/* What the panel really is — measured by the panel itself. */}
+            <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-gray-500 mb-2">
+              <span>{s.realW} × {s.realH} real pixels</span>
+              <span className="font-bold">{shapeNameOf(s.w, s.h)}</span>
+              {s.smallest != null && (
+                <span style={tooSmall ? { color: '#b4342a', fontWeight: 700 } : undefined}>
+                  smallest text {s.smallest}px {tooSmall ? '— too small from across a room' : '— readable'}
+                </span>
+              )}
+            </div>
+            {tooSmall && (
+              <button
+                onClick={() => {
+                  const want = Math.min(2.5, Math.max(0.6,
+                    Math.round(((READABLE / Math.max(1, s.smallest ?? READABLE)) * s.scale) * 10) / 10));
+                  patchScreen(s.id, { scale: want });
+                  onToast('Text size raised — the TV follows within a few seconds');
+                }}
+                className="mb-2 px-3 py-1.5 rounded-xl text-[11px] font-bold text-white"
+                style={{ backgroundColor: '#b4342a' }}>
+                Make the words readable on this TV
+              </button>
+            )}
+
+            {/* Its own slice of the board, drawn at ITS real shape. */}
+            <BoardRegionPicker
+              jobs={jobs}
+              elements={elements}
+              stages={stages}
+              value={mine.view}
+              screenRatio={s.w > 0 && s.h > 0 ? s.w / s.h : 16 / 9}
+              width={520}
+              height={300}
+              onChange={r => {
+                patchScreen(s.id, { view: r });
+                onToast(r ? 'This TV now shows that slice' : 'This TV shows the whole board');
+              }}
+            />
+
+            <label className="block text-[10.5px] font-semibold text-gray-500 mt-2 mb-1">
+              Display size on this TV · {Math.round(scale * 100)}%
+            </label>
+            <div className="flex items-center gap-3">
+              <span className="text-[11px] text-gray-400">Smaller</span>
+              <input type="range" min={0.6} max={2.5} step={0.05} value={scale}
+                onChange={e => patchScreen(s.id, { scale: Number(e.target.value) })}
+                className="flex-1" />
+              <span className="text-[11px] text-gray-400">Bigger</span>
+            </div>
+          </div>
+        );
+      })}
+      <p className="text-[10.5px] text-gray-400">
+        A panel follows its own card; the section below is the default for any TV without one.
+        Changes reach an open panel within a few seconds.
+      </p>
+    </div>
+  );
 }
 
 /** The shapes a wall panel comes in. Same ids the TV page's own buttons use. */
@@ -1724,8 +1871,22 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
         />
       )}
 
-      {/* Aim the TV at part of the board. */}
-      <label className="block text-xs font-semibold text-gray-600 mb-1">What the TV shows</label>
+      {/* ── Each TV, live ─────────────────────────────────────────────────
+          The panels report themselves while open; each gets its own card,
+          its own green box and its own display size. */}
+      <label className="block text-xs font-semibold text-gray-600 mb-1">Your TVs, live</label>
+      <TvScreensPanel
+        tv={tv}
+        setTvSetting={setTvSetting}
+        jobs={boardJobs}
+        elements={boardThings}
+        stages={stages}
+        onToast={onToast}
+      />
+
+      {/* Aim the TV at part of the board — the DEFAULT, for any panel
+          without its own card above. */}
+      <label className="block text-xs font-semibold text-gray-600 mb-1">What the TV shows (default)</label>
       {/*
         The panel's shape, chosen here and SAVED (`tvShape` in the __tv bag) —
         the box below is hard-locked to it, so what gets dragged out is always

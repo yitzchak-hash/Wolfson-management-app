@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useStore, loadAllProjectsTaskData, ensureProjectSnapshot } from '../data/store';
 import { Apartment, CanvasElement, isCountableApartment, binKeyOf, binLabelOf, getStageName, TV_DASH_BOARD } from '../types';
 import { withAlpha } from '../components/board/BoardItems';
+import { tvScreenId, reportTvScreen } from '../data/tvScreens';
 import { queryVariants, skeleton } from '../data/translit';
 import { DriveIcon, ZohoIcon, PlanIcon } from '../components/ui/BrandIcons';
 import { getBoardTheme } from '../data/boardThemes';
@@ -396,11 +397,38 @@ export function TvPresentationPage() {
     ? { zoom: dprFix.zoom, width: dprFix.w, height: dprFix.h }
     : undefined;
 
+  /**
+   * THIS panel's own settings, when the office has made some for it.
+   *
+   * The panel minted itself an id on first open and reports itself to
+   * settings (the heartbeat below); settings stores a per-screen region and
+   * display size under that id. One shared setup across every TV is the
+   * fallback, not the rule — two panels of different shapes want different
+   * slices at different sizes.
+   */
+  const screenId = useMemo(() => tvScreenId(), []);
+  const mine = tvSettings.tvScreens?.[screenId];
+
   const boostParam = Number(params.get('scale'));
   const boost = Number.isFinite(boostParam) && boostParam > 0
     ? boostParam
-    : (tvSettings.tvScale ?? 1);
+    : (mine?.scale ?? tvSettings.tvScale ?? 1);
   const scale = autoScale * boost;
+
+  /**
+   * The live feed to settings: geometry, shape, and how readable the words
+   * really are, reported while the panel is open. On mount (after the first
+   * real paint), on resize, and every 45 seconds — so the settings page can
+   * show each TV as it IS, not as somebody remembers it.
+   */
+  useEffect(() => {
+    let stop = false;
+    const beat = () => { if (!stop) reportTvScreen(view, boost); };
+    const first = setTimeout(beat, 2500);
+    const t = setInterval(beat, 45_000);
+    window.addEventListener('resize', beat);
+    return () => { stop = true; clearTimeout(first); clearInterval(t); window.removeEventListener('resize', beat); };
+  }, [view, boost]);
   const setBoost = (b: number) => {
     const p = new URLSearchParams(params);
     p.set('scale', String(Number(b.toFixed(2))));
@@ -1172,7 +1200,8 @@ export function TvPresentationPage() {
    * Without one it falls back to the automatic whole-board scale, and the
    * manual boost still applies on top either way.
    */
-  const tvRegion = tvSettings.tvView;
+  // This panel's own region first; the shared one is the fallback.
+  const tvRegion = mine?.view ?? tvSettings.tvView;
   const frameW = frameRef.current?.clientWidth ?? window.innerWidth;
   const frameH = (frameRef.current?.clientHeight ?? window.innerHeight) - 56;
   /**
@@ -1321,8 +1350,17 @@ export function TvPresentationPage() {
                       style={{ fontSize: el.fontSize ?? 22, color: el.color || '#0f172a' }}>
                       {el.text || ''}
                     </div>
+                  ) : el.type === 'box' ? (
+                    // The board's own section look: the name on a header BAR
+                    // in the box's colour, not words floating in the field.
+                    el.text ? (
+                      <div className="absolute top-0 left-0 right-0 px-3 py-1.5 rounded-t-xl truncate font-semibold text-sm text-gray-800"
+                        style={{ backgroundColor: withAlpha(el.color, (el.boxOpacity ?? 0.45) + 0.25) }}>
+                        {el.text}
+                      </div>
+                    ) : null
                   ) : (
-                    <div className={`${el.type === 'box' ? 'font-semibold text-sm pt-2 px-3' : 'text-sm pt-3 px-3'} text-gray-700 leading-snug whitespace-pre-wrap break-words`}>
+                    <div className="text-sm pt-3 px-3 text-gray-700 leading-snug whitespace-pre-wrap break-words">
                       {el.text}
                     </div>
                   )}
