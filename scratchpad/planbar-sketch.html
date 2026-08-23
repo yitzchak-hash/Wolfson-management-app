@@ -1910,6 +1910,28 @@ function nextInstance(base) {
   while (used.indexOf(base + ':' + n) !== -1) n++;
   return base + ':' + n;
 }
+/**
+ * Two gaps side by side do exactly what one gap does.
+ *
+ * Left alone they pile up — the button appends to a bar that has already
+ * wrapped, so the new gap lands somewhere you were not looking and the
+ * natural response is to press again. Merging them keeps the read-out
+ * describing the layout rather than the pressing.
+ */
+function mergeGaps() {
+  let merged = 0;
+  S.bars.forEach(function (bar) {
+    const out = [];
+    bar.items.forEach(function (id) {
+      const last = out[out.length - 1];
+      if (baseOf(id) === 'gap' && last && baseOf(last) === 'gap') { merged++; return; }
+      out.push(id);
+    });
+    bar.items = out;
+  });
+  return merged;
+}
+
 function allIds() {
   const out = S.tray.slice();
   S.bars.forEach(function (b) { out.push.apply(out, b.items); });
@@ -2216,6 +2238,7 @@ document.addEventListener('pointerup', function (e) {
     S.bars[+zone.dataset.bar].items.splice(Math.max(0, index), 0, d.id);
   }
   if (caret.parentNode) caret.parentNode.removeChild(caret);
+  if (mergeGaps()) toast('Two gaps in a row do the same as one — kept as one');
   render();
 });
 
@@ -2258,6 +2281,17 @@ function specText() {
   L.push('OFF THE BAR');
   if (!S.tray.length) L.push('    nothing — every control is on a bar');
   S.tray.forEach(function (id) { L.push('    –  ' + labelOf(id)); });
+  /* A bar with neither the folder picker nor the plan bubbles on it has no
+     way to choose WHICH plan is shown. Worth saying at sketch time rather
+     than after it is built. */
+  const onBar = [];
+  S.bars.forEach(function (b) { onBar.push.apply(onBar, b.items.map(baseOf)); });
+  if (onBar.indexOf('folder') === -1 && onBar.indexOf('chips') === -1) {
+    L.push('!! NOTHING ON THE BAR CAN CHOOSE A PLAN');
+    L.push('    the folder picker and the plan bubbles are both parked, so');
+    L.push('    there would be no way to switch between sheets');
+    L.push('');
+  }
   L.push('');
   L.push('LEFT EDGE');
   L.push('    the bar starts ' + Math.round(S.left * 100) + '% across the drawer,');
@@ -2268,7 +2302,7 @@ function paintSpec() {
   const pre = document.getElementById('spec');
   pre.innerHTML = specText()
     .replace(/[&<>]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]; })
-    .replace(/^(BAR \d+|OFF THE BAR|LEFT EDGE)/gm, '<span class="k">$1</span>')
+    .replace(/^(BAR \d+|OFF THE BAR|LEFT EDGE|!! [A-Z ]+)/gm, '<span class="k">$1</span>')
     .replace(/(#[0-9a-fA-F]{6})/g, '<span class="d">$1</span>');
 }
 
@@ -2281,8 +2315,20 @@ document.getElementById('add-bar').addEventListener('click', function () {
 function addSynth(base) {
   remember();
   const id = nextInstance(base);
-  (S.bars[0] || { items: [] }).items.push(id);
-  render(); toast(SYNTH[base].label + ' added to bar 1 — drag it where you want it');
+  /* Beside whatever is picked, otherwise at the end. A bar that has wrapped
+     puts an appended part on the second line, out of the corner of the eye
+     you were watching — which is what makes somebody press again. */
+  const bar = S.bars.find(function (b) { return b.items.indexOf(picked) !== -1; }) || S.bars[0];
+  if (!bar) return;
+  const at = bar.items.indexOf(picked);
+  if (at === -1) bar.items.push(id); else bar.items.splice(at + 1, 0, id);
+  const merged = mergeGaps();
+  /* And it arrives PICKED, so you can see where it went. */
+  picked = bar.items.indexOf(id) === -1 ? null : id;
+  render();
+  toast(merged
+    ? 'Two gaps in a row do the same as one — kept as one'
+    : SYNTH[base].label + ' added — drag it where you want it');
 }
 document.getElementById('add-gap').addEventListener('click', function () { addSynth('gap'); });
 document.getElementById('add-div').addEventListener('click', function () { addSynth('divider'); });
