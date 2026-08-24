@@ -4017,3 +4017,19 @@ old content placed at small world y sits under the buttons until dragged out.
 `board.mjs` / `round20` / `round25` / `round11` / `deexpand` all hold under
 the new contract without edits — they assert "no grey above/left", which the
 higher pin only strengthens.
+
+## A section box never sits above the content
+`BoardItems` node z: `el.type === 'box' ? min(el.z ?? 1, 3) : max(el.z ??
+(bin ? 4 : 5), 4)` — two BANDS. A box brought to the front used to paint over
+every widget inside it, and because a box's body takes the pointer,
+everything under it became unclickable: the owner's calculator trapped under
+his section, clicks silently selecting the near-invisible box ("the
+calculator doesn't respond, and the section became unselectable"). Boxes
+still order against OTHER boxes; content sent-to-back still orders against
+other content but floors at the band's bottom so it can never sink under a
+box either. The wallboard already ignored stored z for boxes (`box ? 1 : 3`)
+— this brings the board itself in line. Harness:
+`scratchpad/boxtrap-probe.mjs` (6 checks — the front-ed box repro, clicks
+reaching the calculator and its keys, the section still selecting on its own
+surface). `grouplock.mjs`'s zoom-anchor check was re-encoded to the flush-top
+contract on the way (anchor = viewport top, not the header's bottom line).

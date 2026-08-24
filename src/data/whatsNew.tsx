@@ -30,6 +30,22 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-09-11',
+    title: 'A section can no longer trap what sits inside it',
+    items: [
+      {
+        title: 'Sections stay under the work',
+        body: 'A section box is furniture: it now always draws UNDERNEATH '
+          + 'widgets, tiles and groups, even one that was brought to the '
+          + 'front. A calculator inside a section used to become unclickable '
+          + '— every press landed on the see-through section instead. Now a '
+          + 'click on the thing hits the thing, and a click on the section’s '
+          + 'own open surface still selects the section.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2026-09-10',
     title: 'The paper meets the top bar',
     items: [

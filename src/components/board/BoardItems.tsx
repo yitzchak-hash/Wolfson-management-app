@@ -646,8 +646,22 @@ export const BoardNode = React.memo(function BoardNode({
         touchAction: 'none',
         // Cut and waiting for its paste — visibly "in the air".
         opacity: faded ? 0.35 : undefined,
-        // An explicit layer wins; otherwise the type decides, as it always has.
-        zIndex: el.z ?? (el.type === 'box' ? 1 : isBin ? 4 : 5),
+        /**
+         * A SECTION BOX is furniture and stays UNDER the content, whatever
+         * its stored z says. A box brought to the front used to paint over
+         * every widget inside it — and because the box's body takes the
+         * pointer, everything under it became unclickable: the owner's
+         * calculator trapped beneath his section, with clicks on it silently
+         * selecting the near-invisible box instead. Bring-to-front on a box
+         * still orders it against OTHER boxes (the cap keeps their ladder),
+         * but never lifts it above tiles, widgets or groups.
+         */
+        // …and the mirror guard: content sent-to-back floors at the band's
+        // bottom (4), so it can sink below other content but never under a
+        // box, where the same trap would spring from the other side.
+        zIndex: el.type === 'box'
+          ? Math.min(el.z ?? 1, 3)
+          : Math.max(el.z ?? (isBin ? 4 : 5), 4),
       }}
     >
       {/* Node actions — always on when selected, on hover otherwise. Bins have
