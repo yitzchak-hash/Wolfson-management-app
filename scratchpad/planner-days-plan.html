@@ -15,7 +15,7 @@
     font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
     margin: 0; padding: 28px 16px 80px;
   }
-  .table { max-width: 880px; margin: 0 auto; }
+  .table { max-width: 900px; margin: 0 auto; }
   .lede { max-width: 62ch; }
   .step { margin-top: 44px; }
   .step-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; }
@@ -39,8 +39,15 @@
     display: inline-block; transform: rotate(-2deg); vertical-align: middle;
   }
   .redline { stroke: #c2402f; stroke-width: 2.2; fill: none; stroke-linecap: round; }
+  .struck { position: relative; opacity: .6; }
+  .struck::after {
+    content: ''; position: absolute; left: 4px; right: 4px; top: 50%;
+    border-top: 2.5px solid #475569; transform: rotate(-4deg);
+  }
   @media (prefers-reduced-motion: reduce) { .chipmove { transition: none !important; } }
-  button:focus-visible, .pressable:focus-visible { outline: 2px solid #1e3a5f; outline-offset: 2px; }
+  button:focus-visible, .pressable:focus-visible, input:focus-visible, select:focus-visible {
+    outline: 2px solid #1e3a5f; outline-offset: 2px;
+  }
 </style>
 
 <div class="table">
@@ -48,13 +55,14 @@
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <span style="background:#1e3a5f;color:#fff;font-weight:800;font-size:13px;border-radius:10px;padding:6px 12px;letter-spacing:.04em">TZVIAIR · WEEKLY NOTEBOOK</span>
       <h1 style="font-size:26px;font-weight:900;color:#16212e;margin:0">Tasks that take days</h1>
+      <span style="font-family:'Caveat','Comic Sans MS',cursive;font-weight:700;font-size:19px;color:#c2402f;transform:rotate(-2deg)">version 2 — your answers drawn in</span>
     </div>
     <p class="lede" style="font-size:14px;color:#3f4c5e;line-height:1.55;margin:12px 0 0">
-      Most jobs take more than one day — AC takes a few, drywall takes a few — and dragging cards
-      day by day got confusing. Here is the plan for what happens when you drag a job onto the
-      notebook, drawn with the app's real parts so it looks exactly like it will.
-      <b>Nothing here is built yet</b> — this page is for deciding. The red handwriting is us
-      talking; everything white is the app.
+      What happens when you drag a job onto the notebook, drawn with the app's real parts. All four
+      questions from version 1 are answered and drawn below — the Friday checkbox, the
+      non-consecutive days, and the worker's own finish-early screen.
+      <b>Nothing here is built yet</b> — one more look, then we build it exactly like this.
+      The red handwriting is us talking; everything white is the app.
     </p>
   </header>
 
@@ -70,23 +78,23 @@
               <span class="font-bold tabular-nums" style="font-size:15px;color:#94a3b8"> 23</span></span>
             </div>
             <div class="px-1 py-0.5 rounded-t-md" style="background:#f1f5f9">
-              <div class="tabular-nums font-black" style="font-size:15px;color:#334155">23 <span style="font-size:10px;color:#94a3b8;font-weight:400">Aug</span></div>
+              <div class="tabular-nums font-black" style="font-size:15px;color:#334155">23</div>
               <div class="font-bold" style="font-size:11px;color:#64748b">Sunday</div>
             </div>
             <div class="px-1 py-0.5 rounded-t-md" style="background:#e0f2fe">
-              <div class="tabular-nums font-black" style="font-size:15px;color:#0369a1">24 <span style="font-size:10px;color:#94a3b8;font-weight:400">Aug</span></div>
+              <div class="tabular-nums font-black" style="font-size:15px;color:#0369a1">24</div>
               <div class="font-bold" style="font-size:11px;color:#0369a1">Monday</div>
             </div>
             <div class="px-1 py-0.5 rounded-t-md" style="background:#f1f5f9">
-              <div class="tabular-nums font-black" style="font-size:15px;color:#334155">25 <span style="font-size:10px;color:#94a3b8;font-weight:400">Aug</span></div>
+              <div class="tabular-nums font-black" style="font-size:15px;color:#334155">25</div>
               <div class="font-bold" style="font-size:11px;color:#64748b">Tuesday</div>
             </div>
             <div class="px-1 py-0.5 rounded-t-md" style="background:#f1f5f9">
-              <div class="tabular-nums font-black" style="font-size:15px;color:#334155">26 <span style="font-size:10px;color:#94a3b8;font-weight:400">Aug</span></div>
+              <div class="tabular-nums font-black" style="font-size:15px;color:#334155">26</div>
               <div class="font-bold" style="font-size:11px;color:#64748b">Wednesday</div>
             </div>
             <div class="px-1 py-0.5 rounded-t-md" style="background:#f1f5f9">
-              <div class="tabular-nums font-black" style="font-size:15px;color:#334155">27 <span style="font-size:10px;color:#94a3b8;font-weight:400">Aug</span></div>
+              <div class="tabular-nums font-black" style="font-size:15px;color:#334155">27</div>
               <div class="font-bold" style="font-size:11px;color:#64748b">Thursday</div>
             </div>
 
@@ -94,6 +102,9 @@
               <span class="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1" style="background:#0d9488"></span>
               <span class="truncate font-bold" style="font-size:12px;color:#334155">Joseph</span>
             </div>
+            <div class="p-0.5" style="min-height:64px;background:#fbfcfd;outline:1px solid #eef2f7;outline-offset:-1px"></div>
+            <div class="p-0.5" style="min-height:64px;background:#fbfcfd;outline:1px solid #eef2f7;outline-offset:-1px"></div>
+            <div class="p-0.5" style="min-height:64px;background:#fbfcfd;outline:1px solid #eef2f7;outline-offset:-1px"></div>
             <div class="p-0.5" style="min-height:64px;background:#dbeafe;outline:2px solid #4aa8d8;outline-offset:-2px">
               <div class="rounded-md px-1.5 py-1" style="background:rgba(13,148,136,.16);border:1px dashed #0d9488;opacity:.75;transform:rotate(-3deg)">
                 <span class="font-bold" style="font-size:12px;color:#1e293b">Cohen</span>
@@ -101,22 +112,18 @@
               </div>
             </div>
             <div class="p-0.5" style="min-height:64px;background:#fbfcfd;outline:1px solid #eef2f7;outline-offset:-1px"></div>
-            <div class="p-0.5" style="min-height:64px;background:#fbfcfd;outline:1px solid #eef2f7;outline-offset:-1px"></div>
-            <div class="p-0.5" style="min-height:64px;background:#fbfcfd;outline:1px solid #eef2f7;outline-offset:-1px"></div>
-            <div class="p-0.5" style="min-height:64px;background:#fbfcfd;outline:1px solid #eef2f7;outline-offset:-1px"></div>
           </div>
         </div>
       </div>
       <div class="notes">
-        <div class="note">You drag <b>Cohen</b> from the board onto <b>Joseph's Sunday</b> — same gesture as today.</div>
-        <div class="note">The square lights up blue under your hand, like it already does.</div>
+        <div class="note">You drag <b>Cohen</b> onto <b>Joseph's Wednesday</b> — same gesture as today. Wednesday on purpose: watch what happens with Friday in the next step.</div>
       </div>
     </div>
   </section>
 
   <!-- ══ STEP 2 · the new card ══ -->
   <section class="step">
-    <div class="step-head"><span class="step-num">2.</span><h2 class="step-title">The card that opens — this is the new part</h2></div>
+    <div class="step-head"><span class="step-num">2.</span><h2 class="step-title">The card that opens — everything here is live, try it</h2></div>
     <div class="lay">
       <div class="stage">
         <div class="rounded-2xl bg-white overflow-hidden flex flex-col" style="max-width:470px;box-shadow:0 24px 60px -16px rgba(15,23,42,.45)">
@@ -135,7 +142,7 @@
                   </div>
                 </label>
                 <label class="block">
-                  <span class="block text-[10.5px] font-bold text-gray-500 mb-1">When it's done, move to<span class="new-tag">new</span></span>
+                  <span class="block text-[10.5px] font-bold text-gray-500 mb-1">When it's done, move to</span>
                   <select class="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12.5px] outline-none bg-white">
                     <option>AC installation</option>
                     <option>Drywall done</option>
@@ -152,7 +159,7 @@
               </label>
 
               <label class="block">
-                <span class="block text-[10.5px] font-bold text-gray-500 mb-1">What has to be done<span class="new-tag">one box now</span></span>
+                <span class="block text-[10.5px] font-bold text-gray-500 mb-1">What has to be done</span>
                 <div class="relative">
                   <textarea rows="3" class="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12.5px] outline-none resize-none bg-white" style="padding-bottom:30px">Close the ceiling in both bedrooms. Gate code 4412 — call the buyer before 8am.</textarea>
                   <span class="absolute flex items-center gap-1" style="right:8px;bottom:12px">
@@ -166,21 +173,14 @@
                 </div>
               </label>
 
-              <div class="grid grid-cols-2 gap-2.5">
-                <label class="block">
-                  <span class="block text-[10.5px] font-bold text-gray-500 mb-1">Start day<span class="new-tag">was "Due"</span></span>
-                  <div class="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12.5px] tabular-nums text-gray-600 bg-white">Sunday · 23 August 2026</div>
-                </label>
-                <label class="block">
-                  <span class="block text-[10.5px] font-bold text-gray-500 mb-1">How many days<span class="new-tag">new</span></span>
-                  <div class="w-full border border-gray-200 rounded-lg text-[12.5px] bg-white flex items-center overflow-hidden">
-                    <button id="dayminus" class="px-3 py-1.5 font-black text-gray-500 hover:bg-gray-50" aria-label="One day fewer">−</button>
-                    <span id="daycount" class="flex-1 text-center font-bold tabular-nums text-gray-700">3</span>
-                    <button id="dayplus" class="px-3 py-1.5 font-black text-gray-500 hover:bg-gray-50" aria-label="One day more">+</button>
-                  </div>
-                </label>
-              </div>
-              <p id="dayspan" class="m-0 text-[12px] font-semibold" style="color:#15803d">→ Sunday 23, Monday 24, Tuesday 25</p>
+              <div id="segments" class="grid gap-2"></div>
+
+              <label class="flex items-center gap-2 text-[11.5px] font-semibold text-gray-600 select-none" style="cursor:pointer">
+                <input id="noncon" type="checkbox" style="width:14px;height:14px;accent-color:#1e3a5f">
+                Non-consecutive — work it in separate stretches<span class="new-tag">new</span>
+              </label>
+
+              <p id="dayspan" class="m-0 text-[12px] font-semibold" style="color:#15803d"></p>
 
               <div class="flex gap-2 justify-end mt-1 pt-3 border-t border-gray-100">
                 <button class="me-auto px-2 py-1.5 rounded-lg text-[11px] font-semibold text-gray-400">Just put it on the planner</button>
@@ -191,51 +191,26 @@
         </div>
       </div>
       <div class="notes">
-        <div class="note">The old explainer paragraph is <b>gone</b>.</div>
-        <div class="note"><b>Current stage</b> just shows where the job stands. Next to it you pick where it moves <b>when the task is closed</b>.</div>
-        <div class="note">"What has to be done" and "Notes" were two boxes saying the same thing — now <b>one box</b>, with the paperclip and a <b>voice memo</b> right in its corner.</div>
-        <div class="note"><b>Try the − and + →</b> the green line always reads out exactly which days it will sit on.</div>
-        <div class="note">"Just put it on the planner" is now the small grey one on the left — for the rare card that needs no task. <b>(Already in the app today.)</b></div>
+        <div class="note"><b>Saturday never counts.</b> Friday counts only when you say so: set 3 days from Wednesday and an <b>Include Friday?</b> checkbox appears — off, the third day is Sunday; tick it and it's Friday. The checkbox only shows itself when the days actually pass a Friday. Default: off.</div>
+        <div class="note"><b>Tick Non-consecutive</b> and a second row appears — its own start day and day count (starts at 1). The green line always reads out every day, both stretches together.</div>
+        <div class="note">And the task now carries <b>ALL of these days</b>, not one date: the worker's schedule shows every one, the calendars plot every one, and it only counts as late after the <b>last</b> one passes.</div>
       </div>
     </div>
   </section>
 
   <!-- ══ STEP 3 · what lands ══ -->
   <section class="step">
-    <div class="step-head"><span class="step-num">3.</span><h2 class="step-title">What lands on the notebook</h2></div>
+    <div class="step-head"><span class="step-num">3.</span><h2 class="step-title">What lands on the notebook — follows the card above, live</h2></div>
     <div class="lay">
       <div class="stage sheet-scroll">
         <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-2" style="min-width:560px">
-          <div id="weekstrip" style="display:grid;grid-template-columns:92px repeat(5,minmax(0,1fr));gap:1px">
-            <div style="display:flex;flex-direction:column;justify-content:flex-end;padding-bottom:2px">
-              <span style="line-height:1"><span class="font-black tracking-wide" style="font-size:15px;color:#334155">AUG</span>
-              <span class="font-bold tabular-nums" style="font-size:15px;color:#94a3b8"> 23</span></span>
-            </div>
-            <div class="px-1 py-0.5 rounded-t-md" style="background:#f1f5f9"><div class="tabular-nums font-black" style="font-size:15px;color:#334155">23</div><div class="font-bold" style="font-size:11px;color:#64748b">Sunday</div></div>
-            <div class="px-1 py-0.5 rounded-t-md" style="background:#e0f2fe"><div class="tabular-nums font-black" style="font-size:15px;color:#0369a1">24</div><div class="font-bold" style="font-size:11px;color:#0369a1">Monday</div></div>
-            <div class="px-1 py-0.5 rounded-t-md" style="background:#f1f5f9"><div class="tabular-nums font-black" style="font-size:15px;color:#334155">25</div><div class="font-bold" style="font-size:11px;color:#64748b">Tuesday</div></div>
-            <div class="px-1 py-0.5 rounded-t-md" style="background:#f1f5f9"><div class="tabular-nums font-black" style="font-size:15px;color:#334155">26</div><div class="font-bold" style="font-size:11px;color:#64748b">Wednesday</div></div>
-            <div class="px-1 py-0.5 rounded-t-md" style="background:#f1f5f9"><div class="tabular-nums font-black" style="font-size:15px;color:#334155">27</div><div class="font-bold" style="font-size:11px;color:#64748b">Thursday</div></div>
-
-            <div class="flex items-start gap-1 px-1 py-1 rounded-l-md" style="background:rgba(13,148,136,.10)">
-              <span class="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1" style="background:#0d9488"></span>
-              <span class="truncate font-bold" style="font-size:12px;color:#334155">Joseph</span>
-            </div>
-            <div class="p-0.5 daycell" data-day="0" style="min-height:74px;background:#fbfcfd;outline:1px solid #eef2f7;outline-offset:-1px"></div>
-            <div class="p-0.5 daycell" data-day="1" style="min-height:74px;background:#fbfcfd;outline:1px solid #eef2f7;outline-offset:-1px"></div>
-            <div class="p-0.5 daycell" data-day="2" style="min-height:74px;background:#fbfcfd;outline:1px solid #eef2f7;outline-offset:-1px"></div>
-            <div class="p-0.5 daycell" data-day="3" style="min-height:74px;background:#fbfcfd;outline:1px solid #eef2f7;outline-offset:-1px"></div>
-            <div class="p-0.5 daycell" data-day="4" style="min-height:74px;background:#fbfcfd;outline:1px solid #eef2f7;outline-offset:-1px"></div>
-          </div>
-        </div>
-        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
-          <button id="movetue" class="pressable px-3 py-1.5 rounded-lg text-[12.5px] font-bold text-white" style="background:#1e3a5f">Move Tuesday to Thursday</button>
+          <div id="weekstrip" class="grid gap-2"></div>
         </div>
       </div>
       <div class="notes">
-        <div class="note"><b>One task, one card per day.</b> The little <b>day 1 of 3</b> pill says it's the same task wearing three faces.</div>
-        <div class="note">Change the day count up in step 2 and this strip follows.</div>
-        <div class="note"><b>Press the navy button</b> — Tuesday jumps to Thursday. The days of one task <b>don't have to touch</b>. Moving one day moves only that day.</div>
+        <div class="note"><b>One task, one card per day</b> — the <b>day 1 of 3</b> pill says it's the same task wearing several faces. Change anything in step 2 and this follows.</div>
+        <div class="note">When Friday is ticked, the notebook grows a <b>Friday column</b> for that week (its off-day purple). The worker sees his Friday either way.</div>
+        <div class="note">Afterwards you can still <b>drag any single card</b> to another day — it just moves, no question asked. The question card stays only for a task's last remaining day.</div>
       </div>
     </div>
   </section>
@@ -260,80 +235,242 @@
         </div>
       </div>
       <div class="notes">
-        <div class="note">Marking the task done takes its cards off the notebook <b>and moves the job to the stage you picked</b> in step 2 — nobody has to remember to.</div>
+        <div class="note">Closing the task takes its cards off the days ahead <b>and moves the job to the stage you picked</b> in step 2 — nobody has to remember to.</div>
         <div class="note">Picked "leave the stage alone"? Then it just closes, like today.</div>
       </div>
     </div>
   </section>
 
-  <!-- ══ decisions ══ -->
+  <!-- ══ STEP 5 · finishing early, from the worker's side ══ -->
   <section class="step">
-    <div class="step-head"><span class="step-num">★</span><h2 class="step-title">Four things for you two to decide</h2></div>
-    <div class="rounded-2xl p-4" style="background:#fef3c7;border:1px solid #fcd34d;max-width:720px">
-      <ol style="margin:0;padding-left:20px;display:grid;gap:10px;font-size:13.5px;line-height:1.5;color:#451a03">
-        <li><b>Do the days skip Friday and Saturday?</b> The notebook shows Sunday–Thursday, so we'd count only working days: 3 days starting Thursday = Thu, Sun, Mon. <i>Our recommendation: yes, skip them.</i></li>
-        <li><b>Which date does the task itself carry?</b> We'd make its due date the LAST day — it's late only once all its days have passed. <i>Recommendation: last day.</i></li>
-        <li><b>Dragging one day of a multi-day task:</b> we'd have it just move, with no question card — the drop question stays only for a task's final remaining day (where moving off means leaving the notebook). <i>Recommendation: just move.</i></li>
-        <li><b>Finishing early:</b> when the task is closed on day 2 of 3, the leftover day's card disappears with the rest. <i>Recommendation: yes, it goes.</i></li>
+    <div class="step-head"><span class="step-num">5.</span><h2 class="step-title">Finishing early — the worker is asked, in his own words</h2></div>
+    <div class="lay">
+      <div class="stage">
+        <div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap">
+          <!-- The worker's phone, AFTER photos + Close task -->
+          <div class="rounded-2xl bg-white overflow-hidden" style="width:270px;box-shadow:0 18px 44px -14px rgba(15,23,42,.4);border:1px solid #e2e8f0">
+            <div class="px-4 py-2.5 text-white font-bold text-[13px]" style="background:#1e3a5f">Task closed ✓</div>
+            <div class="px-4 py-4 grid gap-3">
+              <p class="m-0 font-extrabold text-slate-800" style="font-size:17px;line-height:1.35">
+                This job is still on your calendar for<br>
+                <span style="color:#0369a1">Sunday 30</span>
+              </p>
+              <p class="m-0 text-slate-500" style="font-size:13px">Are you completely finished, or do you need to come back?</p>
+              <button class="w-full py-3 rounded-xl font-bold text-white" style="background:#16a34a;font-size:15px">I finished everything — take it off</button>
+              <button class="w-full py-3 rounded-xl font-bold text-slate-600" style="background:#eef2f7;font-size:15px">No — I'm coming back</button>
+            </div>
+          </div>
+          <!-- The notebook after: past day struck, future day struck -->
+          <div class="sheet-scroll" style="flex:1 1 260px;min-width:260px">
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-2" style="min-width:260px">
+              <div class="text-[10px] font-bold text-gray-400 mb-1 px-1">THE NOTEBOOK, AFTER HE SAYS YES</div>
+              <div style="display:grid;grid-template-columns:70px repeat(3,minmax(0,1fr));gap:1px">
+                <div></div>
+                <div class="px-1 py-0.5 rounded-t-md" style="background:#f1f5f9"><div class="tabular-nums font-black" style="font-size:13px;color:#334155">26</div><div class="font-bold" style="font-size:10px;color:#64748b">Wed</div></div>
+                <div class="px-1 py-0.5 rounded-t-md" style="background:#f1f5f9"><div class="tabular-nums font-black" style="font-size:13px;color:#334155">27</div><div class="font-bold" style="font-size:10px;color:#64748b">Thu</div></div>
+                <div class="px-1 py-0.5 rounded-t-md" style="background:#f1f5f9"><div class="tabular-nums font-black" style="font-size:13px;color:#334155">30</div><div class="font-bold" style="font-size:10px;color:#64748b">Sun</div></div>
+                <div class="flex items-start gap-1 px-1 py-1 rounded-l-md" style="background:rgba(13,148,136,.10)">
+                  <span class="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1" style="background:#0d9488"></span>
+                  <span class="truncate font-bold" style="font-size:11px;color:#334155">Joseph</span>
+                </div>
+                <div class="p-0.5" style="min-height:56px;background:#fbfcfd;outline:1px solid #eef2f7;outline-offset:-1px">
+                  <div class="struck rounded-md px-1.5 py-1" style="background:rgba(13,148,136,.16);border:1px solid rgba(15,23,42,.07)">
+                    <span class="block font-bold" style="font-size:11px;color:#1e293b">Cohen</span>
+                    <span class="block" style="font-size:9px;color:#64748b">day 1 · done</span>
+                  </div>
+                </div>
+                <div class="p-0.5" style="min-height:56px;background:#fbfcfd;outline:1px solid #eef2f7;outline-offset:-1px">
+                  <div class="struck rounded-md px-1.5 py-1" style="background:rgba(13,148,136,.16);border:1px solid rgba(15,23,42,.07)">
+                    <span class="block font-bold" style="font-size:11px;color:#1e293b">Cohen</span>
+                    <span class="block" style="font-size:9px;color:#64748b">day 2 · done</span>
+                  </div>
+                </div>
+                <div class="p-0.5" style="min-height:56px;background:#fbfcfd;outline:1px solid #eef2f7;outline-offset:-1px">
+                  <div class="struck rounded-md px-1.5 py-1" style="background:rgba(13,148,136,.16);border:1px solid rgba(15,23,42,.07)">
+                    <span class="block font-bold" style="font-size:11px;color:#1e293b">Cohen</span>
+                    <span class="block" style="font-size:9px;color:#64748b">finished early</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="notes">
+        <div class="note">This screen only appears <b>after</b> the photos are in and he presses Close task — and it speaks <b>his language</b> (each worker already has one set): big, simple words.</div>
+        <div class="note">"Yes" <b>crosses the days off</b> — the line through the card, on days already worked AND on the days ahead he won't need. Nothing is deleted; the crossed-off card is the record.</div>
+        <div class="note">"No" leaves his calendar exactly as it was.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ locked ══ -->
+  <section class="step">
+    <div class="step-head"><span class="step-num">✓</span><h2 class="step-title">Your four answers, locked in</h2></div>
+    <div class="rounded-2xl p-4" style="background:#dcfce7;border:1px solid #86efac;max-width:720px">
+      <ol style="margin:0;padding-left:20px;display:grid;gap:10px;font-size:13.5px;line-height:1.5;color:#14532d">
+        <li><b>Saturday never counts. Friday is a per-task checkbox</b> that appears only when the days pass a Friday — default off.</li>
+        <li><b>A task carries ALL of its days.</b> The worker's schedule shows every one of them, so does every calendar; it is late only after its last day.</li>
+        <li><b>Non-consecutive from the start:</b> a checkbox adds a second stretch (own start day, own count, starting at 1). And dragging one card afterwards just moves that day — no question, except on a task's last remaining day.</li>
+        <li><b>Finishing early asks the worker</b> — big simple words in his own language, after photos + Close task. Yes crosses the remaining days off; done days wear the strike-through line as the record.</li>
       </ol>
     </div>
     <p class="lede" style="font-size:13px;color:#3f4c5e;margin-top:14px">
-      Say yes (or change any of the four) and we build it exactly as drawn. The week order flip you
-      asked about — older weeks on top, big <b>AUG</b>, bigger eyes, the little up/down arrows —
-      is <b>already done and live</b>; it didn't need a page.
+      If this page now says exactly what you meant, say <b>build it</b> and it ships behaving
+      exactly as drawn. Anything still off — say which step.
     </p>
   </section>
 </div>
 
 <script>
-  // The one moving part of step 2/3: the day count. Working days only, Sun–Thu.
-  var DAYS = [
-    { n: 23, w: 'Sunday' }, { n: 24, w: 'Monday' }, { n: 25, w: 'Tuesday' },
-    { n: 26, w: 'Wednesday' }, { n: 27, w: 'Thursday' },
-  ];
-  var count = 3;
-  var movedTue = false;
+  // ── The live model: stretches of working days ────────────────────────────
+  // Saturday never counts. Friday counts per stretch, only when its checkbox
+  // is ticked — and the checkbox only exists when the stretch passes a Friday.
+  var MS = 86400000;
+  var BASE = new Date(2026, 7, 23);                    // Sunday, Aug 23 2026
+  var START_OPTIONS = [0, 1, 2, 3, 4, 7, 8, 9, 10, 11]; // Sun–Thu, two weeks
+  var WD = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  var WDS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-  function chip(dayIdx, i, total) {
-    return '<div class="chipmove rounded-md px-1.5 py-1" style="background:rgba(13,148,136,.16);border:1px solid rgba(15,23,42,.07);transition:all .35s ease">'
-      + '<span class="flex items-start gap-1"><span class="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1" style="background:#f59e0b"></span>'
-      + '<span style="min-width:0"><span class="block font-bold" style="font-size:12px;color:#1e293b;line-height:1.15">Cohen</span>'
-      + '<span class="block" style="font-size:10px;color:#64748b">Close the ceiling…</span></span></span>'
-      + '<span class="inline-block mt-1 px-1.5 rounded-full font-bold" '
-      + 'style="font-size:9px;background:#e0e7ff;color:#3730a3">day ' + i + ' of ' + total + '</span>'
+  var segs = [{ start: 3, days: 3, friday: false }];   // Wednesday 26, three days
+  var noncon = false;
+
+  function dateAt(off) { return new Date(BASE.getTime() + off * MS); }
+  function fmtLong(d) { return WD[d.getDay()] + ' ' + d.getDate() + ' ' + MO[d.getMonth()]; }
+  function fmtShort(d) { return WDS[d.getDay()] + ' ' + d.getDate() + ' ' + MO[d.getMonth()]; }
+
+  /** The stretch's working days, and whether it passed a Friday on the way. */
+  function runOf(seg) {
+    var out = [], d = dateAt(seg.start), crossed = false;
+    while (out.length < seg.days) {
+      var dow = d.getDay();
+      if (dow === 5) crossed = true;
+      if (dow !== 6 && (dow !== 5 || seg.friday)) out.push(new Date(d));
+      d = new Date(d.getTime() + MS);
+    }
+    return { days: out, crossed: crossed };
+  }
+
+  function allDays() {
+    var list = [];
+    var use = noncon ? segs : segs.slice(0, 1);
+    use.forEach(function (s) { runOf(s).days.forEach(function (d) { list.push(d); }); });
+    var seen = {};
+    return list.filter(function (d) {
+      var k = d.toDateString();
+      if (seen[k]) return false; seen[k] = 1; return true;
+    }).sort(function (a, b) { return a - b; });
+  }
+
+  // ── Step 2: the segment rows ─────────────────────────────────────────────
+  function segRow(seg, i) {
+    var run = runOf(seg);
+    var opts = START_OPTIONS.map(function (off) {
+      return '<option value="' + off + '"' + (off === seg.start ? ' selected' : '') + '>'
+        + fmtLong(dateAt(off)) + '</option>';
+    }).join('');
+    return '<div class="grid grid-cols-2 gap-2.5">'
+      + '<label class="block"><span class="block text-[10.5px] font-bold text-gray-500 mb-1">'
+      + (i === 0 ? 'Start day' : 'And again from') + (i === 0 ? '' : '<span class="new-tag">2nd stretch</span>') + '</span>'
+      + '<select data-seg="' + i + '" data-k="start" class="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12.5px] outline-none bg-white">' + opts + '</select></label>'
+      + '<label class="block"><span class="block text-[10.5px] font-bold text-gray-500 mb-1">How many days</span>'
+      + '<div class="w-full border border-gray-200 rounded-lg text-[12.5px] bg-white flex items-center overflow-hidden">'
+      + '<button data-seg="' + i + '" data-k="minus" class="px-3 py-1.5 font-black text-gray-500 hover:bg-gray-50" aria-label="One day fewer">−</button>'
+      + '<span class="flex-1 text-center font-bold tabular-nums text-gray-700">' + seg.days + '</span>'
+      + '<button data-seg="' + i + '" data-k="plus" class="px-3 py-1.5 font-black text-gray-500 hover:bg-gray-50" aria-label="One day more">+</button>'
+      + '</div></label>'
+      + (run.crossed
+        ? '<label class="flex items-center gap-1.5 text-[11.5px] font-semibold text-gray-600 select-none col-span-2" style="cursor:pointer;margin-top:-4px">'
+          + '<input data-seg="' + i + '" data-k="friday" type="checkbox"' + (seg.friday ? ' checked' : '')
+          + ' style="width:13px;height:13px;accent-color:#1e3a5f"> Include Friday?<span class="new-tag">new</span></label>'
+        : '')
       + '</div>';
   }
 
-  function daysPicked() {
-    var idx = [];
-    for (var i = 0; i < count; i++) idx.push(i);
-    if (movedTue && count === 3) idx = [0, 1, 4];   // Tuesday's card living on Thursday
-    return idx;
+  function drawSegments() {
+    var box = document.getElementById('segments');
+    var use = noncon ? segs : segs.slice(0, 1);
+    box.innerHTML = use.map(segRow).join('');
+    box.querySelectorAll('select[data-k="start"]').forEach(function (el) {
+      el.addEventListener('change', function () {
+        segs[+el.dataset.seg].start = +el.value; draw();
+      });
+    });
+    box.querySelectorAll('button[data-k="minus"],button[data-k="plus"]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var s = segs[+el.dataset.seg];
+        s.days = Math.max(1, Math.min(8, s.days + (el.dataset.k === 'plus' ? 1 : -1)));
+        draw();
+      });
+    });
+    box.querySelectorAll('input[data-k="friday"]').forEach(function (el) {
+      el.addEventListener('change', function () {
+        segs[+el.dataset.seg].friday = el.checked; draw();
+      });
+    });
+  }
+
+  // ── Step 3: the two-week strip ───────────────────────────────────────────
+  function chip(k, n) {
+    return '<div class="chipmove rounded-md px-1.5 py-1" style="background:rgba(13,148,136,.16);border:1px solid rgba(15,23,42,.07)">'
+      + '<span class="flex items-start gap-1"><span class="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1" style="background:#f59e0b"></span>'
+      + '<span style="min-width:0"><span class="block font-bold" style="font-size:12px;color:#1e293b;line-height:1.15">Cohen</span>'
+      + '<span class="block" style="font-size:10px;color:#64748b">Close the ceiling…</span></span></span>'
+      + '<span class="inline-block mt-1 px-1.5 rounded-full font-bold" style="font-size:9px;background:#e0e7ff;color:#3730a3">day ' + k + ' of ' + n + '</span>'
+      + '</div>';
+  }
+
+  function drawStrip(days) {
+    var byKey = {};
+    days.forEach(function (d, i) { byKey[d.toDateString()] = { k: i + 1, n: days.length }; });
+    var friOn = days.some(function (d) { return d.getDay() === 5; });
+    var span = friOn ? 6 : 5;
+    var html = '';
+    [0, 7].forEach(function (weekOff) {
+      var wk = dateAt(weekOff);
+      var head = '<div style="display:flex;flex-direction:column;justify-content:flex-end;padding-bottom:2px">'
+        + '<span style="line-height:1"><span class="font-black tracking-wide" style="font-size:15px;color:#334155">'
+        + MO[wk.getMonth()].toUpperCase() + '</span>'
+        + '<span class="font-bold tabular-nums" style="font-size:15px;color:#94a3b8"> ' + wk.getDate() + '</span></span></div>';
+      var cells = '<div class="flex items-start gap-1 px-1 py-1 rounded-l-md" style="background:rgba(13,148,136,.10)">'
+        + '<span class="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1" style="background:#0d9488"></span>'
+        + '<span class="truncate font-bold" style="font-size:12px;color:#334155">Joseph</span></div>';
+      for (var i = 0; i < span; i++) {
+        var d = dateAt(weekOff + i);
+        var fri = d.getDay() === 5;
+        head += '<div class="px-1 py-0.5 rounded-t-md" style="background:' + (fri ? '#f5f3ff' : '#f1f5f9') + '">'
+          + '<div class="tabular-nums font-black" style="font-size:15px;color:#334155">' + d.getDate()
+          + (d.getDate() <= 7 ? ' <span style="font-size:10px;color:#94a3b8;font-weight:400">Sep</span>' : '') + '</div>'
+          + '<div class="font-bold" style="font-size:11px;color:' + (fri ? '#7c3aed' : '#64748b') + '">' + WD[d.getDay()] + '</div></div>';
+        var hit = byKey[d.toDateString()];
+        cells += '<div class="p-0.5" style="min-height:74px;background:#fbfcfd;outline:1px solid #eef2f7;outline-offset:-1px">'
+          + (hit ? chip(hit.k, hit.n) : '') + '</div>';
+      }
+      html += '<div style="display:grid;grid-template-columns:92px repeat(' + span + ',minmax(0,1fr));gap:1px">' + head + cells + '</div>';
+    });
+    document.getElementById('weekstrip').innerHTML = html;
   }
 
   function draw() {
-    var picked = daysPicked();
-    document.getElementById('daycount').textContent = String(count);
+    drawSegments();
+    var days = allDays();
     document.getElementById('dayspan').textContent =
-      '→ ' + picked.map(function (i) { return DAYS[i].w + ' ' + DAYS[i].n; }).join(', ');
-    var cells = document.querySelectorAll('#weekstrip .daycell');
-    cells.forEach(function (c) { c.innerHTML = ''; });
-    picked.forEach(function (dayIdx, k) {
-      cells[dayIdx].innerHTML = chip(dayIdx, k + 1, picked.length);
-    });
-    var btn = document.getElementById('movetue');
-    btn.style.display = count === 3 ? '' : 'none';
-    btn.textContent = movedTue ? 'Put Tuesday back' : 'Move Tuesday to Thursday';
+      '→ ' + days.map(fmtShort).join(', ') + ' — ' + days.length + (days.length === 1 ? ' day' : ' days');
+    drawStrip(days);
   }
 
-  document.getElementById('dayplus').addEventListener('click', function () {
-    count = Math.min(5, count + 1); movedTue = false; draw();
-  });
-  document.getElementById('dayminus').addEventListener('click', function () {
-    count = Math.max(1, count - 1); movedTue = false; draw();
-  });
-  document.getElementById('movetue').addEventListener('click', function () {
-    movedTue = !movedTue; draw();
+  document.getElementById('noncon').addEventListener('change', function (e) {
+    noncon = e.target.checked;
+    if (noncon && segs.length === 1) {
+      // The second stretch starts after the first ends, one day long.
+      var last = runOf(segs[0]).days.slice(-1)[0];
+      var off = Math.round((last - BASE) / MS) + 1;
+      while (dateAt(off).getDay() === 5 || dateAt(off).getDay() === 6 || off < 7) off++;
+      segs.push({ start: Math.min(off, 11), days: 1, friday: false });
+    }
+    if (!noncon) segs = segs.slice(0, 1);
+    draw();
   });
   draw();
 </script>

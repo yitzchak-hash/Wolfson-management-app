@@ -4227,13 +4227,28 @@ on the planner" is demoted to a small grey side button at the footer's LEFT
 **The full multi-day redesign is PROPOSED, not built**: current stage +
 when-done stage, one merged what/notes box with paperclip + voice memo, start
 day + how-many-days with a live day readout, one card per day ("day 1 of 3"),
-non-consecutive days by dragging one card. Drawn with the app's real classes
-in `scratchpad/planner-days-plan.template.html` (built html injects the dist
+non-consecutive days. Drawn with the app's real classes in
+`scratchpad/planner-days-plan.template.html` (built html injects the dist
 CSS via the snippet in that round's log; the planbar-sketch precedent — strip
 the app's html/body rules, red Caveat handwriting for everything that is not
-the app). Published as the "Tasks That Take Days" artifact with four starred
-decisions (skip Fri/Sat; due date = last day; moving one day just moves;
-finishing early clears leftover days). Build only once the owner picks.
+the app). Published as the "Tasks That Take Days" artifact.
+
+**The owner's four answers (2026-08-24), drawn into version 2 and LOCKED:**
+1. Saturday never counts. Friday is a PER-STRETCH checkbox that only appears
+   when the picked days actually pass a Friday; default off. When Friday is
+   in, the notebook strip grows a Friday column for that week.
+2. **A task carries ALL of its days**, not one dueDate — the worker's
+   schedule and every calendar show every day; "late" starts only after the
+   LAST day. (The single-date model was his exact objection.)
+3. Non-consecutive at CREATION: a checkbox adds a second stretch (own start
+   day + own count, default 1) and the green line reads out both stretches
+   merged. Dragging one card afterwards just moves that day, no question —
+   the drop question survives only on a task's last remaining day.
+4. Finishing early asks the WORKER, in his own language (`Contractor.lang`),
+   big simple words, only AFTER photos + Close task: "still on your calendar
+   for X — completely finished?" Yes crosses the remaining days off; done
+   days wear a strike-through card as the record. Nothing is deleted.
+Build to these exactly once he says "build it".
 
 Harness: `scratchpad/notebookflip.mjs` (6 checks — big AUG, cluster gone,
 open-on-today at max scroll, scrollers scroll exactly, eye size). Its lesson:
