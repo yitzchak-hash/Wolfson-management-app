@@ -14,6 +14,7 @@ import { Toast } from '../components/ui/Toast';
 import { printTable, printDot, printPill } from '../data/printing';
 import { Tooltip } from '../components/ui/Tooltip';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
+import { daysOf, dayNumberOf } from '../data/taskDays';
 import {
   isUploadBackendConfigured, extractFolderId,
   findOrCreateFolderViaBackend, uploadFileViaResumableSession,
@@ -299,22 +300,27 @@ export function TasksPage() {
 
   const calendarEvents: CalendarEvent[] = filtered
     .filter(a => a.dueDate)
-    .map(a => {
+    // A task that takes days is plotted on EVERY one of them — it carries all
+    // its days now, and one chip on the last day was the old world.
+    .flatMap(a => {
       const apt = apartments.find(ap => ap.id === a.apartmentId);
       const contractor = contractors.find(c => c.id === a.contractorId);
       const stage = stages.find(st => st.id === a.stageId);
-      return {
-        id: a.id,
-        date: a.dueDate!,
-        title: a.taskDescription,
-        subtitle: `${a.buildingId} · ${s.aptPrefix} ${aptLabel(apt)}`,
-        // The day shows the STAGE's colour; the worker's trade colour is only
-        // the fallback for a task with no stage.
-        color: stage?.color ?? (contractor ? CAT_COLORS[contractor.category] : '#6b7280'),
-        completed: !!a.completedAt,
-        node: stage ? { stageName: getStageName(stage, !!s.isRtl), stageColor: stage.color } : undefined,
-        onClick: () => { setView('list'); startEdit(a); },
-      };
+      return daysOf(a).map(day => {
+        const pill = dayNumberOf(a.days, day);
+        return {
+          id: `${a.id}:${day}`,
+          date: day,
+          title: pill ? `${a.taskDescription} · ${pill.k}/${pill.n}` : a.taskDescription,
+          subtitle: `${a.buildingId} · ${s.aptPrefix} ${aptLabel(apt)}`,
+          // The day shows the STAGE's colour; the worker's trade colour is only
+          // the fallback for a task with no stage.
+          color: stage?.color ?? (contractor ? CAT_COLORS[contractor.category] : '#6b7280'),
+          completed: !!a.completedAt,
+          node: stage ? { stageName: getStageName(stage, !!s.isRtl), stageColor: stage.color } : undefined,
+          onClick: () => { setView('list'); startEdit(a); },
+        };
+      });
     });
 
   return (

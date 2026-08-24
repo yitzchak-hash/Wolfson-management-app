@@ -4250,6 +4250,78 @@ the app). Published as the "Tasks That Take Days" artifact.
    days wear a strike-through card as the record. Nothing is deleted.
 Build to these exactly once he says "build it".
 
+---
+
+# v2 — multi-day tasks, BUILT (the owner said "build it")
+
+## The model: a task carries ALL of its days
+`ContractorAssignment.days?: string[]` — sorted ISO dates, absent on a
+one-day task — and `stageWhenDone?: string | null`. **`dueDate` is kept
+equal to the LAST day**, which is what lets every consumer written for the
+single-date world (sorting, overdue, badges) stay correct unchanged: late
+means every day has passed. The arithmetic is PURE in `src/data/taskDays.ts`
+(`workingRun` · `stretchDays` · `nextWorkingDay` · `dayNumberOf` ·
+`futureDaysOf` · `daysOf` · `moveTaskDay`/`removeTaskDay`/`addTaskDay`),
+tested offline by `scratchpad/taskdays.mjs` (vite `ssrLoadModule`, 18
+hand-worked checks). Saturday never counts; Friday is per-stretch and only
+offered when `crossesFriday` says the run passed one.
+
+## Store rules
+- **`addContractorAssignment` keeps a caller-minted id** (defaults first,
+  `...fields` last). It rewrote the id, so every planner card the drop
+  dialog created pointed at a task that did not exist — no pill, no
+  take-the-task-off ask, no strike-through, silently, since the dialog was
+  born. Found by reading the live card's props off the React fiber.
+- **Closing a task moves the job** to `stageWhenDone` — applied in
+  `updateContractorAssignment` at the completion transition, whichever
+  screen closes it; the portal has no signed-in user, so the stage write is
+  attributed to the worker by name. Re-opening does NOT move it back.
+- **A hand-typed `dueDate` beats a stale day list**: editing dueDate alone
+  on a task with `days` (Tasks page, drawer) collapses it to that one day.
+
+## The drop dialog (`PlannerTaskDialog`), as approved on the plan page
+Current stage (shown) · when-done stage · who · ONE what-has-to-be-done box
+with the paperclip and a `VoiceRecorderButton` in its corner (a memo becomes
+an audio File on the same attachment path; pending audio renders as a
+player — `PendingAudio`, module-level, object URL in an effect) · start day ·
+how-many-days stepper · per-stretch "Include Friday?" · a Non-consecutive
+switch that opens a second stretch (start = `nextWorkingDay` after the
+first) · a green `[data-day-readout]` naming every day. Priority and the
+separate Notes field are gone. `onDone(taskId, days)` → `placeOnPlanner`
+writes ONE CARD PER DAY (same taskId) in one cells write.
+
+## The notebook's day cards
+- `PlannerCard` takes `day`; a multi-day card wears a `[data-day-pill]`
+  ("day 2 of 3"); a card whose task is CLOSED draws dimmed with a rotated
+  strike line and says "done" — or "finished early" when its day is after
+  the completion date. The record, never a deletion.
+- **A single day of a multi-day task moves/removes SILENTLY** (drag to a
+  square, the X, a drag off the sheet) and the task's `days` are rewritten
+  through the taskDays helpers so the worker's schedule follows the office's
+  hand — the question cards survive only on a task's last remaining square.
+  Ctrl-copy of a task card adds its landing day. Foreign entries
+  (`projectId`) keep the ordinary asks — their task lives elsewhere.
+- `taskChips` expand `daysOf(a)`, so an unplaced task shows on every day.
+
+## The worker's portal
+`daysOf`/`effectiveDue`: filters match ANY day, the badge counts to the NEXT
+covered day (falls back to the last → Overdue), the card and detail sheet
+list every day, the portal calendar plots every day. **Finishing early**:
+closing a task with days ahead swaps the confirm for `[data-finish-early]` —
+big words in the worker's own language (`finishEarly*` keys in
+ContractorUiStrings, optional-with-fallbacks per the standing rule) naming
+the days; Yes completes (days ahead struck as "finished early"), No cancels
+the close and the task stays open. The office calendars (Tasks, Global,
+Project) all expand days too.
+
+Harness: `scratchpad/multiday.mjs` (20 checks, end to end on the container
+clock: drop → form → three cells one taskId → pills → silent Thursday→Monday
+move rewriting days → non-consecutive second stretch → portal any-day Today →
+finish-early ask → stage moved → struck cards). Its traps: the harness must
+seed enough WEEKS for every day it asserts (a day outside the run has no
+cell and nothing to count), and the green readout is locale-formatted — 
+assert the substance, not the commas.
+
 Harness: `scratchpad/notebookflip.mjs` (6 checks — big AUG, cluster gone,
 open-on-today at max scroll, scrollers scroll exactly, eye size). Its lesson:
 the run's LAST week can never sit flush at the top of the scroller, so

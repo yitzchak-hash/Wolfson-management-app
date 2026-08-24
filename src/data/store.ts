@@ -1924,7 +1924,16 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   addContractorAssignment: (fields) => {
-    const a: ContractorAssignment = { ...fields, id: generateId(), createdAt: new Date().toISOString() };
+    /**
+     * A caller that minted its own id KEEPS it. The planner's drop dialog
+     * writes its id onto the day cards it creates before this returns —
+     * `{ ...fields, id: generateId() }` silently rewrote it, so every card
+     * pointed at a task that did not exist: no day pill, no take-the-task-off
+     * question, no strike-through on completion. Defaults first, fields last.
+     */
+    const a: ContractorAssignment = {
+      id: generateId(), createdAt: new Date().toISOString(), ...fields,
+    } as ContractorAssignment;
     set(state => ({ contractorAssignments: [...state.contractorAssignments, a] }));
     persist(get);
 
@@ -1973,6 +1982,18 @@ export const useStore = create<AppState>((set, get) => ({
 
   updateContractorAssignment: (id, changes) => {
     const before = get().contractorAssignments.find(a => a.id === id);
+    /**
+     * A hand-typed due date beats a stale day list. The Tasks page and the
+     * drawer edit `dueDate` alone; on a multi-day task that would leave
+     * `days` describing days the office just moved away from, and every
+     * calendar drawing the old ones. Retyping the date collapses the task to
+     * that one day — explicit and predictable; the planner's own moves write
+     * `days` and `dueDate` together and never hit this.
+     */
+    if ('dueDate' in changes && !('days' in changes)
+        && before?.days?.length && changes.dueDate && !before.days.includes(changes.dueDate)) {
+      changes = { ...changes, days: undefined };
+    }
     set(state => ({
       contractorAssignments: state.contractorAssignments.map(a => a.id === id ? { ...a, ...changes } : a),
     }));
@@ -1981,6 +2002,29 @@ export const useStore = create<AppState>((set, get) => ({
     if (updated) {
       const updForFs = { ...updated, attachments: updated.attachments?.map(att => ({ ...att, dataUrl: '' })) };
       fsSet(projectCollection(get().currentProjectId, 'contractorAssignments'), id, updForFs);
+    }
+    /**
+     * Closing a task MOVES THE JOB to the stage picked at creation.
+     *
+     * Here, at the one write every screen goes through — the planner made the
+     * task, the portal or the Tasks page may close it, and nobody has to
+     * remember the stage. The worker's portal has no signed-in user, so the
+     * stage write is attributed to the worker by name; re-opening the task
+     * does NOT move the stage back (the job may have moved on for other
+     * reasons — an automatic revert would be a guess).
+     */
+    if (before && updated && 'completedAt' in changes
+        && !before.completedAt && updated.completedAt && updated.stageWhenDone) {
+      const apt = get().apartments.find(ap => ap.id === updated.apartmentId);
+      if (apt && apt.currentStageId !== updated.stageWhenDone) {
+        const who = get().currentUser
+          ?? {
+            id: updated.contractorId,
+            name: get().contractors.find(c => c.id === updated.contractorId)?.name ?? 'Worker',
+            code: '', role: 'viewer', active: true, createdAt: updated.createdAt,
+          } as User;
+        get().updateApartment(updated.apartmentId, { currentStageId: updated.stageWhenDone }, who);
+      }
     }
     // Log completion / undo-completion
     if (before && updated && 'completedAt' in changes) {

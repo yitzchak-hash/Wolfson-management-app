@@ -1039,6 +1039,21 @@ export interface ContractorAssignment {
   createdByName: string;
   attachments?: TaskAttachment[];
   priority?: TaskPriority;     // 'urgent' | 'normal' | 'low'
+  /**
+   * EVERY working day the task covers, sorted ISO dates — a task that takes
+   * days carries all of them (owner's ruling, 2026-08-24): the worker's
+   * schedule shows each one and it is late only after the last. Absent on a
+   * one-day task; when present, `dueDate` is kept equal to the LAST entry so
+   * every consumer written for the single-date world stays correct.
+   */
+  days?: string[];
+  /**
+   * Where the JOB moves when this task is closed — picked at creation in the
+   * planner's drop card ("when it's done, move to"). Applied by the store at
+   * the completion write, whichever screen closes the task. Absent/null =
+   * leave the stage alone.
+   */
+  stageWhenDone?: string | null;
 }
 
 export interface ContractorNote {
@@ -1205,6 +1220,15 @@ export interface ContractorUiStrings {
   printLabel: string;
   apartmentColumn: string;
   stageColumn: string;
+  /**
+   * The finish-early ask on a multi-day task — OPTIONAL WITH FALLBACKS, like
+   * every key added after launch: these strings are user-edited and stored,
+   * and a required key renders blank on every object written before today.
+   */
+  finishEarlyStill?: string;
+  finishEarlyQuestion?: string;
+  finishEarlyYes?: string;
+  finishEarlyNo?: string;
 }
 
 export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
@@ -1257,6 +1281,10 @@ export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   printLabel: 'Print my tasks',
   apartmentColumn: 'Apartment',
   stageColumn: 'Stage',
+  finishEarlyStill: 'This job is still on your calendar for:',
+  finishEarlyQuestion: 'Are you completely finished, or do you need to come back?',
+  finishEarlyYes: 'I finished everything — cross those days off',
+  finishEarlyNo: "No — I'm coming back",
   calendarTab: 'Calendar',
 };
 
@@ -1310,6 +1338,10 @@ export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   printLabel: 'הדפס את המשימות שלי',
   apartmentColumn: 'דירה',
   stageColumn: 'שלב',
+  finishEarlyStill: 'העבודה הזאת עדיין ביומן שלך בתאריכים:',
+  finishEarlyQuestion: 'סיימת לגמרי, או שתצטרך לחזור?',
+  finishEarlyYes: 'סיימתי הכול — אפשר למחוק את הימים',
+  finishEarlyNo: 'לא — אני אחזור',
   calendarTab: 'לוח שנה',
 };
 

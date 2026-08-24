@@ -4,6 +4,7 @@ import { CalendarDays } from 'lucide-react';
 import { useStore, loadAllProjectsTaskData } from '../data/store';
 import { TaskCalendar, CalendarEvent } from '../components/tasks/TaskCalendar';
 import { ContractorAssignment, Apartment, aptLabel } from '../types';
+import { daysOf } from '../data/taskDays';
 import { fsListen, isFirebaseConfigured, projectCollection } from '../data/firebase';
 import { DEFAULT_PROJECTS } from '../data/initialData';
 
@@ -79,9 +80,10 @@ export function GlobalCalendarPage() {
         const apt = d.apartments.find(ap => ap.id === a.apartmentId);
         const contractor = contractors.find(c => c.id === a.contractorId);
         const stage = (d.stages ?? []).find(st => st.id === a.stageId);
-        out.push({
-          id: `${d.projectId}:${a.id}`,
-          date: a.dueDate,
+        // Every day of a multi-day task — it carries all of them now.
+        for (const day of daysOf(a)) out.push({
+          id: `${d.projectId}:${a.id}:${day}`,
+          date: day,
           title: a.taskDescription,
           subtitle: `${projectName(d.projectId)} · ${apt ? aptLabel(apt) : a.buildingId}`,
           // Stage colour first; the trade colour only when the task has none.

@@ -2,6 +2,7 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useStore, loadAllProjectsTaskData } from '../data/store';
 import { ContractorAssignment, ContractorPhoto, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, getStageName, aptLabel } from '../types';
+import { daysOf, futureDaysOf } from '../data/taskDays';
 import { PlanPinOverlay } from '../components/apartment/PlanPinOverlay';
 import { printSheet, printEsc } from '../data/printing';
 import { format, isPast, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
@@ -395,6 +396,8 @@ export function ContractorPortal() {
   const [mapFilter, setMapFilter] = useState<'yesterday' | 'today' | 'tomorrow' | 'week' | 'all'>('today');
   const [showPlansPdf, setShowPlansPdf] = useState(false);
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
+  /** The days a multi-day task still has ahead when the worker closes it. */
+  const [finishAsk, setFinishAsk] = useState<string[] | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const noteAttachRef = useRef<HTMLInputElement>(null);
@@ -464,54 +467,74 @@ export function ContractorPortal() {
 
   const assignedAptIds = new Set(assignments.map(a => a.apartmentId));
 
+  /**
+   * Multi-day tasks: the task carries ALL of its days (the owner's ruling),
+   * so the schedule shows it on every one, a filter matches on ANY of them,
+   * and the countdown badge counts to the NEXT day it covers — falling back
+   * to the last, so a task whose days have all passed still reads Overdue.
+   * A single-date task falls out of the same rule: `daysOf` gives [dueDate].
+   */
+  const effectiveDue = (a: ContractorAssignment): string | null => {
+    const list = daysOf(a);
+    if (!list.length) return null;
+    const today = format(new Date(), 'yyyy-MM-dd');
+    return list.find(d => d >= today) ?? list[list.length - 1];
+  };
+  const dayOffsets = (a: ContractorAssignment): number[] => {
+    const today = startOfDay(new Date());
+    return daysOf(a).map(d => differenceInCalendarDays(parseISO(d), today));
+  };
+
   const aptSubLabels = useMemo(() => {
     const m = new Map<string, string>();
     const today = startOfDay(new Date());
     [...assignments]
       .filter(a => !a.completedAt && a.dueDate)
-      .sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? ''))
+      .sort((a, b) => (effectiveDue(a) ?? '').localeCompare(effectiveDue(b) ?? ''))
       .forEach(a => {
         if (m.has(a.apartmentId)) return;
-        const days = differenceInCalendarDays(parseISO(a.dueDate!), today);
+        const eff = effectiveDue(a)!;
+        const days = differenceInCalendarDays(parseISO(eff), today);
         const label =
           days === -1 ? s.filterYesterday :
           days < 0  ? s.filterOverdue :
           days === 0 ? s.filterToday :
           days === 1 ? s.filterTomorrow :
-          format(parseISO(a.dueDate!), 'MMM d');
+          format(parseISO(eff), 'MMM d');
         m.set(a.apartmentId, label);
       });
     return m;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignments, s]);
 
   const filteredAptIds = useMemo(() => {
     if (mapFilter === 'all') return assignedAptIds;
-    const today = startOfDay(new Date());
     const matching = new Set<string>();
     assignments.forEach(a => {
       if (a.completedAt || !a.dueDate) return;
-      const days = differenceInCalendarDays(parseISO(a.dueDate), today);
-      if (mapFilter === 'yesterday' && days === -1) matching.add(a.apartmentId);
-      else if (mapFilter === 'today' && days === 0) matching.add(a.apartmentId);
-      else if (mapFilter === 'tomorrow' && days === 1) matching.add(a.apartmentId);
-      else if (mapFilter === 'week' && days >= 0 && days <= 7) matching.add(a.apartmentId);
+      const offs = dayOffsets(a);
+      if (mapFilter === 'yesterday' && offs.includes(-1)) matching.add(a.apartmentId);
+      else if (mapFilter === 'today' && offs.includes(0)) matching.add(a.apartmentId);
+      else if (mapFilter === 'tomorrow' && offs.includes(1)) matching.add(a.apartmentId);
+      else if (mapFilter === 'week' && offs.some(d => d >= 0 && d <= 7)) matching.add(a.apartmentId);
     });
     return matching;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapFilter, assignments]);
 
   const filteredAssignments = useMemo(() => {
     if (mapFilter === 'all') return assignments;
-    const today = startOfDay(new Date());
     return assignments.filter(a => {
       if (a.completedAt) return false;
       if (!a.dueDate) return false;
-      const days = differenceInCalendarDays(parseISO(a.dueDate), today);
-      if (mapFilter === 'yesterday') return days === -1;
-      if (mapFilter === 'today') return days === 0;
-      if (mapFilter === 'tomorrow') return days === 1;
-      if (mapFilter === 'week') return days >= 0 && days <= 7;
+      const offs = dayOffsets(a);
+      if (mapFilter === 'yesterday') return offs.includes(-1);
+      if (mapFilter === 'today') return offs.includes(0);
+      if (mapFilter === 'tomorrow') return offs.includes(1);
+      if (mapFilter === 'week') return offs.some(d => d >= 0 && d <= 7);
       return true;
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapFilter, assignments]);
 
   async function handleMediaUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -711,6 +734,15 @@ export function ContractorPortal() {
     if (!selectedAssignment) return;
     // Photos gate this unless the office relaxed it for this worker.
     if (getMedia(selectedAssignment.id).length === 0 && !contractor?.photosOptional) return;
+    /**
+     * FINISHING EARLY (the owner's locked decision): a multi-day task closed
+     * while it still has days AHEAD asks the worker — after the photos, in
+     * his own language, in big simple words — whether he is completely done.
+     * Yes crosses the remaining days off (they stay on the calendar, struck
+     * through, as the record); No cancels the close and the task stays open.
+     */
+    const future = futureDaysOf(selectedAssignment.days, format(new Date(), 'yyyy-MM-dd'));
+    if (future.length) { setFinishAsk(future); return; }
     setShowCompleteConfirm(true);
   }
 
@@ -1238,7 +1270,7 @@ export function ContractorPortal() {
                 const notes = getNotes(a.id);
                 const isOverdue = a.dueDate && !a.completedAt && isPast(parseISO(a.dueDate));
                 const isDone = !!a.completedAt;
-                const dueBadge = getDueBadge(a.dueDate, dueWords);
+                const dueBadge = getDueBadge(effectiveDue(a), dueWords);
 
                 return (
                   <button key={a.id} onClick={() => { setSelectedAssignment(a); setShowHistory(false); }}
@@ -1262,7 +1294,11 @@ export function ContractorPortal() {
                           {a.dueDate && (
                             <span className={`flex items-center gap-1 text-xs ${isOverdue ? 'text-red-500' : 'text-gray-400'}`}>
                               <CalendarDays size={11} />
-                              {format(parseISO(a.dueDate), 'MMM d, yyyy')}
+                              {/* EVERY day the task covers — a task that takes
+                                  days carries all of them now. */}
+                              {a.days?.length
+                                ? a.days.map(d => format(parseISO(d), 'EEE d MMM')).join(' · ')
+                                : format(parseISO(a.dueDate), 'MMM d, yyyy')}
                             </span>
                           )}
                           {dueBadge && !isDone && (
@@ -1298,12 +1334,14 @@ export function ContractorPortal() {
       {activeTab === 'calendar' && (() => {
         const calEvents: CalendarEvent[] = assignments
           .filter(a => !!a.dueDate)
-          .map(a => {
+          // Every day of a multi-day task, so the worker's calendar says
+          // exactly which days he is expected at the job.
+          .flatMap(a => {
             const apt = getApt(a.apartmentId);
             const st = stages.find(x => x.id === a.stageId);
-            return {
-              id: a.id,
-              date: a.dueDate!,
+            return daysOf(a).map(day => ({
+              id: `${a.id}:${day}`,
+              date: day,
               title: a.taskDescription,
               subtitle: apt ? aptLabel(apt) : a.buildingId,
               // The stage's colour inside the day; the trade colour only for
@@ -1312,7 +1350,7 @@ export function ContractorPortal() {
               node: st ? { stageName: st.name, stageColor: st.color } : undefined,
               completed: !!a.completedAt,
               onClick: () => setSelectedAssignment(a),
-            };
+            }));
           });
         const wdLabels = s.isRtl
           ? ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳']
@@ -1491,12 +1529,12 @@ export function ContractorPortal() {
         const apt = getApt(a.apartmentId);
         const stage = getStage(a.stageId);
         const isOverdue = a.dueDate && !a.completedAt && isPast(parseISO(a.dueDate));
-        const dueBadge = getDueBadge(a.dueDate, dueWords);
+        const dueBadge = getDueBadge(effectiveDue(a), dueWords);
         const plansPdfFileId = apt?.plansPdfLink ? extractFileId(apt.plansPdfLink) : null;
 
         return (
           <>
-            <div className="fixed inset-0 bg-black/40 z-40" onClick={() => { setSelectedAssignment(null); setShowCompleteConfirm(false); }} />
+            <div className="fixed inset-0 bg-black/40 z-40" onClick={() => { setSelectedAssignment(null); setShowCompleteConfirm(false); setFinishAsk(null); }} />
             <div className="fixed bottom-0 left-0 right-0 z-50 rounded-t-3xl bg-white shadow-2xl flex flex-col" style={{ maxHeight: '92vh' }}>
               <div className="flex items-center justify-center pt-3 pb-1 flex-shrink-0">
                 <div className="w-10 h-1.5 rounded-full bg-gray-200" />
@@ -1530,7 +1568,7 @@ export function ContractorPortal() {
                       </div>
                     )}
                   </div>
-                  <button onClick={() => { setSelectedAssignment(null); setShowCompleteConfirm(false); }} className="p-1.5 rounded-full hover:bg-gray-100">
+                  <button onClick={() => { setSelectedAssignment(null); setShowCompleteConfirm(false); setFinishAsk(null); }} className="p-1.5 rounded-full hover:bg-gray-100">
                     <X size={20} className="text-gray-500" />
                   </button>
                 </div>
@@ -1541,9 +1579,11 @@ export function ContractorPortal() {
                   </div>
                 )}
                 {a.dueDate && (
-                  <div className={`flex items-center gap-1.5 text-xs font-medium mt-2 ${isOverdue ? 'text-red-500' : 'text-gray-500'}`}>
+                  <div className={`flex items-center gap-1.5 text-xs font-medium mt-2 flex-wrap ${isOverdue ? 'text-red-500' : 'text-gray-500'}`}>
                     <CalendarDays size={13} />
-                    {s.duePrefix} {format(parseISO(a.dueDate), 'MMMM d, yyyy')}
+                    {a.days?.length
+                      ? a.days.map(d => format(parseISO(d), 'EEE d MMM')).join(' · ')
+                      : <>{s.duePrefix} {format(parseISO(a.dueDate), 'MMMM d, yyyy')}</>}
                     {dueBadge && !a.completedAt && (
                       <span className={`ml-1 px-1.5 py-0.5 rounded border font-semibold text-xs ${dueBadge.cls}`}>
                         {dueBadge.text}
@@ -1961,7 +2001,41 @@ export function ContractorPortal() {
                       </div>
                     )}
 
-                    {showCompleteConfirm ? (
+                    {finishAsk ? (
+                      /* The finish-early ask — big simple words in the
+                         worker's own language, only reachable after the
+                         photos are in and Close task was pressed. */
+                      <div className="space-y-3" data-finish-early>
+                        <p className="text-center font-extrabold text-gray-800"
+                          style={{ fontSize: 17, lineHeight: 1.35 }}>
+                          {s.finishEarlyStill || (s.isRtl
+                            ? 'העבודה הזאת עדיין ביומן שלך בתאריכים:'
+                            : 'This job is still on your calendar for:')}
+                        </p>
+                        <p className="text-center font-bold" style={{ color: '#0369a1', fontSize: 16 }}>
+                          {finishAsk.map(d => format(parseISO(d), 'EEEE d MMMM')).join(' · ')}
+                        </p>
+                        <p className="text-center text-sm text-gray-500">
+                          {s.finishEarlyQuestion || (s.isRtl
+                            ? 'סיימת לגמרי, או שתצטרך לחזור?'
+                            : 'Are you completely finished, or do you need to come back?')}
+                        </p>
+                        <button
+                          onClick={() => { setFinishAsk(null); handleConfirmComplete(); }}
+                          className="w-full py-3.5 rounded-xl font-bold text-white text-base"
+                          style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}>
+                          {s.finishEarlyYes || (s.isRtl
+                            ? 'סיימתי הכול — אפשר למחוק את הימים'
+                            : 'I finished everything — cross those days off')}
+                        </button>
+                        <button
+                          onClick={() => setFinishAsk(null)}
+                          className="w-full py-3.5 rounded-xl font-bold text-slate-600 text-base"
+                          style={{ backgroundColor: '#eef2f7' }}>
+                          {s.finishEarlyNo || (s.isRtl ? 'לא — אני אחזור' : "No — I'm coming back")}
+                        </button>
+                      </div>
+                    ) : showCompleteConfirm ? (
                       <div className="space-y-2">
                         <p className="text-sm font-medium text-gray-800 text-center">{s.markCompletePrompt}</p>
                         <p className="text-xs text-gray-500 text-center">{s.markCompleteHint}</p>

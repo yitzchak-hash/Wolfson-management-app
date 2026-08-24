@@ -2217,7 +2217,7 @@ export function GeneralJobsPage() {
    * A slot holds as many as the day really holds. Nothing is ever squeezed to
    * fit; the row grows instead.
    */
-  function placeOnPlanner(cell: RotaHit, ids: string[], taskId?: string) {
+  function placeOnPlanner(cell: RotaHit, ids: string[], taskId?: string, taskDays?: string[]) {
     setRotaHover(null);
     const el = canvasElements.find(c => c.id === cell.elId);
     if (!el) return;
@@ -2227,6 +2227,13 @@ export function GeneralJobsPage() {
       ids.filter(id => apartments.find(a => a.id === id)?.inNotebook));
     const data = (el.data ?? {}) as Record<string, unknown>;
     const cells = { ...((data.cells ?? {}) as Record<string, PlannerEntry[]>) };
+    /**
+     * A multi-day task lands as ONE CARD PER DAY: the same task wearing
+     * several faces, each an ordinary entry carrying the same taskId (which
+     * is also what the "day 2 of 3" pill reads). The dialog hands the days
+     * back; without them this is the single square that was dropped on.
+     */
+    const landDays = taskDays?.length ? taskDays : [cell.day];
     const key = `${cell.person}|${cell.day}`;
     const already = cells[key] ?? [];
 
@@ -2252,6 +2259,18 @@ export function GeneralJobsPage() {
       }));
     if (!fresh.length) return;
     cells[key] = [...already, ...fresh];
+    // The task's OTHER days, each its own entry in the same person's row.
+    for (const day of landDays) {
+      if (day === cell.day) continue;
+      const k = `${cell.person}|${day}`;
+      const there = cells[k] ?? [];
+      cells[k] = [...there, ...ids
+        .filter(id => !there.some(e => e.jobId === id))
+        .map(id => ({
+          id: `R-${Math.random().toString(36).slice(2, 8)}`, jobId: id,
+          ...(taskId ? { taskId } : {}),
+        }))];
+    }
     const who = personOf(cell.person, contractors, users)?.name ?? cell.person.replace(/^n:/, '');
     const what = fresh.length === 1
       ? (apartments.find(a => a.id === fresh[0].jobId)?.displayName || (s.isRtl ? 'עבודה' : 'a job'))
@@ -7359,10 +7378,14 @@ export function GeneralJobsPage() {
             stages={allStages.filter(st => st.projectId === 'general')}
             contractors={contractors}
             onCancel={() => setPlannerDrop(null)}
-            onDone={taskId => {
-              placeOnPlanner(plannerDrop.cell, [plannerDrop.job.id], taskId);
+            onDone={(taskId, taskDays) => {
+              placeOnPlanner(plannerDrop.cell, [plannerDrop.job.id], taskId, taskDays);
               setPlannerDrop(null);
-              if (taskId) setToast('On the planner, and a task added');
+              if (taskId) {
+                setToast(taskDays && taskDays.length > 1
+                  ? `On the planner for ${taskDays.length} days, and a task added`
+                  : 'On the planner, and a task added');
+              }
             }}
           />
         );

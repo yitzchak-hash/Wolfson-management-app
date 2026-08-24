@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Paperclip, Loader2, AlertTriangle } from 'lucide-react';
 import {
   Apartment, Contractor, Stage, TaskAttachment, TaskPriority, User, personColor,
@@ -7,6 +7,9 @@ import { useStore } from '../../data/store';
 import {
   isUploadBackendConfigured, extractFolderId, findOrCreateFolderViaBackend, uploadFileViaBackend, shareFileToDrive,
 } from '../../data/driveApi';
+import { DayStretch, workingRun, stretchDays, nextWorkingDay, parseDay } from '../../data/taskDays';
+import { RecordedMemo } from '../../data/voiceMemo';
+import { VoiceRecorderButton, VoiceMemoPlayer } from '../ui/VoiceMemo';
 
 /**
  * The two questions the planner has to ask.
@@ -20,13 +23,14 @@ import {
 // ── Dropping a job in ────────────────────────────────────────────────────────
 
 /**
- * Everything the ordinary Add Task form has, asked here.
- *
- * The point of doing it at the drop is that most of the form is already known:
- * which job, which day, which date, and who. So the only thing left to choose
- * is the stage — and then whatever else you would have typed anyway, which is
- * why the description, the priority, the notes and the attachments are all here
- * too rather than being a cut-down version you have to go and finish elsewhere.
+ * The drop card, laid out as the owner approved it on the "Tasks That Take
+ * Days" page (2026-08-24): the job's CURRENT stage on the left with "when
+ * it's done, move to" beside it; who; ONE box for what has to be done (the
+ * old separate Notes box said the same thing) with the paperclip and a voice
+ * memo in its corner; then the days — a start day, a how-many-days counter,
+ * an Include-Friday checkbox that only exists when the days actually pass a
+ * Friday, and a Non-consecutive switch that opens a second stretch. A green
+ * line always reads out exactly which days the task will sit on.
  */
 export function PlannerTaskDialog({
   job, person, dayIso, stages, contractors, onCancel, onDone,
@@ -38,22 +42,36 @@ export function PlannerTaskDialog({
   stages: Stage[];
   contractors: Contractor[];
   onCancel: () => void;
-  /** taskId is undefined when they chose "just put it on the planner". */
-  onDone: (taskId?: string) => void;
+  /**
+   * taskId is undefined when they chose "just put it on the planner";
+   * `days` is every day the task covers, so the caller can put a card on
+   * each of them.
+   */
+  onDone: (taskId?: string, days?: string[]) => void;
 }) {
   const { addContractorAssignment, currentUser } = useStore();
 
   const [contractorId, setContractorId] = useState(person.contractorId ?? '');
-  const [stageId, setStageId] = useState(job.currentStageId ?? '');
+  const [stageWhenDone, setStageWhenDone] = useState('');
   const [task, setTask] = useState('');
-  const [priority, setPriority] = useState<TaskPriority | ''>('');
-  const [notes, setNotes] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const day = new Date(`${dayIso}T00:00:00`);
-  const stage = stages.find(s => s.id === stageId);
+  /**
+   * The days. One stretch by default, starting on the day dropped on;
+   * Non-consecutive opens a second with its own start and count. Saturday
+   * never counts; Friday is per-stretch and asked only when it matters —
+   * the arithmetic lives in taskDays.ts, tested offline.
+   */
+  const [stretches, setStretches] = useState<DayStretch[]>([{ start: dayIso, days: 1 }]);
+  const [noncon, setNoncon] = useState(false);
+  const active = noncon ? stretches : stretches.slice(0, 1);
+  const allDays = useMemo(() => stretchDays(active), [active]);
+  const patchStretch = (i: number, patch: Partial<DayStretch>) =>
+    setStretches(prev => prev.map((st, j) => (j === i ? { ...st, ...patch } : st)));
+
+  const currentStage = stages.find(s => s.id === job.currentStageId);
 
   useEffect(() => {
     function key(e: KeyboardEvent) { if (e.key === 'Escape') onCancel(); }
@@ -91,7 +109,7 @@ export function PlannerTaskDialog({
   }
 
   async function make() {
-    if (!contractorId || !task.trim()) return;
+    if (!contractorId || !task.trim() || !allDays.length) return;
     setBusy(true);
     try {
       const attachments = await attach();
@@ -99,17 +117,22 @@ export function PlannerTaskDialog({
       addContractorAssignment({
         id,
         apartmentId: job.id,
+        buildingId: job.buildingId,
         contractorId,
         taskDescription: task.trim(),
-        dueDate: dayIso,
-        stageId: stageId || null,
-        priority: (priority || 'normal') as TaskPriority,
-        notes: notes.trim() || undefined,
+        // The task carries ALL of its days; dueDate stays the LAST one, so
+        // everything written for the single-date world (sorting, overdue,
+        // badges) stays correct — late only once every day has passed.
+        dueDate: allDays[allDays.length - 1],
+        ...(allDays.length > 1 ? { days: allDays } : {}),
+        ...(stageWhenDone ? { stageWhenDone } : {}),
+        stageId: job.currentStageId ?? null,
+        priority: 'normal' as TaskPriority,
         attachments,
         createdAt: new Date().toISOString(),
         createdBy: currentUser?.name ?? '',
       } as never);
-      onDone(id);
+      onDone(id, allDays);
     } finally {
       setBusy(false);
     }
@@ -118,79 +141,150 @@ export function PlannerTaskDialog({
   const box = 'w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12.5px] outline-none '
     + 'focus:ring-2 focus:ring-[#1e3a5f]/25 bg-white';
 
+  /** "Wed 26 Aug" — short enough that a week of them fits on the green line. */
+  const fmtDay = (iso: string) =>
+    parseDay(iso).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+
   return (
     <Shell onCancel={onCancel} title={`Put ${job.displayName || 'this job'} on ${person.name}'s ${
-      day.toLocaleDateString(undefined, { weekday: 'long' })}?`}>
+      allDays.length > 1 ? 'week' : parseDay(dayIso).toLocaleDateString(undefined, { weekday: 'long' })}?`}>
       <div className="grid gap-2.5">
         {/* The explainer paragraph is gone, per the owner — the form says what
             it needs and the office knows what a drop means by now. */}
         <div className="grid grid-cols-2 gap-2.5">
-          <Field label="Stage">
-            <select value={stageId} onChange={e => setStageId(e.target.value)} className={box}>
-              <option value="">No stage</option>
+          {/* Where the job STANDS — shown, not asked. Beside it, where it
+              moves when this task is closed; the store applies that at the
+              completion write, whichever screen closes it. */}
+          <Field label="Current stage">
+            <div className={`${box} bg-slate-50 text-gray-600 flex items-center gap-1.5`}>
+              <span className="w-2 h-2 rounded-full flex-shrink-0"
+                style={{ backgroundColor: currentStage?.color ?? '#cbd5e1' }} />
+              <span className="truncate">{currentStage?.name ?? 'Not started'}</span>
+            </div>
+          </Field>
+          <Field label="When it's done, move to">
+            <select value={stageWhenDone} onChange={e => setStageWhenDone(e.target.value)} className={box}>
+              <option value="">Leave the stage alone</option>
               {stages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </Field>
-          <Field label="Who">
-            <select value={contractorId} onChange={e => setContractorId(e.target.value)} className={box}>
-              <option value="">Pick somebody…</option>
-              {contractors.filter(c => c.active).map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </Field>
         </div>
 
+        <Field label="Who">
+          <select value={contractorId} onChange={e => setContractorId(e.target.value)} className={box}>
+            <option value="">Pick somebody…</option>
+            {contractors.filter(c => c.active).map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        </Field>
+
+        {/* ONE box — what to do and any notes were two boxes saying the same
+            thing. The paperclip and the voice memo live in its corner, the
+            drawer's General-notes idiom. */}
         <Field label="What has to be done">
-          <input value={task} onChange={e => setTask(e.target.value)} autoFocus
-            placeholder={stage ? `${stage.name} at ${job.displayName ?? 'this job'}` : 'First fix…'}
-            className={box} />
+          <div className="relative">
+            <textarea value={task} onChange={e => setTask(e.target.value)} autoFocus rows={3}
+              placeholder={`What has to happen at ${job.displayName || 'this job'} — and anything the crew needs to know`}
+              className={`${box} resize-none`} style={{ paddingBottom: 34 }} />
+            <span className="absolute flex items-center gap-1" style={{ insetInlineEnd: 8, bottom: 12 }}>
+              <button
+                onClick={() => fileRef.current?.click()}
+                title="Attach a file"
+                className="flex items-center justify-center w-7 h-7 rounded-lg border border-gray-200
+                           text-gray-500 hover:border-[#1e3a5f] hover:text-[#1e3a5f] bg-white"
+              >
+                <Paperclip size={13} />
+              </button>
+              <VoiceRecorderButton
+                compact
+                title="Record a voice memo"
+                onRecorded={(memo: RecordedMemo) => {
+                  // A memo is an ordinary audio FILE on the same attachment
+                  // path — nothing new to persist or upload.
+                  const ext = memo.blob.type.includes('mp4') ? 'm4a' : 'webm';
+                  setFiles(prev => [...prev, new File(
+                    [memo.blob], `voice-memo-${Date.now()}.${ext}`,
+                    { type: memo.blob.type || 'audio/webm' },
+                  )]);
+                }}
+              />
+            </span>
+          </div>
         </Field>
+        <input ref={fileRef} type="file" multiple className="hidden"
+          onChange={e => setFiles([...files, ...Array.from(e.target.files ?? [])])} />
+        {files.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 -mt-1">
+            {files.map((f, i) => f.type.startsWith('audio/') ? (
+              <PendingAudio key={i} file={f} onDelete={() => setFiles(files.filter((_, j) => j !== i))} />
+            ) : (
+              <span key={i} className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100
+                                       text-[11px] text-slate-600">
+                {f.name}
+                <button onClick={() => setFiles(files.filter((_, j) => j !== i))}
+                  className="text-slate-400 hover:text-red-500"><X size={10} /></button>
+              </span>
+            ))}
+          </div>
+        )}
 
-        <div className="grid grid-cols-2 gap-2.5">
-          <Field label="Due">
-            <div className={`${box} tabular-nums text-gray-600`}>
-              {day.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
-            </div>
-          </Field>
-          <Field label="Priority">
-            <select value={priority} onChange={e => setPriority(e.target.value as TaskPriority)} className={box}>
-              <option value="">Normal</option>
-              <option value="urgent">Urgent</option>
-              <option value="low">Low</option>
-            </select>
-          </Field>
-        </div>
+        {/* The days. Saturday never counts; Friday is per-stretch, asked only
+            when the stretch actually passes one; Non-consecutive opens a
+            second stretch with its own start and count. */}
+        {active.map((st, i) => {
+          const run = workingRun(st.start, st.days, st.friday);
+          return (
+            <React.Fragment key={i}>
+              <div className="grid grid-cols-2 gap-2.5">
+                <Field label={i === 0 ? 'Start day' : 'And again from'}>
+                  <input type="date" value={st.start}
+                    onChange={e => { if (e.target.value) patchStretch(i, { start: e.target.value }); }}
+                    className={box} />
+                </Field>
+                <Field label="How many days">
+                  <div className={`${box} flex items-center p-0 overflow-hidden`}>
+                    <button onClick={() => patchStretch(i, { days: Math.max(1, st.days - 1) })}
+                      className="px-3 py-1.5 font-black text-gray-500 hover:bg-gray-50" aria-label="One day fewer">−</button>
+                    <span className="flex-1 text-center font-bold tabular-nums text-gray-700">{st.days}</span>
+                    <button onClick={() => patchStretch(i, { days: Math.min(15, st.days + 1) })}
+                      className="px-3 py-1.5 font-black text-gray-500 hover:bg-gray-50" aria-label="One day more">+</button>
+                  </div>
+                </Field>
+              </div>
+              {run.crossesFriday && (
+                <label className="flex items-center gap-1.5 text-[11.5px] font-semibold text-gray-600 select-none -mt-1"
+                  style={{ cursor: 'pointer' }}>
+                  <input type="checkbox" checked={!!st.friday}
+                    onChange={e => patchStretch(i, { friday: e.target.checked })}
+                    style={{ width: 13, height: 13, accentColor: '#1e3a5f' }} />
+                  Include Friday?
+                </label>
+              )}
+            </React.Fragment>
+          );
+        })}
 
-        <Field label="Notes">
-          <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
-            placeholder="Anything the crew needs to know — optional"
-            className={`${box} resize-none`} />
-        </Field>
+        <label className="flex items-center gap-2 text-[11.5px] font-semibold text-gray-600 select-none"
+          style={{ cursor: 'pointer' }}>
+          <input type="checkbox" checked={noncon}
+            onChange={e => {
+              const on = e.target.checked;
+              setNoncon(on);
+              if (on && stretches.length === 1) {
+                const run = workingRun(stretches[0].start, stretches[0].days, stretches[0].friday);
+                setStretches([...stretches, { start: nextWorkingDay(run.days[run.days.length - 1]), days: 1 }]);
+              }
+              if (!on) setStretches(prev => prev.slice(0, 1));
+            }}
+            style={{ width: 14, height: 14, accentColor: '#1e3a5f' }} />
+          Non-consecutive — work it in separate stretches
+        </label>
 
-        <div>
-          <button
-            onClick={() => fileRef.current?.click()}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200
-                       text-[12px] font-semibold text-gray-600 hover:border-[#1e3a5f] hover:text-[#1e3a5f]"
-          >
-            <Paperclip size={13} /> Attach a file
-          </button>
-          <input ref={fileRef} type="file" multiple className="hidden"
-            onChange={e => setFiles([...files, ...Array.from(e.target.files ?? [])])} />
-          {files.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mt-1.5">
-              {files.map((f, i) => (
-                <span key={i} className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100
-                                         text-[11px] text-slate-600">
-                  {f.name}
-                  <button onClick={() => setFiles(files.filter((_, j) => j !== i))}
-                    className="text-slate-400 hover:text-red-500"><X size={10} /></button>
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
+        {/* The green line: exactly which days, always. */}
+        <p data-day-readout className="m-0 text-[12px] font-semibold" style={{ color: '#15803d' }}>
+          → {allDays.map(fmtDay).join(', ')} — {allDays.length} {allDays.length === 1 ? 'day' : 'days'}
+        </p>
       </div>
 
       <Footer>
@@ -214,6 +308,21 @@ export function PlannerTaskDialog({
       </Footer>
     </Shell>
   );
+}
+
+/**
+ * A recorded-but-not-yet-saved memo, playable — a grey chip saying
+ * "voice-memo-....webm" reads as broken (the documented voice-memo rule).
+ * MODULE level, and the object URL made and revoked in an effect, once.
+ */
+function PendingAudio({ file, onDelete }: { file: File; onDelete: () => void }) {
+  const [url, setUrl] = useState('');
+  useEffect(() => {
+    const u = URL.createObjectURL(file);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [file]);
+  return url ? <VoiceMemoPlayer src={url} className="max-w-[250px]" onDelete={onDelete} /> : null;
 }
 
 // ── Pulling a job out ────────────────────────────────────────────────────────

@@ -4,6 +4,7 @@ import { CalendarDays } from 'lucide-react';
 import { useStore } from '../data/store';
 import { TaskCalendar, CalendarEvent } from '../components/tasks/TaskCalendar';
 import { aptLabel, projectColor } from '../types';
+import { daysOf } from '../data/taskDays';
 
 const CAT_COLORS: Record<string, string> = { drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981' };
 
@@ -36,9 +37,10 @@ export function ProjectCalendarPage() {
       const apt = apartments.find(ap => ap.id === a.apartmentId);
       const contractor = contractors.find(c => c.id === a.contractorId);
       const stage = apt ? stages.find(st => st.id === apt.currentStageId) : undefined;
-      out.push({
-        id: a.id,
-        date: a.dueDate,
+      // Every day of a multi-day task — it carries all of them now.
+      for (const day of daysOf(a)) out.push({
+        id: `${a.id}:${day}`,
+        date: day,
         title: a.taskDescription,
         subtitle: apt ? `${apt.buildingId} · ${aptLabel(apt)}` : a.buildingId,
         color: contractor ? (CAT_COLORS[contractor.category] ?? '#6b7280') : '#6b7280',
