@@ -12,14 +12,22 @@ import { DashRatio, placeOn, patchPlace, nearestRatio } from '../../data/dashRat
  * Ordinary CanvasElements on a reserved board id, laid out on a twelve-column
  * grid — not a free canvas, because a wall screen gets turned on its side and a
  * free canvas cannot reflow. Each widget's stored width is a column span and
- * its height is real pixels, both scaled by the display size so one arrangement
- * works on a 1080p panel and a 4K one.
+ * its height is layout pixels.
+ *
+ * THE SIZE IS NOT THIS COMPONENT'S BUSINESS (sealed picks 1–2). The display
+ * size is applied ONCE, by the caller, as a layout zoom around the whole
+ * dashboard — every `Math.min(scale, cap)` that used to live in here is what
+ * made the office's red button dead: a wide panel STARTED at the cap, so
+ * pressing 90% → 160% changed the label and froze the picture. Deltas from
+ * pointer gestures arrive in visual pixels, so the handlers measure the
+ * effective zoom off their own node (`rect / offset`, the ScreenReport idiom)
+ * instead of being handed a number that can drift from the truth.
  *
  * The same component draws it on the wall and inside app settings, which is
  * what makes "edit it in settings and it updates the wall" true rather than
  * approximately true: there is one layout, not a description of one.
  */
-export function TvDashboard({ ctx, shape, scale, editing, onSpawn, ratio }: {
+export function TvDashboard({ ctx, shape, editing, onSpawn, ratio }: {
   ctx: WidgetCtx;
   shape: ScreenShape;
   /**
@@ -30,8 +38,6 @@ export function TvDashboard({ ctx, shape, scale, editing, onSpawn, ratio }: {
    * actually arranging for.
    */
   ratio?: DashRatio;
-  /** The wall's display scale, so type and spacing grow with the panel. */
-  scale: number;
   /** Arranging is on — show the handles. */
   editing: boolean;
   /** Open the widget shelf. */
@@ -93,7 +99,7 @@ export function TvDashboard({ ctx, shape, scale, editing, onSpawn, ratio }: {
           disabled={!onSpawn}
           className="rounded-2xl border-2 border-dashed px-8 py-10 text-center transition-colors
                      disabled:cursor-default"
-          style={{ borderColor: '#cbd5e1', color: '#64748b', fontSize: 15 * Math.min(scale, 1.6) }}
+          style={{ borderColor: '#cbd5e1', color: '#64748b', fontSize: 15 }}
         >
           <Plus size={26} className="mx-auto mb-2 opacity-50" />
           {onSpawn
@@ -109,7 +115,7 @@ export function TvDashboard({ ctx, shape, scale, editing, onSpawn, ratio }: {
       className="flex-1 min-h-0 overflow-auto p-3 grid gap-3 content-start"
       style={{
         gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-        fontSize: 15 * Math.min(scale, 1.9),
+        fontSize: 15,
       }}
     >
       {widgets.map(el => (
@@ -118,7 +124,6 @@ export function TvDashboard({ ctx, shape, scale, editing, onSpawn, ratio }: {
           el={el}
           ctx={ctx}
           columns={columns}
-          scale={scale}
           editing={editing}
           shapeKey={shapeKey}
           registry={rects}
@@ -131,11 +136,10 @@ export function TvDashboard({ ctx, shape, scale, editing, onSpawn, ratio }: {
   );
 }
 
-function TvCard({ el, ctx, columns, scale, editing, shapeKey, registry, onSize, onPlaceOver, onRemove }: {
+function TvCard({ el, ctx, columns, editing, shapeKey, registry, onSize, onPlaceOver, onRemove }: {
   el: CanvasElement;
   ctx: WidgetCtx;
   columns: number;
-  scale: number;
   editing: boolean;
   shapeKey: string;
   registry: React.MutableRefObject<Map<string, HTMLDivElement>>;
@@ -150,9 +154,18 @@ function TvCard({ el, ctx, columns, scale, editing, shapeKey, registry, onSize, 
   const place = placeOn(el, shapeKey);
   const span = Math.max(2, Math.min(columns, Math.round((place.w || 400) / 100)));
   const height = Math.max(120, place.h || 200);
-  /** The display multiplier the card is drawn at — drag deltas arrive in
-      SCREEN pixels and the stored height is before this, so divide. */
-  const mult = Math.min(scale, 1.6);
+  /**
+   * The zoom the card is really drawn at — the caller's wrapper zoom (and the
+   * TV frame's real-pixel compensation) folded together, read off the node
+   * itself. Drag deltas arrive in VISUAL pixels and stored sizes are layout
+   * pixels, so gestures divide by this. Never handed in as a prop: a prop is
+   * a claim, and this is a measurement.
+   */
+  const zoomOf = () => {
+    const node = registry.current.get(el.id);
+    return node && node.offsetHeight
+      ? node.getBoundingClientRect().height / node.offsetHeight : 1;
+  };
 
   /**
    * Home-screen editing, two handles and nothing else — the same gestures the
@@ -174,7 +187,11 @@ function TvCard({ el, ctx, columns, scale, editing, shapeKey, registry, onSize, 
   function moveMove(e: React.PointerEvent) {
     const st = moveRef.current;
     if (!st) return;
-    setLift({ dx: e.clientX - st.x, dy: e.clientY - st.y });
+    // The translate is applied INSIDE the caller's zoom, the pointer moves in
+    // visual pixels — divide, or the lifted card outruns the hand at any size
+    // but 100%.
+    const z = zoomOf();
+    setLift({ dx: (e.clientX - st.x) / z, dy: (e.clientY - st.y) / z });
     // What is the hand over? Measured live, because the grid reflows under us.
     for (const [id, node] of registry.current) {
       if (id === el.id) continue;
@@ -201,15 +218,16 @@ function TvCard({ el, ctx, columns, scale, editing, shapeKey, registry, onSize, 
   function sizeMove(e: React.PointerEvent) {
     const st = sizeRef.current;
     if (!st) return;
-    // A column measured from our own card, so the snap follows the real
-    // rendered width at any preview size; deltas divided by the display
-    // multiplier so the stored numbers stay screen-independent.
+    // A column measured from our own card's VISUAL rect, so the width snap is
+    // zoom-independent by construction (delta and rect share the visual
+    // space); the height delta divides by the measured zoom so the stored
+    // numbers stay screen-independent.
     const node = registry.current.get(el.id);
     const colPx = node ? node.getBoundingClientRect().width / span : 100;
     const nextSpan = Math.max(2, Math.min(columns,
       Math.round((st.w / 100) + (e.clientX - st.x) / Math.max(1, colPx))));
     const nextH = Math.max(120, Math.min(900,
-      Math.round((st.h + (e.clientY - st.y) / mult) / 40) * 40));
+      Math.round((st.h + (e.clientY - st.y) / zoomOf()) / 40) * 40));
     setPreview({ span: nextSpan, h: nextH });
   }
   function sizeUp() {
@@ -256,8 +274,12 @@ function TvCard({ el, ctx, columns, scale, editing, shapeKey, registry, onSize, 
     return () => ro.disconnect();
   }, []);
 
+  // Fill the card from the widget's natural width, nothing more: the display
+  // size is the caller's zoom, applied around the whole dashboard, so putting
+  // any scale factor here would apply it twice — and capping it here is the
+  // exact bug that froze the wall at one size.
   const naturalW = def?.w ?? 300;
-  const k = box.w ? Math.max(0.5, Math.min(4, (box.w / naturalW) * Math.min(scale, 1.5))) : 1;
+  const k = box.w ? Math.max(0.5, Math.min(4, box.w / naturalW)) : 1;
 
   const bound: WidgetCtx = useMemo(
     () => ({ ...ctx, update: patch => updateCanvasElement(el.id, patch) }),
@@ -270,7 +292,7 @@ function TvCard({ el, ctx, columns, scale, editing, shapeKey, registry, onSize, 
       className="relative group bg-white rounded-2xl border overflow-hidden"
       style={{
         gridColumn: `span ${shownSpan} / span ${shownSpan}`,
-        height: shownH * mult,
+        height: shownH,
         borderColor: el.outline || '#e2e8f0',
         borderWidth: el.outline ? (el.outlineWidth ?? 3) : 1,
         backgroundColor: el.color || '#ffffff',

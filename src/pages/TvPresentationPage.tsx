@@ -4,7 +4,6 @@ import { useStore, loadAllProjectsTaskData, ensureProjectSnapshot } from '../dat
 import { Apartment, CanvasElement, isCountableApartment, binKeyOf, binLabelOf, getStageName, TV_DASH_BOARD } from '../types';
 import { withAlpha, WidgetSurface } from '../components/board/BoardItems';
 import { tvScreenId, reportTvScreen } from '../data/tvScreens';
-import { isFirebaseConfigured } from '../data/firebase';
 import { queryVariants, skeleton } from '../data/translit';
 import { DriveIcon, ZohoIcon, PlanIcon } from '../components/ui/BrandIcons';
 import { getBoardTheme } from '../data/boardThemes';
@@ -167,19 +166,32 @@ function ScreenReport({ onClose, boost, onBoost, onFull, t }: {
               : 'Turn the wall\'s zoom up with the + beside the clock.'}
           </p>
         )}
-        {tooSmall && (
-          <button
-            onClick={() => {
-              const want = seen?.smallest ? (READABLE_PX / seen.smallest) * boost : 1;
-              onBoost(Math.min(2.5, Math.max(1, Math.round(want * 10) / 10)));
-              if (lost > 30) onFull();
-            }}
-            className="w-full mb-3 py-2.5 rounded-xl font-bold text-white"
-            style={{ backgroundColor: '#b4342a' }}
-          >
-            {t('Make the words readable', 'הגדל את הכתב')}
-          </button>
-        )}
+        {tooSmall && (() => {
+          /**
+           * The red button WALKS (sealed picks 4 + 8): one press moves at most
+           * a quarter of the current size toward the measured need, capped at
+           * 300%, and the report re-measures on the next open — so each press
+           * is a real step with a real answer, never a blind leap that lands
+           * on a ceiling and reads as a dead button.
+           */
+          const need = seen?.smallest ? READABLE_PX / seen.smallest : 1;
+          const next = Math.min(3, Math.max(1, Math.round(boost * Math.min(1.25, need) * 100) / 100));
+          const stepped = next < Math.min(3, boost * need) - 0.01;
+          return (
+            <button
+              onClick={() => {
+                onBoost(next);
+                if (lost > 30) onFull();
+              }}
+              className="w-full mb-3 py-2.5 rounded-xl font-bold text-white"
+              style={{ backgroundColor: '#b4342a' }}
+            >
+              {t('Make the words readable', 'הגדל את הכתב')}
+              {' '}· {Math.round(boost * 100)}% → {Math.round(next * 100)}%
+              {stepped ? t(' (a step at a time)', ' (צעד אחר צעד)') : ''}
+            </button>
+          );
+        })()}
 
         <p className="text-[13px] mb-2">
           {shrunk
@@ -410,10 +422,17 @@ export function TvPresentationPage() {
   const screenId = useMemo(() => tvScreenId(), []);
   const mine = tvSettings.tvScreens?.[screenId];
 
+  /**
+   * THE ONE NUMBER (sealed plan, picks 6–7). Resolution order:
+   * the panel's own SAVED size → the ?scale= address-bar value (bootstrap
+   * only — a tab opened before the panel had a saved size, or no Firebase)
+   * → the shared default (what a brand-new panel starts from) → 1. A saved
+   * size always beats the address bar, so a stale tab can never mute the
+   * office again. Ceiling 3.0 everywhere the number can be set.
+   */
   const boostParam = Number(params.get('scale'));
-  const boost = Number.isFinite(boostParam) && boostParam > 0
-    ? boostParam
-    : (mine?.scale ?? tvSettings.tvScale ?? 1);
+  const paramBoost = Number.isFinite(boostParam) && boostParam > 0 ? boostParam : null;
+  const boost = Math.min(3, mine?.scale ?? paramBoost ?? tvSettings.tvScale ?? 1);
   const scale = autoScale * boost;
 
   /**
@@ -431,6 +450,35 @@ export function TvPresentationPage() {
     return () => { stop = true; clearTimeout(first); clearInterval(t); window.removeEventListener('resize', beat); };
   }, [view, boost]);
   /**
+   * The wall ANSWERS a size change (sealed pick 3): whenever the effective
+   * size moves after first load — from the office, or from the panel's own
+   * buttons — a chip shows "Display size 90% → 160%" for a few seconds, so
+   * a press made across the building is visible from across the room.
+   */
+  const [sizeNote, setSizeNote] = useState<{ from: number; to: number } | null>(null);
+  const prevBoostRef = useRef<number | null>(null);
+  useEffect(() => {
+    const prev = prevBoostRef.current;
+    prevBoostRef.current = boost;
+    if (prev === null || Math.abs(prev - boost) < 0.005) return;
+    setSizeNote({ from: prev, to: boost });
+    const t = setTimeout(() => setSizeNote(null), 4500);
+    return () => clearTimeout(t);
+  }, [boost]);
+
+  /**
+   * The TEST PATTERN (sealed pick 10): rulers and sample words at known REAL
+   * pixel sizes, drawn outside every zoom so the numbers are honest, gone by
+   * itself after ten seconds or on a tap.
+   */
+  const [testPattern, setTestPattern] = useState(false);
+  useEffect(() => {
+    if (!testPattern) return;
+    const t = setTimeout(() => setTestPattern(false), 10_000);
+    return () => clearTimeout(t);
+  }, [testPattern]);
+
+  /**
    * The panel's own size buttons write THE PANEL'S OWN SETTING, not a URL.
    *
    * They used to write a ?scale= param — which is local to this tab, dies
@@ -443,21 +491,19 @@ export function TvPresentationPage() {
    * panel without Firebase.
    */
   const setBoost = (b: number) => {
-    const v = Number(b.toFixed(2));
-    if (isFirebaseConfigured) {
-      const map = { ...(tvSettings.tvScreens ?? {}) };
-      map[screenId] = { ...(map[screenId] ?? {}), scale: v };
-      setTvSetting('tvScreens', map);
-      if (params.get('scale')) {
-        const p = new URLSearchParams(params);
-        p.delete('scale');
-        setParams(p, { replace: true });
-      }
-      return;
+    const v = Number(Math.min(3, b).toFixed(2));
+    // ALWAYS the saved per-panel setting, Firebase or not — the store persists
+    // it locally either way, and a panel whose saved size outranks its own +
+    // button is a dead button (the exact disease the URL param had). The
+    // masking param is cleared so the address bar can never outvote a press.
+    const map = { ...(tvSettings.tvScreens ?? {}) };
+    map[screenId] = { ...(map[screenId] ?? {}), scale: v };
+    setTvSetting('tvScreens', map);
+    if (params.get('scale')) {
+      const p = new URLSearchParams(params);
+      p.delete('scale');
+      setParams(p, { replace: true });
     }
-    const p = new URLSearchParams(params);
-    p.set('scale', String(v));
-    setParams(p, { replace: true });
   };
   /**
    * How big the CONTROLS are, as opposed to how big the board is.
@@ -749,7 +795,7 @@ export function TvPresentationPage() {
           className="px-2 py-1.5 font-bold tabular-nums" style={{ fontSize: '.85em' }}>
           {Math.round(boost * 100)}%
         </button>
-        <button onClick={() => setBoost(Math.min(2.5, Math.round((boost + 0.1) * 100) / 100))}
+        <button onClick={() => setBoost(Math.min(3, Math.round((boost + 0.1) * 100) / 100))}
           title={t('Bigger', 'גדול')} className="px-3 py-1.5 font-black">+</button>
       </div>
 
@@ -792,11 +838,24 @@ export function TvPresentationPage() {
         <ScreenReport
           onClose={() => setDiag(false)}
           boost={boost}
-          onBoost={b => { setBoost(b); setDiag(false); }}
+          /* Stays OPEN after a press: the walking button's whole point is a
+             re-measure between steps, and the report re-reads on every boost
+             change — close it and the next number is never seen. */
+          onBoost={b => setBoost(b)}
           onFull={() => { if (!document.fullscreenElement) toggleFull(); }}
           t={t}
         />
       )}
+
+      {/* The test pattern (sealed pick 10) — rulers and sample words at known
+          REAL pixel sizes, for standing in front of the panel and deciding
+          with your own eyes. */}
+      <button onClick={() => setTestPattern(v => !v)}
+        title={t('Test pattern — sample text at known sizes', 'תבנית בדיקה — טקסט לדוגמה בגדלים ידועים')}
+        className={`${barBtn} px-3 py-1.5`}
+        style={testPattern ? { backgroundColor: '#1e3a5f', color: '#fff' } : off}>
+        <span className="font-black tabular-nums" style={{ fontSize: '.85em', letterSpacing: '.05em' }}>PX</span>
+      </button>
 
       {/* Edit mode. Off by default and never sticky — see the note on `editing`. */}
       <button onClick={() => setEditing(v => !v)}
@@ -843,6 +902,66 @@ export function TvPresentationPage() {
       <span className="font-bold tabular-nums text-slate-600 whitespace-nowrap">
         {now.toLocaleDateString(isRtl ? 'he-IL' : undefined, { weekday: 'short', day: 'numeric', month: 'short' })} · {now.toLocaleTimeString(isRtl ? 'he-IL' : undefined, { hour: '2-digit', minute: '2-digit' })}
       </span>
+
+      {/* The wall ANSWERS (sealed pick 3): a size change after first load —
+          whoever made it, from wherever — flashes old → new on the wall
+          itself. Fixed inside the bar so every view carries it; the frame's
+          own real-pixel zoom applies to it like everything else. */}
+      {sizeNote && (
+        <div data-size-note
+          className="fixed left-1/2 -translate-x-1/2 z-[290] px-6 py-3 rounded-full text-white font-extrabold
+                     shadow-2xl pointer-events-none tabular-nums"
+          style={{ top: 76, backgroundColor: '#1e3a5f', fontSize: 22 }}>
+          {t('Display size', 'גודל תצוגה')} {Math.round(sizeNote.from * 100)}% → {Math.round(sizeNote.to * 100)}%
+        </div>
+      )}
+
+      {/* The test pattern (sealed pick 10). Sizes are computed back to REAL
+          pixels through the frame's zoom and the device ratio, so "16 real px"
+          on the ruler is 16 real pixels on the glass whatever the panel's
+          browser is doing. Outside every content zoom on purpose. */}
+      {testPattern && (() => {
+        const dpr = window.devicePixelRatio || 1;
+        /** CSS px inside the frame that land as ONE real pixel. */
+        const cssPerReal = 1 / ((dprFix?.zoom ?? 1) * dpr);
+        const rows = [12, 16, 22, 30];
+        return (
+          <div data-test-pattern
+            onClick={() => setTestPattern(false)}
+            className="fixed inset-0 z-[280] flex items-center justify-center"
+            style={{ backgroundColor: 'rgba(15,23,42,.82)' }}>
+            <div className="rounded-2xl bg-white px-8 py-6" style={{ width: 'min(720px, 90vw)' }}>
+              <div className="font-extrabold text-[#16212e]" style={{ fontSize: 20 * cssPerReal }}>
+                {t('Test pattern — real sizes on this glass', 'תבנית בדיקה — גדלים אמיתיים על המסך')}
+              </div>
+              {rows.map(px => (
+                <div key={px} className="flex items-baseline gap-4 mt-3">
+                  <span className="tabular-nums font-bold text-slate-400 flex-shrink-0"
+                    style={{ fontSize: 14 * cssPerReal, width: 90 * cssPerReal }}>{px} px</span>
+                  <span className="text-[#16212e] font-semibold whitespace-nowrap overflow-hidden"
+                    style={{ fontSize: px * cssPerReal }}>
+                    {t('Readable from across the room?', 'קריא מהצד השני של החדר?')}
+                  </span>
+                </div>
+              ))}
+              {/* A ruler of 100-real-px blocks: count them against a tape
+                  measure and you know the panel's true pixel pitch. */}
+              <div className="mt-4 flex" style={{ height: 18 * cssPerReal }}>
+                {Array.from({ length: 8 }, (_, i) => (
+                  <div key={i} style={{
+                    width: 100 * cssPerReal,
+                    backgroundColor: i % 2 ? '#1e3a5f' : '#4aa8d8',
+                  }} />
+                ))}
+              </div>
+              <div className="text-slate-400 mt-1 tabular-nums" style={{ fontSize: 13 * cssPerReal }}>
+                {t('Each block is 100 real pixels wide · tap anywhere to close · goes by itself in 10s',
+                   'כל בלוק ברוחב 100 פיקסלים אמיתיים · הקש לסגירה · נעלם לבד אחרי 10 שניות')}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
   // ── Job detail ──
@@ -1101,8 +1220,23 @@ export function TvPresentationPage() {
         className="h-screen w-screen flex flex-col bg-slate-100 overflow-hidden">
         {bar}
         {exitFull}
-        <TvDashboard ctx={wallCtx} shape={shape} scale={scale} editing={editing}
-          onSpawn={editing ? () => setTvStoreOpen(true) : undefined} />
+        {/* ONE number, applied ONCE (sealed picks 1–2): the dashboard renders
+            inside a single layout zoom — the board/diagram idiom — so 160%
+            means everything is genuinely 1.6× and the grid reflows to fewer,
+            bigger cards. The per-element Math.min(scale, cap) multipliers that
+            used to live inside TvDashboard are gone; this wrapper is the only
+            place the size is applied. Scroller stays INSIDE the zoom (the
+            sticky/scroll rule the diagram already documents). */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <div className="flex flex-col" style={{
+            zoom: scale,
+            width: `${100 / scale}%`,
+            height: `${100 / scale}%`,
+          }}>
+            <TvDashboard ctx={wallCtx} shape={shape} editing={editing}
+              onSpawn={editing ? () => setTvStoreOpen(true) : undefined} />
+          </div>
+        </div>
         {editing && (
           <button
             onClick={() => setTvStoreOpen(true)}

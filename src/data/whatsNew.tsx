@@ -30,6 +30,45 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-09-09',
+    title: 'The TV size dial finally moves the picture',
+    items: [
+      {
+        title: 'One number, honestly applied',
+        body: 'Each TV has one display size, and 160% now means everything on '
+          + 'that panel is genuinely 1.6 times bigger — cards, graphs, words. '
+          + 'The hidden ceilings that froze a wide panel at one size are gone, '
+          + 'so the dial moves the picture at every setting, and it goes up '
+          + 'to 300%. A saved size always beats an old address-bar setting.',
+        demo: 'zoom',
+      },
+      {
+        title: 'The TV answers you',
+        body: 'Change a panel’s size — from settings, or with its own + and − '
+          + '— and the wall itself flashes “Display size 90% → 160%” for a few '
+          + 'seconds. A press made across the building is visible from across '
+          + 'the room.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'The red button walks you to readable',
+        body: '“Make the words readable” now takes a measured step — at most a '
+          + 'quarter bigger per press — waits for the TV to re-measure itself, '
+          + 'and offers the next step until the words clear the line. Each '
+          + 'press says exactly what it is about to do: 90% → 113%.',
+        demo: 'tap',
+      },
+      {
+        title: 'A test pattern on the glass',
+        body: 'The PX button on the wall’s bar draws sample sentences at known '
+          + 'real pixel sizes and a ruler of 100-pixel blocks, so you can stand '
+          + 'in front of the panel and decide with your own eyes. It goes away '
+          + 'by itself.',
+        demo: 'pin',
+      },
+    ],
+  },
+  {
     date: '2026-09-08',
     title: 'The corner settled, layouts you can try on, and redo that stays',
     items: [

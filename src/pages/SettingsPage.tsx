@@ -151,25 +151,38 @@ function TvScreensPanel({ tv, setTvSetting, jobs, elements, stages, onToast }: {
                 </span>
               )}
             </div>
-            {tooSmall && !fixes[s.id] && (
-              <button
-                data-tv-fix={s.id}
-                onClick={() => {
-                  const want = Math.min(2.5, Math.max(0.6,
-                    Math.round(((READABLE / Math.max(1, s.smallest ?? READABLE)) * s.scale) * 10) / 10));
-                  patchScreen(s.id, { scale: want });
-                  setFixes(f => ({ ...f, [s.id]: {
-                    at: Date.now(), scaleBefore: s.scale, smallestBefore: s.smallest, scaleAfter: want,
-                  } }));
-                  onToast('Text size raised — the TV is re-measuring');
-                }}
-                className="mb-2 px-3 py-1.5 rounded-xl text-[11px] font-bold text-white"
-                style={{ backgroundColor: '#b4342a' }}>
-                Make the words readable · {Math.round(s.scale * 100)}% → {
-                  Math.min(250, Math.max(60,
-                    Math.round(((READABLE / Math.max(1, s.smallest ?? READABLE)) * s.scale) * 10) * 10))}%
-              </button>
-            )}
+            {/**
+              * The red button WALKS (sealed picks 4 + 8): each press moves at
+              * most a quarter of the current size toward the measured need,
+              * ceiling 300%, and the button comes BACK once a report newer
+              * than the last press says the words are still too small — so it
+              * steps, measures, and keeps offering until they clear the line.
+              * The old version leapt straight at the computed figure, which on
+              * a wide panel hit the (now removed) render caps and read as a
+              * dead button.
+              */}
+            {tooSmall && (!fixes[s.id] || Date.parse(s.lastSeen ?? '') > fixes[s.id].at + 2000) && (() => {
+              const need = READABLE / Math.max(1, s.smallest ?? READABLE);
+              const want = Math.min(3, Math.max(0.6,
+                Math.round(s.scale * Math.min(1.25, need) * 100) / 100));
+              if (want <= s.scale + 0.005) return null;
+              return (
+                <button
+                  data-tv-fix={s.id}
+                  onClick={() => {
+                    patchScreen(s.id, { scale: want });
+                    setFixes(f => ({ ...f, [s.id]: {
+                      at: Date.now(), scaleBefore: s.scale, smallestBefore: s.smallest, scaleAfter: want,
+                    } }));
+                    onToast('Text size raised a step — the TV is re-measuring');
+                  }}
+                  className="mb-2 px-3 py-1.5 rounded-xl text-[11px] font-bold text-white"
+                  style={{ backgroundColor: '#b4342a' }}>
+                  Make the words readable · {Math.round(s.scale * 100)}% → {Math.round(want * 100)}%
+                  {need > 1.25 ? ' (a step at a time)' : ''}
+                </button>
+              );
+            })()}
             {(() => {
               /**
                * The before → after, in the panel's own measurements. "Before"
@@ -192,7 +205,7 @@ function TvScreensPanel({ tv, setTvSetting, jobs, elements, stages, onToast }: {
                       <b>Now:</b> words {s.smallest ?? '?'}px at {Math.round(s.scale * 100)}%
                       {(s.smallest ?? 0) >= READABLE - 2
                         ? ' — readable'
-                        : ' — still small; raise the size bar below further'}
+                        : ' — still small; press the red button again for the next step'}
                     </div>
                   ) : (
                     <div className="text-gray-400">
@@ -228,7 +241,7 @@ function TvScreensPanel({ tv, setTvSetting, jobs, elements, stages, onToast }: {
             </label>
             <div className="flex items-center gap-3">
               <span className="text-[11px] text-gray-400">Smaller</span>
-              <input type="range" min={0.6} max={2.5} step={0.05} value={scale}
+              <input type="range" min={0.6} max={3} step={0.05} value={scale}
                 onChange={e => patchScreen(s.id, { scale: Number(e.target.value) })}
                 className="flex-1" />
               <span className="text-[11px] text-gray-400">Bigger</span>
@@ -1904,8 +1917,10 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
         className="mb-5 flex justify-center bg-slate-50 rounded-2xl py-3 border border-gray-100">
         <div className="rounded-2xl border border-gray-200 overflow-hidden bg-slate-100"
           style={tvPreviewBox(ratio, previewWidth)}>
-          <div className="w-full h-full flex flex-col">
-            <TvDashboard ctx={tvCtx} shape={tvShape} ratio={ratio} scale={0.7} editing={tvArrange}
+          {/* The preview draws at 70% through the same single layout zoom the
+              wall uses — TvDashboard itself no longer takes a scale. */}
+          <div className="flex flex-col" style={{ zoom: 0.7, width: `${100 / 0.7}%`, height: `${100 / 0.7}%` }}>
+            <TvDashboard ctx={tvCtx} shape={tvShape} ratio={ratio} editing={tvArrange}
               onSpawn={() => setTvStore(true)} />
           </div>
         </div>
@@ -2009,7 +2024,7 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
 
       <div className="flex items-center gap-3">
         <span className="text-[11px] text-gray-400">Smaller</span>
-        <input type="range" min={0.6} max={2} step={0.05} value={boost}
+        <input type="range" min={0.6} max={3} step={0.05} value={boost}
           onChange={e => setTvSetting('tvScale', Number(e.target.value))}
           className="flex-1" />
         <span className="text-[11px] text-gray-400">Bigger</span>

@@ -3933,3 +3933,64 @@ preview draws snapshot positions and writes nothing, banner Restore/Back,
 restore as one undo step, redo surviving undo, and five undos → five redos.
 Its trap: the "Layout history" button carries an icon, so `hasText` must not
 anchor (`/^…$/` misses the composite text).
+
+---
+
+# v2 — the TV Size Plan, sealed and built
+
+The full plan is `docs/plans/tv-scaling/MASTER-PLAN.md` — sealed 2026-09-08
+through the slow-plan method, 10 locked picks, and **where any older TV-scaling
+note disagrees with it, the plan wins**. Built as B1–B7 in one round.
+
+## ONE number, applied ONCE
+Resolution in `TvPresentationPage`:
+`boost = min(3, mine?.scale ?? paramBoost ?? tvSettings.tvScale ?? 1)` —
+the panel's own SAVED size first, the `?scale=` address-bar value as
+BOOTSTRAP only, the shared slider as the newcomer's default. Ceiling 3.0 on
+every control that sets the number (both sliders in settings, the panel's +,
+the red buttons).
+
+**`setBoost` always writes `tvScreens[screenId].scale`, Firebase or not** —
+the store persists it locally either way, and the old no-Firebase branch that
+wrote the URL param instead made the panel's own + button DEAD the moment the
+panel had a saved size (the saved size outranks the param by design). It also
+clears any masking `?scale=` from the address bar.
+
+## TvDashboard takes NO scale prop
+The display size is applied ONCE by the caller as layout zoom
+(`zoom: scale; width/height: 100/scale%` — the board/diagram idiom, scroller
+INSIDE the zoom). Every `Math.min(scale, cap)` that lived inside TvDashboard
+is deleted — a wide panel STARTED at those caps, so the office's
+90% → 160% press changed the label and froze the picture, which was the
+whole "red button does nothing" report. Proven fixed at the owner's own
+2560-wide geometry: 0.9 → 1.8 exactly doubles a drawn card.
+
+Gesture handlers inside TvDashboard measure the zoom they are really drawn at
+off their own node (`rect.height / offsetHeight`, the ScreenReport idiom) —
+never handed a number as a prop, because a prop is a claim and this is a
+measurement. Callers rewrapped: the wall (frame zoom), the settings preview
+(0.7), the TV layout page (its mock-panel scale). The bar, the floating
+chrome, and the wall's modals keep their own capped sizing on purpose
+(sealed pick 9 — buttons size for the hand at the panel, content for the
+eyes across the room).
+
+## The wall answers, walks, and proves
+- **The chip** (`data-size-note`): any boost change after first load flashes
+  "Display size 90% → 160%" on the wall for 4.5s — rendered inside the shared
+  `bar` JSX so every view carries it.
+- **The walking red button** (both in `ScreenReport` on the TV and
+  `TvScreensPanel` in settings): one press moves `scale × min(1.25, need)`,
+  capped 3.0, labelled with exactly what it will do ("90% → 113%"). The
+  settings button COMES BACK when a report newer than the last press still
+  says too-small; the TV's report stays OPEN after a press so the re-measure
+  is seen. Never a blind leap.
+- **The test pattern** (`data-test-pattern`, the PX bar button): sample rows
+  at 12/16/22/30 REAL pixels and a ruler of 100-real-px blocks, computed back
+  through the frame's dpr-fix zoom and the device ratio; tap or 10s dismisses.
+
+Harness: `scratchpad/tvsize.mjs` (12 checks) — proportionality at the
+dead-button geometry, stale `?scale=` loses to the saved size, ceiling holds
+under a held +, chip appears/says old → new/goes by itself, pattern draws and
+dismisses. `tvcrash` and `tvscreens` stay green. tvsize's own trap: the
+no-Firebase container is exactly where the old URL-param fallback bit, so a
+"chip never appears" failure here means setBoost stopped writing the setting.

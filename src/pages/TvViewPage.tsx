@@ -188,21 +188,33 @@ export function TvViewPage() {
             outlineOffset: 0,
           }}
         >
-          <TvDashboard
-            ctx={ctx}
-            // The mock-up shows the arrangement for the shape being mocked up,
-            // not for the browser window it is being mocked up in.
-            ratio={nearestRatio(shape.w, shape.h)}
-            shape={{
-              orientation: shape.w >= shape.h ? 'landscape' : 'portrait',
-              width: box.w, height: box.h,
-              ratio: box.h / Math.max(1, box.w),
-              narrow: false,
-            }}
-            scale={Math.max(0.6, scale)}
-            editing={editing}
-            onSpawn={isAdmin ? () => setStore(true) : undefined}
-          />
+          {/* The mock-up lays out at half the panel's real resolution and is
+              zoomed into the box — one layout zoom, the same single-number
+              pipeline the wall itself uses. TvDashboard no longer takes a
+              scale of its own. */}
+          {(() => {
+            const z = Math.max(0.6, scale);
+            return (
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <div className="flex flex-col" style={{ zoom: z, width: `${100 / z}%`, height: `${100 / z}%` }}>
+                  <TvDashboard
+                    ctx={ctx}
+                    // The mock-up shows the arrangement for the shape being mocked up,
+                    // not for the browser window it is being mocked up in.
+                    ratio={nearestRatio(shape.w, shape.h)}
+                    shape={{
+                      orientation: shape.w >= shape.h ? 'landscape' : 'portrait',
+                      width: box.w, height: box.h,
+                      ratio: box.h / Math.max(1, box.w),
+                      narrow: false,
+                    }}
+                    editing={editing}
+                    onSpawn={isAdmin ? () => setStore(true) : undefined}
+                  />
+                </div>
+              </div>
+            );
+          })()}
 
           {/* The panel's own measurements, quietly, in its bezel. */}
           <span data-tv-caption

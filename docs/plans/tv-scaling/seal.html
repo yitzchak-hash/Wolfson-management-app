@@ -1,0 +1,89 @@
+<title>The TV Size Plan — Sealed</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800;900&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<style>
+  :root{
+    --paper:#FBF8F1; --card:#FFFFFF; --ink:#1C2B3A; --soft:#5B6B7C;
+    --navy:#1E3A5F; --sky:#4AA8D8; --sky-soft:#E3F1F9;
+    --amber:#D9820B; --green:#2E7D4F; --green-soft:#E4F2E9; --line:#E5DFD2;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{background:var(--paper);color:var(--ink);font-family:'Source Serif 4',Georgia,serif;
+       font-size:17px;line-height:1.6;padding:0 20px 90px}
+  .wrap{max-width:880px;margin:0 auto}
+  h1,h2,.label,.pickno,.bid{font-family:Archivo,'Helvetica Neue',Arial,sans-serif}
+  h1{font-size:44px;font-weight:900;letter-spacing:-.02em;line-height:1.05;text-wrap:balance}
+  h2{font-size:15px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--navy);margin:0 0 14px}
+  .label{font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--soft)}
+  .sealbadge{display:inline-flex;align-items:center;gap:8px;background:var(--green);color:#fff;
+    font-family:Archivo;font-weight:800;font-size:13px;letter-spacing:.08em;text-transform:uppercase;
+    border-radius:999px;padding:7px 18px;margin-top:16px}
+  section{margin-top:48px}
+  .card{background:var(--card);border:1.5px solid var(--line);border-radius:18px;padding:26px 28px}
+  .picks{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px}
+  .pick{background:var(--green-soft);border:1.5px solid var(--green);border-radius:14px;padding:13px 15px;display:flex;gap:12px}
+  .pickno{background:var(--green);color:#fff;font-weight:900;font-size:13.5px;border-radius:9px;
+          min-width:46px;height:30px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .pick p{font-size:14px;line-height:1.5}
+  .pick b{font-family:Archivo;font-size:13.5px}
+  .steps{counter-reset:none}
+  .step{display:flex;gap:16px;padding:14px 0;border-bottom:1.5px solid var(--line);align-items:baseline}
+  .step:last-child{border-bottom:none}
+  .bid{background:var(--navy);color:#fff;font-weight:900;font-size:13px;border-radius:9px;
+       min-width:44px;height:30px;display:flex;align-items:center;justify-content:center;flex-shrink:0;align-self:flex-start}
+  .step p{font-size:15px}
+  .step b{font-family:Archivo;font-size:14.5px}
+  .rule{border-inline-start:5px solid var(--amber);background:#FBF0DC;border-radius:12px;padding:14px 20px;margin-top:20px;font-size:15px}
+  a{color:var(--sky);font-weight:600}
+  footer{margin-top:46px;color:var(--soft);font-size:13.5px;font-family:Archivo}
+</style>
+
+<div class="wrap">
+  <p class="label" style="margin-top:46px">Wolfson Management · the plan, whole</p>
+  <h1>The TV Size Plan</h1>
+  <div class="sealbadge">✦ Sealed · 10 picks · 2026-09-08</div>
+  <p style="margin-top:14px;max-width:640px">One number per TV, applied once, with no hidden ceilings — the dial
+  always moves the picture, the TV answers out loud, and the red button walks you to readable in measured steps.</p>
+
+  <section>
+    <h2>Every pick, locked</h2>
+    <div class="card"><div class="picks">
+      <div class="pick"><span class="pickno">1</span><p><b>True zoom.</b> 160% means everything is genuinely 1.6× — the grid reflows; fewer, bigger cards.</p></div>
+      <div class="pick"><span class="pickno">2</span><p><b>One pipeline, all views.</b> Board, diagram, dashboard — the same number, applied once at the root.</p></div>
+      <div class="pick"><span class="pickno">3</span><p><b>The TV answers.</b> Any size change flashes “Display size 90% → 160%” on the wall itself.</p></div>
+      <div class="pick"><span class="pickno">4</span><p><b>The red button walks.</b> Bounded steps with a real re-measure between presses.</p></div>
+      <div class="pick"><span class="pickno">5</span><p><b>The dial beats the slice.</b> On a region panel, turning up grows past the slice’s edges — the slice is the framing at 100%.</p></div>
+      <div class="pick"><span class="pickno">6</span><p><b>The shared size greets newcomers.</b> A panel with no saved size starts from it; its first own change takes over.</p></div>
+      <div class="pick"><span class="pickno">7</span><p><b>Ceiling 300%</b>, on every control that sets the number.</p></div>
+      <div class="pick"><span class="pickno">8</span><p><b>One press ≤ +25%</b> of the current size, toward the measured need.</p></div>
+      <div class="pick"><span class="pickno">9</span><p><b>The bar keeps its own dial.</b> Buttons size for the hand at the panel; content sizes for the eyes across the room.</p></div>
+      <div class="pick"><span class="pickno">10</span><p><b>A test pattern on the wall.</b> One press draws rulers and sample words at known real sizes.</p></div>
+    </div>
+    <div class="rule">Also sealed from the diagnosis: an old size in a TV tab’s web address is bootstrap-only —
+    the saved per-panel size always wins. And the supersession rule: where any older note disagrees with this
+    plan, this plan wins; older records stay as history.</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The build order</h2>
+    <div class="card steps">
+      <div class="step"><span class="bid">B1</span><p><b>The one number.</b> Saved per-panel size → address-bar bootstrap → shared default. Ceiling 300% everywhere.</p></div>
+      <div class="step"><span class="bid">B2</span><p><b>Root zoom per view.</b> The dashboard renders inside one sharp layout-zoom like the board and diagram already do; every hidden per-element ceiling is deleted.</p></div>
+      <div class="step"><span class="bid">B3</span><p><b>The confirmation chip.</b> The wall flashes old → new whenever its size changes after first load.</p></div>
+      <div class="step"><span class="bid">B4</span><p><b>The walking red button.</b> Settings card and the TV’s own report button step, measure, and keep offering until the words clear the line.</p></div>
+      <div class="step"><span class="bid">B5</span><p><b>The test pattern.</b> Rulers and sample text at known real pixels, self-dismissing.</p></div>
+      <div class="step"><span class="bid">B6</span><p><b>Proof.</b> The probe that exposed the dead button becomes the standing test: sizes must grow in proportion; a stale address-bar size must lose; the chip must appear; the ceiling must hold.</p></div>
+      <div class="step"><span class="bid">B7</span><p><b>The record.</b> What’s New, the developer notes, and this folder committed together.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The sittings</h2>
+    <div class="card">
+      <p style="font-size:15px">Sitting 1 — <a href="https://claude.ai/code/artifact/614f4555-b9a9-4366-a03a-9ae1e7e32034">The engine and its dials</a> (picks 1–10) · The seal — this page.
+      The master plan also lives in the project at <b style="font-family:Archivo;font-size:13.5px">docs/plans/tv-scaling/MASTER-PLAN.md</b>.</p>
+    </div>
+  </section>
+
+  <footer>📍 Sealed · 10 picks locked · building B1 → B7 now</footer>
+</div>
