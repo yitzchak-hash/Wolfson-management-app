@@ -1,4 +1,4 @@
-// Round 22: the notebook stacks NEWEST WEEK ON TOP (and its add/put-away
+// Round 22: the notebook stacks OLDEST WEEK ON TOP (and its add/put-away
 // buttons follow) · assigned tasks show themselves in the right worker's
 // square, from every workspace · removing the MAIN notebook hands everything
 // to a projection, or files it into the archive — data is never lost.
@@ -83,20 +83,22 @@ await page.waitForTimeout(3500);
 
 const main = page.locator('[data-node-id="CE-main"]');
 
-// ── 1 · newest week on top ──────────────────────────────────────────────────
+// ── 1 · oldest week on top (the owner's 2026-08-24 reversal: a calendar
+//        reads downward; the current week is reached by the open-on-today
+//        scroll and by putting worked weeks away) ───────────────────────────
 const weekTops = await page.evaluate(() => {
   const el = document.querySelector('[data-node-id="CE-main"]');
   const spans = [...el.querySelectorAll('span')]
-    .filter(s => /^Aug \d+$/.test((s.textContent || '').trim()));
+    .filter(s => /^AUG \d+$/.test((s.textContent || '').trim()));
   return spans.map(s => ({ label: s.textContent.trim(), y: s.getBoundingClientRect().top }));
 });
 console.log('       week labels:', JSON.stringify(weekTops));
-const w16 = weekTops.find(w => w.label === 'Aug 16');
-const w23 = weekTops.find(w => w.label === 'Aug 23');
+const w16 = weekTops.find(w => w.label === 'AUG 16');
+const w23 = weekTops.find(w => w.label === 'AUG 23');
 check(!!w16 && !!w23, 'both weeks of the run are drawn');
-check(w23 && w16 && w23.y < w16.y, 'the NEWER week sits on top', JSON.stringify({ w23: w23?.y, w16: w16?.y }));
+check(w23 && w16 && w16.y < w23.y, 'the OLDER week sits on top', JSON.stringify({ w16: w16?.y, w23: w23?.y }));
 
-// ── 2 · the top plus adds a NEWER week; the bottom plus an OLDER one ────────
+// ── 2 · the top plus adds an OLDER week; the bottom plus a NEWER one ────────
 const dataNow = () => page.evaluate(() => {
   const d = JSON.parse(localStorage.getItem('general_app_data') || '{}');
   const el = (d.canvasElements ?? []).find(e => e.id === 'CE-main')
@@ -106,18 +108,18 @@ const dataNow = () => page.evaluate(() => {
 // The controls are hover-revealed on the week's label row.
 await page.locator('[data-node-id="CE-main"] .group\\/wk').first().hover();
 await page.waitForTimeout(250);
-await main.locator('button[title="Add the week after this one"]').first().click();
+await main.locator('button[title="Add the week before this one"]').first().click();
 await page.waitForTimeout(700);
 let dd = await dataNow();
-check(dd.weekCount === 3 && dd.firstWeek === '2026-08-16',
-  'the TOP plus adds the week AFTER — newer, stacked above', JSON.stringify({ firstWeek: dd.firstWeek, weekCount: dd.weekCount }));
+check(dd.weekCount === 3 && dd.firstWeek === '2026-08-09',
+  'the TOP plus adds the week BEFORE — older, above', JSON.stringify({ firstWeek: dd.firstWeek, weekCount: dd.weekCount }));
 await page.locator('[data-node-id="CE-main"] .group\\/wk').last().hover();
 await page.waitForTimeout(250);
-await main.locator('button[title="Add the week before this one"]').first().click();
+await main.locator('button[title="Add the week after this one"]').first().click();
 await page.waitForTimeout(700);
 dd = await dataNow();
 check(dd.weekCount === 4 && dd.firstWeek === '2026-08-09',
-  'the BOTTOM plus adds the week BEFORE — older, at the bottom', JSON.stringify({ firstWeek: dd.firstWeek, weekCount: dd.weekCount }));
+  'the BOTTOM plus adds the week AFTER — newer, at the bottom', JSON.stringify({ firstWeek: dd.firstWeek, weekCount: dd.weekCount }));
 
 // ── 3 · assigned tasks show themselves in the worker's square ───────────────
 const chips = await page.evaluate(() => {

@@ -1,0 +1,338 @@
+<title>Tasks That Take Days</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&display=swap">
+<style>
+/*__APP_CSS__*/
+</style>
+<style>
+  /* The drafting table. The app's own compiled stylesheet is inlined above so
+     every UI part below is drawn by the app's real classes; these rules are
+     the TABLE the parts sit on, and they come after, so they win on the page
+     chrome without touching the parts. App material is app-coloured; every
+     mark of ours is china-marker red — the two can never be confused. */
+  html, body { background: #d7dce3 !important; color: #16212e; }
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+    margin: 0; padding: 28px 16px 80px;
+  }
+  .table { max-width: 880px; margin: 0 auto; }
+  .lede { max-width: 62ch; }
+  .step { margin-top: 44px; }
+  .step-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+  .step-num {
+    font-family: 'Caveat', 'Comic Sans MS', 'Segoe Print', cursive; font-weight: 700; font-size: 30px; line-height: 1;
+    color: #c2402f; flex-shrink: 0; transform: rotate(-2deg);
+  }
+  .step-title { font-size: 19px; font-weight: 800; color: #1e3a5f; text-wrap: balance; margin: 0; }
+  .lay { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+  .stage { flex: 1 1 460px; min-width: 0; }
+  .notes { flex: 1 1 200px; min-width: 200px; max-width: 300px; display: grid; gap: 12px; }
+  .note {
+    font-family: 'Caveat', 'Comic Sans MS', 'Segoe Print', cursive; font-weight: 500; font-size: 19.5px; line-height: 1.25;
+    color: #c2402f; transform: rotate(-1deg);
+  }
+  .note b { font-weight: 700; }
+  .sheet-scroll { overflow-x: auto; }
+  .new-tag {
+    font-family: 'Caveat', 'Comic Sans MS', 'Segoe Print', cursive; font-weight: 700; font-size: 15px; color: #fff;
+    background: #c2402f; border-radius: 999px; padding: 0 8px 2px; margin-left: 6px;
+    display: inline-block; transform: rotate(-2deg); vertical-align: middle;
+  }
+  .redline { stroke: #c2402f; stroke-width: 2.2; fill: none; stroke-linecap: round; }
+  @media (prefers-reduced-motion: reduce) { .chipmove { transition: none !important; } }
+  button:focus-visible, .pressable:focus-visible { outline: 2px solid #1e3a5f; outline-offset: 2px; }
+</style>
+
+<div class="table">
+  <header style="margin-bottom:6px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="background:#1e3a5f;color:#fff;font-weight:800;font-size:13px;border-radius:10px;padding:6px 12px;letter-spacing:.04em">TZVIAIR · WEEKLY NOTEBOOK</span>
+      <h1 style="font-size:26px;font-weight:900;color:#16212e;margin:0">Tasks that take days</h1>
+    </div>
+    <p class="lede" style="font-size:14px;color:#3f4c5e;line-height:1.55;margin:12px 0 0">
+      Most jobs take more than one day — AC takes a few, drywall takes a few — and dragging cards
+      day by day got confusing. Here is the plan for what happens when you drag a job onto the
+      notebook, drawn with the app's real parts so it looks exactly like it will.
+      <b>Nothing here is built yet</b> — this page is for deciding. The red handwriting is us
+      talking; everything white is the app.
+    </p>
+  </header>
+
+  <!-- ══ STEP 1 · the drop ══ -->
+  <section class="step">
+    <div class="step-head"><span class="step-num">1.</span><h2 class="step-title">You drag a job onto somebody's day</h2></div>
+    <div class="lay">
+      <div class="stage sheet-scroll">
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-2" style="min-width:560px">
+          <div style="display:grid;grid-template-columns:92px repeat(5,minmax(0,1fr));gap:1px">
+            <div style="display:flex;flex-direction:column;justify-content:flex-end;padding-bottom:2px">
+              <span style="line-height:1"><span class="font-black tracking-wide" style="font-size:15px;color:#334155">AUG</span>
+              <span class="font-bold tabular-nums" style="font-size:15px;color:#94a3b8"> 23</span></span>
+            </div>
+            <div class="px-1 py-0.5 rounded-t-md" style="background:#f1f5f9">
+              <div class="tabular-nums font-black" style="font-size:15px;color:#334155">23 <span style="font-size:10px;color:#94a3b8;font-weight:400">Aug</span></div>
+              <div class="font-bold" style="font-size:11px;color:#64748b">Sunday</div>
+            </div>
+            <div class="px-1 py-0.5 rounded-t-md" style="background:#e0f2fe">
+              <div class="tabular-nums font-black" style="font-size:15px;color:#0369a1">24 <span style="font-size:10px;color:#94a3b8;font-weight:400">Aug</span></div>
+              <div class="font-bold" style="font-size:11px;color:#0369a1">Monday</div>
+            </div>
+            <div class="px-1 py-0.5 rounded-t-md" style="background:#f1f5f9">
+              <div class="tabular-nums font-black" style="font-size:15px;color:#334155">25 <span style="font-size:10px;color:#94a3b8;font-weight:400">Aug</span></div>
+              <div class="font-bold" style="font-size:11px;color:#64748b">Tuesday</div>
+            </div>
+            <div class="px-1 py-0.5 rounded-t-md" style="background:#f1f5f9">
+              <div class="tabular-nums font-black" style="font-size:15px;color:#334155">26 <span style="font-size:10px;color:#94a3b8;font-weight:400">Aug</span></div>
+              <div class="font-bold" style="font-size:11px;color:#64748b">Wednesday</div>
+            </div>
+            <div class="px-1 py-0.5 rounded-t-md" style="background:#f1f5f9">
+              <div class="tabular-nums font-black" style="font-size:15px;color:#334155">27 <span style="font-size:10px;color:#94a3b8;font-weight:400">Aug</span></div>
+              <div class="font-bold" style="font-size:11px;color:#64748b">Thursday</div>
+            </div>
+
+            <div class="flex items-start gap-1 px-1 py-1 rounded-l-md" style="background:rgba(13,148,136,.10)">
+              <span class="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1" style="background:#0d9488"></span>
+              <span class="truncate font-bold" style="font-size:12px;color:#334155">Joseph</span>
+            </div>
+            <div class="p-0.5" style="min-height:64px;background:#dbeafe;outline:2px solid #4aa8d8;outline-offset:-2px">
+              <div class="rounded-md px-1.5 py-1" style="background:rgba(13,148,136,.16);border:1px dashed #0d9488;opacity:.75;transform:rotate(-3deg)">
+                <span class="font-bold" style="font-size:12px;color:#1e293b">Cohen</span>
+                <span class="block" style="font-size:10px;color:#64748b">…being dropped</span>
+              </div>
+            </div>
+            <div class="p-0.5" style="min-height:64px;background:#fbfcfd;outline:1px solid #eef2f7;outline-offset:-1px"></div>
+            <div class="p-0.5" style="min-height:64px;background:#fbfcfd;outline:1px solid #eef2f7;outline-offset:-1px"></div>
+            <div class="p-0.5" style="min-height:64px;background:#fbfcfd;outline:1px solid #eef2f7;outline-offset:-1px"></div>
+            <div class="p-0.5" style="min-height:64px;background:#fbfcfd;outline:1px solid #eef2f7;outline-offset:-1px"></div>
+          </div>
+        </div>
+      </div>
+      <div class="notes">
+        <div class="note">You drag <b>Cohen</b> from the board onto <b>Joseph's Sunday</b> — same gesture as today.</div>
+        <div class="note">The square lights up blue under your hand, like it already does.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ STEP 2 · the new card ══ -->
+  <section class="step">
+    <div class="step-head"><span class="step-num">2.</span><h2 class="step-title">The card that opens — this is the new part</h2></div>
+    <div class="lay">
+      <div class="stage">
+        <div class="rounded-2xl bg-white overflow-hidden flex flex-col" style="max-width:470px;box-shadow:0 24px 60px -16px rgba(15,23,42,.45)">
+          <div class="px-4 py-3 border-b border-gray-100 flex items-start gap-2">
+            <h3 class="m-0 text-[14.5px] font-extrabold text-slate-800 flex-1">Put Cohen on Joseph's week?</h3>
+            <span class="text-gray-400" style="font-size:16px;line-height:1">✕</span>
+          </div>
+          <div class="px-4 py-3">
+            <div class="grid gap-2.5">
+
+              <div class="grid grid-cols-2 gap-2.5">
+                <label class="block">
+                  <span class="block text-[10.5px] font-bold text-gray-500 mb-1">Current stage</span>
+                  <div class="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12.5px] bg-slate-50 text-gray-600 flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full flex-shrink-0" style="background:#f59e0b"></span> Drywall
+                  </div>
+                </label>
+                <label class="block">
+                  <span class="block text-[10.5px] font-bold text-gray-500 mb-1">When it's done, move to<span class="new-tag">new</span></span>
+                  <select class="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12.5px] outline-none bg-white">
+                    <option>AC installation</option>
+                    <option>Drywall done</option>
+                    <option>Leave the stage alone</option>
+                  </select>
+                </label>
+              </div>
+
+              <label class="block">
+                <span class="block text-[10.5px] font-bold text-gray-500 mb-1">Who</span>
+                <select class="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12.5px] outline-none bg-white">
+                  <option>Joseph</option><option>Moshe</option><option>David</option>
+                </select>
+              </label>
+
+              <label class="block">
+                <span class="block text-[10.5px] font-bold text-gray-500 mb-1">What has to be done<span class="new-tag">one box now</span></span>
+                <div class="relative">
+                  <textarea rows="3" class="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12.5px] outline-none resize-none bg-white" style="padding-bottom:30px">Close the ceiling in both bedrooms. Gate code 4412 — call the buyer before 8am.</textarea>
+                  <span class="absolute flex items-center gap-1" style="right:8px;bottom:12px">
+                    <span class="flex items-center justify-center rounded-lg border border-gray-200 text-gray-500" style="width:26px;height:26px">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                    </span>
+                    <span class="flex items-center justify-center rounded-lg border border-gray-200 text-gray-500" style="width:26px;height:26px">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                    </span>
+                  </span>
+                </div>
+              </label>
+
+              <div class="grid grid-cols-2 gap-2.5">
+                <label class="block">
+                  <span class="block text-[10.5px] font-bold text-gray-500 mb-1">Start day<span class="new-tag">was "Due"</span></span>
+                  <div class="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12.5px] tabular-nums text-gray-600 bg-white">Sunday · 23 August 2026</div>
+                </label>
+                <label class="block">
+                  <span class="block text-[10.5px] font-bold text-gray-500 mb-1">How many days<span class="new-tag">new</span></span>
+                  <div class="w-full border border-gray-200 rounded-lg text-[12.5px] bg-white flex items-center overflow-hidden">
+                    <button id="dayminus" class="px-3 py-1.5 font-black text-gray-500 hover:bg-gray-50" aria-label="One day fewer">−</button>
+                    <span id="daycount" class="flex-1 text-center font-bold tabular-nums text-gray-700">3</span>
+                    <button id="dayplus" class="px-3 py-1.5 font-black text-gray-500 hover:bg-gray-50" aria-label="One day more">+</button>
+                  </div>
+                </label>
+              </div>
+              <p id="dayspan" class="m-0 text-[12px] font-semibold" style="color:#15803d">→ Sunday 23, Monday 24, Tuesday 25</p>
+
+              <div class="flex gap-2 justify-end mt-1 pt-3 border-t border-gray-100">
+                <button class="me-auto px-2 py-1.5 rounded-lg text-[11px] font-semibold text-gray-400">Just put it on the planner</button>
+                <button class="px-3 py-1.5 rounded-lg text-[12.5px] font-bold text-white" style="background:#4aa8d8">Add the task</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="notes">
+        <div class="note">The old explainer paragraph is <b>gone</b>.</div>
+        <div class="note"><b>Current stage</b> just shows where the job stands. Next to it you pick where it moves <b>when the task is closed</b>.</div>
+        <div class="note">"What has to be done" and "Notes" were two boxes saying the same thing — now <b>one box</b>, with the paperclip and a <b>voice memo</b> right in its corner.</div>
+        <div class="note"><b>Try the − and + →</b> the green line always reads out exactly which days it will sit on.</div>
+        <div class="note">"Just put it on the planner" is now the small grey one on the left — for the rare card that needs no task. <b>(Already in the app today.)</b></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ STEP 3 · what lands ══ -->
+  <section class="step">
+    <div class="step-head"><span class="step-num">3.</span><h2 class="step-title">What lands on the notebook</h2></div>
+    <div class="lay">
+      <div class="stage sheet-scroll">
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-2" style="min-width:560px">
+          <div id="weekstrip" style="display:grid;grid-template-columns:92px repeat(5,minmax(0,1fr));gap:1px">
+            <div style="display:flex;flex-direction:column;justify-content:flex-end;padding-bottom:2px">
+              <span style="line-height:1"><span class="font-black tracking-wide" style="font-size:15px;color:#334155">AUG</span>
+              <span class="font-bold tabular-nums" style="font-size:15px;color:#94a3b8"> 23</span></span>
+            </div>
+            <div class="px-1 py-0.5 rounded-t-md" style="background:#f1f5f9"><div class="tabular-nums font-black" style="font-size:15px;color:#334155">23</div><div class="font-bold" style="font-size:11px;color:#64748b">Sunday</div></div>
+            <div class="px-1 py-0.5 rounded-t-md" style="background:#e0f2fe"><div class="tabular-nums font-black" style="font-size:15px;color:#0369a1">24</div><div class="font-bold" style="font-size:11px;color:#0369a1">Monday</div></div>
+            <div class="px-1 py-0.5 rounded-t-md" style="background:#f1f5f9"><div class="tabular-nums font-black" style="font-size:15px;color:#334155">25</div><div class="font-bold" style="font-size:11px;color:#64748b">Tuesday</div></div>
+            <div class="px-1 py-0.5 rounded-t-md" style="background:#f1f5f9"><div class="tabular-nums font-black" style="font-size:15px;color:#334155">26</div><div class="font-bold" style="font-size:11px;color:#64748b">Wednesday</div></div>
+            <div class="px-1 py-0.5 rounded-t-md" style="background:#f1f5f9"><div class="tabular-nums font-black" style="font-size:15px;color:#334155">27</div><div class="font-bold" style="font-size:11px;color:#64748b">Thursday</div></div>
+
+            <div class="flex items-start gap-1 px-1 py-1 rounded-l-md" style="background:rgba(13,148,136,.10)">
+              <span class="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1" style="background:#0d9488"></span>
+              <span class="truncate font-bold" style="font-size:12px;color:#334155">Joseph</span>
+            </div>
+            <div class="p-0.5 daycell" data-day="0" style="min-height:74px;background:#fbfcfd;outline:1px solid #eef2f7;outline-offset:-1px"></div>
+            <div class="p-0.5 daycell" data-day="1" style="min-height:74px;background:#fbfcfd;outline:1px solid #eef2f7;outline-offset:-1px"></div>
+            <div class="p-0.5 daycell" data-day="2" style="min-height:74px;background:#fbfcfd;outline:1px solid #eef2f7;outline-offset:-1px"></div>
+            <div class="p-0.5 daycell" data-day="3" style="min-height:74px;background:#fbfcfd;outline:1px solid #eef2f7;outline-offset:-1px"></div>
+            <div class="p-0.5 daycell" data-day="4" style="min-height:74px;background:#fbfcfd;outline:1px solid #eef2f7;outline-offset:-1px"></div>
+          </div>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+          <button id="movetue" class="pressable px-3 py-1.5 rounded-lg text-[12.5px] font-bold text-white" style="background:#1e3a5f">Move Tuesday to Thursday</button>
+        </div>
+      </div>
+      <div class="notes">
+        <div class="note"><b>One task, one card per day.</b> The little <b>day 1 of 3</b> pill says it's the same task wearing three faces.</div>
+        <div class="note">Change the day count up in step 2 and this strip follows.</div>
+        <div class="note"><b>Press the navy button</b> — Tuesday jumps to Thursday. The days of one task <b>don't have to touch</b>. Moving one day moves only that day.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ STEP 4 · done ══ -->
+  <section class="step">
+    <div class="step-head"><span class="step-num">4.</span><h2 class="step-title">When Joseph finishes, the job moves itself</h2></div>
+    <div class="lay">
+      <div class="stage">
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <div class="bg-white rounded-xl p-2.5" style="width:200px;border:4px solid #f59e0b">
+            <div class="font-bold text-sm text-gray-900">Cohen</div>
+            <div class="text-[11px] text-gray-500">14 Sokolov St, Holon</div>
+            <span class="inline-block mt-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full" style="background:#f59e0b22;color:#b45309">Drywall</span>
+          </div>
+          <svg width="70" height="34" viewBox="0 0 70 34" aria-hidden="true"><path class="redline" d="M4 22 C 24 6, 46 6, 64 18"/><path class="redline" d="M56 10 l8 8 -11 2"/><text x="12" y="33" style="font-family:'Caveat','Comic Sans MS',cursive;font-size:15px;fill:#c2402f">task closed</text></svg>
+          <div class="bg-white rounded-xl p-2.5" style="width:200px;border:4px solid #3b82f6">
+            <div class="font-bold text-sm text-gray-900">Cohen</div>
+            <div class="text-[11px] text-gray-500">14 Sokolov St, Holon</div>
+            <span class="inline-block mt-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full" style="background:#3b82f622;color:#1d4ed8">AC installation</span>
+          </div>
+        </div>
+      </div>
+      <div class="notes">
+        <div class="note">Marking the task done takes its cards off the notebook <b>and moves the job to the stage you picked</b> in step 2 — nobody has to remember to.</div>
+        <div class="note">Picked "leave the stage alone"? Then it just closes, like today.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ decisions ══ -->
+  <section class="step">
+    <div class="step-head"><span class="step-num">★</span><h2 class="step-title">Four things for you two to decide</h2></div>
+    <div class="rounded-2xl p-4" style="background:#fef3c7;border:1px solid #fcd34d;max-width:720px">
+      <ol style="margin:0;padding-left:20px;display:grid;gap:10px;font-size:13.5px;line-height:1.5;color:#451a03">
+        <li><b>Do the days skip Friday and Saturday?</b> The notebook shows Sunday–Thursday, so we'd count only working days: 3 days starting Thursday = Thu, Sun, Mon. <i>Our recommendation: yes, skip them.</i></li>
+        <li><b>Which date does the task itself carry?</b> We'd make its due date the LAST day — it's late only once all its days have passed. <i>Recommendation: last day.</i></li>
+        <li><b>Dragging one day of a multi-day task:</b> we'd have it just move, with no question card — the drop question stays only for a task's final remaining day (where moving off means leaving the notebook). <i>Recommendation: just move.</i></li>
+        <li><b>Finishing early:</b> when the task is closed on day 2 of 3, the leftover day's card disappears with the rest. <i>Recommendation: yes, it goes.</i></li>
+      </ol>
+    </div>
+    <p class="lede" style="font-size:13px;color:#3f4c5e;margin-top:14px">
+      Say yes (or change any of the four) and we build it exactly as drawn. The week order flip you
+      asked about — older weeks on top, big <b>AUG</b>, bigger eyes, the little up/down arrows —
+      is <b>already done and live</b>; it didn't need a page.
+    </p>
+  </section>
+</div>
+
+<script>
+  // The one moving part of step 2/3: the day count. Working days only, Sun–Thu.
+  var DAYS = [
+    { n: 23, w: 'Sunday' }, { n: 24, w: 'Monday' }, { n: 25, w: 'Tuesday' },
+    { n: 26, w: 'Wednesday' }, { n: 27, w: 'Thursday' },
+  ];
+  var count = 3;
+  var movedTue = false;
+
+  function chip(dayIdx, i, total) {
+    return '<div class="chipmove rounded-md px-1.5 py-1" style="background:rgba(13,148,136,.16);border:1px solid rgba(15,23,42,.07);transition:all .35s ease">'
+      + '<span class="flex items-start gap-1"><span class="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1" style="background:#f59e0b"></span>'
+      + '<span style="min-width:0"><span class="block font-bold" style="font-size:12px;color:#1e293b;line-height:1.15">Cohen</span>'
+      + '<span class="block" style="font-size:10px;color:#64748b">Close the ceiling…</span></span></span>'
+      + '<span class="inline-block mt-1 px-1.5 rounded-full font-bold" '
+      + 'style="font-size:9px;background:#e0e7ff;color:#3730a3">day ' + i + ' of ' + total + '</span>'
+      + '</div>';
+  }
+
+  function daysPicked() {
+    var idx = [];
+    for (var i = 0; i < count; i++) idx.push(i);
+    if (movedTue && count === 3) idx = [0, 1, 4];   // Tuesday's card living on Thursday
+    return idx;
+  }
+
+  function draw() {
+    var picked = daysPicked();
+    document.getElementById('daycount').textContent = String(count);
+    document.getElementById('dayspan').textContent =
+      '→ ' + picked.map(function (i) { return DAYS[i].w + ' ' + DAYS[i].n; }).join(', ');
+    var cells = document.querySelectorAll('#weekstrip .daycell');
+    cells.forEach(function (c) { c.innerHTML = ''; });
+    picked.forEach(function (dayIdx, k) {
+      cells[dayIdx].innerHTML = chip(dayIdx, k + 1, picked.length);
+    });
+    var btn = document.getElementById('movetue');
+    btn.style.display = count === 3 ? '' : 'none';
+    btn.textContent = movedTue ? 'Put Tuesday back' : 'Move Tuesday to Thursday';
+  }
+
+  document.getElementById('dayplus').addEventListener('click', function () {
+    count = Math.min(5, count + 1); movedTue = false; draw();
+  });
+  document.getElementById('dayminus').addEventListener('click', function () {
+    count = Math.max(1, count - 1); movedTue = false; draw();
+  });
+  document.getElementById('movetue').addEventListener('click', function () {
+    movedTue = !movedTue; draw();
+  });
+  draw();
+</script>

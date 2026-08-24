@@ -122,11 +122,8 @@ export function PlannerTaskDialog({
     <Shell onCancel={onCancel} title={`Put ${job.displayName || 'this job'} on ${person.name}'s ${
       day.toLocaleDateString(undefined, { weekday: 'long' })}?`}>
       <div className="grid gap-2.5">
-        <p className="text-[12px] text-gray-500 m-0">
-          It's on the planner either way. This also makes it a task on the job —
-          the day, the date and who it's for are already filled in.
-        </p>
-
+        {/* The explainer paragraph is gone, per the owner — the form says what
+            it needs and the office knows what a drop means by now. */}
         <div className="grid grid-cols-2 gap-2.5">
           <Field label="Stage">
             <select value={stageId} onChange={e => setStageId(e.target.value)} className={box}>
@@ -197,9 +194,14 @@ export function PlannerTaskDialog({
       </div>
 
       <Footer>
+        {/* The no-task escape hatch, demoted to a quiet side button at the
+            LEFT of the footer, per the owner: it is for the rare case where a
+            card should sit on the sheet with no task behind it, and drawn as
+            a peer of "Add the task" it was pressed instead of it. */}
         <button onClick={() => onDone(undefined)} disabled={busy}
-          className="px-3 py-1.5 rounded-lg border border-gray-200 text-[12.5px] font-semibold
-                     text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+          className="me-auto px-2 py-1.5 rounded-lg text-[11px] font-semibold
+                     text-gray-400 hover:text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+          title="Rare: the card sits on the planner with no task behind it">
           Just put it on the planner
         </button>
         <button onClick={make} disabled={busy || !contractorId || !task.trim()}

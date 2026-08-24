@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { PlannerDropDialog } from './PlannerDialogs';
-import { ChevronLeft, ChevronRight, Plus, X, CalendarDays, Maximize2, Eye, EyeOff, ClipboardList } from 'lucide-react';
+import { ChevronUp, ChevronDown, Plus, X, CalendarDays, Maximize2, Eye, EyeOff, ClipboardList } from 'lucide-react';
 import {
   Apartment, CanvasElement, Contractor, User, ContractorAssignment, Stage, personColor,
   aptLabel,
@@ -464,14 +464,14 @@ export function PlannerWidget({
   /** What is drawn. */
   const weeks = useMemo(() => runWeeks.filter(w => !hidden.has(iso(w))), [runWeeks, hidden]);
   /**
-   * Drawn NEWEST FIRST — the owner's ruling. The week being worked is the one
-   * at the top when the notebook opens; history stacks away below it instead
-   * of the current week living at the bottom of a season of scroll. Only the
-   * DRAWING reverses: the run is still stored oldest-first (`firstWeek` +
-   * `weekCount`), so nothing already written moves and the month arithmetic
-   * is untouched.
+   * Drawn OLDEST FIRST — the owner's reversal (2026-08-24, the secretary's
+   * ask): a calendar reads downward, older weeks above, newer below, and the
+   * newest-on-top experiment read as backwards to everybody using it. What
+   * keeps the CURRENT week at the top is not the order: worked weeks get put
+   * away with the eye (and come back the same way), and the notebook scrolls
+   * itself to today's week when it opens — see the mount effect below.
    */
-  const drawn = useMemo(() => [...weeks].reverse(), [weeks]);
+  const drawn = weeks;
   /** What has been put away, oldest first. */
   const hiddenInRun = useMemo(() => runWeeks.filter(w => hidden.has(iso(w))), [runWeeks, hidden]);
 
@@ -700,14 +700,6 @@ export function PlannerWidget({
     write({ cells: next });
   }
 
-  /** Arrows step a week in week view and a month in month view. */
-  function shift(by: number) {
-    const d = new Date(anchor.getTime());
-    if (mode === 'week') d.setDate(d.getDate() + by * 7);
-    else d.setMonth(d.getMonth() + by);
-    write({ start: iso(d) });
-  }
-
   /**
    * The workspaces, and the two writers a cross-workspace card needs.
    *
@@ -849,9 +841,9 @@ export function PlannerWidget({
   const weekRefs = useRef(new Map<string, HTMLElement>());
   // `weeks[0]` can be missing — every week can be put away — so the run's own
   // first week stands in rather than the label reading "Invalid Date".
-  // The NEWEST visible week — that is the one at the top now.
+  // Oldest first again, so the first visible week is the one at the top.
   const [shownMonth, setShownMonth] = useState<string>(
-    () => monthKey(weeks[weeks.length - 1] ?? firstWeek));
+    () => monthKey(weeks[0] ?? firstWeek));
 
   const readMonth = useCallback(() => {
     const box = scrollRef.current?.getBoundingClientRect();
@@ -873,23 +865,47 @@ export function PlannerWidget({
   // the month at the top would otherwise still name the week that was hidden.
   useEffect(() => { readMonth(); }, [readMonth, weekCount, weeks.length]);
 
-  /** Scroll to the first week of the next or previous month. */
-  function jumpMonth(by: 1 | -1) {
-    if (!weeks.length) return;
-    const here = new Date(`${shownMonth}-01T00:00:00`);
-    const want = new Date(here.getFullYear(), here.getMonth() + by, 1);
-    // The nearest week that touches that month, within what the notebook holds.
-    let target: Date | null = null;
-    for (const w of weeks) {
-      if (monthKey(w) === monthKey(want)) { target = w; break; }
-      if (by > 0 && w > want && !target) target = w;
-    }
-    if (!target && by < 0) target = weeks[0];
-    if (!target) target = weeks[weeks.length - 1];
-    const node = weekRefs.current.get(iso(target));
+  /** Scroll so a given week's top sits at the top of the notebook. */
+  const scrollToWeek = useCallback((key: string, smooth = true) => {
+    const node = weekRefs.current.get(key);
     const box = scrollRef.current;
-    if (node && box) box.scrollTo({ top: node.offsetTop - 4, behavior: 'smooth' });
-  }
+    if (node && box) {
+      // Offsets, not client rects: the widget sits inside a scale transform,
+      // so rect deltas are in screen pixels while scrollTop is in local ones.
+      // The scroller itself is not positioned, so both offsetTops measure
+      // against the same ancestor and the difference is the position INSIDE
+      // the scroller — bare node.offsetTop also counted the header above it.
+      box.scrollTo({ top: node.offsetTop - box.offsetTop - 4, behavior: smooth ? 'smooth' : 'auto' });
+    }
+  }, []);
+
+  /**
+   * The notebook OPENS on the current week.
+   *
+   * Weeks draw oldest-first (a calendar reads downward), so without this a
+   * season-long notebook opened on last winter and today's week lived at the
+   * bottom of a scroll. Today's week when the run holds it, else the newest
+   * week — the closest thing to today the notebook has. Once, on mount, after
+   * layout; a person's own scrolling is never fought.
+   */
+  const openedRef = useRef(false);
+  useEffect(() => {
+    if (openedRef.current) return;
+    const id = requestAnimationFrame(() => {
+      // Marked done INSIDE the frame, not before it: StrictMode runs
+      // mount → cleanup → mount, and a guard set before the frame fires is
+      // a guard that cancels the scroll and then refuses the retry.
+      openedRef.current = true;
+      const wk = iso(weekStartOf(new Date(), weekStart));
+      const target = weekRefs.current.has(wk)
+        ? wk
+        : weeks.length ? iso(weeks[weeks.length - 1]) : null;
+      if (target) scrollToWeek(target, false);
+      readMonth();
+    });
+    return () => cancelAnimationFrame(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const label = new Date(`${shownMonth}-01T00:00:00`)
     .toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
@@ -908,39 +924,14 @@ export function PlannerWidget({
         <span className="px-1.5 rounded-full bg-slate-100 text-slate-500 flex-shrink-0 tabular-nums"
           style={{ fontSize: Math.max(z(8), textSize - z(2)) }}>{label}</span>
         <span className="flex-1" />
-        {!ro && (
-          <>
-            {onShowAll && (
-              <button data-no-drag data-el-action onClick={onShowAll} title="Show every job in the schedule"
-                className="p-0.5 rounded text-gray-400 hover:text-[#1e3a5f] hover:bg-gray-100">
-                <Maximize2 size={12} />
-              </button>
-            )}
-            {/* The arrows move the VIEW between months, they do not move the
-                notebook. Nothing in it changes; the scroll goes to that month. */}
-            <button data-no-drag data-el-action onClick={() => jumpMonth(-1)}
-              title="The month before"
-              className="p-0.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100">
-              <ChevronLeft size={13} />
-            </button>
-            <button data-no-drag data-el-action title="This week"
-              onClick={() => {
-                const wk = weekStartOf(new Date(), weekStart);
-                const node = weekRefs.current.get(iso(wk));
-                if (node && scrollRef.current) {
-                  scrollRef.current.scrollTo({ top: node.offsetTop - 4, behavior: 'smooth' });
-                }
-              }}
-              className="px-1.5 py-0.5 rounded font-bold text-gray-500 hover:bg-gray-100"
-              style={{ fontSize: Math.max(z(8), textSize - z(2)) }}>
-              Today
-            </button>
-            <button data-no-drag data-el-action onClick={() => jumpMonth(1)}
-              title="The month after"
-              className="p-0.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100">
-              <ChevronRight size={13} />
-            </button>
-          </>
+        {/* The ‹ Today › cluster is gone, per the owner — nobody knew what it
+            was for. The notebook opens on the current week by itself, and each
+            week's label row carries its own tiny up/down scrollers. */}
+        {!ro && onShowAll && (
+          <button data-no-drag data-el-action onClick={onShowAll} title="Show every job in the schedule"
+            className="p-0.5 rounded text-gray-400 hover:text-[#1e3a5f] hover:bg-gray-100">
+            <Maximize2 size={12} />
+          </button>
         )}
       </div>
 
@@ -1010,35 +1001,57 @@ export function PlannerWidget({
                 </div>
               )}
               <div className="grid gap-px mb-px" style={{ gridTemplateColumns: cols }}>
-                <div className="font-black tracking-wide text-gray-400 flex items-end justify-between gap-1 pb-0.5"
-                  style={{ fontSize: Math.max(z(7), daySize - z(3)) }}>
-                  <span className="truncate">
-                    {wkStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                  </span>
-                  {/* The week's tiny controls, together at the label's end —
-                      add-a-week as a little icon right next to the put-away
-                      eye. NEWEST FIRST now, so the TOP week (drawn index 0)
-                      carries the plus that adds a NEWER week, and the BOTTOM
-                      one adds an OLDER week — the direction the eye reads the
-                      stack in. A week put away in that direction turns the
-                      plus into an eye that restores it, wording and all. */}
+                {/* The week's own label cell, rebuilt to the owner's layout
+                    (2026-08-24): the MONTH big and bold on top — "AUG 22" at
+                    the same size as the day numbers beside it, filling the
+                    white space that used to hold seven-point type — tiny
+                    up/down scrollers inline after it, and the week's controls
+                    on their own line underneath, grown and spread out because
+                    at 11px in a huddle they were hard to press. */}
+                <div className="flex flex-col justify-end gap-0.5 pb-0.5 min-w-0">
+                  <div className="flex items-center gap-1 min-w-0">
+                    <span className="truncate leading-none">
+                      <span className="font-black tracking-wide" style={{ fontSize: dateSize, color: '#334155' }}>
+                        {wkStart.toLocaleDateString(undefined, { month: 'short' }).toUpperCase()}
+                      </span>
+                      <span className="font-bold tabular-nums" style={{ fontSize: dateSize, color: '#94a3b8' }}>
+                        {' '}{wkStart.getDate()}
+                      </span>
+                    </span>
+                    <span className="flex-1" />
+                    {/* Just scrollers, nothing more: up shows the week above,
+                        down the week below. They replace the ‹ Today › cluster
+                        nobody understood. Always visible — navigation is not a
+                        control to hunt for. */}
+                    {wi > 0 && (
+                      <button
+                        data-no-drag data-el-action data-week-up
+                        onClick={() => scrollToWeek(iso(drawn[wi - 1]))}
+                        title="Scroll to the week above"
+                        className="flex-shrink-0 text-gray-300 hover:text-[#1e3a5f]"
+                      >
+                        <ChevronUp size={Math.max(11, Math.round(z(12)))} />
+                      </button>
+                    )}
+                    {wi < drawn.length - 1 && (
+                      <button
+                        data-no-drag data-el-action data-week-down
+                        onClick={() => scrollToWeek(iso(drawn[wi + 1]))}
+                        title="Scroll to the week below"
+                        className="flex-shrink-0 text-gray-300 hover:text-[#1e3a5f]"
+                      >
+                        <ChevronDown size={Math.max(11, Math.round(z(12)))} />
+                      </button>
+                    )}
+                  </div>
+                  {/* OLDEST FIRST again, so the TOP week (drawn index 0)
+                      carries the plus that adds an OLDER week and the BOTTOM
+                      one adds a NEWER week — the direction a calendar reads
+                      in. A week put away in that direction turns the plus
+                      into an eye that restores it, wording and all. */}
                   {!ro && (
-                    <span className="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover/wk:opacity-100 transition-opacity">
+                    <span className="flex items-center gap-1.5 opacity-0 group-hover/wk:opacity-100 transition-opacity">
                       {wi === 0 && (
-                        <button
-                          data-no-drag data-el-action
-                          onClick={() => addWeek('after')}
-                          title={hiddenBelow.length
-                            ? 'Bring back the next week — everything in it comes with it'
-                            : 'Add the week after this one'}
-                          className="text-gray-300 hover:text-[#1e3a5f]"
-                        >
-                          {hiddenBelow.length
-                            ? <Eye size={Math.max(10, Math.round(z(11)))} />
-                            : <Plus size={Math.max(10, Math.round(z(11)))} />}
-                        </button>
-                      )}
-                      {wi === drawn.length - 1 && (
                         <button
                           data-no-drag data-el-action
                           onClick={() => addWeek('before')}
@@ -1048,8 +1061,22 @@ export function PlannerWidget({
                           className="text-gray-300 hover:text-[#1e3a5f]"
                         >
                           {hiddenAbove.length
-                            ? <Eye size={Math.max(10, Math.round(z(11)))} />
-                            : <Plus size={Math.max(10, Math.round(z(11)))} />}
+                            ? <Eye size={Math.max(13, Math.round(z(14)))} />
+                            : <Plus size={Math.max(13, Math.round(z(14)))} />}
+                        </button>
+                      )}
+                      {wi === drawn.length - 1 && (
+                        <button
+                          data-no-drag data-el-action
+                          onClick={() => addWeek('after')}
+                          title={hiddenBelow.length
+                            ? 'Bring back the next week — everything in it comes with it'
+                            : 'Add the week after this one'}
+                          className="text-gray-300 hover:text-[#1e3a5f]"
+                        >
+                          {hiddenBelow.length
+                            ? <Eye size={Math.max(13, Math.round(z(14)))} />
+                            : <Plus size={Math.max(13, Math.round(z(14)))} />}
                         </button>
                       )}
                       <button
@@ -1058,7 +1085,7 @@ export function PlannerWidget({
                         title="Put this week away — nothing in it is removed, and adding the week back brings it all with it"
                         className="text-gray-300 hover:text-[#1e3a5f]"
                       >
-                        <EyeOff size={Math.max(10, Math.round(z(11)))} />
+                        <EyeOff size={Math.max(13, Math.round(z(14)))} />
                       </button>
                     </span>
                   )}

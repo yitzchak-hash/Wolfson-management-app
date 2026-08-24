@@ -4190,3 +4190,54 @@ wall's centred crop. Its trap: the settings picker sits BELOW THE FOLD on
 the TV tab, and a mouse press aimed off-screen lands on nothing — which
 reads as "dragging saves nothing". `scrollIntoViewIfNeeded` first. round23,
 tvsize and tvscreens stay green.
+
+---
+
+# v2 — the notebook reads like a calendar again, and multi-day tasks get a plan
+
+## OWNER REVERSAL (2026-08-24, the secretary's ask): weeks draw OLDEST FIRST
+Supersedes round 22's newest-first ruling. `drawn = weeks` in `PlannerWidget`
+— a calendar reads downward. What keeps the CURRENT week on top instead:
+- **The notebook OPENS scrolled to today's week** (or the newest week when
+  the run ended earlier). A mount effect, RAF-deferred; the done-flag is set
+  INSIDE the frame, not before it — StrictMode runs mount→cleanup→mount, and
+  a guard set before the frame fires cancels the scroll and then refuses the
+  retry.
+- Worked weeks get put away with the eye and come back the same way; the
+  TOP week's plus adds an OLDER week (`before`/`hiddenAbove`), the BOTTOM
+  adds a NEWER one — flipped back with the order.
+- `scrollToWeek` scrolls by `node.offsetTop - box.offsetTop`: the scroller is
+  not positioned, so bare offsetTop measured against the widget and counted
+  the header — every jump undershot by one header height. Offsets, not
+  client rects, because the widget sits inside a scale transform.
+
+## The week label row, per the owner
+The month is BIG AND BOLD in the label cell ("AUG 22" at dateSize, month
+black, number grey), the put-away/plus icons grew to z(14) and spread out on
+their own line, and each week carries tiny always-visible up/down scrollers
+(`data-week-up`/`data-week-down`) that scroll to the adjacent week — they
+replaced the header's ‹ Today › cluster, which is REMOVED (with `jumpMonth`
+and the dead `shift`). The month label chip in the widget header stays.
+
+## The drop dialog: two immediate asks shipped, the rest awaits approval
+`PlannerTaskDialog` lost its hard-coded explainer paragraph, and "Just put it
+on the planner" is demoted to a small grey side button at the footer's LEFT
+(`me-auto`) — the rare no-task case, no longer a peer of "Add the task".
+
+**The full multi-day redesign is PROPOSED, not built**: current stage +
+when-done stage, one merged what/notes box with paperclip + voice memo, start
+day + how-many-days with a live day readout, one card per day ("day 1 of 3"),
+non-consecutive days by dragging one card. Drawn with the app's real classes
+in `scratchpad/planner-days-plan.template.html` (built html injects the dist
+CSS via the snippet in that round's log; the planbar-sketch precedent — strip
+the app's html/body rules, red Caveat handwriting for everything that is not
+the app). Published as the "Tasks That Take Days" artifact with four starred
+decisions (skip Fri/Sat; due date = last day; moving one day just moves;
+finishing early clears leftover days). Build only once the owner picks.
+
+Harness: `scratchpad/notebookflip.mjs` (6 checks — big AUG, cluster gone,
+open-on-today at max scroll, scrollers scroll exactly, eye size). Its lesson:
+the run's LAST week can never sit flush at the top of the scroller, so
+"opened on the current week" is asserted as scrolled-to-max-and-visible, and
+the exact-landing check uses an early week's up arrow. `round22.mjs`
+re-encoded to oldest-first; `notebook2way` stays green.
