@@ -4033,3 +4033,66 @@ box either. The wallboard already ignored stored z for boxes (`box ? 1 : 3`)
 reaching the calculator and its keys, the section still selecting on its own
 surface). `grouplock.mjs`'s zoom-anchor check was re-encoded to the flush-top
 contract on the way (anchor = viewport top, not the header's bottom line).
+
+---
+
+# v2 — search that plans, the notebook card, and the wheel setting
+
+## A search result is draggable (the job rows)
+`ResultRow` in `GlobalSearch.tsx` — module-level (the declared-in-render
+trap), one `usePlannerDrag` per row: a job found in the search drags onto a
+notebook square (plans it) or onto the open board (lands as a tile, and the
+board placer's standing rule takes it OUT of its group). While the drag is
+live the dialog stands aside: wrapper `pointer-events-none`, backdrop
+`invisible`, panel `opacity-25` — the backdrop otherwise blocks the board
+placer's own `elementFromPoint`, and the planner probes (rect math) would
+work while the board drop silently never did. On a successful drop the
+dialog closes and the pick is learned.
+
+**`addInitScript` SERIALIZES its function** — a closure over a harness-side
+variable dies silently and the seed never runs, leaving the app on defaults
+while every assertion blames the feature. Pass data as the second ARG.
+
+## The crosshair follows a job into its group
+`BinBoard`'s scroll-to-highlight selector was still `[data-bin-job=…]` — an
+attribute that DIED when the group window adopted the shared `JobTile`
+(which carries `data-node-id`). The stale selector matched nothing, so
+"show me this job in its group" opened the window at the top and stopped.
+One selector fix; the pulse (`searchLit`) was already wired.
+
+## The notebook card (owner's layout, 2026-08-24)
+`PlannerCard`'s job branch: the NAME on top, bigger (`size + z(1.5)`, 800),
+`break-words` and never `truncate` — a card whose whole point is saying
+which job it is must not say "Wein…". The job's OPEN tasks render inside
+the same card, one per row (first 3 + "+N more"), and the pending counter /
+Drive / Zoho / plan links sit in a bottom-right row (the X hover-reveals at
+the row's start). A dashed task CHIP whose job already has a card in the
+same square is folded into that card — the owner's "separate tiles for
+tasks and for the job".
+
+## The wheel setting
+`BoardSetting.wheelScrolls` (rides in `boardSettings` — no new state key):
+when on, plain wheel PANS (x and y), Ctrl/⌘+wheel still zooms, Shift+wheel
+still slides sideways. Read in the once-registered wheel listener through
+`wheelScrollsRef`. The checkbox sits in board settings under
+"Match sizes and spacing".
+
+## Work below the buttons, paper up to the bar (the BLEED)
+Second pass on the two-screenshots ruling — both screenshots at once: the
+WORK pins at the chrome's bottom edge again (`yMax = hr`, `homePan {0,hr}`,
+`zoomCentre` anchored at the header line), so zooming out can never park
+widgets under the floating buttons; and the PAPER layer
+(`data-board-paper`) bleeds up over the band the pan holds open
+(`translate(pan.y − bleedT)`, `height + bleedT`, pattern offset by the same
+`bleedT` so it stays continuous). `bleedT = 0` when the top is UNLOCKED in
+board settings — that grey was asked for by name.
+
+## The box band clamps BOTH ends
+`min(max(z,0),3)`: the owner's second MANAGMENT section carries `z:-1` in
+production (a send-to-back from before the z floor existed) — negative z
+paints behind the world div and hit-tests to the world, which was the "one
+section box is unselectable" report. Render-side clamp; no data migration.
+
+Harness: `scratchpad/round27.mjs` (14 checks, two contexts). `board` /
+`grouplock` / `round20` / `round22` / `notebook2way` / `boxtrap-probe` stay
+green.

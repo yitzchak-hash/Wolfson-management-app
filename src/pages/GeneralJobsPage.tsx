@@ -616,6 +616,9 @@ export function GeneralJobsPage() {
   const snapOn = projectBoard.snapToGrid ?? false;
   /** Advanced guides — size matching on a resize. On unless switched off. */
   const smartGuides = projectBoard.smartGuides ?? true;
+  /** The wheel listener is registered once, so the setting reaches it by ref. */
+  const wheelScrollsRef = useRef(false);
+  wheelScrollsRef.current = projectBoard.wheelScrolls ?? false;
   /** The gutter kept clear on all four sides, like a page's margins. */
   const margin = Math.max(0, projectBoard.margin ?? BOARD_MARGIN);
   const [guides, setGuides] = useState<Guide[]>([]);
@@ -1330,16 +1333,17 @@ export function GeneralJobsPage() {
     const r = viewportRef.current?.getBoundingClientRect();
     if (!r) return;
     /**
-     * The anchor is wherever the board is PINNED — which, since the paper
-     * runs flush to the top (the owner's two-screenshots refinement), is the
-     * viewport's own top-left again. The rule behind it is unchanged: anchor
-     * the zoom at a point the clamp will not allow and the first press snaps
-     * the whole board by exactly the disagreement. When the anchor and the
-     * pin agree, the corner you organise from holds still and new room opens
-     * down and to the right.
+     * The anchor is wherever the WORK is pinned — the first line below the
+     * floating chrome. The rule behind it is unchanged: anchor the zoom at a
+     * point the clamp will not allow and the first press snaps the whole
+     * board by exactly the disagreement. When the anchor and the pin agree,
+     * the corner you organise from holds still and new room opens down and
+     * to the right.
      */
-    zoomAt(r.left, r.top, dir);
-  }, [zoomAt]);
+    const hb = headerBarRef.current?.getBoundingClientRect();
+    const anchorY = hb && viewMode !== 'stages' ? Math.max(r.top, hb.bottom + 6) : r.top;
+    zoomAt(r.left, anchorY, dir);
+  }, [zoomAt, viewMode]);
 
   const deleteRef = useRef<() => void>(() => {});
   const openSearchRef = useRef<() => void>(() => {});
@@ -4392,6 +4396,18 @@ export function GeneralJobsPage() {
         return;
       }
 
+      /**
+       * "Scrolling moves the board, not the zoom" (board settings): the plain
+       * wheel pans like an ordinary page and the header's − / + do the
+       * zooming. Ctrl/⌘+wheel still zooms — that pair means zoom on every
+       * canvas there is. Read through a ref because this listener is
+       * registered once.
+       */
+      if (wheelScrollsRef.current && !e.ctrlKey && !e.metaKey) {
+        setPan(p => clampPanRef.current({ x: p.x - e.deltaX, y: p.y - e.deltaY }));
+        return;
+      }
+
       if (held) {
         zoomingWithButton.current = true;
         clearTimeout(zoomHold.current);
@@ -4625,16 +4641,15 @@ export function GeneralJobsPage() {
     // RIGHT open: desk may show, with a bite of board always kept on screen.
     const xMin = Math.min(xMax, Math.min(VIS, w) - w);
     /**
-     * OWNER REFINEMENT (2026-08-24, the two-screenshots message): the TOP pin
-     * is the VIEWPORT'S OWN TOP, not the chrome's bottom edge. The paper runs
-     * all the way up to the white app bar and the floating buttons sit ON it;
-     * what keeps content out from under them is the invisible margin at the
-     * top of the paper (settleDrop's keep-clear band), never a strip of grey
-     * desk held open above the board. `hr` survives only in the
-     * min-visibility bound below — a bite of board hidden under the buttons
-     * is not a visible bite.
+     * OWNER REFINEMENT (2026-08-24, second pass): the WORK pins at the
+     * chrome's bottom edge — zooming out and coming home must frame the
+     * widgets BELOW the floating buttons, never under them. The PAPER still
+     * meets the white bar: the sheet layer bleeds up over the band the pan
+     * holds open (see the bleed note at the paper layer), so no grey shows
+     * on top even though the world's origin rests below the chrome. Content
+     * below the buttons, background under them — both screenshots at once.
      */
-    const yMax = freeT ? vp.h - Math.min(VIS, h) : 0;
+    const yMax = freeT ? vp.h - Math.min(VIS, h) : hr;
     // BOTTOM open: same min-visibility rule as the right, measured below the
     // chrome so the kept bite is actually seen.
     const yMin = Math.min(yMax, hr + Math.min(VIS, h) - h);
@@ -4652,10 +4667,14 @@ export function GeneralJobsPage() {
    */
   const homePan = (atZoom?: number): { x: number; y: number } => {
     void atZoom;
-    // Flush: the paper's own corner at the viewport's corner — it runs up
-    // under the floating buttons to meet the white bar. Content stays clear
-    // of them through settleDrop's invisible top margin, not through the pan.
-    return { x: 0, y: 0 };
+    // Home: the world's corner at the chrome's bottom edge, so the work opens
+    // below the floating buttons. The paper bleed covers the band above it,
+    // so nothing reads as grey.
+    const hb = headerBarRef.current?.getBoundingClientRect();
+    const vr = viewportRef.current?.getBoundingClientRect();
+    const hr = hb && vr && viewMode !== 'stages'
+      ? Math.max(0, Math.min(hb.bottom - vr.top, vp.h * 0.4)) : 0;
+    return { x: 0, y: hr };
   };
   homePanRef.current = homePan;
 
@@ -5480,6 +5499,21 @@ export function GeneralJobsPage() {
               gap the same as the one next door — with the measurement shown on it.
             </p>
 
+            {/* The wheel: zoom (the default) or plain scrolling. Esther's
+                ruling — scrolling should move the page like any other page,
+                with the header's − / + doing the zooming. */}
+            <label className="flex items-center gap-2 text-[10px] text-gray-600 font-semibold mb-0.5">
+              <input type="checkbox" className="rounded"
+                checked={projectBoard.wheelScrolls ?? false}
+                onChange={e => setBoardSetting('wheelScrolls', e.target.checked)} />
+              Scrolling moves the board, not the zoom
+            </label>
+            <p className="text-[9px] text-gray-400 leading-snug mb-2">
+              The mouse wheel scrolls up and down like an ordinary page; zooming is done with
+              the − and + buttons on top. Ctrl+wheel still zooms, Shift+wheel still slides
+              sideways.
+            </p>
+
             {/* Page margins. */}
             <div className="mb-2">
               <span className="block text-[10px] font-bold text-gray-500 mb-1">
@@ -5960,20 +5994,34 @@ export function GeneralJobsPage() {
             {0,0}) because the layer itself already travels with the pan; the
             transition matches the world div's, so the sheet never detaches
             from the work during the settle glide or a search flight. */}
+        {/* The BLEED: the owner's two rulings together — the work frames
+            itself BELOW the floating buttons (the pan pins at the chrome's
+            edge), while the paper still runs up under them to meet the white
+            bar. So when the pan holds the world below the viewport's top on
+            a pinned side, the sheet is stretched up to cover the band, with
+            the pattern offset by the same amount so it stays continuous with
+            the world. An UNLOCKED top keeps its grey — that dead space was
+            asked for by name. */}
+        {(() => {
+          const bleedT = sideAllowed(projectBoard.expand, 'top') ? 0 : Math.max(0, pan.y);
+          return (
         <div
+          data-board-paper="1"
           className="absolute top-0 left-0 pointer-events-none"
           style={{
-            transform: `translate(${pan.x}px, ${pan.y}px)`,
+            transform: `translate(${pan.x}px, ${pan.y - bleedT}px)`,
             width: maxX * zoom,
-            height: maxY * zoom,
+            height: maxY * zoom + bleedT,
             backgroundColor: (theme.surface as { backgroundColor?: string }).backgroundColor,
-            ...surfaceAtZoom(theme.surface, zoom, { x: 0, y: 0 }),
+            ...surfaceAtZoom(theme.surface, zoom, { x: 0, y: bleedT }),
             boxShadow: '0 0 0 1px rgba(15,23,42,.10), 0 12px 44px rgba(15,23,42,.16)',
             transition: flying ? 'all 600ms cubic-bezier(.22,.9,.28,1)'
               : settling ? 'all 280ms cubic-bezier(.22,.9,.28,1)'
               : undefined,
           }}
         />
+          );
+        })()}
 
         <div
           className="absolute top-0 left-0"

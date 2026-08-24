@@ -993,12 +993,17 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
   const stageOf = (a: Apartment) => stages.find(s => s.id === a.currentStageId) ?? null;
   const taskCount = (a: Apartment) => contractorAssignments.filter(x => x.apartmentId === a.id).length;
 
-  // A job arriving from a search gets scrolled to and pulsed.
+  // A job arriving from a search gets scrolled to and pulsed. The selector is
+  // the shared tile's own `data-node-id` — the old `data-bin-job` attribute
+  // died with the group's private tile when this window adopted `JobTile`,
+  // and the stale selector matched nothing, so "show me this job in its
+  // group" opened the group at the top and stopped: the owner's "it doesn't
+  // take me to that job in the group".
   useEffect(() => {
     if (!highlightJobId) return;
     const t = setTimeout(() => {
       surfaceRef.current
-        ?.querySelector(`[data-bin-job="${highlightJobId}"]`)
+        ?.querySelector(`[data-node-id="${highlightJobId}"]`)
         ?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
     }, 220);
     return () => clearTimeout(t);

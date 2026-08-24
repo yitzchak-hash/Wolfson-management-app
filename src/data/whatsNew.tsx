@@ -30,6 +30,52 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-09-12',
+    title: 'Search that plans, a calendar card you can read, and a calmer wheel',
+    items: [
+      {
+        title: 'Drag a job straight out of the search',
+        body: 'Find a job with the search, then drag its row onto a day in the '
+          + 'weekly notebook to plan it — or onto the open board, where it '
+          + 'lands as a tile and comes OUT of whatever group was holding it. '
+          + 'The search dims out of the way while you drag.',
+        demo: 'drag',
+      },
+      {
+        title: 'The crosshair follows a job into its group',
+        body: 'Pressing the little crosshair on a search result now works for '
+          + 'a job filed in a group too: the group opens with that job '
+          + 'scrolled into view and pulsing.',
+        demo: 'pin',
+      },
+      {
+        title: 'The notebook card, rebuilt',
+        body: 'A job on the calendar shows its WHOLE name on top, bigger — no '
+          + 'more three dots. Its open tasks are listed inside the same card, '
+          + 'one per row, instead of separate tiles for the job and its '
+          + 'tasks; the counter and the Drive, Zoho and plan buttons sit '
+          + 'bottom-right.',
+        demo: 'list',
+      },
+      {
+        title: 'Scrolling can just scroll',
+        body: 'New in board settings: "Scrolling moves the board, not the '
+          + 'zoom". Turn it on and the wheel moves the page up and down like '
+          + 'any other page — zooming is the − and + buttons on top '
+          + '(Ctrl+wheel still zooms).',
+        demo: 'zoom',
+      },
+      {
+        title: 'Zooming out keeps the work below the buttons',
+        body: 'The board\'s paper still runs up to the top bar, but zooming '
+          + 'out now frames the widgets and tiles BELOW the floating buttons '
+          + 'instead of hiding them underneath. And a section box that was '
+          + 'once sent to the back before locks existed is clickable again.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2026-09-11',
     title: 'A section can no longer trap what sits inside it',
     items: [

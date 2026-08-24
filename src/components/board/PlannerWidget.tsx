@@ -1247,8 +1247,14 @@ export function PlannerWidget({
                               itself, not a planner card: change the task's
                               date or worker where the task lives and the chip
                               follows. Clicking opens the job, travelling to
-                              its workspace when it is not this one. */}
-                          {(taskChips.get(key) ?? []).map(t => (
+                              its workspace when it is not this one.
+                              A chip whose JOB already has a card in this same
+                              square is folded into that card (which lists the
+                              job's tasks itself now) — the owner's "separate
+                              tiles for tasks and for the job". */}
+                          {(taskChips.get(key) ?? [])
+                            .filter(t => !entries.some(en => en.jobId === t.jobId))
+                            .map(t => (
                             <button
                               key={t.id}
                               data-no-drag data-el-action
@@ -1465,15 +1471,16 @@ function PlannerCard({
 
   if (entry.jobId) {
     const stage = stages.find(s => s.id === job?.currentStageId);
-    const pending = assignments.filter(a => a.apartmentId === job?.id && !a.completedAt).length;
+    const open = assignments.filter(a => a.apartmentId === job?.id && !a.completedAt);
+    const pending = open.length;
     /**
-     * The tile, in the square.
-     *
-     * The job has MOVED here — this is where it lives now — so the square shows
-     * what the board tile showed: the stage as a dot and a word, what is still
-     * outstanding, and the links. A grey name would have meant losing every
-     * reading the board gave you the moment anything was scheduled.
+     * The tile, in the square — laid out the way the office asked (2026-08-24):
+     * the NAME first, bigger, and never cut off with three dots (it wraps);
+     * the job's open tasks inside the SAME card, one per row, instead of
+     * separate tiles for the job and its tasks; and the task counter, Drive,
+     * Zoho and plan buttons along the bottom-right.
      */
+    const shownTasks = open.slice(0, 3);
     return (
       <div
         {...dragHandlers}
@@ -1492,83 +1499,103 @@ function PlannerCard({
         }}
         title="Click to open · drag to another day · hold Ctrl to leave a copy"
       >
+        {/* The name, on top and WHOLE. `break-words`, never `truncate` — a
+            card whose whole point is saying which job it is must not say
+            "Wein…". */}
         <div className="flex items-start gap-1 min-w-0">
           <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1"
             style={{ backgroundColor: stage?.color ?? '#cbd5e1' }}
             title={stage ? stage.name : 'Not started'} />
           <span
-            className="flex-1 min-w-0 text-left"
-            style={{ fontSize: size, fontWeight: bold ? 800 : 700, color: '#1e293b' }}
+            className="flex-1 min-w-0 text-left break-words"
+            style={{
+              fontSize: size + z(1.5), fontWeight: 800, color: '#1e293b',
+              lineHeight: 1.15, overflowWrap: 'break-word',
+            }}
             title={job ? undefined
               : entry.projectId
                 ? `This job is in ${workspace ?? 'another workspace'} — open it once on this computer and it will show here`
                 : 'This job is no longer on the board'}
           >
-            <span className="block truncate">
-              {/* aptLabel, not displayName: a building-project apartment has a
-                  NUMBER and often no family name, and displayName-only drew
-                  every one of those as the word "Job". */}
-              {job
-                ? (aptLabel(job) || job.address?.trim() || 'Job')
-                : entry.projectId
-                  // Not "removed" — this machine simply has not opened that
-                  // workspace yet, so its snapshot is not here to read.
-                  ? 'Open that workspace to see this'
-                  : '(job removed)'}
-            </span>
-            {(workspace || stage || entry.text || job?.address) && (
-              <span className="block truncate font-medium"
-                style={{ fontSize: Math.max(z(7), size - z(2)), color: '#64748b' }}>
-                {/* The workspace FIRST when it is not this one: "Artzi" here and
-                    "Artzi" in Wolfson are two different answers to "where am I
-                    going today". */}
-                {workspace && (
-                  <span className="font-bold" style={{ color: '#7c3aed' }}>{workspace} · </span>
-                )}
-                {[entry.text, stage?.name, job?.address].filter(Boolean).join(' · ')}
-              </span>
-            )}
-          </span>
-
-          {/* What the tile carries, carried here too. */}
-          <span className="flex items-center gap-0.5 flex-shrink-0">
-            {pending > 0 && (
-              <span className="px-1 rounded-full font-bold tabular-nums"
-                style={{ fontSize: Math.max(z(7), size - z(3)), backgroundColor: '#fef3c7', color: '#92400e' }}
-                title={`${pending} still to do`}>
-                {pending}
-              </span>
-            )}
-            {job?.driveLink && (
-              <a data-no-drag data-el-action href={job.driveLink} target="_blank" rel="noreferrer"
-                title="Drive folder" onClick={e => e.stopPropagation()}
-                className="text-[#4aa8d8] hover:opacity-70">
-                <DriveIcon size={Math.max(z(9), size - z(2))} />
-              </a>
-            )}
-            {job?.zohoLink && (
-              <a data-no-drag data-el-action href={job.zohoLink} target="_blank" rel="noreferrer"
-                title="Zoho" onClick={e => e.stopPropagation()}
-                className="text-[#e11d48] hover:opacity-70">
-                <ZohoIcon size={Math.max(z(9), size - z(2))} />
-              </a>
-            )}
-            {job?.plansPdfLink && (
-              <a data-no-drag data-el-action href={job.plansPdfLink} target="_blank" rel="noreferrer"
-                title="Plan" onClick={e => e.stopPropagation()}
-                className="text-[#1e3a5f] hover:opacity-70">
-                <PlanIcon size={Math.max(z(9), size - z(2))} />
-              </a>
-            )}
-            {!readOnly && (
-              <button data-no-drag data-el-action data-card-action onClick={onRemove}
-                title="Take it off this day"
-                className="opacity-0 group-hover/en:opacity-100 text-gray-400 hover:text-red-500">
-                <X size={9} />
-              </button>
-            )}
+            {/* aptLabel, not displayName: a building-project apartment has a
+                NUMBER and often no family name, and displayName-only drew
+                every one of those as the word "Job". */}
+            {job
+              ? (aptLabel(job) || job.address?.trim() || 'Job')
+              : entry.projectId
+                // Not "removed" — this machine simply has not opened that
+                // workspace yet, so its snapshot is not here to read.
+                ? 'Open that workspace to see this'
+                : '(job removed)'}
           </span>
         </div>
+        {(workspace || stage || entry.text) && (
+          <span className="block truncate font-medium ps-2.5"
+            style={{ fontSize: Math.max(z(7), size - z(2)), color: '#64748b' }}>
+            {/* The workspace FIRST when it is not this one: "Artzi" here and
+                "Artzi" in Wolfson are two different answers to "where am I
+                going today". */}
+            {workspace && (
+              <span className="font-bold" style={{ color: '#7c3aed' }}>{workspace} · </span>
+            )}
+            {[entry.text, stage?.name].filter(Boolean).join(' · ')}
+          </span>
+        )}
+
+        {/* The job's own open tasks, INSIDE the card, one per row — no more
+            separate tiles for the job and for what is to be done on it. */}
+        {shownTasks.map(t => (
+          <span key={t.id} className="flex items-baseline gap-1 min-w-0 ps-2.5"
+            style={{ fontSize: Math.max(z(7), size - z(1.5)), color: '#475569' }}>
+            <span className="flex-shrink-0" style={{ fontSize: '.8em' }}>•</span>
+            <span className="flex-1 min-w-0 truncate font-medium">{t.taskDescription}</span>
+          </span>
+        ))}
+        {pending > shownTasks.length && (
+          <span className="ps-2.5 font-semibold"
+            style={{ fontSize: Math.max(z(7), size - z(2)), color: '#94a3b8' }}>
+            +{pending - shownTasks.length} more
+          </span>
+        )}
+
+        {/* Counter and links, bottom-right — where the office asked for them. */}
+        <span className="flex items-center justify-end gap-1 mt-0.5">
+          {!readOnly && (
+            <button data-no-drag data-el-action data-card-action onClick={onRemove}
+              title="Take it off this day"
+              className="opacity-0 group-hover/en:opacity-100 text-gray-400 hover:text-red-500 me-auto">
+              <X size={9} />
+            </button>
+          )}
+          {pending > 0 && (
+            <span className="px-1 rounded-full font-bold tabular-nums"
+              style={{ fontSize: Math.max(z(7), size - z(3)), backgroundColor: '#fef3c7', color: '#92400e' }}
+              title={`${pending} still to do`}>
+              {pending}
+            </span>
+          )}
+          {job?.driveLink && (
+            <a data-no-drag data-el-action href={job.driveLink} target="_blank" rel="noreferrer"
+              title="Drive folder" onClick={e => e.stopPropagation()}
+              className="text-[#4aa8d8] hover:opacity-70">
+              <DriveIcon size={Math.max(z(9), size - z(2))} />
+            </a>
+          )}
+          {job?.zohoLink && (
+            <a data-no-drag data-el-action href={job.zohoLink} target="_blank" rel="noreferrer"
+              title="Zoho" onClick={e => e.stopPropagation()}
+              className="text-[#e11d48] hover:opacity-70">
+              <ZohoIcon size={Math.max(z(9), size - z(2))} />
+            </a>
+          )}
+          {job?.plansPdfLink && (
+            <a data-no-drag data-el-action href={job.plansPdfLink} target="_blank" rel="noreferrer"
+              title="Plan" onClick={e => e.stopPropagation()}
+              className="text-[#1e3a5f] hover:opacity-70">
+              <PlanIcon size={Math.max(z(9), size - z(2))} />
+            </a>
+          )}
+        </span>
       </div>
     );
   }

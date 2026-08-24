@@ -659,8 +659,13 @@ export const BoardNode = React.memo(function BoardNode({
         // …and the mirror guard: content sent-to-back floors at the band's
         // bottom (4), so it can sink below other content but never under a
         // box, where the same trap would spring from the other side.
+        // The box band is CLAMPED at both ends: a stored NEGATIVE z (a
+        // send-to-back from before the z floor existed — the owner's second
+        // MANAGMENT section carries z:-1 in production) paints behind the
+        // world div and becomes unclickable, so it floors at 0 here rather
+        // than needing a data migration.
         zIndex: el.type === 'box'
-          ? Math.min(el.z ?? 1, 3)
+          ? Math.min(Math.max(el.z ?? 1, 0), 3)
           : Math.max(el.z ?? (isBin ? 4 : 5), 4),
       }}
     >

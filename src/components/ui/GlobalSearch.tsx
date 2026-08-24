@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import Fuse from 'fuse.js';
 import { queryVariants, skeleton } from '../../data/translit';
+import { usePlannerDrag } from '../../data/plannerDrop';
 import { useStore, loadProjectSnapshot } from '../../data/store';
 import { aptLabel, binLabelOf, binKeyOf, CanvasElement, FocusIntent } from '../../types';
 import { WIDGET_BY_ID } from '../../data/widgets';
@@ -55,6 +56,68 @@ interface SearchResult {
 interface GlobalSearchProps {
   open: boolean;
   onClose: () => void;
+}
+
+/**
+ * One result row — its own component (module-level, the documented trap) so it
+ * can hold a `usePlannerDrag` of its own: a JOB found in the search can be
+ * dragged straight out of the results — onto a notebook square to plan it, or
+ * onto the open board, where landing takes it OUT of whatever group held it
+ * (the board placer's standing rule). The dialog dims and stands out of
+ * hit-testing while the drag is live, so the board underneath can answer.
+ */
+function ResultRow({ result, icon, label, onSelect, onReveal, onHeld, onDropped }: {
+  result: SearchResult;
+  icon: React.ReactNode;
+  label: string;
+  onSelect: () => void;
+  onReveal: () => void;
+  onHeld: (held: boolean) => void;
+  onDropped: () => void;
+}) {
+  const isJob = result.focus.kind === 'apartment';
+  const drag = usePlannerDrag(result.focus.kind === 'apartment' ? result.focus.id : '', {
+    enabled: isJob,
+    projectId: result.projectId,
+    label: result.title,
+    onToast: onDropped,
+  });
+  const heldRef = useRef(false);
+  useEffect(() => {
+    if (heldRef.current === drag.held) return;
+    heldRef.current = drag.held;
+    onHeld(drag.held);
+  }, [drag.held, onHeld]);
+  return (
+    // A ROW, not a button — "Show on board" sits inside it, and a button
+    // inside a button is invalid markup browsers flatten.
+    <div
+      role="button"
+      tabIndex={-1}
+      onClick={onSelect}
+      {...drag.handlers}
+      style={drag.style}
+      className="w-full flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors
+                 text-left cursor-pointer group/row"
+    >
+      <div className="mt-0.5 flex-shrink-0">{icon}</div>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-medium text-gray-800 truncate">{result.title}</div>
+        <div className="text-xs text-gray-400 truncate">{result.subtitle}</div>
+      </div>
+      {result.onBoard && (
+        <button
+          onClick={e => { e.stopPropagation(); onReveal(); }}
+          title="Show it on the board"
+          className="flex-shrink-0 p-1.5 -my-0.5 rounded-lg text-gray-300
+                     hover:text-[#1e3a5f] hover:bg-[#4aa8d8]/12 transition-colors"
+        >
+          <Crosshair size={14} />
+        </button>
+      )}
+      <span className="text-[10px] text-gray-300 flex-shrink-0 pt-0.5">{label}</span>
+    </div>
+  );
 }
 
 /**
@@ -138,6 +201,8 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
   const s = useStore(state => state.mainUiStrings);
   const ui = s;
   const [query, setQuery] = useState('');
+  /** A row is being dragged out of the dialog — dim it and free the board. */
+  const [dragLive, setDragLive] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [recent, setRecent] = useState<string[]>([]);
   /**
@@ -579,9 +644,15 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-start justify-center pt-20 px-4">
-      <div className="fixed inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden">
+    // pointer-events-none on the wrapper, auto on the parts: while a row is
+    // being DRAGGED the backdrop goes invisible and the panel dims, so the
+    // board underneath is visible and — crucially — reachable by the board
+    // placer's own elementFromPoint hit test.
+    <div className="fixed inset-0 z-[300] flex items-start justify-center pt-20 px-4 pointer-events-none">
+      <div className={`fixed inset-0 bg-black/40 pointer-events-auto ${dragLive ? 'invisible' : ''}`}
+        onClick={onClose} />
+      <div className={`relative bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden
+                       pointer-events-auto transition-opacity ${dragLive ? 'opacity-25' : ''}`}>
         <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200">
           <Search size={18} className="text-gray-400 flex-shrink-0" />
           <input
@@ -601,33 +672,23 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         {results.length > 0 ? (
           <div className="max-h-80 overflow-y-auto divide-y divide-gray-100">
             {results.map(result => (
-              // A ROW, not a button — "Show on board" sits inside it, and a
-              // button inside a button is invalid markup browsers flatten.
-              <div
+              <ResultRow
                 key={result.id}
-                role="button"
-                tabIndex={-1}
-                onClick={() => handleSelect(result)}
-                className="w-full flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors
-                           text-left cursor-pointer group/row"
-              >
-                <div className="mt-0.5 flex-shrink-0">{TYPE_ICON[result.type]}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-gray-800 truncate">{result.title}</div>
-                  <div className="text-xs text-gray-400 truncate">{result.subtitle}</div>
-                </div>
-                {result.onBoard && (
-                  <button
-                    onClick={e => { e.stopPropagation(); handleReveal(result); }}
-                    title="Show it on the board"
-                    className="flex-shrink-0 p-1.5 -my-0.5 rounded-lg text-gray-300
-                               hover:text-[#1e3a5f] hover:bg-[#4aa8d8]/12 transition-colors"
-                  >
-                    <Crosshair size={14} />
-                  </button>
-                )}
-                <span className="text-[10px] text-gray-300 flex-shrink-0 pt-0.5">{TYPE_LABEL[result.type]}</span>
-              </div>
+                result={result}
+                icon={TYPE_ICON[result.type]}
+                label={TYPE_LABEL[result.type]}
+                onSelect={() => handleSelect(result)}
+                onReveal={() => handleReveal(result)}
+                onHeld={setDragLive}
+                onDropped={() => {
+                  // The drop landed (a notebook square, or the board — where
+                  // it also leaves its group). Remember the pick and get out
+                  // of the way so the result is visible where it landed.
+                  notePick(result.id, query);
+                  setDragLive(false);
+                  onClose();
+                }}
+              />
             ))}
           </div>
         ) : query.trim() ? (

@@ -175,12 +175,17 @@ await page.locator('button[title="Zoom out"]').click();
 await page.waitForTimeout(350);
 const o2 = await originOf();
 /*
-  The zoom buttons hold their ANCHOR POINT. Since the paper-meets-the-top-bar
-  refinement (2026-08-24) the pin — and therefore the anchor — is the
-  VIEWPORT'S OWN TOP: the paper runs flush under the floating chrome, and the
-  world point at the top edge is the same before and after each step.
+  The zoom buttons hold their ANCHOR POINT — the first line below the floating
+  chrome, where the WORK is pinned (the paper bleeds up past it, but the world
+  origin rests here). The world point at that line is the same before and
+  after each step.
 */
-const anchorY = 0;
+const anchorY = await page.evaluate(() => {
+  const vp = document.querySelector('[data-board-viewport]').getBoundingClientRect();
+  const hb = [...document.querySelectorAll('div')].find(d =>
+    d.className?.includes?.('absolute') && d.querySelector?.('button[title="Zoom out"]'));
+  return hb ? hb.getBoundingClientRect().bottom - vp.top + 6 : 76;
+});
 const worldAtAnchor = o => (anchorY - o.y) / o.z;
 const held = (a, b) => Math.abs(worldAtAnchor(a) - worldAtAnchor(b)) * b.z <= 2;
 check(o1.z < o0.z && held(o0, o1) && held(o0, o2),

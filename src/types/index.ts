@@ -105,6 +105,16 @@ export interface BoardSetting {
    */
   smartGuides?: boolean;
   /**
+   * The mouse wheel SCROLLS the board instead of zooming it.
+   *
+   * Absent means off — the wheel zooms towards the pointer, as it always has.
+   * Esther's ruling: scrolling should move the page up and down like any
+   * other page, with the − / + buttons in the header doing the zooming.
+   * Ctrl/⌘+wheel still zooms either way, and Shift+wheel still slides
+   * sideways, so nobody loses a gesture they already use.
+   */
+  wheelScrolls?: boolean;
+  /**
    * Does the building's name stay on top while the diagram scrolls?
    *
    * Absent means yes, which is what it has always done — the point of the bar
