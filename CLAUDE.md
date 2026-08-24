@@ -4134,3 +4134,59 @@ Add Job and the group take-out (whose seed parks the job at 3200,2400 so
 "came back to its old spot" would fail loudly). Its lesson: the centre spot
 NUDGES off occupants, so the take-out assertion is "fully on screen,
 centre-ish", not a bullseye. round27 and grouplock stay green.
+
+---
+
+# v2 — the green frame IS what the TV sees
+
+## One arithmetic for "what does the TV show" (`src/data/tvRegion.ts`)
+The wall fits its region to the frame and THEN multiplies by the display
+size — so at 160% the panel really shows a SMALLER slice than the saved
+region, and at 70% a bigger one. The green frame everybody drags therefore
+cannot be the stored region; it is the EFFECTIVE visible rectangle. That was
+the owner's report by name: "the green border didn't change shape, size or
+placement after scaling". `tvViewbox` (the wall's own scale+origin),
+`tvVisibleRect` (region+shape+size → the frame) and `regionForVisible` (the
+exact inverse, for writing a dragged frame back) live in `tvRegion.ts`, and
+the wall, the settings pickers and the board overlay ALL go through it —
+change one, change nothing, there is only one.
+- **The wall's crop is CENTRED in both directions now.** A display size
+  above 1 zooms into the MIDDLE of the region; it used to anchor at the
+  region's top-left, which is why the box and the panel disagreed the moment
+  the size slider moved.
+- `BoardRegionPicker` takes `scale`: the green box is drawn from
+  `tvVisibleRect` and gestures run ON that rectangle, with the stored region
+  recovered only at commit — the round trip is exact (move the box at 200%
+  and the saved region keeps its size to the pixel). Both settings pickers
+  pass their scale (per-screen and default), so moving a TV's size slider
+  visibly grows/shrinks its green box.
+
+## The board's TV button is a menu of the real TVs (`TvFrameLayer.tsx`)
+Clicking TV on the board header opens a small PORTALLED dropdown (the
+workspace-picker idiom — the header is its own stacking context; outside-
+press close checks both refs): every panel that has reported itself to
+`tvScreens` (live dot, name from settings, real shape, own-slice vs
+follows-default) plus "All TVs (default)", with an honest line when no
+panel can report. Picking one lays that TV's green frame over the real
+board — `TvFrameLayer`, drawn in the world layer so it pans and zooms with
+the work:
+- The frame is the EFFECTIVE view for THAT panel (its region ?? the shared
+  one ?? the wall's content-fit fallback, its real ratio, its display
+  size). The content-fit fallback reproduces the TV page's own rule number
+  for number, so the frame is honest before any region exists — and the
+  first drag of it mints one.
+- **Drag aims, the corner resizes** (ratio-locked to the panel's shape);
+  deltas divide by zoom (the documented trap); border/label/handle divide
+  by zoom too — chrome is a marker, not part of the drawing. Commits write
+  `tvScreens[id].view` (or `tvView` for the default) through `setTvSetting`,
+  so an open panel follows within seconds via the settings listener.
+- The old read-only "On the TV" shading and its `showTvRegion` state are
+  gone; `data-show-tv` (button), `data-tv-menu`, `data-tv-frame` and
+  `data-tv-frame-handle` are the hooks.
+
+Harness: `scratchpad/tvframe.mjs` (21 checks) — the halving box at 200%,
+the exact round trip, the menu, the frame's drag/resize/writes, and the
+wall's centred crop. Its trap: the settings picker sits BELOW THE FOLD on
+the TV tab, and a mouse press aimed off-screen lands on nothing — which
+reads as "dragging saves nothing". `scrollIntoViewIfNeeded` first. round23,
+tvsize and tvscreens stay green.

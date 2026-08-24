@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Apartment, CanvasElement, Stage } from '../../types';
+import { tvVisibleRect, regionForVisible } from '../../data/tvRegion';
 
 const TILE_W = 215, TILE_H = 132;
 
@@ -24,6 +25,7 @@ export interface Region { x: number; y: number; w: number; h: number }
  */
 export function BoardRegionPicker({
   jobs, elements, stages, value, onChange, width = 420, height = 240, screenRatio = 16 / 9,
+  scale = 1,
 }: {
   jobs: Apartment[];
   elements: CanvasElement[];
@@ -34,6 +36,15 @@ export function BoardRegionPicker({
   height?: number;
   /** The panel's shape. The box only ever IS this shape — resizing keeps it. */
   screenRatio?: number;
+  /**
+   * The panel's display size. The wall fits the region and THEN multiplies by
+   * this, so at 160% it really shows a smaller slice than the stored region —
+   * which is why the green box here is the EFFECTIVE visible rectangle
+   * (tvVisibleRect), not the raw region: what you see and drag is exactly
+   * what the TV shows. Gestures run on that rectangle and the stored region
+   * is recovered at commit (regionForVisible), so the round trip is exact.
+   */
+  scale?: number;
 }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ mode: 'move' | 'resize'; px: number; py: number; start: Region } | null>(null);
@@ -88,7 +99,13 @@ export function BoardRegionPicker({
     w: Math.round(world.w + 2 * ax), h: Math.round(world.h + 2 * ay),
   }), [world, ax, ay]);
 
-  const region = live ?? value ?? defaultRegion;
+  /**
+   * The green box is what the TV SHOWS, display size folded in. At 100% it is
+   * the region itself; at 160% it is the middle 62% of it. Everything below —
+   * the dimming, the drag, the resize — works on this rectangle, and the
+   * stored region is recovered only at commit.
+   */
+  const region = live ?? tvVisibleRect(value ?? defaultRegion, screenRatio, scale);
   const stageColor = (id?: string | null) => stages.find(s => s.id === id)?.color ?? '#cbd5e1';
 
   function down(mode: 'move' | 'resize') {
@@ -97,7 +114,7 @@ export function BoardRegionPicker({
       dragRef.current = { mode, px: e.clientX, py: e.clientY, start: { ...region } };
       // A first drag of an unset region commits the default it was showing, so
       // what you were looking at is what you start moving.
-      if (!value) onChange({ ...region });
+      if (!value) onChange(regionForVisible(region, scale));
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     };
   }
@@ -126,10 +143,9 @@ export function BoardRegionPicker({
   }
   function up() {
     if (dragRef.current && live) {
-      onChange({
-        x: Math.round(live.x), y: Math.round(live.y),
-        w: Math.round(live.w), h: Math.round(live.h),
-      });
+      // The gesture moved the VISIBLE rectangle; store the region that makes
+      // the TV show exactly it.
+      onChange(regionForVisible(live, scale));
     }
     dragRef.current = null;
     setLive(null);
@@ -211,7 +227,12 @@ export function BoardRegionPicker({
         </div>
       </div>
 
-      <div className="flex items-center justify-end mt-2" style={{ width: drawW }}>
+      <div className="flex items-center justify-between gap-3 mt-2" style={{ width: drawW }}>
+        <span data-vis-note className="text-[10px] text-gray-400 min-w-0">
+          {Math.abs(scale - 1) > 0.01
+            ? `The box allows for this TV's ${Math.round(scale * 100)}% display size — it is exactly what the TV shows.`
+            : ''}
+        </span>
         <button
           onClick={() => onChange(undefined)}
           className="text-[10.5px] font-bold text-[#1e3a5f] whitespace-nowrap"

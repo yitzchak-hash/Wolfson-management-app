@@ -221,13 +221,16 @@ function TvScreensPanel({ tv, setTvSetting, jobs, elements, stages, onToast }: {
               );
             })()}
 
-            {/* Its own slice of the board, drawn at ITS real shape. */}
+            {/* Its own slice of the board, drawn at ITS real shape — and at
+                ITS display size, so the green box IS what this panel shows:
+                move the size slider and the box grows or shrinks with it. */}
             <BoardRegionPicker
               jobs={jobs}
               elements={elements}
               stages={stages}
               value={mine.view}
               screenRatio={s.w > 0 && s.h > 0 ? s.w / s.h : 16 / 9}
+              scale={Math.min(3, scale)}
               width={520}
               height={300}
               onChange={r => {
@@ -1996,6 +1999,7 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
           stages={stages}
           value={tv.tvView}
           screenRatio={ratioOfShape(tv.tvShape)}
+          scale={Math.min(3, tv.tvScale ?? 1)}
           width={560}
           height={330}
           onChange={r => { setTvSetting('tvView', r); onToast(r ? 'TV view updated' : 'TV shows the whole board'); }}

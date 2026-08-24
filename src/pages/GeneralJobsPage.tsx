@@ -24,6 +24,7 @@ import { ApartmentDetailDrawer } from '../components/apartment/ApartmentDetailDr
 import { QuickAddTaskPanel } from '../components/apartment/QuickAddTaskPanel';
 import { Toast } from '../components/ui/Toast';
 import { DriveIcon, ZohoIcon, PlanIcon, TvIcon } from '../components/ui/BrandIcons';
+import { TvFrameLayer, TvPickMenu, TvPick } from '../components/board/TvFrameLayer';
 import { BoardToolbar, BoardControlsPanel, BoardTool } from '../components/board/BoardToolbar';
 import { BOARD_THEMES, getBoardTheme, surfaceAtZoom } from '../data/boardThemes';
 import { allowed as sideAllowed, edgePushed, roomFor, shiftFor, shiftJobs, shiftNodes, Side } from '../data/boardExpand';
@@ -489,8 +490,16 @@ export function GeneralJobsPage() {
   const [ghostDrag, setGhostDrag] = useState<GhostDrag | null>(null);
   const [openBin, setOpenBin] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
-  /** Shade the slice of the board the wall is showing. */
-  const [showTvRegion, setShowTvRegion] = useState(false);
+  /**
+   * The TV frame: which panel's view is laid over the board, and the little
+   * menu that picks it. `tvPick` carries the panel's id (null = the shared
+   * default), its real shape and its name; the frame itself lives in
+   * TvFrameLayer and is draggable/resizable, writing straight back into that
+   * panel's settings.
+   */
+  const [tvPick, setTvPick] = useState<TvPick | null>(null);
+  const [tvMenu, setTvMenu] = useState<DOMRect | null>(null);
+  const tvBtnRef = useRef<HTMLButtonElement>(null);
   /**
    * Somebody has pushed a node against a locked edge and we are asking.
    *
@@ -499,9 +508,6 @@ export function GeneralJobsPage() {
    */
 
 
-  // Subscribed, not read once: `getState()` at render time would show the
-  // region as it was when the page mounted and never notice it changing.
-  const tvRegion = useStore(st => (st.boardSettings.__tv ?? {}).tvView);
   /** A job the search sent us to: pulsed once the view lands on it. */
   const [searchHit, setSearchHit] = useState<string | null>(null);
   /** Which bin the pointer is currently over mid-drag, so it can light up. */
@@ -5318,21 +5324,33 @@ export function GeneralJobsPage() {
             <Search size={15} /> <span className="hidden md:inline">Find</span>
           </button>
 
-          {/* What the TV is showing, shaded onto the board.
-              The region is chosen on a small map in settings, which tells you
-              the numbers but not what they mean out on the real board — this
-              lays the answer over the actual work. */}
+          {/* What a TV is showing, laid over the board.
+              Opens a small menu of the actual panels (plus the shared
+              default); picking one draws that TV's green frame on the real
+              work — draggable to aim it, a corner to resize it. The settings
+              map tells you the numbers; this shows what they mean. */}
           <button
+            ref={tvBtnRef}
             data-show-tv
-            onClick={() => setShowTvRegion(v => !v)}
-            title="Shade the part of the board the TV is showing"
+            onClick={() => setTvMenu(m => (m ? null : tvBtnRef.current!.getBoundingClientRect()))}
+            title="Show and aim what a TV is displaying"
             className="flex items-center gap-1.5 px-2.5 md:px-3 py-2 rounded-xl text-sm font-medium border transition-colors"
-            style={showTvRegion
+            style={tvPick || tvMenu
               ? { backgroundColor: 'rgba(22,163,74,.12)', borderColor: '#16a34a', color: '#15803d' }
               : { borderColor: '#e5e7eb', color: '#4b5563' }}
           >
             <TvIcon size={15} /> <span className="hidden md:inline">TV</span>
           </button>
+          {tvMenu && (
+            <TvPickMenu
+              anchor={tvMenu}
+              ignore={tvBtnRef}
+              current={tvPick}
+              onPick={p => { setTvPick(p); setTvMenu(null); }}
+              onHide={() => { setTvPick(null); setTvMenu(null); }}
+              onClose={() => setTvMenu(null)}
+            />
+          )}
 
           {/* Full screen — the whole board page, browser chrome away. Between
               the TV button and the zoom, where the owner asked for it. */}
@@ -5862,35 +5880,13 @@ export function GeneralJobsPage() {
           }}
         />
 
-        {/* What the TV is showing, laid over the real board.
-            Inside the world layer, so it pans and zooms with the work — a
-            rectangle drawn in screen space would drift off the jobs it is
-            supposed to be describing the moment anybody moved. */}
-        {showTvRegion && tvRegion && (
-          <div
-            data-tv-overlay
-            className="absolute pointer-events-none"
-            style={{
-              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-              transformOrigin: '0 0',
-              left: 0, top: 0, width: 1, height: 1,
-              zIndex: 40,
-            }}
-          >
-            <div className="absolute"
-              style={{
-                left: tvRegion.x, top: tvRegion.y, width: tvRegion.w, height: tvRegion.h,
-                backgroundColor: 'rgba(22,163,74,.14)',
-                border: '2px solid rgba(22,163,74,.85)',
-                borderRadius: 4,
-              }}>
-              <span className="absolute -top-6 left-0 px-2 py-0.5 rounded-md text-[11px] font-bold text-white whitespace-nowrap"
-                style={{ backgroundColor: '#16a34a' }}>
-                On the TV
-              </span>
-            </div>
-          </div>
-        )}
+        {/* The picked TV's view, laid over the real board — the EFFECTIVE
+            view (region, shape and display size through tvRegion.ts), drawn
+            in the world layer so it pans and zooms with the work, and
+            movable: drag to aim the TV, pull the corner to change how much
+            it takes in. Writes go to that panel's own settings, so an open
+            panel follows within seconds. */}
+        {tvPick && <TvFrameLayer pan={pan} zoom={zoom} pick={tvPick} />}
 
         {/* One handle for a whole selection.
             Several things selected together read as one object, so they get one

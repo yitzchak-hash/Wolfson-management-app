@@ -4,6 +4,7 @@ import { useStore, loadAllProjectsTaskData, ensureProjectSnapshot } from '../dat
 import { Apartment, CanvasElement, isCountableApartment, binKeyOf, binLabelOf, getStageName, TV_DASH_BOARD } from '../types';
 import { withAlpha, WidgetSurface } from '../components/board/BoardItems';
 import { tvScreenId, reportTvScreen } from '../data/tvScreens';
+import { tvViewbox } from '../data/tvRegion';
 import { queryVariants, skeleton } from '../data/translit';
 import { DriveIcon, ZohoIcon, PlanIcon } from '../components/ui/BrandIcons';
 import { getBoardTheme } from '../data/boardThemes';
@@ -1398,17 +1399,16 @@ export function TvPresentationPage() {
       || (tvRegion.x < contentBox.x + contentBox.w && tvRegion.x + tvRegion.w > contentBox.x
         && tvRegion.y < contentBox.y + contentBox.h && tvRegion.y + tvRegion.h > contentBox.y)));
   const frameBox = regionAlive ? tvRegion! : contentBox;
-  const boardScale = frameBox
-    ? Math.min(frameW / frameBox.w, frameH / frameBox.h) * boost
-    : scale;
-  // Centred in the frame: the leftover axis (the shape mismatch, or a boost
-  // under 1) splits evenly instead of piling up on the right and bottom.
-  const boardOrigin = frameBox
-    ? {
-        x: frameBox.x - Math.max(0, frameW / boardScale - frameBox.w) / 2,
-        y: frameBox.y - Math.max(0, frameH / boardScale - frameBox.h) / 2,
-      }
-    : { x: 0, y: 0 };
+  // The SHARED arithmetic (tvRegion.ts) — the same numbers the settings
+  // picker and the board's TV frame draw their green box from, so "the green
+  // box is exactly what the TV sees" is true by construction, display size
+  // included. The crop is centred in BOTH directions: a display size above 1
+  // zooms into the middle of the chosen region (it used to anchor at the
+  // region's top-left, which is why the box and the panel disagreed the
+  // moment the size slider moved).
+  const vb = frameBox ? tvViewbox(frameW, frameH, frameBox, boost) : null;
+  const boardScale = vb ? vb.scale : scale;
+  const boardOrigin = vb ? vb.origin : { x: 0, y: 0 };
 
   // ── The board itself ──
   return (
