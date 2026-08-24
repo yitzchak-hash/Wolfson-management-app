@@ -306,8 +306,19 @@ html, body {
   25%      { box-shadow: 0 0 0 7px rgba(234,107,19,.38); }
   55%      { box-shadow: 0 0 0 3px rgba(234,107,19,.22); }
 }
+/* A job that has just ARRIVED on the board — added, or taken out of a group —
+   glows until it is first selected, so "where did it go" never needs asking.
+   Standing (infinite), unlike .search-hit's two pulses: the glow IS the
+   "this one is new" marker and only selection dismisses it. */
+.fresh-job { animation: freshJob 1.7s ease-in-out infinite; }
+@keyframes freshJob {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(74, 168, 216, .5); }
+  50%      { box-shadow: 0 0 0 9px rgba(74, 168, 216, .12); }
+}
 @media (prefers-reduced-motion: reduce) {
   .bin-window-in, .search-hit { animation: none; }
+  /* Still marked, just not moving. */
+  .fresh-job { animation: none; box-shadow: 0 0 0 3px rgba(74, 168, 216, .5); }
 }
 
 /* ── Plan markup studio ──────────────────────────────────────────────────────

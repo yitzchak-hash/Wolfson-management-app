@@ -30,6 +30,28 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-09-13',
+    title: 'New jobs announce themselves, and the Drive link does the typing',
+    items: [
+      {
+        title: 'A new job lands in front of you, glowing',
+        body: 'Adding a job — or taking one out of a group — places it in the '
+          + 'middle of what you are looking at, nudged aside if something is '
+          + 'already there. It glows softly until the first time you select '
+          + 'it, so a new arrival can never be lost on a big board.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'Paste the Drive link first — the name fills itself in',
+        body: 'The Add Job form now starts with the Google Drive folder link. '
+          + 'Paste it and the family name is read off the folder\'s own title '
+          + 'and filled in automatically. A name you type yourself is never '
+          + 'overwritten.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2026-09-12',
     title: 'Search that plans, a calendar card you can read, and a calmer wheel',
     items: [

@@ -167,11 +167,13 @@ export interface JobTileProps {
   ghostIndex?: number;
   /** CUT and not yet pasted — drawn faded, "in the air". */
   faded?: boolean;
+  /** Just ARRIVED (added, or taken out of a group) — glows until selected. */
+  fresh?: boolean;
 }
 
 export const JobTile = React.memo(function JobTile({
   job, index, x, y, w, h, stage, pendingTasks, isSelected, isDragging,
-  justChanged, searchLit, fallbackBorder, lastEdited, labels, H, ghostIndex, translucent, faded,
+  justChanged, searchLit, fallbackBorder, lastEdited, labels, H, ghostIndex, translucent, faded, fresh,
 }: JobTileProps) {
   const isGhost = ghostIndex !== undefined;
   return (
@@ -186,7 +188,8 @@ export const JobTile = React.memo(function JobTile({
         job.boardLocked ? 'cursor-pointer shadow-sm hover:shadow-md' :
         isDragging ? 'shadow-2xl cursor-grabbing' :
         isSelected ? 'shadow-md cursor-grab' : 'shadow-sm hover:shadow-md cursor-grab'
-      } ${justChanged && !isDragging ? 'live-change-pulse' : ''} ${searchLit ? 'search-hit' : ''}`}
+      } ${justChanged && !isDragging ? 'live-change-pulse' : ''} ${searchLit ? 'search-hit' : ''} ${
+        fresh && !isSelected && !isDragging ? 'fresh-job' : ''}`}
       style={{
         left: x, top: y, width: w, height: h,
         touchAction: 'none',

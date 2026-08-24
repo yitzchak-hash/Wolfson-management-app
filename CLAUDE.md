@@ -4096,3 +4096,41 @@ section box is unselectable" report. Render-side clamp; no data migration.
 Harness: `scratchpad/round27.mjs` (14 checks, two contexts). `board` /
 `grouplock` / `round20` / `round22` / `notebook2way` / `boxtrap-probe` stay
 green.
+
+---
+
+# v2 — new arrivals announce themselves, and the Drive link does the typing
+
+## A new job lands centre-screen and GLOWS until first selected
+- `tileCentreSpot(i)` in `GeneralJobsPage` rides the widgets' own
+  `viewCentreSpot` (centre of the VIEW, nudged off anything already there —
+  do not re-implement it, there was nearly a duplicate) and then
+  `settleDrop`. Used by: Add Job (no right-click spot), and the group
+  window's `onRestored` — `moveToBin(null)` restores the job's OLD position,
+  which on a big board is off-screen and read as "it vanished", so the
+  restore now moves it to the centre of the view (named-board aware).
+- `freshJobs` (state, session-only) + `markFresh`: set by Add Job, the
+  restore, and the board drop placer (a search-drag landing). `JobTile`
+  takes `fresh?: boolean` → `.fresh-job` (index.css): an INFINITE soft
+  pulse, unlike `.search-hit`'s two cycles — the glow IS the "this one is
+  new" marker and only selection dismisses it (an effect watching
+  `selectedJobIds`/`selectedJob` deletes seen ids). Reduced-motion gets a
+  static ring.
+
+## Add Job leads with the DRIVE LINK and fills the name from the folder
+The modal's first field (autofocused) is the Drive link; the family name is
+second. A debounced effect (450ms) on the link extracts the folder id,
+reads the folder's own title through `getFolderNameViaBackend` (no key
+guard — it just fails null when the backend is missing) and fills
+`familyNameFromFolderName(title)` in, with a quiet "reading the folder
+name…" note beside the label while it looks. `jobNameTyped` (a ref, set on
+the name input's onChange, reset on every close path) is the rule that a
+HAND-TYPED name is never overwritten — the same contract as the drawer's
+auto-fill.
+
+Harness: `scratchpad/round28.mjs` (11 checks) — Drive-first form, autofill,
+typed-name survival, centre landing + glow + glow-dies-on-select for both
+Add Job and the group take-out (whose seed parks the job at 3200,2400 so
+"came back to its old spot" would fail loudly). Its lesson: the centre spot
+NUDGES off occupants, so the take-out assertion is "fully on screen,
+centre-ish", not a bullseye. round27 and grouplock stay green.

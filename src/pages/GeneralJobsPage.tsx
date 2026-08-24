@@ -409,7 +409,47 @@ export function GeneralJobsPage() {
   const [jobAddress, setJobAddress] = useState('');
   const [jobZoho, setJobZoho] = useState('');
   const [jobDrive, setJobDrive] = useState('');
+  /** Was the family name typed BY HAND? A hand-typed name is never overwritten
+      by the Drive-folder autofill; an autofilled one may be refined. */
+  const jobNameTyped = useRef(false);
+  /** The Drive folder's title arriving — a quiet "looking it up…" note. */
+  const [nameLookup, setNameLookup] = useState(false);
+  /**
+   * Jobs that just ARRIVED on the board — added, or taken out of a group —
+   * glowing until first selected so "where did it go" never needs asking.
+   * Session-only on purpose: "new" is about this sitting, not the record.
+   */
+  const [freshJobs, setFreshJobs] = useState<Set<string>>(new Set());
+  const markFresh = (ids: string[]) =>
+    setFreshJobs(prev => new Set([...prev, ...ids]));
   const [toast, setToast] = useState<string | null>(null);
+
+  /**
+   * Add Job leads with the DRIVE LINK, and the family name follows from it:
+   * the folders are named "Family, First - …", so the moment a link is pasted
+   * the folder's own title is fetched and the name filled in — the same rule
+   * the drawer's auto-fill and the import wizard already use
+   * (`familyNameFromFolderName`). A name typed BY HAND is never overwritten;
+   * an autofilled one is refined if a different link is pasted. Debounced, and
+   * quietly a no-op when the Drive backend is not configured.
+   */
+  useEffect(() => {
+    if (!showAddModal) return;
+    const folderId = jobDrive.trim() ? extractFolderId(jobDrive.trim()) : null;
+    if (!folderId) return;
+    if (jobNameTyped.current && jobName.trim()) return;
+    let stale = false;
+    setNameLookup(true);
+    const t = setTimeout(async () => {
+      const folder = await getFolderNameViaBackend(folderId);
+      if (stale) return;
+      setNameLookup(false);
+      const fam = folder ? familyNameFromFolderName(folder) : '';
+      if (fam && !jobNameTyped.current) setJobName(fam);
+    }, 450);
+    return () => { stale = true; clearTimeout(t); setNameLookup(false); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobDrive, showAddModal]);
   /** A drop waiting on the "make it a task?" answer. */
   const [plannerDrop, setPlannerDrop] = useState<{ cell: RotaHit; job: Apartment } | null>(null);
   /** A slot being emptied that has a task behind it. */
@@ -882,6 +922,31 @@ export function GeneralJobsPage() {
   }
 
   freeSpotRef.current = freeSpot;
+
+  /**
+   * The middle of what is on SCREEN, as a landing spot for a NEW TILE — a job
+   * added from the modal, or one taken out of a group. Rides on the widgets'
+   * own `viewCentreSpot` (centred in the view, nudged off anything already
+   * there) and then through `settleDrop`, so it respects the chrome band and
+   * the margins. `i` cascades a handful so none hides another.
+   */
+  function tileCentreSpot(i = 0): { x: number; y: number } {
+    const c = viewCentreSpot(TILE_W, TILE_H);
+    return settleDrop(c.x + i * 26, c.y + i * 26);
+  }
+
+  /** The glow ends the moment the job is first selected or opened. */
+  useEffect(() => {
+    if (!freshJobs.size) return;
+    const seen = [...freshJobs].filter(id =>
+      selectedJobIds.has(id) || selectedJob?.id === id);
+    if (!seen.length) return;
+    setFreshJobs(prev => {
+      const n = new Set(prev);
+      seen.forEach(id => n.delete(id));
+      return n;
+    });
+  }, [selectedJobIds, selectedJob, freshJobs]);
   boardRef.current = activeBoardView;
   toolRef.current = tool;
 
@@ -4852,6 +4917,8 @@ export function GeneralJobsPage() {
         });
       });
       if (!placed) return null;
+      // New arrivals glow until first selected — same as an added job.
+      markFresh(ids);
       return placed === 1 ? 'On the board' : `${placed} on the board`;
     };
   };
@@ -6237,6 +6304,7 @@ export function GeneralJobsPage() {
                   labels={tileLabels}
                   H={H}
                   faded={cutMark.has(job.id)}
+                  fresh={freshJobs.has(job.id)}
                 />
               );
             })}
@@ -7030,11 +7098,21 @@ export function GeneralJobsPage() {
             onClose={() => setOpenBin(null)}
             onOpenJob={j => setSelectedJob(j)}
             onRestored={ids => {
-              // The landing is SEEN: close the window, pulse the returned job
-              // where it now stands on the board.
+              // The landing is SEEN: close the window and bring the returned
+              // jobs to the MIDDLE of the current view — the old position
+              // moveToBin restored can be anywhere on a big board, and a job
+              // that reappears off-screen reads as vanished. They glow until
+              // first selected.
               setOpenBin(null);
-              setSearchHit(ids[0]);
-              setTimeout(() => setSearchHit(null), 2600);
+              ids.forEach((id, i) => {
+                const job = apartments.find(a => a.id === id);
+                if (!job || !currentUser) return;
+                const spot = tileCentreSpot(i);
+                updateApartment(id, activeBoardView
+                  ? { viewPos: { ...(job.viewPos ?? {}), [activeBoardView]: { x: spot.x, y: spot.y } } }
+                  : { canvasX: spot.x, canvasY: spot.y }, currentUser);
+              });
+              markFresh(ids);
             }}
           />
         );
@@ -7169,7 +7247,7 @@ export function GeneralJobsPage() {
       {/* ── Add Job modal ── */}
       {showAddModal && (
         <>
-          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => { setShowAddModal(false); setNewJobAt(null); }} />
+          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => { setShowAddModal(false); setNewJobAt(null); jobNameTyped.current = false; setNameLookup(false); }} />
           <div className="fixed z-50 bg-white rounded-2xl shadow-2xl p-6"
             style={{ left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: 'min(420px, 92vw)' }}>
             <h2 className="text-lg font-bold text-gray-900 mb-4">{s.addJobBtn}</h2>
@@ -7177,11 +7255,12 @@ export function GeneralJobsPage() {
               e.preventDefault();
               const now = new Date().toISOString();
               const id = genId('G');
-              // Right-click gives an exact spot; the button falls back to a
-              // free one, so two new jobs never land on top of each other.
+              // Right-click gives an exact spot; the button lands the job in
+              // the MIDDLE of the current view — a new job that appears where
+              // nobody is looking has to be hunted for.
               const pos = newJobAt
                 ? { x: Math.max(0, newJobAt.x - TILE_W / 2), y: Math.max(0, newJobAt.y - TILE_H / 2) }
-                : freeSpot(TILE_W, TILE_H);
+                : tileCentreSpot();
               addApartment({
                 id, buildingId: 'G', apartmentNumber: '',
                 displayName: jobName.trim(), floor: 0, colPosition: 1, colSpan: 1,
@@ -7196,12 +7275,31 @@ export function GeneralJobsPage() {
               });
               // The link's plan and photo folders open up the moment it is saved.
               if (jobDrive.trim()) shareJobFolderSurfaces(jobDrive.trim());
+              // Glowing until first selected — the "this one is new" marker.
+              markFresh([id]);
               setJobName(''); setJobAddress(''); setJobZoho(''); setJobDrive('');
+              jobNameTyped.current = false; setNameLookup(false);
               setShowAddModal(false); setNewJobAt(null);
             }} className="space-y-3">
+              {/* The DRIVE LINK first: paste it and the family name fills
+                  itself in from the folder's own title. */}
               <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">{s.jobNameLabel}</label>
-                <input autoFocus value={jobName} onChange={e => setJobName(e.target.value)}
+                <label className="block text-xs font-semibold text-gray-600 mb-1">{s.driveFolder}</label>
+                <input autoFocus value={jobDrive} onChange={e => setJobDrive(e.target.value)}
+                  placeholder="https://drive.google.com/..."
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  {s.jobNameLabel}
+                  {nameLookup && (
+                    <span className="ms-2 font-normal text-gray-400">
+                      {s.isRtl ? 'קורא את שם התיקייה…' : 'reading the folder name…'}
+                    </span>
+                  )}
+                </label>
+                <input value={jobName}
+                  onChange={e => { jobNameTyped.current = true; setJobName(e.target.value); }}
                   placeholder={s.jobNameLabel}
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
               </div>
@@ -7217,14 +7315,8 @@ export function GeneralJobsPage() {
                   placeholder="https://crm.zoho.com/..."
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">{s.driveFolder}</label>
-                <input value={jobDrive} onChange={e => setJobDrive(e.target.value)}
-                  placeholder="https://drive.google.com/..."
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
-              </div>
               <div className="flex gap-2 pt-1">
-                <button type="button" onClick={() => setShowAddModal(false)}
+                <button type="button" onClick={() => { setShowAddModal(false); jobNameTyped.current = false; setNameLookup(false); }}
                   className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-all">
                   {s.cancel}
                 </button>
