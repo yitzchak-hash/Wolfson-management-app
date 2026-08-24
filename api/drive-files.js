@@ -29,26 +29,62 @@ export default async function handler(req, res) {
 
   try {
     const drive = getDrive();
+    const SHORTCUT = 'application/vnd.google-apps.shortcut';
 
     // metaOnly: return just the folder's own metadata (used to derive the family
     // name from the folder title) without listing its children.
     if (metaOnly) {
       const meta = await drive.files.get({
         fileId: folderId,
-        fields: 'id,name,mimeType',
+        fields: 'id,name,mimeType,shortcutDetails',
         supportsAllDrives: true,
       });
       return res.json({ folder: meta.data, files: [] });
     }
 
-    const resp = await drive.files.list({
-      q: `'${folderId}' in parents and trashed = false`,
-      fields: 'files(id,name,mimeType)',
-      pageSize: '50',
+    /**
+     * SHORTCUTS are resolved, here on the server, so the whole client stays
+     * shortcut-blind. Folders organised through a second tree (the office's
+     * "Leads" beside "Potentials") often hold shortcuts rather than the real
+     * folders, and a shortcut has NO children — listing one answers an empty
+     * folder while the Drive UI cheerfully shows the target's contents. The
+     * asked-for folder is resolved to its target before listing, and every
+     * shortcut CHILD is presented as its target (target id and type, the
+     * shortcut's own name), so "Engineered Plans" matches whether it is the
+     * folder or a pointer to it.
+     */
+    let listId = folderId;
+    const self = await drive.files.get({
+      fileId: folderId,
+      fields: 'id,mimeType,shortcutDetails',
       supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
     });
-    res.json({ files: resp.data.files ?? [] });
+    if (self.data.mimeType === SHORTCUT && self.data.shortcutDetails?.targetId) {
+      listId = self.data.shortcutDetails.targetId;
+    }
+
+    // Paginated: 50 with no follow-up silently truncated a Photos folder on
+    // its 51st picture — the kind of half-failure nobody reports as broken.
+    const files = [];
+    let pageToken;
+    for (let page = 0; page < 5; page++) {
+      const resp = await drive.files.list({
+        q: `'${listId}' in parents and trashed = false`,
+        fields: 'nextPageToken,files(id,name,mimeType,shortcutDetails)',
+        pageSize: 200,
+        pageToken,
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+      });
+      for (const f of resp.data.files ?? []) {
+        files.push(f.mimeType === SHORTCUT && f.shortcutDetails?.targetId
+          ? { id: f.shortcutDetails.targetId, name: f.name, mimeType: f.shortcutDetails.targetMimeType || f.mimeType }
+          : { id: f.id, name: f.name, mimeType: f.mimeType });
+      }
+      pageToken = resp.data.nextPageToken;
+      if (!pageToken) break;
+    }
+    res.json({ files });
   } catch (err) {
     console.error('drive-files error:', err.message);
     res.status(500).json({ error: err.message });

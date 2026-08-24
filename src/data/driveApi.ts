@@ -452,7 +452,7 @@ export async function shareJobFolderSurfacesNow(driveLink: string | null | undef
   try {
     const files = await listFolderViaBackend(folderId);
     const plans = files.find(f => f.mimeType === FOLDER_MIME && isEngineeredPlansFolder(f.name));
-    const photos = files.find(f => f.mimeType === FOLDER_MIME && /^photos?$/i.test(f.name));
+    const photos = files.find(f => f.mimeType === FOLDER_MIME && /^photos?$/i.test(f.name.trim()));
     // Some job folders are flat — no subfolders, the sheets sit in the root.
     // Sharing the job folder itself is then the only thing that opens them.
     if (!plans && !photos) await shareFileToDrive(folderId);
@@ -617,7 +617,7 @@ export async function listAllPhotosViaBackend(driveLink: string): Promise<DriveP
   try {
     const mainFiles = await listFolderViaBackend(mainFolderId);
     const photosFolder = mainFiles.find(
-      f => f.mimeType === 'application/vnd.google-apps.folder' && /^photos?$/i.test(f.name),
+      f => f.mimeType === 'application/vnd.google-apps.folder' && /^photos?$/i.test(f.name.trim()),
     );
     if (!photosFolder) return [];
     // Opening a job's photos is the moment they are needed by somebody — make
@@ -850,6 +850,13 @@ const markable = isViewableFile;
 export async function findPlanSetViaBackend(driveLink: string): Promise<{
   plansFolderId: string | null;
   plans: PlanEntry[];
+  /**
+   * Set when the folder could not be LISTED at all — an access error, not an
+   * empty folder. The two used to be indistinguishable (`catch { return [] }`),
+   * so a folder the service account cannot read looked like "no plans yet"
+   * and got reported as the app failing to find a plan that was there.
+   */
+  problem?: 'unreachable';
 }> {
   const folderId = extractFolderId(driveLink);
   if (!folderId) return { plansFolderId: null, plans: [] };
@@ -880,7 +887,7 @@ export async function findPlanSetViaBackend(driveLink: string): Promise<{
     }
     return { plansFolderId: null, plans: [] };
   } catch {
-    return { plansFolderId: null, plans: [] };
+    return { plansFolderId: null, plans: [], problem: 'unreachable' };
   }
 }
 

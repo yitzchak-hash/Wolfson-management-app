@@ -18,6 +18,7 @@ import { permsOf } from '../data/workerLevels';
 import { PlannerWidget } from '../components/board/PlannerWidget';
 import { TaskCalendar, CalendarEvent } from '../components/tasks/TaskCalendar';
 import { VoiceRecorderButton, VoiceMemoPlayer } from '../components/ui/VoiceMemo';
+import { WazeIcon, wazeUrl } from '../components/ui/BrandIcons';
 import { RecordedMemo } from '../data/voiceMemo';
 import {
   extractFileId, drivePreviewUrl, driveDownloadUrl, driveThumbUrl,
@@ -1576,6 +1577,17 @@ export function ContractorPortal() {
                   <div className="flex items-start gap-1.5 text-xs text-gray-600 mt-2">
                     <MapPin size={13} className="text-[#4aa8d8] flex-shrink-0 mt-0.5" />
                     <span className="leading-snug">{apt.address}</span>
+                    {/* Waze, at the end of the address — one press on site and
+                        the phone is navigating. An icon, nothing more. */}
+                    <a
+                      href={wazeUrl(apt.address)}
+                      target="_blank" rel="noopener noreferrer"
+                      title="Waze"
+                      onClick={e => e.stopPropagation()}
+                      className="flex-shrink-0 -mt-0.5 p-0.5 rounded hover:bg-sky-50"
+                    >
+                      <WazeIcon size={15} />
+                    </a>
                   </div>
                 )}
                 {a.dueDate && (

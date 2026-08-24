@@ -4328,3 +4328,74 @@ the run's LAST week can never sit flush at the top of the scroller, so
 "opened on the current week" is asserted as scrolled-to-max-and-visible, and
 the exact-landing check uses an early week's up arrow. `round22.mjs`
 re-encoded to oldest-first; `notebook2way` stays green.
+
+---
+
+# v2 — the Drive round: names that heal, folders that answer, the plan reads its own address
+
+## A blank family name heals itself (the owner's "it's not pulling the name")
+Two real causes, both fixed:
+- `autoFillFamilyNameFromFolder` opened with `if (isGeneralProject) return;` —
+  the Job Board was deliberately skipped back when its jobs were free-form.
+  They are CLIENT FOLDERS now (owner, 2026-08-24), so the guard is gone:
+  pasting a Drive link on a board job fills the name like everywhere else.
+- The Add Job lookup can lose the race to the Add button (450ms debounce +
+  API latency), creating the job nameless with nothing ever healing it. Two
+  heals, both BLANK-ONLY (a typed name is never clobbered): the Add Job
+  submit finishes the lookup after creation and fills the name in if it is
+  still blank, and the drawer fills a blank name from the folder title on
+  open (riding the folder-name fetch it already does).
+
+## Drive discovery that survives the Leads tree
+The office grew a second main folder ("Leads") beside "Potentials", and jobs
+under it resolved their folder NAME but listed no children — no plans, no
+Photos. Three defences, since the exact production cause cannot be reproduced
+from this container:
+- **`api/drive-files.js` resolves SHORTCUTS server-side**, so the whole
+  client stays shortcut-blind: a folder id that is a shortcut lists its
+  TARGET's children, and every shortcut CHILD is presented as its target
+  (target id and mime, the shortcut's own name) — "Engineered Plans" matches
+  whether it is the folder or a pointer to it.
+- **Pagination**: `pageSize: '50'` with no follow-up silently truncated any
+  folder past 50 files (a Photos folder's 51st picture just vanished). Now
+  200/page, up to 5 pages.
+- **An access error is no longer "no plans"**: `findPlanSetViaBackend`
+  returns `problem: 'unreachable'` when the LISTING throws (it used to
+  `catch { return [] }`), and the drawer's Drive-row hint says "Drive would
+  not let the app read this folder — check it is shared with the service
+  account" instead of "No plans in this folder yet". That sentence is what
+  turns the next such report into a diagnosis.
+
+## The plan reads its own address (`src/data/planAddress.ts`)
+Entirely LOCAL — pdf.js (lazy, the planAspect idiom) reads page 1's TEXT
+LAYER, no service, nothing to install. Lines are rebuilt from positioned
+runs (a Hebrew line is joined right-to-left — the runs sit visually);
+candidates score by a `כתובת`/address LABEL first (value on the same line or
+the neighbour below), a street-word + digit pattern second, with a
+title-block (bottom-third) bonus. The winner ships with a CUTOUT — the
+region around the line rendered via the pdf.js crop trick (`transform:
+[1,0,0,1,-left,-top]`, area-capped so a refused canvas cannot blank it) at
+~1000px wide, genuinely readable.
+`PlanAddressSuggest` sits under the drawer's Address field: auto-runs ONCE
+per plan when the field is EMPTY, a quiet "Read the address from the plan"
+button otherwise; the eye opens the cutout (z-140, above the drawer) and
+only **Use** writes the field. A scan says "no text to read" honestly —
+OCR (tesseract.js) is the known next step if scans matter. An auto-read
+that finds nothing stays silent; only a pressed button gets a failure
+sentence. Results cache per file id, in memory.
+
+## Waze on the worker's address
+`WazeIcon` + `wazeUrl(address)` in BrandIcons (drawn inline like Drive/Zoho);
+the portal's task-sheet address ends with the icon —
+`waze.com/ul?q=…&navigate=yes`, one press and the phone navigates.
+
+Harness: `scratchpad/planaddr.mjs` (9 checks) — runs against a SECOND dev
+server on 5174 started WITH `VITE_DRIVE_API_KEY` (the sharewire precedent;
+the drawer's Drive block is rightly dead without a key), every backend route
+stubbed with `page.route`, and the "plan" built by pdf-lib with the address
+as real text in a drawn title block. Covers: heal-on-open, heal-after-quick-
+Add, plans found, the read + label strip, the cutout's real size, Use
+writing the field, the unreachable-folder sentence, and the Waze href.
+The api shortcut/pagination logic itself cannot be exercised from here (the
+dev server has no serverless runtime) — syntax-checked and code-reviewed;
+watch the first Leads folder on production.

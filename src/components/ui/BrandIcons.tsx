@@ -46,6 +46,31 @@ export function PlanIcon({ size = 14, color = 'currentColor' }: { size?: number;
   );
 }
 
+/**
+ * Waze — the speech-bubble face, reduced to an identifiable glyph. Sits at the
+ * end of an address so a worker on site can press it and be navigating; the
+ * words "open navigation" would take more room than the whole address field.
+ */
+export function WazeIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M12 2.2c-4.9 0-8.9 3.6-8.9 8.1 0 1.6.5 3.1 1.4 4.4-.3.9-1 1.7-2 2.1-.5.2-.5.9 0 1.1 1.3.6 2.7.7 3.9.4 1.6 1.3 3.6 2 5.6 2 4.9 0 8.9-3.6 8.9-8.1S16.9 2.2 12 2.2z"
+        fill="#33ccff"
+      />
+      <circle cx="9.2" cy="9.6" r="1.15" fill="#0b2239" />
+      <circle cx="15" cy="9.6" r="1.15" fill="#0b2239" />
+      <path d="M8.8 13.2c.8 1.4 2 2.1 3.3 2.1s2.5-.7 3.3-2.1"
+        fill="none" stroke="#0b2239" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** The Waze link for an address — opens the app on a phone, the site on a desk. */
+export function wazeUrl(address: string): string {
+  return `https://waze.com/ul?q=${encodeURIComponent(address)}&navigate=yes`;
+}
+
 /** TV — with a slash when hidden from the wallboard. */
 export function TvIcon({ size = 14, hidden = false, color = 'currentColor' }: {
   size?: number; hidden?: boolean; color?: string;

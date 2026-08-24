@@ -7290,6 +7290,27 @@ export function GeneralJobsPage() {
               });
               // The link's plan and photo folders open up the moment it is saved.
               if (jobDrive.trim()) shareJobFolderSurfaces(jobDrive.trim());
+              /**
+               * The name lookup can lose the race to the Add button — a paste
+               * and a quick click creates the job before the folder title has
+               * arrived, and nothing used to fill it in afterwards. Heal it:
+               * finish the lookup AFTER creation and write the family name in,
+               * but only while the name is still blank — a name typed or
+               * filled in the meantime is never clobbered.
+               */
+              const healFolderId = !jobName.trim() && jobDrive.trim()
+                ? extractFolderId(jobDrive.trim()) : null;
+              if (healFolderId) {
+                getFolderNameViaBackend(healFolderId).then(n => {
+                  const derived = n ? familyNameFromFolderName(n) : '';
+                  if (!derived) return;
+                  const st = useStore.getState();
+                  const j = st.apartments.find(a => a.id === id);
+                  if (j && !(j.displayName ?? '').trim() && st.currentUser) {
+                    st.updateApartment(id, { displayName: derived }, st.currentUser);
+                  }
+                }).catch(() => {});
+              }
               // Glowing until first selected — the "this one is new" marker.
               markFresh([id]);
               setJobName(''); setJobAddress(''); setJobZoho(''); setJobDrive('');

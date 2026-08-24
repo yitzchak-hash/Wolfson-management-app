@@ -14,6 +14,7 @@ import { DriveDesktopPath } from './DriveDesktopPath';
 import { DeleteImpact } from '../ui/DeleteImpact';
 import { LinkField } from '../ui/LinkField';
 import { printSheet, printEsc } from '../../data/printing';
+import { PlanAddressSuggest } from './PlanAddressSuggest';
 import { PlanPinOverlay } from './PlanPinOverlay';
 import { cachedPlanAspect, measurePlanAspect } from '../../data/planAspect';
 // Lazy, deliberately. The markup studio carries pdf.js — about a megabyte of
@@ -272,7 +273,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    * the markups from its "Annotated Plans" child. Only those two levels — the
    * plans folder often has other subfolders whose PDFs nobody wants in the row.
    */
-  const [planSet, setPlanSet] = useState<{ plansFolderId: string | null; plans: PlanEntry[] }>(
+  const [planSet, setPlanSet] = useState<{ plansFolderId: string | null; plans: PlanEntry[]; problem?: 'unreachable' }>(
     { plansFolderId: null, plans: [] });
   /** Which chip is showing — an id from planSet, or null for the detected default. */
   const [shownPlanId, setShownPlanId] = useState<string | null>(null);
@@ -396,7 +397,26 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           setPlanSet(ps);
         }).catch(() => {});
         const fid = extractFolderId(apartment.driveLink);
-        if (fid) getFolderNameViaBackend(fid).then(n => { if (n) setDriveFolderName(n); }).catch(() => {});
+        if (fid) getFolderNameViaBackend(fid).then(n => {
+          if (!n) return;
+          setDriveFolderName(n);
+          /**
+           * HEAL a blank name on open. A job created with its Drive link
+           * already in place never fires the link-changed auto-fill, and one
+           * whose Add-Job lookup lost the race to the Add button was created
+           * nameless — so a blank name with a linked folder is filled from
+           * the folder title the first time the job is opened. Only a BLANK
+           * name: a typed one is never clobbered.
+           */
+          if (!(apartment.displayName ?? '').trim() && currentUser) {
+            const derived = familyNameFromFolderName(n);
+            if (derived) {
+              setFamilyName(derived);
+              updateApartment(apartment.id, { displayName: derived }, currentUser);
+              onToast(`${ui.familyName}: ${derived}`);
+            }
+          }
+        }).catch(() => {});
       }
 
       if (!existingFileId && apartment.driveLink && backendConfigured) {
@@ -785,7 +805,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   }
 
   async function autoFillFamilyNameFromFolder(folderId: string) {
-    if (isGeneralProject) return;
+    // The Job Board is no longer skipped (owner, 2026-08-24): its jobs ARE
+    // client folders named "Family, First - …", exactly like the buildings' —
+    // the old guard was why pasting a Drive link on a board job filled nothing.
     const folderName = await getFolderNameViaBackend(folderId);
     if (!folderName) return;
     const derived = familyNameFromFolderName(folderName);
@@ -1483,6 +1505,18 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     placeholder={ui.addressLabel}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                   />
+                  {/* The plan usually knows the address — read it off the
+                      sheet's own text, with the cutout behind the eye so the
+                      words are confirmed against the drawing before Use. */}
+                  <PlanAddressSuggest
+                    fileId={shownPlanId ?? detectedPdfId}
+                    address={addressLocal}
+                    onUse={v => {
+                      setAddressLocal(v);
+                      if (currentUser) updateApartment(apartment!.id, { address: v }, currentUser);
+                      onToast(`${ui.addressLabel}: ${v}`);
+                    }}
+                  />
                 </div>
                 <div className="min-w-0">
                   <label className="block text-[10px] font-medium text-gray-500 mb-1">Phone</label>
@@ -1755,7 +1789,14 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     <span className="flex items-center gap-1.5 text-[10.5px] text-gray-400 flex-wrap">
                       <DriveStatus job={apartment} />
                       {driveLink
-                        ? (detectedPdfId ? 'Plans found' : fetchingPdf ? 'Looking for plans…' : 'No plans in this folder yet')
+                        ? (detectedPdfId ? 'Plans found'
+                          : fetchingPdf ? 'Looking for plans…'
+                          /* An access failure must not read as an empty folder —
+                             that is exactly how a Leads-tree job "had no plans"
+                             while the plan sat right there in Drive. */
+                          : planSet.problem === 'unreachable'
+                            ? 'Drive would not let the app read this folder — check it is shared with the service account'
+                            : 'No plans in this folder yet')
                         : 'Nothing linked'}
                       {/* The deep status, back where it used to live — on the
                           Drive row — with the refresh at the end of it. */}
