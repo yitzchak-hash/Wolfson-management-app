@@ -3994,3 +3994,26 @@ under a held +, chip appears/says old → new/goes by itself, pattern draws and
 dismisses. `tvcrash` and `tvscreens` stay green. tvsize's own trap: the
 no-Firebase container is exactly where the old URL-param fallback bit, so a
 "chip never appears" failure here means setBoost stopped writing the setting.
+
+---
+
+# v2 — the paper meets the top bar
+
+## OWNER REFINEMENT (2026-08-24, the two-screenshots message)
+The TOP pin is the VIEWPORT'S OWN TOP, not the chrome's bottom edge: the
+board's paper runs all the way up to the white app bar, and the floating
+buttons sit ON the paper. What keeps content out from under them is
+`settleDrop`'s invisible keep-clear band (the chrome's measured bottom,
+translated into world coordinates per view), never a strip of grey desk held
+open above the board. In `clampPanRef`: `yMax = freeT ? loose : 0`; `hr`
+survives only in the min-visibility bound (`yMin`), because a kept bite of
+board hidden under the buttons is not a visible bite. `homePan` is `{0, 0}`,
+and `zoomCentre` anchors at the viewport's own top-left again — the anchor
+must always be the point the clamp allows, or the first press snaps the board
+by exactly the disagreement. Note the consequence at home view: the chrome
+line in WORLD coordinates is now ~90–170 units (it used to be ~0 because the
+world started below the chrome), so `settleDrop` floors new content there —
+old content placed at small world y sits under the buttons until dragged out.
+`board.mjs` / `round20` / `round25` / `round11` / `deexpand` all hold under
+the new contract without edits — they assert "no grey above/left", which the
+higher pin only strengthens.

@@ -30,6 +30,21 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-09-10',
+    title: 'The paper meets the top bar',
+    items: [
+      {
+        title: 'No more grey strip above the board',
+        body: 'The board’s paper now runs all the way up to the white bar — '
+          + 'the floating buttons sit on the paper, not on a band of grey desk '
+          + 'held open above it. An invisible margin at the top keeps tiles '
+          + 'and widgets from ever landing underneath the buttons, so the '
+          + 'space is protected without being visible.',
+        demo: 'zoom',
+      },
+    ],
+  },
+  {
     date: '2026-09-09',
     title: 'The TV size dial finally moves the picture',
     items: [

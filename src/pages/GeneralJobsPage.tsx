@@ -1330,20 +1330,16 @@ export function GeneralJobsPage() {
     const r = viewportRef.current?.getBoundingClientRect();
     if (!r) return;
     /**
-     * The anchor is the HEADER'S BOTTOM EDGE, not the viewport's top.
-     *
-     * The clamp pins a board to the first line BELOW the floating chrome (so
-     * nothing can hide under it), while the viewport's own top is 70-odd
-     * pixels higher. Anchoring at the viewport top therefore aimed the zoom at
-     * a point the clamp would not allow, and the first press snapped the whole
-     * board down by exactly that gap — the owner's "it moves the canvas down".
-     * Anchoring where the board is actually pinned means the corner you look
-     * at holds still and the new room opens down and to the right.
+     * The anchor is wherever the board is PINNED — which, since the paper
+     * runs flush to the top (the owner's two-screenshots refinement), is the
+     * viewport's own top-left again. The rule behind it is unchanged: anchor
+     * the zoom at a point the clamp will not allow and the first press snaps
+     * the whole board by exactly the disagreement. When the anchor and the
+     * pin agree, the corner you organise from holds still and new room opens
+     * down and to the right.
      */
-    const hb = headerBarRef.current?.getBoundingClientRect();
-    const anchorY = hb && viewMode !== 'stages' ? Math.max(r.top, hb.bottom + 6) : r.top;
-    zoomAt(r.left, anchorY, dir);
-  }, [zoomAt, viewMode]);
+    zoomAt(r.left, r.top, dir);
+  }, [zoomAt]);
 
   const deleteRef = useRef<() => void>(() => {});
   const openSearchRef = useRef<() => void>(() => {});
@@ -4628,9 +4624,19 @@ export function GeneralJobsPage() {
     const xMax = freeL ? vp.w - Math.min(VIS, w) : 0;
     // RIGHT open: desk may show, with a bite of board always kept on screen.
     const xMin = Math.min(xMax, Math.min(VIS, w) - w);
-    // TOP pinned flush at the chrome's edge, unless unlocked.
-    const yMax = freeT ? vp.h - Math.min(VIS, h) : hr;
-    // BOTTOM open: same min-visibility rule as the right.
+    /**
+     * OWNER REFINEMENT (2026-08-24, the two-screenshots message): the TOP pin
+     * is the VIEWPORT'S OWN TOP, not the chrome's bottom edge. The paper runs
+     * all the way up to the white app bar and the floating buttons sit ON it;
+     * what keeps content out from under them is the invisible margin at the
+     * top of the paper (settleDrop's keep-clear band), never a strip of grey
+     * desk held open above the board. `hr` survives only in the
+     * min-visibility bound below — a bite of board hidden under the buttons
+     * is not a visible bite.
+     */
+    const yMax = freeT ? vp.h - Math.min(VIS, h) : 0;
+    // BOTTOM open: same min-visibility rule as the right, measured below the
+    // chrome so the kept bite is actually seen.
     const yMin = Math.min(yMax, hr + Math.min(VIS, h) - h);
     return {
       x: Math.max(xMin, Math.min(xMax, p.x)),
@@ -4646,13 +4652,10 @@ export function GeneralJobsPage() {
    */
   const homePan = (atZoom?: number): { x: number; y: number } => {
     void atZoom;
-    const hb = headerBarRef.current?.getBoundingClientRect();
-    const vr = viewportRef.current?.getBoundingClientRect();
-    const hr = hb && vr && viewMode !== 'stages'
-      ? Math.max(0, Math.min(hb.bottom - vr.top, vp.h * 0.4)) : 0;
-    // Flush: the world's own corner at the chrome's edge. The margin is PAPER
-    // inside the world now, not a strip of desk held open beside it.
-    return { x: 0, y: hr };
+    // Flush: the paper's own corner at the viewport's corner — it runs up
+    // under the floating buttons to meet the white bar. Content stays clear
+    // of them through settleDrop's invisible top margin, not through the pan.
+    return { x: 0, y: 0 };
   };
   homePanRef.current = homePan;
 
