@@ -930,6 +930,39 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
                     {c.photosOptional ? 'photos optional' : 'photos required'}
                   </button>
                 </Tooltip>
+                {/* The buildings, on the row (the owner's ask): one press
+                    gives this worker the FULL diagrams — every unit, stage
+                    colours, the building picker — not just the units he has
+                    work in. It writes the same two permission switches the
+                    fifteen-switch panel edits, following the override rule:
+                    back to what the level says REMOVES the override. */}
+                {(() => {
+                  const eff = permsOf(c, workerLevels);
+                  const on = !!(eff.seeDiagrams && eff.seeAllApartments);
+                  const level = workerLevels.find(l => l.id === (c.levelId ?? DEFAULT_NEW_WORKER_LEVEL));
+                  const toggle = () => {
+                    const next = { ...(c.perms ?? {}) };
+                    for (const key of ['seeDiagrams', 'seeAllApartments'] as const) {
+                      const fromLevel = !!level?.perms?.[key];
+                      if (!on === fromLevel) delete next[key];
+                      else next[key] = !on;
+                    }
+                    updateContractor(c.id, { perms: next });
+                  };
+                  return (
+                    <Tooltip text={on
+                      ? 'This worker sees the full building diagrams — every unit, with the building picker'
+                      : 'This worker sees only the units he has work in'}>
+                      <button data-diagrams-toggle onClick={toggle}
+                        className={`text-[11px] font-semibold px-2 py-1 rounded-lg border ${
+                          on
+                            ? 'border-sky-200 bg-sky-50 text-sky-700'
+                            : 'border-gray-200 text-gray-400'}`}>
+                        {on ? 'building diagrams' : 'own units only'}
+                      </button>
+                    </Tooltip>
+                  );
+                })()}
                 <button
                   onClick={() => setOpenPerms(o => (o === c.id ? null : c.id))}
                   className="text-[11px] font-semibold"

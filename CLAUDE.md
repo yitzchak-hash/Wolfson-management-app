@@ -4399,3 +4399,64 @@ writing the field, the unreachable-folder sentence, and the Waze href.
 The api shortcut/pagination logic itself cannot be exercised from here (the
 dev server has no serverless runtime) — syntax-checked and code-reviewed;
 watch the first Leads folder on production.
+
+---
+
+# v2 — the portal round (Close Job, the weekly calendar, the diagrams switch)
+
+## Closing a job is a SCREEN, not a grey button
+The task sheet's picture prompt ("press here to add pictures… required
+before complete") and the old Mark-as-Complete button are both gone. An open
+task shows one green **Close job** button (`data-close-job`, in the media
+empty-state and in the sticky footer); pressing it opens the CLOSING SCREEN
+(`data-closing-panel`) in the footer: the headline "Add at least 3 pictures
+to close the job" (hidden for `photosOptional` workers), the add-pictures
+button with a live `n/3` count pill (`data-close-count`, amber → green), the
+note row (paperclip, voice memo, text, send), the final **Close job** press
+(`data-close-now`, locked until the count is met) and a small Cancel back
+link. The finish-early ask still sits on top of the final press when days
+remain. `MIN_CLOSE_MEDIA = 3`; the old one-picture rule and the are-you-sure
+step are gone — the closing screen IS the deliberate act. `closing` resets
+whenever the selected task changes.
+
+**The sheet re-resolves its task from the LIVE list**
+(`contractorAssignments.find(x => x.id === selectedAssignment.id) ?? …`).
+The state holds the object captured at open, so completing the task never
+reached the open sheet — the closing screen stood over a finished job and
+only closing and reopening the sheet showed the truth. Any sheet that
+renders from a stored record object needs this re-resolve.
+
+## The portal calendar is two big bubbles, Weekly first
+`calMode` ('week' default) — two `data-cal-mode` pill buttons on top.
+Monthly is the existing TaskCalendar grid; Weekly (`data-cal-week`) is a
+day-LIST of the current week: seven cards with big date/weekday headers
+(today ringed), each task a tappable row that opens its sheet, ‹ ›
+arrows walking whole weeks and the tappable range label snapping back to
+this week. Workers confused the month grid with the notebook — the list
+reads like a schedule, not a board.
+
+## All leads the filter row
+`filterOptions` order is All · Yesterday · Today · Tomorrow · This Week.
+
+## The planner sheet scrolls sideways instead of smushing
+The portal's planner tab wraps `PlannerWidget` in an `overflow-x-auto` box
+with a `minWidth: 640` inner div — at 390px the week keeps its shape and the
+thumb pans it. The map tab's `BuildingDiagram` now takes `phone={usePhone()}`
+so a phone gets the taller phone cells.
+
+## The building-diagrams quick switch (Settings → Workers)
+Each worker row carries `data-diagrams-toggle`: a pill showing the EFFECTIVE
+state (`permsOf(c, workerLevels)` — level first, overrides on top) as
+"building diagrams" (sky) or "own units only" (grey). One press writes BOTH
+`seeDiagrams` and `seeAllApartments` through the standing override rule — an
+override equal to the level's own answer is REMOVED, not stored. New
+optional ContractorUiStrings: `closeJobBtn`, `addThreePictures`,
+`weeklyLabel`, `monthlyLabel` (optional-with-fallback, the standing rule).
+
+Harness: `scratchpad/portalround.mjs` (18 checks). Its traps: portal tabs
+are PERMISSION-GATED, so the seed worker needs `perms: { seeSchedule: true,
+seePlanner: true }` or Calendar/Planner simply are not drawn; the completion
+celebration (z-220) swallows clicks until dismissed by a tap; the sheet
+closes by a backdrop tap, not Escape; and the settings tab says "Workers"
+(the words-only rename). `multiday.mjs` re-encoded to the new close steps
+(`data-close-job` → `data-close-now`) and stays green.

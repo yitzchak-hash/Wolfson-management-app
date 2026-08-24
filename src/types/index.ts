@@ -1229,6 +1229,11 @@ export interface ContractorUiStrings {
   finishEarlyQuestion?: string;
   finishEarlyYes?: string;
   finishEarlyNo?: string;
+  /** The Close-job flow and the calendar bubbles — optional, same rule. */
+  closeJobBtn?: string;
+  addThreePictures?: string;
+  weeklyLabel?: string;
+  monthlyLabel?: string;
 }
 
 export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
@@ -1285,6 +1290,10 @@ export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   finishEarlyQuestion: 'Are you completely finished, or do you need to come back?',
   finishEarlyYes: 'I finished everything — cross those days off',
   finishEarlyNo: "No — I'm coming back",
+  closeJobBtn: 'Close job',
+  addThreePictures: 'Add at least 3 pictures to close the job',
+  weeklyLabel: 'Weekly',
+  monthlyLabel: 'Monthly',
   calendarTab: 'Calendar',
 };
 
@@ -1342,6 +1351,10 @@ export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   finishEarlyQuestion: 'סיימת לגמרי, או שתצטרך לחזור?',
   finishEarlyYes: 'סיימתי הכול — אפשר למחוק את הימים',
   finishEarlyNo: 'לא — אני אחזור',
+  closeJobBtn: 'סגירת עבודה',
+  addThreePictures: 'הוסיפו לפחות 3 תמונות כדי לסגור את העבודה',
+  weeklyLabel: 'שבועי',
+  monthlyLabel: 'חודשי',
   calendarTab: 'לוח שנה',
 };
 

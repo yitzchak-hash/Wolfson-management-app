@@ -5,7 +5,8 @@ import { ContractorAssignment, ContractorPhoto, DEFAULT_CONTRACTOR_UI_STRINGS, H
 import { daysOf, futureDaysOf } from '../data/taskDays';
 import { PlanPinOverlay } from '../components/apartment/PlanPinOverlay';
 import { printSheet, printEsc } from '../data/printing';
-import { format, isPast, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
+import { format, isPast, parseISO, differenceInCalendarDays, startOfDay, startOfWeek, addDays as addDaysFns } from 'date-fns';
+import { usePhone } from '../data/usePhone';
 import {
   Camera, CheckCircle2, Clock, Building2, CalendarDays, FileText,
   Plus, Send, AlertCircle, X, Play, File as FileIcon, MapPin,
@@ -399,6 +400,20 @@ export function ContractorPortal() {
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
   /** The days a multi-day task still has ahead when the worker closes it. */
   const [finishAsk, setFinishAsk] = useState<string[] | null>(null);
+  /**
+   * The CLOSING screen (the owner's flow, 2026-08-24): the task sheet shows
+   * one big "Close job" button; pressing it opens this — "add at least 3
+   * pictures", the add button, the paperclip, the voice memo and the note all
+   * in one place, and the FINAL Close job press at the bottom. Only then do
+   * the finish-early ask and completion run.
+   */
+  const [closing, setClosing] = useState(false);
+  /** How many pictures a closing needs. photosOptional workers skip it. */
+  const MIN_CLOSE_MEDIA = 3;
+  /** Weekly is what a worker plans his van by; the month grid is one press away. */
+  const [calMode, setCalMode] = useState<'week' | 'month'>('week');
+  const [calWeekOff, setCalWeekOff] = useState(0);
+  const phonePortal = usePhone();
   const [showHistory, setShowHistory] = useState(false);
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const noteAttachRef = useRef<HTMLInputElement>(null);
@@ -731,20 +746,27 @@ export function ContractorPortal() {
     setNoteAttachments([]);
   }
 
+  /** A new task selection always starts OUTSIDE the closing screen. */
+  useEffect(() => { setClosing(false); }, [selectedAssignment?.id]);
+
   function handleComplete() {
     if (!selectedAssignment) return;
-    // Photos gate this unless the office relaxed it for this worker.
-    if (getMedia(selectedAssignment.id).length === 0 && !contractor?.photosOptional) return;
+    // At least three pictures close a job (the owner's rule) — unless the
+    // office relaxed photos for this worker.
+    if (getMedia(selectedAssignment.id).length < MIN_CLOSE_MEDIA && !contractor?.photosOptional) return;
     /**
      * FINISHING EARLY (the owner's locked decision): a multi-day task closed
      * while it still has days AHEAD asks the worker — after the photos, in
      * his own language, in big simple words — whether he is completely done.
      * Yes crosses the remaining days off (they stay on the calendar, struck
      * through, as the record); No cancels the close and the task stays open.
+     *
+     * The old are-you-sure step is gone: the closing screen IS the deliberate
+     * act now, so the final press completes outright.
      */
     const future = futureDaysOf(selectedAssignment.days, format(new Date(), 'yyyy-MM-dd'));
     if (future.length) { setFinishAsk(future); return; }
-    setShowCompleteConfirm(true);
+    handleConfirmComplete();
   }
 
   function handleConfirmComplete() {
@@ -811,17 +833,19 @@ export function ContractorPortal() {
   const selNotes = selectedAssignment ? getNotes(selectedAssignment.id) : [];
   const selOfficeNotes = selNotes.filter(n => n.authorType === 'office');
   const selContractorNotes = selNotes.filter(n => n.authorType === 'contractor');
-  // Photos gate completion unless the office relaxed it for this worker.
-  const canComplete = (selMedia.length > 0 || !!contractor?.photosOptional)
+  // Three pictures close a job, unless the office relaxed it for this worker.
+  const canComplete = (selMedia.length >= MIN_CLOSE_MEDIA || !!contractor?.photosOptional)
     && !selectedAssignment?.completedAt;
 
   type FilterKey = 'yesterday' | 'today' | 'tomorrow' | 'week' | 'all';
+  // ALL leads, per the owner — the everything view is the anchor the eye
+  // returns to, and at the end of the row it kept being hunted for.
   const filterOptions: { key: FilterKey; label: string; color: string }[] = [
+    { key: 'all',       label: s.filterAll,        color: '#1e3a5f' },
     { key: 'yesterday', label: s.filterYesterday, color: '#6b7280' },
     { key: 'today',     label: s.filterToday,     color: '#f97316' },
     { key: 'tomorrow',  label: s.filterTomorrow,  color: '#f59e0b' },
     { key: 'week',      label: s.filterThisWeek,  color: '#3b82f6' },
-    { key: 'all',       label: s.filterAll,        color: '#1e3a5f' },
   ];
 
   return (
@@ -1356,13 +1380,105 @@ export function ContractorPortal() {
         const wdLabels = s.isRtl
           ? ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳']
           : undefined;
+        /**
+         * WEEKLY first (the owner's ask — the month grid kept being mistaken
+         * for the notebook): the current week as a plain list of days, each
+         * with its tasks, big enough for a thumb. The month grid is the other
+         * bubble. Multi-day tasks already arrive one event per day, so the
+         * week view needs no arithmetic of its own.
+         */
+        const byDay = new Map<string, CalendarEvent[]>();
+        for (const ev of calEvents) {
+          const arr = byDay.get(ev.date) ?? [];
+          arr.push(ev); byDay.set(ev.date, arr);
+        }
+        const weekStart = addDaysFns(startOfWeek(new Date()), calWeekOff * 7);
+        const weekDays = Array.from({ length: 7 }, (_, i) => addDaysFns(weekStart, i));
+        const todayKey = format(new Date(), 'yyyy-MM-dd');
         return (
-          <div className="flex-1 overflow-auto px-3 py-4">
-            <TaskCalendar
-              events={calEvents}
-              weekdayLabels={wdLabels}
-              todayLabel={s.filterToday}
-            />
+          <div className="flex-1 overflow-auto px-3 py-3">
+            {/* The two bubbles, big, on top. */}
+            <div className="flex items-center gap-2 mb-3">
+              {([
+                ['week', s.weeklyLabel || (s.isRtl ? 'שבועי' : 'Weekly')],
+                ['month', s.monthlyLabel || (s.isRtl ? 'חודשי' : 'Monthly')],
+              ] as const).map(([mode, label]) => (
+                <button key={mode} data-cal-mode={mode}
+                  onClick={() => setCalMode(mode)}
+                  className="flex-1 py-2.5 rounded-full text-base font-bold transition-all active:scale-[0.98]"
+                  style={calMode === mode
+                    ? { backgroundColor: '#1e3a5f', color: '#fff' }
+                    : { backgroundColor: '#fff', color: '#475569', border: '1px solid #e2e8f0' }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            {calMode === 'month' ? (
+              <TaskCalendar
+                events={calEvents}
+                weekdayLabels={wdLabels}
+                todayLabel={s.filterToday}
+              />
+            ) : (
+              <div data-cal-week>
+                <div className="flex items-center gap-2 mb-2">
+                  <button onClick={() => setCalWeekOff(v => v - 1)} aria-label="Previous week"
+                    className="w-9 h-9 rounded-xl border border-gray-200 bg-white font-black text-gray-500">‹</button>
+                  <button onClick={() => setCalWeekOff(0)}
+                    className="flex-1 text-center text-sm font-bold text-gray-700">
+                    {format(weekStart, 'd MMM')} – {format(addDaysFns(weekStart, 6), 'd MMM')}
+                    {calWeekOff !== 0 && (
+                      <span className="block text-[10px] font-semibold text-[#4aa8d8]">{s.filterToday} ↺</span>
+                    )}
+                  </button>
+                  <button onClick={() => setCalWeekOff(v => v + 1)} aria-label="Next week"
+                    className="w-9 h-9 rounded-xl border border-gray-200 bg-white font-black text-gray-500">›</button>
+                </div>
+                <div className="space-y-2">
+                  {weekDays.map(d => {
+                    const key = format(d, 'yyyy-MM-dd');
+                    const evs = byDay.get(key) ?? [];
+                    const isToday = key === todayKey;
+                    return (
+                      <div key={key} className={`rounded-2xl border bg-white overflow-hidden ${
+                        isToday ? 'border-[#4aa8d8]' : 'border-gray-100'}`}>
+                        <div className="flex items-baseline gap-2 px-3 py-1.5"
+                          style={{ backgroundColor: isToday ? '#e0f2fe' : '#f8fafc' }}>
+                          <span className="font-black tabular-nums" style={{ fontSize: 16, color: isToday ? '#0369a1' : '#334155' }}>
+                            {format(d, 'd')}
+                          </span>
+                          <span className="text-xs font-bold" style={{ color: isToday ? '#0369a1' : '#64748b' }}>
+                            {format(d, 'EEEE')}
+                          </span>
+                          {isToday && (
+                            <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-white text-[#0369a1]">
+                              {s.filterToday}
+                            </span>
+                          )}
+                        </div>
+                        {evs.length === 0 ? (
+                          <div className="px-3 py-2 text-xs text-gray-300">—</div>
+                        ) : evs.map(ev => (
+                          <button key={ev.id} onClick={ev.onClick}
+                            className="w-full text-left px-3 py-2.5 border-t border-gray-50 active:bg-gray-50">
+                            <span className="flex items-start gap-2">
+                              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1"
+                                style={{ backgroundColor: ev.color }} />
+                              <span className="flex-1 min-w-0">
+                                <span className={`block text-sm font-bold text-gray-800 ${ev.completed ? 'line-through opacity-50' : ''}`}>
+                                  {ev.title}
+                                </span>
+                                <span className="block text-xs text-gray-500 truncate">{ev.subtitle}</span>
+                              </span>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         );
       })()}
@@ -1484,7 +1600,11 @@ export function ContractorPortal() {
                   showShinuiBadge={false}
                   highlightedApartmentIds={filteredAptIds}
                   aptSubLabels={aptSubLabels}
-                  compact
+                  /* On a phone, the ADMIN'S phone diagram — taller rows,
+                     bigger type, wrapped stage names — the same drawing the
+                     office holds, per the owner. Desktop keeps compact. */
+                  compact={!phonePortal}
+                  phone={phonePortal}
                 />
               </>
             )}
@@ -1502,8 +1622,13 @@ export function ContractorPortal() {
                 {s.isRtl ? 'אין לוח משמרות עדיין.' : 'Nobody has made a planner yet.'}
               </p>
             ) : (
-              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden"
+              <div className="bg-white rounded-2xl border border-gray-200 overflow-x-auto"
                 style={{ height: 'calc(100vh - 220px)', minHeight: 380 }}>
+                {/* A phone is narrower than a week: the sheet keeps its real
+                    width and SCROLLS sideways instead of smushing five days
+                    into columns a word wide — the same rule every wide thing
+                    in the app follows. */}
+                <div style={{ minWidth: 640, height: '100%' }}>
                 {/* readOnly, and not as a setting — a worker looking at the
                     week must never be one mis-tap from rearranging it. */}
                 <PlannerWidget
@@ -1518,6 +1643,7 @@ export function ContractorPortal() {
                   openJob={() => {}}
                   readOnly
                 />
+                </div>
               </div>
             )}
           </div>
@@ -1526,7 +1652,11 @@ export function ContractorPortal() {
 
       {/* Assignment detail bottom sheet */}
       {selectedAssignment && (() => {
-        const a = selectedAssignment;
+        /* Re-resolve from the LIVE list — the state holds the object captured
+           at open, so closing the task (or any edit) would otherwise never
+           reach the open sheet and the closing screen would stand over a
+           finished job. */
+        const a = contractorAssignments.find(x => x.id === selectedAssignment.id) ?? selectedAssignment;
         const apt = getApt(a.apartmentId);
         const stage = getStage(a.stageId);
         const isOverdue = a.dueDate && !a.completedAt && isPast(parseISO(a.dueDate));
@@ -1815,12 +1945,24 @@ export function ContractorPortal() {
                   )}
 
                   {selMedia.length === 0 ? (
-                    <button onClick={() => mediaInputRef.current?.click()}
-                      className="w-full border-2 border-dashed border-gray-200 rounded-xl py-8 flex flex-col items-center gap-2 text-gray-400 hover:border-[#4aa8d8] hover:text-[#4aa8d8] transition-all">
-                      <Camera size={28} />
-                      <span className="text-sm font-medium">{s.tapToAddMedia}</span>
-                      <span className="text-xs">{s.requiredBeforeComplete}</span>
-                    </button>
+                    !a.completedAt && !closing ? (
+                      /* The owner's flow: the old "press here to add
+                         pictures…" prompt IS the Close job button now — one
+                         press opens the closing screen where the pictures,
+                         the memo and the note all live. */
+                      <button data-close-job onClick={() => setClosing(true)}
+                        className="w-full rounded-xl py-6 flex flex-col items-center gap-2 text-white font-bold transition-all active:scale-[0.98]"
+                        style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}>
+                        <CheckCircle2 size={26} />
+                        <span className="text-base">{s.closeJobBtn || (s.isRtl ? 'סגירת עבודה' : 'Close job')}</span>
+                      </button>
+                    ) : (
+                      <button onClick={() => mediaInputRef.current?.click()}
+                        className="w-full border-2 border-dashed border-gray-200 rounded-xl py-8 flex flex-col items-center gap-2 text-gray-400 hover:border-[#4aa8d8] hover:text-[#4aa8d8] transition-all">
+                        <Camera size={28} />
+                        <span className="text-sm font-medium">{s.tapToAddMedia}</span>
+                      </button>
+                    )
                   ) : (
                     <div className="grid grid-cols-3 gap-2">
                       {selMedia.map((m, i) => (
@@ -2006,13 +2148,6 @@ export function ContractorPortal() {
               <div className="px-5 py-4 border-t border-gray-100 flex-shrink-0 bg-white">
                 {!a.completedAt && (
                   <>
-                    {selMedia.length === 0 && (
-                      <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 mb-3">
-                        <AlertCircle size={14} />
-                        {s.addMediaBeforeComplete}
-                      </div>
-                    )}
-
                     {finishAsk ? (
                       /* The finish-early ask — big simple words in the
                          worker's own language, only reachable after the
@@ -2047,35 +2182,95 @@ export function ContractorPortal() {
                           {s.finishEarlyNo || (s.isRtl ? 'לא — אני אחזור' : "No — I'm coming back")}
                         </button>
                       </div>
-                    ) : showCompleteConfirm ? (
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium text-gray-800 text-center">{s.markCompletePrompt}</p>
-                        <p className="text-xs text-gray-500 text-center">{s.markCompleteHint}</p>
-                        <div className="flex gap-2 mt-2">
-                          <button onClick={() => setShowCompleteConfirm(false)}
-                            className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">
-                            {s.cancel}
+                    ) : closing ? (
+                      /**
+                       * THE CLOSING SCREEN — everything a close needs in one
+                       * place: the picture count against the rule, the add
+                       * button, the paperclip, the voice memo and the note,
+                       * and the FINAL Close job press. The old are-you-sure
+                       * step is gone; this screen is the deliberate act.
+                       */
+                      <div className="space-y-3" data-closing-panel>
+                        {!contractor?.photosOptional && (
+                          <p className="text-center font-extrabold text-gray-800"
+                            style={{ fontSize: 16, lineHeight: 1.35 }}>
+                            {s.addThreePictures || (s.isRtl
+                              ? 'הוסיפו לפחות 3 תמונות כדי לסגור את העבודה'
+                              : 'Add at least 3 pictures to close the job')}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => mediaInputRef.current?.click()}
+                            disabled={uploading}
+                            className="flex-1 py-3 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 active:scale-[0.98]"
+                            style={{ backgroundColor: '#1e3a5f' }}>
+                            <Camera size={17} />
+                            {uploading ? s.uploading : s.tapToAddMedia}
                           </button>
-                          <button onClick={handleConfirmComplete}
-                            className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2"
-                            style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}>
-                            <CheckCircle2 size={16} /> {s.confirmComplete}
+                          {!contractor?.photosOptional && (
+                            <span data-close-count
+                              className="flex-shrink-0 px-3 py-2 rounded-xl text-sm font-black tabular-nums"
+                              style={selMedia.length >= MIN_CLOSE_MEDIA
+                                ? { backgroundColor: '#dcfce7', color: '#15803d' }
+                                : { backgroundColor: '#fef3c7', color: '#92400e' }}>
+                              {selMedia.length}/{MIN_CLOSE_MEDIA}
+                            </span>
+                          )}
+                        </div>
+                        {/* A word with the pictures — the same note thread as
+                            always, its paperclip and memo included. */}
+                        <div className="flex gap-2 items-end">
+                          <button
+                            onClick={() => noteAttachRef.current?.click()}
+                            className="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 text-gray-400 hover:text-[#1e3a5f] hover:border-[#1e3a5f] flex-shrink-0"
+                            title="Attach file">
+                            <Paperclip size={15} />
+                          </button>
+                          <VoiceRecorderButton onRecorded={handleNoteVoiceMemo} title={s.addNote} />
+                          <input
+                            value={noteText}
+                            onChange={e => setNoteText(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSendNote()}
+                            placeholder={s.addNote}
+                            className="flex-1 min-w-0 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                          />
+                          <button onClick={handleSendNote} disabled={!noteText.trim() && noteAttachments.length === 0}
+                            className="w-10 h-10 flex items-center justify-center rounded-xl text-white disabled:opacity-40 flex-shrink-0"
+                            style={{ backgroundColor: '#1e3a5f' }}>
+                            <Send size={16} />
                           </button>
                         </div>
+                        <button
+                          data-close-now
+                          onClick={handleComplete}
+                          disabled={!canComplete || completing}
+                          className="w-full py-3.5 rounded-xl text-base font-bold tracking-wide transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                          style={{
+                            background: canComplete ? 'linear-gradient(135deg, #22c55e, #16a34a)' : undefined,
+                            backgroundColor: !canComplete ? '#e5e7eb' : undefined,
+                            color: canComplete ? 'white' : '#9ca3af',
+                          }}>
+                          <CheckCircle2 size={18} />
+                          {completing ? s.markingComplete
+                            : (s.closeJobBtn || (s.isRtl ? 'סגירת עבודה' : 'Close job'))}
+                        </button>
+                        <button onClick={() => setClosing(false)}
+                          className="w-full text-center text-xs font-semibold text-gray-400 hover:text-gray-600">
+                          {s.cancel}
+                        </button>
                       </div>
                     ) : (
+                      /* One button. Pressing it opens the closing screen —
+                         it never sits greyed-out wondering why. */
                       <button
-                        onClick={handleComplete}
-                        disabled={!canComplete || completing}
-                        className="w-full py-3.5 rounded-xl text-sm font-bold tracking-wide transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                        style={{
-                          background: canComplete ? 'linear-gradient(135deg, #22c55e, #16a34a)' : undefined,
-                          backgroundColor: !canComplete ? '#e5e7eb' : undefined,
-                          color: canComplete ? 'white' : '#9ca3af',
-                        }}
+                        data-close-job
+                        onClick={() => setClosing(true)}
+                        className="w-full py-3.5 rounded-xl text-base font-bold tracking-wide transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-white"
+                        style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}
                       >
                         <CheckCircle2 size={18} />
-                        {completing ? s.markingComplete : s.markAsComplete}
+                        {s.closeJobBtn || (s.isRtl ? 'סגירת עבודה' : 'Close job')}
                       </button>
                     )}
                   </>

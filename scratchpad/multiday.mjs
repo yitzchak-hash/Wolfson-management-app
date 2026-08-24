@@ -146,7 +146,10 @@ check(cardText.includes('Mon 24 Aug') && cardText.includes('Wed 26 Aug') && card
 check(cardText.includes('Today'), 'and it reads Today — today is one of its days');
 await page.locator('button:has-text("Close the ceiling")').first().click();
 await page.waitForTimeout(600);
-await page.click('button:has-text("Mark as Complete")');
+// The new flow: Close job opens the closing screen; the final press closes.
+await page.locator('[data-close-job]').first().click();
+await page.waitForTimeout(300);
+await page.locator('[data-close-now]').click();
 await page.waitForTimeout(400);
 const ask = page.locator('[data-finish-early]');
 check(await ask.count() === 1, 'closing with days ahead raises the big-words ask');
