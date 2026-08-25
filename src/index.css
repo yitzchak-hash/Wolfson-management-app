@@ -655,3 +655,37 @@ main > * { min-width: 0; }
 @media (prefers-reduced-motion: reduce) {
   .pending-glow { animation: none; }
 }
+
+/* ── The Arrange row's hover animation ──
+   Six specks consolidating into a 3×2 grid, looping — the approved Magnific
+   manner, drawn rather than filmed so it cannot rot. */
+.arr-tip {
+  position: absolute; left: 100%; top: -6px; margin-left: 8px; z-index: 60;
+  display: flex; align-items: center; gap: 8px;
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .18); padding: 8px;
+}
+.arr-tip-words { font-size: 11px; color: #6b7280; width: 110px; text-align: left; }
+.arr-anim {
+  position: relative; width: 64px; height: 44px; background: #fff;
+  border: 1px solid #e5e7eb; border-radius: 8px; flex-shrink: 0;
+}
+.arr-anim i {
+  position: absolute; width: 12px; height: 8px; border-radius: 2px;
+  background: #4aa8d8; opacity: .9;
+  animation: arrConsolidate 2.2s ease-in-out infinite;
+}
+.arr-anim i:nth-child(1) { --sx: 4px;  --sy: 3px;  --tx: 12px; --ty: 12px; }
+.arr-anim i:nth-child(2) { --sx: 44px; --sy: 2px;  --tx: 26px; --ty: 12px; }
+.arr-anim i:nth-child(3) { --sx: 20px; --sy: 30px; --tx: 40px; --ty: 12px; }
+.arr-anim i:nth-child(4) { --sx: 48px; --sy: 32px; --tx: 12px; --ty: 24px; }
+.arr-anim i:nth-child(5) { --sx: 2px;  --sy: 20px; --tx: 26px; --ty: 24px; }
+.arr-anim i:nth-child(6) { --sx: 34px; --sy: 16px; --tx: 40px; --ty: 24px; }
+@keyframes arrConsolidate {
+  0%, 12%  { left: var(--sx); top: var(--sy); }
+  48%, 78% { left: var(--tx); top: var(--ty); }
+  100%     { left: var(--sx); top: var(--sy); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .arr-anim i { animation: none; left: var(--tx); top: var(--ty); }
+}

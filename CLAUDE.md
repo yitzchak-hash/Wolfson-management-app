@@ -4664,3 +4664,43 @@ widest, members centred within their row, block centred on the selection's
 old centre (Arrange) or the paste point (paste), everything stays selected.
 Verified shapes: 2→[2], 4→[2,2], 9→[3,3,3], mixed→[3,3,1]. Build it only
 when the owner approves the page.
+
+---
+
+# v2 — Arrange, built as approved
+
+## `src/data/arrangeGrid.ts` is the approved arithmetic — page and code together
+The mockup page ("The Arrange Feature" artifact) carries the same function;
+change one, change both. Tallest-first shelf pack, target √(area×1.4), a
+0.65-width overshoot tolerance (without it nine equal tiles pack two per
+row), rows centred within the widest, members centred within their row.
+Verified shapes: 2→[2], 4→[2,2], 9→[3,3,3].
+
+## On the board (`GeneralJobsPage`)
+- **Right-click ANYWHERE with a selection** shows the SELECTION menu
+  (`ctxMenu.kind: 'selection'`): "N SELECTED" header, Copy, Cut, Paste here,
+  and Arrange with the hover consolidation animation (`ArrangeMenuRow` +
+  `SelCountHeader`, module level — the declared-in-render trap; CSS
+  `.arr-anim`/`.arr-tip` in index.css, reduced-motion safe). The empty-board
+  menu appears only with nothing selected.
+- **`arrangeRef`**: lays the selection into the grid centred on its own mean
+  centre, corner through settleDrop, one `arrange` undo step, drawings
+  re-lay their points, and the selection is KEPT (the approved rule). Left
+  out: bins, arrows, locked things, attached clip art.
+- **The job and element menus** gain the header + Arrange row when multiple
+  are selected. The element menu's z-order section was relabelled ORDER so
+  two things named Arrange cannot sit in one menu.
+- **Paste lands as the TIDY BLOCK now** (supersedes "arrangement kept"):
+  `pasteRef(at?)` lays the clip into arrangeGrid centred on the clicked spot
+  (menu rows pass their world point) or the view centre (Ctrl+V). Cut-move
+  and copy-duplicate both.
+
+## In a group window (`BinBoard`)
+The job menu gains Arrange (N) when multiple are selected — pairs with
+Ctrl+A: grid onto the group's own surface via `binX`/`binY`, tracked, still
+selected.
+
+Harness: `scratchpad/arrange.mjs` (10 checks). Its lesson: the exact pack
+SHAPE depends on the mix — assert the grid's INVARIANTS (compact bands, the
+18px gaps, selection kept), not a guessed row layout; 4 tiles + 1 note
+legitimately packs [2,2,1].

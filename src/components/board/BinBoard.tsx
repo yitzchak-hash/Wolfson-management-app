@@ -10,6 +10,7 @@ import {
   Apartment, CanvasElement, binLabelOf, binKeyOf, BIN_META, relativeTime,
 } from '../../types';
 import { getBoardTheme } from '../../data/boardThemes';
+import { arrangeGrid } from '../../data/arrangeGrid';
 import { WidgetStore } from './WidgetStore';
 import { WidgetDef, WidgetCtx, WIDGET_BY_ID } from '../../data/widgets';
 import {
@@ -1549,6 +1550,36 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
             )}
             {menu.kind === 'job' && (
               <>
+                {menu.ids.length > 1 && (
+                  /* The approved Arrange, inside the group — pairs with
+                     Ctrl+A: select all the jobs, right-click, Arrange, and
+                     they lay into the tidy grid on the group's own surface,
+                     still selected. */
+                  <MenuItem icon={LayoutGrid} label={`Arrange (${menu.ids.length})`}
+                    onClick={() => {
+                      const sel = items.filter(j => menu.ids.includes(j.id) && !j.boardLocked);
+                      if (sel.length >= 2 && currentUser) {
+                        const grid = arrangeGrid(sel.map(j => ({ id: j.id, ...tileSize(j) })));
+                        let cx = 0, cy = 0;
+                        sel.forEach(j => {
+                          const i = items.findIndex(x => x.id === j.id);
+                          const p = jobPos(j, i); const s = tileSize(j);
+                          cx += p.x + s.w / 2; cy += p.y + s.h / 2;
+                        });
+                        cx /= sel.length; cy /= sel.length;
+                        const ox = Math.max(12, Math.round(cx - grid.blockW / 2));
+                        const oy = Math.max(12, Math.round(cy - grid.blockH / 2));
+                        track({ weight: 'arrange', label: `Arranged ${sel.length} in the group` }, () => {
+                          sel.forEach(j => {
+                            const p = grid.pos.get(j.id)!;
+                            updateApartment(j.id, { binX: ox + p.x, binY: oy + p.y }, currentUser);
+                          });
+                        });
+                        setSelected(new Set(sel.map(j => j.id)));
+                      }
+                      setMenu(null);
+                    }} />
+                )}
                 <MenuItem icon={Undo2} label="Put back on the board"
                   onClick={() => { menu.ids.forEach(id => moveToBin(id, null)); setMenu(null); }} />
                 <MenuItem icon={Search} label="Open the job"

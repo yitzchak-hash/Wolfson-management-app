@@ -52,6 +52,7 @@ import { renderWidget, WidgetDef, WidgetCtx, WIDGET_BY_ID, isProjection } from '
 import { JobTile, BoardNode, BoardHandlers, TILE_W, TILE_H, tileSize } from '../components/board/BoardItems';
 import { useTouchGestures, isFingerTouch } from '../hooks/useTouchGestures';
 import { detectPasteIntent, fieldForIntent, canCreateFromIntent, PasteIntent } from '../data/pasteIntent';
+import { arrangeGrid } from '../data/arrangeGrid';
 import { StrokeNib, nibDash } from '../components/board/BoardNodes';
 import { pointsBounds, fmtPoints, planErase, strokeRecord } from '../data/boardInk';
 import { EraserCursor } from '../components/board/EraserCursor';
@@ -251,10 +252,43 @@ interface ResizeState {
 
 interface LassoState { sx: number; sy: number; ex: number; ey: number }
 
+/** The "N SELECTED" strip at the top of a multi-selection menu. */
+function SelCountHeader({ n }: { n: number }) {
+  return (
+    <div className="px-4 py-1.5 text-[11px] font-bold text-gray-400 border-b border-gray-100 tracking-wide">
+      {n} SELECTED
+    </div>
+  );
+}
+
+/**
+ * The Arrange row, with its little hover animation — six specks
+ * consolidating into a tidy grid, the approved Magnific manner. Module
+ * level (the declared-in-render trap), CSS in index.css.
+ */
+function ArrangeMenuRow({ n, onClick }: { n: number; onClick: () => void }) {
+  const [tip, setTip] = useState(false);
+  return (
+    <button onClick={onClick}
+      onMouseEnter={() => setTip(true)} onMouseLeave={() => setTip(false)}
+      className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5 relative"
+      data-arrange-row>
+      <LayoutGrid size={14} className="text-gray-400" />
+      {`Arrange (${n})`}
+      {tip && (
+        <span className="arr-tip">
+          <span className="arr-anim"><i /><i /><i /><i /><i /><i /></span>
+          <span className="arr-tip-words">consolidates the selection into a tidy grid</span>
+        </span>
+      )}
+    </button>
+  );
+}
+
 interface CtxMenu {
   x: number;
   y: number;
-  kind: 'job' | 'element' | 'ghost' | 'canvas';
+  kind: 'job' | 'element' | 'ghost' | 'canvas' | 'selection';
   ids: string[];
   /** ghost only: which appearance of the job was clicked */
   ghostIndex?: number;
@@ -582,7 +616,8 @@ export function GeneralJobsPage() {
   /** The wheel listener is registered once, so it reads the tool through a ref. */
   const toolRef = useRef<BoardTool>('select');
   const copyRef = useRef<() => void>(() => {});
-  const pasteRef = useRef<() => boolean>(() => false);
+  const pasteRef = useRef<(at?: { x: number; y: number }) => boolean>(() => false);
+  const arrangeRef = useRef<() => void>(() => {});
   /** What Ctrl+C put down: whole node records, not text. */
   const boardClip = useRef<{ els: CanvasElement[]; jobs: string[]; mode: 'copy' | 'cut' }>(
     { els: [], jobs: [], mode: 'copy' });
@@ -982,64 +1017,119 @@ export function GeneralJobsPage() {
     setToast(`Cut ${n} — paste puts ${n === 1 ? 'it' : 'them'} in the middle of the screen`);
   };
 
-  pasteRef.current = () => {
+  /**
+   * ARRANGE — the approved Magnific-style consolidation. The selection lays
+   * itself into the arrangeGrid (tallest first, even gaps, centred rows),
+   * centred where the selection already was, and STAYS selected so one drag
+   * still moves the whole block. Locked things, bins, arrows and attached
+   * clip art are left out — Arrange moves things, it never resizes them.
+   */
+  arrangeRef.current = () => {
+    const els = canvasElements.filter(el => selectedElIds.has(el.id)
+      && el.type !== 'bin' && el.type !== 'arrow' && !el.locked && !el.attachedTo
+      && (el.board ?? '') === activeBoardView);
+    const jobSel = jobs.filter(j => selectedJobIds.has(j.id) && !j.boardLocked);
+    const items = [
+      ...els.map(e => ({ id: e.id, w: e.w, h: e.h })),
+      ...jobSel.map(j => ({ id: j.id, ...tileSize(j) })),
+    ];
+    if (items.length < 2) return;
+    // The block centres on the selection's own centre — the mean of member
+    // centres, live positions, so Arrange tidies IN PLACE rather than
+    // carrying the work somewhere else.
+    let cx = 0, cy = 0;
+    els.forEach(e => { const p = elPos(e); cx += p.x + p.w / 2; cy += p.y + p.h / 2; });
+    jobSel.forEach(j => {
+      const i = jobs.findIndex(x => x.id === j.id);
+      const p = jobPos(j, i); const s = tileSize(j);
+      cx += p.x + s.w / 2; cy += p.y + s.h / 2;
+    });
+    cx /= items.length; cy /= items.length;
+    const { pos, blockW, blockH } = arrangeGrid(items);
+    const corner = settleDrop(cx - blockW / 2, cy - blockH / 2);
+    const spotOf = (id: string) => {
+      const p = pos.get(id)!;
+      return { x: Math.round(corner.x + p.x), y: Math.round(corner.y + p.y) };
+    };
+    track({ weight: 'arrange', label: `Arranged ${items.length} into a tidy block` }, () => {
+      els.forEach(el => {
+        const spot = spotOf(el.id);
+        updateCanvasElement(el.id, isDrawingNode(el)
+          ? { ...spot, points: relaidPoints(el, { ...spot, w: el.w, h: el.h }) }
+          : spot);
+      });
+      if (currentUser) jobSel.forEach(j => {
+        const spot = spotOf(j.id);
+        if (activeBoardView) {
+          updateApartment(j.id, {
+            viewPos: { ...(j.viewPos ?? {}), [activeBoardView]: spot },
+          }, currentUser);
+        } else {
+          updateApartment(j.id, { canvasX: spot.x, canvasY: spot.y }, currentUser);
+        }
+      });
+    });
+    // Selection is deliberately KEPT — the approved rule: one drag still
+    // moves the whole block.
+    setToast(`Arranged ${items.length} — still selected`);
+  };
+
+  pasteRef.current = (at?: { x: number; y: number }) => {
     const { els, jobs: jobIds, mode } = boardClip.current;
     if (!els.length && !jobIds.length) return false;
 
     /**
-     * The paste lands CENTRED ON THE SCREEN — the owner's ruling, single item
-     * or a lasso-full alike. The group keeps its own arrangement: its bounds
-     * are measured (live positions for a cut, the snapshot for a copy), and
-     * one shift puts the middle of that box in the middle of the view, run
-     * through settleDrop so nothing lands under the chrome.
+     * The paste lands as ONE TIDY BLOCK — the approved Arrange behaviour:
+     * however far apart and however messy the originals were, they land laid
+     * into the arrangeGrid, centred on the paste point. Right-click paste
+     * centres on the CLICKED spot (`at`); Ctrl+V, which has no spot, centres
+     * on the middle of the view. The block corner still runs through
+     * settleDrop so nothing lands under the chrome.
      */
     const vpEl = viewportRef.current;
     const vr = vpEl?.getBoundingClientRect();
-    const c = vr
+    const c = at ?? (vr
       ? toWorld(vr.left + vpEl!.clientWidth / 2, vr.top + vpEl!.clientHeight / 2)
-      : { x: 300, y: 300 };
+      : { x: 300, y: 300 });
     const liveEls = mode === 'cut'
       ? els.map(e => canvasElements.find(x => x.id === e.id) ?? e)
       : els;
-    const rects: { x: number; y: number; w: number; h: number }[] =
-      liveEls.map(e => ({ x: e.x, y: e.y, w: e.w, h: e.h }));
-    const jobRects = new Map<string, { x: number; y: number; w: number; h: number }>();
+    const jobSizes = new Map<string, { w: number; h: number }>();
     jobIds.forEach(jid => {
       const src = apartments.find(a => a.id === jid);
-      if (!src) return;
-      const idx = jobs.findIndex(j => j.id === jid);
-      const base = idx >= 0 ? jobPos(src, idx) : { x: src.canvasX ?? 40, y: src.canvasY ?? 40 };
-      const r = { ...base, ...tileSize(src) };
-      jobRects.set(jid, r);
-      rects.push(r);
+      if (src) jobSizes.set(jid, tileSize(src));
     });
-    if (!rects.length) return false;
-    const bx = Math.min(...rects.map(r => r.x));
-    const by = Math.min(...rects.map(r => r.y));
-    const bw = Math.max(...rects.map(r => r.x + r.w)) - bx;
-    const bh = Math.max(...rects.map(r => r.y + r.h)) - by;
-    const lift = settleDrop(c.x - bw / 2, c.y - bh / 2);
-    const dx = Math.round(lift.x - bx), dy = Math.round(lift.y - by);
+    const items = [
+      ...liveEls.map(e => ({ id: e.id, w: e.w, h: e.h })),
+      ...[...jobSizes.entries()].map(([id, s]) => ({ id, w: s.w, h: s.h })),
+    ];
+    if (!items.length) return false;
+    const { pos, blockW, blockH } = arrangeGrid(items);
+    const corner = settleDrop(c.x - blockW / 2, c.y - blockH / 2);
+    const spotOf = (id: string) => {
+      const p = pos.get(id)!;
+      return { x: Math.round(corner.x + p.x), y: Math.round(corner.y + p.y) };
+    };
 
     if (mode === 'cut') {
-      // A cut pastes as a MOVE: the same records, carried to the new spot.
+      // A cut pastes as a MOVE: the same records, carried into the block.
       const n = liveEls.length + jobIds.length;
-      track({ weight: 'arrange', label: `Moved ${n} item${n === 1 ? '' : 's'} to the middle of the screen` }, () => {
+      track({ weight: 'arrange', label: `Moved ${n} item${n === 1 ? '' : 's'} into a tidy block` }, () => {
         liveEls.forEach(el => updateCanvasElement(el.id, {
-          x: Math.round(el.x + dx), y: Math.round(el.y + dy),
+          ...spotOf(el.id),
           board: boardRef.current || undefined,
         }));
         if (currentUser) {
           jobIds.forEach(jid => {
             const src = apartments.find(a => a.id === jid);
-            const r = jobRects.get(jid);
-            if (!src || !r) return;
+            if (!src || !jobSizes.has(jid)) return;
+            const s = spotOf(jid);
             if (boardRef.current) {
               updateApartment(jid, {
-                viewPos: { ...(src.viewPos ?? {}), [boardRef.current]: { x: r.x + dx, y: r.y + dy } },
+                viewPos: { ...(src.viewPos ?? {}), [boardRef.current]: s },
               }, currentUser);
             } else {
-              updateApartment(jid, { canvasX: r.x + dx, canvasY: r.y + dy }, currentUser);
+              updateApartment(jid, { canvasX: s.x, canvasY: s.y }, currentUser);
             }
           });
         }
@@ -1048,7 +1138,7 @@ export function GeneralJobsPage() {
       setSelectedJobIds(new Set(jobIds));
       setCutMark(new Set());
       boardClip.current = { els: [], jobs: [], mode: 'copy' };   // a cut pastes once
-      setToast(`Moved ${n} item${n === 1 ? '' : 's'} to the middle of the screen`);
+      setToast(`Moved ${n} item${n === 1 ? '' : 's'} — landed as a tidy block`);
       return true;
     }
 
@@ -1064,7 +1154,7 @@ export function GeneralJobsPage() {
         // attached to whatever the original was stuck to.
         attachedTo: undefined, attachAnchor: undefined, attachAt: undefined,
         ...(boardRef.current ? { board: boardRef.current } : { board: undefined }),
-        x: Math.round(el.x + dx), y: Math.round(el.y + dy),
+        ...spotOf(el.id),
       });
     });
 
@@ -1072,14 +1162,14 @@ export function GeneralJobsPage() {
     if (jobIds.length && currentUser) {
       jobIds.forEach(jid => {
         const src = apartments.find(a => a.id === jid);
-        const r = jobRects.get(jid);
-        if (!src || !r) return;
+        if (!src || !jobSizes.has(jid)) return;
+        const s = spotOf(jid);
         const id = genId('G');
         const now = new Date().toISOString();
         addApartment({
           ...src, id,
           displayName: src.displayName ? `${src.displayName} (copy)` : '',
-          canvasX: r.x + dx, canvasY: r.y + dy,
+          canvasX: s.x, canvasY: s.y,
           ghosts: undefined,
           createdAt: now, updatedAt: now,
           updatedBy: currentUser.id, updatedByName: currentUser.name,
@@ -1092,7 +1182,7 @@ export function GeneralJobsPage() {
     // followed by hunting for what you just made.
     setSelectedElIds(newElIds);
     setSelectedJobIds(newJobIds);
-    setToast(`Pasted ${newElIds.size + newJobIds.size} item${newElIds.size + newJobIds.size === 1 ? '' : 's'} in the middle of the screen`);
+    setToast(`Pasted ${newElIds.size + newJobIds.size} item${newElIds.size + newJobIds.size === 1 ? '' : 's'} as a tidy block`);
     return true;
   };
 
@@ -6214,6 +6304,21 @@ export function GeneralJobsPage() {
               if ((e.target as Element) !== canvasRef.current) { setCtxMenu(null); return; }
               const w = toWorld(e.clientX, e.clientY);
               refreshClipboard();
+              /**
+               * With things SELECTED, a right-click ANYWHERE speaks for the
+               * selection — the approved Magnific behaviour: no need to aim
+               * at one of the selected tiles, and the menu says how many.
+               * With nothing selected the empty-board menu appears as before.
+               */
+              const selCount = selectedJobIds.size + selectedElIds.size;
+              if (selCount > 0) {
+                setCtxMenu({
+                  x: e.clientX, y: e.clientY, kind: 'selection',
+                  ids: [...selectedJobIds, ...selectedElIds],
+                  worldX: w.x, worldY: w.y,
+                });
+                return;
+              }
               setCtxMenu({ x: e.clientX, y: e.clientY, kind: 'canvas', ids: [], worldX: w.x, worldY: w.y });
             }}
           >
@@ -6396,8 +6501,43 @@ export function GeneralJobsPage() {
           <div className="fixed inset-0 z-40" onClick={() => setCtxMenu(null)} />
           <div className="fixed z-50 bg-white rounded-xl shadow-xl border border-gray-100 py-1 min-w-[196px]"
             style={{ left: Math.min(ctxMenu.x, window.innerWidth - 220), top: Math.min(ctxMenu.y, window.innerHeight - 300) }}>
-            {ctxMenu.kind === 'job' ? (
+            {ctxMenu.kind === 'selection' ? (
+              /* Right-click ANYWHERE with things selected — the approved
+                 Magnific menu: the count, Copy, Cut, paste-here, Arrange. */
               <>
+                <SelCountHeader n={selectedJobIds.size + selectedElIds.size} />
+                <button onClick={() => { copyRef.current(); setCtxMenu(null); }}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
+                  <Copy size={14} className="text-gray-400" />
+                  {`Copy (${selectedJobIds.size + selectedElIds.size})`}
+                </button>
+                <button onClick={() => { cutRef.current(); setCtxMenu(null); }}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5"
+                  title="They fade until you paste — the paste lands them as a tidy block">
+                  <Scissors size={14} className="text-gray-400" />
+                  {`Cut (${selectedJobIds.size + selectedElIds.size})`}
+                </button>
+                {(boardClip.current.els.length + boardClip.current.jobs.length) > 0 && (
+                  <button
+                    onClick={() => {
+                      pasteRef.current(ctxMenu.worldX !== undefined
+                        ? { x: ctxMenu.worldX!, y: ctxMenu.worldY! } : undefined);
+                      setCtxMenu(null);
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
+                    <ClipboardPaste size={14} className="text-gray-400" /> Paste here
+                  </button>
+                )}
+                <ArrangeMenuRow n={selectedJobIds.size + selectedElIds.size}
+                  onClick={() => { arrangeRef.current(); setCtxMenu(null); }} />
+              </>
+            ) : ctxMenu.kind === 'job' ? (
+              <>
+                {ctxMenu.ids.length > 1 && <SelCountHeader n={ctxMenu.ids.length} />}
+                {ctxMenu.ids.length > 1 && (
+                  <ArrangeMenuRow n={ctxMenu.ids.length}
+                    onClick={() => { arrangeRef.current(); setCtxMenu(null); }} />
+                )}
                 <button onClick={() => handleDuplicateJobs(ctxMenu.ids)}
                   className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
                   <Copy size={14} className="text-gray-400" />
@@ -6611,7 +6751,13 @@ export function GeneralJobsPage() {
                     one thing or a lasso-full. */}
                 {(boardClip.current.els.length + boardClip.current.jobs.length) > 0 && (
                   <button
-                    onClick={() => { pasteRef.current(); setCtxMenu(null); }}
+                    onClick={() => {
+                      // The right-click told us WHERE — the block centres on
+                      // the clicked spot, per the approved page.
+                      pasteRef.current(ctxMenu.worldX !== undefined
+                        ? { x: ctxMenu.worldX!, y: ctxMenu.worldY! } : undefined);
+                      setCtxMenu(null);
+                    }}
                     className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
                     <ClipboardPaste size={14} className="text-gray-400" />
                     {(() => {
@@ -6625,10 +6771,15 @@ export function GeneralJobsPage() {
               </>
             ) : (
               <>
-                {/* Arrange, the way Google Docs names it. Two overlapping notes
+                {ctxMenu.ids.length > 1 && <SelCountHeader n={ctxMenu.ids.length} />}
+                {ctxMenu.ids.length > 1 && (
+                  <ArrangeMenuRow n={ctxMenu.ids.length}
+                    onClick={() => { arrangeRef.current(); setCtxMenu(null); }} />
+                )}
+                {/* Ordering, the way Google Docs names it. Two overlapping notes
                     and no way to say which is on top was the gap. */}
                 <div className="px-4 pt-1.5 pb-1 text-[10px] font-extrabold tracking-wide text-gray-400">
-                  ARRANGE
+                  ORDER
                 </div>
                 <div className="grid grid-cols-2 gap-0.5 px-2 pb-1">
                   {([
