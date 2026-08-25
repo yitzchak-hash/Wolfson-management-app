@@ -184,8 +184,6 @@ export function ProjectDiagramPage() {
     return m;
   }, [apartments, sortedStages]);
 
-  if (currentProjectId === 'general') return <Navigate to="/jobs" replace />;
-
   /**
    * On a phone the diagram shows ONE building — 'all' resolves to the first.
    * The stored selection is left alone, so going back to a desktop window
@@ -279,6 +277,17 @@ export function ProjectDiagramPage() {
   const countable = apartments.filter(isCountableApartment);
   const noStage = countable.filter(a => !a.currentStageId).length;
   const total = countable.length;
+
+  /**
+   * The redirect guard sits AFTER every hook — the same rule GeneralJobsPage
+   * documents. It used to sit above three useCallbacks, which never bit while
+   * a workspace switch always unmounted this page in the same commit; the
+   * browser-back workspace restore (workspaceHistory.ts) switches the store
+   * synchronously WHILE this page is mounted, so an early return now changes
+   * the hook count between renders and crashes the whole app. Do not move it
+   * back up.
+   */
+  if (currentProjectId === 'general') return <Navigate to="/jobs" replace />;
 
   return (
     <>

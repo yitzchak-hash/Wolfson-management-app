@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
+import React, { useEffect, useRef } from 'react';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Header } from './Header';
 import { Sidebar, MobileNav } from './Sidebar';
 import { useStore, ensureProjectSnapshot } from '../../data/store';
@@ -9,6 +9,64 @@ import { UndoLayer } from '../board/UndoLayer';
 
 export function AppLayout() {
   const { startFirebaseSync, firebaseListening, mainUiStrings } = useStore();
+  const currentProjectId = useStore(st => st.currentProjectId);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  /**
+   * THE BACK BUTTON KNOWS WHICH WORKSPACE YOU WERE IN.
+   *
+   * Routes never carried the workspace — /tasks is /tasks in Wolfson and on
+   * the Job Board — so pressing Back walked the ROUTES you had visited while
+   * leaving you standing in whatever workspace you happened to be in now:
+   * "back" did not take you back to what you actually saw. Every history
+   * entry is therefore STAMPED with the workspace it was viewed in
+   * (`location.state.ws`), and going back or forward restores it.
+   *
+   * This is the STAMP half: a new entry (navigation) is stamped in place
+   * (replace, so no extra history), and a workspace switch that arrives with
+   * NO navigation pushes one entry so Back has something to return to. The
+   * RESTORE half lives in workspaceHistory.ts — a popstate listener that must
+   * be registered BEFORE the router's (see the comment there for why).
+   */
+  const lastLocKey = useRef<string>('');
+  const lastWs = useRef<string>(currentProjectId);
+  useEffect(() => {
+    const state = (location.state ?? null) as { ws?: string } | null;
+    const moved = lastLocKey.current !== location.key;
+    lastLocKey.current = location.key;
+    const here = location.pathname + location.search + location.hash;
+    if (moved) {
+      if (!state?.ws) {
+        navigate(here, { replace: true, state: { ...(state ?? {}), ws: currentProjectId } });
+      }
+      // A pop onto another workspace's entry was already restored by the
+      // popstate listener below — before this effect ever ran.
+      lastWs.current = currentProjectId;
+      return;
+    }
+    if (lastWs.current !== currentProjectId) {
+      // The store switched and this render's location has not — YET. On an
+      // ordinary header switch the store's commit lands one render BEFORE the
+      // router's (navigate() is wrapped in startTransition), so pushing here
+      // immediately minted a phantom entry (old route, new workspace) that
+      // Back landed on. Two defences, both needed: the cleanup cancels the
+      // push when a navigation re-runs this effect, and the timer checks the
+      // REAL address — React Router writes window.history synchronously at
+      // navigate(), long before the transition renders, and a heavy workspace
+      // switch can hold that transition past any reasonable delay.
+      const ws = currentProjectId;
+      lastWs.current = currentProjectId;
+      const t = setTimeout(() => {
+        const real = window.location.pathname + window.location.search + window.location.hash;
+        if (real !== here) return;   // a navigation already carried the stamp
+        navigate(here, { state: { ...(state ?? {}), ws } });
+      }, 150);
+      return () => clearTimeout(t);
+    }
+    lastWs.current = currentProjectId;
+  }, [location, currentProjectId]);
+
 
   // If the user was already logged in (skipped the login page), Firebase sync
   // never gets triggered by the login action — start it here on first mount.

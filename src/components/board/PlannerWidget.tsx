@@ -294,7 +294,7 @@ export interface PendingDrop {
 
 export function PlannerWidget({
   el, data, jobs, contractors, users, assignments, stages, readOnly, projection,
-  update, openJob, onDropAsk, onRemoveTask, onShowAll, onLeaveNotebook,
+  update, openJob, openUnit, onDropAsk, onRemoveTask, onShowAll, onLeaveNotebook,
 }: {
   el: CanvasElement;
   data: PlannerData;
@@ -312,6 +312,14 @@ export function PlannerWidget({
   projection?: boolean;
   update: (patch: Partial<CanvasElement>) => void;
   openJob: (id: string) => void;
+  /**
+   * Opens a unit that lives in ANOTHER workspace. Where the host provides it
+   * (the board, the dashboard) that is a read-only PEEK over the snapshot —
+   * you stay standing exactly where you are, and the peek's own button does
+   * the travel for whoever really wants it. Without it, the old behaviour
+   * (switch workspace, hand over a focus intent) is the fallback.
+   */
+  openUnit?: (projectId: string, aptId: string) => void;
   /** Ask about making a task; only called when the setting is on. */
   onDropAsk?: (d: PendingDrop) => void;
   /** Ask what to do with the task behind an entry being pulled out. */
@@ -1087,8 +1095,15 @@ export function PlannerWidget({
                       one adds a NEWER week — the direction a calendar reads
                       in. A week put away in that direction turns the plus
                       into an eye that restores it, wording and all. */}
+                  {/* ALWAYS visible, like the scroll arrows beside them. They
+                      were opacity-0 group-hover/wk:opacity-100 — and the
+                      touch-screen reveal rule in index.css only matches the
+                      UNNAMED group-hover class, so on an iPad the add-a-week
+                      plus never appeared at all: the owner's "I can't add a
+                      week in the future". A control for navigating time is
+                      not a control to hunt for. */}
                   {!ro && (
-                    <span className="flex items-center gap-1.5 opacity-0 group-hover/wk:opacity-100 transition-opacity">
+                    <span className="flex items-center gap-1.5">
                       {wi === 0 && (
                         <button
                           data-no-drag data-el-action
@@ -1254,11 +1269,14 @@ export function PlannerWidget({
                               openOnly={!!projection}
                               onOpen={() => {
                                 if (!en.jobId) return;
-                                // Another workspace's job opens over there — the
-                                // switch first, then the intent, because
-                                // setCurrentProject clears a pending focus as
-                                // part of arriving somewhere new.
+                                // Another workspace's job PEEKS — the owner's
+                                // rule: clicking it must not carry you off the
+                                // board you are standing on. Only when the host
+                                // offers no peek does the old travel (switch
+                                // first, then the intent — setCurrentProject
+                                // clears a pending focus on arrival) remain.
                                 if (en.projectId && en.projectId !== currentProjectId) {
+                                  if (openUnit) { openUnit(en.projectId, en.jobId); return; }
                                   setCurrentProject(en.projectId);
                                   setPendingFocus({ kind: 'apartment', id: en.jobId });
                                   return;
@@ -1369,8 +1387,8 @@ export function PlannerWidget({
                               drawn dashed, because they are the TASK showing
                               itself, not a planner card: change the task's
                               date or worker where the task lives and the chip
-                              follows. Clicking opens the job, travelling to
-                              its workspace when it is not this one.
+                              follows. Clicking opens the job — a PEEK when it
+                              lives in another workspace, so you stay put.
                               A chip whose JOB already has a card in this same
                               square is folded into that card (which lists the
                               job's tasks itself now) — the owner's "separate
@@ -1383,6 +1401,7 @@ export function PlannerWidget({
                               data-no-drag data-el-action
                               onClick={() => {
                                 if (t.projectId && t.projectId !== currentProjectId) {
+                                  if (openUnit) { openUnit(t.projectId, t.jobId); return; }
                                   setCurrentProject(t.projectId);
                                   setPendingFocus({ kind: 'apartment', id: t.jobId });
                                   return;

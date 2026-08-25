@@ -1641,6 +1641,7 @@ export function ContractorPortal() {
                   assignments={contractorAssignments}
                   update={() => {}}
                   openJob={() => {}}
+                  openUnit={() => {}}
                   readOnly
                 />
                 </div>

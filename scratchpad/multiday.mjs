@@ -140,10 +140,19 @@ await page.waitForTimeout(300);
 // ── 4 · the worker's portal: every day shown, Today matches, finish early ───
 await page.goto(`${APP}/c/tok-jo`);
 await page.waitForTimeout(2500);
+// The default filter is Today, and the harness's task days are FIXED dates in
+// the week of 2026-08-23 — the container clock walks on, so show All first.
+await page.locator('button', { hasText: /^All$/ }).first().click();
+await page.waitForTimeout(400);
 const cardText = await page.locator('button:has-text("Close the ceiling")').first().innerText();
 check(cardText.includes('Mon 24 Aug') && cardText.includes('Wed 26 Aug') && cardText.includes('Sun 30 Aug'),
   'the worker sees EVERY day on the task card', cardText.replace(/\n/g, ' · ').slice(0, 120));
-check(cardText.includes('Today'), 'and it reads Today — today is one of its days');
+// The badge counts to the NEXT covered day, so what it says depends on the
+// real clock: Today when today is one of the days, Tomorrow when the next
+// covered day is tomorrow (holds for clocks on 24–26 Aug 2026).
+const todayIso = new Date().toISOString().slice(0, 10);
+const expectBadge = ['2026-08-24', '2026-08-26', '2026-08-30'].includes(todayIso) ? 'Today' : 'Tomorrow';
+check(cardText.includes(expectBadge), `and the badge counts to the next covered day (${expectBadge})`);
 await page.locator('button:has-text("Close the ceiling")').first().click();
 await page.waitForTimeout(600);
 // The new flow: Close job opens the closing screen; the final press closes.

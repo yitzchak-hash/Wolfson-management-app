@@ -2787,6 +2787,7 @@ function PlannerHost({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
         projection={projecting}
         update={projecting ? updateMain : c.update}
         openJob={c.openJob}
+        openUnit={c.openUnit}
         onShowAll={c.showAllScheduled ? () => c.showAllScheduled!(src.id) : undefined}
         onRemoveTask={c.askRemoveTask}
         onLeaveNotebook={c.leaveNotebook}

@@ -16,6 +16,10 @@ import { JobListPage } from './pages/JobListPage';
 import { GlobalCalendarPage } from './pages/GlobalCalendarPage';
 import { ProjectCalendarPage } from './pages/ProjectCalendarPage';
 import { TvPresentationPage } from './pages/TvPresentationPage';
+import { armWorkspaceHistoryRestore } from './data/workspaceHistory';
+
+// Before the router can subscribe to popstate — see workspaceHistory.ts.
+armWorkspaceHistoryRestore();
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { currentUser } = useStore();

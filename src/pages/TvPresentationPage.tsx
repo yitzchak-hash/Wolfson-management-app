@@ -695,6 +695,9 @@ export function TvPresentationPage() {
       const j = apartments.find(a => a.id === id);
       if (j) { setPhotoAt(0); setOpenJob(j); }
     },
+    // A stray tap on a foreign notebook card must never switch the whole
+    // wall's workspace — without this the planner falls back to travelling.
+    openUnit: () => {},
     // A widget on the wall shows live figures and cannot be typed into. Only
     // the pen unlocks arranging, and that moves cards rather than editing them.
     readOnly: !editing,

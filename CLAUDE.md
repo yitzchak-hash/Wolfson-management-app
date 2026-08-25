@@ -4460,3 +4460,67 @@ celebration (z-220) swallows clicks until dismissed by a tap; the sheet
 closes by a backdrop tap, not Escape; and the settings tab says "Workers"
 (the words-only rename). `multiday.mjs` re-encoded to the new close steps
 (`data-close-job` → `data-close-now`) and stays green.
+
+---
+
+# v2 — you stay where you are standing (peeks, the back button, the future week)
+
+## A foreign job on the notebook PEEKS — nothing on the notebook travels
+`PlannerWidget` takes `openUnit?` and both foreign click paths (a planner
+CARD from another workspace, a dashed task CHIP whose task lives elsewhere)
+go through it; only when the host offers none does the old
+switch-then-intent travel remain as the fallback. `PlannerHost` passes
+`c.openUnit`, so on the board a click opens `UnitPeek` over the board.
+`DashboardPage.openUnit` now peeks too (it used to switch workspace and
+navigate); the peek's own "Open in …" button does the real journey. The
+portal passes `openUnit={() => {}}` and the wall ctx got `openUnit: () => {}`
+— a stray tap must never switch the portal's or the TV's workspace.
+
+## The browser back button restores the WORKSPACE, not just the route
+Routes never carried the workspace, so Back walked the routes while leaving
+you in whatever workspace you were in now. Every history entry is STAMPED
+with the workspace it was viewed in (`location.state.ws`) and a pop restores
+it. Two halves, and the split is load-bearing:
+- **Stamp** — an effect in `AppLayout`: a new entry is stamped in place
+  (replace), and a store switch that truly arrives with no navigation
+  pushes one entry. Two traps paid for: navigate() is wrapped in
+  startTransition, so the store's commit lands one render BEFORE the
+  router's and pushing immediately minted a phantom entry (old route, new
+  workspace); and React Router writes `window.history` synchronously at
+  navigate() while a heavy workspace switch holds the transition past any
+  timer — so the deferred push checks the REAL address before firing.
+- **Restore** — `src/data/workspaceHistory.ts`, a popstate listener
+  registered at MODULE LOAD (armed at the top of App.tsx). It cannot be an
+  effect: the router's history subscription flushes its React update
+  SYNCHRONOUSLY inside ITS popstate listener (useSyncExternalStore), so a
+  later-registered listener runs after the popped route has already
+  rendered — and the /jobs ↔ /project guards have bounced it. First in
+  line, the store is switched before the router's own sync render.
+- **ProjectDiagramPage's redirect guard moved below every hook** — it sat
+  above three useCallbacks, which never bit while a switch always unmounted
+  the page in the same commit; the synchronous restore switches the store
+  WHILE it is mounted, and the early return crashed the whole app
+  ("Rendered fewer hooks than expected"). The GeneralJobsPage rule, now on
+  both pages: the guard sits after every hook.
+
+## The add-a-week plus is always visible — and that is the future week
+The notebook's per-week add/put-away icons were `opacity-0
+group-hover/wk:opacity-100` — and the touch-screen reveal rule in index.css
+only matched the UNNAMED `group-hover\:opacity-100` class, so on an iPad
+the plus never appeared at all: the owner's "I can't add a week in the
+future". The icons are always visible now (the scroll arrows beside them
+already were — navigation is not a control to hunt for), and index.css
+gained `[class*="group-hover/"][class*="opacity-100"]` under
+`any-hover: none`, which catches every current and future NAMED reveal
+(pin, art, cell…). Tooltips are unaffected — they render through a portal.
+The bottom week's plus adds the week AFTER (the future); the top week's
+adds the week before; a week put away in that direction still shows the eye.
+
+Harness: `scratchpad/round29.mjs` (14 checks) — the foreign-card peek with
+the workspace and route asserted unmoved, Back/Forward restoring workspace
+AND route with the notebook really back on screen, and the always-visible
+plus adding weekCount 2. **Harness date drift**: `multiday.mjs` and
+`portalround.mjs` seed FIXED task dates and the portal's default filter is
+Today, so both now press the All pill before reaching for a card, and
+multiday derives its badge expectation (Today/Tomorrow) from the real
+clock. A harness that assumes the container's date goes red at midnight.

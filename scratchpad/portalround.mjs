@@ -82,6 +82,10 @@ check(await page.locator('[data-cal-week]').count() === 0,
 // ── 3 · the Close job flow ──────────────────────────────────────────────────
 await page.locator('button:has-text("My Tasks")').first().click();
 await page.waitForTimeout(400);
+// The default filter is Today and the seeded task's date is FIXED — the
+// container clock walks on, so show All before reaching for the card.
+await page.locator('button', { hasText: /^All$/ }).first().click();
+await page.waitForTimeout(400);
 await page.locator('button:has-text("Hang the unit")').first().click();
 await page.waitForTimeout(600);
 check(await page.locator('button:has-text("Mark as Complete")').count() === 0,

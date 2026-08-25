@@ -31,6 +31,18 @@
   }
 
   /*
+     NAMED groups fall in the same hole and the class above cannot see them:
+     `group-hover/wk:opacity-100` compiles to its own class name, so on an
+     iPad the notebook's add-a-week plus (and every other named reveal — pin,
+     art, cell…) simply never appeared. The attribute selector reads the
+     class ATTRIBUTE, so it catches every current and future named variant.
+     Tooltips are safe — they render through a portal, not a named group.
+  */
+  [class*="group-hover/"][class*="opacity-100"] {
+    opacity: 1 !important;
+  }
+
+  /*
      Long-pressing anything in the app means "open the menu for it", never
      "select this text" or "share this image", and iOS offers both by default.
   */
