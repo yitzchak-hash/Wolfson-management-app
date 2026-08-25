@@ -4630,3 +4630,37 @@ view memory restores the harness's own zoom on reload, parking the bins under
 the floating header — press 100% before aiming at one. `grouplock.mjs` gained
 the same come-home line before its rename section; its old zoom-anchor
 assertion still holds at the home view because the clamp pins the top there.
+
+---
+
+# v2 — the group lands in one piece, and the Arrange plan
+
+## A multi-selection SETTLES AS ONE RIGID PIECE
+`settleGroupDelta` in GeneralJobsPage: both drag commits (job-led and
+node-led) compute ONE settle correction — from the selection's
+top-left-most member — and apply it to every member. `settleDrop` run per
+member clamped each tile independently, so a spread selection released near
+the chrome TORE on mouse-up, clamped members leaping to their own spots
+("the second I pick up my mouse, it jumps there one by one"). The drag
+itself was already live for every carried member (`jobPos`/`elPos` apply
+`drag.dx/dy` to the whole carry). Harness: `scratchpad/groupsettle.mjs` —
+mid-drag togetherness, exact relative offsets surviving a clamped drop
+(jobs AND nodes), the settle floor. Its lesson: world y is measured below
+the pinned chrome line, so the settle floor is the board MARGIN (28), not a
+screen offset.
+
+## The Arrange feature is PROPOSED, not built (owner's gate)
+The owner asked for the mockup FIRST, with the app's real UI code, published
+for approval before any live wiring: `scratchpad/arrange-plan.template.html`
+(built by inlining the dist CSS, the planner-days precedent) — published as
+the "The Arrange Feature" artifact. It carries the real tile/menu markup,
+the right-click-anywhere "X selected" menu with an Arrange row, the hover
+consolidation animation, LIVE Arrange and cut/paste-to-tidy-grid demos, and
+the rules box. **The `arrangeGrid` function in the page is the exact
+arithmetic to ship**: sort tallest-first, shelf-pack rows against
+`targetW = sqrt(totalArea × 1.4)` with a 0.65-width overshoot tolerance
+(without it nine equal tiles pack two per row), rows centred within the
+widest, members centred within their row, block centred on the selection's
+old centre (Arrange) or the paste point (paste), everything stays selected.
+Verified shapes: 2→[2], 4→[2,2], 9→[3,3,3], mixed→[3,3,1]. Build it only
+when the owner approves the page.

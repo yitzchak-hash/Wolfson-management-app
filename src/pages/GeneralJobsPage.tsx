@@ -3534,6 +3534,25 @@ export function GeneralJobsPage() {
     return { x: Math.max(Math.max(EDGE_LIP, margin), Math.round(x)), y: Math.max(minY, Math.round(y)) };
   }
 
+  /**
+   * A GROUP settles as ONE RIGID PIECE.
+   *
+   * settleDrop clamps a single point, and run per member it shoved each tile
+   * independently — a spread selection released near the chrome TORE on
+   * mouse-up, the clamped members leaping to their own spots while the rest
+   * stayed: the owner's "the second I pick up my mouse, it jumps there one
+   * by one". The correction is computed ONCE, from the group's top-left-most
+   * member, and applied to every member, so the selection lands exactly as
+   * it was dragged — moved as a whole when the edge pushes back, never bent.
+   */
+  function settleGroupDelta(points: Array<{ x: number; y: number }>): { dx: number; dy: number } {
+    if (points.length === 0) return { dx: 0, dy: 0 };
+    let minX = Infinity, minY = Infinity;
+    for (const p of points) { if (p.x < minX) minX = p.x; if (p.y < minY) minY = p.y; }
+    const s = settleDrop(minX, minY);
+    return { dx: s.x - minX, dy: s.y - minY };
+  }
+
   function onJobPointerUp(e: React.PointerEvent, job: Apartment) {
     setGuides([]);
     stopEdgePush();
@@ -3576,9 +3595,18 @@ export function GeneralJobsPage() {
          * else.
          */
         track({ weight: 'arrange', label: movedLabel(drag.ids.length + (drag.carryEls?.size ?? 0)) }, () => {
+          // ONE settle correction for the whole selection — never per member.
+          const g = settleGroupDelta([
+            ...drag.ids.map(id => {
+              const st = drag.starts.get(id)!;
+              return { x: st.x + drag.dx, y: st.y + drag.dy };
+            }),
+            ...[...(drag.carryEls?.values() ?? [])]
+              .map(st => ({ x: st.x + drag.dx, y: st.y + drag.dy })),
+          ]);
           drag.ids.forEach(id => {
             const st = drag.starts.get(id)!;
-            const { x, y } = settleDrop(st.x + drag.dx, st.y + drag.dy);
+            const x = Math.round(st.x + drag.dx + g.dx), y = Math.round(st.y + drag.dy + g.dy);
             if (activeBoardView) {
               const job = apartments.find(a => a.id === id);
               updateApartment(id, {
@@ -3589,7 +3617,10 @@ export function GeneralJobsPage() {
             }
           });
           drag.carryEls?.forEach((st, id) => {
-            const settled = settleDrop(st.x + drag.dx, st.y + drag.dy);
+            const settled = {
+              x: Math.round(st.x + drag.dx + g.dx),
+              y: Math.round(st.y + drag.dy + g.dy),
+            };
             const node = canvasElements.find(n => n.id === id);
             updateCanvasElement(id, node && isDrawingNode(node)
               ? { ...settled, points: relaidPoints(node, { ...settled, w: node.w, h: node.h }) }
@@ -3849,9 +3880,21 @@ export function GeneralJobsPage() {
       // No make-room question here either — see the tile drop path. A locked
       // edge simply stops the thing, in silence.
       track({ weight: 'arrange', label: movedLabel(drag.ids.length + (drag.carryJobs?.size ?? 0)) }, () => {
+        // ONE settle correction for the whole selection — never per member.
+        const g = settleGroupDelta([
+          ...drag.ids.map(id => {
+            const st = drag.starts.get(id)!;
+            return { x: st.x + drag.dx, y: st.y + drag.dy };
+          }),
+          ...[...(drag.carryJobs?.values() ?? [])]
+            .map(st => ({ x: st.x + drag.dx, y: st.y + drag.dy })),
+        ]);
         drag.ids.forEach(id => {
           const st = drag.starts.get(id)!;
-          const settled = settleDrop(st.x + drag.dx, st.y + drag.dy);
+          const settled = {
+            x: Math.round(st.x + drag.dx + g.dx),
+            y: Math.round(st.y + drag.dy + g.dy),
+          };
           const node = canvasElements.find(n => n.id === id);
           // A drawing carries its polyline with it — the points ARE the ink, so
           // moving the node without them would leave the drawing behind. Still
@@ -3861,7 +3904,7 @@ export function GeneralJobsPage() {
             : settled);
         });
         if (currentUser) drag.carryJobs?.forEach((st, id) => {
-          const { x, y } = settleDrop(st.x + drag.dx, st.y + drag.dy);
+          const x = Math.round(st.x + drag.dx + g.dx), y = Math.round(st.y + drag.dy + g.dy);
           if (activeBoardView) {
             const j = apartments.find(a => a.id === id);
             updateApartment(id, {

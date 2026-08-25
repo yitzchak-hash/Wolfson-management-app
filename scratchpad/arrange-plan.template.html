@@ -1,0 +1,273 @@
+<title>The Arrange Feature</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Caveat:wght@600;700&display=swap">
+<style>/*__APPCSS__*/</style>
+<style>
+  /* The drafting table: everything that is NOT the app is paper-grey chrome
+     and china-marker red, so the thing being approved and the thing doing the
+     explaining can never be confused (the planbar-sketch rule). */
+  html, body { background: #e8ebf0 !important; margin: 0; overscroll-behavior: auto !important; }
+  body { font-family: Inter, system-ui, sans-serif; color: #1f2937; }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 28px 20px 80px; }
+  .mark { font-family: Caveat, cursive; color: #c0392b; }
+  .scene { background: #f6f7f9; border: 1px solid #d8dde5; border-radius: 18px; padding: 22px; margin-top: 26px; }
+  .scene h2 { font-size: 15px; font-weight: 800; color: #1e3a5f; letter-spacing: .02em; margin: 0 0 4px; }
+  .scene p.lead { font-size: 13.5px; color: #4b5563; margin: 0 0 14px; max-width: 62ch; }
+  .board { position: relative; background: #fff; border: 1px solid #d8dde5; border-radius: 14px; overflow: hidden;
+           background-image: radial-gradient(#d4d9e2 1.1px, transparent 1.1px); background-size: 22px 22px; }
+  .tilemove { transition: left .55s cubic-bezier(.25,.9,.3,1), top .55s cubic-bezier(.25,.9,.3,1), opacity .25s ease; }
+  .note-el { position: absolute; border-radius: 10px; background: #fef9c3; box-shadow: 0 1px 2px rgba(0,0,0,.12);
+             padding: 8px 10px; font-size: 12px; color: #713f12; }
+  .selring { border-color: #4aa8d8 !important; outline: 2px solid rgba(74,168,216,.4); outline-offset: 1px; }
+  .btnrow { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; align-items: center; }
+  .democta { background: #1e3a5f; color: #fff; font-size: 13px; font-weight: 700; padding: 9px 18px;
+             border-radius: 10px; border: 0; cursor: pointer; }
+  .democta.alt { background: #fff; color: #1e3a5f; border: 1px solid #cbd5e1; }
+  .democta:disabled { opacity: .4; cursor: default; }
+  .hint { font-size: 12.5px; color: #6b7280; }
+  /* The little hover animation on the Arrange row — six specks consolidating
+     into a 3×2 grid, looping. Drawn, not filmed, so it cannot rot. */
+  .arr-anim { position: relative; width: 64px; height: 44px; background: #fff;
+              border: 1px solid #e5e7eb; border-radius: 8px; flex-shrink: 0; }
+  .arr-anim i { position: absolute; width: 12px; height: 8px; border-radius: 2px; background: #4aa8d8; opacity: .9;
+                animation: consolidate 2.2s ease-in-out infinite; }
+  .arr-anim i:nth-child(1) { --sx: 4px;  --sy: 3px;  --tx: 12px; --ty: 12px; }
+  .arr-anim i:nth-child(2) { --sx: 44px; --sy: 2px;  --tx: 26px; --ty: 12px; }
+  .arr-anim i:nth-child(3) { --sx: 20px; --sy: 30px; --tx: 40px; --ty: 12px; }
+  .arr-anim i:nth-child(4) { --sx: 48px; --sy: 32px; --tx: 12px; --ty: 24px; }
+  .arr-anim i:nth-child(5) { --sx: 2px;  --sy: 20px; --tx: 26px; --ty: 24px; }
+  .arr-anim i:nth-child(6) { --sx: 34px; --sy: 16px; --tx: 40px; --ty: 24px; }
+  @keyframes consolidate {
+    0%, 12%  { left: var(--sx); top: var(--sy); }
+    48%, 78% { left: var(--tx); top: var(--ty); }
+    100%     { left: var(--sx); top: var(--sy); }
+  }
+  @media (prefers-reduced-motion: reduce) { .arr-anim i { animation: none; left: var(--tx); top: var(--ty); } }
+  .rules { background: #fff; border: 1px solid #d8dde5; border-radius: 14px; padding: 18px 20px; margin-top: 26px; }
+  .rules h2 { font-size: 15px; font-weight: 800; color: #1e3a5f; margin: 0 0 10px; }
+  .rules li { font-size: 13.5px; color: #374151; margin: 7px 0 7px 0; max-width: 70ch; }
+  .cursor-dot { position: absolute; width: 14px; height: 14px; pointer-events: none; z-index: 60;
+                border: 2px solid #c0392b; border-radius: 50%; background: rgba(192,57,43,.15); }
+</style>
+
+<div class="wrap">
+  <div style="display:flex; align-items:baseline; gap:14px; flex-wrap:wrap;">
+    <h1 style="font-size:26px; font-weight:800; color:#1e3a5f; margin:0;">The Arrange feature</h1>
+    <span class="mark" style="font-size:20px;">drawn with the board&rsquo;s real tiles and menus &mdash; press the buttons, everything works</span>
+  </div>
+  <p style="font-size:13.5px; color:#4b5563; max-width:72ch; margin:8px 0 0;">
+    This page is for approval before it goes into the live board. The grid arithmetic running in
+    the demos below is the exact arithmetic the real feature will ship with &mdash; what you approve
+    here is what Arrange will do.
+  </p>
+
+  <!-- ── SCENE 1 · the right-click menu ─────────────────────────────────── -->
+  <div class="scene">
+    <h2>1 &middot; RIGHT-CLICK ANYWHERE — THE SELECTION KEEPS ITS MENU</h2>
+    <p class="lead">Four tiles are selected. The right-click landed on EMPTY board, away from any of
+      them &mdash; and the menu still speaks for the selection, says how many, and carries the new
+      Arrange row. Hover the Arrange row to see its little animation.</p>
+    <div class="board" style="height: 320px;" id="scene1"></div>
+  </div>
+
+  <!-- ── SCENE 2 · Arrange, live ────────────────────────────────────────── -->
+  <div class="scene">
+    <h2>2 &middot; ARRANGE — MESSY TO TIDY, ONE PRESS, STILL SELECTED</h2>
+    <p class="lead">Seven things &mdash; five job tiles of the board&rsquo;s own size and two sticky
+      notes of different sizes. Press Arrange: they consolidate into one compact, symmetrical block,
+      centred where the selection was, and they STAY selected so you can still move them as one.</p>
+    <div class="board" style="height: 480px;" id="scene2"></div>
+    <div class="btnrow">
+      <button class="democta" id="btn-arrange">Arrange</button>
+      <button class="democta alt" id="btn-scatter">Scatter them again</button>
+      <span class="hint" id="scene2-hint">tallest first &middot; equal 18px gaps &middot; each row centred &middot; block lands on the selection&rsquo;s old centre</span>
+    </div>
+  </div>
+
+  <!-- ── SCENE 3 · cut & paste to a tidy grid ───────────────────────────── -->
+  <div class="scene">
+    <h2>3 &middot; CUT &amp; PASTE — HOWEVER FAR APART, THEY LAND AS ONE TIDY BLOCK</h2>
+    <p class="lead">These four are scattered to the corners. Press Cut (they fade, &ldquo;in the
+      air&rdquo;), then CLICK anywhere on the board &mdash; they land as the same tidy grid, centred
+      exactly on your click. Copy works the same, leaving the originals behind.</p>
+    <div class="board" style="height: 360px; cursor: crosshair;" id="scene3"></div>
+    <div class="btnrow">
+      <button class="democta" id="btn-cut">Cut (4)</button>
+      <span class="hint" id="scene3-hint">now click a spot on the board above&hellip;</span>
+    </div>
+  </div>
+
+  <!-- ── SCENE 4 · inside a group ───────────────────────────────────────── -->
+  <div class="scene">
+    <h2>4 &middot; THE SAME THING INSIDE A GROUP</h2>
+    <p class="lead">Inside an open group window: Ctrl+A selects every job in the group (already
+      live), the right-click menu shows the same &ldquo;X selected&rdquo; + Arrange, and Arrange
+      tidies them inside the group&rsquo;s own surface the same way.</p>
+    <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+      <div class="bg-white rounded-xl shadow-xl border border-gray-100 py-1" style="min-width:196px;">
+        <div class="px-4 py-1.5 text-[11px] font-bold text-gray-400 border-b border-gray-100" style="letter-spacing:.04em;">6 SELECTED</div>
+        <button class="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">⧉&nbsp; Copy (6)</button>
+        <button class="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">✂&nbsp; Cut (6)</button>
+        <button class="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5" style="background:#eef6fb;">▦&nbsp; Arrange (6)</button>
+      </div>
+      <span class="mark" style="font-size:19px;">same menu, same grid &mdash; just inside the group window</span>
+    </div>
+  </div>
+
+  <!-- ── the rules being approved ───────────────────────────────────────── -->
+  <div class="rules">
+    <h2>THE SMART GRID, IN PLAIN WORDS — THIS IS WHAT YOU ARE APPROVING</h2>
+    <ul style="margin:0; padding-inline-start:18px;">
+      <li><b>Even gaps of 18px</b> between everything, rows and columns alike.</li>
+      <li><b>Tallest things go first</b>, packed into rows; a row is as tall as its tallest member, and
+        shorter members centre vertically inside it &mdash; that is the &ldquo;smart by size and
+        aspect ratio&rdquo; part.</li>
+      <li><b>The block aims at roughly 4:3</b> (a touch wider than tall). Same-size job tiles come out
+        as the near-square grid &mdash; nine tiles make three rows of three.</li>
+      <li><b>Each row centres</b> within the widest row, so the block reads symmetrical, never ragged.</li>
+      <li><b>Where it lands:</b> Arrange centres the block on where the selection already was; a paste
+        centres it on the spot you clicked.</li>
+      <li><b>Everything stays selected</b> afterwards, so one drag still moves the whole block.</li>
+      <li>Locked tiles and the four fixture groups are left out; a job inside the block keeps its own
+        size &mdash; Arrange moves things, it never resizes them.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+/* ── The real arithmetic — this exact function ships in the live feature ── */
+function arrangeGrid(items, gap = 18) {
+  const sorted = [...items].sort((a, b) => b.h - a.h || b.w - a.w);
+  const totalArea = sorted.reduce((s, i) => s + (i.w + gap) * (i.h + gap), 0);
+  // Aim a touch wider than tall (~4:3). A row may run PAST the aim by up to
+  // 0.65 of the incoming item's width — without that tolerance nine equal tiles
+  // pack two per row and the block comes out tall instead of square-ish.
+  const targetW = Math.max(Math.sqrt(totalArea * 1.4), Math.max(...sorted.map(i => i.w)));
+  const rows = []; let row = [], roww = 0;
+  for (const it of sorted) {
+    const need = (row.length ? gap : 0) + it.w;
+    if (row.length && roww + need > targetW + it.w * 0.65) { rows.push(row); row = []; roww = 0; }
+    row.push(it); roww += (row.length > 1 ? gap : 0) + it.w;
+  }
+  if (row.length) rows.push(row);
+  const rowW = r => r.reduce((s, i, k) => s + i.w + (k ? gap : 0), 0);
+  const blockW = Math.max(...rows.map(rowW));
+  let y = 0; const pos = new Map();
+  for (const r of rows) {
+    let x = (blockW - rowW(r)) / 2;
+    const rh = Math.max(...r.map(i => i.h));
+    for (const it of r) { pos.set(it.id, { x, y: y + (rh - it.h) / 2 }); x += it.w + gap; }
+    y += rh + gap;
+  }
+  return { pos, blockW, blockH: y - gap };
+}
+
+/* ── Board furniture drawn with the app's own classes ── */
+const STAGE = { name: 'AC installation', color: '#3b82f6' };
+function tileHtml(id, name, x, y, sel) {
+  return `<div id="${id}" class="tilemove absolute rounded-xl border px-3 pb-3 pt-[22px] select-none ${sel ? 'selring' : ''}"
+    style="left:${x}px; top:${y}px; width:215px; height:132px; background:#fff;
+           border:4px solid ${sel ? '#4aa8d8' : STAGE.color}; box-shadow:0 1px 2px rgba(0,0,0,.08); z-index:5;">
+    <div class="flex items-start gap-2 mb-1.5 pr-6">
+      <span class="flex-shrink-0 w-2.5 h-2.5 rounded-full mt-1" style="background:${STAGE.color}"></span>
+      <h3 class="font-semibold text-gray-900 leading-tight" style="font-size:14px;">${name}</h3>
+    </div>
+    <span class="inline-block font-bold px-2 py-0.5 rounded-full whitespace-nowrap"
+      style="background:${STAGE.color}22; color:${STAGE.color}; font-size:9.4px;">${STAGE.name}</span>
+  </div>`;
+}
+function noteHtml(id, text, x, y, w, h, sel) {
+  return `<div id="${id}" class="tilemove note-el ${sel ? 'selring' : ''}"
+    style="left:${x}px; top:${y}px; width:${w}px; height:${h}px; ${sel ? 'border:2px solid #4aa8d8;' : ''}">${text}</div>`;
+}
+
+/* ── Scene 1: the menu, static, with the hover animation live ── */
+const s1 = document.getElementById('scene1');
+s1.innerHTML =
+  tileHtml('s1a', 'Cohen', 24, 26, true) + tileHtml('s1b', 'Levi', 268, 60, true) +
+  tileHtml('s1c', 'Artzi', 60, 176, true) + tileHtml('s1d', 'Mizrahi', 300, 210, true) +
+  `<div class="cursor-dot" style="left:640px; top:60px;"></div>
+   <div class="mark" style="position:absolute; left:660px; top:28px; font-size:18px; width:180px; line-height:1.1;">
+     the click was HERE, on nothing &mdash; the menu still comes up for the four</div>
+   <div class="fixed bg-white rounded-xl shadow-xl border border-gray-100 py-1"
+     style="position:absolute; left:652px; top:78px; min-width:196px; z-index:50;">
+     <div class="px-4 py-1.5 text-[11px] font-bold text-gray-400 border-b border-gray-100" style="letter-spacing:.04em;">4 SELECTED</div>
+     <button class="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">⧉&nbsp; Copy (4)</button>
+     <button class="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">✂&nbsp; Cut (4)</button>
+     <div class="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5" style="cursor:pointer; position:relative;"
+          onmouseenter="this.querySelector('.arr-tip').style.display='flex'"
+          onmouseleave="this.querySelector('.arr-tip').style.display='none'">
+       ▦&nbsp; Arrange (4)
+       <div class="arr-tip" style="display:none; position:absolute; left:100%; top:-6px; margin-left:8px; background:#fff;
+            border:1px solid #e5e7eb; border-radius:10px; box-shadow:0 8px 24px rgba(15,23,42,.18); padding:8px; align-items:center; gap:8px; z-index:60;">
+         <span class="arr-anim"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+         <span style="font-size:11px; color:#6b7280; width:110px;">consolidates the selection into a tidy grid</span>
+       </div>
+     </div>
+   </div>`;
+
+/* ── Scene 2: live Arrange ── */
+const S2 = [
+  { id: 's2a', kind: 'tile', name: 'Cohen', w: 215, h: 132, x: 30,  y: 24 },
+  { id: 's2b', kind: 'tile', name: 'Levi', w: 215, h: 132, x: 640, y: 40 },
+  { id: 's2c', kind: 'tile', name: 'Artzi', w: 215, h: 132, x: 120, y: 250 },
+  { id: 's2d', kind: 'tile', name: 'Peretz', w: 215, h: 132, x: 700, y: 262 },
+  { id: 's2e', kind: 'tile', name: 'Mizrahi', w: 215, h: 132, x: 420, y: 150 },
+  { id: 's2f', kind: 'note', text: 'call about the crane', w: 165, h: 110, x: 380, y: 20 },
+  { id: 's2g', kind: 'note', text: 'keys with the neighbour', w: 165, h: 150, x: 40, y: 150 },
+];
+const s2 = document.getElementById('scene2');
+function drawS2() {
+  s2.innerHTML = S2.map(o => o.kind === 'tile'
+    ? tileHtml(o.id, o.name, o.x, o.y, true)
+    : noteHtml(o.id, o.text, o.x, o.y, o.w, o.h, true)).join('');
+}
+drawS2();
+const S2_START = S2.map(o => ({ ...o }));
+document.getElementById('btn-arrange').onclick = () => {
+  const { pos, blockW, blockH } = arrangeGrid(S2);
+  // centre the block on the selection's current centre
+  let cx = 0, cy = 0;
+  S2.forEach(o => { cx += o.x + o.w / 2; cy += o.y + o.h / 2; });
+  cx /= S2.length; cy /= S2.length;
+  const ox = Math.max(10, cx - blockW / 2), oy = Math.max(10, cy - blockH / 2);
+  S2.forEach(o => { const p = pos.get(o.id); o.x = ox + p.x; o.y = oy + p.y; });
+  S2.forEach(o => { const el = document.getElementById(o.id); el.style.left = o.x + 'px'; el.style.top = o.y + 'px'; });
+  document.getElementById('scene2-hint').textContent = 'still all selected — one drag would move the whole block';
+};
+document.getElementById('btn-scatter').onclick = () => {
+  S2.forEach((o, i) => { o.x = S2_START[i].x; o.y = S2_START[i].y; });
+  drawS2();
+  document.getElementById('scene2-hint').textContent = 'tallest first · equal 18px gaps · each row centred · block lands on the selection’s old centre';
+};
+
+/* ── Scene 3: cut, then paste where you click ── */
+const S3 = [
+  { id: 's3a', name: 'Dahan', w: 215, h: 132, x: 10, y: 12 },
+  { id: 's3b', name: 'Biton', w: 215, h: 132, x: 790, y: 16 },
+  { id: 's3c', name: 'Azoulay', w: 215, h: 132, x: 20, y: 212 },
+  { id: 's3d', name: 'Ohayon', w: 215, h: 132, x: 760, y: 216 },
+];
+const s3 = document.getElementById('scene3');
+s3.innerHTML = S3.map(o => tileHtml(o.id, o.name, o.x, o.y, true)).join('');
+let cutArmed = false;
+document.getElementById('btn-cut').onclick = () => {
+  cutArmed = true;
+  S3.forEach(o => { document.getElementById(o.id).style.opacity = '.35'; });
+  document.getElementById('scene3-hint').textContent = 'they are in the air — click a spot on the board above to paste';
+};
+s3.addEventListener('click', e => {
+  if (!cutArmed) return;
+  cutArmed = false;
+  const r = s3.getBoundingClientRect();
+  const px = e.clientX - r.left, py = e.clientY - r.top;
+  const { pos, blockW, blockH } = arrangeGrid(S3);
+  const ox = Math.min(Math.max(8, px - blockW / 2), r.width - blockW - 8);
+  const oy = Math.min(Math.max(8, py - blockH / 2), r.height - blockH - 8);
+  S3.forEach(o => {
+    const p = pos.get(o.id); o.x = ox + p.x; o.y = oy + p.y;
+    const el = document.getElementById(o.id);
+    el.style.left = o.x + 'px'; el.style.top = o.y + 'px'; el.style.opacity = '1';
+  });
+  document.getElementById('scene3-hint').textContent = 'landed as one tidy block, centred on your click — and still selected';
+});
+</script>
