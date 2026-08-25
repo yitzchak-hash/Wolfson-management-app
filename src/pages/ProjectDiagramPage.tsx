@@ -43,7 +43,10 @@ export function ProjectDiagramPage() {
   const [namingApt, setNamingApt] = useState<Apartment | null>(null);
   const [namingInput, setNamingInput] = useState('');
 
-  // Open a specific apartment drawer on mount when navigated from dashboard
+  // Open a specific apartment drawer — navigated here from the dashboard, or
+  // asked for WHILE standing here (the header's pending list): the effect
+  // watches the value, not just the mount, or a request made on this page
+  // was silently ignored.
   useEffect(() => {
     if (pendingOpenAptId) {
       const apt = apartments.find(a => a.id === pendingOpenAptId);
@@ -51,7 +54,7 @@ export function ProjectDiagramPage() {
       setPendingOpenAptId(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [pendingOpenAptId]);
 
   /**
    * "Show me this", arriving from search.

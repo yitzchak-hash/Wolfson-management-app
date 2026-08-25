@@ -15,6 +15,7 @@ import { DeleteImpact } from '../ui/DeleteImpact';
 import { LinkField } from '../ui/LinkField';
 import { printSheet, printEsc } from '../../data/printing';
 import { PlanAddressSuggest } from './PlanAddressSuggest';
+import { StagePicker } from './StagePicker';
 import { PlanPinOverlay } from './PlanPinOverlay';
 import { cachedPlanAspect, measurePlanAspect } from '../../data/planAspect';
 // Lazy, deliberately. The markup studio carries pdf.js — about a megabyte of
@@ -1474,20 +1475,20 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 </div>
                 )}
 
-                {/* Current stage */}
+                {/* Current stage — with the per-stage done / half-done boxes.
+                    Marks save on the spot (the drawer's autosave manner);
+                    picking a row runs the same handleStageChange the old
+                    select ran, questions and all. */}
                 <div className="flex-1 min-w-[150px]">
                   <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.currentStage}</label>
-                  <select
-                    value={currentStageId}
-                    onChange={e => handleStageChange(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-2 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
-                    style={{ borderLeftColor: currentStage?.color, borderLeftWidth: currentStage ? '3px' : undefined }}
-                  >
-                    <option value="">{ui.notStartedOption}</option>
-                    {sortedStages.map(s => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
+                  <StagePicker
+                    stages={sortedStages}
+                    currentStageId={currentStageId}
+                    stageMarks={(apartments.find(a => a.id === apartment.id) ?? apartment).stageMarks}
+                    onPickStage={handleStageChange}
+                    onMarks={next => updateApartment(apartment.id, { stageMarks: next }, currentUser)}
+                    ui={ui}
+                  />
                 </div>
               </div>
 

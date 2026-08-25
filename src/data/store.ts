@@ -1103,7 +1103,9 @@ export const useStore = create<AppState>((set, get) => ({
     let extraUpdates: Apartment[] = [];
     // displayName is synced too: a linked pair is one physical home, so it carries
     // one family name. Each cell still shows its own apartment number.
-    const syncedFields = ['currentStageId', 'classification', 'driveLink', 'plansPdfLink', 'displayName'] as const;
+    // stageMarks syncs like currentStageId — a merged pair is one home, and
+    // its stage bookkeeping (done / pending per stage) is one record too.
+    const syncedFields = ['currentStageId', 'classification', 'driveLink', 'plansPdfLink', 'displayName', 'stageMarks'] as const;
     const changesHaveSync = syncedFields.some(f => f in changes);
     if (changesHaveSync && updated.mergedWith) {
       const partner = get().apartments.find(a => a.id === updated.mergedWith);
@@ -1113,6 +1115,7 @@ export const useStore = create<AppState>((set, get) => ({
         if ('classification' in changes) partnerPatch.classification = updated.classification;
         if ('driveLink' in changes) partnerPatch.driveLink = updated.driveLink;
         if ('plansPdfLink' in changes) partnerPatch.plansPdfLink = updated.plansPdfLink;
+        if ('stageMarks' in changes) partnerPatch.stageMarks = updated.stageMarks;
         // Never copy a name that is just the source apartment's own number
         if ('displayName' in changes && updated.displayName?.trim()
             && updated.displayName.trim() !== updated.apartmentNumber?.trim()) {
@@ -2024,6 +2027,29 @@ export const useStore = create<AppState>((set, get) => ({
             code: '', role: 'viewer', active: true, createdAt: updated.createdAt,
           } as User;
         get().updateApartment(updated.apartmentId, { currentStageId: updated.stageWhenDone }, who);
+      }
+    }
+    /**
+     * Closing a STAGE REPORT marks its stage done on the apartment — the
+     * worker said "I did work here, and I finished", proved it with the
+     * pictures, and closed. Here for the same reason stageWhenDone is here:
+     * this is the one write every closing screen goes through. A pending
+     * mark on that stage is superseded; re-opening the task does not unmark
+     * (the office may have confirmed it by hand in the meantime).
+     */
+    if (before && updated && 'completedAt' in changes
+        && !before.completedAt && updated.completedAt
+        && updated.stageReport && updated.stageId) {
+      const apt = get().apartments.find(ap => ap.id === updated.apartmentId);
+      if (apt && apt.stageMarks?.[updated.stageId] !== 'done') {
+        const who = get().currentUser
+          ?? {
+            id: updated.contractorId,
+            name: get().contractors.find(c => c.id === updated.contractorId)?.name ?? 'Worker',
+            code: '', role: 'viewer', active: true, createdAt: updated.createdAt,
+          } as User;
+        get().updateApartment(updated.apartmentId,
+          { stageMarks: { ...(apt.stageMarks ?? {}), [updated.stageId]: 'done' } }, who);
       }
     }
     // Log completion / undo-completion

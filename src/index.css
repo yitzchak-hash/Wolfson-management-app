@@ -642,3 +642,16 @@ main > * { min-width: 0; }
   .short-scroll { height: auto !important; overflow: visible !important; }
   .short-scroll .short-scroll-body { overflow: visible !important; flex: none !important; }
 }
+
+/*
+   The half-done stage clock. A soft repeating orange pulse — enough to say
+   "this one is waiting on somebody" without shouting. Respect reduced motion.
+*/
+@keyframes pendingGlow {
+  0%, 100% { filter: drop-shadow(0 0 1px rgba(249, 115, 22, .55)); opacity: 1; }
+  50% { filter: drop-shadow(0 0 5px rgba(249, 115, 22, .95)); opacity: .75; }
+}
+.pending-glow { animation: pendingGlow 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .pending-glow { animation: none; }
+}

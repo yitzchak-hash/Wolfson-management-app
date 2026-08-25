@@ -4524,3 +4524,69 @@ plus adding weekCount 2. **Harness date drift**: `multiday.mjs` and
 Today, so both now press the All pill before reaching for a card, and
 multiday derives its badge expectation (Today/Tomorrow) from the real
 clock. A harness that assumes the container's date goes red at midnight.
+
+---
+
+# v2 — stage discipline (crossed-off stages, half done, and "I did work here")
+
+## The model (`src/data/stageMarks.ts` + `Apartment.stageMarks`)
+`stageMarks?: Record<stageId, 'done' | 'pending'>` rides in `apartments` (no
+new store point) and SYNCS TO A MERGED PARTNER like currentStageId. The rule,
+one sentence: a manual mark always wins; without one, every stage ordered
+BEFORE the current stage derives as done (moving on is what closes a stage),
+and the current stage stays open until the job moves past it or somebody
+marks it. Pure helpers: `stageStateOf` · `pendingStages` (manual pendings
+only — derived done is bookkeeping, not an alarm) · `cycleMark` (left press
+open→done→open, pending→done; right press pending↔open; empty map collapses
+to undefined so the field vanishes).
+
+`ContractorAssignment.stageReport?: boolean` — the task IS a stage report.
+The store's completion write (beside stageWhenDone) marks the report's stage
+'done' on the apartment, whichever screen closes it; an OPEN report task is
+the record behind a pending stage, the worker's what-is-left note under it.
+
+## The stage picker (`src/components/apartment/StagePicker.tsx`)
+The drawer's stage `<select>` is gone — an option cannot wear a checkbox, a
+strikethrough or a right-click. Every stage row carries a box: derived/manual
+done = green check + name struck through; right-click = half done, a glowing
+orange clock (`.pending-glow` in index.css, reduced-motion safe); row press
+still runs `handleStageChange` (keep-history / assign-task questions intact).
+Marks save on the spot via `updateApartment`. The panel PORTALS at z-[140] —
+the drawer body is an overflow scroller (the tooltip scissors). Its Escape
+handler is capture+stopPropagation so the drawer under it stays open. Applies
+to every workspace — the drawer is shared.
+
+## The worker's flow (`ContractorPortal`, the map tab)
+Tapping ANY apartment on the building map opens its sheet (`data-work-sheet`):
+his tasks there one tap deeper, plus the big **I did work here** button
+(`data-work-here`). Then one small screen at a time: What did you do? (the
+workspace's stages as rows) → Did you finish this stage? →
+- **Yes** creates a stage-report task and hands straight over to the standing
+  3-picture closing screen. `arriveClosingRef` is load-bearing: the sheet's
+  "a new selection starts OUTSIDE the closing screen" effect fires on the
+  very selection this flow makes and would undo a plain `setClosing(true)`.
+- **Not yet** asks what is left (`data-work-note`), files the note under an
+  OPEN report task, and marks the stage pending — nothing is created until
+  Send, so backing out leaves no records.
+New optional ContractorUiStrings (fallback rule): `workHereBtn`,
+`whatDidYouDo`, `didYouFinish`, `finishedYes`, `finishedNo`, `whatsLeft`,
+`sendToOffice`, `halfDoneSaved`.
+
+## Pending shows on BOTH (the owner's ruling)
+The apartment's picker wears the clock — and the Header grows
+`PendingStagesBell` (`data-pending-bell`): a glowing orange clock with a
+count, drawn ONLY while something is pending, listing every half-done stage
+in the workspace with the worker's note, portalled (the header is a stacking
+context). A row opens the apartment through the channel its page already
+watches while mounted: `pendingFocus` for the board, `pendingOpenAptId` for
+the diagram — whose consuming effect now watches the VALUE, not just the
+mount (asked-for-while-standing-here was silently ignored). New MainUiStrings
+(both presets): `stagePendingLabel`, `stageMarkHint`, `stagePendingListTitle`,
+`stagePendingEmpty`.
+
+Harness: `scratchpad/stagereport.mjs` (22 checks) — derived cross-off, manual
+done, right-click pending, the bell and its row opening the drawer, the
+worker's no path (pending + open task + note) and yes path (closing screen →
+stage done), and the office list carrying both with the note. Its manner: one
+live page at a time — a background admin page's flush-on-unload overwrites
+the worker's writes (the standing localStorage trap).

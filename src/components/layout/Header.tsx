@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { LogOut, User, Sun, Moon, AlertTriangle, Loader2, CheckCircle2, Search, CalendarDays, Settings,
-         ChevronDown, Check, GripVertical } from 'lucide-react';
+         ChevronDown, Check, GripVertical, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../data/store';
 import { usePhone } from '../../data/usePhone';
-import { Project } from '../../types';
+import { Project, aptLabel, getStageName } from '../../types';
+import { pendingStages } from '../../data/stageMarks';
 import { Tooltip } from '../ui/Tooltip';
 import { ActivityTicker } from '../ui/ActivityTicker';
 import { WhatsNewButton } from '../ui/WhatsNew';
@@ -38,6 +39,149 @@ function CloudSyncBadge({ light }: { light: boolean }) {
         ? <><Loader2 size={13} className="animate-spin" /> {s.syncSaving}</>
         : <><CheckCircle2 size={13} /> {s.syncSaved}</>}
     </div>
+  );
+}
+
+
+/**
+ * THE PENDING LIST — the office's running list of half-done stages.
+ *
+ * A stage a worker reported "not finished" (or the office right-clicked to
+ * half done) shows an orange glowing clock in the apartment's stage picker —
+ * and HERE, so nobody has to open apartments one by one to find out what is
+ * waiting. The owner's ruling: pending shows on both. The bell only exists
+ * while there is something pending; a permanent icon reading zero is noise.
+ *
+ * The menu renders through a PORTAL — the header is its own stacking context
+ * (the workspace picker's disease), so no z-index on a child could clear the
+ * board's floating chrome. Outside-press close checks BOTH refs.
+ */
+function PendingStagesBell({ light }: { light: boolean }) {
+  const apartments = useStore(st => st.apartments);
+  const allStages = useStore(st => st.stages);
+  const currentProjectId = useStore(st => st.currentProjectId);
+  const assignments = useStore(st => st.contractorAssignments);
+  const notes = useStore(st => st.contractorNotes);
+  const setPendingOpenAptId = useStore(st => st.setPendingOpenAptId);
+  const setPendingFocus = useStore(st => st.setPendingFocus);
+  const ui = useStore(st => st.mainUiStrings);
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+
+  const stages = allStages.filter(st =>
+    currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId);
+  const rows = useMemo(() => pendingStages(apartments, stages), [apartments, stages]);
+
+  useEffect(() => {
+    if (!open) return;
+    const down = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (btnRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    window.addEventListener('pointerdown', down);
+    return () => window.removeEventListener('pointerdown', down);
+  }, [open]);
+
+  if (rows.length === 0) return null;
+
+  const MENU_W = 300;
+  const openMenu = () => {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (!r) return;
+    setPos({
+      left: Math.max(8, Math.min(ui.isRtl ? r.left : r.right - MENU_W, window.innerWidth - MENU_W - 8)),
+      top: r.bottom + 6,
+    });
+    setOpen(true);
+  };
+
+  /** The worker's "what is left" — the newest note under the stage's open report task. */
+  const noteFor = (aptId: string, stageId: string): string | null => {
+    const task = assignments
+      .filter(a => a.stageReport && a.apartmentId === aptId && a.stageId === stageId && !a.completedAt)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    if (!task) return null;
+    const n = notes
+      .filter(x => x.assignmentId === task.id && x.text?.trim())
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    return n?.text ?? null;
+  };
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        data-pending-bell
+        onClick={() => (open ? setOpen(false) : openMenu())}
+        title={ui.stagePendingListTitle}
+        className="relative p-2 rounded-lg transition-colors flex-shrink-0"
+        style={{ color: '#f97316' }}
+      >
+        <Clock size={18} className="pending-glow" />
+        <span
+          className="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-0.5 rounded-full text-[9px] font-black
+                     flex items-center justify-center text-white tabular-nums"
+          style={{ backgroundColor: '#f97316' }}
+        >
+          {rows.length}
+        </span>
+      </button>
+      {open && pos && createPortal(
+        <div
+          ref={menuRef}
+          data-pending-menu
+          dir={ui.isRtl ? 'rtl' : 'ltr'}
+          className="fixed z-[100] bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden flex flex-col"
+          style={{ left: pos.left, top: pos.top, width: MENU_W, maxHeight: 'min(380px, calc(100dvh - 80px))' }}
+        >
+          <div className="px-3 py-2 border-b border-gray-100 flex items-center gap-1.5 flex-shrink-0">
+            <Clock size={13} style={{ color: '#f97316' }} />
+            <span className="text-xs font-bold text-gray-700">{ui.stagePendingListTitle}</span>
+          </div>
+          <div className="flex-1 overflow-y-auto py-1">
+            {rows.map(({ apartment, stage }) => {
+              const note = noteFor(apartment.id, stage.id);
+              return (
+                <button
+                  key={`${apartment.id}|${stage.id}`}
+                  data-pending-row
+                  onClick={() => {
+                    setOpen(false);
+                    // The board listens for a FOCUS intent; the diagram for
+                    // pendingOpenAptId — each is the channel that page
+                    // already watches while mounted.
+                    if (currentProjectId === 'general') {
+                      setPendingFocus({ kind: 'apartment', id: apartment.id });
+                      navigate('/jobs');
+                    } else {
+                      setPendingOpenAptId(apartment.id);
+                      navigate('/project');
+                    }
+                  }}
+                  className="w-full text-left rtl:text-right px-3 py-2 hover:bg-orange-50 transition-colors"
+                >
+                  <span className="block text-xs font-bold text-gray-800 truncate">{aptLabel(apartment)}</span>
+                  <span className="flex items-center gap-1.5 mt-0.5">
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color }} />
+                    <span className="text-[11px] font-semibold truncate" style={{ color: '#c2410c' }}>
+                      {getStageName(stage, !!ui.isRtl)} · {ui.stagePendingLabel}
+                    </span>
+                  </span>
+                  {note && (
+                    <span className="block text-[10px] text-gray-500 truncate mt-0.5">{note}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }
 
@@ -348,6 +492,8 @@ export function Header() {
         {currentUser && <WhatsNewButton />}
         {/* What just changed, and who did it — see ActivityTicker. */}
         {currentUser && <ActivityTicker light={lightTheme} />}
+        {/* Half-done stages — pending shows on BOTH the apartment and here. */}
+        {currentUser && <PendingStagesBell light={lightTheme} />}
         <CloudSyncBadge light={lightTheme} />
 
         {currentUser && (

@@ -8,7 +8,7 @@ import { printSheet, printEsc } from '../data/printing';
 import { format, isPast, parseISO, differenceInCalendarDays, startOfDay, startOfWeek, addDays as addDaysFns } from 'date-fns';
 import { usePhone } from '../data/usePhone';
 import {
-  Camera, CheckCircle2, Clock, Building2, CalendarDays, FileText,
+  Camera, CheckCircle2, Clock, Building2, CalendarDays, FileText, Hammer,
   Plus, Send, AlertCircle, X, Play, File as FileIcon, MapPin,
   BookOpen, Download, Paperclip, MessageSquare, CloudUpload,
   ChevronLeft, ChevronRight, Languages, History, PenLine, Printer,
@@ -308,6 +308,7 @@ export function ContractorPortal() {
     apartments, stages, stageNotes, buildings,
     addContractorNote, addContractorPhoto, deleteContractorPhoto,
     updateContractorAssignment, addContractorAssignment, addActivityLog,
+    updateApartment,
     contractorUiStrings, planAnnotations,
     workerLevels, updateContractor, canvasElements, users,
     projects, currentProjectId, setCurrentProject,
@@ -408,6 +409,11 @@ export function ContractorPortal() {
    * the finish-early ask and completion run.
    */
   const [closing, setClosing] = useState(false);
+  /** The map's "I did work here" flow — one small screen at a time. */
+  const [workHere, setWorkHere] = useState<null | {
+    aptId: string; step: 'view' | 'stage' | 'finished' | 'note'; stageId?: string;
+  }>(null);
+  const [leftNote, setLeftNote] = useState('');
   /** How many pictures a closing needs. photosOptional workers skip it. */
   const MIN_CLOSE_MEDIA = 3;
   /** Weekly is what a worker plans his van by; the month grid is one press away. */
@@ -746,8 +752,18 @@ export function ContractorPortal() {
     setNoteAttachments([]);
   }
 
-  /** A new task selection always starts OUTSIDE the closing screen. */
-  useEffect(() => { setClosing(false); }, [selectedAssignment?.id]);
+  /**
+   * A new task selection always starts OUTSIDE the closing screen — except a
+   * sheet the "I did work here" flow opens: the worker just said the stage is
+   * finished, so he arrives straight ON the closing screen. A ref, because
+   * this effect fires on the very selection that flow makes, and a plain
+   * setClosing(true) beside setSelectedAssignment would be undone right here.
+   */
+  const arriveClosingRef = useRef(false);
+  useEffect(() => {
+    if (arriveClosingRef.current) { arriveClosingRef.current = false; setClosing(true); return; }
+    setClosing(false);
+  }, [selectedAssignment?.id]);
 
   function handleComplete() {
     if (!selectedAssignment) return;
@@ -822,10 +838,16 @@ export function ContractorPortal() {
     updateContractorAssignment(selectedAssignment.id, { completedAt: null });
   }
 
+  /**
+   * Tapping an apartment on the map opens ITS sheet: the same view as before
+   * (his tasks there, one tap deeper), plus the big "I did work here"
+   * button — the start of the stage-report flow, one small step at a time:
+   * what did you do → did you finish → yes: pictures and close (the standing
+   * closing screen), no: a note of what is left, and the stage goes HALF
+   * DONE (orange) for the office.
+   */
   function handleDiagramClick(apt: typeof apartments[0]) {
-    const aptAssignments = assignments.filter(a => a.apartmentId === apt.id);
-    if (aptAssignments.length === 0) return;
-    setSelectedAssignment(aptAssignments.find(a => !a.completedAt) ?? aptAssignments[0]);
+    setWorkHere({ aptId: apt.id, step: 'view' });
     setShowHistory(false);
   }
 
@@ -2275,6 +2297,211 @@ export function ContractorPortal() {
                       </button>
                     )}
                   </>
+                )}
+              </div>
+            </div>
+          </>
+        );
+      })()}
+
+      {/*
+        THE "I DID WORK HERE" SHEET — the map's stage-report flow, one small
+        screen at a time. View (his tasks here + the big button) → what did
+        you do (a stage) → did you finish → YES creates a stage-report task
+        and hands over to the standing closing screen (pictures, note, Close
+        job — completing it marks the stage done on the apartment), NO takes
+        a note of what is left, files it under an OPEN stage-report task, and
+        marks the stage HALF DONE (the glowing orange clock the office sees
+        in the stage picker and in the header's pending list).
+      */}
+      {workHere && (() => {
+        const apt = apartments.find(a => a.id === workHere.aptId);
+        if (!apt) return null;
+        const wsStages = stages
+          .filter(st => (currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId) && st.active)
+          .sort((a, b) => a.order - b.order);
+        const pickedStage = wsStages.find(st => st.id === workHere.stageId);
+        const aptTasks = assignments.filter(a => a.apartmentId === apt.id);
+        const curStage = getStage(apt.currentStageId);
+        const todayIso = new Date().toISOString().slice(0, 10);
+        const closeSheet = () => { setWorkHere(null); setLeftNote(''); };
+        const mintId = () => `SR-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+        const reportBase = (st: typeof wsStages[0], desc: string) => ({
+          contractorId,
+          apartmentId: apt.id,
+          buildingId: apt.buildingId,
+          taskDescription: desc,
+          dueDate: todayIso,
+          stageId: st.id,
+          priority: 'normal',
+          completedAt: null,
+          stageReport: true,
+          createdBy: contractorId,
+          createdByName: contractor?.name ?? '',
+        });
+        const finishedYes = () => {
+          if (!pickedStage) return;
+          const rid = mintId();
+          addContractorAssignment({
+            id: rid,
+            ...reportBase(pickedStage,
+              `${getStageName(pickedStage, !!s.isRtl)} — ${s.isRtl ? 'דיווח שלב' : 'stage report'}`),
+          } as never);
+          const rec = useStore.getState().contractorAssignments.find(a => a.id === rid);
+          closeSheet();
+          if (rec) { arriveClosingRef.current = true; setSelectedAssignment(rec); }
+        };
+        const sendNotFinished = () => {
+          if (!pickedStage || !leftNote.trim()) return;
+          const rid = mintId();
+          addContractorAssignment({
+            id: rid,
+            ...reportBase(pickedStage,
+              `${s.isRtl ? 'להשלים' : 'Finish'} ${getStageName(pickedStage, !!s.isRtl)}`),
+          } as never);
+          addContractorNote({
+            assignmentId: rid,
+            apartmentId: apt.id,
+            contractorId,
+            text: leftNote.trim(),
+            authorType: 'contractor' as const,
+            authorId: contractorId,
+            authorName: contractor?.name ?? '',
+          });
+          updateApartment(apt.id,
+            { stageMarks: { ...(apt.stageMarks ?? {}), [pickedStage.id]: 'pending' } },
+            {
+              id: contractorId, name: contractor?.name ?? 'Worker', code: '',
+              role: 'viewer', active: true, createdAt: new Date().toISOString(),
+            } as never);
+          closeSheet();
+        };
+        return (
+          <>
+            <div className="fixed inset-0 bg-black/40 z-40" onClick={closeSheet} />
+            <div data-work-sheet
+              className="fixed bottom-0 left-0 right-0 z-50 rounded-t-3xl bg-white shadow-2xl flex flex-col"
+              style={{ maxHeight: '88vh' }}>
+              <div className="flex items-center justify-center pt-3 pb-1 flex-shrink-0">
+                <div className="w-10 h-1.5 rounded-full bg-gray-200" />
+              </div>
+              <div className="px-5 pb-3 border-b border-gray-100 flex-shrink-0 flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Building2 size={16} className="text-[#4aa8d8] flex-shrink-0" />
+                    <span className="font-bold text-[#1e3a5f] text-lg truncate">{aptLabel(apt)}</span>
+                    <span className="text-gray-400 text-sm">{apt.buildingId}</span>
+                  </div>
+                  {apt.address && <p className="text-xs text-gray-500 mt-0.5 truncate">{apt.address}</p>}
+                  {curStage && (
+                    <p className="text-xs mt-0.5 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: curStage.color }} />
+                      <span className="text-gray-600">{getStageName(curStage, !!s.isRtl)}</span>
+                    </p>
+                  )}
+                </div>
+                <button onClick={closeSheet} className="p-1.5 text-gray-400 flex-shrink-0"><X size={18} /></button>
+              </div>
+              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+                {workHere.step === 'view' && (
+                  <>
+                    {aptTasks.length > 0 && (
+                      <div className="space-y-2">
+                        {aptTasks.map(t => (
+                          <button key={t.id}
+                            onClick={() => { closeSheet(); setSelectedAssignment(t); }}
+                            className="w-full text-left rtl:text-right border border-gray-200 rounded-xl px-3 py-2.5">
+                            <span className={`text-sm font-semibold ${t.completedAt ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                              {t.taskDescription}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <button data-work-here
+                      onClick={() => setWorkHere({ ...workHere, step: 'stage' })}
+                      className="w-full py-4 rounded-xl text-base font-bold text-white flex items-center justify-center gap-2 active:scale-[0.98]"
+                      style={{ background: 'linear-gradient(135deg, #1e3a5f, #2c4f78)' }}>
+                      <Hammer size={19} />
+                      {s.workHereBtn || (s.isRtl ? 'עבדתי כאן' : 'I did work here')}
+                    </button>
+                  </>
+                )}
+                {workHere.step === 'stage' && (
+                  <>
+                    <p className="text-center font-extrabold text-gray-800" style={{ fontSize: 17 }}>
+                      {s.whatDidYouDo || (s.isRtl ? 'מה עשית?' : 'What did you do?')}
+                    </p>
+                    <div className="space-y-2" data-work-stages>
+                      {wsStages.map(st => (
+                        <button key={st.id}
+                          onClick={() => setWorkHere({ ...workHere, step: 'finished', stageId: st.id })}
+                          className="w-full flex items-center gap-2.5 border border-gray-200 rounded-xl px-3.5 py-3 text-left rtl:text-right active:scale-[0.99]">
+                          <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: st.color }} />
+                          <span className="text-sm font-bold text-gray-800">{getStageName(st, !!s.isRtl)}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <button onClick={() => setWorkHere({ ...workHere, step: 'view' })}
+                      className="w-full text-center text-xs font-semibold text-gray-400">
+                      {s.isRtl ? 'חזרה' : 'Back'}
+                    </button>
+                  </>
+                )}
+                {workHere.step === 'finished' && pickedStage && (
+                  <div data-work-finished className="space-y-3">
+                    <p className="text-center font-extrabold text-gray-800" style={{ fontSize: 17, lineHeight: 1.35 }}>
+                      {s.didYouFinish || (s.isRtl ? 'סיימת את השלב הזה?' : 'Did you finish this stage?')}
+                    </p>
+                    <p className="text-center font-bold flex items-center justify-center gap-2" style={{ color: '#0369a1', fontSize: 15 }}>
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: pickedStage.color }} />
+                      {getStageName(pickedStage, !!s.isRtl)}
+                    </p>
+                    <button data-finished-yes onClick={finishedYes}
+                      className="w-full py-3.5 rounded-xl font-bold text-white text-base"
+                      style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}>
+                      {s.finishedYes || (s.isRtl ? 'כן — זה גמור' : 'Yes — it is finished')}
+                    </button>
+                    <button data-finished-no onClick={() => setWorkHere({ ...workHere, step: 'note' })}
+                      className="w-full py-3.5 rounded-xl font-bold text-base"
+                      style={{ backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fdba74' }}>
+                      {s.finishedNo || (s.isRtl ? 'עוד לא' : 'Not yet')}
+                    </button>
+                    <button onClick={() => setWorkHere({ ...workHere, step: 'stage' })}
+                      className="w-full text-center text-xs font-semibold text-gray-400">
+                      {s.isRtl ? 'חזרה' : 'Back'}
+                    </button>
+                  </div>
+                )}
+                {workHere.step === 'note' && pickedStage && (
+                  <div data-work-note className="space-y-3">
+                    <p className="text-center font-extrabold text-gray-800" style={{ fontSize: 17 }}>
+                      {s.whatsLeft || (s.isRtl ? 'מה נשאר לעשות?' : 'What is left to do?')}
+                    </p>
+                    <textarea
+                      value={leftNote}
+                      onChange={e => setLeftNote(e.target.value)}
+                      rows={3}
+                      autoFocus
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                      placeholder={s.whatsLeft || (s.isRtl ? 'מה נשאר לעשות?' : 'What is left to do?')}
+                    />
+                    <button data-work-send onClick={sendNotFinished} disabled={!leftNote.trim()}
+                      className="w-full py-3.5 rounded-xl font-bold text-white text-base flex items-center justify-center gap-2 disabled:opacity-40"
+                      style={{ backgroundColor: '#1e3a5f' }}>
+                      <Send size={16} />
+                      {s.sendToOffice || (s.isRtl ? 'שליחה למשרד' : 'Send to the office')}
+                    </button>
+                    <p className="text-center text-[11px] text-gray-400">
+                      {s.halfDoneSaved || (s.isRtl
+                        ? 'המשרד יראה את השלב הזה כחצי גמור.'
+                        : 'The office will see this stage as half done.')}
+                    </p>
+                    <button onClick={() => setWorkHere({ ...workHere, step: 'finished' })}
+                      className="w-full text-center text-xs font-semibold text-gray-400">
+                      {s.isRtl ? 'חזרה' : 'Back'}
+                    </button>
+                  </div>
                 )}
               </div>
             </div>

@@ -616,6 +616,17 @@ export interface Apartment {
   tileW?: number;
   tileH?: number;
   stageDates?: Record<string, string>; // stageId → ISO timestamp of when that stage was first set
+  /**
+   * Per-stage bookkeeping for work done OUT OF ORDER — the owner's "he did
+   * wall units before concealed units". `'done'` draws the stage crossed off
+   * with a green check; `'pending'` is half-done (a glowing orange clock) and
+   * also surfaces in the office's pending list in the header. A stage with no
+   * entry derives its state: stages ORDERED BEFORE the current one read as
+   * done (moving on is what closes a stage), the current stage and everything
+   * after are open. A manual mark always wins over the derived state. Rides
+   * in `apartments`, so persist/export/import/Firestore need no new key.
+   */
+  stageMarks?: Record<string, 'done' | 'pending'>;
   driveLink?: string; // Google Drive folder URL for this apartment's files
   plansPdfLink?: string; // Google Drive link to the Engineering Plans PDF
   zohoLink?: string;   // General Jobs: Zoho CRM / work order link
@@ -1054,6 +1065,14 @@ export interface ContractorAssignment {
    * leave the stage alone.
    */
   stageWhenDone?: string | null;
+  /**
+   * This task IS a stage report — born from the worker's "I did work here"
+   * flow on the building map, about `stageId`. Completing it (photos in,
+   * closed) marks that stage 'done' on the apartment, applied by the store at
+   * the completion write; an OPEN stage-report task is the record behind a
+   * 'pending' stage — the note of what is left hangs under it.
+   */
+  stageReport?: boolean;
 }
 
 export interface ContractorNote {
@@ -1234,6 +1253,15 @@ export interface ContractorUiStrings {
   addThreePictures?: string;
   weeklyLabel?: string;
   monthlyLabel?: string;
+  /** The "I did work here" stage-report flow on the building map — optional, same rule. */
+  workHereBtn?: string;
+  whatDidYouDo?: string;
+  didYouFinish?: string;
+  finishedYes?: string;
+  finishedNo?: string;
+  whatsLeft?: string;
+  sendToOffice?: string;
+  halfDoneSaved?: string;
 }
 
 export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
@@ -1295,6 +1323,14 @@ export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   weeklyLabel: 'Weekly',
   monthlyLabel: 'Monthly',
   calendarTab: 'Calendar',
+  workHereBtn: 'I did work here',
+  whatDidYouDo: 'What did you do?',
+  didYouFinish: 'Did you finish this stage?',
+  finishedYes: 'Yes — it is finished',
+  finishedNo: 'Not yet',
+  whatsLeft: 'What is left to do?',
+  sendToOffice: 'Send to the office',
+  halfDoneSaved: 'Sent — the office will see it as half done.',
 };
 
 export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
@@ -1356,6 +1392,14 @@ export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   weeklyLabel: 'שבועי',
   monthlyLabel: 'חודשי',
   calendarTab: 'לוח שנה',
+  workHereBtn: 'עבדתי כאן',
+  whatDidYouDo: 'מה עשית?',
+  didYouFinish: 'סיימת את השלב הזה?',
+  finishedYes: 'כן — זה גמור',
+  finishedNo: 'עוד לא',
+  whatsLeft: 'מה נשאר לעשות?',
+  sendToOffice: 'שליחה למשרד',
+  halfDoneSaved: 'נשלח — המשרד יראה את זה כחצי גמור.',
 };
 
 // ─── Main Admin UI Strings ────────────────────────────────────────────────────
@@ -1449,6 +1493,11 @@ export interface MainUiStrings {
   buildingPrefix: string;
   standard: string;
   notStartedOption: string;
+  // Stage marks (done / pending bookkeeping in the stage picker)
+  stagePendingLabel: string;
+  stageMarkHint: string;
+  stagePendingListTitle: string;
+  stagePendingEmpty: string;
   // Header
   syncSaving: string;
   syncSaved: string;
@@ -1997,6 +2046,10 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   buildingPrefix: 'Building',
   standard: 'Standard',
   notStartedOption: '— Not Started —',
+  stagePendingLabel: 'half done',
+  stageMarkHint: 'Tap a box to cross a stage off · right-click marks it half done',
+  stagePendingListTitle: 'Half-done stages',
+  stagePendingEmpty: 'Nothing is waiting — no half-done stages.',
   // Header
   syncSaving: 'Saving…',
   syncSaved: 'Saved ✓',
@@ -2544,6 +2597,10 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   buildingPrefix: 'בניין',
   standard: 'סטנדרטי',
   notStartedOption: '— טרם התחיל —',
+  stagePendingLabel: 'חצי גמור',
+  stageMarkHint: 'לחיצה על התיבה מסמנת שלב כגמור · קליק ימני מסמן חצי גמור',
+  stagePendingListTitle: 'שלבים חצי גמורים',
+  stagePendingEmpty: 'אין שלבים חצי גמורים.',
   // Header
   syncSaving: 'שומר...',
   syncSaved: 'נשמר ✓',
