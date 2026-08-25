@@ -4704,3 +4704,28 @@ Harness: `scratchpad/arrange.mjs` (10 checks). Its lesson: the exact pack
 SHAPE depends on the mix — assert the grid's INVARIANTS (compact bands, the
 18px gaps, selection kept), not a guessed row layout; 4 tiles + 1 note
 legitimately packs [2,2,1].
+
+---
+
+# v2 — Building Progress cells scale to fit
+
+`ProgressCell` in DashWidgets is measured in BOTH dimensions now: cell width
+from the columns as before, cell HEIGHT from the widget's real room divided
+by the tallest building's rows, written into the grid as `gridAutoRows` — a
+taller widget grows the apartments themselves, not just its frame. Inside
+the cell everything sizes from the measured box, per name, via the diagram's
+`emWidth`:
+- the family name takes the LARGER of a one-line and a two-line fit (wrap
+  costs ~5%, hence ×1.9 not ×2), capped by a ceiling that grows with the
+  cell — a tall cell spends its height on a big wrapped name;
+- the number steps ×0.82 smaller when a name shares the cell;
+- a genuinely tall cell (≥34px + slack) earns the ADDRESS line, in the
+  owner's stated order: address, number, name;
+- floors at 4.5px — below that it is ink, not writing.
+
+Harness: `scratchpad/progresscells.mjs` (10 checks). Its lesson: WidgetSurface
+SCALES the widget's natural drawing, and computed font-size stays in LOCAL px
+under a transform (the ScreenReport rule) — a probe must multiply by the
+render scale or a visually-big name reads as 8px and the harness blames the
+product. `boardsize.mjs` carries one PRE-EXISTING red (left-edge auto-pan),
+verified identical with these changes stashed.

@@ -6,6 +6,7 @@ import {
 } from '../../types';
 import { useStore, loadProjectSnapshot } from '../../data/store';
 import { usePlannerDrag } from '../../data/plannerDrop';
+import { emWidth } from '../diagram/BuildingDiagram';
 
 /**
  * The three widgets the dashboard was asked for.
@@ -37,32 +38,88 @@ import { usePlannerDrag } from '../../data/plannerDrop';
 function ProgressCell({ apt, fill, cell, label, projectId, onOpen }: {
   apt: Apartment;
   fill: string;
-  cell: { number: boolean; name: boolean; numberPx: number; namePx: number };
+  /** The measured cell box — everything inside is sized from it. */
+  cell: { w: number; h: number };
   label: string;
   /** Which workspace this unit lives in — it travels with the drop. */
   projectId: string;
   onOpen: () => void;
 }) {
   const planner = usePlannerDrag(apt.id, { projectId, label });
+
+  /**
+   * EVERYTHING SCALES TO FIT THE CELL — the owner's ruling: the family name
+   * must be legible at any widget size and aspect, wrapping to TWO rows when
+   * one is not enough, the number giving up a little size to make the room,
+   * and a tall cell earning the address line too. Sized per NAME with the
+   * diagram's own measured `emWidth`, rounded DOWN (the diagram rule), so a
+   * long name picks a smaller font instead of being cut invisible.
+   */
+  const { w, h } = cell;
+  const name = apt.displayName && apt.displayName !== apt.apartmentNumber ? apt.displayName : '';
+  const usable = Math.max(4, w - 2);
+
+  // The number: from the cell's smaller dimension, and a step smaller when a
+  // name shares the cell — that step is what buys the name its two rows.
+  let numberPx = Math.max(5, Math.min(12, Math.min(w * 0.4, h * 0.5)));
+  if (name) numberPx = Math.max(5, numberPx * 0.82);
+
+  // The name: the LARGER of a one-line fit and a two-line fit (wrap costs
+  // ~5% over a clean split, hence 1.9 not 2), so a tall cell SPENDS its
+  // height on a bigger wrapped name instead of a small single line. The cap
+  // grows with the cell, floor 4.5px — below that it is ink, not writing.
+  let namePx = 0, nameLines = 1;
+  if (name) {
+    const cap = Math.min(13, Math.max(10.5, h * 0.16));
+    const em = emWidth(name) * 1.04;
+    const one = Math.min(cap, usable / em);
+    const two = Math.min(cap, (usable * 1.9) / em);
+    const twoFits = h >= Math.min(12, w * 0.4) * 0.9 + two * 1.12 * 2 + 2;
+    if (twoFits && two > one) { nameLines = 2; namePx = Math.max(4.5, Math.floor(two * 10) / 10); }
+    else namePx = Math.max(4.5, Math.floor(one * 10) / 10);
+  }
+
+  // What actually FITS this cell's height, in the owner's order: address,
+  // number, name. The name is the headline, so it is the last to be dropped.
+  const addrPx = Math.max(4.5, Math.min(8, h * 0.16));
+  const nameH = namePx * 1.12 * nameLines;
+  const showNumber = w >= 14 && h >= 9;
+  const showName = !!name && w >= 22 && h >= numberPx * 1.1 + namePx * 1.12 + 2;
+  if (showName && nameLines === 2 && h < numberPx * 1.1 + nameH + 2) nameLines = 1;
+  // The address is the TALL-cell earn — his "if it becomes taller": a real
+  // height floor plus slack, so a squeezed cell never stacks three lines.
+  const showAddr = !!apt.address && w >= 30 && h >= 34
+    && h >= addrPx * 1.15 + numberPx * 1.1 + (showName ? nameH : 0) + 10;
+
   return (
     <button
       {...planner.handlers}
       onClick={e => { e.stopPropagation(); onOpen(); }}
       className="rounded-[2px] overflow-hidden flex flex-col items-center justify-center leading-none
                  hover:ring-2 hover:ring-[#1e3a5f] transition-shadow px-[1px]"
-      style={{
-        backgroundColor: fill, aspectRatio: '1.35', color: readableOn(fill),
-        ...planner.style,
-      }}
+      style={{ backgroundColor: fill, color: readableOn(fill), ...planner.style }}
       title={planner.draggable ? `${label} · drag it onto a day` : label}
     >
-      {cell.number && (
-        <span className="font-bold truncate max-w-full" style={{ fontSize: cell.numberPx }}>
+      {showAddr && (
+        <span className="truncate max-w-full" style={{ fontSize: addrPx, opacity: .7 }}>
+          {apt.address}
+        </span>
+      )}
+      {showNumber && (
+        <span className="font-bold truncate max-w-full flex-shrink-0" style={{ fontSize: numberPx }}>
           {apt.apartmentNumber || '—'}
         </span>
       )}
-      {cell.name && apt.displayName && apt.displayName !== apt.apartmentNumber && (
-        <span className="truncate max-w-full" style={{ fontSize: cell.namePx, opacity: .85 }}>
+      {showName && (
+        <span
+          className="max-w-full"
+          style={{
+            fontSize: namePx, opacity: .85, lineHeight: 1.12,
+            overflowWrap: 'break-word',
+            display: '-webkit-box', WebkitBoxOrient: 'vertical',
+            WebkitLineClamp: nameLines, overflow: 'hidden',
+          }}
+        >
           {apt.displayName}
         </span>
       )}
@@ -137,7 +194,15 @@ export function ProjectMini({ projectId: chosen, buildingId, onOpen, onOpenUnit,
    * the cell rather than pinned to a number that only suits one size.
    */
   const gridRef = useRef<HTMLDivElement>(null);
-  const [cellW, setCellW] = useState(0);
+  const [cellBox, setCellBox] = useState({ w: 0, h: 0 });
+  /**
+   * The cell is measured in BOTH dimensions now — the owner's ruling: make
+   * the widget taller and the apartments themselves grow taller, so the tall
+   * cell can hold the address, the number and a two-line family name. Width
+   * from the columns as before; height from the widget's real room divided by
+   * the tallest building's rows, so every building's cells share one height
+   * and the whole grid always fits whatever size and shape the widget is.
+   */
   useEffect(() => {
     const node = gridRef.current;
     if (!node) return;
@@ -145,19 +210,18 @@ export function ProjectMini({ projectId: chosen, buildingId, onOpen, onOpenUnit,
       const cols = Math.max(1, byBuilding.length);
       // Four across per building, 2px gaps, 8px between buildings.
       const per = (node.clientWidth - (cols - 1) * 8) / cols;
-      setCellW(Math.max(0, (per - 6) / 4));
+      const w = Math.max(0, (per - 6) / 4);
+      const rows = Math.max(1, ...byBuilding.map(([, apts]) => Math.ceil(Math.min(apts.length, 64) / 4)));
+      // 11px for the building label above each grid.
+      const h = Math.max(6, Math.floor((node.clientHeight - 11 - (rows - 1) * 2) / rows));
+      setCellBox({ w, h });
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(node);
     return () => ro.disconnect();
-  }, [byBuilding.length]);
-  const cell = {
-    number: cellW >= 16,
-    name: cellW >= 27,
-    numberPx: Math.max(6, Math.min(13, cellW * 0.42)),
-    namePx: Math.max(5, Math.min(10, cellW * 0.3)),
-  };
+  }, [byBuilding]);
+  const cell = cellBox;
 
   return (
     /**
@@ -221,7 +285,12 @@ export function ProjectMini({ projectId: chosen, buildingId, onOpen, onOpenUnit,
             <div key={bid} className="flex flex-col min-w-0 flex-1">
               <span className="text-[8px] font-bold text-gray-400 mb-0.5">{bid}</span>
               <div className="flex-1 min-h-0 grid gap-[2px] content-start"
-                style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>
+                style={{
+                  gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                  // The measured height IS the row height — this is what makes
+                  // a taller widget grow the apartments, not just its frame.
+                  gridAutoRows: cell.h > 0 ? `${cell.h}px` : undefined,
+                }}>
                 {apts.slice(0, 64).map(a => {
                   const st = stageOf(a.currentStageId);
                   const fill = st?.color ?? '#e2e8f0';
