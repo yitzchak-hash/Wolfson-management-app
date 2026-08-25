@@ -98,7 +98,7 @@ function phoneCellTextWidth(cols: number): number {
 const emCache = new Map<string, number>();
 let emCtx: CanvasRenderingContext2D | null | undefined;
 
-function emWidth(text: string): number {
+export function emWidth(text: string): number {
   const hit = emCache.get(text);
   if (hit !== undefined) return hit;
 

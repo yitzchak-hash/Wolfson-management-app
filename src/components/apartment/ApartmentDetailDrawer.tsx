@@ -156,7 +156,7 @@ function DriveImg({ src, alt, className }: { src: string; alt: string; className
 export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast, onRequestAddTask }: Props) {
   const { stages, activityLogs, apartments, updateApartment, mergeApartments, unmergeApartments,
     autoBackup, backupSnapshots, restoreFromSnapshot, mainUiStrings: ui,
-    officeNoteFiles, addOfficeNoteFile, deleteOfficeNoteFile,
+    officeNoteFiles, addOfficeNoteFile, deleteOfficeNoteFile, addActivityLog,
     contractorAssignments, contractors, updateContractorAssignment, deleteContractorAssignment,
     deleteApartment, getGeneralNoteVersions, currentProjectId,
     contractorPhotos, updateContractorPhoto, planAnnotations, stageNotes, planPins } = useStore();
@@ -388,6 +388,36 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       setSelectedPdfIdx(0);
       setPlanSet({ plansFolderId: null, plans: [] });
       setShownPlanId(null);
+
+      /**
+       * WHO OPENED IT goes in the history — the owner's "I see no activity
+       * yet": a job nobody has edited told you nothing about who has been
+       * looking at it. Throttled to one entry per person per job per hour, so
+       * flicking a drawer open and shut is one visit, not a stream; and the
+       * store skips the auto-backup snapshot for these (looking changes no
+       * data).
+       */
+      if (currentUser) {
+        const HOUR = 3_600_000;
+        const recent = useStore.getState().activityLogs.find(l =>
+          l.actionType === 'opened' && l.apartmentId === apartment.id
+          && l.userId === currentUser.id
+          && Date.now() - new Date(l.createdAt).getTime() < HOUR);
+        if (!recent) {
+          addActivityLog({
+            userId: currentUser.id,
+            userName: currentUser.name,
+            buildingId: apartment.buildingId,
+            apartmentId: apartment.id,
+            apartmentNumber: apartment.displayName || apartment.apartmentNumber || '',
+            actionType: 'opened',
+            fieldChanged: 'viewed',
+            previousValue: '',
+            newValue: '',
+            stageId: '',
+          });
+        }
+      }
 
       setPickedPlanName('');
       setDriveFolderName('');

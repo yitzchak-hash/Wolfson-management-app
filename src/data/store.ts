@@ -2313,6 +2313,9 @@ export const useStore = create<AppState>((set, get) => ({
     const entry: ActivityLog = { ...log, id: generateId(), createdAt: new Date().toISOString() };
     set(state => {
       const newLogs = [entry, ...state.activityLogs].slice(0, 500);
+      // Somebody LOOKING at a job changes no data — a snapshot exists to
+      // restore what a change overwrote, so an 'opened' entry never takes one.
+      if (entry.actionType === 'opened') return { activityLogs: newLogs };
       if (!state.autoBackup) return { activityLogs: newLogs };
 
       // Check frequency before snapshotting

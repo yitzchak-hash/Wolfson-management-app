@@ -1026,6 +1026,19 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
         selected.forEach(id => { if (nodes.some(n => n.id === id)) deleteCanvasElement(id); });
         setSelected(new Set());
       }
+      /**
+       * Ctrl/⌘+A selects every JOB in THIS group — the owner's ask. Scoped to
+       * the visible list (a search narrows what "all" means, the way every
+       * file manager reads it), jobs only (the drawings and notes inside a
+       * group are furniture), and preventDefault so the browser does not
+       * select the page's text instead. The board behind the window never
+       * hears the key — this window is on top and acts, so it consumes it.
+       */
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        e.stopPropagation();
+        setSelected(new Set(items.map(j => j.id)));
+      }
     }
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);

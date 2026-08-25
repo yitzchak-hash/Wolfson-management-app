@@ -58,6 +58,8 @@ export function ActivityLogPage() {
       ? who
       : `${s.aptPrefix} ${who} (${log.buildingId})`;
     switch (log.actionType) {
+      case 'opened':
+        return `${s.openedJob} ${apt}`;
       case 'task_created':
         return `${s.taskCreatedAction} on ${apt}: "${log.newValue}"`;
       case 'task_completed':
@@ -102,6 +104,7 @@ export function ActivityLogPage() {
       case 'contractor_note': return '✎';
       case 'contractor_complete': return '★';
       case 'note': return '✎';
+      case 'opened': return '◎';
       default: return '•';
     }
   }

@@ -4590,3 +4590,43 @@ worker's no path (pending + open task + note) and yes path (closing screen →
 stage done), and the office list carrying both with the note. Its manner: one
 live page at a time — a background admin page's flush-on-unload overwrites
 the worker's writes (the standing localStorage trap).
+
+---
+
+# v2 — the five-fix round (history of opens, centre zoom, edge pin, tile fit, Ctrl+A)
+
+- **Opening a job is in its history.** The drawer's open effect writes an
+  `actionType: 'opened'` activity entry (fieldChanged 'viewed'), throttled to
+  one per person per job per HOUR, rendered as "opened" in the drawer's
+  History tab and the global log ('◎'). `addActivityLog` skips the
+  auto-backup snapshot for these — looking changes no data.
+- **OWNER RULING (2026-08-25): the header zoom buttons anchor the MIDDLE of
+  the view**, overriding the top-left-corner anchor. The corner anchor
+  existed to avoid an anchor the clamp refuses (which snapped the board);
+  that is handled by clamping INSIDE the same zoom step — near the pinned
+  corner the zoom gives way to the wall, everywhere else it is a true centre
+  zoom. The centre is measured below the floating chrome.
+- **The ~7% edge rule in `zoomAt`**: a ctrl+wheel zoom aimed inside the outer
+  7% of the board's own space, while that edge is on screen, anchors at the
+  EDGE — it holds exactly where it is and the zoom opens inward, so a thing
+  near the rim can never be pushed off past it. Per axis, all four sides;
+  `worldSizeRef` is written each render beside `fitZoomRef` because zoomAt is
+  a stable callback.
+- **Job tile text auto-fits** through the diagram's own `emWidth` (now
+  exported from BuildingDiagram): the stage badge's font is computed from the
+  tile's real room (clamped [6.5, 10], rounded DOWN, 6% bold margin,
+  whitespace-nowrap so it is ONE line, ellipsis only below the floor); the
+  family name steps 14 → 12.5 when it measures wider than one row.
+- **Ctrl/⌘+A inside a group window** selects every JOB on its visible list
+  (a search narrows what "all" means), jobs only, preventDefault so the
+  browser's select-all never fires. The main board has no Ctrl+A — only the
+  group was asked for.
+- Friday checkbox default STAYS OFF — re-confirmed by the owner against his
+  earlier prompt text.
+
+Harness: `scratchpad/fixes5.mjs` (11 checks). Its traps: a BUILT-IN bin opens
+on a single CLICK (dblclick is the custom-group rename path); the board's
+view memory restores the harness's own zoom on reload, parking the bins under
+the floating header — press 100% before aiming at one. `grouplock.mjs` gained
+the same come-home line before its rename section; its old zoom-anchor
+assertion still holds at the home view because the clamp pins the top there.

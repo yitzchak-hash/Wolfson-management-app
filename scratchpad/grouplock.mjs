@@ -245,6 +245,10 @@ check(revived.length === 1 && revived[0].people === 2 && revived[0].cells === 1,
   `a new notebook came back with what was in the last one (${JSON.stringify(revived)})`);
 
 // ── Renaming a group keeps focus (the settings panel is module-level now) ──
+// The zoom buttons anchor the CENTRE of the view now (owner, 2026-08-25), so
+// the zoom dance above leaves the bins off to the side — come home first.
+await page.locator('button:has-text("100%")').first().click();
+await page.waitForTimeout(600);
 await page.locator('[data-node-id="CE-bin-done"]').first().hover().catch(() => {});
 await page.waitForTimeout(300);
 await page.locator('[data-node-id="CE-bin-done"] button[title="Settings"]').first().click();

@@ -1498,6 +1498,7 @@ export interface MainUiStrings {
   stageMarkHint: string;
   stagePendingListTitle: string;
   stagePendingEmpty: string;
+  openedJob: string;
   // Header
   syncSaving: string;
   syncSaved: string;
@@ -2050,6 +2051,7 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   stageMarkHint: 'Tap a box to cross a stage off · right-click marks it half done',
   stagePendingListTitle: 'Half-done stages',
   stagePendingEmpty: 'Nothing is waiting — no half-done stages.',
+  openedJob: 'opened',
   // Header
   syncSaving: 'Saving…',
   syncSaved: 'Saved ✓',
@@ -2601,6 +2603,7 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   stageMarkHint: 'לחיצה על התיבה מסמנת שלב כגמור · קליק ימני מסמן חצי גמור',
   stagePendingListTitle: 'שלבים חצי גמורים',
   stagePendingEmpty: 'אין שלבים חצי גמורים.',
+  openedJob: 'פתח/ה את',
   // Header
   syncSaving: 'שומר...',
   syncSaved: 'נשמר ✓',

@@ -1300,6 +1300,8 @@ export function GeneralJobsPage() {
   const ZOOM_STEPS = [0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.25, 1.5, 2, 3];
   /** The zoom the whole board fits at, written each render from the live world size. */
   const fitZoomRef = useRef(0.25);
+  /** The live world size, written each render beside fitZoomRef. */
+  const worldSizeRef = useRef({ w: 1600, h: 1200 });
   /**
    * The ladder, extended BELOW 25% when the board is too big to fit there —
    * ~×0.8 a step, ending exactly on the fit. On a small board this is the
@@ -1350,7 +1352,25 @@ export function GeneralJobsPage() {
 
     // The world point under the cursor stays under the cursor: solve the
     // transform for the pan that keeps it fixed at the new scale.
-    const cx = clientX - r.left, cy = clientY - r.top;
+    let cx = clientX - r.left, cy = clientY - r.top;
+    /**
+     * THE EDGE RULE (the owner's ~7%): zooming at a point in the outer band
+     * of the board's own space, while that edge is on screen, anchors at the
+     * EDGE instead of the point — the edge holds exactly where it is and the
+     * zoom opens inward, so the thing you aimed at near the rim can never be
+     * pushed off past it. Per axis, all four sides; only when the edge is
+     * actually visible (an off-screen edge is not the thing being protected).
+     */
+    const EDGE = 0.07;
+    const world = worldSizeRef.current;
+    const wx = (cx - prevPan.x) / prevZoom, wy = (cy - prevPan.y) / prevZoom;
+    const leftEdge = prevPan.x, rightEdge = prevPan.x + world.w * prevZoom;
+    const topEdge = prevPan.y, bottomEdge = prevPan.y + world.h * prevZoom;
+    if (wx <= world.w * EDGE && leftEdge >= -1) cx = leftEdge;
+    else if (wx >= world.w * (1 - EDGE) && rightEdge <= r.width + 1) cx = rightEdge;
+    if (wy <= world.h * EDGE && topEdge >= -1) cy = topEdge;
+    else if (wy >= world.h * (1 - EDGE) && bottomEdge <= r.height + 1) cy = bottomEdge;
+
     let nextPan = clampPanRef.current({
       x: cx - (cx - prevPan.x) * (next / prevZoom),
       y: cy - (cy - prevPan.y) * (next / prevZoom),
@@ -1389,31 +1409,25 @@ export function GeneralJobsPage() {
   // The field follows the zoom unless it is being typed in.
   useEffect(() => { setZoomField(String(Math.round(zoom * 100))); }, [zoom]);
 
-  /** Zoom from the middle of the view — what the header buttons use. */
   /**
-   * The zoom buttons hold the TOP-LEFT still, not the centre.
-   *
-   * Zooming from the middle pulls everything inwards from all four sides, so
-   * the corner you organise from drifts every time you change scale. Anchoring
-   * the origin means your top-left stays exactly where it was and new room
-   * appears down and to the right, which is the direction the board grows in
-   * anyway. The wheel is left alone: it is an aimed gesture and keeping the
-   * point under the pointer still is what makes it feel right.
+   * The header zoom buttons anchor at the MIDDLE of the view — the owner's
+   * ruling (2026-08-25), overriding the earlier top-left-corner anchor:
+   * "take the middle point on the screen and zoom to there, because right
+   * now it jumps all around." What you are looking at stays where you are
+   * looking. The old corner anchor existed to avoid an anchor the clamp
+   * would refuse (which snapped the board by the disagreement); that is
+   * handled instead by clamping INSIDE the same zoom step — near the pinned
+   * corner the zoom simply gives way to the wall, everywhere else it is a
+   * true centre zoom. The middle is measured below the floating chrome, so
+   * the visual centre of the WORK is the anchor, not a point under the
+   * buttons.
    */
   const zoomCentre = useCallback((dir: 1 | -1) => {
     const r = viewportRef.current?.getBoundingClientRect();
     if (!r) return;
-    /**
-     * The anchor is wherever the WORK is pinned — the first line below the
-     * floating chrome. The rule behind it is unchanged: anchor the zoom at a
-     * point the clamp will not allow and the first press snaps the whole
-     * board by exactly the disagreement. When the anchor and the pin agree,
-     * the corner you organise from holds still and new room opens down and
-     * to the right.
-     */
     const hb = headerBarRef.current?.getBoundingClientRect();
-    const anchorY = hb && viewMode !== 'stages' ? Math.max(r.top, hb.bottom + 6) : r.top;
-    zoomAt(r.left, anchorY, dir);
+    const top = hb && viewMode !== 'stages' ? Math.max(r.top, hb.bottom) : r.top;
+    zoomAt(r.left + r.width / 2, top + (r.bottom - top) / 2, dir);
   }, [zoomAt, viewMode]);
 
   const deleteRef = useRef<() => void>(() => {});
@@ -5091,6 +5105,9 @@ export function GeneralJobsPage() {
     vp.w / Math.max(1, maxX),
     (vp.h - (headerBarRef.current?.getBoundingClientRect().height ?? 0)) / Math.max(1, maxY),
   ));
+  // The live world size, for zoomAt's edge rule — a ref for the same reason
+  // fitZoomRef is one: zoomAt is a stable callback.
+  worldSizeRef.current = { w: maxX, h: maxY };
 
   /**
    * The hand came off: take the true size and close the space up.

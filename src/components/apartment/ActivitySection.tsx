@@ -16,6 +16,7 @@ export function ActivitySection({ logs, autoBackup, backupSnapshots, onRestore }
   const s = useStore(state => state.mainUiStrings);
 
   function actionLabel(log: ActivityLog): string {
+    if (log.actionType === 'opened') return s.openedJob;
     if (log.actionType === 'note') return s.updatedStageNote;
     if (log.actionType === 'contractor_upload') return `${s.uploadedFile} ${log.newValue}`;
     if (log.actionType === 'contractor_note') return s.addedNote;

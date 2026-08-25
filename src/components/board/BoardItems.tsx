@@ -26,6 +26,7 @@ import { MapPin, ClipboardList, Trash2, Palette, Pencil, X, ThumbsUp, ThumbsDown
 import { Apartment, CanvasElement, Stage, BinKind, BIN_META, binKeyOf, binLabelOf } from '../../types';
 import { Settings2, Mic, Crosshair } from 'lucide-react';
 import { DriveIcon, ZohoIcon, PlanIcon, TvIcon } from '../ui/BrandIcons';
+import { emWidth } from '../diagram/BuildingDiagram';
 import { extractFileId, driveDownloadUrl } from '../../data/driveApi';
 
 /** A Drive file link turned into a direct download, when we can read its id. */
@@ -296,7 +297,16 @@ export const JobTile = React.memo(function JobTile({
 
       <div className="flex items-start gap-2 mb-1.5 pr-6">
         {stage && <span className="flex-shrink-0 w-2.5 h-2.5 rounded-full mt-1" style={{ backgroundColor: stage.color }} />}
-        <h3 className="font-semibold text-gray-900 text-sm leading-tight line-clamp-2 flex-1">
+        {/* The family name steps down a size when it needs a second row —
+            measured with the diagram's own emWidth, the same machinery the
+            phone cells fit with, so the two can never disagree about what
+            fits. Available width: tile w − padding/border(32) − pr-6(24) −
+            the stage dot and its gap when present. */}
+        <h3 className="font-semibold text-gray-900 leading-tight line-clamp-2 flex-1"
+          style={{
+            fontSize: emWidth(job.displayName || labels.job) * 14 * 1.02
+              <= w - 56 - (stage ? 18 : 0) ? 14 : 12.5,
+          }}>
           {job.displayName || labels.job}
         </h3>
         {/* The Drive light used to sit here as well as on the row below, so
@@ -305,8 +315,18 @@ export const JobTile = React.memo(function JobTile({
       </div>
 
       {stage && (
-        <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mb-1.5"
-          style={{ backgroundColor: `${stage.color}22`, color: stage.color }}>
+        /* The stage name AUTO-FITS one line (the owner's ask): the font is
+           computed from the badge's real room — never wrapped, and only
+           ellipsized below the 6.5px floor. Measured, rounded DOWN, with a
+           6% margin because the badge renders bolder than the measuring
+           weight. */
+        <span className="inline-block font-bold px-2 py-0.5 rounded-full mb-1.5 whitespace-nowrap
+                         overflow-hidden text-ellipsis max-w-full align-bottom"
+          style={{
+            backgroundColor: `${stage.color}22`, color: stage.color,
+            fontSize: Math.min(10, Math.max(6.5,
+              Math.floor(((w - 48) / (emWidth(stage.name) * 1.06)) * 10) / 10)),
+          }}>
           {stage.name}
         </span>
       )}
