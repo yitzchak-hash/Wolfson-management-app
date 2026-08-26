@@ -4779,7 +4779,11 @@ tabs persist per machine per job, X asks "Your work isn't saved. Save to
 Google Drive?" only when marks are unsaved (Yes = the existing Annotated
 Plans pipeline, unchanged), and background download of the folder's other
 plans with per-plan progress — copies dropped on exit, tabs kept. Build only
-when he approves the page.
+when he approves the page. His 2026-08-26 refinements, drawn in: two upright
+separator lines boxing the tab section off from the name and the zoom, and
+the unsaved dot became a CLOUD on every tab — amber with an × while unsaved,
+the Drive mark once saved, and the saved cloud is a LINK that opens the file
+in Google Drive (the real build uses the app's own DriveIcon).
 
 Harness: `scratchpad/markupfixes.mjs` (17 checks). Its lessons: under
 `Emulation.setEmitTouchEventsForMouse` Playwright's own synthetic clicks

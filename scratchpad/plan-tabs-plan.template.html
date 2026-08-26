@@ -35,7 +35,16 @@
   .tab .x { width: 16px; height: 16px; border-radius: 5px; display: flex; align-items: center;
             justify-content: center; flex-shrink: 0; font-size: 12px; line-height: 1; color: rgba(255,255,255,.6); }
   .tab .x:hover { background: rgba(255,255,255,.18); color: #fff; }
-  .tab .dot { width: 6px; height: 6px; border-radius: 50%; background: #fbbf24; flex-shrink: 0; }
+  /* The save-state cloud on every tab: amber with an × while there are
+     unsaved marks; the Drive mark once the sketch is filed — and that one is
+     a LINK, pressing it opens the file in Google Drive. */
+  .tab .cl { width: 16px; height: 16px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+  .tab .cl.drive { cursor: pointer; }
+  .tab .cl.drive:hover svg { filter: brightness(1.15); }
+  /* The two upright lines bounding the tab section, per the owner. */
+  .vsep { width: 1px; align-self: stretch; background: rgba(255,255,255,.24); margin: 8px 5px; flex-shrink: 0; border-radius: 1px; }
+  .dtoast { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: rgba(15,23,42,.92);
+            color: #fff; font-size: 11.5px; font-weight: 600; padding: 6px 12px; border-radius: 8px; z-index: 6; display: none; }
   .tab .spin { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
                border: 1.5px solid rgba(255,255,255,.3); border-top-color: #4aa8d8; animation: sp 1s linear infinite; }
   .tab .pct { font-size: 9px; color: rgba(255,255,255,.55); flex-shrink: 0; }
@@ -106,10 +115,13 @@
   <div class="scene">
     <h2>THE TAB STRIP</h2>
     <p class="lead">
-      Every plan you open gets a tab, like a browser. The tab you are on is lit with the blue underline;
-      a tab with <b>unsaved marks wears an amber dot</b>; a tab whose plan is still arriving shows a tiny
-      spinner with how much has come. The <b>+</b> at the end opens the plan you are on in a fresh tab
-      (a second, clean sketch of the same sheet). The strip scrolls sideways when there are many.
+      Every plan you open gets a tab, like a browser, and two upright lines box the tab section off from
+      the plan&rsquo;s name on one side and the zoom on the other. The tab you are on is lit with the blue
+      underline. Every tab wears a little cloud: <b>a cloud with an &times; while there are unsaved
+      marks</b>, and <b>the Drive mark once the sketch is filed &mdash; pressing that cloud opens the file
+      in Google Drive</b>. A tab whose plan is still arriving shows a tiny spinner with how much has come.
+      The <b>+</b> at the end opens the plan you are on in a fresh tab (a second, clean sketch of the same
+      sheet). The strip scrolls sideways when there are many.
     </p>
 
     <div class="studio" id="studio1">
@@ -118,8 +130,10 @@
           <div style="font-size:13px; font-weight:700; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" id="barname">Ground floor.pdf</div>
           <div style="font-size:10.5px; color:#9ca3af; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">37 &mdash; Artzi<span id="bardirty"></span></div>
         </div>
+        <div class="vsep"></div>
         <div class="tabs" id="tabs"></div>
         <div class="newtab" id="newtab" title="Open this plan in a new tab">+</div>
+        <div class="vsep"></div>
         <div style="display:flex; align-items:center; gap:2px; flex-shrink:0;">
           <div class="zoombtn" title="Zoom out"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg></div>
           <span style="font-size:11px; color:rgba(255,255,255,.85); width:38px; text-align:center;">100%</span>
@@ -133,6 +147,7 @@
           <div class="t" id="sheettitle">Ground floor.pdf</div>
           <div class="body"><svg id="sheetart" viewBox="0 0 100 60" preserveAspectRatio="none"></svg></div>
         </div>
+        <div class="dtoast" id="dtoast"></div>
         <div class="ask" id="ask">
           <div class="askbox">
             <h3>Your work isn&rsquo;t saved.</h3>
@@ -147,8 +162,10 @@
     </div>
     <p class="hint" style="margin-top:10px;">
       <span class="mark" style="font-size:17px;">try it:</span> switch tabs &mdash; the sheet changes with no wait.
-      Close the tab with the amber dot and the studio asks the exact question above; Save files it through the same
-      Annotated&nbsp;Plans pipeline as today, No throws only the unsaved marks away. A tab with nothing unsaved just closes.
+      Press a Drive cloud to see where it would take you. Close the tab with the cloud-&times; and the studio asks
+      the exact question above; Save files it through the same Annotated&nbsp;Plans pipeline as today, No throws only
+      the unsaved marks away. A tab with nothing unsaved just closes &mdash; and when a sketch gets saved the ordinary
+      way, its &times; cloud turns into the Drive mark on the spot.
     </p>
   </div>
 
@@ -218,8 +235,10 @@
         viewer, so it gets the same tabs, on a slim row of its own under the two bars there (its bars have no
         spare middle). If you want tabs only in the full-screen studio, that is one switch.</li>
       <li><b>Tab look:</b> Chrome&rsquo;s manner &mdash; rounded top, the lit one brighter with a blue underline,
-        amber dot for unsaved, &times; on each tab (always visible on the touchscreen). Drawn above with the
-        studio&rsquo;s real colours; if you want them shaped differently, mark this page up.</li>
+        two upright lines boxing the tab section, a cloud on every tab (&times; while unsaved, the Drive mark
+        once saved &mdash; pressing it opens the file in Drive), &times; on each tab (always visible on the
+        touchscreen). Drawn above with the studio&rsquo;s real colours; if you want them shaped differently,
+        mark this page up.</li>
     </ul>
   </div>
 </div>
@@ -239,6 +258,25 @@
   ];
   var on = 1, pending = null;
 
+  // The save-state clouds. Unsaved: amber cloud with an ×. Saved: a soft
+  // white cloud carrying the Drive triangle — the real thing uses the app's
+  // own DriveIcon — and pressing it opens the file in Google Drive.
+  var CLOUD = 'M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z';
+  var CLOUD_X = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="' + CLOUD + '"/><line x1="10.2" y1="11.2" x2="13.8" y2="14.8"/><line x1="13.8" y1="11.2" x2="10.2" y2="14.8"/></svg>';
+  var CLOUD_DRIVE = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none">'
+    + '<path d="' + CLOUD + '" fill="rgba(255,255,255,.88)"/>'
+    + '<g stroke-width="2" stroke-linecap="round" fill="none">'
+    + '<line x1="12" y1="8.6" x2="8.7" y2="14.4" stroke="#1EA362"/>'
+    + '<line x1="12" y1="8.6" x2="15.3" y2="14.4" stroke="#4285f4"/>'
+    + '<line x1="8.7" y1="14.4" x2="15.3" y2="14.4" stroke="#fbbc04"/>'
+    + '</g></svg>';
+
+  var dtoast = document.getElementById('dtoast'), dtoastT;
+  function toast(msg) {
+    dtoast.textContent = msg; dtoast.style.display = 'block';
+    clearTimeout(dtoastT); dtoastT = setTimeout(function () { dtoast.style.display = 'none'; }, 1700);
+  }
+
   function artFor(t) {
     var c = 'hsl(' + t.hue + ',60%,45%)';
     return '<polyline points="8,50 8,14 44,14 44,32 78,32 78,50" fill="none" stroke="#94a3b8" stroke-width="2"/>' +
@@ -250,11 +288,16 @@
     tabs.forEach(function (t) {
       var d = document.createElement('div');
       d.className = 'tab' + (t.id === on ? ' on' : '');
-      d.innerHTML = (t.dirty ? '<span class="dot" title="unsaved marks"></span>' : '') +
+      d.innerHTML = (t.dirty
+        ? '<span class="cl" title="Unsaved marks — not in Drive yet">' + CLOUD_X + '</span>'
+        : '<span class="cl drive" title="Saved in Drive — press to open it">' + CLOUD_DRIVE + '</span>') +
         (t.dl != null && t.dl < 100 ? '<span class="spin"></span><span class="pct">' + t.dl + '%</span>' : '') +
         '<span class="nm">' + t.nm + '</span><span class="x" title="Close">&#215;</span>';
       d.onclick = function (e) {
-        if (e.target.className === 'x') { tryClose(t.id); return; }
+        if (e.target.closest && e.target.closest('.x')) { tryClose(t.id); return; }
+        if (e.target.closest && e.target.closest('.cl.drive')) {
+          toast('→ would open the saved PDF in Google Drive'); return;
+        }
         on = t.id; draw();
       };
       tabsEl.appendChild(d);
