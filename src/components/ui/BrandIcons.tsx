@@ -66,6 +66,18 @@ export function WazeIcon({ size = 14 }: { size?: number }) {
   );
 }
 
+/** Google Photos — the four-petal pinwheel, reduced to an identifiable glyph. */
+export function PhotosIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 2 A5 5 0 0 0 12 12 Z" fill="#4285f4" />
+      <path d="M22 12 A5 5 0 0 0 12 12 Z" fill="#ea4335" />
+      <path d="M12 22 A5 5 0 0 0 12 12 Z" fill="#fbbc04" />
+      <path d="M2 12 A5 5 0 0 0 12 12 Z" fill="#34a853" />
+    </svg>
+  );
+}
+
 /** The Waze link for an address — opens the app on a phone, the site on a desk. */
 export function wazeUrl(address: string): string {
   return `https://waze.com/ul?q=${encodeURIComponent(address)}&navigate=yes`;

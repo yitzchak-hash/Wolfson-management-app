@@ -15,6 +15,7 @@ import { TV_ALLOWED } from '../data/tvWidgets';
 import { TvDashboard } from '../components/board/TvDashboard';
 import { useOrientation } from '../data/useOrientation';
 import { WidgetStore } from '../components/board/WidgetStore';
+import { WidgetListPopup } from '../components/board/WidgetListPopup';
 import { extractFileId } from '../data/driveApi';
 import { PenLine, Maximize, Minimize, Pencil, X as CloseIcon, Plus, Info, Search as SearchIcon } from 'lucide-react';
 
@@ -682,6 +683,9 @@ export function TvPresentationPage() {
     window.addEventListener('pointerup', up);
   }
 
+  /** A widget figure clicked open on the wall: the list behind it. */
+  const [wallList, setWallList] = useState<{ title: string; jobIds: string[] } | null>(null);
+
   /** One context for every widget on the wall — live figures, nothing editable. */
   const wallCtx: WidgetCtx = useMemo(() => ({
     jobs: apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed && !a.boardBin),
@@ -704,6 +708,9 @@ export function TvPresentationPage() {
     // Every widget on the wall knows it is on a wall. The notebook is the one
     // that refuses to be edited here even when the pen is out.
     wall: true,
+    // Every number opens its list on the wall too — the board's standing rule.
+    // Rows open the wall's own job screen, never a drawer it does not have.
+    showList: (title: string, jobIds: string[]) => setWallList({ title, jobIds }),
   }), [apartments, stages, contractorAssignments, contractors, users, contractorPhotos,
        activityLogs, editing]);
 
@@ -886,10 +893,22 @@ export function TvPresentationPage() {
       <span className="flex-1" />
 
       {overdue > 0 && (
-        <span className="px-3 py-1.5 rounded-full font-bold"
+        /* The number opens its list — the board's standing rule reaches the
+           wall's own bar: the overdue JOBS in the workspace on screen, each
+           row opening the wall's job view. The count itself spans every
+           workspace; the list shows the one you are looking at. */
+        <button data-tv-overdue
+          onClick={() => {
+            const today = new Date().toISOString().slice(0, 10);
+            const ids = [...new Set(contractorAssignments
+              .filter(a => !a.completedAt && a.dueDate && a.dueDate < today)
+              .map(a => a.apartmentId))];
+            setWallList({ title: t('Overdue here', 'באיחור כאן'), jobIds: ids });
+          }}
+          className="px-3 py-1.5 rounded-full font-bold"
           style={{ backgroundColor: '#fdecea', color: '#b4342a' }}>
           {overdue} {t('overdue', 'באיחור')}
-        </span>
+        </button>
       )}
 
       {/* Language — the default lives in TV settings, this switches the panel. */}
@@ -1718,6 +1737,20 @@ export function TvPresentationPage() {
             });
           }}
           onClose={() => setTvStoreOpen(false)}
+        />
+      )}
+
+      {/* A widget number (or the bar's overdue pill) opened its list. */}
+      {wallList && (
+        <WidgetListPopup
+          title={wallList.title}
+          jobIds={wallList.jobIds}
+          onOpenJob={id => {
+            setWallList(null);
+            const j = apartments.find(a => a.id === id);
+            if (j) { setPhotoAt(0); setOpenJob(j); }
+          }}
+          onClose={() => setWallList(null)}
         />
       )}
     </div>

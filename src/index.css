@@ -50,6 +50,20 @@
     -webkit-touch-callout: none;
     -webkit-tap-highlight-color: transparent;
   }
+
+  /*
+     A control that exists only for touch screens — a screen with no Escape
+     key needs a visible way out of full screen, and drawing one on a desktop
+     would be a second exit beside the one the header already has.
+  */
+  .touch-show {
+    display: flex !important;
+  }
+}
+
+/* Hidden wherever a hover pointer (and therefore an Escape key) exists. */
+.touch-show {
+  display: none;
 }
 
 /*

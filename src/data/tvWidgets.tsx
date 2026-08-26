@@ -11,6 +11,7 @@ import { WidgetCtx, WidgetDef } from './widgets';
 import { useStore, loadAllProjectsTaskData, loadProjectSnapshot } from './store';
 import { hebrewLabel, holidaysOn } from './hebrewDates';
 import { PlannerData, personOf, iso } from '../components/board/PlannerWidget';
+import { daysOf } from './taskDays';
 import { describeActivity } from './activityText';
 import { ActivitySentence } from '../components/ui/ActivitySentence';
 
@@ -269,11 +270,37 @@ export const TV_WIDGETS: WidgetDef[] = [
       const first = new Date(now.getFullYear(), now.getMonth(), 1);
       const days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
       const counts = new Map<number, number>();
-      for (const a of c.assignments) {
-        if (!a.dueDate || a.completedAt) continue;
-        const dt = new Date(`${a.dueDate}T00:00:00`);
-        if (dt.getMonth() !== now.getMonth() || dt.getFullYear() !== now.getFullYear()) continue;
+      const bump = (isoDay: string | undefined) => {
+        if (!isoDay) return;
+        const dt = new Date(`${isoDay}T00:00:00`);
+        if (Number.isNaN(dt.getTime())
+          || dt.getMonth() !== now.getMonth() || dt.getFullYear() !== now.getFullYear()) return;
         counts.set(dt.getDate(), (counts.get(dt.getDate()) ?? 0) + 1);
+      };
+      // EVERY day an open task covers — a three-day task shades three days,
+      // not just its final dueDate.
+      for (const a of c.assignments) {
+        if (a.completedAt) continue;
+        for (const day of daysOf(a)) bump(day);
+      }
+      /**
+       * The NOTEBOOK too — this heat map used to know nothing about the
+       * weekly planner, which is where the actual booking lives, so it read
+       * as stale. Every planned entry counts on its day; entries that stand
+       * for a TASK are skipped, because their task's days were counted above
+       * and one piece of work must not shade twice. Projections point at the
+       * main notebook's element and would double it — skipped.
+       */
+      const els = c.boardElements ?? useStore.getState().canvasElements;
+      for (const el of els) {
+        if (el.type !== 'widget' || (el.widget !== 'rota' && el.widget !== 'week-planner')) continue;
+        if ((el.data as { role?: string } | undefined)?.role === 'projection') continue;
+        const cells = (el.data as { cells?: Record<string, { taskId?: string }[]> } | undefined)?.cells ?? {};
+        for (const [key, entries] of Object.entries(cells)) {
+          const day = String(key).split('|')[1];
+          if (!Array.isArray(entries)) continue;
+          for (const en of entries) if (!en?.taskId) bump(day);
+        }
       }
       const busiest = Math.max(1, ...counts.values());
       return (

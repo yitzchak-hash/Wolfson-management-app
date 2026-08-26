@@ -30,6 +30,69 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-09-14',
+    title: 'A calmer touch screen, numbers that open, and the reel grows up',
+    items: [
+      {
+        title: 'Touching a widget no longer starts typing',
+        body: 'On the touch screen, tapping a widget or a calendar card used '
+          + 'to drop a text cursor into it. A tap now does what it should: a '
+          + 'job card opens the job, a widget just responds. Only notes, '
+          + 'boxes and titles still open for typing on a second tap.',
+        demo: 'tap',
+      },
+      {
+        title: 'Press a number, see its list',
+        body: 'A widget saying “2 overdue” now opens the two jobs when you '
+          + 'press it — on the office board and on the TV wall alike. The '
+          + 'monthly heat map also reads the weekly notebook now, so a '
+          + 'planned day is a busy day.',
+        demo: 'list',
+      },
+      {
+        title: 'The TikTok reel: full screen, and a real settings room',
+        body: 'A full-screen button on the reel; in full screen a tap brings '
+          + 'the controls back, then pauses and resumes, and a × is always '
+          + 'there to leave. The sound button no longer restarts the video. '
+          + 'The sliders button opens a big manager where every link is a '
+          + 'tile with the video\'s own picture — hide or remove each one.',
+        demo: 'zoom',
+      },
+      {
+        title: 'A Google Photos album on the board',
+        body: 'Paste a shared album link and the widget wears the album\'s '
+          + 'own cover with the Photos mark — press it and the album opens. '
+          + 'An album that isn\'t shared says so, with what to press in '
+          + 'Google Photos.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'The map chooses what it shows',
+        body: 'The map widget\'s pencil now offers: every job, only jobs with '
+          + 'an address, or just today\'s work — with the crew\'s names on '
+          + 'the pins.',
+        demo: 'pin',
+      },
+      {
+        title: 'Visiting another workspace brings you back',
+        body: 'Opening an apartment from another workspace — a Building '
+          + 'Progress square, a notebook card — takes you there, opens the '
+          + 'full window, and brings you back to where you were standing the '
+          + 'moment you close it.',
+        demo: 'drag',
+      },
+      {
+        title: 'The board photographs itself',
+        body: 'Layout history can now take snapshots by itself — every hour, '
+          + 'or once a day — in its own slots, so they never push out one '
+          + 'you saved on purpose. “Room above” and “Room on the left” can '
+          + 'be undone with Ctrl+Z, and the settings explainers moved into '
+          + 'little ⓘ bubbles.',
+        demo: 'sparkle',
+      },
+    ],
+  },
+  {
     date: '2026-09-13',
     title: 'New jobs announce themselves, and the Drive link does the typing',
     items: [

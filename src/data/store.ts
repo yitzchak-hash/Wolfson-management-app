@@ -24,6 +24,8 @@ import { DEFAULT_TIME_CLOCK, resolvePunch } from './timeClock';
 import { purgeJobsFromPlanner, isPlannerElement } from './plannerPurge';
 import { DEFAULT_WORKER_LEVELS } from './workerLevels';
 
+/** How many AUTOMATIC layout snapshots rotate, separate from the 10 manual. */
+const LAYOUTS_AUTO_MAX = 8;
 const WOLFSON_STORAGE_KEY = 'wolfson_app_data';
 const VERSION_KEY = 'wolfson_app_version';
 const THEME_KEY = 'wolfson_theme';
@@ -618,7 +620,7 @@ interface AppState {
 
   /** Saved board arrangements, per project. Positions only — never content. */
   boardLayouts: Record<string, BoardLayout[]>;
-  saveBoardLayout: (label: string) => void;
+  saveBoardLayout: (label: string, auto?: boolean) => void;
   restoreBoardLayout: (layoutId: string) => void;
   deleteBoardLayout: (layoutId: string) => void;
 
@@ -959,20 +961,30 @@ export const useStore = create<AppState>((set, get) => ({
 
   boardLayouts: (stored?.boardLayouts as Record<string, BoardLayout[]> | null) ?? {},
 
-  saveBoardLayout: (label) => {
+  saveBoardLayout: (label, auto) => {
     const st = get();
     const pid = st.currentProjectId;
     const layout: BoardLayout = {
       id: 'BL-' + Date.now().toString(36),
       at: new Date().toISOString(),
       label,
+      ...(auto ? { auto: true } : {}),
       jobs: st.apartments
         .filter(a => a.buildingId === 'G' && typeof a.canvasX === 'number' && typeof a.canvasY === 'number')
         .map(a => ({ id: a.id, x: a.canvasX!, y: a.canvasY! })),
       els: st.canvasElements.map(e => ({ id: e.id, x: e.x, y: e.y, w: e.w, h: e.h })),
     };
-    // Capped, because these are convenience snapshots and not a backup.
-    const next = { ...st.boardLayouts, [pid]: [layout, ...(st.boardLayouts[pid] ?? [])].slice(0, 10) };
+    // Capped, because these are convenience snapshots and not a backup — and
+    // capped SEPARATELY: the clock's snapshots rotate in their own slots, so
+    // an hourly ticker can never push out an arrangement somebody saved on
+    // purpose, and ten deliberate saves can never starve the automatic ones.
+    const merged = [layout, ...(st.boardLayouts[pid] ?? [])];
+    const manualKeep = new Set(merged.filter(l => !l.auto).slice(0, 10).map(l => l.id));
+    const autoKeep = new Set(merged.filter(l => l.auto).slice(0, LAYOUTS_AUTO_MAX).map(l => l.id));
+    const next = {
+      ...st.boardLayouts,
+      [pid]: merged.filter(l => (l.auto ? autoKeep.has(l.id) : manualKeep.has(l.id))),
+    };
     set({ boardLayouts: next });
     persist(get);
   },

@@ -12,6 +12,7 @@ import { TapInBoard } from '../components/board/TapInBoard';
 import { MapWidget } from '../components/board/MapWidget';
 import { WeatherWidget } from '../components/board/WeatherWidget';
 import { TikTokWidget } from '../components/board/TikTokWidget';
+import { PhotosAlbumWidget } from '../components/board/PhotosAlbumWidget';
 
 /**
  * The widgets whose render is a real component rather than a few lines.
@@ -118,6 +119,17 @@ export const MORE_WIDGETS: WidgetDef[] = [
     blurb: 'Five days for the site. The one widget that uses the internet — rain decides the week.',
     data: { placeId: 'telaviv' },
     render: (el, c) => <WeatherWidget el={el} c={c} />,
+  },
+  {
+    /**
+     * A shared Google Photos album, wearing its own cover picture. A pointer
+     * at the album, never a copy of it — clicking opens Google Photos.
+     */
+    id: 'photos-album', rank: 6, name: 'Google Photos album', category: 'live',
+    icon: Images, w: 250, h: 200,
+    blurb: 'Paste a shared album link and the board wears its cover. Click it to open the album.',
+    data: {},
+    render: (el, c) => <PhotosAlbumWidget el={el} c={c} />,
   },
   {
     id: 'tiktok', rank: 29, name: 'TikTok reel', category: 'visual',

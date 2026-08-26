@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Map as MapIcon, Crosshair, Loader2 , LocateFixed } from 'lucide-react';
 import { CanvasElement, isCountableApartment, personColor } from '../../types';
+import { daysOf } from '../../data/taskDays';
 import { Frame, d, WidgetCtx } from '../../data/widgets';
 import {
   LatLon, TILE, lonToX, latToY, xToLon, yToLat, fitBounds, scatterAround, geocodeAddress,
@@ -87,7 +88,24 @@ export function MapWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   const tileUrl = String(data.tiles || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png');
 
   // ── what goes on the map ──────────────────────────────────────────────────
-  const jobs = useMemo(() => c.jobs.filter(isCountableApartment), [c.jobs]);
+  /**
+   * The owner's filter, from the pencil: everything, only jobs that have an
+   * address (the red scattered no-address pins hidden), or TODAY'S WORK —
+   * only jobs with an open task covering today, which is the "where are my
+   * crews right now" view. Today goes through the task's whole day list, so
+   * day two of a three-day job still shows.
+   */
+  const showMode = String(data.show || 'all');
+  const allJobs = useMemo(() => c.jobs.filter(isCountableApartment), [c.jobs]);
+  const jobs = useMemo(() => {
+    if (showMode !== 'today') return allJobs;
+    const now = new Date();
+    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const ids = new Set((c.assignments ?? [])
+      .filter(a => !a.completedAt && daysOf(a).includes(todayKey))
+      .map(a => a.apartmentId));
+    return allJobs.filter(j => ids.has(j.id));
+  }, [allJobs, showMode, c.assignments]);
 
   const addresses = useMemo(
     () => [...new Set(jobs.map(j => (j.address ?? '').trim()).filter(Boolean))],
@@ -157,7 +175,7 @@ export function MapWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
     return out;
   }, [c.photos, c.assignments]);
 
-  const markers: Marker[] = useMemo(() => jobs.map(j => {
+  const markers: Marker[] = useMemo(() => jobs.flatMap(j => {
     const address = (j.address ?? '').trim();
     const at = address ? geo[address] : undefined;
     const name = j.displayName?.trim() || j.apartmentNumber || 'Job';
@@ -165,11 +183,17 @@ export function MapWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
     const booked = (c.assignments ?? []).find(a => a.apartmentId === j.id && !a.completedAt);
     const bookedWho = booked ? c.contractors.find(x => x.id === booked.contractorId)?.name : undefined;
     const photos = photosByJob.get(j.id) ?? [];
+    // Only-with-address: the red scattered pins are hidden outright.
+    if (!at && showMode === 'addressed') return [];
 
     if (at) {
       const stage = c.stages.find(s => s.id === j.currentStageId);
       return {
-        id: j.id, at, jobId: j.id, label: name, sub: address,
+        id: j.id, at, jobId: j.id,
+        // Today's-work pins are named after the WORKER there — the map is
+        // answering "where are my crews", not "what is this job called".
+        label: showMode === 'today' && bookedWho ? bookedWho : name,
+        sub: showMode === 'today' && bookedWho ? name : address,
         colour: stage?.color ?? '#4aa8d8', unplaced: false,
         stageName: stage?.name, address, who: bookedWho, openTasks, photos,
       };

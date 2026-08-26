@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Search, X, ToggleLeft, CheckSquare, Printer, ChevronDown, SlidersHorizontal } from 'lucide-react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
+import { redeemReturn } from '../data/unitTravel';
 import { Tooltip } from '../components/ui/Tooltip';
 import { useStore } from '../data/store';
 import { Apartment, BuildingId, isCountableApartment } from '../types';
@@ -28,7 +29,8 @@ function usePhone(): boolean {
 }
 
 export function ProjectDiagramPage() {
-  const { apartments, stages, buildings, currentUser, bulkUpdateApartments, updateApartment, contractorAssignments, contractors, mainUiStrings: s, pendingOpenAptId, setPendingOpenAptId, pendingFocus, setPendingFocus, currentProjectId, projects } = useStore();
+  const { apartments, stages, buildings, currentUser, bulkUpdateApartments, updateApartment, contractorAssignments, contractors, mainUiStrings: s, pendingOpenAptId, setPendingOpenAptId, pendingFocus, setPendingFocus, currentProjectId, projects, setCurrentProject } = useStore();
+  const navigate = useNavigate();
 
   const isPhone = usePhone();
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -562,7 +564,17 @@ export function ProjectDiagramPage() {
         {!bulkMode && liveApt && currentUser && (
           <ApartmentDetailDrawer
             apartment={liveApt}
-            onClose={() => setSelectedApt(null)}
+            onClose={() => {
+              const id = liveApt.id;
+              setSelectedApt(null);
+              // A glance that travelled here holds a return ticket — closing
+              // the SAME unit it opened goes straight back where you stood.
+              const back = redeemReturn(id);
+              if (back && back.projectId !== currentProjectId) {
+                setCurrentProject(back.projectId);
+                navigate(back.path);
+              }
+            }}
             currentUser={currentUser}
             onToast={showToast}
             onRequestAddTask={(apt) => { setSelectedApt(null); setAddTaskApt(apt); }}

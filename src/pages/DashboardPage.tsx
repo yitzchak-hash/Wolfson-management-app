@@ -15,6 +15,7 @@ import { WidgetStore } from '../components/board/WidgetStore';
 import { NodeSettings } from '../components/board/NodeSettings';
 import { WidgetCtx, renderWidget as renderBoardWidget, WIDGET_BY_ID } from '../data/widgets';
 import { printSheet, printEsc } from '../data/printing';
+import { rememberReturn } from '../data/unitTravel';
 import { usePhone } from '../data/usePhone';
 
 type ModalKind = 'changes' | 'notes' | 'total' | 'notStarted' | 'overdue' | 'pending' | 'completedToday' | null;
@@ -127,6 +128,9 @@ export function DashboardPage() {
         navigate(currentProjectId === 'general' ? '/jobs' : '/project');
         return;
       }
+      // The journey holds a RETURN TICKET — closing the drawer over there
+      // brings you straight back to this dashboard.
+      rememberReturn(currentProjectId, window.location.pathname, aptId);
       setCurrentProject(pid);
       setPendingFocus({ kind: 'apartment', id: aptId });
       navigate(pid === 'general' ? '/jobs' : '/project');

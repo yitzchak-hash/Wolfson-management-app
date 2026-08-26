@@ -12,6 +12,7 @@ import { ActivityTicker } from '../ui/ActivityTicker';
 import { WhatsNewButton } from '../ui/WhatsNew';
 import { GlobalSearch } from '../ui/GlobalSearch';
 import { subscribeCloudSync, isFirebaseConfigured, SyncStatus } from '../../data/firebase';
+import { clearReturnTicket } from '../../data/unitTravel';
 
 function CloudSyncBadge({ light }: { light: boolean }) {
   const [status, setStatus] = useState<SyncStatus>('idle');
@@ -313,6 +314,9 @@ function WorkspacePicker({ light }: { light: boolean }) {
 
   function handlePickProject(id: string) {
     setOpen(false);
+    // A deliberate workspace switch tears up any pending glance-return ticket
+    // — you chose where to be, and a later drawer close must not teleport you.
+    clearReturnTicket();
     setCurrentProject(id);
     navigate(id === 'general' ? '/jobs' : '/project');
   }

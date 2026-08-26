@@ -309,6 +309,17 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
   'job-map': [
     title(),
     {
+      key: 'show', label: 'What the map shows', kind: 'select',
+      options: [
+        { value: 'all', label: 'Every job' },
+        { value: 'addressed', label: 'Only jobs with an address' },
+        { value: 'today', label: "Today's work — where the crews are" },
+      ],
+      hint: "Today's work shows only jobs with a task on TODAY, each pin named "
+        + 'after the worker booked there. Only-with-address hides the red '
+        + 'no-address pins.',
+    },
+    {
       key: 'tiles', label: 'Map tiles', kind: 'url',
       placeholder: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
       hint: 'Leave blank for OpenStreetMap. Point it at a paid tile provider here if the '
@@ -333,13 +344,25 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
       ],
     },
   ],
+  'photos-album': [
+    title(),
+    {
+      key: 'album', label: 'The album link', kind: 'text',
+      placeholder: 'https://photos.app.goo.gl/…',
+      hint: 'In Google Photos open the album, press Share, then Create link — that link is '
+        + 'the one to paste. Anyone with the link can view the album; that is what lets '
+        + 'the board show its cover.',
+    },
+  ],
   tiktok: [
     title(),
     {
       key: 'links', label: 'The links', kind: 'longtext',
       placeholder: 'https://www.tiktok.com/@someone/video/1234567890123456789',
       hint: 'Paste as many as you like — one per line, all in a row, or straight out of a '
-        + 'spreadsheet. Anything that is not a link is ignored, and duplicates are dropped.',
+        + 'spreadsheet. Anything that is not a link is ignored, and duplicates are dropped. '
+        + 'The sliders button on the widget opens the big manager, with a preview picture '
+        + 'and hide/remove on every video.',
     },
     {
       key: 'shuffle', label: 'Order', kind: 'select',
@@ -873,6 +896,9 @@ export const WIDGET_PREVIEW: Record<string, Record<string, unknown>> = {
    */
   // A canned unit — the shelf has no other workspace's snapshot to read.
   'unit-card': { sample: 1, projectId: 'wolfson' },
+  // A canned cover — the shelf must never make a network call, and a card
+  // stuck on "reading the album…" previews nothing.
+  'photos-album': { sample: 1, album: 'https://photos.app.goo.gl/sample' },
   // Three real, long-standing TikTok links, so the card plays rather than
   // showing its own paste box — which is what a shopper would otherwise see.
   tiktok: {

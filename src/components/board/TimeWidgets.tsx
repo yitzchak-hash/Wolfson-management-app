@@ -128,17 +128,31 @@ export function WorldClocks({ el }: { el: CanvasElement }) {
    * from that share — bigger box, bigger clocks, always fitting.
    */
   const listRef = React.useRef<HTMLDivElement>(null);
-  const [rowPx, setRowPx] = React.useState(0);
+  const [fit, setFit] = React.useState({ h: 0, w: 0 });
   React.useEffect(() => {
     const node = listRef.current;
     if (!node) return;
-    const measure = () => setRowPx(node.clientHeight / Math.max(1, ids.length));
+    /**
+     * DAMPED, or the wall blinks. On the TV the widget draws inside
+     * WidgetSurface, which scales to the content's natural width — and the
+     * row font here follows the measured box. Bigger font → wider rows →
+     * the surface rescales → the box re-measures → bigger font… the two
+     * observers chased each other and the clock flickered ("blinking on the
+     * TV"). Two brakes: sub-2px measurements are ignored, and the factor is
+     * capped by the WIDTH as well as the height, so the font can never ask
+     * for more room than the box has.
+     */
+    const measure = () => {
+      const h = node.clientHeight / Math.max(1, ids.length);
+      const w = node.clientWidth;
+      setFit(prev => (Math.abs(prev.h - h) > 2 || Math.abs(prev.w - w) > 8) ? { h, w } : prev);
+    };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(node);
     return () => ro.disconnect();
   }, [ids.length]);
-  const f = Math.max(1, Math.min(2.8, rowPx / 24));
+  const f = Math.max(1, Math.min(2.8, Math.min(fit.h / 24, fit.w > 0 ? fit.w / 175 : 2.8)));
 
   return (
     <Frame title={data.title || 'World clocks'} icon={Globe2}>

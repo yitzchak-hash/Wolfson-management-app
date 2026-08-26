@@ -5,7 +5,7 @@ import {
   Ghost, ThumbsUp, ThumbsDown, ClipboardPaste, LayoutGrid, Columns3, Archive, CheckCircle2, PlayCircle,
   Image as ImageIcon, ImageOff, History, MoveUpRight, Unlink, FileText, Search, FolderPlus, Printer,
   Settings2 as Settings, BringToFront, SendToBack, ChevronUp, ChevronDown, Eye,
-  Eraser, GripVertical, Lock, Unlock, Group, Ungroup,
+  Eraser, GripVertical, Lock, Unlock, Group, Ungroup, Info as InfoGlyph,
 } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useStore } from '../data/store';
@@ -20,11 +20,13 @@ import { boardAccess } from '../types';
 import { Apartment, CanvasElement, BinKind, BIN_KINDS, BIN_META, binKeyOf, binLabelOf, isBuiltInBin, getStageName, relativeTime, personColor, PLANNER_ARCHIVE_MAX, BOARD_MARGIN, BoardLayout } from '../types';
 import { presenceReady, startPresence, publishPresence } from '../data/presence';
 import { PresenceLayer } from '../components/board/PresenceLayer';
+import { rememberReturn, redeemReturn } from '../data/unitTravel';
 import { layoutRipple, rippleSentence } from '../data/layoutDiff';
 import { printTable, printDot } from '../data/printing';
 import { ApartmentDetailDrawer } from '../components/apartment/ApartmentDetailDrawer';
 import { QuickAddTaskPanel } from '../components/apartment/QuickAddTaskPanel';
 import { Toast } from '../components/ui/Toast';
+import { Tooltip } from '../components/ui/Tooltip';
 import { DriveIcon, ZohoIcon, PlanIcon, TvIcon } from '../components/ui/BrandIcons';
 import { TvFrameLayer, TvPickMenu, TvPick } from '../components/board/TvFrameLayer';
 import { BoardToolbar, BoardControlsPanel, BoardTool } from '../components/board/BoardToolbar';
@@ -252,6 +254,22 @@ interface ResizeState {
 }
 
 interface LassoState { sx: number; sy: number; ex: number; ey: number }
+
+/**
+ * A settings hint as a hover ⓘ, the shared Row idiom — never a standing
+ * paragraph. The panels carried their explainers as inline grey text, which
+ * on a 252px panel was more explanation than control (the owner's ask:
+ * tooltips, not hardcoded text).
+ */
+function Hint({ text }: { text: string }) {
+  return (
+    <Tooltip text={text} side="top">
+      <span className="inline-flex flex-shrink-0 text-gray-300 hover:text-gray-500 cursor-help align-middle">
+        <InfoGlyph size={11} />
+      </span>
+    </Tooltip>
+  );
+}
 
 /** The "N SELECTED" strip at the top of a multi-selection menu. */
 function SelCountHeader({ n }: { n: number }) {
@@ -1665,6 +1683,51 @@ export function GeneralJobsPage() {
     if (document.fullscreenElement) void document.exitFullscreen();
     else void (pageRootRef.current ?? document.documentElement).requestFullscreen?.();
   }
+
+  /**
+   * Automatic layout snapshots — the clock pressing "Save this arrangement".
+   *
+   * Runs only while the board page is open, which is exactly right: positions
+   * only ever change from here, so a closed board has nothing new to record.
+   * 'hourly' takes one when the newest automatic snapshot is an hour old;
+   * 'daily' when it is from a previous day (the first open of the morning
+   * records how yesterday ended). A board where NOTHING has moved since the
+   * last automatic snapshot is skipped — eight copies of the same arrangement
+   * rotate the useful ones out and record nothing.
+   */
+  const autoLayoutMode = projectBoard.autoLayout;
+  useEffect(() => {
+    if (!autoLayoutMode || currentProjectId !== 'general') return;
+    const takeIfDue = () => {
+      const st = useStore.getState();
+      if (st.currentProjectId !== 'general') return;
+      const layouts = st.boardLayouts[st.currentProjectId] ?? [];
+      const lastAuto = layouts.find(l => l.auto);
+      const now = new Date();
+      if (lastAuto) {
+        const then = new Date(lastAuto.at);
+        if (autoLayoutMode === 'hourly' && now.getTime() - then.getTime() < 3600_000) return;
+        if (autoLayoutMode === 'daily' && then.toDateString() === now.toDateString()) return;
+        const jobsNow = st.apartments.filter(a =>
+          a.buildingId === 'G' && typeof a.canvasX === 'number' && typeof a.canvasY === 'number');
+        const jm = new Map(lastAuto.jobs.map(j => [j.id, j]));
+        const em = new Map(lastAuto.els.map(e => [e.id, e]));
+        const unchanged =
+          jobsNow.length === lastAuto.jobs.length &&
+          st.canvasElements.length === lastAuto.els.length &&
+          jobsNow.every(a => { const j = jm.get(a.id); return j && j.x === a.canvasX && j.y === a.canvasY; }) &&
+          st.canvasElements.every(e => {
+            const p = em.get(e.id);
+            return p && p.x === e.x && p.y === e.y && p.w === e.w && p.h === e.h;
+          });
+        if (unchanged) return;
+      }
+      saveBoardLayout(`Auto — ${now.toLocaleString()}`, true);
+    };
+    takeIfDue();
+    const t = setInterval(takeIfDue, 5 * 60_000);
+    return () => clearInterval(t);
+  }, [autoLayoutMode, currentProjectId]);
 
   /**
    * The four bins exist on every board.
@@ -3445,7 +3508,10 @@ export function GeneralJobsPage() {
      * them would retarget the click to the tile (the standing capture trap).
      */
     if (isFingerTouch(e) && !e.ctrlKey && !e.metaKey) {
-      if ((e.target as HTMLElement).closest('a,button,input,textarea,select')) return;
+      // The annotated interactive children too — same exemption as the mouse
+      // path, so a control that is a div with its own handlers still takes
+      // the tap on a finger.
+      if ((e.target as HTMLElement).closest('a,button,input,textarea,select,[data-no-drag],[data-el-action]')) return;
       e.stopPropagation();
       panRef.current = { px: e.clientX, py: e.clientY, ox: pan.x, oy: pan.y };
       setPanning(true);
@@ -3839,9 +3905,13 @@ export function GeneralJobsPage() {
     if (eraseMode) { startEraseAt(e); return; }
     // The same finger rule the tiles follow: touch navigates, it never moves a
     // node. Interactive children (a widget's buttons, a player's controls) are
-    // left alone so they still take the tap.
+    // left alone so they still take the tap — INCLUDING the annotated ones
+    // (`data-no-drag`/`data-el-action`, e.g. a notebook job card, which is a
+    // div with its own handlers): the mouse path always exempted those, and
+    // the finger path missing them is what made tapping a card in the
+    // notebook do nothing and then blink a text caret ("typing indicator").
     if (isFingerTouch(e) && !e.ctrlKey && !e.metaKey) {
-      if ((e.target as HTMLElement).closest('a,button,input,textarea,select')) return;
+      if ((e.target as HTMLElement).closest('a,button,input,textarea,select,[data-no-drag],[data-el-action]')) return;
       e.stopPropagation();
       panRef.current = { px: e.clientX, py: e.clientY, ox: pan.x, oy: pan.y };
       setPanning(true);
@@ -4079,6 +4149,10 @@ export function GeneralJobsPage() {
       e && isFingerTouch(e) && !drag.moved
       && drag.ids.length === 1 && drag.ids[0] === el.id
       && selectedElIds.has(el.id) && selectedElIds.size === 1
+      // ONLY the node types that actually render a text editor. A widget has
+      // no text to edit, and startEdit on one blinked a caret over the
+      // weather — the touchscreen's "typing indicator" report.
+      && (el.type === 'note' || el.type === 'box' || el.type === 'title')
     ) {
       startEdit(el);
     }
@@ -5178,6 +5252,9 @@ export function GeneralJobsPage() {
     // of the apartment should show — take me to that workspace to show it."
     openUnit: (pid: string, aptId: string) => {
       if (pid === currentProjectId) { openJobRef.current(aptId); return; }
+      // Approved refinement: the journey holds a RETURN TICKET — closing the
+      // drawer over there brings you straight back to this board.
+      rememberReturn(currentProjectId, window.location.pathname, aptId);
       // Switch FIRST — the switch clears pendingFocus as part of arriving
       // somewhere new, so the intent goes in afterwards (the settled order).
       setCurrentProject(pid);
@@ -5494,17 +5571,23 @@ export function GeneralJobsPage() {
       side === 'top' ? (vp?.clientHeight ?? 800) : (vp?.clientWidth ?? 1200), zoom);
     const shift = shiftFor(side, amount);
 
-    shiftJobs(jobs, shift, activeBoardView).forEach(({ id, x, y }) => {
-      const job = apartments.find(a => a.id === id);
-      if (activeBoardView) {
-        updateApartment(id, {
-          viewPos: { ...(job?.viewPos ?? {}), [activeBoardView]: { x, y } },
-        }, currentUser);
-      } else {
-        updateApartment(id, { canvasX: x, canvasY: y }, currentUser);
-      }
+    // Tracked, so Ctrl+Z closes the room back up (the owner's ask). The pan
+    // compensation below is view state and stays put — undoing visibly slides
+    // everything back toward the edge, which is the honest picture of what
+    // the undo did.
+    track({ weight: 'arrange', label: side === 'top' ? 'Made room above' : 'Made room on the left' }, () => {
+      shiftJobs(jobs, shift, activeBoardView).forEach(({ id, x, y }) => {
+        const job = apartments.find(a => a.id === id);
+        if (activeBoardView) {
+          updateApartment(id, {
+            viewPos: { ...(job?.viewPos ?? {}), [activeBoardView]: { x, y } },
+          }, currentUser);
+        } else {
+          updateApartment(id, { canvasX: x, canvasY: y }, currentUser);
+        }
+      });
+      shiftNodes(onThisBoard, shift).forEach(({ id, x, y }) => updateCanvasElement(id, { x, y }));
     });
-    shiftNodes(onThisBoard, shift).forEach(({ id, x, y }) => updateCanvasElement(id, { x, y }));
 
     setPan(p => clampPanRef.current({
       x: p.x - shift.dx * zoom,
@@ -5539,6 +5622,20 @@ export function GeneralJobsPage() {
 
   return (
     <div ref={pageRootRef} className="flex-1 flex flex-col min-h-0 bg-gray-50 relative">
+      {/* The way out of full screen on a touch screen — no Escape key there,
+          and the header's own toggle is one small button in a scrolling strip.
+          .touch-show keeps it off any screen that has a hover pointer. */}
+      {isFull && (
+        <button
+          data-touch-exit-fullscreen
+          onClick={toggleFullscreen}
+          title="Exit full screen"
+          className="touch-show absolute top-16 right-3 z-40 w-11 h-11 rounded-full bg-black/55 text-white
+                     items-center justify-center shadow-lg"
+        >
+          <Minimize size={18} />
+        </button>
+      )}
       {/* ── Header ── */}
       <div ref={headerBarRef} className={`flex items-center justify-between px-2 md:px-5 py-2 md:py-3 flex-shrink-0 gap-2 ${
         floatingHeader
@@ -5822,16 +5919,13 @@ export function GeneralJobsPage() {
             {/* Lining up with what is already there is always on and draws its
                 own lines. This is the extra: a 22px lattice to land on when
                 there is nothing nearby to line up with. */}
-            <label className="flex items-center gap-2 text-[10px] text-gray-600 font-semibold mb-0.5">
+            <label className="flex items-center gap-2 text-[10px] text-gray-600 font-semibold mb-2">
               <input type="checkbox" className="rounded"
                 checked={projectBoard.snapToGrid ?? false}
                 onChange={e => setBoardSetting('snapToGrid', e.target.checked)} />
               Snap to grid as well
+              <Hint text="Things always line up with their neighbours, and the lines show why. This adds the 22px grid for when there is nothing beside them." />
             </label>
-            <p className="text-[9px] text-gray-400 leading-snug mb-2">
-              Things always line up with their neighbours, and the lines show why. This adds the
-              22px grid for when there is nothing beside them.
-            </p>
 
             {/* The advanced half of lining things up: matching a neighbour's
                 SIZE, and matching the SPACE between things — neither of which
@@ -5839,37 +5933,30 @@ export function GeneralJobsPage() {
                 but not in a line share no edge; nor do three cards whose gaps
                 read 18, 41 and 18, which are perfectly lined up and still look
                 wrong. */}
-            <label className="flex items-center gap-2 text-[10px] text-gray-600 font-semibold mb-0.5">
+            <label className="flex items-center gap-2 text-[10px] text-gray-600 font-semibold mb-2">
               <input type="checkbox" className="rounded"
                 checked={smartGuides}
                 onChange={e => setBoardSetting('smartGuides', e.target.checked)} />
               Match sizes and spacing
+              <Hint text="Drag a corner near the size of something nearby and it lands on exactly that size. Drop something between two things and it lands with equal space either side, or a gap the same as the one next door — with the measurement shown on it." />
             </label>
-            <p className="text-[9px] text-gray-400 leading-snug mb-2">
-              Drag a corner near the size of something nearby and it lands on exactly that size.
-              Drop something between two things and it lands with equal space either side, or a
-              gap the same as the one next door — with the measurement shown on it.
-            </p>
 
             {/* The wheel: zoom (the default) or plain scrolling. Esther's
                 ruling — scrolling should move the page like any other page,
                 with the header's − / + doing the zooming. */}
-            <label className="flex items-center gap-2 text-[10px] text-gray-600 font-semibold mb-0.5">
+            <label className="flex items-center gap-2 text-[10px] text-gray-600 font-semibold mb-2">
               <input type="checkbox" className="rounded"
                 checked={projectBoard.wheelScrolls ?? false}
                 onChange={e => setBoardSetting('wheelScrolls', e.target.checked)} />
               Scrolling moves the board, not the zoom
+              <Hint text="The mouse wheel scrolls up and down like an ordinary page; zooming is done with the − and + buttons on top. Ctrl+wheel still zooms, Shift+wheel still slides sideways." />
             </label>
-            <p className="text-[9px] text-gray-400 leading-snug mb-2">
-              The mouse wheel scrolls up and down like an ordinary page; zooming is done with
-              the − and + buttons on top. Ctrl+wheel still zooms, Shift+wheel still slides
-              sideways.
-            </p>
 
             {/* Page margins. */}
             <div className="mb-2">
-              <span className="block text-[10px] font-bold text-gray-500 mb-1">
+              <span className="flex items-center gap-1.5 text-[10px] font-bold text-gray-500 mb-1">
                 Margin round the edges
+                <Hint text="Space kept clear on all four sides, like the margins on a page — nothing lands inside it." />
               </span>
               <div className="flex items-center gap-1.5">
                 <input
@@ -5881,10 +5968,6 @@ export function GeneralJobsPage() {
                   {margin}px
                 </span>
               </div>
-              <p className="text-[9px] text-gray-400 leading-snug mt-1">
-                Space kept clear on all four sides, like the margins on a page — nothing
-                lands inside it.
-              </p>
             </div>
 
             {/* Per machine on purpose — a synced default would push one
@@ -6024,6 +6107,7 @@ export function GeneralJobsPage() {
             style={{ top: showControls ? 236 : 12, maxHeight: '70%', overflowY: 'auto' }}>
             <div className="flex items-center gap-2 mb-2 pl-4">
               <span className="text-[10px] font-extrabold text-gray-700 tracking-wide">LAYOUT HISTORY</span>
+              <Hint text="Snapshots record where things sit — never the jobs themselves. Restoring moves things back and cannot undo an edit or bring back a deleted job." />
               <button onClick={() => setLayoutPanel(false)} className="ml-auto text-gray-300 hover:text-gray-500">
                 <X size={13} />
               </button>
@@ -6034,10 +6118,22 @@ export function GeneralJobsPage() {
               style={{ background: 'linear-gradient(135deg, #1e3a5f, #2d5a8e)' }}>
               Save this arrangement
             </button>
-            <p className="text-[9.5px] text-gray-400 leading-snug mb-2">
-              Snapshots record where things sit — never the jobs themselves. Restoring moves things back
-              and cannot undo an edit or bring back a deleted job.
-            </p>
+            {/* The clock's own saves. Their snapshots rotate in their own
+                slots (see saveBoardLayout), so they can never push out an
+                arrangement somebody saved on purpose. */}
+            <div className="flex items-center gap-1.5 mb-2">
+              <span className="text-[10px] font-bold text-gray-500 flex-shrink-0">By itself</span>
+              <select
+                data-auto-layout
+                value={projectBoard.autoLayout ?? ''}
+                onChange={e => setBoardSetting('autoLayout', e.target.value as '' | 'hourly' | 'daily')}
+                className="flex-1 text-[10px] border border-gray-200 rounded-lg px-1.5 py-1 bg-white">
+                <option value="">Never</option>
+                <option value="hourly">Every hour</option>
+                <option value="daily">Once a day</option>
+              </select>
+              <Hint text="Takes a snapshot by itself while the board is open — every hour, or the first time it is opened each day. Automatic snapshots rotate in their own slots and never push out one you saved yourself." />
+            </div>
             {(boardLayouts[currentProjectId] ?? []).length === 0 && (
               <div className="text-[10.5px] text-gray-400 py-3 text-center">Nothing saved yet.</div>
             )}
@@ -6069,6 +6165,12 @@ export function GeneralJobsPage() {
                   <div className="px-2 pt-1.5">
                     <div className="flex items-center gap-1.5">
                       <span className="text-[9.5px] text-gray-500 truncate flex-1" title={L.label}>{L.label}</span>
+                      {L.auto && (
+                        <span data-layout-auto-tag
+                          className="text-[8px] font-bold uppercase tracking-wide bg-gray-100 text-gray-400 rounded px-1 py-px flex-shrink-0">
+                          auto
+                        </span>
+                      )}
                       <button
                         data-layout-preview={L.id}
                         onClick={() => setPreviewLayout(previewLayout?.id === L.id ? null : L)}
@@ -7677,7 +7779,17 @@ export function GeneralJobsPage() {
       {selectedJob && currentUser && (
         <ApartmentDetailDrawer
           apartment={selectedJob}
-          onClose={() => setSelectedJob(null)}
+          onClose={() => {
+            const id = selectedJob.id;
+            setSelectedJob(null);
+            // A glance that travelled here holds a return ticket — closing
+            // the SAME unit it opened goes straight back where you stood.
+            const back = redeemReturn(id);
+            if (back && back.projectId !== currentProjectId) {
+              setCurrentProject(back.projectId);
+              navigate(back.path);
+            }
+          }}
           currentUser={currentUser}
           onToast={msg => setToast(msg)}
           onRequestAddTask={(apt) => { setSelectedJob(null); setAddTaskJob(apt); }}

@@ -198,6 +198,14 @@ export interface BoardSetting {
     view?: { x: number; y: number; w: number; h: number };
     scale?: number;
   }>;
+  /**
+   * Automatic layout snapshots: absent/'' = off, 'hourly' = one an hour while
+   * the board is open, 'daily' = the first time the board is opened each day.
+   * Automatic snapshots carry `auto: true` and rotate in their OWN slots
+   * (LAYOUTS_AUTO_MAX) so they can never push out an arrangement somebody
+   * saved on purpose.
+   */
+  autoLayout?: '' | 'hourly' | 'daily';
 }
 
 export type BoardSettingKey = keyof BoardSetting;
@@ -233,6 +241,8 @@ export interface BoardLayout {
   id: string;
   at: string;
   label: string;
+  /** Taken by the clock, not a person — rotates in its own slots. */
+  auto?: boolean;
   jobs: { id: string; x: number; y: number }[];
   els: { id: string; x: number; y: number; w: number; h: number }[];
 }

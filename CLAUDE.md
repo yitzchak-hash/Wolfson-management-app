@@ -4939,3 +4939,112 @@ Firestore), put its URL in Vercel as VITE_FIREBASE_DATABASE_URL.
 
 Standing pre-existing reds, verified identical with this diff stashed:
 `boardsize.mjs` left-edge auto-pan, `touchpan.mjs` pinch-zoom.
+
+---
+
+# v2 — the touch round: taps that mean it, numbers that open, and the reel grown up
+
+## A finger tap must never start typing
+The board's FINGER branches (tile and node pointerdown) exempted
+`a,button,input,textarea,select` but not `[data-no-drag],[data-el-action]` —
+the two attributes every widget control carries and the MOUSE path already
+honoured — so on a touch screen a tap on a widget's own button was captured
+as a pan and a caret appeared where nothing should type. Both selectors now
+match the mouse path's. And tap-to-edit (second tap on a picked node) is
+gated to `note | box | title` — the only kinds where "edit" means typing;
+on a widget it now opens nothing, and a notebook card's tap opens its JOB.
+
+## Travelling to another workspace buys a return ticket
+`src/data/unitTravel.ts` — `rememberReturn(projectId, path, aptId)` /
+`redeemReturn(aptId)` / `clearReturnTicket()`. `openUnit` (board ctx and
+dashboard) remembers where you stood before switching; BOTH drawer close
+paths (board and diagram) redeem it and take you straight back. The ticket
+is only honoured for the SAME apartment it was written for — opening a
+different unit over there means you stayed, and the ticket is torn up. A
+deliberate workspace switch (the header picker) and the browser Back button
+clear it too. Session-only, module-level, never persisted.
+
+## Numbers open their lists on the wall too
+`TvPresentationPage` provides a real `showList` in its widget ctx and draws
+`WidgetListPopup` over the wall (rows open the wall's own job screen); the
+overdue pill in the wall's bar is a button (`data-tv-overdue`) listing the
+workspace's overdue jobs. The tv-month heat map counts `daysOf(a)` for OPEN
+tasks — every day of a multi-day task — plus the weekly notebook's own cells
+(entries WITHOUT a `taskId`, projections skipped), so a planned day is a
+busy day. `WorldClocks` no longer blinks on the TV: its measure effect damps
+(`>2px` height / `>8px` width change before writing state) and the row
+factor is width-capped, which kills the resize→font→resize feedback loop
+the wall's zoom amplified.
+
+## The map picks what it shows
+`job-map` gained `data.show`: `all` (default) · `addressed` (a job with no
+address is left off instead of scattered) · `today` (only jobs someone is
+booked on today — `daysOf` against the local date — with the CREW's names
+on the pins and the job's name beneath).
+
+## The TikTok reel
+- **The frame's address is FROZEN per mount** (`src` useMemo on
+  `videoId:playToken`, settings read through refs). `muted` and `loop` were
+  interpolated into `src`, so the sound button and the Repeat toggle
+  changed the URL and the browser RELOADED the frame — that was the
+  restart. Everything mid-video travels over the player's postMessage
+  protocol; the sound button never remounts at all.
+- **Full screen on the reel's own root** (`data-tiktok-root`,
+  requestFullscreen — the top layer escapes the board's transforms), with
+  the TAP LADDER: the iframe eats every press, so a transparent overlay
+  (`data-tiktok-tap`) above it is what a tap lands on. Chrome starts
+  hidden; first tap brings the floating control pill back; each tap after
+  toggles pause/play; 4s quiet puts the pill away and resets the ladder. A
+  × (`data-tiktok-exit`) is ALWAYS visible — a touch screen has no Escape.
+  **The overlay and the × carry `data-no-drag data-el-action` + their own
+  stopPropagation** — without them the node underneath captured the pointer
+  and the click retargeted away (the standing capture trap, paid again).
+- **The big manager** (`TikTokManager`, module level, portalled, seals its
+  pointer events): near-fullscreen popup where every link is a tile with
+  the video's own preview picture (resolved through the existing
+  `/api/tiktok` oEmbed route, chunked in threes), hide (the link stays,
+  the reel skips it — `data.hidden`, an array beside `links`) and remove
+  per tile, paste-to-add, play-jumps-the-reel, Escape closes.
+- NOT verified against tiktok.com end to end — no internet here. The
+  container's egress proxy serves an error page into the sandboxed player
+  iframe whose own script throws a localStorage pageerror; `round30.mjs`
+  filters exactly that message as third-party noise.
+
+## The Google Photos album widget (`photos-album`)
+`api/photos-cover.js` reads the share page's `og:image` on the server (not
+key-guarded, URL-checked to photos hosts only — never a general fetcher);
+`PhotosAlbumWidget` wears the cover with a drawn `PhotosIcon` mark
+(BrandIcons, the Drive/Waze manner) and the album's title, links out, and
+answers the two honest cases in words: NOT SHARED (no og:image / a
+sign-in redirect → "open the album, press Share, Create link") and
+unreachable (retry). The answer is cached on the node keyed by the link
+(`data.cover.for`), so one machine's lookup serves every screen and
+changing the link refetches. `data.sample` draws a canned cover on the
+shelf — the store makes no network calls. Registered in all four places:
+MORE_WIDGETS, WIDGET_FIELDS, WIDGET_PREVIEW, SHELF.
+
+## Layout history grows a clock, and the panels lose their paragraphs
+- `BoardSetting.autoLayout` (`'' | 'hourly' | 'daily'`) +
+  `BoardLayout.auto` — the clock's snapshots rotate in their OWN slots
+  (`LAYOUTS_AUTO_MAX` 8 in store.ts) so they can never push out an
+  arrangement somebody saved on purpose, and ten deliberate saves never
+  starve them. The ticker lives in GeneralJobsPage (positions only ever
+  change there): checks on arrival and every 5 minutes; 'daily' takes one
+  when the newest auto snapshot is from a previous day; a board where
+  NOTHING moved since the last auto snapshot is skipped. Configured inside
+  the Layout history panel (`data-auto-layout`); auto rows wear an `auto`
+  tag. No new state key — both ride existing persisted keys.
+- **`Hint`** (module level in GeneralJobsPage): every standing explainer
+  paragraph in board settings and the layout panel became a hover ⓘ
+  tooltip, the settings-Row idiom.
+- **Make room is tracked**: `makeRoom`'s writes run inside
+  `track({weight:'arrange'})`, so Ctrl+Z closes the room back up. The pan
+  compensation stays view state — undoing visibly slides things back.
+- **`.touch-show`** (index.css): display:none, `display:flex !important`
+  under `any-hover: none`. The board's full-screen mode renders an
+  always-visible exit button (`data-touch-exit-fullscreen`) through it —
+  a touch screen has no Escape key, and a desktop keeps its single exit.
+
+Harness: `scratchpad/round30.mjs` (32 checks). Regressions green: board,
+undoredo, round26, round27. Standing pre-existing reds unchanged
+(`boardsize.mjs` left-edge auto-pan, `touchpan.mjs` pinch-zoom).

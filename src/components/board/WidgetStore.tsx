@@ -107,7 +107,7 @@ const SHELF: Record<string, string> = {
   'recent-photos': 'Photos, map and weather', 'photo-review': 'Photos, map and weather',
   'before-after': 'Photos, map and weather', 'tv-photo': 'Photos, map and weather',
   'tv-photo-wall': 'Photos, map and weather', 'job-map': 'Photos, map and weather',
-  weather: 'Photos, map and weather',
+  weather: 'Photos, map and weather', 'photos-album': 'Photos, map and weather',
   // Time.
   clock: 'Clocks and timers', 'tv-clock': 'Clocks and timers',
   'world-clocks': 'Clocks and timers', 'shabbat-clock': 'Clocks and timers',
