@@ -4860,3 +4860,18 @@ observable). Its trap: the drawer is itself `position:fixed`, so a studio
 query scoped `.fixed …` finds the PANE's strip first — every studio
 assertion goes through the LAST `[data-plan-tabs]`. `planaddr.mjs` gained
 the standing All-pill fix (fixed seeded date vs the portal's Today filter).
+
+---
+
+# v2 — the TV frame is see-through
+
+The board's green TV frame no longer takes the pointer on its body: tiles and
+widgets under it are clicked, dragged and edited as if it were not there.
+Only two things on it are live — a MOVE grip on the top-left corner
+(`data-tv-frame-move`, the Move glyph) and the resize handle on the bottom-
+right (`data-tv-frame-handle`), both sized ÷zoom like all frame chrome.
+Pointer capture on the grips is what keeps a drag delivering to them while
+every ancestor is `pointer-events-none` — the move/up handlers must sit ON
+the grips, not on the frame body. The label moved right of the grip and says
+"grip moves · corner resizes". `tvframe.mjs` asserts the click-through with
+`elementFromPoint` at the frame's centre and drags by the grip.

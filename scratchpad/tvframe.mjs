@@ -137,18 +137,31 @@ check(Math.abs(visW - rNow.w / 2) < 3,
   'board: the frame is the region ÷ display size — what the TV really shows',
   `frame ${Math.round(visW)} vs region ${rNow.w} at 200%`);
 
-// Drag the frame body: it moves 1:1 under the hand (screen ÷ zoom) and the
-// release writes the region — moved, same size.
-const before = await bFrame.evaluate(el => ({ x: parseFloat(el.style.left), y: parseFloat(el.style.top) }));
+// The BODY is see-through, per the owner: a press in the middle of the green
+// falls through to whatever is under it — only the grip and the corner are
+// live. So the board (or a tile) is what the browser finds there, never the
+// frame itself.
 const bb = await bFrame.boundingBox();
-await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2);
+const under = await page.evaluate(([x, y]) => {
+  const el = document.elementFromPoint(x, y);
+  return { inFrame: !!el?.closest('[data-tv-overlay]'), tag: el?.tagName ?? '' };
+}, [bb.x + bb.width / 2, bb.y + bb.height / 2]);
+check(!under.inFrame, 'board: the frame BODY is click-through — the board is under the green', under.tag);
+check(await page.locator('[data-tv-frame-move]').count() === 1,
+  'board: a move grip sits on the top-left corner');
+
+// Drag the frame by its GRIP: it moves 1:1 under the hand (screen ÷ zoom)
+// and the release writes the region — moved, same size.
+const before = await bFrame.evaluate(el => ({ x: parseFloat(el.style.left), y: parseFloat(el.style.top) }));
+const gb = await page.locator('[data-tv-frame-move]').boundingBox();
+await page.mouse.move(gb.x + gb.width / 2, gb.y + gb.height / 2);
 await page.mouse.down();
-await page.mouse.move(bb.x + bb.width / 2 + 80, bb.y + bb.height / 2 + 40, { steps: 6 });
+await page.mouse.move(gb.x + gb.width / 2 + 80, gb.y + gb.height / 2 + 40, { steps: 6 });
 await page.mouse.up();
 await page.waitForTimeout(700);
 const after = await bFrame.evaluate(el => ({ x: parseFloat(el.style.left), y: parseFloat(el.style.top) }));
 check(Math.abs(after.x - before.x - 80 / zoom) < 3 && Math.abs(after.y - before.y - 40 / zoom) < 3,
-  'board: dragging the frame moves it with the hand at this zoom',
+  'board: dragging the GRIP moves the frame with the hand at this zoom',
   `moved ${Math.round(after.x - before.x)},${Math.round(after.y - before.y)} for 80,40 at ${zoom}`);
 const rMoved = (await tvBag()).tvView;
 check(Math.abs(rMoved.w - rNow.w) <= 2 && rMoved.x !== rNow.x,

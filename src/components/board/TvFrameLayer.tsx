@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { Move } from 'lucide-react';
 import { useStore } from '../../data/store';
 import { TvRect, tvVisibleRect, regionForVisible, ratioOfShape } from '../../data/tvRegion';
 import { loadTvScreens, screenIsLive, shapeNameOf, TvScreenPresence } from '../../data/tvScreens';
@@ -264,13 +265,17 @@ export function TvFrameLayer({ pan, zoom, pick }: {
         zIndex: 40,
       }}
     >
+      {/*
+        The frame's BODY is see-through to the hand, per the owner: the green
+        stays, but tiles and widgets under it are clicked, dragged and edited
+        exactly as if it were not there. Only two things on it are live — the
+        MOVE grip at the top-left corner and the resize handle at the bottom-
+        right. Pointer capture on the grips keeps a drag delivering to them
+        even though every ancestor here is pointer-events-none.
+      */}
       <div
         data-tv-frame
-        onPointerDown={down('move')}
-        onPointerMove={move}
-        onPointerUp={up}
-        onPointerCancel={up}
-        className="absolute pointer-events-auto cursor-move"
+        className="absolute pointer-events-none"
         style={{
           left: vis.x, top: vis.y, width: vis.w, height: vis.h,
           backgroundColor: 'rgba(22,163,74,.10)',
@@ -280,13 +285,33 @@ export function TvFrameLayer({ pan, zoom, pick }: {
         }}
       >
         <span
-          className="absolute left-0 px-2 py-0.5 rounded-md font-bold text-white whitespace-nowrap pointer-events-none"
+          className="absolute px-2 py-0.5 rounded-md font-bold text-white whitespace-nowrap pointer-events-none"
           style={{
+            left: 24 / zoom,
             bottom: '100%', marginBottom: 4 / zoom,
             backgroundColor: '#16a34a',
             fontSize: 11 / zoom, borderRadius: 5 / zoom,
           }}>
-          {pick.label} · drag to aim · corner resizes
+          {pick.label} · grip moves · corner resizes
+        </span>
+        <span
+          data-tv-frame-move
+          onPointerDown={down('move')}
+          onPointerMove={move}
+          onPointerUp={up}
+          onPointerCancel={up}
+          title="Move the frame — aim the TV"
+          className="absolute pointer-events-auto cursor-move flex items-center justify-center text-white"
+          style={{
+            left: -8 / zoom, top: -8 / zoom,
+            width: 18 / zoom, height: 18 / zoom,
+            backgroundColor: '#16a34a',
+            border: `${2 / zoom}px solid #fff`,
+            borderRadius: 4 / zoom,
+            boxShadow: `0 ${1 / zoom}px ${4 / zoom}px rgba(15,23,42,.35)`,
+          }}
+        >
+          <Move size={11 / zoom} />
         </span>
         <span
           data-tv-frame-handle
@@ -294,6 +319,7 @@ export function TvFrameLayer({ pan, zoom, pick }: {
           onPointerMove={move}
           onPointerUp={up}
           onPointerCancel={up}
+          title="Resize the frame — how much the TV takes in"
           className="absolute pointer-events-auto cursor-se-resize"
           style={{
             right: -8 / zoom, bottom: -8 / zoom,
