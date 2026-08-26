@@ -4729,3 +4729,61 @@ under a transform (the ScreenReport rule) — a probe must multiply by the
 render scale or a visually-big name reads as 8px and the harness blames the
 product. `boardsize.mjs` carries one PRE-EXISTING red (left-edge auto-pan),
 verified identical with these changes stashed.
+
+---
+
+# v2 — the markup round, first half (the tabs await approval)
+
+## The zoom-out floor is the fit
+`fitScaleRef` in PlanAnnotator is written EVERY renderPage from the stage's
+real size (not only when a fit was asked for — the buttons and the pinch
+clamp against it and need it current after every resize, page turn and
+rotation). Every zoom-out path — wheel, pinch, all three button clusters —
+floors on it: once the whole sheet is visible with its margin, zooming out
+buys nothing but blank stage. Zoom-in caps are untouched.
+
+## Touch: unrounded pinch, gentler taps
+- The pinch sets the scale UNROUNDED while the fingers are down and snaps to
+  whole per-cents only on gesture end — per-frame rounding made the sheet
+  grow in visible 1% ticks, each tick re-running the anchor scroll
+  correction, which is the stutter that read as "pinch jumps".
+- `zoomStep(dir, step, cap)` is the one door for every zoom button. On a
+  touch screen (`any-hover: none`, the standing capability test — never "is
+  this a tablet") a tap moves ×1.08 instead of a flat +0.15/+0.2, so taps
+  are fine moves at any zoom.
+
+## Full screen is real, and the fit button stopped lying
+The button that wore the full-screen icon ran `setFitting(true)`. Now: the
+fit button wears a SQUARE icon (`data-plan-fit`), and a REAL full-screen
+button (`data-plan-fullscreen`, Maximize2/Minimize2) sits between zoom-in
+and fit in all three clusters (viewer pill, markup header, phone ⋯ sheet) —
+`rootRef.requestFullscreen()` on the annotator's own root, state follows
+`fullscreenchange` so Esc is honest, and the same button is the visible way
+out. In the drawer the pill lives INSIDE the root, so the exit control is
+visible in full screen even though the drawer's portalled bars are not.
+
+## The markup button size is a per-machine setting
+`src/data/markupScale.ts` (`markup_ui_scale` in localStorage, clamp [1,2.2],
+a window event so an open studio follows live) multiplies with the host's
+`touchScale` prop into the studio's `ts`/`ui` factor. The control is five
+preset buttons (Normal→Giant) on the **This computer** card in app settings
+(`data-markup-scale`) — per-machine like `drive_desktop_root`, NEVER synced:
+the touchscreen's giant buttons must not arrive on every desk.
+
+## Tabs + preloading are PROPOSED, not built (the owner's gate)
+The walkthrough is `scratchpad/plan-tabs-plan.template.html` (dist CSS
+inlined, the drafting-table manner), published as the "Plan Tabs" artifact:
+Chrome-style tabs between the plan's name and the zoom cluster, open-in-new-
+tab on plan rows, sketches in their own tabs, + duplicates the current plan,
+tabs persist per machine per job, X asks "Your work isn't saved. Save to
+Google Drive?" only when marks are unsaved (Yes = the existing Annotated
+Plans pipeline, unchanged), and background download of the folder's other
+plans with per-plan progress — copies dropped on exit, tabs kept. Build only
+when he approves the page.
+
+Harness: `scratchpad/markupfixes.mjs` (17 checks). Its lessons: under
+`Emulation.setEmitTouchEventsForMouse` Playwright's own synthetic clicks
+HANG — arm the touch profile after navigation and press buttons through the
+DOM; and `setEmulatedMedia`'s feature overrides do not reach matchMedia in
+this Chromium — `setTouchEmulationEnabled` is what genuinely flips
+`any-hover: none`.

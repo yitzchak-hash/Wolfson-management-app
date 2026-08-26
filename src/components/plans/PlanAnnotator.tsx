@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   X, Undo2, Redo2, Trash2, HardDrive, AlertTriangle, SquareDashedMousePointer,
   Save, Printer, Download, ChevronLeft, ChevronRight,
-  Plus, Minus, Maximize2, Loader2, Pen, Pencil, Highlighter, Eraser, Minus as LineIcon,
+  Plus, Minus, Maximize2, Minimize2, Loader2, Pen, Pencil, Highlighter, Eraser, Minus as LineIcon,
   ArrowUpRight, Square, Circle, Type, Hand, Layers, FileDown, Check, ExternalLink,
   MessageSquare, Move, Layers2, ChevronsUpDown, User as UserIcon,
   Monitor, ArrowRight, RotateCcw, RotateCw, MoreHorizontal,
@@ -19,6 +19,7 @@ import { PenStroke, PenSample, NibWatch, samplesOf, simplify, nearSegment } from
 import { TOOLS, toolById, INK_COLORS, HIGHLIGHT_COLORS, rememberColor } from './annotTools';
 import { InkPicker } from './InkPicker';
 import { notePointer, isPalm, isPen, touchWasPalm } from '../../data/pencil';
+import { useMarkupScale } from '../../data/markupScale';
 import { paintStroke, bubbleTextBox, REF, LINE } from './paintStroke';
 import { PlanPicker } from './PlanPicker';
 import { usePhone } from '../../data/usePhone';
@@ -439,6 +440,50 @@ export function PlanAnnotator({
   /** The live scale, for the pinch handler — which is registered once. */
   const scaleRef = useRef(scale);
   scaleRef.current = scale;
+  /**
+   * The scale at which the WHOLE sheet fits the stage with its margin — the
+   * floor under every zoom-out. Written by renderPage each time it measures
+   * the stage, so a resized window or a rotated tablet moves the floor with
+   * it. Zooming below it only buys blank stage around a sheet that is already
+   * entirely visible, which read as the plan shrinking away to nothing.
+   */
+  const fitScaleRef = useRef(0.1);
+  /**
+   * A touch screen zooms in gentler steps.
+   *
+   * A flat +0.2 per tap is a quarter of the sheet gone at 80% and barely a
+   * nudge at 400%; with a finger there is no wheel to make the fine moves in
+   * between, so each tap moves ~8% instead. Keyed off what the device can DO
+   * (`any-hover: none`), never off "is this a tablet" — the standing rule.
+   */
+  const touchUI = useMedia('(any-hover: none)');
+  const touchUIRef = useRef(touchUI);
+  touchUIRef.current = touchUI;
+  const zoomStep = useCallback((dir: 1 | -1, step: number, cap: number) => {
+    setFitting(false);
+    setScale(s => {
+      const next = touchUIRef.current ? s * (dir > 0 ? 1.08 : 1 / 1.08) : s + dir * step;
+      return Math.min(cap, Math.max(fitScaleRef.current, Math.round(next * 100) / 100));
+    });
+  }, []);
+  /**
+   * REAL full screen, alongside the fit-to-page button that used to wear its
+   * icon. The browser only grants it from a user gesture, and Esc leaves it
+   * without asking — so the state follows `fullscreenchange` rather than the
+   * button, and the same button reads "exit" once it is on.
+   */
+  const [isFull, setIsFull] = useState(false);
+  useEffect(() => {
+    const on = () => setIsFull(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', on);
+    return () => document.removeEventListener('fullscreenchange', on);
+  }, []);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const toggleFull = useCallback(() => {
+    if (document.fullscreenElement) { void document.exitFullscreen?.(); return; }
+    rootRef.current?.requestFullscreen?.()
+      .catch(() => onToast?.('The browser would not allow full screen here', 'error'));
+  }, [onToast]);
 
   /**
    * Abandon a stroke in progress without committing it.
@@ -468,7 +513,13 @@ export function PlanAnnotator({
    * button later means reaching for `ui.btn` and `ui.icon`, and it comes out
    * the right size on the wall without anybody remembering to think about it.
    */
-  const ts = Math.max(1, Math.min(2.2, touchScale || 1));
+  /**
+   * The host's factor (the wallboard passes one) times THIS MACHINE's own
+   * setting from app settings — per-machine, localStorage, never synced,
+   * because the touchscreen's giant buttons must not arrive on every desk.
+   */
+  const markupPref = useMarkupScale();
+  const ts = Math.max(1, Math.min(2.2, (touchScale || 1) * markupPref));
   const ui = useMemo(() => ({
     on: ts > 1.02,
     rail: Math.round(62 * ts),
@@ -579,15 +630,22 @@ export function PlanAnnotator({
     setNat({ w: natVp.width, h: natVp.height });
 
     let s = raster;
-    if (fitting && stageRef.current) {
+    if (stageRef.current) {
       // The margin the stage keeps round the sheet — 16px a side at the desk,
       // 4px on a phone, where sixteen of them is four per cent of the screen
       // spent on nothing.
       const pad = compact ? 8 : 32;
       const availW = stageRef.current.clientWidth - pad;
       const availH = stageRef.current.clientHeight - pad;
-      s = Math.max(0.1, Math.min(4, Math.min(availW / natVp.width, availH / natVp.height)));
-      setScale(s); setRaster(s); setFitting(false);
+      // The zoom-out floor is measured HERE, whether or not a fit was asked
+      // for — the buttons and the pinch clamp against it and they need it
+      // current after every resize, page turn and rotation.
+      fitScaleRef.current = Math.max(0.05, Math.min(4,
+        Math.min(availW / natVp.width, availH / natVp.height)));
+      if (fitting) {
+        s = Math.max(0.1, fitScaleRef.current);
+        setScale(s); setRaster(s); setFitting(false);
+      }
     }
 
     // Nothing to redraw if the page is already on screen at this resolution.
@@ -773,7 +831,9 @@ export function PlanAnnotator({
   const zoomAt = useCallback((clientX: number, clientY: number, factor: number) => {
     anchorZoomAt(clientX, clientY);
     setFitting(false);
-    setScale(z => Math.min(6, Math.max(0.1, Math.round(z * factor * 100) / 100)));
+    // The floor is the fit: once the whole sheet is on screen with its
+    // margin, zooming out further only shrinks it into blank stage.
+    setScale(z => Math.min(6, Math.max(fitScaleRef.current, Math.round(z * factor * 100) / 100)));
   }, [anchorZoomAt]);
 
   useEffect(() => {
@@ -836,13 +896,23 @@ export function PlanAnnotator({
 
       const d = gap(e.touches);
       if (base.dist < 8) return;
-      const want = Math.min(6, Math.max(0.1, base.scale * (d / base.dist)));
+      /**
+       * UNROUNDED while the fingers are down. Rounding to whole per-cents made
+       * the sheet grow in visible 1% ticks, each tick re-running the anchor
+       * scroll correction — which is the stutter that read as "pinch jumps".
+       * The number is snapped once, when the gesture ends, so the readout and
+       * every later step still land on tidy values.
+       */
+      const want = Math.min(6, Math.max(fitScaleRef.current, base.scale * (d / base.dist)));
       anchorZoomAt(m.x, m.y);
       setFitting(false);
-      setScale(Math.round(want * 100) / 100);
+      setScale(want);
     }
     function end(e: TouchEvent) {
-      if (e.touches.length < 2) { base = null; lastMid = null; }
+      if (e.touches.length < 2) {
+        if (base) setScale(s => Math.round(s * 100) / 100);
+        base = null; lastMid = null;
+      }
     }
 
     el.addEventListener('touchstart', start, { passive: true });
@@ -2381,7 +2451,11 @@ export function PlanAnnotator({
 
   return (
     <div
+      ref={rootRef}
       className={embedded ? 'absolute inset-0 flex flex-col' : 'fixed inset-0 z-[150] flex flex-col'}
+      // A white ground matters in FULL SCREEN too: the fullscreen element is
+      // painted over black by the browser, and the embedded pane's white
+      // otherwise only comes from the drawer behind it.
       style={{ backgroundColor: embedded ? '#ffffff' : NAVY_DEEP }}
     >
       {/* Header.
@@ -2464,13 +2538,21 @@ export function PlanAnnotator({
               bar over the sheet — one set of controls, where Drive keeps them. */}
           {!locked && (
             <div className="flex items-center gap-0.5 text-white/85 mr-1">
-              <button onClick={() => setScale(s => Math.max(0.2, s - 0.2))} title="Zoom out"
+              <button onClick={() => zoomStep(-1, 0.2, 5)} title="Zoom out"
                 className="p-1.5 rounded-lg hover:bg-white/10"><Minus size={14} /></button>
               <span className="text-[11px] tabular-nums w-11 text-center">{Math.round(scale * 100)}%</span>
-              <button onClick={() => setScale(s => Math.min(5, s + 0.2))} title="Zoom in"
+              <button onClick={() => zoomStep(1, 0.2, 5)} title="Zoom in"
                 className="p-1.5 rounded-lg hover:bg-white/10"><Plus size={14} /></button>
-              <button onClick={() => setFitting(true)} title="Fit the page"
-                className="p-1.5 rounded-lg hover:bg-white/10"><Maximize2 size={13} /></button>
+              {/* REAL full screen — the fit button beside it used to wear this
+                  icon while running the fit, which is the mislabel the owner
+                  called out. Between zoom-in and fit, per his placement. */}
+              <button data-plan-fullscreen onClick={toggleFull}
+                title={isFull ? 'Exit full screen' : 'Full screen'}
+                className="p-1.5 rounded-lg hover:bg-white/10">
+                {isFull ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+              </button>
+              <button data-plan-fit onClick={() => setFitting(true)} title="Fit the page"
+                className="p-1.5 rounded-lg hover:bg-white/10"><Square size={12} /></button>
             </div>
           )}
 
@@ -2822,7 +2904,7 @@ export function PlanAnnotator({
                   className="px-2 py-1 rounded-full hover:bg-white/10 disabled:opacity-30">›</button>
                 <span className="mx-1 w-px self-stretch bg-white/20" />
               </>)}
-              <button onClick={() => setScale(s => Math.max(0.1, Math.round((s - 0.15) * 100) / 100))}
+              <button onClick={() => zoomStep(-1, 0.15, 6)}
                 title="Zoom out" className="px-2.5 py-1 rounded-full hover:bg-white/10">
                 <Minus size={14} />
               </button>
@@ -2830,13 +2912,18 @@ export function PlanAnnotator({
                 className="px-2 py-1 rounded-full text-[12px] font-semibold tabular-nums hover:bg-white/10">
                 {Math.round(scale * 100)}%
               </button>
-              <button onClick={() => setScale(s => Math.min(6, Math.round((s + 0.15) * 100) / 100))}
+              <button onClick={() => zoomStep(1, 0.15, 6)}
                 title="Zoom in" className="px-2.5 py-1 rounded-full hover:bg-white/10">
                 <Plus size={14} />
               </button>
-              <button onClick={() => setFitting(true)} title="Fit to window"
+              <button data-plan-fullscreen onClick={toggleFull}
+                title={isFull ? 'Exit full screen' : 'Full screen'}
                 className="px-2.5 py-1 rounded-full hover:bg-white/10">
-                <Maximize2 size={13} />
+                {isFull ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+              </button>
+              <button data-plan-fit onClick={() => setFitting(true)} title="Fit to page"
+                className="px-2.5 py-1 rounded-full hover:bg-white/10">
+                <Square size={12} />
               </button>
             </div>
           )}
@@ -3169,18 +3256,24 @@ export function PlanAnnotator({
             {/* Zoom, as one row. A pinch does this too, but a number you can
                 read is how you get back to a known size. */}
             <div className="flex items-center gap-1 px-1 py-1">
-              <button onClick={() => setScale(s => Math.max(0.2, s - 0.2))} title="Zoom out"
+              <button onClick={() => zoomStep(-1, 0.2, 5)} title="Zoom out"
                 className="rounded-lg flex items-center justify-center min-w-[42px] min-h-[42px]"
                 style={{ backgroundColor: '#f1f5f9', color: '#334155' }}><Minus size={16} /></button>
               <span className="flex-1 text-center text-[13px] font-bold tabular-nums text-slate-700">
                 {Math.round(scale * 100)}%
               </span>
-              <button onClick={() => setScale(s => Math.min(5, s + 0.2))} title="Zoom in"
+              <button onClick={() => zoomStep(1, 0.2, 5)} title="Zoom in"
                 className="rounded-lg flex items-center justify-center min-w-[42px] min-h-[42px]"
                 style={{ backgroundColor: '#f1f5f9', color: '#334155' }}><Plus size={16} /></button>
+              <button onClick={() => { toggleFull(); setShowMore(false); }}
+                title={isFull ? 'Exit full screen' : 'Full screen'}
+                className="rounded-lg flex items-center justify-center min-w-[42px] min-h-[42px]"
+                style={{ backgroundColor: '#f1f5f9', color: '#334155' }}>
+                {isFull ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+              </button>
               <button onClick={() => { setFitting(true); setShowMore(false); }} title="Fit the page"
                 className="rounded-lg flex items-center justify-center min-w-[42px] min-h-[42px]"
-                style={{ backgroundColor: '#f1f5f9', color: '#334155' }}><Maximize2 size={15} /></button>
+                style={{ backgroundColor: '#f1f5f9', color: '#334155' }}><Square size={14} /></button>
             </div>
 
             <SheetRow icon={ChevronsUpDown} label="Plans"

@@ -1,0 +1,320 @@
+<title>Plan Tabs</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Caveat:wght@600;700&display=swap">
+<style>/*__APPCSS__*/</style>
+<style>
+  /* The drafting table: everything that is NOT the app is paper-grey chrome
+     and china-marker red, so the thing being approved and the thing doing the
+     explaining can never be confused (the planbar-sketch rule). */
+  html, body { background: #e8ebf0 !important; margin: 0; overscroll-behavior: auto !important; }
+  body { font-family: Inter, system-ui, sans-serif; color: #1f2937; }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 28px 20px 80px; }
+  .mark { font-family: Caveat, cursive; color: #c0392b; }
+  .scene { background: #f6f7f9; border: 1px solid #d8dde5; border-radius: 18px; padding: 22px; margin-top: 26px; }
+  .scene h2 { font-size: 15px; font-weight: 800; color: #1e3a5f; letter-spacing: .02em; margin: 0 0 4px; }
+  .scene p.lead { font-size: 13.5px; color: #4b5563; margin: 0 0 14px; max-width: 68ch; }
+  .hint { font-size: 12.5px; color: #6b7280; }
+  .rules { background: #fff; border: 1px solid #d8dde5; border-radius: 14px; padding: 18px 20px; margin-top: 26px; }
+  .rules h2 { font-size: 15px; font-weight: 800; color: #1e3a5f; margin: 0 0 10px; }
+  .rules li { font-size: 13.5px; color: #374151; margin: 7px 0; max-width: 72ch; }
+
+  /* ── the studio bar, drawn with its real colours and classes ── */
+  .studio { border-radius: 14px; overflow: hidden; border: 1px solid #d8dde5; background: #152b47; }
+  .bar { background: #1e3a5f; display: flex; align-items: center; gap: 8px; padding: 7px 10px; min-height: 46px; }
+
+  /* The tab strip — Chrome's manner, sat between the plan's name and the zoom. */
+  .tabs { display: flex; align-items: flex-end; gap: 2px; flex: 1; min-width: 0; align-self: stretch;
+          overflow-x: auto; scrollbar-width: none; padding-top: 6px; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { display: flex; align-items: center; gap: 6px; max-width: 168px; min-width: 0; flex-shrink: 0;
+         padding: 6px 8px 7px 11px; border-radius: 9px 9px 0 0; cursor: pointer; position: relative;
+         color: rgba(255,255,255,.72); font-size: 11.5px; font-weight: 600; background: rgba(255,255,255,.06); }
+  .tab .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tab.on { background: #2c4f78; color: #fff; }
+  .tab.on::after { content: ''; position: absolute; left: 8px; right: 8px; bottom: 2px; height: 2px;
+                   border-radius: 2px; background: #4aa8d8; }
+  .tab .x { width: 16px; height: 16px; border-radius: 5px; display: flex; align-items: center;
+            justify-content: center; flex-shrink: 0; font-size: 12px; line-height: 1; color: rgba(255,255,255,.6); }
+  .tab .x:hover { background: rgba(255,255,255,.18); color: #fff; }
+  .tab .dot { width: 6px; height: 6px; border-radius: 50%; background: #fbbf24; flex-shrink: 0; }
+  .tab .spin { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+               border: 1.5px solid rgba(255,255,255,.3); border-top-color: #4aa8d8; animation: sp 1s linear infinite; }
+  .tab .pct { font-size: 9px; color: rgba(255,255,255,.55); flex-shrink: 0; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  .newtab { width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+            color: rgba(255,255,255,.75); font-size: 16px; flex-shrink: 0; cursor: pointer; align-self: center; }
+  .newtab:hover { background: rgba(255,255,255,.12); }
+
+  .zoombtn { padding: 6px; border-radius: 8px; color: rgba(255,255,255,.85); display: flex; cursor: pointer; }
+  .zoombtn:hover { background: rgba(255,255,255,.1); }
+
+  /* the sheet below the bar */
+  .stage { height: 240px; background: #223c5e; display: flex; align-items: center; justify-content: center; position: relative; }
+  .sheet { background: #fff; width: 320px; height: 200px; box-shadow: 0 18px 40px rgba(0,0,0,.4);
+           display: flex; flex-direction: column; padding: 14px; transition: opacity .12s ease; }
+  .sheet .t { font-size: 11px; font-weight: 800; color: #334155; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; }
+  .sheet .body { flex: 1; position: relative; }
+  .sheet svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  /* plan-picker rows */
+  .rows { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; max-width: 520px; }
+  .prow { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #f1f5f9; }
+  .prow:last-child { border-bottom: 0; }
+  .prow .ic { width: 30px; height: 30px; border-radius: 8px; background: #eef4fa; color: #1e3a5f; display: flex;
+              align-items: center; justify-content: center; font-size: 12px; font-weight: 800; flex-shrink: 0; }
+  .prow .nm { flex: 1; min-width: 0; }
+  .prow .nm b { display: block; font-size: 12.5px; color: #1f2937; }
+  .prow .nm span { font-size: 10.5px; color: #94a3b8; }
+  .prow .dl { font-size: 10px; color: #64748b; display: flex; align-items: center; gap: 5px; }
+  .prow .bar2 { width: 54px; height: 3px; border-radius: 2px; background: #e2e8f0; overflow: hidden; }
+  .prow .bar2 i { display: block; height: 100%; background: #4aa8d8; width: 0%; transition: width .3s linear; }
+  .opennew { border: 1px solid #cbd5e1; background: #fff; color: #1e3a5f; font-size: 11px; font-weight: 700;
+             border-radius: 8px; padding: 5px 9px; cursor: pointer; display: flex; align-items: center; gap: 5px; }
+  .opennew:hover { border-color: #4aa8d8; }
+
+  /* the unsaved ask */
+  .ask { position: absolute; inset: 0; background: rgba(15,23,42,.5); display: none; align-items: center;
+         justify-content: center; z-index: 5; }
+  .ask.on { display: flex; }
+  .askbox { background: #fff; border-radius: 14px; padding: 18px 20px; width: 300px; box-shadow: 0 24px 60px rgba(0,0,0,.4); }
+  .askbox h3 { margin: 0 0 6px; font-size: 14px; font-weight: 800; color: #1f2937; }
+  .askbox p { margin: 0 0 14px; font-size: 12.5px; color: #6b7280; }
+  .askbox .btns { display: flex; gap: 8px; }
+  .askbox button { flex: 1; border: 0; border-radius: 9px; padding: 8px 0; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+  .askbox .yes { background: #1e3a5f; color: #fff; }
+  .askbox .no { background: #f1f5f9; color: #475569; }
+
+  .democta { background: #1e3a5f; color: #fff; font-size: 13px; font-weight: 700; padding: 9px 18px;
+             border-radius: 10px; border: 0; cursor: pointer; }
+  .qbox { background: #fdf6ec; border: 1px solid #ecd9b8; border-radius: 14px; padding: 16px 20px; margin-top: 26px; }
+  .qbox h2 { font-size: 14px; font-weight: 800; color: #8a5a12; margin: 0 0 8px; }
+  .qbox li { font-size: 13px; color: #6b4d17; margin: 6px 0; max-width: 72ch; }
+</style>
+
+<div class="wrap">
+  <div style="display:flex; align-items:baseline; gap:14px; flex-wrap:wrap;">
+    <h1 style="font-size:26px; font-weight:800; color:#1e3a5f; margin:0;">Plan tabs, and plans that open instantly</h1>
+    <span class="mark" style="font-size:20px;">everything on this page works &mdash; click the tabs, close one, watch a download</span>
+  </div>
+  <p style="font-size:13.5px; color:#4b5563; max-width:74ch; margin:8px 0 0;">
+    This page is for approval before any of it goes into the live markup studio. The bar below is drawn
+    with the studio&rsquo;s real colours and sizes; the tab strip is the new part, sitting exactly where you
+    asked &mdash; between the plan&rsquo;s name and the zoom buttons. Nothing about the tool rail, the saving
+    pipeline or the Annotated&nbsp;Plans folder changes.
+  </p>
+
+  <!-- ── SCENE 1: the bar with tabs ─────────────────────────────────────── -->
+  <div class="scene">
+    <h2>THE TAB STRIP</h2>
+    <p class="lead">
+      Every plan you open gets a tab, like a browser. The tab you are on is lit with the blue underline;
+      a tab with <b>unsaved marks wears an amber dot</b>; a tab whose plan is still arriving shows a tiny
+      spinner with how much has come. The <b>+</b> at the end opens the plan you are on in a fresh tab
+      (a second, clean sketch of the same sheet). The strip scrolls sideways when there are many.
+    </p>
+
+    <div class="studio" id="studio1">
+      <div class="bar">
+        <div style="min-width:0; max-width:170px; flex-shrink:0;">
+          <div style="font-size:13px; font-weight:700; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" id="barname">Ground floor.pdf</div>
+          <div style="font-size:10.5px; color:#9ca3af; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">37 &mdash; Artzi<span id="bardirty"></span></div>
+        </div>
+        <div class="tabs" id="tabs"></div>
+        <div class="newtab" id="newtab" title="Open this plan in a new tab">+</div>
+        <div style="display:flex; align-items:center; gap:2px; flex-shrink:0;">
+          <div class="zoombtn" title="Zoom out"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg></div>
+          <span style="font-size:11px; color:rgba(255,255,255,.85); width:38px; text-align:center;">100%</span>
+          <div class="zoombtn" title="Zoom in"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div>
+          <div class="zoombtn" title="Full screen"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></div>
+          <div class="zoombtn" title="Fit the page"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg></div>
+        </div>
+      </div>
+      <div class="stage">
+        <div class="sheet" id="sheet">
+          <div class="t" id="sheettitle">Ground floor.pdf</div>
+          <div class="body"><svg id="sheetart" viewBox="0 0 100 60" preserveAspectRatio="none"></svg></div>
+        </div>
+        <div class="ask" id="ask">
+          <div class="askbox">
+            <h3>Your work isn&rsquo;t saved.</h3>
+            <p>Save this sketch to Google Drive before closing the tab?</p>
+            <div class="btns">
+              <button class="yes" id="askyes">Save to Drive</button>
+              <button class="no" id="askno">Close without saving</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="hint" style="margin-top:10px;">
+      <span class="mark" style="font-size:17px;">try it:</span> switch tabs &mdash; the sheet changes with no wait.
+      Close the tab with the amber dot and the studio asks the exact question above; Save files it through the same
+      Annotated&nbsp;Plans pipeline as today, No throws only the unsaved marks away. A tab with nothing unsaved just closes.
+    </p>
+  </div>
+
+  <!-- ── SCENE 2: where tabs come from ──────────────────────────────────── -->
+  <div class="scene">
+    <h2>WHERE A TAB COMES FROM</h2>
+    <p class="lead">
+      Three doors, all of them already in the studio: the <b>Plans list</b> grows an &ldquo;open in new
+      tab&rdquo; button on every row (pressing the row itself still replaces the current tab, exactly as now);
+      opening a <b>saved sketch</b> (v1, v2&hellip;) puts it in its own tab; and the <b>+</b> on the strip
+      opens the plan you are looking at again, clean.
+    </p>
+    <div class="rows">
+      <div class="prow">
+        <div class="ic">PDF</div>
+        <div class="nm"><b>Ground floor.pdf</b><span>Engineered Plans</span></div>
+        <span class="dl" id="dl1"><span class="bar2"><i></i></span><span class="p">waiting&hellip;</span></span>
+        <button class="opennew">&#8599; new tab</button>
+      </div>
+      <div class="prow">
+        <div class="ic">PDF</div>
+        <div class="nm"><b>Electrical riser.pdf</b><span>Engineered Plans</span></div>
+        <span class="dl" id="dl2"><span class="bar2"><i></i></span><span class="p">waiting&hellip;</span></span>
+        <button class="opennew">&#8599; new tab</button>
+      </div>
+      <div class="prow">
+        <div class="ic">v2</div>
+        <div class="nm"><b>annotated version 2 &mdash; Ground floor</b><span>Annotated Plans &middot; opens in its own tab</span></div>
+        <span class="dl" id="dl3"><span class="bar2"><i></i></span><span class="p">waiting&hellip;</span></span>
+        <button class="opennew">&#8599; new tab</button>
+      </div>
+    </div>
+    <div style="margin-top:12px;"><button class="democta" id="simdl">Watch the background download</button>
+      <span class="hint" style="margin-inline-start:10px;">what happens by itself the moment the studio opens</span></div>
+  </div>
+
+  <!-- ── SCENE 3: the rules ─────────────────────────────────────────────── -->
+  <div class="rules">
+    <h2>THE RULES THE REAL THING WILL KEEP</h2>
+    <ul>
+      <li><b>Tabs survive a refresh.</b> The strip is remembered on this machine, per job &mdash; reopening the
+        studio brings back the same tabs on the same plans, each remembering its page and zoom. Unsaved
+        marks already survive a refresh today (the studio keeps them on this machine); each tab&rsquo;s marks
+        are kept the same way.</li>
+      <li><b>The question is asked only when there is something to lose.</b> A tab with no unsaved marks
+        closes silently. With unsaved marks: &ldquo;Your work isn&rsquo;t saved. Save to Google Drive?&rdquo; &mdash;
+        Yes files it exactly as the Save button does today (same Annotated&nbsp;Plans folder, same naming,
+        same version numbers), No closes and discards. Nothing else about saving changes.</li>
+      <li><b>Plans download ahead, quietly.</b> When a plan opens, the other plans in its Engineered Plans
+        folder start downloading one at a time in the background &mdash; the current plan always first, and
+        it is never slowed down by the others. Each row and tab says &ldquo;downloading&hellip; 40%&rdquo; until its
+        copy is here; after that, switching to it is instant.</li>
+      <li><b>The copies are thrown away when you leave; the tabs are not.</b> Closing the studio drops every
+        downloaded copy (nothing piles up on the machine) but keeps the tab strip &mdash; next time, the tabs
+        come back and their plans download again.</li>
+      <li><b>The toolbar is not touched.</b> No tool moves, no button changes; the strip takes only the empty
+        middle of the top bar. On a phone, where that bar has no middle, the strip sits on its own thin row
+        under the bar.</li>
+    </ul>
+  </div>
+
+  <!-- ── open questions ─────────────────────────────────────────────────── -->
+  <div class="qbox">
+    <h2>TWO CALLS I MADE &mdash; SAY IF EITHER IS WRONG</h2>
+    <ul>
+      <li><b>The drawer&rsquo;s plan pane gets the same strip.</b> The pane in the apartment window is the same
+        viewer, so it gets the same tabs, on a slim row of its own under the two bars there (its bars have no
+        spare middle). If you want tabs only in the full-screen studio, that is one switch.</li>
+      <li><b>Tab look:</b> Chrome&rsquo;s manner &mdash; rounded top, the lit one brighter with a blue underline,
+        amber dot for unsaved, &times; on each tab (always visible on the touchscreen). Drawn above with the
+        studio&rsquo;s real colours; if you want them shaped differently, mark this page up.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+(function () {
+  var tabsEl = document.getElementById('tabs');
+  var sheetT = document.getElementById('sheettitle');
+  var art = document.getElementById('sheetart');
+  var barname = document.getElementById('barname');
+  var bardirty = document.getElementById('bardirty');
+  var ask = document.getElementById('ask');
+  var tabs = [
+    { id: 1, nm: 'Ground floor.pdf', dirty: false, hue: 210 },
+    { id: 2, nm: 'Electrical riser.pdf', dirty: true, hue: 0 },
+    { id: 3, nm: 'annotated v2 — Ground floor', dirty: false, hue: 140 },
+  ];
+  var on = 1, pending = null;
+
+  function artFor(t) {
+    var c = 'hsl(' + t.hue + ',60%,45%)';
+    return '<polyline points="8,50 8,14 44,14 44,32 78,32 78,50" fill="none" stroke="#94a3b8" stroke-width="2"/>' +
+      '<polyline points="16,44 30,22 52,40 70,18" fill="none" stroke="' + c + '" stroke-width="2.5" stroke-linecap="round"/>' +
+      (t.dirty ? '<circle cx="86" cy="10" r="4" fill="#fbbf24"/>' : '');
+  }
+  function draw() {
+    tabsEl.innerHTML = '';
+    tabs.forEach(function (t) {
+      var d = document.createElement('div');
+      d.className = 'tab' + (t.id === on ? ' on' : '');
+      d.innerHTML = (t.dirty ? '<span class="dot" title="unsaved marks"></span>' : '') +
+        (t.dl != null && t.dl < 100 ? '<span class="spin"></span><span class="pct">' + t.dl + '%</span>' : '') +
+        '<span class="nm">' + t.nm + '</span><span class="x" title="Close">&#215;</span>';
+      d.onclick = function (e) {
+        if (e.target.className === 'x') { tryClose(t.id); return; }
+        on = t.id; draw();
+      };
+      tabsEl.appendChild(d);
+    });
+    var cur = tabs.filter(function (t) { return t.id === on; })[0];
+    if (cur) {
+      sheetT.textContent = cur.nm; barname.textContent = cur.nm;
+      bardirty.textContent = cur.dirty ? ' · unsaved' : '';
+      art.innerHTML = artFor(cur);
+    }
+  }
+  function tryClose(id) {
+    var t = tabs.filter(function (x) { return x.id === id; })[0];
+    if (t && t.dirty) { pending = id; ask.className = 'ask on'; return; }
+    close(id);
+  }
+  function close(id) {
+    tabs = tabs.filter(function (x) { return x.id !== id; });
+    if (!tabs.length) tabs = [{ id: 1, nm: 'Ground floor.pdf', dirty: false, hue: 210 }];
+    if (!tabs.some(function (x) { return x.id === on; })) on = tabs[0].id;
+    draw();
+  }
+  document.getElementById('askyes').onclick = function () {
+    ask.className = 'ask';
+    if (pending != null) { var t = tabs.filter(function (x) { return x.id === pending; })[0]; if (t) t.dirty = false; close(pending); pending = null; }
+  };
+  document.getElementById('askno').onclick = function () {
+    ask.className = 'ask';
+    if (pending != null) { close(pending); pending = null; }
+  };
+  document.getElementById('newtab').onclick = function () {
+    var cur = tabs.filter(function (t) { return t.id === on; })[0] || tabs[0];
+    var id = Math.max.apply(null, tabs.map(function (t) { return t.id; })) + 1;
+    tabs.push({ id: id, nm: cur.nm.replace(/\.pdf$/, '') + ' (2).pdf', dirty: false, hue: (cur.hue + 70) % 360 });
+    on = id; draw();
+  };
+
+  // the background-download simulation: one plan at a time, current first.
+  var simOn = false;
+  document.getElementById('simdl').onclick = function () {
+    if (simOn) return; simOn = true;
+    var rows = ['dl1', 'dl2', 'dl3'].map(function (id) { return document.getElementById(id); });
+    var i = 0;
+    tabs.forEach(function (t, k) { if (k > 0) t.dl = 0; });
+    function step() {
+      if (i >= rows.length) { simOn = false; draw(); return; }
+      var row = rows[i], fill = row.querySelector('i'), p = row.querySelector('.p'), pct = 0;
+      var iv = setInterval(function () {
+        pct += 7 + Math.round(Math.random() * 9);
+        if (pct >= 100) {
+          pct = 100; clearInterval(iv); p.textContent = 'ready — opens instantly'; p.style.color = '#16a34a';
+          if (tabs[i]) { tabs[i].dl = null; }
+          i++; draw(); setTimeout(step, 250);
+        } else { p.textContent = 'downloading… ' + pct + '%'; if (tabs[i]) tabs[i].dl = pct; draw(); }
+        fill.style.width = pct + '%';
+      }, 160);
+    }
+    step();
+  };
+
+  draw();
+})();
+</script>

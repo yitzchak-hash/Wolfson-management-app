@@ -24,6 +24,7 @@ import { ToolbarEditor } from '../components/settings/ToolbarEditor';
 import { WorkerLevelsPanel, WorkerLevelPicker, WorkerPermissionOverrides } from '../components/settings/WorkerLevels';
 import { DEFAULT_NEW_WORKER_LEVEL, permsOf, overrideCount, WORKER_PERMISSIONS } from '../data/workerLevels';
 import { getDriveRoot, setDriveRoot, guessRoot } from '../data/drivePath';
+import { useMarkupScale, setMarkupScale } from '../data/markupScale';
 import {
   guessPlatform, helperInstalled, setHelperInstalled, windowsInstaller, macInstaller, download,
 } from '../data/tzviairHelper';
@@ -2109,6 +2110,7 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
 function ThisComputerCard({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
   const [root, setRoot] = useState(getDriveRoot);
   const [installed, setInstalled] = useState(helperInstalled);
+  const markupScale = useMarkupScale();
   const platform = guessPlatform();
   const guess = guessRoot();
 
@@ -2119,8 +2121,33 @@ function ThisComputerCard({ onToast }: { onToast: (msg: string, type?: 'success'
         <h2 className="font-semibold text-gray-800">This computer</h2>
       </div>
       <p className="text-xs text-gray-400 mb-4">
-        These two are per-machine and never shared — everyone&apos;s Drive path is different.
+        These are per-machine and never shared — everyone&apos;s Drive path and screen are different.
       </p>
+
+      {/* The markup studio's button size, for THIS screen.
+          The big touchscreen wants buttons half again the desk size, and a
+          synced setting would push those onto every desktop — so it lives
+          here, beside the other two per-machine facts. The studio follows
+          it live, even while open. */}
+      <label className="block text-xs font-semibold text-gray-700 mb-1"
+        title="How big the buttons and tool rail are in the plan markup studio, on this screen only.">
+        Markup studio button size
+      </label>
+      <div className="flex items-center gap-1.5 flex-wrap mb-4" data-markup-scale>
+        {([[1, 'Normal'], [1.25, 'Big'], [1.5, 'Bigger'], [1.8, 'Huge'], [2.2, 'Giant']] as const)
+          .map(([v, label]) => {
+            const on = Math.abs(markupScale - v) < 0.02;
+            return (
+              <button key={v} onClick={() => { setMarkupScale(v); onToast('Saved for this computer'); }}
+                className="px-3 py-2 rounded-xl text-[12px] font-bold border transition-colors"
+                style={on
+                  ? { backgroundColor: '#1e3a5f', color: '#fff', borderColor: '#1e3a5f' }
+                  : { backgroundColor: '#fff', color: '#475569', borderColor: '#e2e8f0' }}>
+                {label}
+              </button>
+            );
+          })}
+      </div>
 
       <label className="block text-xs font-semibold text-gray-700 mb-1">Where Google Drive is</label>
       <input
