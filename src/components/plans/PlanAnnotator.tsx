@@ -14,7 +14,9 @@ import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { useStore } from '../../data/store';
 import { useOrientation } from '../../data/useOrientation';
 import { AnnStroke, AnnTool, PlanAnnotation } from '../../types';
-import { fetchPlanBytes, stampPlanToDrive, extractFolderId, isUploadBackendConfigured } from '../../data/driveApi';
+import { stampPlanToDrive, extractFolderId, isUploadBackendConfigured } from '../../data/driveApi';
+import { fetchPlanCached, prefetchPlans, acquirePlanCache, releasePlanCache } from '../../data/planCache';
+import { PlanTab, PlanTabsStrip, mintTab, loadTabState, saveTabState } from './PlanTabs';
 import { PenStroke, PenSample, NibWatch, samplesOf, simplify, nearSegment } from './penInput';
 import { TOOLS, toolById, INK_COLORS, HIGHLIGHT_COLORS, rememberColor } from './annotTools';
 import { InkPicker } from './InkPicker';
@@ -183,11 +185,32 @@ export interface PlanChoice {
   isImage?: boolean;
 }
 
-export function PlanAnnotator({
+/**
+ * What one TAB is holding, carried across tab switches and studio reopenings.
+ *
+ * The editor remounts per tab (`key={tab.id}`), so its per-sketch state has to
+ * travel: seeded in through `initialWork`, and reported back out through
+ * `workRef` — a mutable ref the editor writes every render, which costs no
+ * re-renders and is always current when the wrapper stashes a tab away.
+ */
+export interface TabWork {
+  strokes: AnnStroke[];
+  redo: AnnStroke[];
+  basedOn?: number;
+  dirty: boolean;
+  saveState: 'clean' | 'local' | 'sending' | 'sent' | 'failed';
+  page: number;
+  scale: number | null;
+  versionId: string | null;
+  sketchVersion: number | null;
+}
+
+function PlanEditor({
   planFileId, planName, apartmentId, apartmentLabel, driveFolderUrl, plansFolderId,
   authorName, readOnly = false, askWho = false, people = [], plans = [], embedded = false,
   barExtrasRef, barInto, barInto2,
   touchScale = 1,
+  tabStrip, initialWork, workRef, onOpenPlanNewTab, onUnsavedChange,
   onClose, onToast, onPickPlan, onStartMarkup,
 }: {
   planFileId: string;
@@ -262,6 +285,16 @@ export function PlanAnnotator({
   touchScale?: number;
   /** Every plan on this job: the originals, and the markups made from them. */
   plans?: PlanChoice[];
+  /** The tab strip, rendered by the wrapper — drawn in the bar or on its own row. */
+  tabStrip?: React.ReactNode;
+  /** This tab's carried state — see TabWork. */
+  initialWork?: TabWork;
+  /** Written every render with the live TabWork, for the wrapper to stash. */
+  workRef?: React.MutableRefObject<TabWork | null>;
+  /** The picker's "open in new tab" — offered only when the wrapper runs tabs. */
+  onOpenPlanNewTab?: (p: PlanChoice) => void;
+  /** Fires when this tab's has-unsaved-marks answer changes, for its cloud. */
+  onUnsavedChange?: (unsaved: boolean) => void;
   onClose: () => void;
   onToast?: (msg: string, kind?: 'success' | 'error') => void;
   onPickPlan?: (p: PlanChoice) => void;
@@ -302,9 +335,10 @@ export function PlanAnnotator({
   const [loadErr, setLoadErr] = useState('');
   /** How much of a heavy plan has arrived, so the wait is visible. */
   const [got, setGot] = useState<{ bytes: number; total: number | null }>({ bytes: 0, total: null });
-  const [page, setPage] = useState(0);
-  const [scale, setScale] = useState(1.25);
-  const [fitting, setFitting] = useState(true);
+  const [page, setPage] = useState(initialWork?.page ?? 0);
+  const [scale, setScale] = useState(initialWork?.scale ?? 1.25);
+  // A tab coming back remembers its zoom; only a fresh one fits on open.
+  const [fitting, setFitting] = useState(initialWork?.scale == null);
   /**
    * Zooming does NOT redraw the sheet. Not straight away.
    *
@@ -320,7 +354,7 @@ export function PlanAnnotator({
    * hand stops, at which point the page is redrawn at full resolution — once,
    * off-screen, and blitted in one go so nothing ever goes blank.
    */
-  const [raster, setRaster] = useState(1.25);
+  const [raster, setRaster] = useState(initialWork?.scale ?? 1.25);
   /** The page at 100%, so the CSS size can follow the zoom without a render. */
   const [nat, setNat] = useState<{ w: number; h: number } | null>(null);
   /** What is actually painted on the canvas right now. */
@@ -334,10 +368,10 @@ export function PlanAnnotator({
   const [sheetWide, setSheetWide] = useState(false);
   const screen = useOrientation();
 
-  const [strokes, setStrokes] = useState<AnnStroke[]>([]);
-  const [redo, setRedo] = useState<AnnStroke[]>([]);
-  const [basedOn, setBasedOn] = useState<number | undefined>(undefined);
-  const [dirty, setDirty] = useState(false);
+  const [strokes, setStrokes] = useState<AnnStroke[]>(initialWork?.strokes ?? []);
+  const [redo, setRedo] = useState<AnnStroke[]>(initialWork?.redo ?? []);
+  const [basedOn, setBasedOn] = useState<number | undefined>(initialWork?.basedOn);
+  const [dirty, setDirty] = useState(initialWork?.dirty ?? false);
 
   const [tool, setTool] = useState<string>('pen');
   const [color, setColor] = useState('#dc2626');
@@ -591,7 +625,9 @@ export function PlanAnnotator({
     let dead = false;
     setDoc(null); setLoadErr('');
     setGot({ bytes: 0, total: null });
-    fetchPlanBytes(planFileId, (bytes, total) => { if (!dead) setGot({ bytes, total }); })
+    // Through the cache: a plan already downloaded in the background — or by
+    // another tab — opens with no wait at all.
+    fetchPlanCached(planFileId, (bytes, total) => { if (!dead) setGot({ bytes, total }); })
       .then(async buf => {
         /**
          * A picture is drawn as a one-page document.
@@ -1871,9 +1907,10 @@ export function PlanAnnotator({
    *    window is the one way to lose it, so the browser is asked to stop you.
    */
   const DRIVE_IDLE_MS = 9_000;
-  const [saveState, setSaveState] = useState<'clean' | 'local' | 'sending' | 'sent' | 'failed'>('clean');
+  const [saveState, setSaveState] = useState<'clean' | 'local' | 'sending' | 'sent' | 'failed'>(
+    initialWork?.saveState ?? 'clean');
   const idleTimer = useRef<number | undefined>(undefined);
-  const versionIdRef = useRef<string | null>(null);
+  const versionIdRef = useRef<string | null>(initialWork?.versionId ?? null);
   const pushingRef = useRef(false);
 
   /** The strokes as the server wants them, minus our own ids. */
@@ -1897,9 +1934,25 @@ export function PlanAnnotator({
    * feed back into it. `nextVersion` is read through a ref for the same
    * reason — it must not be a dependency of anything that saves.
    */
-  const sketchVersion = useRef<number | null>(null);
+  const sketchVersion = useRef<number | null>(initialWork?.sketchVersion ?? null);
   const nextVersionRef = useRef(nextVersion);
   nextVersionRef.current = nextVersion;
+
+  // The wrapper stashes a tab away by reading this — written every render so
+  // it is always current, at the cost of nothing (a ref assignment).
+  if (workRef) {
+    workRef.current = {
+      strokes, redo, basedOn, dirty, saveState, page,
+      // While a fit is still owed, the zoom is "not chosen yet" — a stash
+      // taken in that window (StrictMode's mount/cleanup/mount does this)
+      // must not freeze the pre-fit default as the tab's remembered zoom.
+      scale: fitting ? null : scale,
+      versionId: versionIdRef.current, sketchVersion: sketchVersion.current,
+    };
+  }
+  // The cloud on this tab, kept live while drawing.
+  const unsavedNow = strokes.length > 0 && saveState !== 'sent';
+  useEffect(() => { onUnsavedChange?.(unsavedNow); }, [unsavedNow, onUnsavedChange]);
 
   const claimVersion = useCallback(() => {
     if (sketchVersion.current == null) sketchVersion.current = nextVersionRef.current;
@@ -2491,6 +2544,18 @@ export function PlanAnnotator({
       {(() => {
         /** Two slots given: the name goes up top, everything else underneath. */
         const twoRow = !!barInto && !!barInto2;
+        /**
+         * The tab strip lives in the bar's middle on a desk with a whole bar
+         * to itself — boxed off by two upright lines, per the owner. A phone
+         * has no middle, and the drawer's bars are portalled slots with no
+         * room; both draw the strip on a slim row of its own instead (below,
+         * outside this bar).
+         */
+        const stripInBar = !!tabStrip && !compact && !barInto;
+        const stripSep = (
+          <span aria-hidden className="w-px self-stretch flex-shrink-0"
+            style={{ backgroundColor: 'rgba(255,255,255,.24)', margin: '6px 5px' }} />
+        );
         const head = (<>
           {!compact && <Layers size={16} className="text-[#4aa8d8] flex-shrink-0" />}
           <div className={compact ? 'min-w-0 flex-1' : 'min-w-0'}>
@@ -2514,7 +2579,7 @@ export function PlanAnnotator({
         */}
         <span ref={barExtrasRef} className="flex items-center gap-1.5 flex-shrink-0" />
 
-        {!compact && !twoRow && <div className="flex-1" />}
+        {!compact && !twoRow && !stripInBar && <div className="flex-1" />}
 
         {/* The pager and the zoom live in the floating bar over the sheet
             when there is nothing to mark up — one set of controls, where Drive
@@ -2720,11 +2785,25 @@ export function PlanAnnotator({
               compact ? 'px-2 flex-nowrap overflow-x-auto' : 'px-3 flex-wrap'}`}
             style={barInto ? undefined : { backgroundColor: NAVY, ...(ui.on ? { zoom: ts } : {}) }}>
             {head}
+            {stripInBar && (<>
+              {stripSep}
+              <div className="flex-1 min-w-0 self-stretch flex">{tabStrip}</div>
+              {stripSep}
+            </>)}
             {rest}
           </div>
         );
         return barInto ? createPortal(row, barInto) : row;
       })()}
+
+      {/* The strip's own slim row, where the bar has no middle for it — the
+          phone, and the drawer pane whose bars are portalled slots. */}
+      {tabStrip && (compact || !!barInto) && (
+        <div className="flex-shrink-0 flex items-center px-2"
+          style={{ backgroundColor: NAVY, ...(ui.on ? { zoom: ts } : {}) }}>
+          {tabStrip}
+        </div>
+      )}
 
       <div className="flex-1 min-h-0 flex">
         {/* Tool rail, down the side — the desk, and a phone held sideways,
@@ -3352,6 +3431,10 @@ export function PlanAnnotator({
             onPickPlan?.(p);
             if (!stayOpen) setShowPlans(false);
           }}
+          onOpenNewTab={onOpenPlanNewTab && (p => {
+            onOpenPlanNewTab(p);
+            setShowPlans(false);
+          })}
           onClose={() => setShowPlans(false)}
         />
       )}
@@ -3667,4 +3750,359 @@ function AskFirst({ title, body, confirm, second, danger, onCancel, onConfirm, o
       </div>
     </>
   );
+}
+
+/**
+ * The studio/viewer with its TAB STRIP — the exported face.
+ *
+ * Every plan you open gets a browser-style tab; the strip is remembered on
+ * this machine per job, so reopening brings the same tabs back. The EDITOR is
+ * remounted per tab (`key`), and a tab's working state travels through
+ * `initialWork` in and `workRef` out — stashed in a module-level map for the
+ * session, and recoverable across a refresh through the autosaved
+ * planAnnotations record each sketch already keeps.
+ *
+ * Closing a tab whose sketch has not reached Drive asks the one question —
+ * "Your work isn't saved. Save to Google Drive?" — and Yes files it through
+ * exactly the pipeline the Save button uses (same folder, same naming, same
+ * version numbers). Nothing else about saving changes.
+ */
+type PlanHostProps = Omit<Parameters<typeof PlanEditor>[0],
+  'tabStrip' | 'initialWork' | 'workRef' | 'onOpenPlanNewTab' | 'onUnsavedChange'>;
+
+/** Session memory of every tab's work — survives host remounts, not reloads. */
+const tabWorkMap = new Map<string, TabWork>();
+
+export function PlanAnnotator(props: PlanHostProps) {
+  const {
+    planFileId, planName, apartmentId, apartmentLabel, authorName,
+    plans = [], readOnly = false, embedded = false, plansFolderId, driveFolderUrl,
+    onPickPlan, onToast,
+  } = props;
+  /**
+   * The drawer's pane and the full studio SHARE the tab list, but not a
+   * tab's working zoom — a zoom right for a 380px pane is wrong for a
+   * full-screen studio, and vice versa. The session work map is therefore
+   * scoped per surface, and only the studio writes zoom into the tab meta.
+   */
+  const surface = embedded ? 'pane' : 'studio';
+  const planAnnotations = useStore(s => s.planAnnotations);
+  const updatePlanAnnotation = useStore(s => s.updatePlanAnnotation);
+
+  const storeKey = `plan_tabs_${apartmentId || planFileId}`;
+  const [state, setState] = useState<{ tabs: PlanTab[]; activeId: string }>(() => {
+    const s = loadTabState(storeKey);
+    const existing = s.tabs.find(t => t.fileId === planFileId);
+    if (existing) return { tabs: s.tabs, activeId: existing.id };
+    const t = mintTab(planFileId, planName || 'Plan');
+    return { tabs: [...s.tabs, t], activeId: t.id };
+  });
+  const { tabs, activeId } = state;
+  const active = tabs.find(t => t.id === activeId) ?? tabs[0];
+
+  const workRef = useRef<TabWork | null>(null);
+  const activeRef = useRef(active); activeRef.current = active;
+  const tabsRef = useRef(state); tabsRef.current = state;
+  const planNameRef = useRef(planName); planNameRef.current = planName;
+  const planFileIdRef = useRef(planFileId); planFileIdRef.current = planFileId;
+  const [activeUnsaved, setActiveUnsaved] = useState(false);
+  const [ask, setAsk] = useState<{ tabId: string } | null>(null);
+  const [askBusy, setAskBusy] = useState(false);
+
+  const wkey = useCallback((t: PlanTab) => `${apartmentId}:${surface}:${t.id}:${t.fileId}`,
+    [apartmentId, surface]);
+
+  /**
+   * Put the active tab's live work into the session map and return a patch
+   * that carries its pointers (sketch record, page, zoom) onto the tab meta.
+   * Called BEFORE any setState that changes which tab is active — never
+   * inside an updater, which must stay pure.
+   */
+  const stashActive = useCallback((): ((tabs: PlanTab[]) => PlanTab[]) => {
+    const w = workRef.current, act = activeRef.current;
+    if (!w || !act) return t => t;
+    // dirty stays behind: the marks are already kept locally, and re-arming
+    // the Drive timer on every switch would stamp duplicate files.
+    tabWorkMap.set(wkey(act), { ...w, dirty: false });
+    // Only the STUDIO writes page and zoom into the shared tab meta — the
+    // pane always fits on open, and its numbers are wrong for the studio.
+    const patch = surface === 'studio'
+      ? {
+        versionId: w.versionId, sketchVersion: w.sketchVersion,
+        basedOn: w.basedOn, page: w.page, scale: w.scale,
+      }
+      : { versionId: w.versionId, sketchVersion: w.sketchVersion, basedOn: w.basedOn };
+    return ts => ts.map(t => (t.id === act.id ? { ...t, ...patch } : t));
+  }, [wkey, surface]);
+  const stashRef = useRef(stashActive); stashRef.current = stashActive;
+
+  /** A refreshed browser recovers a tab's marks from its autosaved record. */
+  const workFromRecord = useCallback((t: PlanTab): TabWork | undefined => {
+    if (!t.versionId) return undefined;
+    const rec = planAnnotations.find(a => a.id === t.versionId);
+    if (!rec) return undefined;
+    return {
+      strokes: rec.strokes ?? [], redo: [], basedOn: t.basedOn, dirty: false,
+      saveState: rec.driveUrl ? 'sent' : 'local',
+      page: t.page ?? 0, scale: t.scale ?? null,
+      versionId: rec.id, sketchVersion: rec.version ?? t.sketchVersion ?? null,
+    };
+  }, [planAnnotations]);
+
+  const initialWork = useMemo<TabWork | undefined>(() => {
+    if (!active) return undefined;
+    // The pane never inherits a remembered zoom — it fits on open, always.
+    const noZoom = (w: TabWork): TabWork => (embedded ? { ...w, scale: null } : w);
+    const w = tabWorkMap.get(wkey(active));
+    if (w) return noZoom(w);
+    const fromRec = workFromRecord(active);
+    if (fromRec) return noZoom(fromRec);
+    if (active.page || active.scale != null) {
+      return noZoom({
+        strokes: [], redo: [], dirty: false, saveState: 'clean',
+        page: active.page ?? 0, scale: active.scale ?? null,
+        versionId: null, sketchVersion: null,
+      });
+    }
+    return undefined;
+  // Only the mounted tab's identity — the editor reads this once, at mount.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active?.id, active?.fileId]);
+
+  // The host drove planFileId (a chip, the drawer) — adopt it: an existing
+  // tab on that file is activated, otherwise the active tab is retargeted,
+  // which is exactly what pressing a picker row did before tabs existed.
+  const prevProp = useRef(planFileId);
+  useEffect(() => {
+    if (prevProp.current === planFileId) return;
+    prevProp.current = planFileId;
+    const act = activeRef.current;
+    if (act?.fileId === planFileId) return;
+    const apply = stashRef.current();
+    setState(s => {
+      const ex = s.tabs.find(t => t.fileId === planFileId);
+      if (ex) return { tabs: apply(s.tabs), activeId: ex.id };
+      return {
+        tabs: apply(s.tabs).map(t => (t.id === s.activeId
+          ? {
+            ...t, fileId: planFileId, name: planNameRef.current || t.name,
+            versionId: null, sketchVersion: null, basedOn: undefined, page: 0, scale: null,
+          }
+          : t)),
+        activeId: s.activeId,
+      };
+    });
+  }, [planFileId]);
+
+  // Remember the strip on this machine, and flush it when the page goes.
+  useEffect(() => { saveTabState(storeKey, tabs, activeId); }, [storeKey, tabs, activeId]);
+  useEffect(() => {
+    const flush = () => {
+      const apply = stashRef.current();
+      const s = tabsRef.current;
+      saveTabState(storeKey, apply(s.tabs), s.activeId);
+    };
+    window.addEventListener('pagehide', flush);
+    return () => { flush(); window.removeEventListener('pagehide', flush); };
+  }, [storeKey]);
+
+  // The downloaded copies live only while a viewer is open — reference
+  // counted, because the drawer pane and the studio can be open at once.
+  useEffect(() => {
+    acquirePlanCache();
+    return () => releasePlanCache();
+  }, []);
+  // Download the job's OTHER plans in the background, one at a time.
+  useEffect(() => {
+    const others = plans.map(p => p.id).filter(id => id !== activeRef.current?.fileId);
+    if (others.length) prefetchPlans(others);
+  }, [plans]);
+
+  const pickTab = useCallback((id: string) => {
+    if (id === activeRef.current?.id) return;
+    const apply = stashRef.current();
+    setState(s => ({ tabs: apply(s.tabs), activeId: id }));
+  }, []);
+
+  const openInNewTab = useCallback((p: PlanChoice) => {
+    const apply = stashRef.current();
+    const t = mintTab(p.id, p.name, p.kind);
+    setState(s => ({ tabs: [...apply(s.tabs), t], activeId: t.id }));
+  }, []);
+
+  /** The + on the strip: this plan again, in a fresh tab — a clean sketch. */
+  const newTabPlus = useCallback(() => {
+    const act = activeRef.current;
+    if (!act) return;
+    const apply = stashRef.current();
+    const t = mintTab(act.fileId, act.name, act.kind);
+    setState(s => ({ tabs: [...apply(s.tabs), t], activeId: t.id }));
+  }, []);
+
+  const reallyClose = useCallback((id: string) => {
+    const closingActive = activeRef.current?.id === id;
+    const apply = closingActive ? (x: PlanTab[]) => x : stashRef.current();
+    setState(s => {
+      const idx = s.tabs.findIndex(t => t.id === id);
+      let nextTabs = apply(s.tabs).filter(t => t.id !== id);
+      let nextActive = s.activeId;
+      if (!nextTabs.length) {
+        const t = mintTab(planFileIdRef.current, planNameRef.current || 'Plan');
+        nextTabs = [t]; nextActive = t.id;
+      } else if (s.activeId === id) {
+        nextActive = nextTabs[Math.max(0, idx - 1)]?.id ?? nextTabs[0].id;
+      }
+      return { tabs: nextTabs, activeId: nextActive };
+    });
+    for (const k of [...tabWorkMap.keys()]) {
+      // Both surfaces' stashes for the closed tab go with it.
+      if (k.startsWith(`${apartmentId}:`) && k.includes(`:${id}:`)) tabWorkMap.delete(k);
+    }
+  }, [apartmentId]);
+
+  const liveWorkOf = useCallback((t: PlanTab): TabWork | undefined => {
+    if (t.id === activeRef.current?.id) return workRef.current ?? undefined;
+    return tabWorkMap.get(wkey(t)) ?? workFromRecord(t);
+  }, [wkey, workFromRecord]);
+
+  const closeTab = useCallback((id: string) => {
+    const t = tabsRef.current.tabs.find(x => x.id === id);
+    if (!t) return;
+    const w = liveWorkOf(t);
+    const unsaved = !readOnly && !!w && w.strokes.length > 0 && w.saveState !== 'sent';
+    const canDrive = isUploadBackendConfigured()
+      && !!(plansFolderId || (driveFolderUrl && extractFolderId(driveFolderUrl)));
+    // No question when there is nothing to lose — or nowhere to send it: the
+    // marks are autosaved on this machine and stand in the version list.
+    if (unsaved && canDrive) { setAsk({ tabId: id }); return; }
+    reallyClose(id);
+  }, [liveWorkOf, readOnly, plansFolderId, driveFolderUrl, reallyClose]);
+
+  const saveAskAndClose = useCallback(async () => {
+    const id = ask?.tabId;
+    const t = id ? tabsRef.current.tabs.find(x => x.id === id) : undefined;
+    if (!t) { setAsk(null); return; }
+    const w = liveWorkOf(t);
+    if (!w || !w.strokes.length) { setAsk(null); reallyClose(t.id); return; }
+    setAskBusy(true);
+    try {
+      const parent = plansFolderId || (driveFolderUrl ? extractFolderId(driveFolderUrl) : null);
+      const version = w.sketchVersion
+        ?? (Math.max(0, ...planAnnotations
+          .filter(a => a.apartmentId === apartmentId && a.planFileId === t.fileId)
+          .map(a => a.version)) + 1);
+      const out = await stampPlanToDrive({
+        planFileId: t.fileId,
+        parentFolderId: parent!,
+        strokes: w.strokes.map(({ id: _i, ...rest }) => rest),
+        version,
+        jobName: apartmentLabel,
+        author: authorName,
+      });
+      if (w.versionId) {
+        updatePlanAnnotation(w.versionId, { driveFileId: out.fileId, driveUrl: out.webViewLink });
+      }
+      onToast?.(`Version ${version} filed in Drive under “Annotated Plans”.`);
+      setAsk(null);
+      reallyClose(t.id);
+    } catch {
+      onToast?.('Drive would not take it — the tab stays open.', 'error');
+    } finally {
+      setAskBusy(false);
+    }
+  }, [ask, liveWorkOf, reallyClose, plansFolderId, driveFolderUrl, planAnnotations,
+      apartmentId, apartmentLabel, authorName, updatePlanAnnotation, onToast]);
+
+  const unsavedOf = useCallback((t: PlanTab): boolean => {
+    if (readOnly) return false;
+    if (t.id === activeId) return activeUnsaved;
+    const w = tabWorkMap.get(wkey(t));
+    if (w) return w.strokes.length > 0 && w.saveState !== 'sent';
+    if (t.versionId) {
+      const rec = planAnnotations.find(a => a.id === t.versionId);
+      if (rec) return (rec.strokes?.length ?? 0) > 0 && !rec.driveUrl;
+    }
+    return false;
+  }, [readOnly, activeId, activeUnsaved, wkey, planAnnotations]);
+
+  /** Picks from the Plans chooser: a sketch gets ITS OWN tab; an original
+   *  replaces the current tab (as pressing a row always did) and still goes
+   *  through the host, which is what writes plansPdfLink for originals. */
+  const handlePick = useCallback((p: PlanChoice) => {
+    if (p.kind === 'annotated') { openInNewTab(p); return; }
+    const apply = stashRef.current();
+    setState(s => {
+      const act = s.tabs.find(t => t.id === s.activeId);
+      if (act?.fileId === p.id) return s;
+      const ex = s.tabs.find(t => t.fileId === p.id);
+      if (ex) return { tabs: apply(s.tabs), activeId: ex.id };
+      return {
+        tabs: apply(s.tabs).map(t => (t.id === s.activeId
+          ? {
+            ...t, fileId: p.id, name: p.name,
+            versionId: null, sketchVersion: null, basedOn: undefined, page: 0, scale: null,
+          }
+          : t)),
+        activeId: s.activeId,
+      };
+    });
+    onPickPlan?.(p);
+  }, [openInNewTab, onPickPlan]);
+
+  if (!active) return null;
+
+  return (<>
+    <PlanEditor
+      {...props}
+      key={`${active.id}:${active.fileId}`}
+      planFileId={active.fileId}
+      planName={active.name || planName}
+      tabStrip={(
+        <PlanTabsStrip
+          tabs={tabs}
+          activeId={active.id}
+          showClouds={!readOnly}
+          unsavedOf={unsavedOf}
+          onPick={pickTab}
+          onCloseTab={closeTab}
+          onNewTab={newTabPlus}
+        />
+      )}
+      initialWork={initialWork}
+      workRef={workRef}
+      onUnsavedChange={setActiveUnsaved}
+      onPickPlan={handlePick}
+      onOpenPlanNewTab={openInNewTab}
+    />
+
+    {/* The one question, only when closing would lose marks Drive never got. */}
+    {ask && (<>
+      <div className="fixed inset-0 z-[168]" style={{ backgroundColor: 'rgba(9,14,22,.5)' }}
+        onClick={() => { if (!askBusy) setAsk(null); }} />
+      <div data-tab-ask className="fixed z-[169] rounded-2xl overflow-hidden shadow-2xl"
+        style={{ left: '50%', top: '50%', transform: 'translate(-50%,-50%)',
+                 width: 'min(320px, 92vw)', backgroundColor: '#fff' }}>
+        <div className="px-5 pt-4">
+          <div className="text-[14px] font-extrabold text-gray-900">Your work isn&rsquo;t saved.</div>
+          <p className="text-[12.5px] text-gray-500 mt-1 mb-4">
+            Save this sketch to Google Drive before closing the tab?
+          </p>
+        </div>
+        <div className="flex gap-2 px-5 pb-4">
+          <button data-tab-ask-save disabled={askBusy}
+            onClick={() => { void saveAskAndClose(); }}
+            className="flex-1 py-2 rounded-xl text-[12.5px] font-bold text-white disabled:opacity-60"
+            style={{ backgroundColor: NAVY }}>
+            {askBusy ? 'Saving…' : 'Save to Drive'}
+          </button>
+          <button data-tab-ask-discard disabled={askBusy}
+            onClick={() => { const id = ask.tabId; setAsk(null); reallyClose(id); }}
+            className="flex-1 py-2 rounded-xl text-[12.5px] font-bold text-slate-600 disabled:opacity-60"
+            style={{ backgroundColor: '#f1f5f9' }}>
+            Close without saving
+          </button>
+        </div>
+      </div>
+    </>)}
+  </>);
 }

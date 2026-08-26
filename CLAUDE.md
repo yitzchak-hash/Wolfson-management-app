@@ -4791,3 +4791,72 @@ HANG — arm the touch profile after navigation and press buttons through the
 DOM; and `setEmulatedMedia`'s feature overrides do not reach matchMedia in
 this Chromium — `setTouchEmulationEnabled` is what genuinely flips
 `any-hover: none`.
+
+---
+
+# v2 — plan tabs, built as approved
+
+## The strip (`src/components/plans/PlanTabs.tsx`)
+Chrome's manner, in the studio bar's middle boxed by TWO upright separator
+lines (the owner's ask); on a phone and in the drawer pane — whose bars are
+portalled slots with no middle — it sits on a slim navy row of its own.
+Every tab wears a save-state cloud: **a big RED × while marks have not
+reached Drive, a big GREEN ✓ otherwise** — icons only, the click-to-open-
+Drive idea was dropped by his ruling. The × strokes its GROUP element, not
+the lines (a harness matching `line[stroke]` finds nothing). The + lives
+OUTSIDE the scroller so it can never be covered, and the picked tab is
+`scrollIntoView`'d — with too many tabs the overflow hides the others,
+never the one you are on (his exact report).
+
+## The wrapper owns the tabs; the editor is remounted per tab
+`PlanAnnotator` is now a wrapper around the renamed `PlanEditor` (same file):
+tabs per machine per job (`plan_tabs_<apartmentId>`), the editor keyed
+`tab.id:tab.fileId`, per-tab work carried through `initialWork` in and
+`workRef` out (a ref the editor writes every render). Rules paid for:
+- **A stash is made BEFORE any setState that changes the active tab, never
+  inside an updater** (updaters must stay pure under StrictMode).
+- **The editor reports `scale: null` while a fit is still owed** — a stash
+  taken in StrictMode's mount/cleanup/mount window otherwise freezes the
+  pre-fit 1.25 as the tab's remembered zoom and the studio opens unfitted
+  (the phone studio did, at 1489px CSS on a 390px screen).
+- **The session work map is scoped per SURFACE** (`pane` vs `studio`) and
+  only the studio writes page/zoom into the shared tab meta — a zoom right
+  for a 380px pane is wrong for a full-screen studio. The pane always fits
+  on open (`initialWork.scale` stripped when `embedded`).
+- Refresh recovery: a tab's `versionId` points at the autosaved
+  planAnnotations record, so unsaved marks survive a reload the way they
+  always did — per sketch.
+- Closing a tab whose sketch has not reached Drive asks "Your work isn't
+  saved. Save to Google Drive?" — Yes runs `stampPlanToDrive` with the same
+  folder/naming/version rules as the Save button; No discards only the
+  unsaved marks. No ask in the read-only pane, or when there is nowhere to
+  send it (marks are autosaved locally and stand in the version list).
+- Picker rules: an ORIGINAL replaces the current tab (and still goes through
+  the host's `onPickPlan`, which is what writes `plansPdfLink`); an
+  ANNOTATED sketch opens in its own tab; every row gains an
+  `open in new tab` button (`PlanPicker.onOpenNewTab`) — the Row became a
+  `div role=button` because a button inside a button is flattened.
+
+## The cache (`src/data/planCache.ts`)
+In-memory bytes per Drive file id; a background PUMP downloads the job's
+other plans one at a time (the sheet being read is never slowed); tab
+spinners and picker rows show `downloading… n%` / `ready` via
+`usePlanDownload`. Reference-counted (`acquire`/`release`) because the pane
+and the studio are open at once — the copies are dropped when the LAST
+viewer closes; the tab list survives. Traps paid for:
+- **pdf.js TRANSFERS its input buffer to the worker** — hand it the cached
+  buffer and the cache is neutered on first use; every read hands out
+  `slice(0)`.
+- **The pump is restart-safe**: a running-flag chain that StrictMode's
+  mount/cleanup/mount stranded at "running" over an abandoned loop fetched
+  nothing, silently, forever.
+- **A cache clear sweeps the progress map while a download is still in
+  flight** — both `fetchPlanCached` and `prefetchPlans` re-mark inflight
+  files, or the indicator vanishes and the row reads as never-started.
+
+Harness: `scratchpad/plantabs.mjs` (23 checks, on the 5174 keyed server with
+all Drive routes stubbed; one plan's route sleeps 8s so the indicators are
+observable). Its trap: the drawer is itself `position:fixed`, so a studio
+query scoped `.fixed …` finds the PANE's strip first — every studio
+assertion goes through the LAST `[data-plan-tabs]`. `planaddr.mjs` gained
+the standing All-pill fix (fixed seeded date vs the portal's Today filter).

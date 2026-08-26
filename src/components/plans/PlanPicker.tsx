@@ -1,8 +1,30 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Search, Folder, FileText, Image as ImageIcon, Loader2, X } from 'lucide-react';
+import { ChevronDown, Search, Folder, FileText, Image as ImageIcon, Loader2, X, ExternalLink } from 'lucide-react';
 import {
   DriveFolder, PlanEntry, listFoldersViaBackend, listMarkableViaBackend,
 } from '../../data/driveApi';
+import { usePlanDownload } from '../../data/planCache';
+
+/**
+ * How far a plan's background download has got — quiet, on the row's right.
+ * "ready" means its bytes are already here and pressing the row opens it with
+ * no wait at all.
+ */
+function DownloadNote({ fileId }: { fileId: string }) {
+  const pct = usePlanDownload(fileId);
+  if (pct == null) return null;
+  if (pct >= 100) {
+    return <span data-plan-ready className="text-[9.5px] font-bold text-emerald-600 flex-shrink-0">ready</span>;
+  }
+  return (
+    <span data-plan-downloading className="flex items-center gap-1 flex-shrink-0 text-[9.5px] text-slate-400 tabular-nums">
+      <span className="w-[42px] h-[3px] rounded-full overflow-hidden bg-slate-200">
+        <span className="block h-full rounded-full bg-[#4aa8d8]" style={{ width: `${pct}%` }} />
+      </span>
+      {pct}%
+    </span>
+  );
+}
 
 /**
  * Which plan, out of which folder.
@@ -20,7 +42,7 @@ import {
  */
 export function PlanPicker({
   driveLink, plansFolderId, plansFolderName = 'Engineered Plans',
-  plans, current, onPick, onClose,
+  plans, current, onPick, onOpenNewTab, onClose,
 }: {
   driveLink?: string;
   plansFolderId?: string | null;
@@ -35,6 +57,8 @@ export function PlanPicker({
    * because you have finished.
    */
   onPick: (p: PlanEntry, folder: { id: string; name: string }, stayOpen?: boolean) => void;
+  /** Offered per row when the host runs tabs — opens the plan in a NEW tab. */
+  onOpenNewTab?: (p: PlanEntry) => void;
   onClose: () => void;
 }) {
   const [openList, setOpenList] = useState(false);
@@ -156,11 +180,16 @@ export function PlanPicker({
     return needle ? folders.filter(f => f.name.toLowerCase().includes(needle)) : folders;
   }, [folders, q]);
 
+  // A div wearing role=button, NOT a <button>: the open-in-new-tab control
+  // inside it is a real button, and a button inside a button is invalid
+  // markup that browsers flatten (the Building Progress lesson).
   const Row = ({ p, sub, onChoose }: { p: PlanEntry; sub?: string; onChoose: () => void }) => (
-    <button
+    <div
       data-plan-row={p.id}
+      role="button" tabIndex={0}
       onClick={onChoose}
-      className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg hover:bg-gray-50 text-left"
+      onKeyDown={e => { if (e.key === 'Enter') onChoose(); }}
+      className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg hover:bg-gray-50 text-left cursor-pointer"
       style={p.id === current ? { backgroundColor: 'rgba(74,168,216,.12)' } : undefined}
     >
       {p.isImage
@@ -170,12 +199,22 @@ export function PlanPicker({
         <span className="block truncate text-[12.5px] text-slate-700">{p.name}</span>
         {sub && <span className="block truncate text-[10.5px] text-slate-400">{sub}</span>}
       </span>
+      <DownloadNote fileId={p.id} />
       {p.kind === 'annotated' && (
-        <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
+        <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 flex-shrink-0">
           marked up
         </span>
       )}
-    </button>
+      {onOpenNewTab && (
+        <button data-open-new-tab={p.id}
+          onClick={e => { e.stopPropagation(); onOpenNewTab(p); }}
+          title="Open in a new tab"
+          className="flex items-center gap-1 px-1.5 py-1 rounded-lg border border-gray-200 text-[10px]
+                     font-bold text-[#1e3a5f] hover:border-[#4aa8d8] flex-shrink-0">
+          <ExternalLink size={11} /> new tab
+        </button>
+      )}
+    </div>
   );
 
   return (

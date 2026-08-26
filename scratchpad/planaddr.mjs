@@ -158,6 +158,10 @@ check(!!fresh && fresh.displayName === 'Aaron, David',
 // ── 4 · the worker's address carries Waze ───────────────────────────────────
 await page.goto(`${APP}/c/tok-jo`);
 await page.waitForTimeout(2500);
+// The task's seeded date is fixed and the portal's default filter is Today —
+// the container clock walks on, so show All first (the standing date trap).
+await page.locator('button', { hasText: /^All$/ }).first().click();
+await page.waitForTimeout(500);
 await page.locator('button:has-text("Hang the unit")').first().click();
 await page.waitForTimeout(800);
 const waze = page.locator('a[title="Waze"]');

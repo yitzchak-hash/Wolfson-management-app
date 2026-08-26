@@ -117,9 +117,9 @@
     <p class="lead">
       Every plan you open gets a tab, like a browser, and two upright lines box the tab section off from
       the plan&rsquo;s name on one side and the zoom on the other. The tab you are on is lit with the blue
-      underline. Every tab wears a little cloud: <b>a cloud with an &times; while there are unsaved
-      marks</b>, and <b>the Drive mark once the sketch is filed &mdash; pressing that cloud opens the file
-      in Google Drive</b>. A tab whose plan is still arriving shows a tiny spinner with how much has come.
+      underline. Every tab wears a little cloud: <b>a big red &times; while there are unsaved
+      marks</b>, and <b>a big green &check; once the sketch is filed in Drive</b>.
+      A tab whose plan is still arriving shows a tiny spinner with how much has come.
       The <b>+</b> at the end opens the plan you are on in a fresh tab (a second, clean sketch of the same
       sheet). The strip scrolls sideways when there are many.
     </p>
@@ -162,10 +162,9 @@
     </div>
     <p class="hint" style="margin-top:10px;">
       <span class="mark" style="font-size:17px;">try it:</span> switch tabs &mdash; the sheet changes with no wait.
-      Press a Drive cloud to see where it would take you. Close the tab with the cloud-&times; and the studio asks
-      the exact question above; Save files it through the same Annotated&nbsp;Plans pipeline as today, No throws only
-      the unsaved marks away. A tab with nothing unsaved just closes &mdash; and when a sketch gets saved the ordinary
-      way, its &times; cloud turns into the Drive mark on the spot.
+      Close the tab with the red &times; and the studio asks the exact question above; Save files it through the same
+      Annotated&nbsp;Plans pipeline as today, No throws only the unsaved marks away. A tab with nothing unsaved just
+      closes &mdash; and when a sketch gets saved the ordinary way, its red &times; turns into the green &check; on the spot.
     </p>
   </div>
 
@@ -235,10 +234,9 @@
         viewer, so it gets the same tabs, on a slim row of its own under the two bars there (its bars have no
         spare middle). If you want tabs only in the full-screen studio, that is one switch.</li>
       <li><b>Tab look:</b> Chrome&rsquo;s manner &mdash; rounded top, the lit one brighter with a blue underline,
-        two upright lines boxing the tab section, a cloud on every tab (&times; while unsaved, the Drive mark
-        once saved &mdash; pressing it opens the file in Drive), &times; on each tab (always visible on the
-        touchscreen). Drawn above with the studio&rsquo;s real colours; if you want them shaped differently,
-        mark this page up.</li>
+        two upright lines boxing the tab section, a cloud on every tab (a big red &times; while unsaved, a big
+        green &check; once saved), &times; on each tab (always visible on the touchscreen). Drawn above with the
+        studio&rsquo;s real colours; if you want them shaped differently, mark this page up.</li>
     </ul>
   </div>
 </div>
@@ -258,18 +256,18 @@
   ];
   var on = 1, pending = null;
 
-  // The save-state clouds. Unsaved: amber cloud with an ×. Saved: a soft
-  // white cloud carrying the Drive triangle — the real thing uses the app's
-  // own DriveIcon — and pressing it opens the file in Google Drive.
+  // The save-state clouds, per the owner's ruling: the × RED and the ✓ GREEN,
+  // drawn BIG over a soft cloud outline. Icons only — no Drive link on them.
   var CLOUD = 'M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z';
-  var CLOUD_X = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="' + CLOUD + '"/><line x1="10.2" y1="11.2" x2="13.8" y2="14.8"/><line x1="13.8" y1="11.2" x2="10.2" y2="14.8"/></svg>';
-  var CLOUD_DRIVE = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none">'
-    + '<path d="' + CLOUD + '" fill="rgba(255,255,255,.88)"/>'
-    + '<g stroke-width="2" stroke-linecap="round" fill="none">'
-    + '<line x1="12" y1="8.6" x2="8.7" y2="14.4" stroke="#1EA362"/>'
-    + '<line x1="12" y1="8.6" x2="15.3" y2="14.4" stroke="#4285f4"/>'
-    + '<line x1="8.7" y1="14.4" x2="15.3" y2="14.4" stroke="#fbbc04"/>'
+  var CLOUD_X = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none">'
+    + '<path d="' + CLOUD + '" stroke="rgba(255,255,255,.55)" stroke-width="1.6"/>'
+    + '<g stroke="#ef4444" stroke-width="2.8" stroke-linecap="round">'
+    + '<line x1="8.6" y1="8.6" x2="15.4" y2="15.4"/><line x1="15.4" y1="8.6" x2="8.6" y2="15.4"/>'
     + '</g></svg>';
+  var CLOUD_OK = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none">'
+    + '<path d="' + CLOUD + '" stroke="rgba(255,255,255,.55)" stroke-width="1.6"/>'
+    + '<path d="M7.6 12.4 10.8 15.6 16.6 8.6" stroke="#22c55e" stroke-width="2.8"'
+    + ' stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>';
 
   var dtoast = document.getElementById('dtoast'), dtoastT;
   function toast(msg) {
@@ -290,14 +288,11 @@
       d.className = 'tab' + (t.id === on ? ' on' : '');
       d.innerHTML = (t.dirty
         ? '<span class="cl" title="Unsaved marks — not in Drive yet">' + CLOUD_X + '</span>'
-        : '<span class="cl drive" title="Saved in Drive — press to open it">' + CLOUD_DRIVE + '</span>') +
+        : '<span class="cl" title="Saved">' + CLOUD_OK + '</span>') +
         (t.dl != null && t.dl < 100 ? '<span class="spin"></span><span class="pct">' + t.dl + '%</span>' : '') +
         '<span class="nm">' + t.nm + '</span><span class="x" title="Close">&#215;</span>';
       d.onclick = function (e) {
         if (e.target.closest && e.target.closest('.x')) { tryClose(t.id); return; }
-        if (e.target.closest && e.target.closest('.cl.drive')) {
-          toast('→ would open the saved PDF in Google Drive'); return;
-        }
         on = t.id; draw();
       };
       tabsEl.appendChild(d);
