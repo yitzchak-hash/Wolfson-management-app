@@ -34,6 +34,15 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     title: 'A calmer touch screen, numbers that open, and the reel grows up',
     items: [
       {
+        title: 'The tap-in board works on the TV wall',
+        body: 'Pressing a name on the wall panel now really clocks them in or '
+          + 'out — the wall being read-only no longer silences it, because a '
+          + 'punch goes to the time clock, not the board. The name tiles also '
+          + 'fill the widget in even rows: a taller widget means bigger '
+          + 'buttons, and every pixel of a tile presses as one button.',
+        demo: 'tap',
+      },
+      {
         title: 'Touching a widget no longer starts typing',
         body: 'On the touch screen, tapping a widget or a calendar card used '
           + 'to drop a text cursor into it. A tap now does what it should: a '

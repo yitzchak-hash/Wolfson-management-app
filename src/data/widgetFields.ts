@@ -303,7 +303,9 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
     title(),
     {
       key: 'cols', label: 'Tiles across', kind: 'number', min: 1, max: 6,
-      hint: 'Three suits a portrait wall panel; six suits a wide one.',
+      hint: 'How many name tiles sit side by side. The rows share the widget\'s '
+        + 'height evenly, so a taller widget means bigger buttons. Three suits '
+        + 'a portrait wall panel; six suits a wide one.',
     },
   ],
   'job-map': [

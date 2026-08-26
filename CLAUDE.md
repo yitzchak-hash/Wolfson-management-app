@@ -5048,3 +5048,22 @@ MORE_WIDGETS, WIDGET_FIELDS, WIDGET_PREVIEW, SHELF.
 Harness: `scratchpad/round30.mjs` (32 checks). Regressions green: board,
 undoredo, round26, round27. Standing pre-existing reds unchanged
 (`boardsize.mjs` left-edge auto-pan, `touchpan.mjs` pinch-zoom).
+
+## The tap-in board answers the wall
+Two rules in `TapInBoard.tsx`, both paid for:
+- **A punch is not a board edit.** The TV renders every widget `readOnly`,
+  and honouring that here made the ONE widget built for the wall panel dead
+  on it — "the tap-in widget isn't working". The tap guard is `sampleMode`
+  (the shelf's canned people), never `c.readOnly`: the wall, a view-only
+  named board, anywhere the board is drawn live, takes punches. The whole
+  tile is one `<button>` — name, time, icon and the colour around them.
+- **Tiles FILL the box in even rows.** They carried a fixed 46px height
+  under WidgetSurface's scale, so changing "tiles across" or resizing the
+  node left dead bands and rows that stopped lining up with the box. The
+  grid is measured (damped, the WorldClocks rule), `gridAutoRows` gives
+  every row an equal share (floor 44px, past which it scrolls), and the
+  type scales from the tile height.
+Harness: `scratchpad/tapin2.mjs` (8 checks, including a real punch from the
+/tv page). Its lesson is the standing one: patching localStorage and
+reloading is overwritten by the app's flush-on-unload — the one-column case
+needs its own seeded context.
