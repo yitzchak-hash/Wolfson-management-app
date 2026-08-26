@@ -51,6 +51,9 @@ export const isFirebaseConfigured = Boolean(
 let app: FirebaseApp | null = null;
 let db: Firestore | null = null;
 
+/** The initialized app, for the presence channel (Realtime Database). */
+export function firebaseApp(): FirebaseApp | null { return app; }
+
 if (isFirebaseConfigured) {
   try {
     app = initializeApp(firebaseConfig);

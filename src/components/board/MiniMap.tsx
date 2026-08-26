@@ -264,45 +264,8 @@ export const MiniMap = React.memo(function MiniMap({
       )}
 
       <div className="absolute inset-0 pointer-events-none">
-      {elements.map(el => {
-        const w = Math.max(2, el.w * scale);
-        const h = Math.max(2, el.h * scale);
-        const face = el.type === 'widget' ? faceFor(el.widget) : null;
-        /*
-          One colour per KIND, so the overview is readable at a glance: a job is
-          the blue of the app, a group box is the faint grey it is on the board,
-          and a note keeps its yellow. Widgets get a painted face of their own —
-          see FACES above.
-        */
-        const bg = face ? face.bg
-          : el.type === 'box' ? 'rgba(148,163,184,.28)'
-          : el.type === 'bin' ? 'rgba(100,116,139,.45)'
-          : 'rgba(252,211,77,.75)';
-        // Cells cost a span each, so they only appear once they would be visible.
-        const showCells = !!face?.cells && w >= 15 && h >= 12;
-        return (
-          <div key={el.id} className="absolute rounded-[1px] overflow-hidden"
-            style={{ left: el.x * scale, top: el.y * scale, width: w, height: h, backgroundColor: bg }}>
-            {showCells && (
-              <div className="grid h-full w-full gap-[1px] p-[1px]"
-                style={{ gridTemplateColumns: `repeat(${face!.cols ?? 3}, minmax(0,1fr))` }}>
-                {face!.cells!.map((c, i) => (
-                  <span key={i} className="rounded-[1px]" style={{ backgroundColor: c }} />
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })}
-      {jobs.map((j, i) => (
-        <div key={j.id} className="absolute rounded-[1px]"
-          style={{
-            left: (j.canvasX ?? 24 + (i % 6) * 240) * scale,
-            top: (j.canvasY ?? 24 + Math.floor(i / 6) * 150) * scale,
-            width: Math.max(3, tileW * scale), height: Math.max(2, tileH * scale),
-            backgroundColor: stageColor(j.currentStageId),
-          }} />
-      ))}
+        <MiniMarks jobs={jobs} elements={elements} stages={stages}
+          scale={scale} tileW={tileW} tileH={tileH} />
         <div className="absolute border-2 rounded-[2px]"
           style={{
             left: view.x, top: view.y, width: view.w, height: view.h,
@@ -311,4 +274,66 @@ export const MiniMap = React.memo(function MiniMap({
       </div>
     </div>
   );
+});
+
+/**
+ * The board's marks, split OUT of the panel and memoised on their own.
+ *
+ * The panel takes `pan` — it has to, the view rectangle is drawn from it — so
+ * its own React.memo is useless during a pan: every frame re-rendered a
+ * thousand miniature rects that had not moved, which was a measurable slice
+ * of the thousand-job board's pan cost. The marks depend on the CONTENT and
+ * the panel's scale, neither of which changes while panning; only the little
+ * blue view rectangle re-renders per frame now.
+ */
+const MiniMarks = React.memo(function MiniMarks({ jobs, elements, stages, scale, tileW, tileH }: {
+  jobs: Apartment[];
+  elements: CanvasElement[];
+  stages: Stage[];
+  scale: number;
+  tileW: number;
+  tileH: number;
+}) {
+  const stageColor = (id?: string | null) => stages.find(s => s.id === id)?.color ?? '#1e3a5f';
+  return (<>
+    {elements.map(el => {
+      const w = Math.max(2, el.w * scale);
+      const h = Math.max(2, el.h * scale);
+      const face = el.type === 'widget' ? faceFor(el.widget) : null;
+      /*
+        One colour per KIND, so the overview is readable at a glance: a job is
+        the blue of the app, a group box is the faint grey it is on the board,
+        and a note keeps its yellow. Widgets get a painted face of their own —
+        see FACES above.
+      */
+      const bg = face ? face.bg
+        : el.type === 'box' ? 'rgba(148,163,184,.28)'
+        : el.type === 'bin' ? 'rgba(100,116,139,.45)'
+        : 'rgba(252,211,77,.75)';
+      // Cells cost a span each, so they only appear once they would be visible.
+      const showCells = !!face?.cells && w >= 15 && h >= 12;
+      return (
+        <div key={el.id} className="absolute rounded-[1px] overflow-hidden"
+          style={{ left: el.x * scale, top: el.y * scale, width: w, height: h, backgroundColor: bg }}>
+          {showCells && (
+            <div className="grid h-full w-full gap-[1px] p-[1px]"
+              style={{ gridTemplateColumns: `repeat(${face!.cols ?? 3}, minmax(0,1fr))` }}>
+              {face!.cells!.map((c, i) => (
+                <span key={i} className="rounded-[1px]" style={{ backgroundColor: c }} />
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    })}
+    {jobs.map((j, i) => (
+      <div key={j.id} className="absolute rounded-[1px]"
+        style={{
+          left: (j.canvasX ?? 24 + (i % 6) * 240) * scale,
+          top: (j.canvasY ?? 24 + Math.floor(i / 6) * 150) * scale,
+          width: Math.max(3, tileW * scale), height: Math.max(2, tileH * scale),
+          backgroundColor: stageColor(j.currentStageId),
+        }} />
+    ))}
+  </>);
 });

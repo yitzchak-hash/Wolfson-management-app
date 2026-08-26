@@ -4893,3 +4893,49 @@ round21 / round23 / round29 / boardsize re-encode the new contract (round29
 walks home through the header before its Back-button section). The portal
 and the TV still pass a no-op openUnit — a stray tap there must never switch
 workspace.
+
+---
+
+# v2 — the board goes fast, and colleagues appear on it
+
+## VIEWPORT CULLING (the thousand-job board's performance story)
+Panning the imported board measured **717ms A FRAME** — every tile mounted
+whatever the view showed. Only what is in (or within CULL_PAD=350 of) the
+view is mounted now; the KEEP rules hold the selection, everything a live
+drag/resize carries, the edited node, the search hit, fresh jobs and the
+dragged ghost mounted wherever they are. **WIDGETS and BINS are never
+culled** — a widget unmounted mid-pan loses its own state (a planner's
+scroll, the map's tiles, a notebook's drop probe), and there are dozens
+against a thousand tiles. All board arithmetic reads DATA, not the DOM, so
+only the rendering bill changed. Two more finds from the same profile:
+`relativeTime` is MEMOISED in types/index.ts (its `toLocaleDateString` cost
+~0.3ms per call, per visible tile, per frame), and MiniMap's marks moved to
+their own memoised `MiniMarks` (the panel takes `pan` for its view
+rectangle, so its own memo was useless during a pan and a thousand
+miniature rects redrew per frame). Container numbers, dev server: pan
+717→33ms median, tile drag p90 733→16.8ms, 56 of 1000 tiles mounted.
+`scratchpad/boardperf.mjs` is the guard; its numbers are CPU-rendered and
+pessimistic — the production build is faster still.
+
+## LIVE PRESENCE (`src/data/presence.ts` + `PresenceLayer`)
+Who else is on this board, their named cursor in their colour, and dashed
+ghosts of tiles mid-drag under their hand. Rides Firebase's REALTIME
+DATABASE (`VITE_FIREBASE_DATABASE_URL`), NOT Firestore — cursor traffic
+would chew Firestore's per-write quota; RTDB is built for cheap ephemeral
+streams. The module is lazy-imported only when the URL is set; with it
+absent every function is a no-op and the board is exactly as before. Rows
+die with the tab (`onDisconnect().remove()`), writes are throttled to ~8/s
+trailing, a 10s heartbeat keeps a motionless colleague from fading, and
+the layer drops peers 15s quiet on its own clock tick. The layer renders
+INSIDE the world div (board coordinates need no conversion), is entirely
+pointer-events-none, and chrome divides by zoom. Presence is scoped per
+workspace AND per named board — cursors on different boards never cross.
+The harness door: `window.__injectPresence` (DEV builds only) feeds the
+real fan-out, because a websocket to firebaseio.com cannot be stubbed with
+page.route — `scratchpad/presence.mjs`. End-to-end against a real RTDB
+needs production; the owner's setup: create the Realtime Database in the
+Firebase console (rules read/write true, same public posture as
+Firestore), put its URL in Vercel as VITE_FIREBASE_DATABASE_URL.
+
+Standing pre-existing reds, verified identical with this diff stashed:
+`boardsize.mjs` left-edge auto-pan, `touchpan.mjs` pinch-zoom.

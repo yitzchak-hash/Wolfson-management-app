@@ -17,7 +17,9 @@ import { PlannerEntry, personOf } from '../components/board/PlannerWidget';
 import { PlannerTaskDialog, PlannerRemoveDialog } from '../components/board/PlannerDialogs';
 import { ScheduleWindow } from '../components/board/ScheduleWindow';
 import { boardAccess } from '../types';
-import { Apartment, CanvasElement, BinKind, BIN_KINDS, BIN_META, binKeyOf, binLabelOf, isBuiltInBin, getStageName, relativeTime, PLANNER_ARCHIVE_MAX, BOARD_MARGIN, BoardLayout } from '../types';
+import { Apartment, CanvasElement, BinKind, BIN_KINDS, BIN_META, binKeyOf, binLabelOf, isBuiltInBin, getStageName, relativeTime, personColor, PLANNER_ARCHIVE_MAX, BOARD_MARGIN, BoardLayout } from '../types';
+import { presenceReady, startPresence, publishPresence } from '../data/presence';
+import { PresenceLayer } from '../components/board/PresenceLayer';
 import { layoutRipple, rippleSentence } from '../data/layoutDiff';
 import { printTable, printDot } from '../data/printing';
 import { ApartmentDetailDrawer } from '../components/apartment/ApartmentDetailDrawer';
@@ -851,6 +853,65 @@ export function GeneralJobsPage() {
   const panRef2 = useRef({ x: 0, y: 0 });
   zoomRef.current = zoom;
   panRef2.current = pan;
+
+  /**
+   * LIVE PRESENCE — tell colleagues on this board where my hand is.
+   *
+   * My row: started per workspace+board, removed on leave (and by the server
+   * on disconnect). The cursor and any mid-drag tile positions ride a native
+   * pointermove listener registered ONCE — live pan/zoom/drag come through
+   * refs, publishing is throttled inside presence.ts, and none of it renders
+   * anything here, so it costs the board nothing. No-op without the
+   * Realtime Database URL configured.
+   */
+  const presenceDragRef = useRef<DragState | null>(null);
+  presenceDragRef.current = drag;
+  useEffect(() => {
+    if (!presenceReady() || !currentUser) return;
+    return startPresence(currentProjectId, activeBoardView ?? '', {
+      name: currentUser.name,
+      color: personColor(currentUser.name, currentUser.color),
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentProjectId, activeBoardView, currentUser?.id]);
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el || !presenceReady()) return;
+    const dragPayload = () => {
+      const d = presenceDragRef.current;
+      if (!d || d.kind !== 'job' || !d.moved) return null;
+      const out: Record<string, { x: number; y: number }> = {};
+      let n = 0;
+      for (const id of d.ids) {
+        const st = d.starts.get(id);
+        if (st && n < 20) { out[id] = { x: st.x + d.dx, y: st.y + d.dy }; n++; }
+      }
+      d.carryJobs?.forEach((st, id) => {
+        if (n < 20 && !out[id]) { out[id] = { x: st.x + d.dx, y: st.y + d.dy }; n++; }
+      });
+      return n ? out : null;
+    };
+    let lastX: number | null = null, lastY: number | null = null;
+    const onMove = (e: PointerEvent) => {
+      const r = el.getBoundingClientRect();
+      lastX = (e.clientX - r.left - panRef2.current.x) / zoomRef.current;
+      lastY = (e.clientY - r.top - panRef2.current.y) / zoomRef.current;
+      publishPresence({ x: lastX, y: lastY, drag: dragPayload() });
+    };
+    const onLeave = () => { lastX = lastY = null; publishPresence({ x: null, y: null, drag: null }); };
+    // The ghost must not linger on a hand that stopped moving after release —
+    // the cursor itself stays where it was.
+    const onUp = () => { setTimeout(() => publishPresence({ x: lastX, y: lastY, drag: null }), 80); };
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerleave', onLeave);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerleave', onLeave);
+      window.removeEventListener('pointerup', onUp);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   /** Live viewport size — the board surface is sized against it. */
   const [vp, setVp] = useState({ w: 0, h: 0 });
   useEffect(() => {
@@ -5244,6 +5305,42 @@ export function GeneralJobsPage() {
   worldSizeRef.current = { w: maxX, h: maxY };
 
   /**
+   * VIEWPORT CULLING — the thousand-job board's whole performance story.
+   *
+   * Every tile used to be MOUNTED whatever the view showed, and reconciling a
+   * thousand memoised tiles per pan frame measured 717ms a frame after the
+   * CRM import — the "board feels slow". Only what is in (or within a pad of)
+   * the view is mounted now; everything else returns null and the browser
+   * never hears about it. All the board's arithmetic — snapping, lasso,
+   * world size, minimap, host boxes — reads DATA, not the DOM, so nothing
+   * changes but the rendering bill.
+   *
+   * The KEEP rules, each a real trap: the selection (arrow-nudging it must
+   * not lose members), everything a live drag or resize carries (it can
+   * cross the pad faster than the pad grows), the node being edited (its
+   * textarea would lose focus), the search hit and fresh jobs (their pulse
+   * IS the answer), and the ghost being dragged. WIDGETS and BINS are never
+   * culled — a widget unmounted mid-pan loses its own state (a planner's
+   * scroll, the map's tiles, a notebook's drop probe), and there are dozens
+   * of them against a thousand tiles.
+   */
+  const CULL_PAD = 350;
+  const cullL = -pan.x / zoom - CULL_PAD;
+  const cullT = -pan.y / zoom - CULL_PAD;
+  const cullR = cullL + (vp.w || window.innerWidth) / zoom + CULL_PAD * 2;
+  const cullB = cullT + (vp.h || window.innerHeight) / zoom + CULL_PAD * 2;
+  const cullVisible = (x: number, y: number, w: number, h: number) =>
+    x < cullR && x + w > cullL && y < cullB && y + h > cullT;
+  const keepJob = (id: string) =>
+    selectedJobIds.has(id) || freshJobs.has(id) || searchHit === id
+    || jobResize?.id === id
+    || (!!drag && (drag.ids.includes(id) || !!drag.carryJobs?.has(id)));
+  const keepEl = (id: string) =>
+    selectedElIds.has(id) || editingEl === id
+    || (!!resize && resize.ids.includes(id))
+    || (!!drag && (drag.ids.includes(id) || !!drag.carryEls?.has(id)));
+
+  /**
    * The hand came off: take the true size and close the space up.
    *
    * `settling` glides the pan rather than snapping it, because a board that
@@ -6412,6 +6509,13 @@ export function GeneralJobsPage() {
               if (el.attachedTo) return null;                // drawn on its host
               if (el.type === 'title' && el.pinned) return null;
               const pos = elPos(el);
+              // Culling: simple nodes far outside the view are not mounted.
+              // WIDGETS and BINS always render — a widget unmounted mid-pan
+              // loses its own state (a planner's scroll, the map's tiles, a
+              // notebook's drop probe), and there are dozens of them against a
+              // thousand tiles; the tiles are where the win is.
+              if (el.type !== 'widget' && el.type !== 'bin' && !keepEl(el.id)
+                && !cullVisible(pos.x, pos.y, pos.w, pos.h)) return null;
               return (
                 <BoardNode
                   key={el.id}
@@ -6444,6 +6548,8 @@ export function GeneralJobsPage() {
                 an edit through a ghost is an edit to the job. */}
             {jobs.flatMap(job => (job.ghosts ?? []).map((g, gi) => {
               const p = ghostPos(job.id, gi, g);
+              if (!(ghostDrag && ghostDrag.jobId === job.id && ghostDrag.index === gi)
+                && !cullVisible(p.x, p.y, tileSize(job).w, tileSize(job).h)) return null;
               return (
                 <JobTile
                   key={`${job.id}-ghost-${gi}`}
@@ -6465,6 +6571,7 @@ export function GeneralJobsPage() {
             {jobs.map((job, i) => {
               const pos = jobPos(job, i);
               const changedAt = job.contentUpdatedAt ?? job.updatedAt;
+              if (!keepJob(job.id) && !cullVisible(pos.x, pos.y, tileSize(job).w, tileSize(job).h)) return null;
               return (
                 <JobTile
                   key={job.id}
@@ -6489,6 +6596,10 @@ export function GeneralJobsPage() {
                 />
               );
             })}
+
+            {/* Colleagues' live cursors and mid-drag ghosts — see presence.ts.
+                Inside the world layer, so their board coordinates are ours. */}
+            <PresenceLayer pid={currentProjectId} board={activeBoardView ?? ''} zoom={zoom} />
           </div>
         )}
         </div>

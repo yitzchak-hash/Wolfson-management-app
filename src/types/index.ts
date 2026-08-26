@@ -458,19 +458,39 @@ export function aptLabel(
 
 /** "3h ago" / "yesterday" / "6 Aug" — short, because tile space is scarce.
  *  Used by the board tiles and the job list, so the stamp reads the same. */
+/**
+ * Memoised, because the board calls this for every visible tile on every
+ * render — and for anything older than a week the answer runs through
+ * `toLocaleDateString`, whose locale machinery cost a measurable slice of
+ * each pan frame on the thousand-job board (~0.3ms per call, profiled).
+ * A fresh stamp's answer can drift within a minute so it is cached briefly;
+ * a dated one never changes and is cached for good measure much longer.
+ */
+const relTimeCache = new Map<string, { out: string; until: number }>();
 export function relativeTime(iso?: string): string {
   if (!iso) return '';
+  const now = Date.now();
+  const hit = relTimeCache.get(iso);
+  if (hit && hit.until > now) return hit.out;
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return '';
-  const mins = Math.floor((Date.now() - then) / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days === 1) return 'yesterday';
-  if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  const mins = Math.floor((now - then) / 60000);
+  let out: string;
+  if (mins < 1) out = 'just now';
+  else if (mins < 60) out = `${mins}m ago`;
+  else {
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) out = `${hrs}h ago`;
+    else {
+      const days = Math.floor(hrs / 24);
+      out = days === 1 ? 'yesterday'
+        : days < 7 ? `${days}d ago`
+        : new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    }
+  }
+  if (relTimeCache.size > 4000) relTimeCache.clear();
+  relTimeCache.set(iso, { out, until: now + (mins < 60 ? 30_000 : 10 * 60_000) });
+  return out;
 }
 
 export interface StageNoteAttachment {
