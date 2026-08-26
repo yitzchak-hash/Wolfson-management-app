@@ -108,32 +108,23 @@ const cardText = await page.evaluate(id => {
 check(!!cardText, 'the card is drawn: workspace, name, stage', cardText);
 check(/Piping/.test(cardText), 'including the unit\'s stage from the snapshot');
 
-// ── 4 · clicking the card PEEKS; the peek's own button travels ──────────────
-// ROUND-6 CHANGE: opening a foreign unit from the job board no longer leaves
-// the board — the click opens a read-only peek window ON /jobs, and only the
-// peek's "Open in …" button does the workspace switch.
+// ── 4 · clicking the card travels and opens the FULL drawer ─────────────────
+// OWNER REVERSAL (2026-08-26): the read-only peek is gone — one click on a
+// foreign unit switches to its workspace and opens the real apartment window
+// there, markup and all.
 const card = page.locator('[data-node-id] button', { hasText: 'Artzi' }).last();
 await card.click();
-await page.waitForTimeout(800);
-const peeked = await page.evaluate(() => ({
-  path: location.pathname,
-  active: localStorage.getItem('active_project'),
-  open: !!document.querySelector('[data-unit-peek]'),
-}));
-console.log('       after click:', JSON.stringify(peeked));
-check(peeked.open && peeked.path === '/jobs' && peeked.active === 'general',
-  'clicking the card opens a PEEK and stays on the job board', JSON.stringify(peeked));
-await page.locator('[data-peek-open-full]').click();
-await page.waitForTimeout(2500);
+await page.waitForTimeout(2800);
 const where = await page.evaluate(() => ({
   path: location.pathname,
   active: localStorage.getItem('active_project'),
   drawer: document.querySelectorAll('.drawer-panel').length,
+  peek: !!document.querySelector('[data-unit-peek]'),
 }));
-console.log('       after Open in Wolfson:', JSON.stringify(where));
+console.log('       after click:', JSON.stringify(where));
 check(where.path === '/project' && where.active === 'wolfson',
-  'the peek\'s Open button switches to the unit\'s own workspace', JSON.stringify(where));
-check(where.drawer > 0, 'and opens that unit');
+  'one click switches to the unit\'s own workspace', JSON.stringify(where));
+check(where.drawer > 0 && !where.peek, 'and opens the FULL drawer — no peek window');
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASS');
 await b.close();

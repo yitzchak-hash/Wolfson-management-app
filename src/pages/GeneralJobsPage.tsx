@@ -41,7 +41,6 @@ import { BoardViewPicker } from '../components/board/BoardViewPicker';
 import { StageBoard } from '../components/board/StageBoard';
 import { WidgetStore } from '../components/board/WidgetStore';
 import { WidgetListPopup } from '../components/board/WidgetListPopup';
-import { UnitPeek } from '../components/board/UnitPeek';
 import { WIDGETS } from '../data/widgets';
 import { TitleEditor } from '../components/board/TitleEditor';
 import {
@@ -506,8 +505,6 @@ export function GeneralJobsPage() {
   const headerBarRef = useRef<HTMLDivElement>(null);
   /** A widget number clicked open: the list behind it. */
   const [widgetList, setWidgetList] = useState<{ title: string; jobIds: string[] } | null>(null);
-  /** A unit from another workspace, peeked at without leaving the board. */
-  const [unitPeek, setUnitPeek] = useState<{ pid: string; aptId: string } | null>(null);
   const [resize, setResize] = useState<ResizeState | null>(null);
   const [lasso, setLasso] = useState<LassoState | null>(null);
   const [ctxMenu, setCtxMenu] = useState<CtxMenu | null>(null);
@@ -5113,14 +5110,18 @@ export function GeneralJobsPage() {
     leaveNotebook: (id: string) => leaveNotebookRef.current(id),
     // Every widget figure opens the records it counted.
     showList: (title: string, jobIds: string[]) => setWidgetList({ title, jobIds }),
-    // A unit in ANOTHER workspace opens as a PEEK, not a journey: the board
-    // stays where it is, and closing the peek leaves you standing on it. The
-    // old behaviour — switch workspace, open the drawer there — meant X-ing
-    // out of a Wolfson apartment stranded you in Wolfson. The peek's own
-    // "Open in …" button does the travel for whoever actually wants it.
+    // OWNER REVERSAL (2026-08-26): a unit in ANOTHER workspace opens the FULL
+    // drawer — the app travels to that workspace and shows it, markup and
+    // all. The read-only peek this replaced was itself his earlier ruling
+    // ("stay where I'm at"); his correction, in his words: "The full pop up
+    // of the apartment should show — take me to that workspace to show it."
     openUnit: (pid: string, aptId: string) => {
       if (pid === currentProjectId) { openJobRef.current(aptId); return; }
-      setUnitPeek({ pid, aptId });
+      // Switch FIRST — the switch clears pendingFocus as part of arriving
+      // somewhere new, so the intent goes in afterwards (the settled order).
+      setCurrentProject(pid);
+      setPendingFocus({ kind: 'apartment', id: aptId });
+      navigate(pid === 'general' ? '/jobs' : '/project');
     },
   }), [apartments, allStages, contractorAssignments, contractors, contractorPhotos, activityLogs,
        users, canvasElements]);
@@ -7294,23 +7295,6 @@ export function GeneralJobsPage() {
           jobIds={widgetList.jobIds}
           onOpenJob={id => openJobRef.current(id)}
           onClose={() => setWidgetList(null)}
-        />
-      )}
-
-      {/* ── A unit in ANOTHER workspace, peeked at without leaving this one ── */}
-      {unitPeek && (
-        <UnitPeek
-          pid={unitPeek.pid}
-          aptId={unitPeek.aptId}
-          onClose={() => setUnitPeek(null)}
-          onOpenFull={() => {
-            const { pid, aptId } = unitPeek;
-            setUnitPeek(null);
-            // The switch clears pendingFocus, so the intent goes in afterwards.
-            if (pid !== currentProjectId) setCurrentProject(pid);
-            setPendingFocus({ kind: 'apartment', id: aptId });
-            navigate(pid === 'general' ? '/jobs' : '/project');
-          }}
         />
       )}
 

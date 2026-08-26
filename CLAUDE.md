@@ -4875,3 +4875,21 @@ every ancestor is `pointer-events-none` — the move/up handlers must sit ON
 the grips, not on the frame body. The label moved right of the grip and says
 "grip moves · corner resizes". `tvframe.mjs` asserts the click-through with
 `elementFromPoint` at the frame's centre and drags by the grip.
+
+---
+
+# v2 — OWNER REVERSAL (2026-08-26): a foreign unit opens the FULL drawer
+
+Supersedes the round-29 peek ruling, in his words: "The full pop up of the
+apartment should show — take me to that workspace to show it." Tapping a
+unit that belongs to another workspace — a Building Progress cell, a weekly-
+notebook card or task chip, a unit card — now travels there and opens the
+real ApartmentDetailDrawer in ONE tap: `openUnit` (board ctx and dashboard
+ctx) does setCurrentProject → setPendingFocus({kind:'apartment'}) → navigate,
+the settled switch-then-intent order; the diagram and the board both open
+the drawer from that intent (goToHit's non-reveal path). `UnitPeek.tsx` is
+DELETED with its state and `[data-unit-peek]`/`[data-peek-open-full]` hooks;
+round21 / round23 / round29 / boardsize re-encode the new contract (round29
+walks home through the header before its Back-button section). The portal
+and the TV still pass a no-op openUnit — a stray tap there must never switch
+workspace.

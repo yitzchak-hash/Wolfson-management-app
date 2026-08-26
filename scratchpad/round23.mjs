@@ -179,34 +179,19 @@ check(!mics.box, 'a section box does NOT offer the mic');
 // ── 6 · a foreign unit opens as a PEEK and the board stays put ─────────────
 // `button.w-full` is the card's own face — a bare `button` first-matches the
 // node's floating action strip, which renders before the widget's content.
+// OWNER REVERSAL (2026-08-26): the peek is gone — one click on a foreign
+// unit card travels to its workspace and opens the FULL drawer there.
 await page.locator('[data-node-id="CE-unit"] button.w-full').first().evaluate(el => el.click());
-await page.waitForTimeout(600);
-const peek = await page.evaluate(() => {
-  const p = document.querySelector('[data-unit-peek]');
-  return {
-    open: !!p, path: location.pathname,
-    text: p ? p.textContent : '',
-  };
-});
-check(peek.open && peek.path === '/jobs', 'clicking the unit card opens a peek ON the job board', peek.path);
-check(/Katz/.test(peek.text) && /Piping/.test(peek.text) && /Fix the VRF/.test(peek.text),
-  'the peek shows the unit: name, stage and its open task', peek.text.slice(0, 80));
-await page.keyboard.press('Escape');
-await page.waitForTimeout(400);
-const closed = await page.evaluate(() => ({
-  gone: !document.querySelector('[data-unit-peek]'), path: location.pathname,
-}));
-check(closed.gone && closed.path === '/jobs', 'Escape closes the peek and you are still on the board');
-// The one button that DOES travel.
-await page.locator('[data-node-id="CE-unit"] button.w-full').first().evaluate(el => el.click());
-await page.waitForTimeout(500);
-await page.locator('[data-peek-open-full]').click();
-await page.waitForTimeout(1500);
+await page.waitForTimeout(2800);
 const travelled = await page.evaluate(() => ({
   path: location.pathname, pid: localStorage.getItem('active_project'),
+  drawer: document.querySelectorAll('.drawer-panel').length,
+  peek: !!document.querySelector('[data-unit-peek]'),
 }));
 check(travelled.path === '/project' && travelled.pid === 'wolfson',
-  '"Open in Wolfson" travels there on purpose', JSON.stringify(travelled));
+  'clicking the unit card travels to its workspace', JSON.stringify(travelled));
+check(travelled.drawer > 0 && !travelled.peek,
+  'and opens the FULL drawer there — no peek window');
 await ctx.close();
 
 // ════ Context 2: TV settings — the shape buttons and the picker ════════════

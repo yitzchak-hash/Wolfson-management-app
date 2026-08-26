@@ -62,19 +62,26 @@ const pid = () => page.evaluate(() => localStorage.getItem('active_project'));
 const card = page.locator('[data-node-id="CE-rota"] .planner-card').first();
 check((await card.innerText()).includes('Artzi'), 'the Wolfson card resolves on the notebook');
 await card.click();
-await page.waitForTimeout(900);
-check(await page.locator('[data-peek-open-full]').count() === 1,
-  'clicking it opens the PEEK, not a journey');
-check((await pid()) === 'general', 'the workspace did not switch', await pid());
-check(page.url().includes('/jobs'), 'still standing on the board');
-const peekText = await page.evaluate(() => document.body.innerText);
-check(peekText.includes('Artzi') && peekText.includes('3 Wolfson St'),
-  "the peek shows the unit's snapshot");
+await page.waitForTimeout(2800);
+// OWNER REVERSAL (2026-08-26): the peek is gone — the click IS the journey:
+// it switches to the unit's workspace and opens the full apartment window.
+check((await pid()) === 'wolfson', 'clicking it travels to the unit\'s workspace', await pid());
+check(page.url().includes('/project'), 'and lands on the building page');
+check(await page.evaluate(() =>
+  document.querySelectorAll('.drawer-panel').length > 0 && !document.querySelector('[data-unit-peek]')),
+  'the FULL drawer is open — no peek window');
+check(await page.evaluate(() => document.body.innerText.includes('Artzi')),
+  'showing the unit itself');
+// Close the drawer and walk home through the header, so the next section
+// starts where it always did — standing on the Job Board.
 await page.keyboard.press('Escape');
-await page.waitForTimeout(400);
-check(await page.locator('[data-peek-open-full]').count() === 0
-  && page.url().includes('/jobs') && (await pid()) === 'general',
-  'closing the peek leaves you exactly where you were');
+await page.waitForTimeout(500);
+await page.locator('header button', { hasText: /Wolfson/ }).first().click();
+await page.waitForTimeout(500);
+await page.getByRole('menu').getByText(/Job Board/).first().click();
+await page.waitForTimeout(2200);
+check((await pid()) === 'general' && page.url().includes('/jobs'),
+  'the header brings you back to the board', `${await pid()} ${page.url()}`);
 
 // ── 2 · the browser back button returns to the workspace you SAW ────────────
 // Switch to Wolfson the way a person does — through the real header dropdown.

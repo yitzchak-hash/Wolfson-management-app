@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../data/store';
 import { WidgetListPopup } from '../components/board/WidgetListPopup';
-import { UnitPeek } from '../components/board/UnitPeek';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import {
@@ -84,9 +83,6 @@ export function DashboardPage() {
   const [storeOpen, setStoreOpen] = useState(false);
   const [arranging, setArranging] = useState(false);
   const [settingsFor, setSettingsFor] = useState<CanvasElement | null>(null);
-  /** A unit in ANOTHER workspace, opened as a peek — never a journey. */
-  const [unitPeek, setUnitPeek] = useState<{ pid: string; aptId: string } | null>(null);
-
   /**
    * The dashboard's own widgets.
    *
@@ -117,11 +113,13 @@ export function DashboardPage() {
       navigate(id === 'general' ? '/jobs' : '/project');
     },
     /**
-     * One unit in another workspace opens as a PEEK over its snapshot — the
-     * board's rule, now here too: clicking it must not carry you off the
-     * dashboard you are standing on. The peek's own "Open in …" button does
-     * the real travel (switch first, then the focus intent — the switch
-     * clears any pending focus as part of arriving somewhere new).
+     * OWNER REVERSAL (2026-08-26): a unit in another workspace opens the FULL
+     * drawer — the app travels to that workspace and shows it, markup and
+     * all. (This replaced the read-only peek, which was itself his earlier
+     * "stay where I'm at" ruling; his correction: "The full pop up of the
+     * apartment should show — take me to that workspace to show it.")
+     * Switch FIRST, intent after — the switch clears any pending focus as
+     * part of arriving somewhere new.
      */
     openUnit: (pid: string, aptId: string) => {
       if (pid === currentProjectId) {
@@ -129,7 +127,9 @@ export function DashboardPage() {
         navigate(currentProjectId === 'general' ? '/jobs' : '/project');
         return;
       }
-      setUnitPeek({ pid, aptId });
+      setCurrentProject(pid);
+      setPendingFocus({ kind: 'apartment', id: aptId });
+      navigate(pid === 'general' ? '/jobs' : '/project');
     },
     showList: (title: string, jobIds: string[]) => setWidgetList({ title, jobIds }),
   }), [apartments, sortedStages, liveAssignments, contractors, users,
@@ -790,23 +790,6 @@ export function DashboardPage() {
             ))}
           </div>
         </div>
-      )}
-
-      {unitPeek && (
-        <UnitPeek
-          pid={unitPeek.pid}
-          aptId={unitPeek.aptId}
-          onClose={() => setUnitPeek(null)}
-          onOpenFull={() => {
-            const { pid, aptId } = unitPeek;
-            setUnitPeek(null);
-            // The switch clears any pending focus — hand the intent over
-            // AFTER it, never before, or the unit never opens.
-            if (pid !== currentProjectId) setCurrentProject(pid);
-            setPendingFocus({ kind: 'apartment', id: aptId });
-            navigate(pid === 'general' ? '/jobs' : '/project');
-          }}
-        />
       )}
 
       {/* Modal */}

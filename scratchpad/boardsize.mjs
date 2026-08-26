@@ -105,21 +105,14 @@ check(cells.n === 12, `a cell per apartment (${cells.n})`);
 check(cells.text.every(t => t && /\d/.test(t)), `every cell carries its number (${JSON.stringify(cells.text)})`);
 check(cells.text.some(t => /Cohen/.test(t ?? '')), 'and the family name where there is one');
 
-// ROUND-6 CHANGE: clicking a cell from the JOB BOARD no longer travels — it
-// opens a read-only PEEK on /jobs, and only the peek's "Open in …" button
-// switches workspace. X-ing out of a foreign unit used to strand you in
-// Wolfson, which was the owner's complaint.
+// OWNER REVERSAL (2026-08-26): the peek is gone — clicking a Building
+// Progress cell travels to the building workspace and opens the FULL drawer
+// there in one press.
 await page.locator('[data-node-id="CE-bp"] button[title*="·"]').first().click();
-await page.waitForTimeout(800);
-const peeked = await page.evaluate(() => ({
-  path: location.pathname,
-  open: !!document.querySelector('[data-unit-peek]'),
-}));
-check(peeked.open && peeked.path === '/jobs',
-  `the click opens a PEEK and stays on the job board (${peeked.path})`);
-await page.locator('[data-peek-open-full]').click();
-await page.waitForTimeout(2200);
-check(page.url().includes('/project'), `the peek's Open button lands on the building workspace (${new URL(page.url()).pathname})`);
+await page.waitForTimeout(2800);
+check(await page.evaluate(() => !document.querySelector('[data-unit-peek]')),
+  'no peek window — the click is the journey');
+check(page.url().includes('/project'), `the click lands on the building workspace (${new URL(page.url()).pathname})`);
 const diag = await page.evaluate(() => {
   const d = JSON.parse(localStorage.getItem('wolfson_app_data') ?? '{}');
   return {
