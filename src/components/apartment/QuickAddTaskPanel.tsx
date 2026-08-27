@@ -10,6 +10,7 @@ import { contractorLoad, loadTooltip, loadColor } from '../../data/contractorLoa
 import { taskShareText, copyTaskShare } from '../../data/taskShare';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import { findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, isUploadBackendConfigured, extractFolderId } from '../../data/driveApi';
+import { TaskDaysPicker, daysFields } from '../tasks/TaskDaysPicker';
 
 const CAT_COLORS: Record<ContractorCategory, string> = {
   drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981',
@@ -54,6 +55,9 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
   }
   const [task, setTask] = useState('');
   const [dueDate, setDueDate] = useState('');
+  /** Every day the task will cover — the multi-day block, every form now. */
+  const [taskDays, setTaskDays] = useState<string[]>([]);
+  const [daysEpoch, setDaysEpoch] = useState(0);
   const [stageId, setStageId] = useState(apartment.currentStageId ?? '');
   const [priority, setPriority] = useState('');
   const [showForm, setShowForm] = useState(true);
@@ -162,13 +166,16 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
 
     setSaving(true);
     const made: ContractorAssignment = {
-      id: '',
+      // A real id, minted here, so the record kept for the share button IS the
+      // stored one. An empty '' placeholder used to survive the store's
+      // fields-last spread and the task saved with no id at all.
+      id: Math.random().toString(36).substr(2, 9) + Date.now().toString(36),
       createdAt: new Date().toISOString(),
       contractorId,
       apartmentId: apartment.id,
       buildingId: apartment.buildingId,
       taskDescription: task.trim(),
-      dueDate: dueDate || null,
+      ...daysFields(dueDate, taskDays),
       stageId: stageId || null,
       completedAt: null,
       createdBy: currentUser.id,
@@ -183,6 +190,8 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
     setTask('');
     setContractorId('');
     setDueDate('');
+    setTaskDays([]);
+    setDaysEpoch(e => e + 1);
     setPriority('');
     setAttachments([]);
     setAttachmentFiles([]);
@@ -629,6 +638,11 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                       onChange={e => setDueDate(e.target.value)}
                       className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                     />
+                    {/* The multi-day block — the same rules as the notebook's
+                        drop dialog, in every workspace and at every stage. */}
+                    <div className="col-span-2">
+                      <TaskDaysPicker key={daysEpoch} start={dueDate} onDaysChange={setTaskDays} />
+                    </div>
                     <select
                       value={priority}
                       onChange={e => setPriority(e.target.value)}

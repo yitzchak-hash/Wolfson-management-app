@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { BulkAddTaskModal } from '../components/apartment/BulkAddTaskModal';
 import { TaskCalendar, CalendarEvent } from '../components/tasks/TaskCalendar';
+import { TaskDaysPicker, daysFields } from '../components/tasks/TaskDaysPicker';
 import { ContractorAssignment, ContractorCategory, TaskAttachment, TaskPriority, getStageName, aptLabel, isCountableApartment } from '../types';
 import { Toast } from '../components/ui/Toast';
 import { printTable, printDot, printPill } from '../data/printing';
@@ -71,6 +72,9 @@ export function TasksPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [showBulkAdd, setShowBulkAdd] = useState(false);
   const [addForm, setAddForm] = useState({ contractorId: '', aptId: '', task: '', dueDate: '', stageId: '', priority: '' });
+  /** Every day the new task will cover — the shared multi-day block. */
+  const [addDays, setAddDays] = useState<string[]>([]);
+  const [addDaysEpoch, setAddDaysEpoch] = useState(0);
   const [addAttachments, setAddAttachments] = useState<TaskAttachment[]>([]);
   const [addUploadProgress, setAddUploadProgress] = useState<number | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
@@ -281,7 +285,7 @@ export function TasksPage() {
       apartmentId: addForm.aptId,
       buildingId: apt.buildingId,
       taskDescription: addForm.task.trim(),
-      dueDate: addForm.dueDate || null,
+      ...daysFields(addForm.dueDate, addDays),
       stageId: addForm.stageId || null,
       completedAt: null,
       createdBy: currentUser?.id ?? '',
@@ -293,6 +297,8 @@ export function TasksPage() {
       updateApartment(apt.id, { currentStageId: addForm.stageId }, currentUser);
     }
     setAddForm({ contractorId: '', aptId: '', task: '', dueDate: '', stageId: '', priority: '' });
+    setAddDays([]);
+    setAddDaysEpoch(e => e + 1);
     setAddAttachments([]);
     setShowAdd(false);
     onToast(s.taskAdded);
@@ -648,6 +654,11 @@ export function TasksPage() {
                 <option value="normal">{s.normalPriority}</option>
                 <option value="low">{s.lowPriority}</option>
               </select>
+            </div>
+            {/* The multi-day block — same rules as the notebook's drop
+                dialog, now on every form in every workspace. */}
+            <div className="mt-2">
+              <TaskDaysPicker key={addDaysEpoch} start={addForm.dueDate} onDaysChange={setAddDays} />
             </div>
             <textarea
               value={addForm.task}

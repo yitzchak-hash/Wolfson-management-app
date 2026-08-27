@@ -5181,3 +5181,35 @@ clock check now multiplies by the render scale, and its second clock grows
 in BOTH dimensions (the blink fix width-capped the row factor). storefull:
 84 cards, only the standing nobody-booked false positive. tvcrash green on
 the built bundle.
+
+---
+
+# v2 — "how many days" on every task form
+
+## One picker, every door (`src/components/tasks/TaskDaysPicker.tsx`)
+The multi-day arithmetic shipped inside the notebook's drop dialog and stayed
+there, so a task made any other way could only carry one date — which read to
+the owner as a PER-STAGE gap ("Geves needs days like installation has"). The
+real boundary was which FORM. `TaskDaysPicker` is the shared block — count
+stepper, per-stretch Friday (offered only when the run crosses one), the
+non-consecutive second stretch, the green day readout — rendered by the
+drawer's Add Task (`QuickAddTaskPanel`), the Tasks page's add form and
+`BulkAddTaskModal`, in every workspace and at every stage. It renders nothing
+until a start date is picked (a dateless task stays what it was), and
+`daysFields(start, days)` is the one write: >1 day → `{ dueDate: lastDay,
+days }` (the model's standing invariant), else the plain single-date task.
+Reset a host's picker by bumping its `key`. All the day rules stay in
+`taskDays.ts` — the picker only drives them.
+
+## The empty-id regression this round's harness caught
+`addContractorAssignment` keeps a caller-minted id (fields-last, the planner
+round's fix) — and QuickAddTaskPanel passed `id: ''` as a placeholder, which
+WON the spread: every task made through the drawer's quick-add stored and
+synced with NO id, so editing, completing or deleting it matched nothing.
+Two-sided fix: the store re-mints on a falsy id (`if (!a.id)`), and the panel
+mints a real id so the record it keeps for the share button IS the stored one.
+
+Harness: `scratchpad/taskdaysforms.mjs` (11 checks) — the Tasks page form and
+the drawer's quick-add each producing a task whose `days` array and
+last-day `dueDate` land in localStorage, plus the every-task-has-an-id guard.
+Dates derived from the real clock (next Monday), per the standing drift rule.

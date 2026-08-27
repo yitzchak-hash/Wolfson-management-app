@@ -30,6 +30,31 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-09-16',
+    title: 'A task can take days — from every form, in every workspace',
+    items: [
+      {
+        title: '"How many days" on every task form',
+        body: 'The day stepper that lived only in the weekly notebook\'s drop '
+          + 'dialog is now on the drawer\'s Add Task, the Tasks page\'s form '
+          + 'and the bulk modal — so a Geves job on the Job Board (or any '
+          + 'stage, anywhere) can be given its three days right where the '
+          + 'task is made. Same rules as the notebook: Saturday never counts, '
+          + 'Friday is offered only when the days pass one, and a '
+          + 'non-consecutive switch adds a second stretch. The green line '
+          + 'reads out exactly which days before you save.',
+        demo: 'tap',
+      },
+      {
+        title: 'And the days go everywhere the task goes',
+        body: 'A task made this way shows on every one of its days in the '
+          + 'worker\'s portal, on all the calendars, and on the weekly '
+          + 'notebook\'s squares for whoever it is assigned to.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2026-09-15',
     title: 'The widget store, tidied: one widget per job',
     items: [

@@ -6,6 +6,7 @@ import {
 import { Apartment, ContractorCategory, TaskAttachment, TaskPriority } from '../../types';
 import { useStore } from '../../data/store';
 import { VoiceRecorderButton, VoiceMemoPlayer } from '../ui/VoiceMemo';
+import { TaskDaysPicker, daysFields } from '../tasks/TaskDaysPicker';
 import { RecordedMemo } from '../../data/voiceMemo';
 import { contractorLoad } from '../../data/contractorLoad';
 import {
@@ -44,6 +45,9 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
   const [selectedAptIds, setSelectedAptIds] = useState<Set<string>>(new Set());
   const [buildingTab, setBuildingTab] = useState<BuildingTab>('all');
   const [priority, setPriority] = useState<TaskPriority | ''>('');
+  // The multi-day list, from the shared picker. Every apartment in the batch
+  // gets the same days — one plan of work, many units.
+  const [taskDays, setTaskDays] = useState<string[]>([]);
 
   // ── Attachments ───────────────────────────────────────────────────────────
   const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
@@ -245,7 +249,7 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
         apartmentId: apt.id,
         buildingId: apt.buildingId,
         taskDescription: task.trim(),
-        dueDate: dueDate || null,
+        ...daysFields(dueDate, taskDays),
         stageId: stageId || null,
         completedAt: null,
         createdBy: currentUser?.id ?? '',
@@ -519,6 +523,9 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                         />
                       </div>
                     </div>
+
+                    {/* How many days — the shared multi-day block */}
+                    <TaskDaysPicker start={dueDate} onDaysChange={setTaskDays} />
 
                     {/* Priority */}
                     <div>
