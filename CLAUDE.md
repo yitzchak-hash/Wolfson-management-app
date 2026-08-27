@@ -55,6 +55,18 @@ cloud-sync badge, dropping `persistentLocalCache` — are all in the tree).
 - **Serverless API**: `/api` folder at repo root — Vercel auto-deploys each `.js` file as a serverless function
 - **Environment variables**: Set in Vercel dashboard (Firebase config, Google service account, API key)
 
+## HARD LIMIT — at most 12 files in /api (Vercel Hobby)
+Vercel's Hobby plan allows **12 serverless functions per deployment**, and
+every `.js` file under `/api` is one. The 13th file turns EVERY deployment
+red at the platform step — while local `tsc && vite build` stays green,
+because the local build never touches `/api`. That is exactly how production
+silently stopped updating for a day (2026-08-26: `photos-cover.js` was the
+13th; the unused `health.js` gave up its slot, its report now lives at
+`GET /api/geocode?health=1`). **Adding a route means folding it into an
+existing one or retiring another first** — check with
+`node scratchpad/apilimit.mjs`, and glance at the Vercel deployments page
+after shipping: a red "Error" there with a green local build is this.
+
 ## Drive Upload Backend (Vercel API routes)
 - `/api/drive-session.js` — creates a Google Drive resumable upload session via service account; returns a one-time `uploadUrl` so the browser uploads the file directly to Drive (no bytes pass through Vercel)
 - `/api/folder.js` — finds or creates a Drive subfolder by name under a given parent folder ID
@@ -5102,6 +5114,212 @@ all four doors, and the portal sections now DERIVE their date expectations
 from the clock (badge wording, finish-early day names, finished-early
 strike) instead of pinning them — the harness was red at midnight the
 moment the container clock walked past its fixed seed dates.
+
+---
+
+# v2 — the widget dedupe (owner-approved, 2026-08-27, "all of it")
+
+## 94 widgets → 74, and the TV family dissolves
+The audit (the "One widget per job" artifact) found 38 widgets that were 17
+wearing two or three coats — mostly TV-prefixed big-type copies from before
+`WidgetSurface` reached the wall. All 17 merges built. The survivors and
+their new pencil switches:
+- **Coming up** (`due-today`): `window` today/tomorrow/week (absorbs
+  `week-ahead`; the wall's `tv-tomorrow` went to On site today instead —
+  it read the PLANNER, not the tasks, which the audit page had blurred).
+- **On site today** (`team-today`): `source` typed/planner/both + `day`
+  today/tomorrow (absorbs `tv-out-today`, `tv-tomorrow`; the planner body
+  is tvWidgets' exported `WhoIsOut`).
+- **Stages** (`stage-legend`): `look` legend/bars (absorbs `stage-funnel`,
+  `tv-stage-spread`).
+- **One stage** (`count-by-stage`): `show` number/ring (absorbs
+  `progress-ring`, keeping the ring's reached-share semantics).
+- **Latest photos** (`recent-photos`): `look` grid/one/wall (absorbs
+  `tv-photo`, `tv-photo-wall` — bodies exported from tvWidgets).
+- **Calendar** (`calendar-mini`): `shade` (absorbs `tv-month` as the
+  exported `MonthHeat`).
+- **Wall clock** (`clock`): `hebrew` + `holiday` switches (absorbs
+  `tv-clock`; `WallClock` takes flags).
+- **Workspace card** (`project-glance`): unset/`'this'` now draws the LIVE
+  WorkspaceCard of the current workspace (the old unset state was a "pick a
+  workspace" placeholder); any other id keeps the snapshot glance. Absorbs
+  `tv-workspace`.
+- **Workers' load** (`tv-load`): `show` all/one + contractor picker
+  (absorbs `contractor-load`).
+- **Finished** (`tv-done-today`): `period` today/week (absorbs
+  `tv-week-done`).
+- **Target** (`weekly-goal`): `asPct` percentage-slider mode (absorbs
+  `progress-bar`).
+- **Nobody's booked** (`nobody-booked`): `scope` stalled/never/both
+  (absorbs `tv-waiting`).
+- **On site without a plan** (`no-plan`): gained the folder/plan/neither
+  counts strip (absorbs `tv-drive`).
+- Straight retirements: `job-search` → `job-find` (two widgets literally
+  both named "Find a job"), `tv-late` → `overdue-list`, `tv-new` →
+  `recent-jobs`, `tv-feed` → `activity-feed`.
+tvWidgets.tsx now registers only the two survivors and EXPORTS the wall
+bodies the merged board widgets borrow — it imports only TYPES from
+widgets.tsx, so there is still no runtime cycle.
+
+## The alias system — nothing migrates, nothing breaks
+`src/data/widgetAliases.ts` (pure, no imports — three registries need it and
+two must not import each other): retired id → survivor + a `map` translating
+the old data bag into the survivor's options. The MAPPED values go first and
+the stored bag spreads over them, so a setting later changed through the
+pencil always wins. At the bottom of widgets.tsx every retired id is pushed
+into WIDGETS as a real entry (`retired: true`) spreading its survivor and
+rendering through `aliasedEl(el)` — so WIDGET_BY_ID, WidgetSurface's natural
+size, renderWidget and the wall needed ZERO call-site changes, and no
+Firestore echo or old backup can ever produce "Unknown widget". Rules:
+- **The store shelf filters `retired`** — nothing new is placed under an
+  old name; SHELF/WIDGET_PREVIEW entries for retired ids are gone.
+- **`WIDGET_FIELDS[retired] = WIDGET_FIELDS[survivor]`** (by reference — the
+  type/outline push loops guard on keys, so a shared array is extended
+  once), and NodeSettings READS values through `aliasedEl` while WRITING to
+  the raw bag: an old "Tomorrow" card's pencil shows the Window select
+  already on tomorrow.
+- **TV_ALLOWED lists the survivors AND the retired ids** (hardcoded there —
+  importing the alias table from tvWidgets would close a cycle).
+- **Deleting an absorbed def means deleting it** — the stage-funnel def was
+  folded into Stages but its original entry survived, so the shelf sold it
+  next to its own alias. The dedupe harness's shelf check is what caught it.
+
+Harness: `scratchpad/dedupe.mjs` (12 checks — eight retired ids drawing
+their survivors with translated settings, a survivor's new switch, the
+pencil-translation, and the shelf selling none of the twenty). Its traps are
+the standing ones: Frame UPPERCASES titles (match case-insensitively), and
+computed font-size stays LOCAL under WidgetSurface's transform — round24's
+clock check now multiplies by the render scale, and its second clock grows
+in BOTH dimensions (the blink fix width-capped the row factor). storefull:
+84 cards, only the standing nobody-booked false positive. tvcrash green on
+the built bundle.
+
+---
+
+# v2 — "how many days" on every task form
+
+## One picker, every door (`src/components/tasks/TaskDaysPicker.tsx`)
+The multi-day arithmetic shipped inside the notebook's drop dialog and stayed
+there, so a task made any other way could only carry one date — which read to
+the owner as a PER-STAGE gap ("Geves needs days like installation has"). The
+real boundary was which FORM. `TaskDaysPicker` is the shared block — count
+stepper, per-stretch Friday (offered only when the run crosses one), the
+non-consecutive second stretch, the green day readout — rendered by the
+drawer's Add Task (`QuickAddTaskPanel`), the Tasks page's add form and
+`BulkAddTaskModal`, in every workspace and at every stage. It renders nothing
+until a start date is picked (a dateless task stays what it was), and
+`daysFields(start, days)` is the one write: >1 day → `{ dueDate: lastDay,
+days }` (the model's standing invariant), else the plain single-date task.
+Reset a host's picker by bumping its `key`. All the day rules stay in
+`taskDays.ts` — the picker only drives them.
+
+## The empty-id regression this round's harness caught
+`addContractorAssignment` keeps a caller-minted id (fields-last, the planner
+round's fix) — and QuickAddTaskPanel passed `id: ''` as a placeholder, which
+WON the spread: every task made through the drawer's quick-add stored and
+synced with NO id, so editing, completing or deleting it matched nothing.
+Two-sided fix: the store re-mints on a falsy id (`if (!a.id)`), and the panel
+mints a real id so the record it keeps for the share button IS the stored one.
+
+Harness: `scratchpad/taskdaysforms.mjs` (11 checks) — the Tasks page form and
+the drawer's quick-add each producing a task whose `days` array and
+last-day `dueDate` land in localStorage, plus the every-task-has-an-id guard.
+Dates derived from the real clock (next Monday), per the standing drift rule.
+
+---
+
+# v2 — the TzviAir Goals embed
+
+## The goals board is a widget (`src/components/board/GoalsWidget.tsx`)
+The separate goals app at `https://tzviair-goals.vercel.app` (repo
+`yitzchak-hash/Tzviair-Goals` — reference only, never modified from here) is
+embedded through its OWN `widget.js`: the script is loaded once
+(module-level promise, cleared on error so retry works), `mount()` puts an
+auto-resizing iframe into the node, `destroy()` runs on unmount. Registered
+in all four places (MORE_WIDGETS id `goals` · WIDGET_FIELDS ·
+WIDGET_PREVIEW `{sample:1}` · SHELF "Counts and progress") plus TV_ALLOWED.
+
+Rules, each load-bearing:
+- **This codebase never touches `/api/goals`** — its POST replaces the whole
+  goals board with no auth, so a buggy host write could wipe real data. All
+  reads/writes happen inside the iframe; `interactive` is the sanctioned
+  lever, and it is forced OFF wherever `WidgetCtx.readOnly` is set (the
+  wall).
+- **view and interactive default by SURFACE**: a dashboard copy
+  (`el.board === DASHBOARD_BOARD`) opens as the compact read-only summary,
+  a board copy as the full interactive grid — both overridable in the
+  pencil ('' = automatic). `lang` follows `mainUiStrings.isRtl` unless set.
+- The iframe mounts `transparent, header:false` — Frame draws the title and
+  paints the panel; the widget's own logo row would be a box in a box.
+  `onState` counters draw a small badge line over the iframe.
+- `data.sample` (the shelf) draws canned tiles — no network on the store.
+- A failed script load shows an honest sentence with a working retry.
+
+## Seeded once, deleted forever
+Both surfaces seed one copy as a fixture (the bins' idiom): FIXED ids
+(`CE-goals-board` on the Job Board main board via `viewCentreSpot`,
+`CE-goals-dash` on the dashboard grid) so a Firestore echo overwrites, and
+`isTombstoned()` (now exported from store.ts) so a deleted one stays
+deleted. Two traps paid for here: **StrictMode runs a seeding effect twice
+in ONE commit on the same pre-add state** — without a `useRef` tried-flag
+the widget seeded twice under one fixed id; and the board's landed-signal is
+"the seeded bins exist", because a still-loading board and an empty one look
+identical.
+
+## The Goals page and the five styles
+`/goals` (`GoalsPage.tsx`) — the whole goals website as a full page: the
+interactive tile grid through the SAME `widget.js` door, the goals site's
+OWN header row on, live counters, an "open the site itself" link.
+**OWNER RULING (2026-08-27): there is NO sidebar tab for it.** The page is
+reached by clicking any host-drawn goals figure (ring/number/bar), and the
+wall gets its own door: a **Goals button on the TV bar, right of Dashboard,
+a small vertical line between the two** (`data-tv-goals`), opening
+`TvGoalsBoard` — module-level in TvPresentationPage (the declared-in-render
+trap), mounted `interactive: false` ALWAYS: the wall never edits.
+`navGoals` stays in MainUiStrings for the TV bar label.
+
+`data.style` on the widget — one widget, the look in the pencil (the dedupe
+round's own idiom): `board` · `summary` (the two iframe views) · `ring` ·
+`number` · `bar`. The host-drawn three still mount the widget HIDDEN,
+because `onState` is the one sanctioned channel for the counters — drawing
+from a direct `/api/goals` read is exactly what the contract forbids —
+and clicking a drawn figure opens `/goals`. Absent style defaults by
+surface (summary on the dashboard); legacy `data.view` is read the same
+way and never written again.
+
+Harness: `scratchpad/goalswidget.mjs` (20 checks) — tzviair-goals.vercel.app
+is STUBBED (no internet here): a fake `widget.js` implementing the
+documented mount() API that encodes its options into the iframe URL, which
+is what lets the harness read back what WE asked for. Its own trap:
+Playwright consults routes NEWEST-first, so the specific `/widget.js` route
+must be registered AFTER the `/widget*` page route or scripts get HTML
+("Unexpected token '<'"). Live end-to-end against the real goals app needs
+production eyes-on. No CSP anywhere in this app, so no header changes.
+
+
+---
+
+# v2 — the crash screen, and the corner-drag hunt
+
+## A crash says what broke (`src/components/ui/CrashScreen.tsx`)
+The owner's report was "dragging to a corner makes the site crash" — and a
+React render error unmounts the whole tree, so the only witness was a white
+page. `CrashScreen` is an error boundary around the entire app (App.tsx):
+it shows the error's own message, the head of its stack and the component
+stack, with Reload and Copy-the-details buttons, bilingual reassurance that
+nothing is lost. Deliberately store-free and dependency-free — the store may
+be the thing that crashed. Every future "it crashed" report becomes an
+exact sentence.
+
+## The hunt itself (unreproduced — the tools are committed)
+`scratchpad/cornerdrag.mjs` / `cornerdrag2.mjs` replay HIS real board
+(fetched to /tmp, never the repo) and drag tiles, nodes, the TV frame's
+grip and corner, dashboard cards and widget corner-resizes into every
+viewport corner with edge-auto-pan dwell — no crash under dev or the
+production bundle. Noted on the way: the TV dashboard's add-widget writes
+`z: Date.now()` (the giant timestamp z values on his elements — harmless,
+TvDashboard only sorts by z). If the crash recurs, the CrashScreen's copied
+text is the next step.
 
 ---
 

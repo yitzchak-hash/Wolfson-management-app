@@ -49,7 +49,9 @@ await ctx.addInitScript(() => {
       { id: 'CE-under', type: 'note', x: 60, y: 320, w: 340, h: 200, text: 'underneath', color: '#fef9c3' },
       { id: 'CE-wc1', type: 'widget', widget: 'world-clocks', x: 470, y: 120, w: 210, h: 165,
         text: '', color: '#ffffff', data: { cities: ['il', 'ny', 'lon', 'sha'] } },
-      { id: 'CE-wc2', type: 'widget', widget: 'world-clocks', x: 720, y: 120, w: 210, h: 430,
+      // Bigger in BOTH dimensions: since the TV blink fix the row factor is
+      // width-capped, so height alone deliberately no longer grows the type.
+      { id: 'CE-wc2', type: 'widget', widget: 'world-clocks', x: 720, y: 120, w: 420, h: 430,
         text: '', color: '#ffffff', data: { cities: ['il', 'ny', 'lon', 'sha'] } },
       { id: 'CE-link', type: 'widget', widget: 'link', x: 980, y: 120, w: 185, h: 90,
         text: '', color: '#ffffff', data: { label: 'Deals board', url: 'https://crm.zoho.com/x' } },
@@ -125,15 +127,20 @@ check(await page.evaluate(() => !document.querySelector('[data-search-overlay]')
 
 // ── 2 · world clocks: taller widget, bigger type ───────────────────────────
 const clockFonts = await page.evaluate(() => {
+  // REAL pixels, not computed font-size: under WidgetSurface's transform the
+  // computed size stays in local px (the ScreenReport rule), so a visually
+  // doubled widget reads as unchanged unless the render scale is applied.
   const size = id => {
     const node = document.querySelector(`[data-node-id="${id}"]`);
     const span = [...node.querySelectorAll('span')].find(s => (s.textContent || '').trim() === 'Israel');
-    return span ? parseFloat(getComputedStyle(span).fontSize) : 0;
+    if (!span) return 0;
+    const k = span.getBoundingClientRect().height / (span.offsetHeight || 1);
+    return parseFloat(getComputedStyle(span).fontSize) * k;
   };
   return { natural: size('CE-wc1'), tall: size('CE-wc2') };
 });
 check(clockFonts.natural > 0 && clockFonts.tall > clockFonts.natural * 1.5,
-  'the taller clock widget draws its cities in bigger type', JSON.stringify(clockFonts));
+  'the bigger clock widget draws its cities in bigger type', JSON.stringify(clockFonts));
 const clockFits = await page.evaluate(() => {
   const node = document.querySelector('[data-node-id="CE-wc2"]');
   const r = node.getBoundingClientRect();

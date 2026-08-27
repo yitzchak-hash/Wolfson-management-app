@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useStore } from '../data/store';
+import { useStore, isTombstoned } from '../data/store';
 import { WidgetListPopup } from '../components/board/WidgetListPopup';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
@@ -99,6 +99,31 @@ export function DashboardPage() {
       .sort((a, b) => (a.z ?? 0) - (b.z ?? 0)),
     [canvasElements],
   );
+
+  /**
+   * The Goals panel appears on the dashboard once, by itself — the compact
+   * summary view (the widget defaults to it from `el.board`). The board's
+   * seeding rules exactly: fixed id so a Firestore echo overwrites, the
+   * tombstone check so a deleted one stays deleted, and it waits for the
+   * workspace to have landed rather than seeding into a still-loading store.
+   */
+  const goalsSeedTried = useRef(false);
+  useEffect(() => {
+    if (!allApartments.length) return;
+    if (dashWidgets.some(e => e.widget === 'goals')) return;
+    if (isTombstoned('CE-goals-dash')) return;
+    // StrictMode runs the effect twice in one commit on the same pre-add
+    // state — the board's seed duplicated without this guard.
+    if (goalsSeedTried.current) return;
+    goalsSeedTried.current = true;
+    addCanvasElement({
+      addedAt: new Date().toISOString(),
+      id: 'CE-goals-dash', type: 'widget', widget: 'goals', board: DASHBOARD_BOARD,
+      x: 0, y: 0, w: 400, h: 340, z: dashWidgets.length,
+      text: '', color: '#ffffff', data: {},
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allApartments.length, dashWidgets]);
 
   const dashCtx: WidgetCtx = useMemo(() => ({
     jobs: apartments.filter(a => isCountableApartment(a)),

@@ -26,6 +26,11 @@ function useNavItems() {
     isGeneral
       ? { to: '/jobs',     icon: Briefcase,       label: s.jobsNavLabel }
       : { to: '/project',  icon: Building2,       label: s.navProject },
+    /**
+     * No Goals tab here — the owner's ruling: the goals page lives on the TV
+     * bar beside its Dashboard button, and on a computer the goals widget's
+     * drawn styles open /goals. The route stands; the rail stays clean.
+     */
     { to: '/dashboard',        icon: LayoutDashboard, label: s.navDashboard },
     { to: '/project-calendar', icon: CalendarDays,    label: s.navCalendar },
     { to: '/tasks',            icon: ClipboardList,   label: s.navTasks },

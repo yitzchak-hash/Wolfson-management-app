@@ -70,8 +70,15 @@ export function TvPickMenu({ anchor, ignore, current, onPick, onHide, onClose }:
       if (ignore.current?.contains(t)) return;
       onClose();
     };
+    // Panels close on Escape — the standing rule; this menu only had the
+    // outside-press close, so Escape left it standing.
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('pointerdown', down);
-    return () => window.removeEventListener('pointerdown', down);
+    window.addEventListener('keydown', key);
+    return () => {
+      window.removeEventListener('pointerdown', down);
+      window.removeEventListener('keydown', key);
+    };
   }, [ignore, onClose]);
 
   const stored = bag.tvScreens;

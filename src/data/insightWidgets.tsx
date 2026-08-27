@@ -106,22 +106,35 @@ function NobodyBooked({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
   const booked = jobsOnPlanners(c.boardElements ?? storeElements);
   const limit = Number(d(el).limit) || 20;
 
-  // "Mid-job" means somebody has started it: a stage is set and it is not at
-  // the last one. A job nobody has touched yet is not neglected, it is queued.
+  /**
+   * Two moments in a job's life where nobody is on it, and a scope switch
+   * between them (the wall's "Waiting on us" folded in here):
+   * - `stalled` — "mid-job" means somebody has started it: a stage is set and
+   *   it is not at the last one. The original answer. A job nobody has
+   *   touched yet is not neglected, it is queued — unless you ask for it:
+   * - `never` — no stage at all and no open task: nobody has picked it up.
+   * - `both` — either.
+   */
+  const scope = String(d(el).scope || 'stalled');
   const lastStage = c.stages[c.stages.length - 1]?.id;
+  const noTask = (j: { id: string }) =>
+    !c.assignments.some(a => a.apartmentId === j.id && !a.completedAt);
+  const stalled = (j: { currentStageId: string | null; id: string }) =>
+    !!j.currentStageId && j.currentStageId !== lastStage && !booked.has(j.id) && noTask(j);
+  const never = (j: { currentStageId: string | null; id: string }) =>
+    !j.currentStageId && noTask(j);
   const list = liveJobs(c).filter(j =>
-    j.currentStageId
-    && j.currentStageId !== lastStage
-    && !booked.has(j.id)
-    && !c.assignments.some(a => a.apartmentId === j.id && !a.completedAt));
+    scope === 'never' ? never(j) : scope === 'both' ? (never(j) || stalled(j)) : stalled(j));
 
+  const titleWord = scope === 'never' ? 'Waiting on us' : "Nobody's booked";
   return (
-    <Frame title={`Nobody's booked · ${list.length}`} icon={UserX} tone="#7c3aed">
+    <Frame title={`${titleWord} · ${list.length}`} icon={UserX} tone="#7c3aed">
       <Scroll>
         {list.length === 0 && <Empty good>Everything under way has somebody on it</Empty>}
         {list.slice(0, limit).map(j => (
           <MiniJob key={j.id} job={j} stages={c.stages} assignments={c.assignments}
-            onOpen={c.openJob} rtl={c.isRtl} sub="no task, not on a planner" />
+            onOpen={c.openJob} rtl={c.isRtl}
+            sub={j.currentStageId ? 'no task, not on a planner' : 'no stage, no task'} />
         ))}
       </Scroll>
     </Frame>
@@ -383,16 +396,52 @@ export const INSIGHT_WIDGETS: WidgetDef[] = [
         !j.plansPdfLink
         && c.assignments.some(a => a.apartmentId === j.id && !a.completedAt));
       const limit = Number(d(el).limit) || 20;
+      /**
+       * The wall's "Drive health" folded in here: its folder/plan/neither
+       * counts sit as a strip above the offender list — the count and the
+       * list it counts belong on one card (a number that opens its list is
+       * already the house rule).
+       */
+      const units = liveJobs(c);
+      const ready = units.filter(j => j.driveLink?.trim() && j.plansPdfLink?.trim()).length;
+      const part = units.filter(j => j.driveLink?.trim() && !j.plansPdfLink?.trim()).length;
+      const none = units.length - ready - part;
+      const total = Math.max(1, units.length);
+      const strip = [
+        { n: ready, c: '#16a34a', l: 'folder and plan' },
+        { n: part, c: '#d97706', l: 'folder only' },
+        { n: none, c: '#cbd5e1', l: 'neither' },
+      ];
       return (
         <Frame title={`No plan · ${list.length}`} icon={FileWarning} tone="#dc2626">
-          <Scroll>
-            {list.length === 0 && <Empty good>Every live job has its plan</Empty>}
-            {list.slice(0, limit).map(j => (
-              <MiniJob key={j.id} job={j} stages={c.stages} assignments={c.assignments}
-                onOpen={c.openJob} rtl={c.isRtl}
-                sub={j.driveLink ? 'folder set, no plan chosen' : 'no Drive folder either'} />
-            ))}
-          </Scroll>
+          <div className="h-full flex flex-col min-h-0">
+            <div className="flex-shrink-0 mb-1.5" data-drive-strip>
+              <div className="h-2 rounded-full overflow-hidden flex" style={{ backgroundColor: '#eef2f7' }}>
+                {strip.map(b => b.n > 0 && (
+                  <span key={b.l} title={`${b.l}: ${b.n}`}
+                    style={{ width: `${(b.n / total) * 100}%`, backgroundColor: b.c }} />
+                ))}
+              </div>
+              <div className="flex gap-2 mt-1">
+                {strip.map(b => (
+                  <span key={b.l} className="flex items-center gap-1 text-[8.5px] text-gray-400">
+                    <i className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: b.c }} />
+                    {b.l} <b className="tabular-nums text-gray-600">{b.n}</b>
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="flex-1 min-h-0">
+              <Scroll>
+                {list.length === 0 && <Empty good>Every live job has its plan</Empty>}
+                {list.slice(0, limit).map(j => (
+                  <MiniJob key={j.id} job={j} stages={c.stages} assignments={c.assignments}
+                    onOpen={c.openJob} rtl={c.isRtl}
+                    sub={j.driveLink ? 'folder set, no plan chosen' : 'no Drive folder either'} />
+                ))}
+              </Scroll>
+            </div>
+          </div>
         </Frame>
       );
     },

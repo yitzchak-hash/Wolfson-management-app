@@ -13,6 +13,7 @@ import { CountdownNode, StopwatchNode, ClipArtNode, StrokeLayer } from '../compo
 import { renderWidget, WidgetCtx } from '../data/widgets';
 import { TV_ALLOWED } from '../data/tvWidgets';
 import { TvDashboard } from '../components/board/TvDashboard';
+import { loadGoalsScript, GoalsMountHandle } from '../components/board/GoalsWidget';
 import { useOrientation } from '../data/useOrientation';
 import { WidgetStore } from '../components/board/WidgetStore';
 import { WidgetListPopup } from '../components/board/WidgetListPopup';
@@ -256,6 +257,49 @@ class WallGuard extends React.Component<{ children?: React.ReactNode }, { dead: 
     }
     return this.props.children;
   }
+}
+
+/**
+ * The goals board on the wall — the owner's placement: a Goals button on the
+ * TV bar right of Dashboard, a vertical line between the two. Mounted through
+ * the goals app's own widget.js exactly like the board widget, but ALWAYS
+ * read-only: the wall never edits, whatever any setting says. Module-level,
+ * not declared inside the page's render (the standing new-type-every-render
+ * trap — a nested component would remount the iframe on every wall tick).
+ */
+function TvGoalsBoard({ lang }: { lang: 'en' | 'he' }) {
+  const slotRef = useRef<HTMLDivElement | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
+  useEffect(() => {
+    let handle: GoalsMountHandle | null = null;
+    let cancelled = false;
+    loadGoalsScript()
+      .then(api => {
+        if (cancelled || !slotRef.current) return;
+        handle = api.mount(slotRef.current, {
+          view: 'board', lang, interactive: false,
+          transparent: false, header: true, link: false, height: 'auto',
+        });
+      })
+      .catch(() => { if (!cancelled) setFailed(true); });
+    return () => { cancelled = true; handle?.destroy(); };
+  }, [lang, retryTick]);
+  if (failed) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
+        <div className="text-lg font-bold text-slate-500">
+          {lang === 'he' ? 'לוח היעדים לא נטען.' : "Couldn't reach the goals board."}
+        </div>
+        <button data-goals-retry onClick={() => { setFailed(false); setRetryTick(t => t + 1); }}
+          className="px-4 py-2 rounded-xl text-sm font-bold text-white"
+          style={{ backgroundColor: '#1e3a5f' }}>
+          {lang === 'he' ? 'נסה שוב' : 'Try again'}
+        </button>
+      </div>
+    );
+  }
+  return <div ref={slotRef} data-goals-slot className="max-w-5xl mx-auto w-full px-6 py-4" />;
 }
 
 export function TvPresentationPage() {
@@ -789,6 +833,15 @@ export function TvPresentationPage() {
         {t('Dashboard', 'לוח בקרה')}
       </button>
 
+      {/* The owner's placement: Goals right of Dashboard, a small vertical
+          line separating the two buttons. */}
+      <span className="w-px h-6" style={{ backgroundColor: '#e2e8f0' }} />
+      <button data-tv-goals onClick={() => { setView('goals'); setOpenJob(null); }}
+        className={`${barBtn} px-3 py-1.5`}
+        style={view === 'goals' ? on : off}>
+        {t('Goals', 'יעדים')}
+      </button>
+
       <span className="w-px h-6 mx-1" style={{ backgroundColor: '#e2e8f0' }} />
 
       {/* Full screen, and the way back out — beside the views, as asked. */}
@@ -1287,6 +1340,28 @@ export function TvPresentationPage() {
             onClose={() => setTvStoreOpen(false)}
           />
         )}
+      </div>
+    );
+  }
+
+  // ── The goals board, full screen on the wall — read-only always ──
+  if (view === 'goals') {
+    return (
+      <div ref={setFrame} dir={isRtl ? 'rtl' : 'ltr'} style={frameStyle}
+        className="h-screen w-screen flex flex-col bg-slate-100 overflow-hidden">
+        {bar}
+        {exitFull}
+        {/* The one display-size wrapper, the dashboard's idiom: the scroller
+            stays INSIDE the zoom. */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <div className="overflow-y-auto widget-scroll" style={{
+            zoom: scale,
+            width: `${100 / scale}%`,
+            height: `${100 / scale}%`,
+          }}>
+            <TvGoalsBoard lang={lang} />
+          </div>
+        </div>
       </div>
     );
   }
