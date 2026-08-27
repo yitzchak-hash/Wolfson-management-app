@@ -31,7 +31,8 @@ const AREAS = [
   { key: 'A', title: 'The plan in the apartment window', state: 'done', link: PROPOSAL_A,
     blurb: 'Where the plan sits on each screen, and the row of tabs above it.',
     pins: [] },
-  { key: 'B', title: 'The building diagram on a tablet', state: 'next',
+  { key: 'B', title: 'The building diagram on a tablet', state: 'open',
+    link: 'https://claude.ai/code/artifact/3226a721-b537-4fdb-ad7f-4b38ce4e8151',
     blurb: 'The row of coloured stage bubbles, and three buildings squeezed side by side on a screen that is not wide enough for them.',
     pins: [
       { n: 3, crop: 'pincrop-3.png', where: 'iPad upright · building diagram',
@@ -59,7 +60,8 @@ const lockedHtml = LOCKED.map(d => `
   </div>`).join('');
 
 const stateTag = s => s === 'done' ? '<span class="tag good">Settled</span>'
-  : s === 'next' ? '<span class="tag wait">Next up</span>' : '<span class="tag wait">Queued</span>';
+  : s === 'open' ? '<span class="tag pin">Three options waiting for you</span>'
+  : '<span class="tag wait">Queued</span>';
 
 const areasHtml = AREAS.map(a => `
   <div class="card">
@@ -67,6 +69,7 @@ const areasHtml = AREAS.map(a => `
     <h2 style="margin-top:10px">Area ${a.key} — ${a.title}</h2>
     <p>${a.blurb}</p>
     ${a.state === 'done' ? `<p style="margin-top:8px"><strong>Approved.</strong> Three decisions locked above. <a href="${a.link}" style="color:var(--blue);font-weight:700">The proposal that got us there →</a></p>` : ''}
+    ${a.state === 'open' ? `<p style="margin-top:8px"><a href="${a.link}" style="color:var(--blue);font-weight:700">Open Proposal B — three options →</a></p>` : ''}
     ${a.pins.map(p => `
       <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
         <h3>Your note ${p.n} · <span style="font-weight:400;color:var(--muted);font-size:13px">${p.where}</span></h3>
@@ -83,7 +86,7 @@ const html = `${HEAD('UI Decisions')}
 
   <div class="card" style="border-left:4px solid var(--good)">
     <span class="tag good">Where things stand</span>
-    <p><strong>3 decisions locked · Area A settled.</strong> Area B is next — the building diagram on a tablet — then Area C, the worker’s Close job flow.</p>
+    <p><strong>3 decisions locked · Area A settled.</strong> Area B now has three options waiting for your pick. Area C — the worker’s Close job flow — comes after.</p>
   </div>
 
   <section>
