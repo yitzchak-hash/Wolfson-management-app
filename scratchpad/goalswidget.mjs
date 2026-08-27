@@ -162,6 +162,70 @@ const shelfCard = await page.evaluate(() => {
 });
 check(!!shelfCard && /sample data/.test(shelfCard) && /הושלמו/.test(shelfCard),
   'the shelf sells the Goals widget with canned tiles', (shelfCard || '').slice(0, 60));
+await page.keyboard.press('Escape');
+await page.waitForTimeout(600);
+
+// ── 6 · the Goals TAB — the whole site, beside Dashboard ───────────────────
+check(await page.locator('aside a[href="/goals"]').count() === 1,
+  'the sidebar carries a Goals tab');
+await page.locator('aside a[href="/goals"]').click();
+await page.waitForTimeout(1500);
+const goalsPage = await page.evaluate(() => ({
+  path: location.pathname,
+  mounted: !!document.querySelector('[data-goals-page] iframe[data-goals-iframe]'),
+  src: document.querySelector('[data-goals-page] iframe[data-goals-iframe]')?.getAttribute('src') ?? '',
+  badge: document.querySelector('[data-goals-page] [data-goals-badge]')?.textContent ?? '',
+}));
+check(goalsPage.path === '/goals' && goalsPage.mounted,
+  'the tab opens the full-page goals embed', JSON.stringify(goalsPage.path));
+check(/view=board/.test(goalsPage.src) && /interactive=1/.test(goalsPage.src) && !/title=0/.test(goalsPage.src),
+  'full interactive grid WITH the goals site\'s own header — the whole website', goalsPage.src);
+check(/3\/9/.test(goalsPage.badge), 'the page header carries the live counters', goalsPage.badge);
+
+// ── 7 · the three host-drawn styles (own seeded context — the standing
+//        flush-on-unload rule: a localStorage patch on a live page is
+//        overwritten, so the styles get a fresh context) ────────────────────
+const page2 = await ctx.newPage();
+await ctx.addInitScript(() => {
+  const d = JSON.parse(localStorage.getItem('general_app_data') || '{}');
+  if (!d.canvasElements) return;
+  if (!d.canvasElements.some(e => e.id === 'CE-g-ring')) {
+    d.canvasElements.push(
+      { id: 'CE-g-ring', type: 'widget', widget: 'goals', x: 60, y: 120, w: 200, h: 190, text: '', color: '#ffffff', data: { style: 'ring' } },
+      { id: 'CE-g-num', type: 'widget', widget: 'goals', x: 300, y: 120, w: 200, h: 140, text: '', color: '#ffffff', data: { style: 'number' } },
+      { id: 'CE-g-bar', type: 'widget', widget: 'goals', x: 540, y: 120, w: 240, h: 110, text: '', color: '#ffffff', data: { style: 'bar' } },
+    );
+    localStorage.setItem('general_app_data', JSON.stringify(d));
+  }
+});
+page2.on('pageerror', e => { console.log('PAGE2 ERROR', e.message); fails++; });
+await page2.goto(`${APP}/jobs`);
+await page2.waitForTimeout(3200);
+
+const styles = await page2.evaluate(() => {
+  const read = id => {
+    const node = document.querySelector(`[data-node-id="${id}"]`);
+    const frame = node?.querySelector('iframe[data-goals-iframe]');
+    return {
+      text: (node?.textContent ?? '').slice(0, 80),
+      // A host-drawn style keeps its mount HIDDEN — the counters channel only.
+      frameHidden: frame ? frame.offsetParent === null : null,
+    };
+  };
+  return { ring: read('CE-g-ring'), num: read('CE-g-num'), bar: read('CE-g-bar') };
+});
+check(/3\/9/.test(styles.ring.text) && /done/i.test(styles.ring.text) && styles.ring.frameHidden === true,
+  'the RING draws the live share, its mount hidden', JSON.stringify(styles.ring));
+check(/3\/9/.test(styles.num.text) && /goals done/i.test(styles.num.text) && styles.num.frameHidden === true,
+  'the BIG NUMBER draws completed/total', JSON.stringify(styles.num));
+check(/33%/.test(styles.bar.text) && /3\/9/.test(styles.bar.text) && styles.bar.frameHidden === true,
+  'the BAR draws the percentage and the counts', JSON.stringify(styles.bar));
+
+// A host-drawn figure is a door to the Goals tab.
+await page2.locator('[data-node-id="CE-g-ring"] [data-goals-open]').click();
+await page2.waitForTimeout(1200);
+check(await page2.evaluate(() => location.pathname) === '/goals',
+  'clicking a drawn figure opens the Goals tab');
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASS');
 await b.close();

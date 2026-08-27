@@ -430,12 +430,16 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
   goals: [
     title(),
     {
-      key: 'view', label: 'What it shows', kind: 'select',
+      key: 'style', label: 'Style', kind: 'select',
       options: [
-        { value: '', label: 'Automatic (board here, summary on the dashboard)' },
+        { value: '', label: 'Automatic (tiles here, summary on the dashboard)' },
         { value: 'board', label: 'The full tile grid' },
-        { value: 'dashboard', label: 'The compact summary' },
+        { value: 'summary', label: 'Summary strip' },
+        { value: 'ring', label: 'Progress ring' },
+        { value: 'number', label: 'Big number' },
+        { value: 'bar', label: 'Progress bar' },
       ],
+      hint: 'Ring, number and bar draw the live counters; clicking them opens the Goals tab.',
     },
     {
       key: 'interactive', label: 'Start and finish buttons', kind: 'select',

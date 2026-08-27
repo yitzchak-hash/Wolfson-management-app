@@ -1439,6 +1439,7 @@ export interface MainUiStrings {
   // Sidebar navigation
   navProject: string;
   navDashboard: string;
+  navGoals: string;
   navTasks: string;
   navAnalytics: string;
   navReports: string;
@@ -1999,6 +2000,7 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   isRtl: false,
   navProject: 'Project',
   navDashboard: 'Dashboard',
+  navGoals: 'Goals',
   navTasks: 'Tasks',
   navAnalytics: 'Analytics',
   navReports: 'Reports',
@@ -2551,6 +2553,7 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   isRtl: true,
   navProject: 'פרויקט',
   navDashboard: 'לוח בקרה',
+  navGoals: 'יעדים',
   navTasks: 'משימות',
   navAnalytics: 'ניתוח',
   navReports: 'דוחות',

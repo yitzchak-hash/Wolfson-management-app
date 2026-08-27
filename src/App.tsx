@@ -13,6 +13,7 @@ import { TvViewPage } from './pages/TvViewPage';
 import { TasksPage } from './pages/TasksPage';
 import { GeneralJobsPage } from './pages/GeneralJobsPage';
 import { JobListPage } from './pages/JobListPage';
+import GoalsPage from './pages/GoalsPage';
 import { GlobalCalendarPage } from './pages/GlobalCalendarPage';
 import { ProjectCalendarPage } from './pages/ProjectCalendarPage';
 import { TvPresentationPage } from './pages/TvPresentationPage';
@@ -82,6 +83,8 @@ export default function App() {
           <Route index element={<Navigate to="/jobs" replace />} />
           <Route path="project" element={<ProjectDiagramPage />} />
           <Route path="dashboard" element={<DashboardPage />} />
+          {/* The whole goals website, as a tab — computer only, never the TV */}
+          <Route path="goals" element={<GoalsPage />} />
           <Route path="tasks" element={<TasksPage />} />
           <Route path="calendar" element={<GlobalCalendarPage />} />
           {/* Per-project calendar (sidebar); /calendar stays the all-workspace one */}

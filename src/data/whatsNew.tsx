@@ -50,6 +50,16 @@ export const WHATS_NEW: WhatsNewEntry[] = [
           + 'language, and how many tiles to show.',
         demo: 'drag',
       },
+      {
+        title: 'A Goals tab, and five widget styles',
+        body: 'The whole goals website now has its own tab in the sidebar, '
+          + 'right after Dashboard — the full board with its timers, live, '
+          + 'without leaving the app. And the widget comes in five styles '
+          + 'from the pencil: the tile grid, the summary strip, a progress '
+          + 'ring, a big number, and a slim progress bar — the drawn ones '
+          + 'open the Goals tab when clicked.',
+        demo: 'tap',
+      },
     ],
   },
   {

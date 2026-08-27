@@ -5254,7 +5254,27 @@ the widget seeded twice under one fixed id; and the board's landed-signal is
 "the seeded bins exist", because a still-loading board and an empty one look
 identical.
 
-Harness: `scratchpad/goalswidget.mjs` (12 checks) — tzviair-goals.vercel.app
+## The Goals TAB and the five styles
+`/goals` (`GoalsPage.tsx`) — the whole goals website as a sidebar tab right
+after Dashboard, per the owner: the full interactive tile grid mounted
+through the SAME `widget.js` door, with the goals site's OWN header row on
+(this page wears that site's face; `link` off because we are standing on
+it), live counters in the page header, and an "open the site itself"
+external link. **Computer only — the TV is deliberately untouched** (the
+wall keeps the read-only widget). On the phone the tab leads the More sheet
+rather than the bar — putting it in the first five would push Tasks off,
+the documented rule. `navGoals` in MainUiStrings (both presets).
+
+`data.style` on the widget — one widget, the look in the pencil (the dedupe
+round's own idiom): `board` · `summary` (the two iframe views) · `ring` ·
+`number` · `bar`. The host-drawn three still mount the widget HIDDEN,
+because `onState` is the one sanctioned channel for the counters — drawing
+from a direct `/api/goals` read is exactly what the contract forbids —
+and clicking a drawn figure opens `/goals`. Absent style defaults by
+surface (summary on the dashboard); legacy `data.view` is read the same
+way and never written again.
+
+Harness: `scratchpad/goalswidget.mjs` (20 checks) — tzviair-goals.vercel.app
 is STUBBED (no internet here): a fake `widget.js` implementing the
 documented mount() API that encodes its options into the iframe URL, which
 is what lets the harness read back what WE asked for. Its own trap:
