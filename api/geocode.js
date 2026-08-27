@@ -47,6 +47,39 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
+
+  /**
+   * The old /api/health diagnostic lives here now, as GET /api/geocode?health=1.
+   * Vercel's Hobby plan allows at most 12 serverless functions per deployment,
+   * and the 13th file under /api silently turned EVERY deployment red while
+   * local builds stayed green — so health.js (which nothing in the app calls)
+   * gave up its slot. It reports only booleans, never secret values, and this
+   * route is already the unauthenticated one.
+   */
+  if (req.query && req.query.health) {
+    const saJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+    let serviceAccountValid = false;
+    let clientEmail = null;
+    if (saJson) {
+      try {
+        const parsed = JSON.parse(saJson);
+        serviceAccountValid = !!parsed.private_key && !!parsed.client_email;
+        clientEmail = parsed.client_email ?? null;
+      } catch { serviceAccountValid = false; }
+    }
+    return res.status(200).json({
+      ok: true,
+      hasServiceAccount: !!saJson,
+      serviceAccountValid,
+      clientEmail,
+      hasApiKey: !!process.env.API_KEY,
+      allowedOrigin: process.env.ALLOWED_ORIGIN || '(not set — defaults to *)',
+      vercelEnv: process.env.VERCEL_ENV || '(not set)',
+      nodeEnv: process.env.NODE_ENV || '(not set)',
+      vercelRegion: process.env.VERCEL_REGION || '(not set)',
+    });
+  }
+
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});

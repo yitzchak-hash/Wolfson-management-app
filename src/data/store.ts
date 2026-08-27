@@ -1949,6 +1949,11 @@ export const useStore = create<AppState>((set, get) => ({
     const a: ContractorAssignment = {
       id: generateId(), createdAt: new Date().toISOString(), ...fields,
     } as ContractorAssignment;
+    // Keeping a MINTED id must not keep an EMPTY one: the drawer's quick-add
+    // passes id '' as a placeholder, and fields-last let it win — every task
+    // it made stored (and synced) with no id at all, so editing, completing
+    // and deleting it matched nothing.
+    if (!a.id) a.id = generateId();
     set(state => ({ contractorAssignments: [...state.contractorAssignments, a] }));
     persist(get);
 

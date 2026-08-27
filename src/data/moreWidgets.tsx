@@ -13,6 +13,7 @@ import { MapWidget } from '../components/board/MapWidget';
 import { WeatherWidget } from '../components/board/WeatherWidget';
 import { TikTokWidget } from '../components/board/TikTokWidget';
 import { PhotosAlbumWidget } from '../components/board/PhotosAlbumWidget';
+import { GoalsWidget } from '../components/board/GoalsWidget';
 
 /**
  * The widgets whose render is a real component rather than a few lines.
@@ -137,6 +138,18 @@ export const MORE_WIDGETS: WidgetDef[] = [
     blurb: 'Paste a list of links and it plays through them. Shuffle, and move on by itself.',
     data: { seconds: 30, auto: true },
     render: (el, c) => <TikTokWidget el={el} c={c} />,
+  },
+  {
+    /**
+     * The company goals board, live from the separate goals app. An iframe
+     * embed through that app's own widget.js — this codebase never touches
+     * its data API (see GoalsWidget.tsx for the rule and why).
+     */
+    id: 'goals', rank: 30, name: 'Goals', category: 'live',
+    icon: Trophy, w: 340, h: 320,
+    blurb: 'The shared goals board, live — running timers, start and finish from the tiles.',
+    data: {},
+    render: (el, c) => <GoalsWidget el={el} c={c} />,
   },
   {
     id: 'btu-hp', rank: 18, name: 'BTU and horsepower', category: 'plan',

@@ -30,6 +30,106 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-09-17',
+    title: 'The goals board, on the board',
+    items: [
+      {
+        title: 'Our goals, live on the Job Board and the dashboard',
+        body: 'The shared TzviAir goals board now stands on the Job Board as '
+          + 'a widget — the full tiles with their running timers, and start '
+          + 'and finish work right from it. The dashboard carries a compact '
+          + 'read-only summary card with the progress bar and live counters. '
+          + 'Both update by themselves every few seconds.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'An ordinary widget, like any other',
+        body: 'Move it, resize it, put it on the TV wall (read-only there), '
+          + 'add more copies from the widget store, or remove it — removing '
+          + 'sticks, on every device. The pencil picks the view, the '
+          + 'language, and how many tiles to show.',
+        demo: 'drag',
+      },
+      {
+        title: 'Goals on the TV, and five widget styles',
+        body: 'The TV wall\'s top bar has a Goals button right beside '
+          + 'Dashboard — press it and the whole goals board fills the wall, '
+          + 'timers running, read-only. And the widget comes in five styles '
+          + 'from the pencil: the tile grid, the summary strip, a progress '
+          + 'ring, a big number, and a slim progress bar — clicking a drawn '
+          + 'one opens the full goals page.',
+        demo: 'tap',
+      },
+      {
+        title: 'A crash now says what broke',
+        body: 'If a screen ever crashes, instead of going blank it shows '
+          + 'exactly what went wrong, with a Reload button and a copy button '
+          + 'so the error\'s own words can be sent straight to whoever is '
+          + 'fixing it. Nothing is lost — the data is always saved.',
+        demo: 'sparkle',
+      },
+    ],
+  },
+  {
+    date: '2026-09-16',
+    title: 'A task can take days — from every form, in every workspace',
+    items: [
+      {
+        title: '"How many days" on every task form',
+        body: 'The day stepper that lived only in the weekly notebook\'s drop '
+          + 'dialog is now on the drawer\'s Add Task, the Tasks page\'s form '
+          + 'and the bulk modal — so a Geves job on the Job Board (or any '
+          + 'stage, anywhere) can be given its three days right where the '
+          + 'task is made. Same rules as the notebook: Saturday never counts, '
+          + 'Friday is offered only when the days pass one, and a '
+          + 'non-consecutive switch adds a second stretch. The green line '
+          + 'reads out exactly which days before you save.',
+        demo: 'tap',
+      },
+      {
+        title: 'And the days go everywhere the task goes',
+        body: 'A task made this way shows on every one of its days in the '
+          + 'worker\'s portal, on all the calendars, and on the weekly '
+          + 'notebook\'s squares for whoever it is assigned to.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
+    date: '2026-09-15',
+    title: 'The widget store, tidied: one widget per job',
+    items: [
+      {
+        title: 'Twenty fewer widgets, nothing lost',
+        body: 'Thirty-eight of the store\'s widgets were seventeen widgets '
+          + 'wearing two or three coats — most of them big-type TV copies from '
+          + 'before the wall learned to scale. They are merged now: everything '
+          + 'an absorbed widget could show survives as a switch in the '
+          + 'surviving widget\'s pencil, and every widget already placed on '
+          + 'any board keeps working exactly as it was.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'One widget, one switch',
+        body: 'Due today, Tomorrow and Week ahead became one “Coming up” with '
+          + 'the window in its pencil. The three stage pictures became '
+          + '“Stages” (legend or bars) and “One stage” (number or ring). The '
+          + 'three photo widgets became one “Latest photos” with three looks. '
+          + 'The clock gained Hebrew-date and next-holiday switches, the '
+          + 'Calendar gained load shading, and “On site today” can now read '
+          + 'the weekly notebook live.',
+        demo: 'tap',
+      },
+      {
+        title: 'One "Find a job", the forgiving one',
+        body: 'There were two widgets with the identical name. The one that '
+          + 'finds Hebrew names typed in English — and forgives a spelling '
+          + 'that is nearly right — is the one that stays.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2026-09-14',
     title: 'A calmer touch screen, numbers that open, and the reel grows up',
     items: [

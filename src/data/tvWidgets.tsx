@@ -1,32 +1,28 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Users, AlertTriangle, CalendarCheck, CalendarDays, BarChart3, Camera, Images,
-  Activity, HardHat, Inbox, HardDrive, Sparkles, CheckCircle2, Clock3, Building,
-} from 'lucide-react';
+import { HardHat, CheckCircle2 } from 'lucide-react';
 import {
   Apartment, CanvasElement, Stage, isCountableApartment, getStageName, personColor,
-  projectColor, isCountableApartment as counts,
+  projectColor,
 } from '../types';
 import { WidgetCtx, WidgetDef } from './widgets';
 import { useStore, loadAllProjectsTaskData, loadProjectSnapshot } from './store';
 import { hebrewLabel, holidaysOn } from './hebrewDates';
 import { PlannerData, personOf, iso } from '../components/board/PlannerWidget';
 import { daysOf } from './taskDays';
-import { describeActivity } from './activityText';
-import { ActivitySentence } from '../components/ui/ActivitySentence';
 
 /**
- * The widgets built for the wall.
+ * The wall pieces.
  *
- * Every one reads data the app already holds — no new field, no new collection,
- * no backend call. They are ordinary entries in the same registry the board
- * uses, so each inherits the settings pencil, the outline, the colour, the
- * scaling and the syncing without a line for any of it.
- *
- * What makes them WALL widgets rather than board ones is only how they are
- * drawn: big figures, few words, and nothing that needs a pointer. A keypad or
- * a note pad makes no sense on a screen nobody touches, which is what
- * TV_WIDGETS below is for.
+ * This file used to register SIXTEEN widgets — big-type copies of ordinary
+ * board widgets, built when the wall drew everything at desk size. Since the
+ * wall learned to scale every widget through WidgetSurface, the size reason
+ * died, and the owner's 2026-08-27 dedupe folded fourteen of them into their
+ * ordinary twins (see widgetAliases.ts — every old id still draws). What
+ * remains here is what genuinely has no twin: the two surviving registrations
+ * (Workers' load, Finished) and the wall-grade BODIES the merged board
+ * widgets borrow — WhoIsOut, WorkspaceCard, LatestPhoto, PhotoWall,
+ * WallClock, MonthHeat. widgets.tsx imports these; this file imports only
+ * TYPES from widgets.tsx, so there is no runtime cycle.
  */
 
 const d = (el: CanvasElement) => (el.data ?? {}) as Record<string, unknown>;
@@ -92,7 +88,11 @@ function plannerRows(canvasElements: CanvasElement[], dayIso: string) {
   return out;
 }
 
-function WhoIsOut({ c, dayIso, label, tone }: {
+/**
+ * Who is out, read off the weekly notebook. Exported: the merged
+ * "On site today" board widget draws this for its planner source.
+ */
+export function WhoIsOut({ c, dayIso, label, tone }: {
   c: WidgetCtx; dayIso: string; label: string; tone?: string;
 }) {
   const storeElements = useStore(st => st.canvasElements);
@@ -128,257 +128,27 @@ function WhoIsOut({ c, dayIso, label, tone }: {
 }
 
 export const TV_WIDGETS: WidgetDef[] = [
-  // ── 1 · a workspace, whole ────────────────────────────────────────────────
+  // ── Workers' load — one worker, or everybody as bars ──────────────────────
   {
-    id: 'tv-workspace', rank: 1, name: 'Workspace card', category: 'live', icon: Building,
-    w: 420, h: 260,
-    blurb: 'One workspace: units, how far along, open, late, done today — and every unit as a '
-      + 'coloured square so the shape of the job reads across the room.',
-    data: {},
-    render: (el, c) => <WorkspaceCard el={el} c={c} />,
-  },
-
-  // ── 2 · who is out today ──────────────────────────────────────────────────
-  {
-    id: 'tv-out-today', rank: 2, name: 'Out today', category: 'live', icon: Users, w: 400, h: 230,
-    blurb: 'Who is on which job today, from the planner, in their own colour.',
-    render: (_el, c) => <WhoIsOut c={c} dayIso={todayIso()} label="Out today" />,
-  },
-
-  // ── 3 · running late ──────────────────────────────────────────────────────
-  {
-    id: 'tv-late', rank: 3, name: 'Running late', category: 'live', icon: AlertTriangle,
-    w: 300, h: 180,
-    blurb: 'One big number, and the worst one by name.',
-    render: (_el, c) => {
-      const today = todayIso();
-      const late = c.assignments
-        .filter(a => !a.completedAt && a.dueDate && a.dueDate < today)
-        .sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? ''));
-      const worst = late[0];
-      const job = worst ? c.jobs.find(j => j.id === worst.apartmentId) : undefined;
-      const days = worst
-        ? Math.floor((Date.now() - new Date(worst.dueDate!).getTime()) / 86_400_000)
-        : 0;
-      return (
-        <Card label="Running late" tone={late.length ? '#b4342a' : '#12735a'}>
-          <Figure value={late.length} tone={late.length ? '#b4342a' : '#12735a'}
-            sub={worst ? `worst is ${days}d · ${job?.displayName ?? 'a job'}` : 'nothing overdue'} />
-        </Card>
-      );
-    },
-  },
-
-  // ── 4 · finished this week ────────────────────────────────────────────────
-  {
-    id: 'tv-week-done', rank: 4, name: 'Finished this week', category: 'live', icon: BarChart3,
-    w: 340, h: 200,
-    blurb: 'A bar for each day of this week, today picked out.',
-    render: (_el, c) => {
-      const start = new Date();
-      start.setDate(start.getDate() - start.getDay());
-      const days = Array.from({ length: 7 }, (_, i) => {
-        const dt = new Date(start); dt.setDate(dt.getDate() + i);
-        const key = iso(dt);
-        return {
-          key,
-          label: dt.toLocaleDateString(undefined, { weekday: 'narrow' }),
-          n: c.assignments.filter(a => a.completedAt?.startsWith(key)).length,
-          today: key === todayIso(),
-        };
-      });
-      const top = Math.max(1, ...days.map(x => x.n));
-      return (
-        <Card label="Finished this week">
-          <div className="h-full flex items-end gap-2">
-            {days.map(x => (
-              <div key={x.key} className="flex-1 flex flex-col items-center gap-1 h-full">
-                <span className="flex-1 w-full flex items-end">
-                  <span className="w-full rounded-t-md" title={`${x.n}`}
-                    style={{ height: `${(x.n / top) * 100}%`, minHeight: 3,
-                             backgroundColor: x.today ? '#12735a' : '#4aa8d8' }} />
-                </span>
-                <span className="text-[11px] text-slate-400">{x.label}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      );
-    },
-  },
-
-  // ── 5 · tomorrow ──────────────────────────────────────────────────────────
-  {
-    id: 'tv-tomorrow', rank: 5, name: 'Tomorrow', category: 'live', icon: CalendarCheck,
-    w: 400, h: 230,
-    blurb: 'The same as Out today, a day ahead — so the evening shift can see it.',
-    render: (_el, c) => {
-      const t = new Date(); t.setDate(t.getDate() + 1);
-      return <WhoIsOut c={c} dayIso={iso(t)} label="Tomorrow" tone="#7c3aed" />;
-    },
-  },
-
-  // ── 6 · stage spread ──────────────────────────────────────────────────────
-  {
-    id: 'tv-stage-spread', rank: 6, name: 'Stage spread', category: 'live', icon: BarChart3,
-    w: 380, h: 230,
-    blurb: 'How the workspace is spread across its stages, as one stacked bar and a key.',
-    render: (_el, c) => {
-      const units = c.jobs.filter(isCountableApartment);
-      const rows = c.stages.filter(s => s.active !== false).map(s => ({
-        s, n: units.filter(u => u.currentStageId === s.id).length,
-      }));
-      const none = units.filter(u => !u.currentStageId).length;
-      const total = Math.max(1, units.length);
-      return (
-        <Card label="Where everything is">
-          <div className="h-full flex flex-col gap-3">
-            <div className="h-5 rounded-full overflow-hidden flex flex-shrink-0" style={{ backgroundColor: '#eef2f7' }}>
-              {rows.map(({ s, n }) => n > 0 && (
-                <span key={s.id} title={`${s.name}: ${n}`}
-                  style={{ width: `${(n / total) * 100}%`, backgroundColor: s.color }} />
-              ))}
-            </div>
-            <div className="flex-1 min-h-0 overflow-auto widget-scroll grid gap-1.5 content-start">
-              {rows.filter(r => r.n > 0).map(({ s, n }) => (
-                <div key={s.id} className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
-                  <span className="text-[13px] text-slate-500 flex-1 truncate">{s.name}</span>
-                  <b className="text-[14px] tabular-nums text-slate-700">{n}</b>
-                </div>
-              ))}
-              {none > 0 && (
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-slate-300 flex-shrink-0" />
-                  <span className="text-[13px] text-slate-400 flex-1">Not started</span>
-                  <b className="text-[14px] tabular-nums text-slate-500">{none}</b>
-                </div>
-              )}
-            </div>
-          </div>
-        </Card>
-      );
-    },
-  },
-
-  // ── 7 · this month ────────────────────────────────────────────────────────
-  {
-    id: 'tv-month', rank: 7, name: 'This month', category: 'live', icon: CalendarDays, w: 320, h: 250,
-    blurb: 'The month as a grid, each day shaded by how much is due on it.',
-    render: (_el, c) => {
-      const now = new Date();
-      const first = new Date(now.getFullYear(), now.getMonth(), 1);
-      const days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-      const counts = new Map<number, number>();
-      const bump = (isoDay: string | undefined) => {
-        if (!isoDay) return;
-        const dt = new Date(`${isoDay}T00:00:00`);
-        if (Number.isNaN(dt.getTime())
-          || dt.getMonth() !== now.getMonth() || dt.getFullYear() !== now.getFullYear()) return;
-        counts.set(dt.getDate(), (counts.get(dt.getDate()) ?? 0) + 1);
-      };
-      // EVERY day an open task covers — a three-day task shades three days,
-      // not just its final dueDate.
-      for (const a of c.assignments) {
-        if (a.completedAt) continue;
-        for (const day of daysOf(a)) bump(day);
+    id: 'tv-load', rank: 11, name: "Workers' load", category: 'live', icon: HardHat, w: 360, h: 240,
+    blurb: 'How much everybody is carrying right now — a bar each, or one worker\'s own count.',
+    render: (el, c) => {
+      // The old "Contractor" widget folded in here: its single-worker card is
+      // this widget's `show: one`, so one worker and the whole crew are one
+      // widget with a switch rather than two widgets.
+      if (String(d(el).show || 'all') === 'one') {
+        const con = c.contractors.find(x => x.id === d(el).contractorId) ?? c.contractors[0];
+        if (!con) return <Card label="Worker"><span className="text-[13px] text-slate-400">No workers yet.</span></Card>;
+        const mine = c.assignments.filter(a => a.contractorId === con.id && !a.completedAt);
+        const today = todayIso();
+        const late = mine.filter(a => a.dueDate && a.dueDate < today).length;
+        return (
+          <Card label={con.name} tone={late ? '#b4342a' : personColor(con.name, con.color)}>
+            <Figure value={mine.length} tone={late ? '#b4342a' : '#0f172a'}
+              sub={late ? `open · ${late} late` : 'open'} />
+          </Card>
+        );
       }
-      /**
-       * The NOTEBOOK too — this heat map used to know nothing about the
-       * weekly planner, which is where the actual booking lives, so it read
-       * as stale. Every planned entry counts on its day; entries that stand
-       * for a TASK are skipped, because their task's days were counted above
-       * and one piece of work must not shade twice. Projections point at the
-       * main notebook's element and would double it — skipped.
-       */
-      const els = c.boardElements ?? useStore.getState().canvasElements;
-      for (const el of els) {
-        if (el.type !== 'widget' || (el.widget !== 'rota' && el.widget !== 'week-planner')) continue;
-        if ((el.data as { role?: string } | undefined)?.role === 'projection') continue;
-        const cells = (el.data as { cells?: Record<string, { taskId?: string }[]> } | undefined)?.cells ?? {};
-        for (const [key, entries] of Object.entries(cells)) {
-          const day = String(key).split('|')[1];
-          if (!Array.isArray(entries)) continue;
-          for (const en of entries) if (!en?.taskId) bump(day);
-        }
-      }
-      const busiest = Math.max(1, ...counts.values());
-      return (
-        <Card label={first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}>
-          <div className="grid grid-cols-7 gap-1 h-full content-start">
-            {Array.from({ length: first.getDay() }, (_, i) => <span key={`x${i}`} />)}
-            {Array.from({ length: days }, (_, i) => {
-              const n = counts.get(i + 1) ?? 0;
-              const heat = n ? 0.25 + 0.75 * (n / busiest) : 0;
-              const today = i + 1 === now.getDate();
-              return (
-                <span key={i} className="rounded-md flex items-center justify-center tabular-nums"
-                  style={{
-                    aspectRatio: '1', fontSize: 12,
-                    backgroundColor: n ? `rgba(217,119,6,${heat.toFixed(2)})` : '#f1f5f9',
-                    color: n && heat > 0.55 ? '#fff' : '#64748b',
-                    outline: today ? '2px solid #4aa8d8' : undefined,
-                    fontWeight: today ? 800 : 500,
-                  }}>{i + 1}</span>
-              );
-            })}
-          </div>
-        </Card>
-      );
-    },
-  },
-
-  // ── 8 · the newest photo, large ───────────────────────────────────────────
-  {
-    id: 'tv-photo', rank: 8, name: 'Latest from site', category: 'live', icon: Camera, w: 400, h: 300,
-    blurb: 'The newest picture back from site, filling the card, changing every twenty seconds.',
-    render: (_el, c) => <LatestPhoto c={c} />,
-  },
-
-  // ── 9 · a wall of photos, grouped by job ──────────────────────────────────
-  {
-    id: 'tv-photo-wall', rank: 9, name: 'Photo wall', category: 'live', icon: Images, w: 460, h: 320,
-    blurb: 'The recent pictures grouped under the job they came from, newest job first.',
-    render: (_el, c) => <PhotoWall c={c} />,
-  },
-
-  // ── 10 · what just happened ───────────────────────────────────────────────
-  {
-    id: 'tv-feed', rank: 10, name: 'Just happened', category: 'live', icon: Activity, w: 400, h: 250,
-    blurb: 'The last few changes anybody made, newest on top.',
-    render: (_el, c) => (
-      <Card label="Just happened">
-        <div className="h-full overflow-hidden grid gap-2 content-start">
-          {c.logs.slice(0, 7).map(l => (
-            <div key={l.id} className="flex items-baseline gap-2 min-w-0">
-              <span className="text-[13px] font-bold text-slate-700 w-[86px] truncate flex-shrink-0">
-                {l.userName}
-              </span>
-              {/* A sentence, not a field name. The wall was printing
-                  `currentStageId`, which tells a room nothing. This is the SAME
-                  describer the board's own feed uses — one wording, so the two
-                  screens can never narrate the same event differently. */}
-              <ActivitySentence
-                className="text-[13px] text-slate-500 truncate flex-1"
-                parts={describeActivity(l, c.jobs).parts}
-                onOpen={c.openJob}
-              />
-              <span className="text-[11px] text-slate-300 tabular-nums flex-shrink-0">
-                {new Date(l.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
-              </span>
-            </div>
-          ))}
-          {c.logs.length === 0 && <span className="text-[13px] text-slate-400">Nothing yet today.</span>}
-        </div>
-      </Card>
-    ),
-  },
-
-  // ── 11 · contractor load ──────────────────────────────────────────────────
-  {
-    id: 'tv-load', rank: 11, name: 'Contractor load', category: 'live', icon: HardHat, w: 360, h: 240,
-    blurb: 'A bar each: how much everybody is carrying right now.',
-    render: (_el, c) => {
       const rows = c.contractors.filter(x => x.active).map(x => ({
         x, open: c.assignments.filter(a => a.contractorId === x.id && !a.completedAt).length,
       })).sort((a, b) => b.open - a.open);
@@ -407,101 +177,44 @@ export const TV_WIDGETS: WidgetDef[] = [
     },
   },
 
-  // ── 12 · waiting on us ────────────────────────────────────────────────────
+  // ── Finished — today's names, or the week as bars ─────────────────────────
   {
-    id: 'tv-waiting', rank: 12, name: 'Waiting on us', category: 'live', icon: Inbox, w: 340, h: 220,
-    blurb: 'Jobs with no stage and no task — the ones nobody has picked up.',
-    render: (_el, c) => {
-      const idle = c.jobs.filter(j => isCountableApartment(j)
-        && !j.currentStageId
-        && !c.assignments.some(a => a.apartmentId === j.id && !a.completedAt));
-      return (
-        <Card label="Waiting on us" tone={idle.length ? '#b8650a' : '#12735a'}>
-          <div className="h-full flex flex-col">
-            <Figure value={idle.length} tone={idle.length ? '#b8650a' : '#12735a'} />
-            <div className="grid gap-1 mt-1 overflow-hidden">
-              {idle.slice(0, 4).map(j => (
-                <span key={j.id} className="text-[13px] text-slate-500 truncate">
-                  {j.displayName || 'Job'}
-                </span>
-              ))}
-            </div>
-          </div>
-        </Card>
-      );
-    },
-  },
-
-  // ── 13 · Drive health ─────────────────────────────────────────────────────
-  {
-    id: 'tv-drive', rank: 13, name: 'Drive health', category: 'live', icon: HardDrive, w: 320, h: 200,
-    blurb: 'How many jobs have a folder, a plan, or neither.',
-    render: (_el, c) => {
-      const units = c.jobs.filter(isCountableApartment);
-      const ready = units.filter(j => j.driveLink?.trim() && j.plansPdfLink?.trim()).length;
-      const part = units.filter(j => j.driveLink?.trim() && !j.plansPdfLink?.trim()).length;
-      const none = units.length - ready - part;
-      const bar = [
-        { n: ready, c: '#16a34a', l: 'folder and plan' },
-        { n: part, c: '#d97706', l: 'folder only' },
-        { n: none, c: '#cbd5e1', l: 'neither' },
-      ];
-      const total = Math.max(1, units.length);
-      return (
-        <Card label="Drive">
-          <div className="h-full flex flex-col justify-center gap-3">
-            <div className="h-5 rounded-full overflow-hidden flex" style={{ backgroundColor: '#eef2f7' }}>
-              {bar.map(b => b.n > 0 && (
-                <span key={b.l} title={`${b.l}: ${b.n}`}
-                  style={{ width: `${(b.n / total) * 100}%`, backgroundColor: b.c }} />
-              ))}
-            </div>
-            <div className="grid gap-1">
-              {bar.map(b => (
-                <div key={b.l} className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: b.c }} />
-                  <span className="text-[13px] text-slate-500 flex-1">{b.l}</span>
-                  <b className="text-[13px] tabular-nums text-slate-700">{b.n}</b>
+    id: 'tv-done-today', rank: 15, name: 'Finished', category: 'live', icon: CheckCircle2,
+    w: 360, h: 220,
+    blurb: 'What was finished — today with who finished it, or the whole week as a bar per day.',
+    render: (el, c) => {
+      // "Finished this week" folded in here as `period: week`.
+      if (String(d(el).period || 'today') === 'week') {
+        const start = new Date();
+        start.setDate(start.getDate() - start.getDay());
+        const days = Array.from({ length: 7 }, (_, i) => {
+          const dt = new Date(start); dt.setDate(dt.getDate() + i);
+          const key = iso(dt);
+          return {
+            key,
+            label: dt.toLocaleDateString(undefined, { weekday: 'narrow' }),
+            n: c.assignments.filter(a => a.completedAt?.startsWith(key)).length,
+            today: key === todayIso(),
+          };
+        });
+        const top = Math.max(1, ...days.map(x => x.n));
+        return (
+          <Card label="Finished this week">
+            <div className="h-full flex items-end gap-2">
+              {days.map(x => (
+                <div key={x.key} className="flex-1 flex flex-col items-center gap-1 h-full">
+                  <span className="flex-1 w-full flex items-end">
+                    <span className="w-full rounded-t-md" title={`${x.n}`}
+                      style={{ height: `${(x.n / top) * 100}%`, minHeight: 3,
+                               backgroundColor: x.today ? '#12735a' : '#4aa8d8' }} />
+                  </span>
+                  <span className="text-[11px] text-slate-400">{x.label}</span>
                 </div>
               ))}
             </div>
-          </div>
-        </Card>
-      );
-    },
-  },
-
-  // ── 14 · new this week ────────────────────────────────────────────────────
-  {
-    id: 'tv-new', rank: 14, name: 'New this week', category: 'live', icon: Sparkles, w: 320, h: 220,
-    blurb: 'Jobs added in the last seven days.',
-    render: (_el, c) => {
-      const cut = new Date(Date.now() - 7 * 86_400_000).toISOString();
-      const fresh = c.jobs.filter(j => (j.createdAt ?? '') > cut)
-        .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
-      return (
-        <Card label="New this week" tone="#7c3aed">
-          <div className="h-full flex flex-col">
-            <Figure value={fresh.length} tone="#7c3aed" />
-            <div className="grid gap-1 mt-1 overflow-hidden">
-              {fresh.slice(0, 4).map(j => (
-                <span key={j.id} className="text-[13px] text-slate-500 truncate">
-                  {j.displayName || 'Job'}
-                </span>
-              ))}
-            </div>
-          </div>
-        </Card>
-      );
-    },
-  },
-
-  // ── 15 · done today ───────────────────────────────────────────────────────
-  {
-    id: 'tv-done-today', rank: 15, name: 'Done today', category: 'live', icon: CheckCircle2,
-    w: 360, h: 220,
-    blurb: 'What was finished today, and who finished it.',
-    render: (_el, c) => {
+          </Card>
+        );
+      }
       const today = todayIso();
       const done = c.assignments.filter(a => a.completedAt?.startsWith(today));
       return (
@@ -524,22 +237,16 @@ export const TV_WIDGETS: WidgetDef[] = [
       );
     },
   },
-
-  // ── 18 · the clock, with both calendars ───────────────────────────────────
-  {
-    id: 'tv-clock', rank: 16, name: 'Clock and date', category: 'live', icon: Clock3, w: 340, h: 200,
-    blurb: 'The time, big, with the English and Hebrew date and the next holiday.',
-    render: () => <WallClock />,
-  },
 ];
 
-// ── The pieces that need their own state ────────────────────────────────────
+// ── The bodies the merged board widgets borrow ──────────────────────────────
 
-function WorkspaceCard({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
+export function WorkspaceCard({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   const projects = useStore(st => st.projects);
   const currentProjectId = useStore(st => st.currentProjectId);
   const isRtl = useStore(st => st.mainUiStrings.isRtl);
-  const chosen = String(d(el).projectId || '') || currentProjectId;
+  const pid = String(d(el).projectId || '');
+  const chosen = (!pid || pid === 'this') ? currentProjectId : pid;
   const live = chosen === currentProjectId;
   // Re-read when a missing workspace snapshot arrives from the cloud.
   const snapTick = useStore(st => st.snapshotTick);
@@ -612,7 +319,7 @@ function WorkspaceCard({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   );
 }
 
-function LatestPhoto({ c }: { c: WidgetCtx }) {
+export function LatestPhoto({ c }: { c: WidgetCtx }) {
   const shots = useMemo(() => [...c.photos]
     .filter(p => p.storageUrl || p.driveUrl || p.dataUrl)
     .sort((a, b) => (b.uploadedAt ?? '').localeCompare(a.uploadedAt ?? ''))
@@ -657,7 +364,7 @@ function LatestPhoto({ c }: { c: WidgetCtx }) {
  * and the pictures that came in for it, which is how somebody looking at the
  * wall actually reads them.
  */
-function PhotoWall({ c }: { c: WidgetCtx }) {
+export function PhotoWall({ c }: { c: WidgetCtx }) {
   const groups = useMemo(() => {
     const byJob = new Map<string, { job: Apartment; shots: typeof c.photos }>();
     const sorted = [...c.photos]
@@ -703,7 +410,79 @@ function PhotoWall({ c }: { c: WidgetCtx }) {
   );
 }
 
-function WallClock() {
+/**
+ * The month as a heat map: each day shaded by how much is due on it —
+ * every day a multi-day task covers, plus the weekly notebook's own entries.
+ * The merged Calendar widget draws this for its `shade` look.
+ */
+export function MonthHeat({ c }: { c: WidgetCtx }) {
+  const now = new Date();
+  const first = new Date(now.getFullYear(), now.getMonth(), 1);
+  const days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const counts = new Map<number, number>();
+  const bump = (isoDay: string | undefined) => {
+    if (!isoDay) return;
+    const dt = new Date(`${isoDay}T00:00:00`);
+    if (Number.isNaN(dt.getTime())
+      || dt.getMonth() !== now.getMonth() || dt.getFullYear() !== now.getFullYear()) return;
+    counts.set(dt.getDate(), (counts.get(dt.getDate()) ?? 0) + 1);
+  };
+  // EVERY day an open task covers — a three-day task shades three days,
+  // not just its final dueDate.
+  for (const a of c.assignments) {
+    if (a.completedAt) continue;
+    for (const day of daysOf(a)) bump(day);
+  }
+  /**
+   * The NOTEBOOK too — this heat map used to know nothing about the
+   * weekly planner, which is where the actual booking lives, so it read
+   * as stale. Every planned entry counts on its day; entries that stand
+   * for a TASK are skipped, because their task's days were counted above
+   * and one piece of work must not shade twice. Projections point at the
+   * main notebook's element and would double it — skipped.
+   */
+  const els = c.boardElements ?? useStore.getState().canvasElements;
+  for (const el of els) {
+    if (el.type !== 'widget' || (el.widget !== 'rota' && el.widget !== 'week-planner')) continue;
+    if ((el.data as { role?: string } | undefined)?.role === 'projection') continue;
+    const cells = (el.data as { cells?: Record<string, { taskId?: string }[]> } | undefined)?.cells ?? {};
+    for (const [key, entries] of Object.entries(cells)) {
+      const day = String(key).split('|')[1];
+      if (!Array.isArray(entries)) continue;
+      for (const en of entries) if (!en?.taskId) bump(day);
+    }
+  }
+  const busiest = Math.max(1, ...counts.values());
+  return (
+    <Card label={first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}>
+      <div className="grid grid-cols-7 gap-1 h-full content-start">
+        {Array.from({ length: first.getDay() }, (_, i) => <span key={`x${i}`} />)}
+        {Array.from({ length: days }, (_, i) => {
+          const n = counts.get(i + 1) ?? 0;
+          const heat = n ? 0.25 + 0.75 * (n / busiest) : 0;
+          const today = i + 1 === now.getDate();
+          return (
+            <span key={i} className="rounded-md flex items-center justify-center tabular-nums"
+              style={{
+                aspectRatio: '1', fontSize: 12,
+                backgroundColor: n ? `rgba(217,119,6,${heat.toFixed(2)})` : '#f1f5f9',
+                color: n && heat > 0.55 ? '#fff' : '#64748b',
+                outline: today ? '2px solid #4aa8d8' : undefined,
+                fontWeight: today ? 800 : 500,
+              }}>{i + 1}</span>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * The clock with both calendars. The merged Wall clock draws this whenever
+ * either extra is switched on; the flags hide the lines that were not asked
+ * for, so "Hebrew date without the holiday" is a real choice.
+ */
+export function WallClock({ hebrew = true, holiday = true }: { hebrew?: boolean; holiday?: boolean }) {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 10_000);
@@ -712,13 +491,14 @@ function WallClock() {
 
   // The next thing worth knowing about, up to a month out.
   const next = useMemo(() => {
+    if (!holiday) return null;
     for (let i = 0; i < 40; i++) {
       const d2 = new Date(now); d2.setDate(d2.getDate() + i);
       const hits = holidaysOn(d2, { jewish: true, israeli: true });
       if (hits.length) return { name: hits[0].name, days: i };
     }
     return null;
-  }, [now]);
+  }, [now, holiday]);
 
   return (
     // Centred when it fits, scrollable when it does not — squeezed short, the
@@ -730,7 +510,7 @@ function WallClock() {
       <div className="text-[15px] text-slate-500 mt-1.5">
         {now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
       </div>
-      <div className="text-[14px] text-slate-400">{hebrewLabel(now)}</div>
+      {hebrew && <div className="text-[14px] text-slate-400">{hebrewLabel(now)}</div>}
       {next && (
         <div className="text-[13px] mt-1.5" style={{ color: '#7c3aed' }}>
           {next.days === 0 ? next.name : `${next.name} in ${next.days} day${next.days === 1 ? '' : 's'}`}
@@ -744,13 +524,22 @@ function WallClock() {
  * Which widgets may go on the wall screen.
  *
  * The wall ones, plus the board pieces that genuinely belong on a wall —
- * a heading, a banner, a message, a countdown, a stopwatch, a photo, a note,
- * and the two miniatures. A keypad or a note pad makes no sense on a screen
- * nobody touches.
+ * and every RETIRED id, because a wall somebody set up before the dedupe
+ * still carries the old names and must keep drawing. A keypad or a note pad
+ * makes no sense on a screen nobody touches.
  */
 export const TV_ALLOWED = new Set([
   ...TV_WIDGETS.map(w => w.id),
+  // The survivors of the TV merges — the same content the wall always had.
+  'overdue-list', 'recent-jobs', 'activity-feed', 'recent-photos', 'calendar-mini',
+  'stage-legend', 'due-today', 'team-today', 'count-by-stage', 'project-glance',
+  'nobody-booked', 'no-plan',
   'w-title', 'banner', 'quote', 'divider', 'legend', 'photo',
   'w-countdown', 'w-stopwatch', 'clock',
-  'board-mini', 'project-mini', 'rota',
+  'board-mini', 'project-mini', 'rota', 'goals',
+  // Retired ids (widgetAliases.ts) — hardcoded rather than imported, because
+  // importing the alias table from here would close a runtime cycle.
+  'tv-workspace', 'tv-out-today', 'tv-late', 'tv-week-done', 'tv-tomorrow',
+  'tv-stage-spread', 'tv-month', 'tv-photo', 'tv-photo-wall', 'tv-feed',
+  'tv-waiting', 'tv-drive', 'tv-new', 'tv-clock', 'week-ahead', 'contractor-load',
 ]);

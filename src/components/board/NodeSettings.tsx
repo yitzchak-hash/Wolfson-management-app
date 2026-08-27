@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Trash2, Upload, Check, Plus, ChevronUp, ChevronDown } from 'lucide-react';
 import { useStore } from '../../data/store';
 import { CanvasElement, Stage, binLabelOf, isBuiltInBin, personColor } from '../../types';
-import { WIDGET_BY_ID } from '../../data/widgets';
+import { WIDGET_BY_ID, aliasedEl } from '../../data/widgets';
 import { WidgetField, WIDGET_FIELDS, ART_FIELDS, BOX_FIELDS, TEXT_STYLE_FIELDS, OUTLINE_FIELDS, fieldDefault } from '../../data/widgetFields';
 import { ART_KINDS, ArtKind } from './BoardNodes';
 import {
@@ -124,10 +124,17 @@ export function NodeSettings({ el, onClose, onDelete }: {
   }, [fields]);
   const [openGroup, setOpenGroup] = useState<string | null>(null);
 
-  const data = (el.data ?? {}) as Record<string, unknown>;
+  /**
+   * VALUES are read through the alias translation (a retired widget id shows
+   * the settings its survivor actually renders — a "Tomorrow" card's window
+   * select says tomorrow), but WRITES go onto the element's own raw bag: a
+   * written key spreads over the translation and wins from then on.
+   */
+  const data = aliasedEl(el).data ?? {} as Record<string, unknown>;
+  const rawData = (el.data ?? {}) as Record<string, unknown>;
 
   function setData(key: string, value: unknown) {
-    updateCanvasElement(el.id, { data: { ...data, [key]: value } });
+    updateCanvasElement(el.id, { data: { ...rawData, [key]: value } });
   }
   function setEl(key: string, value: unknown) {
     updateCanvasElement(el.id, { [key]: value } as Partial<CanvasElement>);

@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useStore } from './data/store';
 import { AppLayout } from './components/layout/AppLayout';
 import { LoginPage } from './pages/LoginPage';
+import { CrashScreen } from './components/ui/CrashScreen';
 import { ProjectDiagramPage } from './pages/ProjectDiagramPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ReportsPage } from './pages/ReportsPage';
@@ -13,6 +14,7 @@ import { TvViewPage } from './pages/TvViewPage';
 import { TasksPage } from './pages/TasksPage';
 import { GeneralJobsPage } from './pages/GeneralJobsPage';
 import { JobListPage } from './pages/JobListPage';
+import GoalsPage from './pages/GoalsPage';
 import { GlobalCalendarPage } from './pages/GlobalCalendarPage';
 import { ProjectCalendarPage } from './pages/ProjectCalendarPage';
 import { TvPresentationPage } from './pages/TvPresentationPage';
@@ -63,6 +65,7 @@ function useEnterCommits() {
 export default function App() {
   useEnterCommits();
   return (
+    <CrashScreen>
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
@@ -82,6 +85,8 @@ export default function App() {
           <Route index element={<Navigate to="/jobs" replace />} />
           <Route path="project" element={<ProjectDiagramPage />} />
           <Route path="dashboard" element={<DashboardPage />} />
+          {/* The whole goals website, as a tab — computer only, never the TV */}
+          <Route path="goals" element={<GoalsPage />} />
           <Route path="tasks" element={<TasksPage />} />
           <Route path="calendar" element={<GlobalCalendarPage />} />
           {/* Per-project calendar (sidebar); /calendar stays the all-workspace one */}
@@ -103,5 +108,6 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
+    </CrashScreen>
   );
 }

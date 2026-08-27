@@ -8,7 +8,7 @@ import {
   Eraser, GripVertical, Lock, Unlock, Group, Ungroup, Info as InfoGlyph,
 } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { useStore } from '../data/store';
+import { useStore, isTombstoned } from '../data/store';
 import { useBoardTrack } from '../data/useBoardUndo';
 import { UndoButtons } from '../components/board/UndoLayer';
 import { isPlannerElement, purgeJobsFromPlanner } from '../data/plannerPurge';
@@ -1822,6 +1822,38 @@ export function GeneralJobsPage() {
       }));
     });
   }, [canvasElements, updateCanvasElement, addCanvasElement]);
+
+  /**
+   * The Goals widget appears on the board once, by itself.
+   *
+   * The owner asked for the goals embed ON the board, so it is seeded like a
+   * fixture rather than waiting to be shopped for — but exactly once, ever:
+   * a FIXED id so a Firestore echo overwrites rather than duplicates, and
+   * the tombstone check so a deleted one STAYS deleted on every device (the
+   * bins' own idiom). Waits for the board to have landed (the seeded bins
+   * are the signal — "no bins" and "nothing loaded yet" look identical
+   * otherwise), and only on the main board.
+   */
+  const goalsSeedTried = useRef(false);
+  useEffect(() => {
+    if (activeBoardView) return;
+    if (!canvasElements.some(e => e.type === 'bin')) return;
+    if (canvasElements.some(e => e.type === 'widget' && e.widget === 'goals')) return;
+    if (isTombstoned('CE-goals-board')) return;
+    // StrictMode runs the effect twice in ONE commit, and both runs read the
+    // same pre-add state — without this the widget seeded twice, two records
+    // under one fixed id.
+    if (goalsSeedTried.current) return;
+    goalsSeedTried.current = true;
+    const at = viewCentreSpot(340, 320);
+    addCanvasElement({
+      addedAt: new Date().toISOString(),
+      id: 'CE-goals-board', type: 'widget', widget: 'goals',
+      x: Math.round(at.x), y: Math.round(at.y), w: 340, h: 320,
+      text: '', color: '#ffffff', data: {},
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canvasElements, activeBoardView]);
 
   /**
    * One notebook per kind. The rest are projections of it.
