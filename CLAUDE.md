@@ -5344,3 +5344,107 @@ Two things shipped from the round:
   `scratchpad/navwatch.mjs` proves silent-when-working, loud-when-blocked,
   absent-without-flag. The next report of dead buttons starts from that
   banner's photograph, not from a guess.
+---
+
+# v2 — the Flip and the iPad round
+
+## The portal opens on the workspace his work is IN
+The real fault the device audit surfaced: which workspace the portal opens
+on is whatever `active_project` the browser last held — on a worker's phone,
+a default nobody chose. A worker whose jobs live in Netiv or on the Job
+Board opened onto Wolfson, saw "No tasks yet", and — without the
+switchProject permission — had no way to reach his own work at all. Three
+pieces in `ContractorPortal`:
+- it hydrates the OTHER workspaces' snapshots on mount
+  (`ensureProjectSnapshot`, the AppLayout idiom) — without them it cannot
+  even know where his work is;
+- `myProjects` subscribes to `snapshotTick` (the standing rule for every
+  snapshot consumer), or a hydrated snapshot landing changes nothing;
+- once per visit, when the open workspace holds NONE of his tasks and
+  another holds some, it switches there (most open tasks wins) — decided on
+  a 1600ms settle timer (the seeded-bins idiom: "he has nothing here" and
+  "nothing has loaded yet" look identical at first, and data arriving
+  restarts the clock). The guard trips the moment a workspace with his work
+  is on screen, so his own later switch is never fought.
+Harness: `scratchpad/portalswitch.mjs` — stands in the Job Board through the
+real header dropdown, opens the worker's link, and the six Wolfson tasks
+must appear by themselves.
+
+## The sweep takes any shape now
+`shots.mjs` accepts `H` beside `W` (defaults unchanged): the Galaxy Z Flip
+unfolded is `W=344` (portrait) and `VIEW=landscape W=882 H=344`; an iPad is
+`W=768 H=1024` / `VIEW=landscape W=1024 H=768`. All four measured clean —
+344 is where `overflow-wrap` legitimately starts breaking the longest
+family names mid-word, which is the correct last resort, not a fault.
+
+## `scratchpad/ipadcheck.mjs` — the desktop layout driven by a finger
+An iPad gets the DESKTOP layout, so the phone sweeps never covered it. The
+harness arms genuine touch emulation (setTouchEmulationEnabled +
+setEmitTouchEventsForMouse AFTER navigation — the markupfixes lesson) and
+asserts: `any-hover: none` is live and hover-revealed controls are visible
+at rest, a finger tap opens an apartment and gets the desktop modal, a
+finger drag from a tile pans the board and leaves the job in place, a
+finger can open a job, and at 768 portrait (exactly ON the md line) the
+desktop sidebar shows with no phone bottom bar. Its own re-paid trap: tap
+the MIDDLE of a tile — the top strip is buttons, always visible under
+touch, so a press up there is a button press.
+
+## Three harness rots fixed while auditing (each had made a check vacuous)
+- `seed.mjs` dates are offsets from the REAL clock, never a fixed base — the
+  pinned 2026-08-16 drifted past and the portal's Today filter showed
+  nothing, so every tap at a task card timed out (the standing date-drift
+  trap, now fixed at the seed instead of per-harness).
+- The seed worker carries `perms: { seeDiagrams, seeAllApartments }` — the
+  default contractor level has neither, so the portal's Building Map tab was
+  never drawn and every map assertion silently measured the tasks list.
+- `shots.mjs` drawer-tab taps match the Hebrew labels too, and portal-task
+  presses the All pill first (unscoped — the filter row sits OUTSIDE
+  `<main>`, and a `main`-scoped locator never matched).
+
+## The Z Fold: three screens, one phone — nothing needed fixing
+Audited 2026-08-27, all clean: the cover screen IS the Flip's size (344x882,
+covered by that sweep); the classic Fold's inner screen (690x829) stays
+UNDER the md line — the phone layout with room to breathe — and crosses it
+when turned sideways (829x690, desktop); the newest Fold's inner screen
+(820x910 / 910x820) is past md BOTH ways, so it is desktop even upright.
+`scratchpad/foldswap.mjs` is the Fold's own test: the viewport changes size
+under the RUNNING app (closed → open → sideways → closed), asserting the
+chrome swaps live, an open drawer reshapes desktop-modal ↔ phone-sheet
+mid-look, the portal survives an unfold, and no page errors fire. usePhone's
+matchMedia listener is what makes this work — anything that caches "am I a
+phone" at mount instead of subscribing will break on a Fold first.
+
+## The drawer's plan pane fits the screen it is on (the Fold screenshot fix)
+The pane was sized to the SHEET alone (`paneH × ratio`) beside a fixed 560px
+fields column, so on anything narrower than a big monitor the row laid itself
+out past the modal's clipped 96vw edge and the plan showed only its left
+half — the owner's unfolded-Fold screenshot (2026-08-27). Three rules now:
+- `planW` caps at what the screen LEAVES beside the fields
+  (`96vw − 560`), and when that cap bites the modal gives back the height
+  the sheet no longer needs (floor 640px) so the plan sits in a smaller
+  square instead of floating in a tall empty pane.
+- The pane carries `minWidth: 0` — a flex item refuses to shrink below its
+  content's min-width by default, and canvases have one.
+- **PlanAnnotator re-fits from a ResizeObserver on its own STAGE**, replacing
+  the window-resize listener: the pane narrowing when the measured sheet
+  ratio lands (or the cap bites) is a resize the window never sees, and an
+  already-fitted sheet stayed wider than its pane. Damped 3px; the phone
+  keyboard/address-bar rule (height changes alone never re-fit while
+  compact) is preserved.
+Harness: `scratchpad/folddrawer.mjs` — five widths from 1092 to 1920, the
+sheet, the modal and the Download button must all fit. `scratchpad/gallery.mjs`
+captures the drawer/diagram/board/portal at every device profile for the
+owner's Device Gallery artifact. All four iPad Pro shapes (834x1194 /
+1194x834 / 1024x1366 / 1366x1024) swept clean.
+
+## The Device Gallery is a standing working method
+`.claude/skills/device-gallery/SKILL.md` is the method: ONE artifact page of
+real screenshots of the running app on every device (newest iPhone, newest
+Galaxy, Flip, the Fold's three screens, every iPad, the office PC), captured
+by `scratchpad/gallery.mjs`, republished to the SAME link on every UI round —
+and the page takes the owner's pinned change notes (tap a spot, type or
+dictate, Send to Claude saves them INTO the artifact via the `artifact`
+capability). When the owner says to check his gallery notes, READ the
+artifact and work the pins. `docs/DEVICE-GALLERY-PROMPT.md` is the portable
+version for other projects. The newest-phone sweeps: iPhone 17 Pro is
+`W=402 H=874`, Galaxy S25 Ultra `W=384 H=832` — both clean 2026-08-27.

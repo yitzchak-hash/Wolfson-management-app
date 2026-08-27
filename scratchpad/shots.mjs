@@ -15,11 +15,16 @@ const LANDSCAPE = process.env.VIEW === 'landscape';
 // W=360 is a common Android, 375 an iPhone SE/mini. Thirty pixels less than
 // the 390 everything was built against is exactly where a row that "just
 // fits" stops fitting, so the sweep has to be runnable at each.
-const W = Number(process.env.W) || 390;
+// H joins W so non-phone shapes can run the same sweep: the Galaxy Z Flip's
+// unfolded landscape is 882x344 (VIEW=landscape W=882 H=344), an iPad is
+// W=768 H=1024 / VIEW=landscape W=1024 H=768. Defaults unchanged.
+const W = Number(process.env.W) || (LANDSCAPE ? 844 : 390);
+const H = Number(process.env.H) || (LANDSCAPE ? 390 : 844);
 const HEBREW = process.env.LANG_HE === '1';
-const VW = LANDSCAPE ? 844 : W;
-const VH = LANDSCAPE ? 390 : 844;
-const TAG = (LANDSCAPE ? 'land-' : W !== 390 ? `w${W}-` : '') + (HEBREW ? 'he-' : '');
+const VW = W;
+const VH = H;
+const STD = (!LANDSCAPE && W === 390 && H === 844) || (LANDSCAPE && W === 844 && H === 390);
+const TAG = (LANDSCAPE ? 'land-' : '') + (STD ? '' : `w${W}x${H}-`) + (HEBREW ? 'he-' : '');
 const ctx = await browser.newContext({
   viewport: { width: VW, height: VH },
   isMobile: true, hasTouch: true, deviceScaleFactor: 2,
@@ -105,11 +110,18 @@ await shot('drawer', '/project', async () => {
   await page.locator('[class*="cursor-pointer"]', { hasText: /^53/ }).first().tap();
   await page.waitForTimeout(1100);
 });
-for (const tab of ['Tasks', 'Notes', 'Photos', 'History']) {
-  await shot(`drawer-${tab.toLowerCase()}`, '/project', async () => {
+// Tab labels follow the ADMIN language — a Hebrew sweep needs the Hebrew
+// words, or every tab tap times out and the four shots all measure the
+// details tab (the hardcoded-English harness trap).
+const TABS = [
+  ['tasks', /^(Tasks|משימות)/], ['notes', /^(Notes|הערות)/],
+  ['photos', /^(Photos|תמונות)/], ['history', /^(History|היסטוריה)/],
+];
+for (const [tab, re] of TABS) {
+  await shot(`drawer-${tab}`, '/project', async () => {
     await page.locator('[class*="cursor-pointer"]', { hasText: /^53/ }).first().tap();
     await page.waitForTimeout(1000);
-    await page.locator('.drawer-panel button', { hasText: new RegExp(`^${tab}`) }).first().tap();
+    await page.locator('.drawer-panel button', { hasText: re }).first().tap();
     await page.waitForTimeout(700);
   });
 }
@@ -151,6 +163,10 @@ await shot('board', '/jobs', async () => {
 // one that had never been measured on one.
 await shot('portal', `/c/${PORTAL_TOKEN}`);
 await shot('portal-task', `/c/${PORTAL_TOKEN}`, async () => {
+  // The default filter is Today — press All first (the standing fix), or the
+  // card being tapped may sit outside the filter and the tap times out.
+  await page.locator('button').filter({ hasText: /^(All|הכול|הכל)$/ }).first().tap();
+  await page.waitForTimeout(400);
   await page.locator('button, [role=button]').filter({ hasText: /concealed unit|registers|thermostats/i }).first().tap();
   await page.waitForTimeout(900);
 });

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { useStore, loadAllProjectsTaskData } from '../data/store';
+import { useStore, loadAllProjectsTaskData, ensureProjectSnapshot } from '../data/store';
 import { ContractorAssignment, ContractorPhoto, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, getStageName, aptLabel } from '../types';
 import { daysOf, futureDaysOf } from '../data/taskDays';
 import { PlanPinOverlay } from '../components/apartment/PlanPinOverlay';
@@ -312,7 +312,7 @@ export function ContractorPortal() {
     contractorUiStrings, planAnnotations,
     workerLevels, updateContractor, canvasElements, users,
     projects, currentProjectId, setCurrentProject,
-    startFirebaseSync, firebaseListening,
+    startFirebaseSync, firebaseListening, snapshotTick,
   } = useStore();
 
   /**
@@ -325,6 +325,19 @@ export function ContractorPortal() {
   useEffect(() => {
     if (!firebaseListening) startFirebaseSync();
   }, [firebaseListening, startFirebaseSync]);
+
+  /**
+   * Pull down the OTHER workspaces' snapshots too (the AppLayout idiom).
+   *
+   * The portal only ever syncs the open workspace live, and a worker's phone
+   * has no reason to have visited the others — so without this, "which
+   * workspaces have work for this person" can only see the one that happens
+   * to be open, and the auto-switch below has nothing to switch to.
+   */
+  useEffect(() => {
+    const { projects: ps, currentProjectId: cur } = useStore.getState();
+    ps.filter(p => p.id !== cur).forEach(p => void ensureProjectSnapshot(p.id));
+  }, []);
 
   const workerNow = contractors.find(c => c.token === token) ?? null;
 
@@ -444,7 +457,42 @@ export function ContractorPortal() {
         total: p.assignments.filter(a => a.contractorId === contractor.id).length,
       }))
       .filter(p => p.total > 0 || p.id === currentProjectId);
-  }, [contractor?.id, projects, currentProjectId, contractorAssignments]);
+    // snapshotTick: a hydrated snapshot landing must recompute this, or a
+    // fresh phone never learns which workspaces hold this worker's tasks.
+  }, [contractor?.id, projects, currentProjectId, contractorAssignments, snapshotTick]);
+
+  /**
+   * Open on the workspace his work is IN.
+   *
+   * Which workspace the portal opens on is whatever `active_project` this
+   * browser last held — on a worker's phone, a default nobody chose. A worker
+   * whose jobs live in Netiv or on the Job Board opened onto Wolfson, saw
+   * "No tasks yet", and — without the switchProject permission — had no way
+   * to reach his own work at all.
+   *
+   * Once per visit: when the open workspace holds NONE of his tasks and
+   * another holds some, go there (most open tasks wins). Decided on a settle
+   * timer, the seeded-bins idiom — "he has nothing here" and "nothing has
+   * loaded yet" look identical for the first moments, and data arriving
+   * restarts the clock. His own later switch is never fought: the guard trips
+   * the moment a workspace with his work is on screen.
+   */
+  const autoSwitched = useRef(false);
+  useEffect(() => {
+    if (autoSwitched.current || !contractor) return;
+    const here = myProjects.find(p => p.id === currentProjectId);
+    if (here && here.total > 0) { autoSwitched.current = true; return; }
+    const best = myProjects.filter(p => p.total > 0)
+      .sort((a, b) => (b.open - a.open) || (b.total - a.total))[0];
+    if (!best) return;
+    const t = setTimeout(() => {
+      if (autoSwitched.current) return;
+      autoSwitched.current = true;
+      setCurrentProject(best.id);
+      setMapBuilding('');
+    }, 1600);
+    return () => clearTimeout(t);
+  }, [contractor?.id, myProjects, currentProjectId, setCurrentProject]);
 
   if (!contractor) {
     return (

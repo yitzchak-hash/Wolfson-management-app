@@ -322,9 +322,26 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    * Landscape √2 stands in for the moment before the measurement lands.
    */
   const [planRatio, setPlanRatio] = useState<number | null>(null);
-  const modalH = Math.min(980, window.innerHeight * 0.93);
-  const paneH = modalH - 56;                       // minus the navy header
-  const planW = Math.round(paneH * (planRatio ?? Math.SQRT2));
+  const maxModalH = Math.min(980, window.innerHeight * 0.93);
+  const sheetRatio = planRatio ?? Math.SQRT2;
+  /**
+   * ...but never wider than the screen LEAVES beside the 560px fields column
+   * inside the modal's 96vw cap. Sized to the sheet alone, the pane laid
+   * itself out past the modal's clipped edge on anything narrower than a big
+   * monitor — the owner's unfolded Fold showed only the left half of the plan
+   * (his 2026-08-27 screenshot).
+   */
+  const fitW = Math.max(280, Math.round(window.innerWidth * 0.96) - 560);
+  const planW = Math.min(Math.round((maxModalH - 56) * sheetRatio), fitW);
+  /**
+   * When the width cap bit, the sheet needs less height too — the whole
+   * window shrinks so the plan sits in a smaller square, instead of floating
+   * in a tall pane of empty space. 141 = the navy header (56) plus the pane's
+   * own two bars (47 + 38, measured); floored so the fields column stays a
+   * usable height on a very wide, very short screen.
+   */
+  const modalH = Math.min(maxModalH,
+    Math.max(Math.round(planW / sheetRatio) + 141, Math.min(640, maxModalH)));
 
   /** The plan pane beside the fields — off when there is no plan to show. */
   const [planWanted, setPlanWanted] = useState(true);
@@ -1006,7 +1023,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       // jump when the sheet lands.
       return (
         <div className="flex flex-col min-h-0 border-l border-gray-200"
-          style={{ flex: '1 1 54%', backgroundColor: '#f8fafc' }}>
+          style={{ flex: '1 1 54%', minWidth: 0, backgroundColor: '#f8fafc' }}>
           {body}
         </div>
       );
@@ -1017,7 +1034,10 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         className={`flex flex-col min-h-0 ${asTab ? 'h-full' : 'border-l border-gray-200'}`}
         style={asTab
           ? { backgroundColor: '#f8fafc' }
-          : { flex: '1 1 54%', backgroundColor: '#f8fafc' }}
+          // minWidth 0: a flex item refuses to shrink below its content's
+          // min-width by default, and the sheet's canvases have one — without
+          // this the pane could hold the row wider than the clipped modal.
+          : { flex: '1 1 54%', minWidth: 0, backgroundColor: '#f8fafc' }}
       >
         {/* The plan's two bars, at the pane's own left edge. */}
         {planControls()}
@@ -1272,7 +1292,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               // inset on every edge so it reads as a window over the board rather
               // than as a page you have navigated to.
               width: planSideOn ? `min(${560 + planW}px, 96vw)` : 'min(1020px, 94vw)',
-              height: 'min(980px, 93vh)',
+              height: planSideOn ? `${modalH}px` : 'min(980px, 93vh)',
               transition: 'width 180ms ease',
             }}
       >

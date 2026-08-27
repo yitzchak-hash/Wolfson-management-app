@@ -59,8 +59,11 @@ export async function realisticWolfson(browser, { hebrew = false } = {}) {
    * are spread across overdue / today / later on purpose: the countdown badges
    * and the date filters are the part of that page most likely to overflow.
    */
+  // Offsets are from the REAL clock, never a fixed date — a pinned base date
+  // drifts into the past and the portal's Today filter shows nothing, which
+  // times out every tap aimed at a task card (the standing date-drift trap).
   const day = off => {
-    const d = new Date('2026-08-16T12:00:00Z');
+    const d = new Date();
     d.setDate(d.getDate() + off);
     return d.toISOString().slice(0, 10);
   };
@@ -68,10 +71,14 @@ export async function realisticWolfson(browser, { hebrew = false } = {}) {
   // office's. Without it a Hebrew sweep tests the admin app in Hebrew and the
   // portal in English, which is the one screen a Hebrew-speaking worker
   // actually holds.
+  // The portal's tabs are PERMISSION-GATED and the default contractor level
+  // has no seeDiagrams — without the override the Building Map tab is simply
+  // not drawn, and every map assertion silently measures the tasks list.
   data.contractors = [{
     id: 'C-test', name: 'Moshe Aharonov', category: 'ac', token: PORTAL_TOKEN,
     active: true, createdAt: '2026-01-01', phone: '050-1234567',
     lang: hebrew ? 'he' : undefined,
+    perms: { seeDiagrams: true, seeAllApartments: true },
   }];
   const named = data.apartments.filter(a => a.displayName && !a.isUnnamed).slice(0, 6);
   data.contractorAssignments = named.map((a, i) => ({
