@@ -61,6 +61,14 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'tap',
       },
       {
+        title: 'One TV, one button',
+        body: 'The TV tab in the left bar shows only on the Job Board now — '
+          + 'the wall is one shared screen whichever workspace you are in, '
+          + 'so Wolfson and Netiv no longer carry a second and third button '
+          + 'that opened the same thing.',
+        demo: 'tap',
+      },
+      {
         title: 'A crash now says what broke',
         body: 'If a screen ever crashes, instead of going blank it shows '
           + 'exactly what went wrong, with a Reload button and a copy button '

@@ -5320,3 +5320,27 @@ production bundle. Noted on the way: the TV dashboard's add-widget writes
 `z: Date.now()` (the giant timestamp z values on his elements — harmless,
 TvDashboard only sorts by z). If the crash recurs, the CrashScreen's copied
 text is the next step.
+
+
+---
+
+# v2 — the dead-sidebar hunt (round 2) and NAV WATCH
+
+The owner's refined report: the sidebar links REACT (address moves) but the
+page does not change, on the Job Board workspace, on his machine only. Ruled
+out by experiment against his real board: element coverage (elementFromPoint
+sweeps), a standing invisible backdrop (interaction sweeps with cleanup),
+and React Router v7 transition STARVATION — `scratchpad/navstarve.mjs`
+injects presence-peer churn at up to 60Hz during a sidebar click and the
+navigation still commits.
+
+Two things shipped from the round:
+- **The TV sidebar tab is Job Board-only** (`isGeneral` gate in
+  `useNavItems`) — one wall, one door, per the owner.
+- **NAV WATCH** (`AppLayout`): open the site with `?debugnav=1` and every
+  in-app link click is watched — if 1.5s later the address has not moved, a
+  red banner paints the facts (target, where the click landed, the history
+  stamp, fullscreen state, recent page errors). Zero cost without the flag.
+  `scratchpad/navwatch.mjs` proves silent-when-working, loud-when-blocked,
+  absent-without-flag. The next report of dead buttons starts from that
+  banner's photograph, not from a guess.
