@@ -427,6 +427,38 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
         + 'the board show its cover.',
     },
   ],
+  goals: [
+    title(),
+    {
+      key: 'view', label: 'What it shows', kind: 'select',
+      options: [
+        { value: '', label: 'Automatic (board here, summary on the dashboard)' },
+        { value: 'board', label: 'The full tile grid' },
+        { value: 'dashboard', label: 'The compact summary' },
+      ],
+    },
+    {
+      key: 'interactive', label: 'Start and finish buttons', kind: 'select',
+      options: [
+        { value: '', label: 'Automatic (board yes, dashboard read-only)' },
+        { value: '1', label: 'Show them' },
+        { value: '0', label: 'Read-only' },
+      ],
+      hint: 'The wall is always read-only whatever this says.',
+    },
+    {
+      key: 'max', label: 'At most this many tiles', kind: 'number', min: 1, max: 30,
+      hint: 'Blank shows them all; the widget notes how many more there are.',
+    },
+    {
+      key: 'lang', label: 'Language', kind: 'select',
+      options: [
+        { value: '', label: 'Follow the app' },
+        { value: 'he', label: 'עברית' },
+        { value: 'en', label: 'English' },
+      ],
+    },
+  ],
   tiktok: [
     title(),
     {
@@ -1005,6 +1037,9 @@ export const WIDGET_PREVIEW: Record<string, Record<string, unknown>> = {
   // A canned cover — the shelf must never make a network call, and a card
   // stuck on "reading the album…" previews nothing.
   'photos-album': { sample: 1, album: 'https://photos.app.goo.gl/sample' },
+  // Canned tiles — the goals live in another app's iframe, and the store
+  // makes no network calls.
+  goals: { sample: 1 },
   // Three real, long-standing TikTok links, so the card plays rather than
   // showing its own paste box — which is what a shopper would otherwise see.
   tiktok: {

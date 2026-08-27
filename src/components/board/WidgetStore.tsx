@@ -90,6 +90,7 @@ const SHELF: Record<string, string> = {
   'bin-counter': 'Counts and progress', 'streak-flame': 'Counts and progress',
   'split-flap': 'Counts and progress',
   'tv-done-today': 'Counts and progress',
+  goals: 'Counts and progress',
   // Getting to a job, and seeing what changed.
   'job-find': 'Finding and following',
   'job-list': 'Finding and following', 'recent-jobs': 'Finding and following',

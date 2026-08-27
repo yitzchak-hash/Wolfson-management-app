@@ -5213,3 +5213,52 @@ Harness: `scratchpad/taskdaysforms.mjs` (11 checks) — the Tasks page form and
 the drawer's quick-add each producing a task whose `days` array and
 last-day `dueDate` land in localStorage, plus the every-task-has-an-id guard.
 Dates derived from the real clock (next Monday), per the standing drift rule.
+
+---
+
+# v2 — the TzviAir Goals embed
+
+## The goals board is a widget (`src/components/board/GoalsWidget.tsx`)
+The separate goals app at `https://tzviair-goals.vercel.app` (repo
+`yitzchak-hash/Tzviair-Goals` — reference only, never modified from here) is
+embedded through its OWN `widget.js`: the script is loaded once
+(module-level promise, cleared on error so retry works), `mount()` puts an
+auto-resizing iframe into the node, `destroy()` runs on unmount. Registered
+in all four places (MORE_WIDGETS id `goals` · WIDGET_FIELDS ·
+WIDGET_PREVIEW `{sample:1}` · SHELF "Counts and progress") plus TV_ALLOWED.
+
+Rules, each load-bearing:
+- **This codebase never touches `/api/goals`** — its POST replaces the whole
+  goals board with no auth, so a buggy host write could wipe real data. All
+  reads/writes happen inside the iframe; `interactive` is the sanctioned
+  lever, and it is forced OFF wherever `WidgetCtx.readOnly` is set (the
+  wall).
+- **view and interactive default by SURFACE**: a dashboard copy
+  (`el.board === DASHBOARD_BOARD`) opens as the compact read-only summary,
+  a board copy as the full interactive grid — both overridable in the
+  pencil ('' = automatic). `lang` follows `mainUiStrings.isRtl` unless set.
+- The iframe mounts `transparent, header:false` — Frame draws the title and
+  paints the panel; the widget's own logo row would be a box in a box.
+  `onState` counters draw a small badge line over the iframe.
+- `data.sample` (the shelf) draws canned tiles — no network on the store.
+- A failed script load shows an honest sentence with a working retry.
+
+## Seeded once, deleted forever
+Both surfaces seed one copy as a fixture (the bins' idiom): FIXED ids
+(`CE-goals-board` on the Job Board main board via `viewCentreSpot`,
+`CE-goals-dash` on the dashboard grid) so a Firestore echo overwrites, and
+`isTombstoned()` (now exported from store.ts) so a deleted one stays
+deleted. Two traps paid for here: **StrictMode runs a seeding effect twice
+in ONE commit on the same pre-add state** — without a `useRef` tried-flag
+the widget seeded twice under one fixed id; and the board's landed-signal is
+"the seeded bins exist", because a still-loading board and an empty one look
+identical.
+
+Harness: `scratchpad/goalswidget.mjs` (12 checks) — tzviair-goals.vercel.app
+is STUBBED (no internet here): a fake `widget.js` implementing the
+documented mount() API that encodes its options into the iframe URL, which
+is what lets the harness read back what WE asked for. Its own trap:
+Playwright consults routes NEWEST-first, so the specific `/widget.js` route
+must be registered AFTER the `/widget*` page route or scripts get HTML
+("Unexpected token '<'"). Live end-to-end against the real goals app needs
+production eyes-on. No CSP anywhere in this app, so no header changes.

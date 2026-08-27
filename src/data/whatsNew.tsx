@@ -30,6 +30,29 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-09-17',
+    title: 'The goals board, on the board',
+    items: [
+      {
+        title: 'Our goals, live on the Job Board and the dashboard',
+        body: 'The shared TzviAir goals board now stands on the Job Board as '
+          + 'a widget — the full tiles with their running timers, and start '
+          + 'and finish work right from it. The dashboard carries a compact '
+          + 'read-only summary card with the progress bar and live counters. '
+          + 'Both update by themselves every few seconds.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'An ordinary widget, like any other',
+        body: 'Move it, resize it, put it on the TV wall (read-only there), '
+          + 'add more copies from the widget store, or remove it — removing '
+          + 'sticks, on every device. The pencil picks the view, the '
+          + 'language, and how many tiles to show.',
+        demo: 'drag',
+      },
+    ],
+  },
+  {
     date: '2026-09-16',
     title: 'A task can take days — from every form, in every workspace',
     items: [
