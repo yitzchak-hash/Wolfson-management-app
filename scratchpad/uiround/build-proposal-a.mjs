@@ -4,7 +4,11 @@ const OUT = '/tmp/claude-0/-home-user-Wolfson-management-app/38623ef8-73c0-5354-
 
 const html = `${HEAD('The Plan Beside the Details')}
 <div class="wrap">
-  <div class="eyebrow">Proposal A · design only, nothing built yet</div>
+  <div class="eyebrow">Proposal A · approved 27 Aug</div>
+  <div class="card" style="border-left:4px solid var(--good);margin-top:14px">
+    <span class="tag good">Approved, with two changes</span>
+    <p><strong>The 800 line: yes.</strong> <strong>The tab row: broadened</strong> — it now leaves EVERY preview on every device, not just the desktop one; only Mark up keeps it. <strong>Drive and Zoho: changed</strong> — they stay side by side at every width and the text hides behind the field's edge instead of stacking. The locked wording is on the <a href="https://claude.ai/code/artifact/18d71433-a44e-4268-b63b-29f8bc03fe99" style="color:var(--blue);font-weight:700">UI Decisions page</a>.</p>
+  </div>
   <h1>The plan beside the details</h1>
   <p class="lede">Three of your six notes are about the same thing: where the plan sits in the apartment window, and the row of tabs above it. Here is what happens now on each screen, and what I propose instead — every picture below is the real app, not a drawing.</p>
 
@@ -43,8 +47,8 @@ const html = `${HEAD('The Plan Beside the Details')}
       </div>
     </div>
     <div class="card">
-      <h3>One thing I noticed while doing it</h3>
-      <p>Squeezing the details column makes the <strong>Drive and Zoho boxes overlap</strong> (you can see them collide in the proposed picture). So the proposal includes: below about 480 pixels of column, those two boxes stack one above the other instead of sitting side by side. Same fix the phone already uses.</p>
+      <h3>One thing I noticed while doing it — and how you settled it</h3>
+      <p>Squeezing the details column makes the <strong>Drive and Zoho boxes overlap</strong> (you can see them collide in the proposed picture above). I proposed stacking them; <strong>you chose otherwise</strong> — they stay side by side at every width, and the writing inside runs to the end of its box and slips behind the edge. That is decision 3, with its own picture on the decisions page.</p>
     </div>
   </section>
 
@@ -83,14 +87,14 @@ const html = `${HEAD('The Plan Beside the Details')}
     </div>
   </section>
 
-  <div class="ask">
-    <h3>What I need from you</h3>
+  <div class="ask" style="border-left:4px solid var(--good)">
+    <h3>Settled</h3>
     <ol>
-      <li><strong>The 800 line</strong> — say yes, or name a different width. Everything above hangs on this one number.</li>
-      <li><strong>The tab row leaving the preview</strong> — yes, or keep it.</li>
-      <li><strong>Drive and Zoho stacking</strong> on a narrow details column — yes, or leave them side by side and let them squeeze.</li>
+      <li><strong>The 800 line</strong> — approved as proposed.</li>
+      <li><strong>The tab row</strong> — approved and widened: gone from every preview on every device, kept only in Mark up.</li>
+      <li><strong>Drive and Zoho</strong> — side by side always, the text hiding behind the field's edge.</li>
     </ol>
-    <p style="margin-top:12px;color:var(--muted)">Say “yes to A” and all three lock together, or answer them one at a time. Nothing is built during this round.</p>
+    <p style="margin-top:12px;color:var(--muted)">All three are locked on the decisions page as 1, 2 and 3.</p>
   </div>
 </div>`;
 writeFileSync(OUT, html);
