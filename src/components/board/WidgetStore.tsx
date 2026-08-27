@@ -72,44 +72,39 @@ const SHELF_ORDER = [
 ] as const;
 
 const SHELF: Record<string, string> = {
-  // What needs doing, and when.
+  // What needs doing, and when. (The dedupe: Week ahead, the TV's Tomorrow
+  // and This month all fold into Coming up and Calendar as pencil options.)
   'overdue-list': 'Chasing the work', 'due-today': 'Chasing the work',
-  'no-date': 'Chasing the work', 'week-ahead': 'Chasing the work',
+  'no-date': 'Chasing the work',
   'calendar-mini': 'Chasing the work', milestones: 'Chasing the work',
   timeline: 'Chasing the work', 'weekly-goal': 'Chasing the work',
-  'backlog-trend': 'Chasing the work', 'tv-late': 'Chasing the work',
-  'tv-tomorrow': 'Chasing the work', 'tv-month': 'Chasing the work',
-  'tv-waiting': 'Chasing the work',
+  'backlog-trend': 'Chasing the work',
   // What is quietly going wrong.
   'gone-quiet': 'Catching problems', 'nobody-booked': 'Catching problems',
   'no-plan': 'Catching problems', duplicates: 'Catching problems',
   'skipped-stage': 'Catching problems', 'open-snags': 'Catching problems',
-  'floor-by-floor': 'Catching problems', 'tv-drive': 'Catching problems',
+  'floor-by-floor': 'Catching problems',
   // Figures and bars.
   kpi: 'Counts and progress', 'count-by-stage': 'Counts and progress',
-  'stage-legend': 'Counts and progress', 'stage-funnel': 'Counts and progress',
-  'progress-ring': 'Counts and progress', 'progress-bar': 'Counts and progress',
+  'stage-legend': 'Counts and progress',
   'bin-counter': 'Counts and progress', 'streak-flame': 'Counts and progress',
-  'split-flap': 'Counts and progress', 'tv-stage-spread': 'Counts and progress',
-  'tv-week-done': 'Counts and progress', 'tv-done-today': 'Counts and progress',
+  'split-flap': 'Counts and progress',
+  'tv-done-today': 'Counts and progress',
   // Getting to a job, and seeing what changed.
-  'job-find': 'Finding and following', 'job-search': 'Finding and following',
+  'job-find': 'Finding and following',
   'job-list': 'Finding and following', 'recent-jobs': 'Finding and following',
-  'activity-feed': 'Finding and following', 'tv-new': 'Finding and following',
-  'tv-feed': 'Finding and following',
+  'activity-feed': 'Finding and following',
   // Who is where, and the week's plan.
   rota: 'People and the week', 'week-planner': 'People and the week',
   'team-today': 'People and the week', 'tap-in': 'People and the week',
-  'contractor-load': 'People and the week', 'contractor-links': 'People and the week',
+  'contractor-links': 'People and the week',
   'crew-race': 'People and the week', 'tv-load': 'People and the week',
-  'tv-out-today': 'People and the week',
   // What the site looks like.
   'recent-photos': 'Photos, map and weather', 'photo-review': 'Photos, map and weather',
-  'before-after': 'Photos, map and weather', 'tv-photo': 'Photos, map and weather',
-  'tv-photo-wall': 'Photos, map and weather', 'job-map': 'Photos, map and weather',
+  'before-after': 'Photos, map and weather', 'job-map': 'Photos, map and weather',
   weather: 'Photos, map and weather', 'photos-album': 'Photos, map and weather',
   // Time.
-  clock: 'Clocks and timers', 'tv-clock': 'Clocks and timers',
+  clock: 'Clocks and timers',
   'world-clocks': 'Clocks and timers', 'shabbat-clock': 'Clocks and timers',
   'w-countdown': 'Clocks and timers', 'w-stopwatch': 'Clocks and timers',
   'multi-timer': 'Clocks and timers',
@@ -124,7 +119,7 @@ const SHELF: Record<string, string> = {
   'notes-board': 'Your own lists and tools',
   // Looking across workspaces.
   'project-mini': 'Other workspaces', 'project-glance': 'Other workspaces',
-  'board-mini': 'Other workspaces', 'tv-workspace': 'Other workspaces',
+  'board-mini': 'Other workspaces',
   'unit-card': 'Other workspaces',
   // The rest is for the eyes.
   'w-title': 'Decoration and fun', banner: 'Decoration and fun',
@@ -272,6 +267,9 @@ export function WidgetStore({ onPick, onClose, only, destLabel = 'the board', pl
   const matches = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return WIDGETS
+      // A retired id is an alias that keeps old placements drawing — nothing
+      // new is ever shopped under an old name.
+      .filter(w => !w.retired)
       .filter(w => !only || only.has(w.id))
       .filter(w => !needle
         || w.name.toLowerCase().includes(needle)

@@ -21,9 +21,12 @@ import { describeActivity } from './activityText';
 import { ClipArtNode, ART_KINDS, ArtKind } from '../components/board/BoardNodes';
 import { MiniJob } from '../components/board/MiniJob';
 import { ProjectMini, BoardMini, CalendarMini } from '../components/board/DashWidgets';
-import { TV_WIDGETS } from './tvWidgets';
+import {
+  TV_WIDGETS, WhoIsOut, WorkspaceCard, LatestPhoto, PhotoWall, MonthHeat, WallClock,
+} from './tvWidgets';
 import { INSIGHT_WIDGETS } from './insightWidgets';
 import { MORE_WIDGETS } from './moreWidgets';
+import { WIDGET_ALIASES } from './widgetAliases';
 import { PlannerWidget, PlannerData, PlannerEntry } from '../components/board/PlannerWidget';
 import { StickyNoteWidget, StickyNoteRecord, NOTE_COLOURS } from '../components/board/StickyNoteWidget';
 import { ActivitySentence } from '../components/ui/ActivitySentence';
@@ -156,6 +159,12 @@ export interface WidgetDef {
   h: number;
   /** Seed values for `data` when one is placed. */
   data?: Record<string, unknown>;
+  /**
+   * A retired id kept alive as an alias (widgetAliases.ts): it renders its
+   * survivor and never appears on the store shelf. Placed copies keep
+   * working forever; nothing new is ever placed under the old name.
+   */
+  retired?: boolean;
   render: (el: CanvasElement, ctx: WidgetCtx) => React.ReactNode;
 }
 
@@ -295,10 +304,35 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'stage-legend', rank: 12, name: 'Stage legend', category: 'live', icon: BarChart3, w: 210, h: 175,
-    blurb: 'Every stage with a live count, in the stage colours.',
-    render: (_el, c) => (
-      <Frame title="Stages" icon={BarChart3}>
+    id: 'stage-legend', rank: 12, name: 'Stages', category: 'live', icon: BarChart3, w: 210, h: 175,
+    blurb: 'Every stage with a live count — as a legend, or as bars.',
+    render: (el, c) => {
+      // The old Stage funnel (and the wall's Stage spread) folded in here as
+      // the `bars` look: the same spread, drawn with bars instead of counts.
+      if (String(d(el).look || 'legend') === 'bars') {
+        const rows = c.stages.map(st => ({ st, n: c.jobs.filter(j => j.currentStageId === st.id).length }));
+        const top = Math.max(1, ...rows.map(r => r.n));
+        return (
+          <Frame title={String(d(el).title || 'Spread by stage')} icon={BarChart3}>
+            <div className="flex flex-col gap-1 h-full overflow-y-auto pr-1">
+              {rows.map(({ st, n }) => (
+                <div key={st.id}>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-[9.5px] text-gray-600 truncate flex-1">{st.name}</span>
+                    <span className="text-[9.5px] font-bold tabular-nums" style={{ color: st.color }}>{n}</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${(n / top) * 100}%`, backgroundColor: st.color }} />
+                  </div>
+                </div>
+              ))}
+              {c.stages.length === 0 && <span className="text-[10px] text-gray-400">No stages yet</span>}
+            </div>
+          </Frame>
+        );
+      }
+      return (
+      <Frame title={String(d(el).title || 'Stages')} icon={BarChart3}>
         <div className="flex flex-col gap-1 h-full overflow-y-auto pr-1">
           {c.stages.map(st => {
             const at = c.jobs.filter(j => j.currentStageId === st.id);
@@ -319,7 +353,8 @@ export const WIDGETS: WidgetDef[] = [
           {c.stages.length === 0 && <span className="text-[10px] text-gray-400">No stages yet</span>}
         </div>
       </Frame>
-    ),
+      );
+    },
   },
   {
     id: 'overdue-list', rank: 5, name: 'Running late', category: 'live', icon: AlertTriangle, w: 235, h: 175,
@@ -357,55 +392,16 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'contractor-load', rank: 11, name: 'Contractor', category: 'live', icon: HardHat, w: 200, h: 110,
-    blurb: 'One contractor and how much they already have open.',
-    data: {},
-    render: (el, c) => {
-      const con = c.contractors.find(x => x.id === d(el).contractorId) ?? c.contractors[0];
-      if (!con) return <Frame title="Contractor" icon={HardHat}><span className="text-[10px] text-gray-400">No contractors yet</span></Frame>;
-      const mine = c.assignments.filter(a => a.contractorId === con.id && !a.completedAt);
-      const late = mine.filter(overdueOf).length;
-      return (
-        <Frame title={con.name} icon={HardHat} tone={late ? '#dc2626' : undefined}>
-          <div className="flex items-baseline gap-2 h-full">
-            <span className="font-black tabular-nums" style={{ fontSize: 30 }}>{mine.length}</span>
-            <span className="text-[10px] text-gray-500">open</span>
-            {late > 0 && <span className="ml-auto text-[10px] font-bold text-red-600">{late} late</span>}
-          </div>
-        </Frame>
-      );
-    },
-  },
-  {
-    id: 'week-ahead', rank: 9, name: 'Week ahead', category: 'live', icon: CalendarDays, w: 300, h: 130,
-    blurb: 'The next seven days with what falls due on each.',
-    render: (_el, c) => {
-      const days = Array.from({ length: 7 }, (_, i) => {
-        const dt = new Date(Date.now() + i * 86_400_000);
-        const iso = dt.toISOString().slice(0, 10);
-        return { iso, dt, n: c.assignments.filter(a => !a.completedAt && a.dueDate === iso).length };
-      });
-      return (
-        <Frame title="Week ahead" icon={CalendarDays}>
-          <div className="grid grid-cols-7 gap-1 h-full">
-            {days.map(({ iso, dt, n }, i) => (
-              <div key={iso} className="flex flex-col items-center justify-center rounded-lg"
-                style={{ backgroundColor: i === 0 ? 'rgba(30,58,95,.08)' : '#f8fafc' }}>
-                <span className="text-[8.5px] text-gray-400">{dt.toLocaleDateString(undefined, { weekday: 'narrow' })}</span>
-                <span className="text-[11px] font-bold text-gray-700">{dt.getDate()}</span>
-                {n > 0 && <span className="text-[9px] font-black text-amber-600">{n}</span>}
-              </div>
-            ))}
-          </div>
-        </Frame>
-      );
-    },
-  },
-  {
     id: 'recent-photos', rank: 8, name: 'Latest photos', category: 'live', icon: Camera, w: 235, h: 150,
-    blurb: 'The newest pictures back from site — from every job, or only the ones you choose.',
+    blurb: 'The newest pictures back from site — a grid, one big rotating picture, or grouped '
+      + 'under their jobs.',
     data: {},
     render: (el, c) => {
+      // The wall's two photo widgets folded in here as looks: `one` is the
+      // single big rotating picture, `wall` groups the pictures by job.
+      const look = String(d(el).look || 'grid');
+      if (look === 'one') return <LatestPhoto c={c} />;
+      if (look === 'wall') return <PhotoWall c={c} />;
       // Narrowed to chosen jobs, or left open to everything. "Everything" is
       // the default because a wall widget with nothing configured should still
       // be showing you something.
@@ -462,36 +458,6 @@ export const WIDGETS: WidgetDef[] = [
         </div>
       </Frame>
     ),
-  },
-  {
-    id: 'progress-ring', rank: 18, name: 'Progress ring', category: 'live', icon: CircleDashed, w: 155, h: 155,
-    blurb: 'How much of the board has reached a chosen stage.',
-    data: {},
-    render: (el, c) => {
-      const target = d(el).stageId as string | undefined;
-      const idx = c.stages.findIndex(s => s.id === target);
-      const done = idx === -1
-        ? c.jobs.filter(j => j.currentStageId).length
-        : c.jobs.filter(j => {
-            const i = c.stages.findIndex(s => s.id === j.currentStageId);
-            return i >= idx;
-          }).length;
-      const pct = c.jobs.length ? Math.round((done / c.jobs.length) * 100) : 0;
-      const colour = c.stages[idx]?.color ?? '#4aa8d8';
-      const R = 34, C = 2 * Math.PI * R;
-      return (
-        <Frame title={c.stages[idx]?.name ?? 'Started'} icon={CircleDashed} tone={colour}>
-          <div className="h-full flex items-center justify-center">
-            <svg viewBox="0 0 90 90" style={{ width: 84, height: 84 }}>
-              <circle cx="45" cy="45" r={R} fill="none" stroke="#e2e8f0" strokeWidth="9" />
-              <circle cx="45" cy="45" r={R} fill="none" stroke={colour} strokeWidth="9" strokeLinecap="round"
-                strokeDasharray={`${(C * pct) / 100} ${C}`} transform="rotate(-90 45 45)" />
-              <text x="45" y="51" textAnchor="middle" fontSize="19" fontWeight="900" fill="#0f172a">{pct}%</text>
-            </svg>
-          </div>
-        </Frame>
-      );
-    },
   },
   {
     id: 'bin-counter', rank: 17, name: 'Bin totals', category: 'live', icon: Archive, w: 200, h: 120,
@@ -569,28 +535,6 @@ export const WIDGETS: WidgetDef[] = [
                 className="w-6 h-6 rounded-md bg-gray-100 text-gray-600 font-bold">−</button>
             </div>
           )}
-        </div>
-      </Frame>
-    ),
-  },
-  {
-    id: 'progress-bar', rank: 10, name: 'Progress bar', category: 'plan', icon: BarChart3, w: 215, h: 95,
-    blurb: 'A percentage you set by hand, for anything the data cannot know.',
-    data: { title: 'Progress', pct: 40 },
-    render: (el, c) => (
-      <Frame title={d(el).title ?? 'Progress'} icon={BarChart3}>
-        <div className="h-full flex flex-col justify-center gap-1.5">
-          <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden">
-            <div className="h-full rounded-full" style={{ width: `${d(el).pct ?? 0}%`, backgroundColor: el.color || '#4aa8d8' }} />
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold tabular-nums">{d(el).pct ?? 0}%</span>
-            {!c.readOnly && (
-              <input data-no-drag data-el-action type="range" min={0} max={100} value={d(el).pct ?? 0}
-                onChange={e => c.update({ data: { ...d(el), pct: Number(e.target.value) } })}
-                className="flex-1 h-1" />
-            )}
-          </div>
         </div>
       </Frame>
     ),
@@ -819,39 +763,44 @@ export const WIDGETS: WidgetDef[] = [
     render: (_el, c) => <ContractorLinks contractors={c.contractors} assignments={c.assignments} />,
   },
   {
-    id: 'stage-funnel', rank: 10, name: 'Stage funnel', category: 'live', icon: ListFilter, w: 260, h: 180,
-    blurb: 'Bars showing how the board is spread across the stages.',
-    render: (_el, c) => {
-      const rows = c.stages.map(st => ({ st, n: c.jobs.filter(j => j.currentStageId === st.id).length }));
-      const top = Math.max(1, ...rows.map(r => r.n));
-      return (
-        <Frame title="Spread by stage" icon={ListFilter}>
-          <div className="flex flex-col gap-1 h-full overflow-y-auto pr-1">
-            {rows.map(({ st, n }) => (
-              <div key={st.id}>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-[9.5px] text-gray-600 truncate flex-1">{st.name}</span>
-                  <span className="text-[9.5px] font-bold tabular-nums" style={{ color: st.color }}>{n}</span>
+    id: 'due-today', rank: 6, name: 'Coming up', category: 'live', icon: CalendarCheck, w: 230, h: 165,
+    blurb: 'What falls due — today, tomorrow, or the whole week ahead. One widget, the window '
+      + 'in its pencil.',
+    render: (el, c) => {
+      // Three widgets asked one question in three windows; the window is a
+      // setting now. `week` draws the old Week ahead's seven-day strip.
+      const win = String(d(el).window || 'today');
+      if (win === 'week') {
+        const days = Array.from({ length: 7 }, (_, i) => {
+          const dt = new Date(Date.now() + i * 86_400_000);
+          const iso = dt.toISOString().slice(0, 10);
+          return { iso, dt, n: c.assignments.filter(a => !a.completedAt && a.dueDate === iso).length };
+        });
+        return (
+          <Frame title={String(d(el).title || 'Week ahead')} icon={CalendarDays}>
+            <div className="grid grid-cols-7 gap-1 h-full">
+              {days.map(({ iso, dt, n }, i) => (
+                <div key={iso} className="flex flex-col items-center justify-center rounded-lg"
+                  style={{ backgroundColor: i === 0 ? 'rgba(30,58,95,.08)' : '#f8fafc' }}>
+                  <span className="text-[8.5px] text-gray-400">{dt.toLocaleDateString(undefined, { weekday: 'narrow' })}</span>
+                  <span className="text-[11px] font-bold text-gray-700">{dt.getDate()}</span>
+                  {n > 0 && <span className="text-[9px] font-black text-amber-600">{n}</span>}
                 </div>
-                <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                  <div className="h-full rounded-full" style={{ width: `${(n / top) * 100}%`, backgroundColor: st.color }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </Frame>
-      );
-    },
-  },
-  {
-    id: 'due-today', rank: 6, name: 'Due today', category: 'live', icon: CalendarCheck, w: 230, h: 165,
-    blurb: 'Only what is due today. The morning list.',
-    render: (_el, c) => {
-      const list = c.assignments.filter(a => !a.completedAt && a.dueDate === today());
+              ))}
+            </div>
+          </Frame>
+        );
+      }
+      const day = win === 'tomorrow'
+        ? new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)
+        : today();
+      const label = win === 'tomorrow' ? 'Due tomorrow' : 'Due today';
+      const list = c.assignments.filter(a => !a.completedAt && a.dueDate === day);
       return (
-        <Frame title={`Due today · ${list.length}`} icon={CalendarCheck} tone="#d97706">
+        <Frame title={`${String(d(el).title || label)} · ${list.length}`} icon={CalendarCheck}
+          tone={win === 'tomorrow' ? '#7c3aed' : '#d97706'}>
           <div className="flex flex-col gap-1 h-full overflow-y-auto pr-1">
-            {list.length === 0 && <span className="text-[10.5px] text-gray-400">Nothing due today</span>}
+            {list.length === 0 && <span className="text-[10.5px] text-gray-400">Nothing due</span>}
             {list.map(a => {
               const job = c.jobs.find(j => j.id === a.apartmentId);
               const con = c.contractors.find(x => x.id === a.contractorId);
@@ -924,10 +873,38 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'count-by-stage', rank: 15, name: 'Stage count', category: 'live', icon: Gauge, w: 185, h: 110,
-    blurb: 'One big number: how many jobs sit at a chosen stage, across whichever jobs you pick.',
+    id: 'count-by-stage', rank: 15, name: 'One stage', category: 'live', icon: Gauge, w: 185, h: 110,
+    blurb: 'One stage, one answer — how many jobs sit at it as a number, or what share of the '
+      + 'board has reached it as a ring.',
     data: {},
     render: (el, c) => {
+      // The old Progress ring folded in here as `show: ring` — the same
+      // stage, answered as a share-reached percentage instead of a count.
+      if (String(d(el).show || 'number') === 'ring') {
+        const target = d(el).stageId as string | undefined;
+        const idx = c.stages.findIndex(s => s.id === target);
+        const done = idx === -1
+          ? c.jobs.filter(j => j.currentStageId).length
+          : c.jobs.filter(j => {
+              const i = c.stages.findIndex(s => s.id === j.currentStageId);
+              return i >= idx;
+            }).length;
+        const pct = c.jobs.length ? Math.round((done / c.jobs.length) * 100) : 0;
+        const colour = c.stages[idx]?.color ?? '#4aa8d8';
+        const R = 34, C = 2 * Math.PI * R;
+        return (
+          <Frame title={c.stages[idx]?.name ?? 'Started'} icon={CircleDashed} tone={colour}>
+            <div className="h-full flex items-center justify-center">
+              <svg viewBox="0 0 90 90" style={{ width: 84, height: 84 }}>
+                <circle cx="45" cy="45" r={R} fill="none" stroke="#e2e8f0" strokeWidth="9" />
+                <circle cx="45" cy="45" r={R} fill="none" stroke={colour} strokeWidth="9" strokeLinecap="round"
+                  strokeDasharray={`${(C * pct) / 100} ${C}`} transform="rotate(-90 45 45)" />
+                <text x="45" y="51" textAnchor="middle" fontSize="19" fontWeight="900" fill="#0f172a">{pct}%</text>
+              </svg>
+            </div>
+          </Frame>
+        );
+      }
       const st = c.stages.find(x => x.id === d(el).stageId) ?? c.stages[0];
       const only = (d(el).jobIds ?? []) as string[];
       const pool = only.length ? c.jobs.filter(j => only.includes(j.id)) : c.jobs;
@@ -972,14 +949,6 @@ export const WIDGETS: WidgetDef[] = [
     },
   },
   {
-    id: 'job-search', rank: 14, name: 'Find a job', category: 'live', icon: Search, w: 230, h: 160,
-    blurb: 'Type a name and jump straight to the job.',
-    render: (el, c) => (
-      <JobSearch jobs={c.jobs} openJob={c.openJob} stages={c.stages} assignments={c.assignments}
-        preset={String(d(el).sampleQuery ?? '') || undefined} readOnly={c.readOnly} />
-    ),
-  },
-  {
     id: 'calculator', rank: 16, name: 'Calculator', category: 'plan', icon: Calculator, w: 190, h: 175,
     blurb: 'A plain calculator, for when the phone is across the room.',
     render: () => <CalcWidget />,
@@ -992,9 +961,31 @@ export const WIDGETS: WidgetDef[] = [
   },
   {
     id: 'weekly-goal', rank: 11, name: 'Target', category: 'plan', icon: Target, w: 195, h: 120,
-    blurb: 'A target and how far along you are against it.',
+    blurb: 'A hand-set meter: a counted target, or a plain percentage slider.',
     data: { title: 'This week', target: 10, done: 0 },
     render: (el, c) => {
+      // The old Progress bar folded in here as `asPct` — the same hand-set
+      // meter with a slider and no named target.
+      if (d(el).asPct) {
+        return (
+          <Frame title={String(d(el).title ?? 'Progress')} icon={BarChart3}>
+            <div className="h-full flex flex-col justify-center gap-1.5">
+              <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                <div className="h-full rounded-full"
+                  style={{ width: `${d(el).pct ?? 0}%`, backgroundColor: el.color || '#4aa8d8' }} />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold tabular-nums">{d(el).pct ?? 0}%</span>
+                {!c.readOnly && (
+                  <input data-no-drag data-el-action type="range" min={0} max={100} value={Number(d(el).pct ?? 0)}
+                    onChange={e => c.update({ data: { ...d(el), pct: Number(e.target.value) } })}
+                    className="flex-1 h-1" />
+                )}
+              </div>
+            </div>
+          </Frame>
+        );
+      }
       const t = Number(d(el).target ?? 0), n = Number(d(el).done ?? 0);
       const pct = t > 0 ? Math.min(100, Math.round((n / t) * 100)) : 0;
       return (
@@ -1022,40 +1013,36 @@ export const WIDGETS: WidgetDef[] = [
   },
   {
     id: 'team-today', rank: 6, name: 'On site today', category: 'plan', icon: Users, w: 215, h: 175,
-    blurb: 'Who is where today. The question the office is asked most.',
+    blurb: 'Who is where — typed by hand, read live off the weekly notebook, or both. Today or '
+      + 'tomorrow.',
     data: { rows: [{ who: '', where: '' }] },
     render: (el, c) => {
-      const rows = (d(el).rows ?? []) as { who: string; where: string }[];
-      const set = (next: typeof rows) => c.update({ data: { ...d(el), rows: next } });
-      // Typing a contractor's name here picks up their colour automatically —
-      // the same colour they have on the rota. Nothing to configure: it matches
-      // on the name, and falls back to a colour derived from whatever is typed.
-      const colourFor = (who: string) => {
-        const hit = c.contractors.find(x => x.name.toLowerCase() === who.trim().toLowerCase());
-        return who.trim() ? personColor(hit?.name ?? who, hit?.color) : '#e2e8f0';
-      };
-      return (
-        <Frame title="On site today" icon={Users}>
-          <div className="flex flex-col gap-1 h-full overflow-y-auto pr-1">
-            {rows.map((r, i) => (
-              <div key={i} className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: colourFor(r.who) }} />
-                <Line value={r.who} readOnly={c.readOnly} placeholder="Who"
-                  onChange={v => set(rows.map((x, j) => j === i ? { ...x, who: v } : x))}
-                  className="text-[10.5px] font-bold text-gray-800 w-[42%]" />
-                <Line value={r.where} readOnly={c.readOnly} placeholder="Where"
-                  onChange={v => set(rows.map((x, j) => j === i ? { ...x, where: v } : x))}
-                  className="text-[10.5px] text-gray-500 flex-1" />
-              </div>
-            ))}
-            {!c.readOnly && (
-              <button data-no-drag data-el-action onClick={() => set([...rows, { who: '', where: '' }])}
-                className="text-[10px] text-gray-400 hover:text-gray-600 text-left">+ add</button>
-            )}
+      /**
+       * The wall's "Out today" and "Tomorrow" folded in here: they read the
+       * weekly notebook live, this one was typed by hand, and both answer the
+       * office's most-asked question. The source is a setting now — and the
+       * truest answer, `both`, stacks the notebook's rows above the typed
+       * ones, because a person is out whether the plan came from a square or
+       * from somebody's pen.
+       */
+      const source = String(d(el).source || 'typed');
+      const dayIso = String(d(el).day || 'today') === 'tomorrow'
+        ? new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)
+        : today();
+      const label = String(d(el).day || 'today') === 'tomorrow' ? 'Tomorrow' : 'Out today';
+      if (source === 'planner') {
+        return <WhoIsOut c={c} dayIso={dayIso} label={String(d(el).title || label)}
+          tone={label === 'Tomorrow' ? '#7c3aed' : undefined} />;
+      }
+      if (source === 'both') {
+        return (
+          <div className="w-full h-full grid grid-rows-2">
+            <WhoIsOut c={c} dayIso={dayIso} label={String(d(el).title || label)} />
+            <TeamTyped el={el} c={c} />
           </div>
-        </Frame>
-      );
+        );
+      }
+      return <TeamTyped el={el} c={c} />;
     },
   },
   {
@@ -1303,11 +1290,24 @@ export const WIDGETS: WidgetDef[] = [
    * the board they work on.
    */
   {
-    id: 'project-glance', rank: 21, name: 'Another workspace', category: 'live',
+    id: 'project-glance', rank: 21, name: 'Workspace card', category: 'live',
     icon: Building, w: 250, h: 165,
-    blurb: 'A live summary of one of your other workspaces — its stages, its counts, its progress.',
+    blurb: 'A live summary of a workspace — this one, or any of the others: stages, counts, '
+      + 'progress, every unit as a coloured square.',
     data: {},
-    render: (el, c) => <ProjectGlance el={el} ctx={c} />,
+    render: (el, c) => {
+      // The wall's Workspace card folded in here: "the one you are in" (the
+      // picker's first choice, and now the unconfigured default) draws the
+      // live card with every unit as a square; any other workspace keeps the
+      // snapshot summary this widget always drew. The old unconfigured state
+      // was a "pick a workspace" placeholder — the live card of the current
+      // workspace is strictly more useful, except on the shelf, whose sample
+      // flag keeps the canned summary.
+      const pid = String(d(el).projectId || '');
+      return (!pid && !d(el).sample) || pid === 'this'
+        ? <WorkspaceCard el={el} c={c} />
+        : <ProjectGlance el={el} ctx={c} />;
+    },
   },
 
   /**
@@ -1343,8 +1343,15 @@ export const WIDGETS: WidgetDef[] = [
   // ── Look & feel ───────────────────────────────────────────────────────────
   {
     id: 'clock', rank: 7, name: 'Wall clock', category: 'visual', icon: Clock3, w: 190, h: 110,
-    blurb: 'Time and date, big enough to read across the office.',
-    render: () => <ClockWidget />,
+    blurb: 'Time and date, big enough to read across the office — with the Hebrew date and the '
+      + 'next holiday when you switch them on.',
+    render: (el) => (
+      // The wall's "Clock and date" folded in here: its two extras became
+      // switches on the one clock instead of a second clock.
+      (d(el).hebrew || d(el).holiday)
+        ? <WallClock hebrew={!!d(el).hebrew} holiday={!!d(el).holiday} />
+        : <ClockWidget />
+    ),
   },
   {
     id: 'banner', rank: 2, name: 'Banner', category: 'visual', icon: Megaphone, w: 340, h: 62,
@@ -1385,8 +1392,15 @@ export const WIDGETS: WidgetDef[] = [
   },
   {
     id: 'calendar-mini', rank: 3, name: 'Calendar', category: 'live', icon: CalendarDays, w: 220, h: 185,
-    blurb: 'This month, with the busy days marked. Opens the full calendar.',
-    render: (_el, c) => <CalendarMini assignments={c.assignments} jobs={c.jobs} />,
+    blurb: 'This month — busy days marked, or shaded by how much is due on each.',
+    render: (el, c) => (
+      // The wall's "This month" heat map folded in here as the `shade` look:
+      // days shaded by load (every day of a multi-day task, plus the weekly
+      // notebook's own entries) instead of plain marks.
+      d(el).shade
+        ? <MonthHeat c={c} />
+        : <CalendarMini assignments={c.assignments} jobs={c.jobs} />
+    ),
   },
   {
     id: 'divider', rank: 3, name: 'Divider', category: 'visual', icon: Minus, w: 340, h: 34,
@@ -2145,6 +2159,41 @@ function ArtInner({ el, update, readOnly }: {
   );
 }
 
+/** The typed who-is-where rows — On site today's hand-written source. */
+function TeamTyped({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
+  const rows = (d(el).rows ?? []) as { who: string; where: string }[];
+  const set = (next: typeof rows) => c.update({ data: { ...d(el), rows: next } });
+  // Typing a contractor's name here picks up their colour automatically —
+  // the same colour they have on the rota. Nothing to configure: it matches
+  // on the name, and falls back to a colour derived from whatever is typed.
+  const colourFor = (who: string) => {
+    const hit = c.contractors.find(x => x.name.toLowerCase() === who.trim().toLowerCase());
+    return who.trim() ? personColor(hit?.name ?? who, hit?.color) : '#e2e8f0';
+  };
+  return (
+    <Frame title={String(d(el).title || 'On site today')} icon={Users}>
+      <div className="flex flex-col gap-1 h-full overflow-y-auto pr-1">
+        {rows.map((r, i) => (
+          <div key={i} className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full flex-shrink-0"
+              style={{ backgroundColor: colourFor(r.who) }} />
+            <Line value={r.who} readOnly={c.readOnly} placeholder="Who"
+              onChange={v => set(rows.map((x, j) => j === i ? { ...x, who: v } : x))}
+              className="text-[10.5px] font-bold text-gray-800 w-[42%]" />
+            <Line value={r.where} readOnly={c.readOnly} placeholder="Where"
+              onChange={v => set(rows.map((x, j) => j === i ? { ...x, where: v } : x))}
+              className="text-[10.5px] text-gray-500 flex-1" />
+          </div>
+        ))}
+        {!c.readOnly && (
+          <button data-no-drag data-el-action onClick={() => set([...rows, { who: '', where: '' }])}
+            className="text-[10px] text-gray-400 hover:text-gray-600 text-left">+ add</button>
+        )}
+      </div>
+    </Frame>
+  );
+}
+
 function ClockWidget() {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
@@ -2566,6 +2615,39 @@ WIDGETS.push(...TV_WIDGETS);
  */
 WIDGETS.push(...INSIGHT_WIDGETS);
 WIDGETS.push(...MORE_WIDGETS);
+
+/**
+ * The mapped element behind a RETIRED widget id.
+ *
+ * The dedupe (widgetAliases.ts) never migrates anything: an element placed as
+ * "tv-tomorrow" still says tv-tomorrow in every store and backup, and this is
+ * the one door that translates its old settings into the survivor's options
+ * at read time. The mapped value goes under the stored bag, so anything the
+ * office later changes through the pencil wins over the translation.
+ */
+export function aliasedEl(el: CanvasElement): CanvasElement {
+  const a = el.widget ? WIDGET_ALIASES[el.widget] : undefined;
+  if (!a) return el;
+  return a.map ? { ...el, data: a.map({ ...(el.data ?? {}) }) } : el;
+}
+
+/**
+ * Every retired id joins the registry as a real entry that draws its
+ * survivor — so WIDGET_BY_ID, WidgetSurface's natural size, renderWidget and
+ * the wall all keep working with ZERO changes at their call sites, and no
+ * placed widget anywhere can ever say "Unknown widget". `retired` keeps them
+ * off the store shelf; nothing new is placed under an old name.
+ */
+for (const [oldId, alias] of Object.entries(WIDGET_ALIASES)) {
+  const target = WIDGETS.find(w => w.id === alias.to);
+  if (!target) continue;
+  WIDGETS.push({
+    ...target,
+    id: oldId,
+    retired: true,
+    render: (el, ctx) => target.render(aliasedEl(el), ctx),
+  });
+}
 
 export const WIDGET_BY_ID = new Map(WIDGETS.map(w => [w.id, w]));
 

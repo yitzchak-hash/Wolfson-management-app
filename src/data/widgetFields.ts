@@ -15,6 +15,8 @@
  *  - `element` — a key on the CanvasElement itself (text, colour, type styling)
  */
 
+import { WIDGET_ALIASES } from './widgetAliases';
+
 export type WidgetFieldKind =
   | 'text' | 'longtext' | 'number' | 'percent'
   | 'select' | 'colour' | 'url' | 'image' | 'datetime'
@@ -123,10 +125,39 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
       ],
     },
   ],
-  'stage-legend': [title()],
+  'stage-legend': [
+    title(),
+    {
+      key: 'look', label: 'Drawn as', kind: 'select',
+      options: [
+        { value: 'legend', label: 'A legend with counts' },
+        { value: 'bars', label: 'Bars' },
+      ],
+    },
+  ],
   'overdue-list': [title(), limit()],
-  'contractor-load': [
-    { key: 'contractorId', label: 'Contractor', kind: 'contractor', allowNone: 'The first one' },
+  'tv-load': [
+    {
+      key: 'show', label: 'Show', kind: 'select',
+      options: [
+        { value: 'all', label: 'Everybody, a bar each' },
+        { value: 'one', label: 'One worker\'s own count' },
+      ],
+    },
+    {
+      key: 'contractorId', label: 'Which worker', kind: 'contractor', allowNone: 'The first one',
+      hint: 'Only read when showing one worker.',
+    },
+  ],
+  'tv-done-today': [
+    title(),
+    {
+      key: 'period', label: 'Period', kind: 'select',
+      options: [
+        { value: 'today', label: 'Today, with who finished it' },
+        { value: 'week', label: 'This week, a bar per day' },
+      ],
+    },
   ],
   'project-mini': [
     {
@@ -154,41 +185,70 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
     // is easier to find than one behind a pencil, and it has to be answered
     // before anything renders anyway.
   ],
-  'calendar-mini': [title()],
-  'week-ahead': [title()],
+  'calendar-mini': [
+    title(),
+    {
+      key: 'shade', label: 'Busy days', kind: 'select',
+      options: [
+        { value: '', label: 'Marked' },
+        { value: '1', label: 'Shaded by how much is due' },
+      ],
+      hint: 'Shading counts every day a multi-day task covers, plus the weekly notebook\'s own entries.',
+    },
+  ],
   'recent-photos': [
     title(),
+    {
+      key: 'look', label: 'Drawn as', kind: 'select',
+      options: [
+        { value: 'grid', label: 'A grid of the newest' },
+        { value: 'one', label: 'One big picture, rotating' },
+        { value: 'wall', label: 'Grouped under their jobs' },
+      ],
+    },
     limit('How many photos'),
     {
       key: 'jobIds', label: 'Only these jobs', kind: 'jobs',
-      hint: 'Leave empty for every job in this workspace. Search and tick as many as you like.',
+      hint: 'Read by the grid look. Leave empty for every job in this workspace.',
     },
   ],
   'activity-feed': [title(), limit('How many entries')],
-  'progress-ring': [
-    { key: 'stageId', label: 'Reached which stage', kind: 'stage', allowNone: 'Anything started' },
-  ],
   'bin-counter': [title()],
   'contractor-links': [title()],
-  'stage-funnel': [title()],
-  'due-today': [title()],
+  'due-today': [
+    title(),
+    {
+      key: 'window', label: 'Window', kind: 'select',
+      options: [
+        { value: 'today', label: 'Due today' },
+        { value: 'tomorrow', label: 'Due tomorrow' },
+        { value: 'week', label: 'The week ahead' },
+      ],
+    },
+  ],
   'job-list': [
     { key: 'stageId', label: 'Only this stage', kind: 'stage', allowNone: 'Every job' },
     limit('How many jobs'),
   ],
   'photo-review': [title()],
   'count-by-stage': [
+    {
+      key: 'show', label: 'Answered as', kind: 'select',
+      options: [
+        { value: 'number', label: 'How many sit at it (a number)' },
+        { value: 'ring', label: 'What share has reached it (a ring)' },
+      ],
+    },
     { key: 'stageId', label: 'Which stage', kind: 'stage', allowNone: 'The first one' },
     {
       key: 'jobIds', label: 'Only these jobs', kind: 'jobs',
-      hint: 'Leave empty to count every job in this workspace.',
+      hint: 'Read by the number. Leave empty to count every job in this workspace.',
     },
   ],
   'recent-jobs': [
     title(),
     { key: 'days', label: 'Added in the last… (days)', kind: 'number', min: 1, max: 90 },
   ],
-  'job-search': [title()],
 
   // ── The ones that look for what is NOT happening ───────────────────────
   'no-date': [title(), limit()],
@@ -199,7 +259,18 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
       hint: 'Counted from the day the task was handed out.',
     },
   ],
-  'nobody-booked': [title(), limit()],
+  'nobody-booked': [
+    title(),
+    {
+      key: 'scope', label: 'Looking for', kind: 'select',
+      options: [
+        { value: 'stalled', label: 'Started, then left — part-way, nobody on it' },
+        { value: 'never', label: 'Never picked up — no stage, no task' },
+        { value: 'both', label: 'Either' },
+      ],
+    },
+    limit(),
+  ],
   'backlog-trend': [
     title(),
     { key: 'weeks', label: 'How many weeks', kind: 'number', min: 3, max: 16 },
@@ -417,10 +488,6 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
     { key: 'n', label: 'Count', kind: 'number', min: 0 },
     { key: 'step', label: 'Each tap adds', kind: 'number', min: 1, max: 100 },
   ],
-  'progress-bar': [
-    title('Label'),
-    { key: 'pct', label: 'How far along', kind: 'percent' },
-  ],
   table: [title()],
   'order-list': [title()],
   'week-planner': [title(), {
@@ -543,10 +610,36 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
   converter: [title('Label')],
   'weekly-goal': [
     title('Label'),
+    {
+      key: 'asPct', label: 'Kind of meter', kind: 'select',
+      options: [
+        { value: '', label: 'A counted target' },
+        { value: '1', label: 'A percentage slider' },
+      ],
+    },
     { key: 'target', label: 'Target', kind: 'number', min: 0 },
     { key: 'done', label: 'Done so far', kind: 'number', min: 0 },
+    { key: 'pct', label: 'How far along (percentage meter)', kind: 'percent' },
   ],
-  'team-today': [title()],
+  'team-today': [
+    title(),
+    {
+      key: 'source', label: 'Where the names come from', kind: 'select',
+      options: [
+        { value: 'typed', label: 'Typed by hand' },
+        { value: 'planner', label: 'The weekly notebook, live' },
+        { value: 'both', label: 'Both' },
+      ],
+    },
+    {
+      key: 'day', label: 'Which day', kind: 'select',
+      options: [
+        { value: 'today', label: 'Today' },
+        { value: 'tomorrow', label: 'Tomorrow' },
+      ],
+      hint: 'Read when the notebook is a source.',
+    },
+  ],
   timeline: [title()],
   'multi-timer': [title()],
   'w-countdown': [
@@ -588,6 +681,14 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
         { value: 'date', label: 'Date only' },
       ],
     },
+    {
+      key: 'hebrew', label: 'Hebrew date', kind: 'select',
+      options: [{ value: '', label: 'Off' }, { value: '1', label: 'On' }],
+    },
+    {
+      key: 'holiday', label: 'Next holiday', kind: 'select',
+      options: [{ value: '', label: 'Off' }, { value: '1', label: 'On' }],
+    },
   ],
   banner: [
     { key: 'text', label: 'Wording', kind: 'text', placeholder: 'THIS WEEK' },
@@ -628,13 +729,20 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
  * needing more gets a real entry above. `??=` so a proper entry added later
  * silently wins over this floor.
  */
-for (const id of [
-  'job-find', 'sticky-pad', 'add-bin',
-  'tv-workspace', 'tv-out-today', 'tv-late', 'tv-week-done', 'tv-tomorrow',
-  'tv-stage-spread', 'tv-month', 'tv-photo', 'tv-photo-wall', 'tv-feed',
-  'tv-load', 'tv-waiting', 'tv-drive', 'tv-new', 'tv-done-today', 'tv-clock',
-]) {
+for (const id of ['job-find', 'sticky-pad', 'add-bin']) {
   WIDGET_FIELDS[id] ??= [title()];
+}
+
+/**
+ * Every RETIRED id opens its SURVIVOR's pencil (widgetAliases.ts), so a
+ * widget placed under an old name can be switched to any of the merged
+ * options — a "Tomorrow" card can be re-pointed at today. Assigned by
+ * REFERENCE deliberately: the loops below that append the type and outline
+ * controls guard on the keys already being present, so a shared array is
+ * only extended once.
+ */
+for (const [oldId, alias] of Object.entries(WIDGET_ALIASES)) {
+  WIDGET_FIELDS[oldId] = WIDGET_FIELDS[alias.to] ?? [title()];
 }
 
 
@@ -751,7 +859,6 @@ export const WIDGET_PREVIEW: Record<string, Record<string, unknown>> = {
   // so it seeds a query and shows RESULTS, which is what the widget looks
   // like in use. 'cohen' matches the sample board's Cohen, Miriam.
   'job-find': { sampleQuery: 'cohen' },
-  'job-search': { sampleQuery: 'cohen' },
   divider: { text: 'this week' },
   quote: { text: 'Ladders get tied off. Every time.', by: 'Site rules' },
   legend: {
@@ -779,7 +886,6 @@ export const WIDGET_PREVIEW: Record<string, Record<string, unknown>> = {
     ],
   },
   tally: { title: 'Units delivered', n: 14, step: 1 },
-  'progress-bar': { title: 'First fix', pct: 65 },
   table: {
     title: 'Deliveries',
     rows: [['Item', 'Due'], ['Condensers ×4', 'Tue'], ['Grilles', 'Thu'], ['Thermostats', 'Fri']],
@@ -859,8 +965,6 @@ export const WIDGET_PREVIEW: Record<string, Record<string, unknown>> = {
   'job-list': {},
   // The preview's own job and stage ids, matching the sample rows in widgets.tsx.
   'count-by-stage': { stageId: 'x2' },
-  'progress-ring': { stageId: 'x2' },
-  'contractor-load': { contractorId: 'k2' },
   kpi2: {},
   'recent-jobs': { days: 7 },
   // The store draws these against the sample jobs and tasks, so a card shows

@@ -30,6 +30,40 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-09-15',
+    title: 'The widget store, tidied: one widget per job',
+    items: [
+      {
+        title: 'Twenty fewer widgets, nothing lost',
+        body: 'Thirty-eight of the store\'s widgets were seventeen widgets '
+          + 'wearing two or three coats — most of them big-type TV copies from '
+          + 'before the wall learned to scale. They are merged now: everything '
+          + 'an absorbed widget could show survives as a switch in the '
+          + 'surviving widget\'s pencil, and every widget already placed on '
+          + 'any board keeps working exactly as it was.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'One widget, one switch',
+        body: 'Due today, Tomorrow and Week ahead became one “Coming up” with '
+          + 'the window in its pencil. The three stage pictures became '
+          + '“Stages” (legend or bars) and “One stage” (number or ring). The '
+          + 'three photo widgets became one “Latest photos” with three looks. '
+          + 'The clock gained Hebrew-date and next-holiday switches, the '
+          + 'Calendar gained load shading, and “On site today” can now read '
+          + 'the weekly notebook live.',
+        demo: 'tap',
+      },
+      {
+        title: 'One "Find a job", the forgiving one',
+        body: 'There were two widgets with the identical name. The one that '
+          + 'finds Hebrew names typed in English — and forgives a spelling '
+          + 'that is nearly right — is the one that stays.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2026-09-14',
     title: 'A calmer touch screen, numbers that open, and the reel grows up',
     items: [

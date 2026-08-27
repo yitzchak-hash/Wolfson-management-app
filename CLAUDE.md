@@ -5102,3 +5102,82 @@ all four doors, and the portal sections now DERIVE their date expectations
 from the clock (badge wording, finish-early day names, finished-early
 strike) instead of pinning them — the harness was red at midnight the
 moment the container clock walked past its fixed seed dates.
+
+---
+
+# v2 — the widget dedupe (owner-approved, 2026-08-27, "all of it")
+
+## 94 widgets → 74, and the TV family dissolves
+The audit (the "One widget per job" artifact) found 38 widgets that were 17
+wearing two or three coats — mostly TV-prefixed big-type copies from before
+`WidgetSurface` reached the wall. All 17 merges built. The survivors and
+their new pencil switches:
+- **Coming up** (`due-today`): `window` today/tomorrow/week (absorbs
+  `week-ahead`; the wall's `tv-tomorrow` went to On site today instead —
+  it read the PLANNER, not the tasks, which the audit page had blurred).
+- **On site today** (`team-today`): `source` typed/planner/both + `day`
+  today/tomorrow (absorbs `tv-out-today`, `tv-tomorrow`; the planner body
+  is tvWidgets' exported `WhoIsOut`).
+- **Stages** (`stage-legend`): `look` legend/bars (absorbs `stage-funnel`,
+  `tv-stage-spread`).
+- **One stage** (`count-by-stage`): `show` number/ring (absorbs
+  `progress-ring`, keeping the ring's reached-share semantics).
+- **Latest photos** (`recent-photos`): `look` grid/one/wall (absorbs
+  `tv-photo`, `tv-photo-wall` — bodies exported from tvWidgets).
+- **Calendar** (`calendar-mini`): `shade` (absorbs `tv-month` as the
+  exported `MonthHeat`).
+- **Wall clock** (`clock`): `hebrew` + `holiday` switches (absorbs
+  `tv-clock`; `WallClock` takes flags).
+- **Workspace card** (`project-glance`): unset/`'this'` now draws the LIVE
+  WorkspaceCard of the current workspace (the old unset state was a "pick a
+  workspace" placeholder); any other id keeps the snapshot glance. Absorbs
+  `tv-workspace`.
+- **Workers' load** (`tv-load`): `show` all/one + contractor picker
+  (absorbs `contractor-load`).
+- **Finished** (`tv-done-today`): `period` today/week (absorbs
+  `tv-week-done`).
+- **Target** (`weekly-goal`): `asPct` percentage-slider mode (absorbs
+  `progress-bar`).
+- **Nobody's booked** (`nobody-booked`): `scope` stalled/never/both
+  (absorbs `tv-waiting`).
+- **On site without a plan** (`no-plan`): gained the folder/plan/neither
+  counts strip (absorbs `tv-drive`).
+- Straight retirements: `job-search` → `job-find` (two widgets literally
+  both named "Find a job"), `tv-late` → `overdue-list`, `tv-new` →
+  `recent-jobs`, `tv-feed` → `activity-feed`.
+tvWidgets.tsx now registers only the two survivors and EXPORTS the wall
+bodies the merged board widgets borrow — it imports only TYPES from
+widgets.tsx, so there is still no runtime cycle.
+
+## The alias system — nothing migrates, nothing breaks
+`src/data/widgetAliases.ts` (pure, no imports — three registries need it and
+two must not import each other): retired id → survivor + a `map` translating
+the old data bag into the survivor's options. The MAPPED values go first and
+the stored bag spreads over them, so a setting later changed through the
+pencil always wins. At the bottom of widgets.tsx every retired id is pushed
+into WIDGETS as a real entry (`retired: true`) spreading its survivor and
+rendering through `aliasedEl(el)` — so WIDGET_BY_ID, WidgetSurface's natural
+size, renderWidget and the wall needed ZERO call-site changes, and no
+Firestore echo or old backup can ever produce "Unknown widget". Rules:
+- **The store shelf filters `retired`** — nothing new is placed under an
+  old name; SHELF/WIDGET_PREVIEW entries for retired ids are gone.
+- **`WIDGET_FIELDS[retired] = WIDGET_FIELDS[survivor]`** (by reference — the
+  type/outline push loops guard on keys, so a shared array is extended
+  once), and NodeSettings READS values through `aliasedEl` while WRITING to
+  the raw bag: an old "Tomorrow" card's pencil shows the Window select
+  already on tomorrow.
+- **TV_ALLOWED lists the survivors AND the retired ids** (hardcoded there —
+  importing the alias table from tvWidgets would close a cycle).
+- **Deleting an absorbed def means deleting it** — the stage-funnel def was
+  folded into Stages but its original entry survived, so the shelf sold it
+  next to its own alias. The dedupe harness's shelf check is what caught it.
+
+Harness: `scratchpad/dedupe.mjs` (12 checks — eight retired ids drawing
+their survivors with translated settings, a survivor's new switch, the
+pencil-translation, and the shelf selling none of the twenty). Its traps are
+the standing ones: Frame UPPERCASES titles (match case-insensitively), and
+computed font-size stays LOCAL under WidgetSurface's transform — round24's
+clock check now multiplies by the render scale, and its second clock grows
+in BOTH dimensions (the blink fix width-capped the row factor). storefull:
+84 cards, only the standing nobody-booked false positive. tvcrash green on
+the built bundle.
