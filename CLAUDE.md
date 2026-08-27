@@ -22,33 +22,44 @@ The entire admin UI and contractor portal are fully bilingual (English/Hebrew wi
 ## Repository
 `yitzchak-hash/wolfson-management-app` — development branch: `claude/blissful-cray-spTFY`
 
-### STANDING RULE — every round ends on the production branch
+### STANDING RULE — ONE BRANCH. Commit straight to production.
 **There is no branch called `main`.** The repo's default branch — the one Vercel
 deploys to `wolfson-management-app.vercel.app` — is
 **`claude/blissful-cray-spTFY`**. When the owner says "push to main", that is
 the branch he means: work sitting anywhere else only ever produces a PREVIEW
 build behind Vercel's sign-in.
 
-So, at the end of every round, without being asked again:
-1. commit everything and push the working branch;
-2. **fast-forward `claude/blissful-cray-spTFY` to it** and push that too.
+**OWNER RULING (2026-08-27): work on that branch DIRECTLY.** No per-session
+working branch, no fast-forward dance. The old two-branch habit put two rows
+on the Vercel deployments page for every single commit — a Preview and a
+Production — which is most of what made that page read as "a big mess", and
+a branch that forks for a day inherits whatever platform limit was fixed
+meanwhile (see the 12-function rule below: the Flip/iPad branch was red for
+a day for exactly that reason). One branch, one row, one truth.
 
-Before pushing, prove nothing is being dropped — do not assume:
-- `git merge-base --is-ancestor origin/claude/blissful-cray-spTFY HEAD`
-  must succeed. If it does, the push is a fast-forward and no commit can be
-  lost. **If it does NOT, stop and merge** — never force.
-- Check the other live branches for content that exists nowhere else:
-  `comm -23 <(git ls-tree -r --name-only origin/<branch> | sort)
-            <(git ls-tree -r --name-only HEAD | sort)`
-  Old branches carry hundreds of commits whose SHAs differ because they were
-  squashed in — that is not lost work, and a commit count says nothing. The
-  file list is what answers the question.
+So every round: commit on `claude/blissful-cray-spTFY` and push it. Before
+pushing, `git merge-base --is-ancestor origin/claude/blissful-cray-spTFY HEAD`
+must succeed — if it does not, another session pushed; **merge, never force**.
 
-Audited 2026-08-29: `claude/tzviair-platform` has 205 commits not reachable
-from the production branch and **zero files** missing from it;
-`claude/firebase-save-diagnostics-Px3rx` has 57 and one missing file,
-`SYNC_REPORT.md`, a June diagnostics note rather than code (its fixes — the
-cloud-sync badge, dropping `persistentLocalCache` — are all in the tree).
+**When another session DOES need its own branch** (a parallel round, a design
+session), it merges PRODUCTION INTO ITSELF while it works and its branch is
+merged back the moment its round lands. Judge such a branch by FILES, never
+by commit count:
+  `comm -13 <(git ls-tree -r --name-only origin/claude/blissful-cray-spTFY | sort) \
+            <(git ls-tree -r --name-only origin/<branch> | sort)`
+Old branches carry hundreds of commits whose SHAs differ because they were
+squashed in — that is not lost work, and a commit count says nothing.
+
+Audited 2026-08-27, everything folded into production and re-checked by that
+file test: `claude/tzviair-platform` (205 commits) and
+`claude/firebase-save-diagnostics-Px3rx` (57) hold **nothing** production
+lacks except `api/health.js`, which was deliberately RETIRED to stay inside
+Vercel's 12-function limit — merging either branch would put it back and turn
+every deployment red again. Their one genuine document was rescued to
+`docs/SYNC_REPORT.md` (a June 2026 report on how the platforms do sync).
+`claude/jobs-notebook-drag-drop-hf5xlz`, `claude/skill-installation-h5hfp0`,
+`claude/mobile-buildings-domain-il3khp` and `claude/tv-green-border-scaling-rknz7j`
+are strict ancestors of production — dead weight, safe to delete.
 
 ## Deployment
 - **Hosting**: Vercel (connected to GitHub repo, auto-deploys on push)
