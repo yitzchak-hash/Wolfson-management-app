@@ -5067,3 +5067,38 @@ Harness: `scratchpad/tapin2.mjs` (8 checks, including a real punch from the
 /tv page). Its lesson is the standing one: patching localStorage and
 reloading is overwritten by the app's flush-on-unload — the one-column case
 needs its own seeded context.
+
+## OWNER RULING (2026-08-27): dragging ONE DAY of a multi-day task ASKS
+Supersedes the earlier "a single day just moves silently" decision, in his
+own three labels. `PlannerDayDialog` (PlannerDialogs.tsx) opens when a
+day-card whose task has other squares is dropped on a different square:
+- **Move this day** — the old silent path (moveEntry + moveTaskDay).
+- **Add this day to the existing task** — origin card stays, the task grows
+  (the Ctrl-drag shortcut still does this without the question).
+- **New task on this day** — opens the standing `PlannerTaskDialog`,
+  three-quarters filled in; its days place one card per day on the target
+  person's row, the dragged card never moves, and the job-in-square rule
+  holds (a job's card lists its tasks itself).
+- A target day the task ALREADY covers asks its own plain question —
+  **merge** (origin card off, task one day shorter) or a new task — because
+  "move" there folds two days into one and "add" adds nothing.
+The day-number pills are labels derived from calendar order, never
+identities: day one dragged past day two simply renumbers. Dropping a card
+back on its own square asks nothing. Foreign entries keep the ordinary
+asks (their task lives in another workspace). Dragging a day OFF the sheet
+still takes just that day, silently.
+
+**The plannerAsk trap, paid for here**: `addContractorAssignment` queues
+the store's "this job is on the planner and just got a dated task" question
+whenever the job already has a card on any rota — and the new-task door
+creates exactly such a task, so the `PlannerAskModal` stood invisibly over
+the board and swallowed every later press (the standing unseen-backdrop
+disease; in the harness it read as "the next drag does nothing at all").
+The widget's onDone answers it as 'skip' for its own job before placing
+the cards.
+
+Harness: `scratchpad/multiday.mjs` re-encoded — sections 3/3a/3b/3c cover
+all four doors, and the portal sections now DERIVE their date expectations
+from the clock (badge wording, finish-early day names, finished-early
+strike) instead of pinning them — the harness was red at midnight the
+moment the container clock walked past its fixed seed dates.

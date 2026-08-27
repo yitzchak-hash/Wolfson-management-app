@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { PlannerDropDialog } from './PlannerDialogs';
+import { PlannerDropDialog, PlannerDayDialog, PlannerTaskDialog, DayChoice } from './PlannerDialogs';
 import { ChevronUp, ChevronDown, Plus, X, CalendarDays, Maximize2, Eye, EyeOff, ClipboardList } from 'lucide-react';
 import {
   Apartment, CanvasElement, Contractor, User, ContractorAssignment, Stage, personColor,
@@ -662,6 +662,53 @@ export function PlannerWidget({
    */
   const [dropAsk, setDropAsk] = useState<
     { fromKey: string; entry: PlannerEntry; target: RotaHit | null } | null>(null);
+
+  /**
+   * A dragged day of a MULTI-DAY task, waiting to be told what it meant.
+   *
+   * The owner's 2026-08-27 ruling replaces the earlier silent move with a
+   * question in his own three labels: move this day, add this day to the
+   * existing task, or a new task on this day. The day-number pills renumber
+   * themselves from calendar order after any answer — they are labels, not
+   * identities, so day one dragged past day two simply becomes the later day.
+   */
+  const [dayAsk, setDayAsk] = useState<
+    { fromKey: string; entry: PlannerEntry; target: RotaHit } | null>(null);
+  /** "New task on this day" — the standing task form, three-quarters filled in. */
+  const [newTaskAsk, setNewTaskAsk] = useState<
+    { entry: PlannerEntry; target: RotaHit } | null>(null);
+
+  function resolveDayChoice(choice: DayChoice) {
+    const ask = dayAsk;
+    setDayAsk(null);
+    if (!ask) return;
+    if (choice === 'new') { setNewTaskAsk({ entry: ask.entry, target: ask.target }); return; }
+    const t = taskOf(ask.entry);
+    const fromDay = ask.fromKey.split('|')[1];
+    if (choice === 'merge') {
+      // The landing day is already one of the task's days: the dragged card
+      // comes off and the task shrinks by that one day. Nothing else changes.
+      track({
+        weight: 'content',
+        label: `Merged a day of ${cardName(ask.entry)}`,
+        explain: `The card comes back onto ${squareName(ask.fromKey)}, and that day is `
+          + 'put back on the task. The task itself is not otherwise touched.',
+      }, () => setCell(ask.fromKey, (cells[ask.fromKey] ?? []).filter(x => x.id !== ask.entry.id)));
+      if (t) {
+        const upd = removeTaskDay(daysOf(t), fromDay);
+        if (upd) updateAssignment(t.id, upd);
+      }
+      return;
+    }
+    // 'add' keeps the origin card and grows the task; 'move' rewrites the day.
+    const landed = moveEntry(ask.fromKey, ask.entry, ask.target, choice === 'add');
+    if (landed && t) {
+      const upd = choice === 'add'
+        ? addTaskDay(daysOf(t), ask.target.day)
+        : moveTaskDay(daysOf(t), fromDay, ask.target.day);
+      if (upd) updateAssignment(t.id, upd);
+    }
+  }
 
   /** Carry out whichever the office picked. */
   function resolveDrop(choice: 'move' | 'copy' | 'off') {
@@ -1364,17 +1411,15 @@ export function PlannerWidget({
                                   return;
                                 }
                                 /**
-                                 * A single day of a multi-day task just MOVES — no
-                                 * question card (the locked decision): the day lands
-                                 * where the hand put it and the task's days follow.
-                                 * The ask survives only on the last remaining day.
+                                 * A single day of a multi-day task ASKS — the owner's
+                                 * 2026-08-27 ruling, superseding the earlier silent
+                                 * move: move this day, add this day to the task, or a
+                                 * new task on this day. Dropping the card back on its
+                                 * own square still means nothing and asks nothing.
                                  */
                                 if (t && taskSquares(t.id) > 1) {
-                                  const landed = moveEntry(key, en, target, false);
-                                  if (landed) {
-                                    const upd = moveTaskDay(daysOf(t), day, target.day);
-                                    if (upd) updateAssignment(t.id, upd);
-                                  }
+                                  if (cellKey(target.person, target.day) === key) return;
+                                  setDayAsk({ fromKey: key, entry: en, target });
                                   return;
                                 }
                                 // A plain drag asks, because the same gesture used
@@ -1482,6 +1527,84 @@ export function PlannerWidget({
         />,
         document.body,
       )}
+
+      {/* What dragging ONE DAY of a multi-day task meant — same portal rule. */}
+      {dayAsk && (() => {
+        const t = taskOf(dayAsk.entry);
+        const fromDay = dayAsk.fromKey.split('|')[1];
+        const days = t ? daysOf(t) : [];
+        const num = t ? dayNumberOf(days, fromDay) : null;
+        return createPortal(
+          <PlannerDayDialog
+            jobName={cardName(dayAsk.entry)}
+            dayNum={num?.k ?? 1}
+            dayCount={days.length || 1}
+            fromLabel={squareName(dayAsk.fromKey)}
+            toLabel={squareName(cellKey(dayAsk.target.person, dayAsk.target.day))}
+            covered={dayAsk.target.day !== fromDay && days.includes(dayAsk.target.day)}
+            onCancel={() => setDayAsk(null)}
+            onDone={resolveDayChoice}
+          />,
+          document.body,
+        );
+      })()}
+
+      {/* "New task on this day": the standing task form, three-quarters filled
+          in — the dragged card never moved, and the form's own days place one
+          card per day on the target person's row. */}
+      {newTaskAsk && (() => {
+        const job = newTaskAsk.entry.jobId ? jobById.get(newTaskAsk.entry.jobId) : undefined;
+        if (!job) return null;
+        const who = personOf(newTaskAsk.target.person, contractors, users);
+        return createPortal(
+          <PlannerTaskDialog
+            job={job}
+            person={who}
+            dayIso={newTaskAsk.target.day}
+            stages={stages}
+            contractors={contractors}
+            onCancel={() => setNewTaskAsk(null)}
+            onDone={(taskId, taskDays) => {
+              /**
+               * The store queues its "this job is on the planner and just got
+               * a dated task" question (plannerAsk) the moment the dialog
+               * creates the task — right for a task typed elsewhere, and
+               * exactly wrong here: this task was made FROM the planner and
+               * its day cards are placed two lines down. Left standing, the
+               * modal's backdrop silently swallowed every later press on the
+               * board. Answer it as "leave the planner alone" ourselves.
+               */
+              const queued = useStore.getState().plannerAsk;
+              if (queued && queued.jobId === newTaskAsk.entry.jobId) {
+                useStore.getState().answerPlannerAsk('skip');
+              }
+              const person = newTaskAsk.target.person;
+              const dds = taskDays?.length ? taskDays : [newTaskAsk.target.day];
+              track({
+                weight: 'content',
+                label: `Planned a new task for ${cardName(newTaskAsk.entry)}`,
+                explain: `The new task's day cards come back off the notebook. The task `
+                  + 'itself stays on the job either way.',
+              }, () => {
+                const next = { ...cells };
+                for (const dd of dds) {
+                  const k2 = cellKey(person, dd);
+                  const landing = next[k2] ?? [];
+                  // The same job twice in ONE square says nothing — its card
+                  // lists the job's tasks itself, so the new task shows there.
+                  if (landing.some(e => e.jobId === job.id)) continue;
+                  next[k2] = [...landing, {
+                    id: newEntryId(), jobId: job.id, ...(taskId ? { taskId } : {}),
+                  }];
+                }
+                write({ cells: next });
+              });
+              setNewTaskAsk(null);
+            }}
+          />,
+          document.body,
+        );
+      })()}
     </div>
   );
 }

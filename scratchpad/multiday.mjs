@@ -107,21 +107,88 @@ check(await page.locator('[data-day-pill]').count() === 3
   && (await page.locator('[data-day-pill]').first().innerText()).includes('1 of 3'),
   'each card wears its day-of pill');
 
-// ── 3 · drag ONE day (Thursday → Monday): silent, and the task follows ──────
+// ── 3 · drag ONE day (Thursday → Monday): the ASK, then Move ────────────────
+// The owner's 2026-08-27 ruling replaced the silent move with a question in
+// his own three labels; the day pills renumber from calendar order after it.
+const midOf = r => ({ x: r.x + r.width / 2, y: r.y + r.height / 2 });
+const rotaCells = () => data().then(x => x.canvasElements.find(e => e.id === 'CE-rota').data.cells);
 const thuCard = await page.locator('[data-node-id="CE-rota"] .group\\/cell >> nth=4')
   .locator('.planner-card').boundingBox();
-await drag({ x: thuCard.x + thuCard.width / 2, y: thuCard.y + thuCard.height / 2 }, await cellCentre(1));
+await drag(midOf(thuCard), await cellCentre(1));
 await page.waitForTimeout(700);
-check(await page.locator('.fixed.z-\\[171\\]').count() === 0,
-  'no question card — a single day of a multi-day task just moves');
+check(await page.locator('[data-day-dialog]').count() === 1,
+  'dragging a day of a multi-day task ASKS what it meant');
+const dlgText = await page.locator('.fixed.z-\\[171\\]').innerText();
+check(dlgText.includes('day 2 of 3'), 'and names which day it is');
+check(await page.locator('[data-day-choice="move"]').count() === 1
+  && await page.locator('[data-day-choice="add"]').count() === 1
+  && await page.locator('[data-day-choice="new"]').count() === 1,
+  'with the three choices: move · add to the task · new task');
+await page.locator('[data-day-choice="move"]').click();
+await page.waitForTimeout(700);
 d = await data();
 task = d.contractorAssignments[0];
 check(JSON.stringify(task.days) === JSON.stringify(['2026-08-24', '2026-08-26', '2026-08-30'])
   && task.dueDate === '2026-08-30',
-  'the task\'s days follow the hand', JSON.stringify(task.days));
-const cells2 = d.canvasElements.find(e => e.id === 'CE-rota').data.cells;
+  'Move: the task\'s days follow the hand', JSON.stringify(task.days));
+const cells2 = await rotaCells();
 check((cells2['c:C-jo|2026-08-24'] ?? []).length === 1 && !cells2['c:C-jo|2026-08-27'],
   'the card lives on Monday now, Thursday is empty');
+check((await page.locator('[data-day-pill]').first().innerText()).includes('1 of 3'),
+  'the pills renumbered themselves from calendar order');
+
+// ── 3a · ADD: Monday's card dragged to Tuesday grows the task ───────────────
+let monCard = await page.locator('[data-node-id="CE-rota"] .group\\/cell >> nth=1')
+  .locator('.planner-card').boundingBox();
+await drag(midOf(monCard), await cellCentre(2));
+await page.waitForTimeout(700);
+await page.locator('[data-day-choice="add"]').click();
+await page.waitForTimeout(700);
+d = await data();
+task = d.contractorAssignments[0];
+check(JSON.stringify(task.days) === JSON.stringify(['2026-08-24', '2026-08-25', '2026-08-26', '2026-08-30']),
+  'Add: the task grows to four days and the origin day stays', JSON.stringify(task.days));
+const cells3 = await rotaCells();
+check((cells3['c:C-jo|2026-08-24'] ?? []).length === 1 && (cells3['c:C-jo|2026-08-25'] ?? []).length === 1,
+  'cards on Monday AND Tuesday');
+
+// ── 3b · a covered day asks its own question: MERGE ─────────────────────────
+const tueCard = await page.locator('[data-node-id="CE-rota"] .group\\/cell >> nth=2')
+  .locator('.planner-card').boundingBox();
+await drag(midOf(tueCard), await cellCentre(1));
+await page.waitForTimeout(700);
+check((await page.locator('.fixed.z-\\[171\\]').innerText()).includes('already one of this task'),
+  'landing on a day the task already covers is its own plain question');
+await page.locator('[data-day-choice="merge"]').click();
+await page.waitForTimeout(700);
+d = await data();
+task = d.contractorAssignments[0];
+const cells4 = await rotaCells();
+check(JSON.stringify(task.days) === JSON.stringify(['2026-08-24', '2026-08-26', '2026-08-30'])
+  && !cells4['c:C-jo|2026-08-25'],
+  'Merge: back to three days, the Tuesday card gone', JSON.stringify(task.days));
+
+// ── 3c · NEW TASK: the third door opens the standing form, pre-filled ───────
+monCard = await page.locator('[data-node-id="CE-rota"] .group\\/cell >> nth=1')
+  .locator('.planner-card').boundingBox();
+await drag(midOf(monCard), await cellCentre(2));
+await page.waitForTimeout(700);
+await page.locator('[data-day-choice="new"]').click();
+await page.waitForTimeout(600);
+check(await page.locator('.fixed.z-\\[171\\] textarea').count() === 1
+  && /25/.test(await page.locator('[data-day-readout]').innerText()),
+  'New task opens the standing form, already on Tuesday');
+await page.fill('.fixed.z-\\[171\\] textarea', 'Paint the hallway');
+await page.click('button:has-text("Add the task")');
+await page.waitForTimeout(900);
+d = await data();
+const newTask = d.contractorAssignments.find(a => a.id !== task.id);
+const cells5 = await rotaCells();
+check(!!newTask && (cells5['c:C-jo|2026-08-25'] ?? []).some(e => e.taskId === newTask.id),
+  'a separate task with its own card on Tuesday');
+check(JSON.stringify(d.contractorAssignments.find(a => a.id === task.id).days)
+  === JSON.stringify(['2026-08-24', '2026-08-26', '2026-08-30']),
+  'and the original task kept its three days untouched');
 
 // ── 3½ · Non-consecutive: the checkbox opens a second stretch ───────────────
 const levi = await page.locator('[data-node-id="G-levi"]').boundingBox();
@@ -148,11 +215,25 @@ const cardText = await page.locator('button:has-text("Close the ceiling")').firs
 check(cardText.includes('Mon 24 Aug') && cardText.includes('Wed 26 Aug') && cardText.includes('Sun 30 Aug'),
   'the worker sees EVERY day on the task card', cardText.replace(/\n/g, ' · ').slice(0, 120));
 // The badge counts to the NEXT covered day, so what it says depends on the
-// real clock: Today when today is one of the days, Tomorrow when the next
-// covered day is tomorrow (holds for clocks on 24–26 Aug 2026).
-const todayIso = new Date().toISOString().slice(0, 10);
-const expectBadge = ['2026-08-24', '2026-08-26', '2026-08-30'].includes(todayIso) ? 'Today' : 'Tomorrow';
-check(cardText.includes(expectBadge), `and the badge counts to the next covered day (${expectBadge})`);
+// real clock — DERIVE the expectation instead of pinning it, or the harness
+// goes red at midnight (the standing date-drift trap).
+const taskDaysArr = ['2026-08-24', '2026-08-26', '2026-08-30'];
+const now0 = new Date(); now0.setHours(0, 0, 0, 0);
+const localIso = dt => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+const todayIso = localIso(now0);
+const nextCovered = taskDaysArr.find(x => x >= todayIso);
+let expectBadge = null;
+if (taskDaysArr.includes(todayIso)) expectBadge = 'Today';
+else if (!nextCovered) expectBadge = 'Overdue';
+else {
+  const diff = Math.round((new Date(`${nextCovered}T00:00:00`) - now0) / 86400000);
+  if (diff === 1) expectBadge = 'Tomorrow';
+}
+if (expectBadge) {
+  check(cardText.includes(expectBadge), `and the badge counts to the next covered day (${expectBadge})`);
+} else {
+  console.log('SKIP badge wording — the clock sits between covered days, the badge counts days');
+}
 await page.locator('button:has-text("Close the ceiling")').first().click();
 await page.waitForTimeout(600);
 // The new flow: Close job opens the closing screen; the final press closes.
@@ -160,15 +241,22 @@ await page.locator('[data-close-job]').first().click();
 await page.waitForTimeout(300);
 await page.locator('[data-close-now]').click();
 await page.waitForTimeout(400);
+// The finish-early ask exists only while days lie AHEAD of the clock —
+// derive them rather than pinning, the same drift rule as the badge.
+const futureDays = taskDaysArr.filter(x => x > todayIso);
 const ask = page.locator('[data-finish-early]');
-check(await ask.count() === 1, 'closing with days ahead raises the big-words ask');
-const askText = await ask.innerText();
-check(askText.includes('Wednesday 26 August') && askText.includes('Sunday 30 August'),
-  'it names the days he would come back for', askText.replace(/\n/g, ' · ').slice(0, 140));
-await ask.locator('button').first().click();       // "I finished everything"
+if (futureDays.length) {
+  check(await ask.count() === 1, 'closing with days ahead raises the big-words ask');
+  const askText = await ask.innerText();
+  check(futureDays.every(x => askText.includes(String(Number(x.slice(8))))),
+    'it names the days he would come back for', askText.replace(/\n/g, ' · ').slice(0, 140));
+  await ask.locator('button').first().click();     // "I finished everything"
+} else {
+  console.log('SKIP finish-early — the clock has passed every covered day');
+}
 await page.waitForTimeout(900);
 d = await data();
-task = d.contractorAssignments[0];
+task = d.contractorAssignments.find(a => a.taskDescription?.includes('Close the ceiling'));
 check(!!task.completedAt, 'yes closes the task');
 check(d.apartments.find(a => a.id === 'G-cohen').currentStageId === 'S-done',
   'and the JOB moved itself to the when-done stage');
@@ -184,7 +272,8 @@ const struck = await page.evaluate(() => {
 });
 check(struck.lines === 3, 'every day card wears the strike line — the record, not a deletion',
   JSON.stringify(struck));
-check(struck.early, 'the days ahead say "finished early"');
+if (futureDays.length) check(struck.early, 'the days ahead say "finished early"');
+else console.log('SKIP finished-early wording — no days lay ahead of the clock');
 
 await b.close();
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASS');

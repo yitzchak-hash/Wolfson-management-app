@@ -34,6 +34,15 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     title: 'A calmer touch screen, numbers that open, and the reel grows up',
     items: [
       {
+        title: 'Dragging a day of a multi-day task asks what you meant',
+        body: 'Move a day-card of a task that covers several days and the '
+          + 'notebook asks: move this day, add this day to the existing task, '
+          + 'or a new task on this day. The “day 1 of 3” numbers follow the '
+          + 'calendar and renumber themselves, and dropping onto a day the '
+          + 'task already covers asks its own plain question.',
+        demo: 'drag',
+      },
+      {
         title: 'The tap-in board works on the TV wall',
         body: 'Pressing a name on the wall panel now really clocks them in or '
           + 'out — the wall being read-only no longer silences it, because a '

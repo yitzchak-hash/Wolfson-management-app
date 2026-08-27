@@ -448,6 +448,94 @@ export function PlannerDropDialog({ jobName, toWhere, canLand, onCancel, onDone 
   );
 }
 
+// ── Dragging one day of a MULTI-DAY task ─────────────────────────────────────
+
+export type DayChoice = 'move' | 'add' | 'new' | 'merge';
+
+/**
+ * At module level for the same remount reason as DropChoiceButton above.
+ */
+function DayChoiceButton({ id, title, sub, danger, onPick }: {
+  id: DayChoice; title: string; sub: string; danger?: boolean;
+  onPick: (c: DayChoice) => void;
+}) {
+  return (
+    <button data-day-choice={id} onClick={() => onPick(id)}
+      className="w-full text-left px-3 py-2.5 rounded-lg border transition-colors hover:bg-slate-50"
+      style={{ borderColor: danger ? '#f3c9c4' : '#e2e8f0' }}>
+      <b className="text-[13px]" style={{ color: danger ? '#b4342a' : '#1e293b' }}>{title}</b>
+      <span className="block text-[11.5px] text-slate-500">{sub}</span>
+    </button>
+  );
+}
+
+/**
+ * What dragging ONE DAY of a multi-day task to another square meant.
+ *
+ * It used to move the day silently; the owner's 2026-08-27 ruling replaces
+ * that with a question, in his own three labels: move this day, add this day
+ * to the existing task, or a new task on this day. The day-number pills are
+ * labels derived from calendar order, never identities — so a move that
+ * carries day one past day two simply renumbers them, and the dialog does
+ * not treat it specially.
+ *
+ * When the target day is ALREADY one of the task's days, "move" would fold
+ * two days into one and "add" would add nothing — so that case asks its own
+ * plain question (merge, or a separate new task) instead of offering choices
+ * that cannot mean what they say.
+ */
+export function PlannerDayDialog({
+  jobName, dayNum, dayCount, fromLabel, toLabel, covered, onCancel, onDone,
+}: {
+  jobName: string;
+  /** Which day of the task the dragged card is (1-based), and how many it has. */
+  dayNum: number;
+  dayCount: number;
+  /** "Moshe · Tue 18 Aug" for where it came from and where it landed. */
+  fromLabel: string;
+  toLabel: string;
+  /** The landing day is already one of this task's days. */
+  covered: boolean;
+  onCancel: () => void;
+  onDone: (choice: DayChoice) => void;
+}) {
+  const Choice = (p: { id: DayChoice; title: string; sub: string; danger?: boolean }) =>
+    DayChoiceButton({ ...p, onPick: onDone });
+
+  return (
+    <Shell onCancel={onCancel} title={`${jobName} — day ${dayNum} of ${dayCount}`}>
+      <div className="grid gap-2" data-day-dialog>
+        {covered ? (
+          <>
+            <p className="text-[13px] text-gray-600 m-0">
+              <b>{toLabel}</b> is already one of this task's days.
+            </p>
+            <Choice id="merge" danger title="Merge into that day"
+              sub={`The card from ${fromLabel} comes off and the task drops to ${dayCount - 1} `
+                + `day${dayCount - 1 === 1 ? '' : 's'}. Nothing else about the task changes.`} />
+            <Choice id="new" title="New task on this day"
+              sub={`Opens the task form for ${jobName} starting ${toLabel} — a separate task.`} />
+          </>
+        ) : (
+          <>
+            <p className="text-[13px] text-gray-600 m-0">
+              This card is one day of a task that covers {dayCount} days.
+            </p>
+            <Choice id="move" title="Move this day"
+              sub={`The work planned for ${fromLabel} happens on ${toLabel} instead. `
+                + 'The day numbers follow the calendar and renumber themselves.'} />
+            <Choice id="add" title="Add this day to the existing task"
+              sub={`${fromLabel} stays as well — the task grows to ${dayCount + 1} days, `
+                + 'and the worker\'s schedule grows with it.'} />
+            <Choice id="new" title="New task on this day"
+              sub={`Opens the task form for ${jobName} starting ${toLabel} — a completely separate task.`} />
+          </>
+        )}
+      </div>
+    </Shell>
+  );
+}
+
 // ── Taking somebody off the planner ──────────────────────────────────────────
 
 export type OffScope = 'forward' | 'all' | 'date';
