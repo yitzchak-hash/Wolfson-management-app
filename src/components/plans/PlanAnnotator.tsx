@@ -808,13 +808,24 @@ function PlanEditor({
   const compactRef = useRef(compact);
   compactRef.current = compact;
 
-  // Re-fit when the window changes shape — the studio is full screen, so a
-  // rotated tablet or a resized window otherwise leaves the plan stranded.
+  // Re-fit when the STAGE changes shape — watched on the stage itself, not
+  // the window. The window listener this replaces missed every resize that
+  // happens without the window moving: the drawer's side pane narrowing when
+  // the sheet's measured ratio lands, or when the modal's screen cap bites —
+  // which left an already-fitted sheet wider than its pane, clipped at the
+  // modal's edge (the owner's Fold screenshot). A window resize still lands
+  // here too, because the stage resizes with it.
   useEffect(() => {
-    let last = { w: window.innerWidth, h: window.innerHeight };
-    const on = () => {
-      const w = window.innerWidth, h = window.innerHeight;
-      const turned = w !== last.w;
+    const el = stageRef.current;
+    if (!el) return;
+    let last = { w: el.clientWidth, h: el.clientHeight };
+    const ro = new ResizeObserver(() => {
+      const w = el.clientWidth, h = el.clientHeight;
+      // Damped: sub-3px wobble (scrollbars, the width transition settling)
+      // must not throw away a zoom somebody chose.
+      const turned = Math.abs(w - last.w) > 3;
+      const grew = Math.abs(h - last.h) > 3;
+      if (!turned && !grew) return;
       last = { w, h };
       /**
        * On a phone the height changes for reasons that are not a resize: the
@@ -825,9 +836,9 @@ function PlanEditor({
        */
       if (compactRef.current && !turned) return;
       setFitting(true);
-    };
-    window.addEventListener('resize', on);
-    return () => window.removeEventListener('resize', on);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
   /**
