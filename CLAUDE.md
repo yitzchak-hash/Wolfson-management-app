@@ -5172,3 +5172,26 @@ chrome swaps live, an open drawer reshapes desktop-modal ↔ phone-sheet
 mid-look, the portal survives an unfold, and no page errors fire. usePhone's
 matchMedia listener is what makes this work — anything that caches "am I a
 phone" at mount instead of subscribing will break on a Fold first.
+
+## The drawer's plan pane fits the screen it is on (the Fold screenshot fix)
+The pane was sized to the SHEET alone (`paneH × ratio`) beside a fixed 560px
+fields column, so on anything narrower than a big monitor the row laid itself
+out past the modal's clipped 96vw edge and the plan showed only its left
+half — the owner's unfolded-Fold screenshot (2026-08-27). Three rules now:
+- `planW` caps at what the screen LEAVES beside the fields
+  (`96vw − 560`), and when that cap bites the modal gives back the height
+  the sheet no longer needs (floor 640px) so the plan sits in a smaller
+  square instead of floating in a tall empty pane.
+- The pane carries `minWidth: 0` — a flex item refuses to shrink below its
+  content's min-width by default, and canvases have one.
+- **PlanAnnotator re-fits from a ResizeObserver on its own STAGE**, replacing
+  the window-resize listener: the pane narrowing when the measured sheet
+  ratio lands (or the cap bites) is a resize the window never sees, and an
+  already-fitted sheet stayed wider than its pane. Damped 3px; the phone
+  keyboard/address-bar rule (height changes alone never re-fit while
+  compact) is preserved.
+Harness: `scratchpad/folddrawer.mjs` — five widths from 1092 to 1920, the
+sheet, the modal and the Download button must all fit. `scratchpad/gallery.mjs`
+captures the drawer/diagram/board/portal at every device profile for the
+owner's Device Gallery artifact. All four iPad Pro shapes (834x1194 /
+1194x834 / 1024x1366 / 1366x1024) swept clean.
