@@ -5102,3 +5102,60 @@ all four doors, and the portal sections now DERIVE their date expectations
 from the clock (badge wording, finish-early day names, finished-early
 strike) instead of pinning them — the harness was red at midnight the
 moment the container clock walked past its fixed seed dates.
+
+---
+
+# v2 — the Flip and the iPad round
+
+## The portal opens on the workspace his work is IN
+The real fault the device audit surfaced: which workspace the portal opens
+on is whatever `active_project` the browser last held — on a worker's phone,
+a default nobody chose. A worker whose jobs live in Netiv or on the Job
+Board opened onto Wolfson, saw "No tasks yet", and — without the
+switchProject permission — had no way to reach his own work at all. Three
+pieces in `ContractorPortal`:
+- it hydrates the OTHER workspaces' snapshots on mount
+  (`ensureProjectSnapshot`, the AppLayout idiom) — without them it cannot
+  even know where his work is;
+- `myProjects` subscribes to `snapshotTick` (the standing rule for every
+  snapshot consumer), or a hydrated snapshot landing changes nothing;
+- once per visit, when the open workspace holds NONE of his tasks and
+  another holds some, it switches there (most open tasks wins) — decided on
+  a 1600ms settle timer (the seeded-bins idiom: "he has nothing here" and
+  "nothing has loaded yet" look identical at first, and data arriving
+  restarts the clock). The guard trips the moment a workspace with his work
+  is on screen, so his own later switch is never fought.
+Harness: `scratchpad/portalswitch.mjs` — stands in the Job Board through the
+real header dropdown, opens the worker's link, and the six Wolfson tasks
+must appear by themselves.
+
+## The sweep takes any shape now
+`shots.mjs` accepts `H` beside `W` (defaults unchanged): the Galaxy Z Flip
+unfolded is `W=344` (portrait) and `VIEW=landscape W=882 H=344`; an iPad is
+`W=768 H=1024` / `VIEW=landscape W=1024 H=768`. All four measured clean —
+344 is where `overflow-wrap` legitimately starts breaking the longest
+family names mid-word, which is the correct last resort, not a fault.
+
+## `scratchpad/ipadcheck.mjs` — the desktop layout driven by a finger
+An iPad gets the DESKTOP layout, so the phone sweeps never covered it. The
+harness arms genuine touch emulation (setTouchEmulationEnabled +
+setEmitTouchEventsForMouse AFTER navigation — the markupfixes lesson) and
+asserts: `any-hover: none` is live and hover-revealed controls are visible
+at rest, a finger tap opens an apartment and gets the desktop modal, a
+finger drag from a tile pans the board and leaves the job in place, a
+finger can open a job, and at 768 portrait (exactly ON the md line) the
+desktop sidebar shows with no phone bottom bar. Its own re-paid trap: tap
+the MIDDLE of a tile — the top strip is buttons, always visible under
+touch, so a press up there is a button press.
+
+## Three harness rots fixed while auditing (each had made a check vacuous)
+- `seed.mjs` dates are offsets from the REAL clock, never a fixed base — the
+  pinned 2026-08-16 drifted past and the portal's Today filter showed
+  nothing, so every tap at a task card timed out (the standing date-drift
+  trap, now fixed at the seed instead of per-harness).
+- The seed worker carries `perms: { seeDiagrams, seeAllApartments }` — the
+  default contractor level has neither, so the portal's Building Map tab was
+  never drawn and every map assertion silently measured the tasks list.
+- `shots.mjs` drawer-tab taps match the Hebrew labels too, and portal-task
+  presses the All pill first (unscoped — the filter row sits OUTSIDE
+  `<main>`, and a `main`-scoped locator never matched).
