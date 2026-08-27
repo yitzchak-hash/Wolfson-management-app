@@ -51,14 +51,22 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'drag',
       },
       {
-        title: 'A Goals tab, and five widget styles',
-        body: 'The whole goals website now has its own tab in the sidebar, '
-          + 'right after Dashboard — the full board with its timers, live, '
-          + 'without leaving the app. And the widget comes in five styles '
+        title: 'Goals on the TV, and five widget styles',
+        body: 'The TV wall\'s top bar has a Goals button right beside '
+          + 'Dashboard — press it and the whole goals board fills the wall, '
+          + 'timers running, read-only. And the widget comes in five styles '
           + 'from the pencil: the tile grid, the summary strip, a progress '
-          + 'ring, a big number, and a slim progress bar — the drawn ones '
-          + 'open the Goals tab when clicked.',
+          + 'ring, a big number, and a slim progress bar — clicking a drawn '
+          + 'one opens the full goals page.',
         demo: 'tap',
+      },
+      {
+        title: 'A crash now says what broke',
+        body: 'If a screen ever crashes, instead of going blank it shows '
+          + 'exactly what went wrong, with a Reload button and a copy button '
+          + 'so the error\'s own words can be sent straight to whoever is '
+          + 'fixing it. Nothing is lost — the data is always saved.',
+        demo: 'sparkle',
       },
     ],
   },

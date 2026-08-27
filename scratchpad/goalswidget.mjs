@@ -165,22 +165,46 @@ check(!!shelfCard && /sample data/.test(shelfCard) && /הושלמו/.test(shelfC
 await page.keyboard.press('Escape');
 await page.waitForTimeout(600);
 
-// ── 6 · the Goals TAB — the whole site, beside Dashboard ───────────────────
-check(await page.locator('aside a[href="/goals"]').count() === 1,
-  'the sidebar carries a Goals tab');
-await page.locator('aside a[href="/goals"]').click();
+// ── 6 · the sidebar carries NO Goals tab (owner's ruling) — the /goals page
+//        still stands, reached from the widgets' drawn figures ──────────────
+check(await page.locator('aside a[href="/goals"]').count() === 0,
+  'the sidebar carries NO Goals tab — the rail stays clean');
+await page.goto(`${APP}/goals`);
 await page.waitForTimeout(1500);
 const goalsPage = await page.evaluate(() => ({
-  path: location.pathname,
   mounted: !!document.querySelector('[data-goals-page] iframe[data-goals-iframe]'),
   src: document.querySelector('[data-goals-page] iframe[data-goals-iframe]')?.getAttribute('src') ?? '',
   badge: document.querySelector('[data-goals-page] [data-goals-badge]')?.textContent ?? '',
 }));
-check(goalsPage.path === '/goals' && goalsPage.mounted,
-  'the tab opens the full-page goals embed', JSON.stringify(goalsPage.path));
-check(/view=board/.test(goalsPage.src) && /interactive=1/.test(goalsPage.src) && !/title=0/.test(goalsPage.src),
-  'full interactive grid WITH the goals site\'s own header — the whole website', goalsPage.src);
-check(/3\/9/.test(goalsPage.badge), 'the page header carries the live counters', goalsPage.badge);
+check(goalsPage.mounted && /view=board/.test(goalsPage.src) && /interactive=1/.test(goalsPage.src) && !/title=0/.test(goalsPage.src),
+  'the /goals page still serves the whole site, its own header on', goalsPage.src);
+check(/3\/9/.test(goalsPage.badge), 'with the live counters in its header', goalsPage.badge);
+
+// ── 6b · the TV bar: Goals right of Dashboard, a vertical line between ─────
+await page.goto(`${APP}/tv`);
+await page.waitForTimeout(3000);
+const tvBar = await page.evaluate(() => {
+  const goals = document.querySelector('[data-tv-goals]');
+  if (!goals) return { present: false };
+  const dash = [...document.querySelectorAll('button')]
+    .find(x => (x.textContent || '').trim() === 'Dashboard');
+  const between = dash && goals.previousElementSibling;
+  return {
+    present: true,
+    rightOfDash: !!dash && !!(dash.compareDocumentPosition(goals) & Node.DOCUMENT_POSITION_FOLLOWING),
+    dividerBetween: !!between && between.classList.contains('w-px'),
+  };
+});
+check(tvBar.present && tvBar.rightOfDash && tvBar.dividerBetween,
+  'the TV bar: Goals sits right of Dashboard behind a small vertical line', JSON.stringify(tvBar));
+await page.locator('[data-tv-goals]').click();
+await page.waitForTimeout(1500);
+const tvGoals = await page.evaluate(() =>
+  document.querySelector('iframe[data-goals-iframe]')?.getAttribute('src') ?? '');
+check(/view=board/.test(tvGoals) && !/interactive=1/.test(tvGoals),
+  'pressing it shows the goals board READ-ONLY on the wall', tvGoals);
+await page.goto(`${APP}/jobs`);
+await page.waitForTimeout(2500);
 
 // ── 7 · the three host-drawn styles (own seeded context — the standing
 //        flush-on-unload rule: a localStorage patch on a live page is

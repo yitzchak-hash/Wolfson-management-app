@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   Building2, LayoutDashboard, FileText, Settings, Activity, Tv,
-  TrendingUp, ClipboardList, Briefcase, CalendarDays, MoreHorizontal, TextSearch, Target,
+  TrendingUp, ClipboardList, Briefcase, CalendarDays, MoreHorizontal, TextSearch,
 } from 'lucide-react';
 import { useStore } from '../../data/store';
 import { projectColor } from '../../types';
@@ -26,12 +26,12 @@ function useNavItems() {
     isGeneral
       ? { to: '/jobs',     icon: Briefcase,       label: s.jobsNavLabel }
       : { to: '/project',  icon: Building2,       label: s.navProject },
-    { to: '/dashboard',        icon: LayoutDashboard, label: s.navDashboard },
     /**
-     * The whole goals website, right after the dashboard — the owner's ask.
-     * A computer destination only: the TV keeps the read-only widget.
+     * No Goals tab here — the owner's ruling: the goals page lives on the TV
+     * bar beside its Dashboard button, and on a computer the goals widget's
+     * drawn styles open /goals. The route stands; the rail stays clean.
      */
-    { to: '/goals',            icon: Target,          label: s.navGoals },
+    { to: '/dashboard',        icon: LayoutDashboard, label: s.navDashboard },
     { to: '/project-calendar', icon: CalendarDays,    label: s.navCalendar },
     { to: '/tasks',            icon: ClipboardList,   label: s.navTasks },
     { to: '/reports',          icon: FileText,        label: s.navReports },
@@ -119,18 +119,12 @@ export function MobileNav() {
   const withList = [
     navItems[0],
     { to: '/list', icon: TextSearch, label: 'List' },
-    // Goals stays off the phone bar for the same reason the List rule below
-    // exists — adding it into the first five would push Tasks off — so on a
-    // phone it leads the More sheet instead.
-    ...navItems.slice(1).filter(i => i.to !== '/goals'),
+    ...navItems.slice(1),
   ];
   // Five plus More, not four: the List tab must not cost Tasks its place on
   // the bar. Six slots at 390px is 65px each — snug, still tappable.
   const primary = withList.slice(0, 5);
-  const overflow = [
-    ...navItems.filter(i => i.to === '/goals'),
-    ...withList.slice(5),
-  ];
+  const overflow = withList.slice(5);
   const overflowActive = overflow.some(i => pathname.startsWith(i.to));
 
   return (

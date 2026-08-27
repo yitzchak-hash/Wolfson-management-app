@@ -5266,16 +5266,17 @@ the widget seeded twice under one fixed id; and the board's landed-signal is
 "the seeded bins exist", because a still-loading board and an empty one look
 identical.
 
-## The Goals TAB and the five styles
-`/goals` (`GoalsPage.tsx`) — the whole goals website as a sidebar tab right
-after Dashboard, per the owner: the full interactive tile grid mounted
-through the SAME `widget.js` door, with the goals site's OWN header row on
-(this page wears that site's face; `link` off because we are standing on
-it), live counters in the page header, and an "open the site itself"
-external link. **Computer only — the TV is deliberately untouched** (the
-wall keeps the read-only widget). On the phone the tab leads the More sheet
-rather than the bar — putting it in the first five would push Tasks off,
-the documented rule. `navGoals` in MainUiStrings (both presets).
+## The Goals page and the five styles
+`/goals` (`GoalsPage.tsx`) — the whole goals website as a full page: the
+interactive tile grid through the SAME `widget.js` door, the goals site's
+OWN header row on, live counters, an "open the site itself" link.
+**OWNER RULING (2026-08-27): there is NO sidebar tab for it.** The page is
+reached by clicking any host-drawn goals figure (ring/number/bar), and the
+wall gets its own door: a **Goals button on the TV bar, right of Dashboard,
+a small vertical line between the two** (`data-tv-goals`), opening
+`TvGoalsBoard` — module-level in TvPresentationPage (the declared-in-render
+trap), mounted `interactive: false` ALWAYS: the wall never edits.
+`navGoals` stays in MainUiStrings for the TV bar label.
 
 `data.style` on the widget — one widget, the look in the pencil (the dedupe
 round's own idiom): `board` · `summary` (the two iframe views) · `ring` ·
@@ -5294,3 +5295,28 @@ Playwright consults routes NEWEST-first, so the specific `/widget.js` route
 must be registered AFTER the `/widget*` page route or scripts get HTML
 ("Unexpected token '<'"). Live end-to-end against the real goals app needs
 production eyes-on. No CSP anywhere in this app, so no header changes.
+
+
+---
+
+# v2 — the crash screen, and the corner-drag hunt
+
+## A crash says what broke (`src/components/ui/CrashScreen.tsx`)
+The owner's report was "dragging to a corner makes the site crash" — and a
+React render error unmounts the whole tree, so the only witness was a white
+page. `CrashScreen` is an error boundary around the entire app (App.tsx):
+it shows the error's own message, the head of its stack and the component
+stack, with Reload and Copy-the-details buttons, bilingual reassurance that
+nothing is lost. Deliberately store-free and dependency-free — the store may
+be the thing that crashed. Every future "it crashed" report becomes an
+exact sentence.
+
+## The hunt itself (unreproduced — the tools are committed)
+`scratchpad/cornerdrag.mjs` / `cornerdrag2.mjs` replay HIS real board
+(fetched to /tmp, never the repo) and drag tiles, nodes, the TV frame's
+grip and corner, dashboard cards and widget corner-resizes into every
+viewport corner with edge-auto-pan dwell — no crash under dev or the
+production bundle. Noted on the way: the TV dashboard's add-widget writes
+`z: Date.now()` (the giant timestamp z values on his elements — harmless,
+TvDashboard only sorts by z). If the crash recurs, the CrashScreen's copied
+text is the next step.
