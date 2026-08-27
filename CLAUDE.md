@@ -5159,3 +5159,16 @@ touch, so a press up there is a button press.
 - `shots.mjs` drawer-tab taps match the Hebrew labels too, and portal-task
   presses the All pill first (unscoped — the filter row sits OUTSIDE
   `<main>`, and a `main`-scoped locator never matched).
+
+## The Z Fold: three screens, one phone — nothing needed fixing
+Audited 2026-08-27, all clean: the cover screen IS the Flip's size (344x882,
+covered by that sweep); the classic Fold's inner screen (690x829) stays
+UNDER the md line — the phone layout with room to breathe — and crosses it
+when turned sideways (829x690, desktop); the newest Fold's inner screen
+(820x910 / 910x820) is past md BOTH ways, so it is desktop even upright.
+`scratchpad/foldswap.mjs` is the Fold's own test: the viewport changes size
+under the RUNNING app (closed → open → sideways → closed), asserting the
+chrome swaps live, an open drawer reshapes desktop-modal ↔ phone-sheet
+mid-look, the portal survives an unfold, and no page errors fire. usePhone's
+matchMedia listener is what makes this work — anything that caches "am I a
+phone" at mount instead of subscribing will break on a Fold first.
