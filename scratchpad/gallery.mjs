@@ -20,6 +20,8 @@ const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromi
 const blob = await realisticWolfson(browser);
 
 const PROFILES = [
+  ['iphone',      402, 874,  true],   // iPhone 17 Pro
+  ['galaxy',      384, 832,  true],   // Galaxy S25 Ultra
   ['flip',        344, 882,  true],
   ['fold-open',   690, 829,  true],
   ['fold-side',   829, 690,  false],
@@ -28,12 +30,16 @@ const PROFILES = [
   ['ipad-land',  1024, 768,  false],
   ['ipadpro11',   834, 1194, false],
   ['ipadpro13', 1366, 1024,  false],
+  ['pc',         1920, 1080, false],  // the office computer
 ];
 
+// `node gallery.mjs iphone galaxy pc` re-captures only those profiles.
+const only = process.argv.slice(2);
 for (const [tag, W, H, phone] of PROFILES) {
+  if (only.length && !only.includes(tag)) continue;
   const ctx = await browser.newContext({
     viewport: { width: W, height: H },
-    isMobile: phone, hasTouch: true, deviceScaleFactor: phone ? 2 : 1.5,
+    isMobile: phone, hasTouch: true, deviceScaleFactor: phone ? 2 : W >= 1600 ? 1 : 1.5,
     userAgent: devices['iPhone 13'].userAgent,
   });
   await applySeed(ctx, blob);

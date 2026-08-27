@@ -5195,3 +5195,15 @@ sheet, the modal and the Download button must all fit. `scratchpad/gallery.mjs`
 captures the drawer/diagram/board/portal at every device profile for the
 owner's Device Gallery artifact. All four iPad Pro shapes (834x1194 /
 1194x834 / 1024x1366 / 1366x1024) swept clean.
+
+## The Device Gallery is a standing working method
+`.claude/skills/device-gallery/SKILL.md` is the method: ONE artifact page of
+real screenshots of the running app on every device (newest iPhone, newest
+Galaxy, Flip, the Fold's three screens, every iPad, the office PC), captured
+by `scratchpad/gallery.mjs`, republished to the SAME link on every UI round —
+and the page takes the owner's pinned change notes (tap a spot, type or
+dictate, Send to Claude saves them INTO the artifact via the `artifact`
+capability). When the owner says to check his gallery notes, READ the
+artifact and work the pins. `docs/DEVICE-GALLERY-PROMPT.md` is the portable
+version for other projects. The newest-phone sweeps: iPhone 17 Pro is
+`W=402 H=874`, Galaxy S25 Ultra `W=384 H=832` — both clean 2026-08-27.
