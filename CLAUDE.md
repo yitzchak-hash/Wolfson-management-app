@@ -55,6 +55,18 @@ cloud-sync badge, dropping `persistentLocalCache` — are all in the tree).
 - **Serverless API**: `/api` folder at repo root — Vercel auto-deploys each `.js` file as a serverless function
 - **Environment variables**: Set in Vercel dashboard (Firebase config, Google service account, API key)
 
+## HARD LIMIT — at most 12 files in /api (Vercel Hobby)
+Vercel's Hobby plan allows **12 serverless functions per deployment**, and
+every `.js` file under `/api` is one. The 13th file turns EVERY deployment
+red at the platform step — while local `tsc && vite build` stays green,
+because the local build never touches `/api`. That is exactly how production
+silently stopped updating for a day (2026-08-26: `photos-cover.js` was the
+13th; the unused `health.js` gave up its slot, its report now lives at
+`GET /api/geocode?health=1`). **Adding a route means folding it into an
+existing one or retiring another first** — check with
+`node scratchpad/apilimit.mjs`, and glance at the Vercel deployments page
+after shipping: a red "Error" there with a green local build is this.
+
 ## Drive Upload Backend (Vercel API routes)
 - `/api/drive-session.js` — creates a Google Drive resumable upload session via service account; returns a one-time `uploadUrl` so the browser uploads the file directly to Drive (no bytes pass through Vercel)
 - `/api/folder.js` — finds or creates a Drive subfolder by name under a given parent folder ID
