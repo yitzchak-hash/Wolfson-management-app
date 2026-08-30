@@ -47,6 +47,10 @@ const AREAS = [
     link: 'https://claude.ai/code/artifact/3226a721-b537-4fdb-ad7f-4b38ce4e8151',
     blurb: 'The row of coloured stage bubbles, and three buildings squeezed side by side on a screen that is not wide enough for them.',
     pins: [] },
+  { key: 'D', title: 'The task as a conversation', state: 'open',
+    link: 'https://claude.ai/code/artifact/7113a269-5687-4d55-94d0-1a472bdd2ba9',
+    blurb: 'The office’s notes and the worker’s replies as one WhatsApp-style chat on the task — the same on his phone and on your computer — with the closing comment as its last message.',
+    pins: [] },
   { key: 'C', title: 'How the worker closes a job', state: 'open',
     link: 'https://claude.ai/code/artifact/2cd1d84f-e771-497f-b626-5ee7c8b8e688',
     blurb: 'Two Close job buttons on one screen, and closing a job becoming its own clean screen instead of a panel inside the task.',
@@ -94,7 +98,7 @@ const html = `${HEAD('UI Decisions')}
 
   <div class="card" style="border-left:4px solid var(--good)">
     <span class="tag good">Where things stand</span>
-    <p><strong>5 decisions locked · Areas A and B settled.</strong> Area C — the worker’s Close job flow — is drawn and waiting for you. It is the last one.</p>
+    <p><strong>5 decisions locked · Areas A and B settled.</strong> Areas C and D are drawn and waiting for you — the Close job flow, and the task as a conversation.</p>
   </div>
 
   <section>
