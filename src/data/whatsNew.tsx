@@ -30,6 +30,38 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-09-19',
+    title: 'The job window: days on tasks, the worker on the stage',
+    items: [
+      {
+        title: 'A task that takes days says so, and can be changed',
+        body: 'The Tasks tab in a job window now shows "3 days" on a task '
+          + 'that takes three, and opening it to edit gives you the same day '
+          + 'picker every other task form has — already set to the days it '
+          + 'has. Editing one used to quietly collapse it back to a single '
+          + 'day.',
+        demo: 'tap',
+      },
+      {
+        title: 'The stage shows who is actually on it',
+        body: 'A stage said "none" whenever the worker\'s task did not have '
+          + 'that stage filled in — which is most of the time, since the '
+          + 'stage box is optional. The stage the job is at now names the '
+          + 'worker who is on the job, and a finished task no longer hides a '
+          + 'live one.',
+        demo: 'list',
+      },
+      {
+        title: 'History does not break any more',
+        body: 'Opening History on a job could show the error screen. One old '
+          + 'entry had lost the name of who did it, and that was enough to '
+          + 'take the whole tab down. It copes now, and new entries always '
+          + 'carry a name.',
+        demo: 'sparkle',
+      },
+    ],
+  },
+  {
     date: '2026-09-18',
     title: 'Downloading a plan asks what you want in it',
     items: [

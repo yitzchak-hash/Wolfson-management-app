@@ -130,3 +130,56 @@ export function addTaskDay(days: string[] | undefined, day: string): {
   const next = [...base, day].sort();
   return { days: next, dueDate: next[next.length - 1] };
 }
+
+/**
+ * Read a saved day list BACK into the two stretches the picker edits.
+ *
+ * The picker's controls are "how many days, from here" — but a task on disk
+ * is just a list of dates. Opening a three-day task for editing therefore has
+ * to work out what to put in the boxes, or the editor shows "1 day" over a
+ * task that covers three and saving quietly throws two of them away.
+ *
+ * The rule: take the LONGEST working run starting at the first day that is a
+ * prefix of the list (trying without Friday first, since that is the default),
+ * and hand whatever is left over to a second stretch. A list nobody could have
+ * built out of two stretches — days scattered across a month — falls back to
+ * the first day alone rather than lying about the rest; the caller keeps the
+ * stored days until something is actually changed.
+ */
+export function stretchesFromDays(days: string[]): {
+  count: number; friday: boolean; second: DayStretch | null; exact: boolean;
+} {
+  const none = { count: 1, friday: false, second: null, exact: false };
+  if (!days || days.length === 0) return none;
+  const sorted = [...days].sort();
+  const start = sorted[0];
+
+  /** The longest run from `from` that the list opens with. */
+  const bestRun = (from: string, list: string[]) => {
+    let best = { n: 1, friday: false, used: 1 };
+    for (const friday of [false, true]) {
+      for (let n = 1; n <= 30; n++) {
+        const run = workingRun(from, n, friday).days;
+        if (run.length !== n) break;
+        const isPrefix = run.every((d, i) => list[i] === d);
+        if (!isPrefix) break;
+        if (n > best.n) best = { n, friday, used: n };
+      }
+    }
+    return best;
+  };
+
+  const first = bestRun(start, sorted);
+  const rest = sorted.slice(first.used);
+  if (rest.length === 0) {
+    return { count: first.n, friday: first.friday, second: null, exact: true };
+  }
+  const secondRun = bestRun(rest[0], rest);
+  return {
+    count: first.n,
+    friday: first.friday,
+    second: { start: rest[0], days: secondRun.n, friday: secondRun.friday },
+    // Only claim an exact reading when the two stretches account for every day.
+    exact: first.used + secondRun.used === sorted.length,
+  };
+}

@@ -592,6 +592,12 @@ export function PlannerWidget({
     return `${who} · ${isNaN(when.getTime()) ? day : when.toLocaleDateString(undefined,
       { weekday: 'short', day: 'numeric', month: 'short' })}`;
   };
+  /** The day alone, spelled out: "Friday 28 August" — no name in it. */
+  const dayName = (key: string) => {
+    const when = new Date(`${key.split('|')[1]}T00:00:00`);
+    return isNaN(when.getTime()) ? key.split('|')[1]
+      : when.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+  };
   /** What a card says: the job's name, or the words written on it. */
   const cardName = (e: PlannerEntry) =>
     (e.jobId ? jobById.get(e.jobId)?.displayName : undefined)
@@ -1541,6 +1547,7 @@ export function PlannerWidget({
             dayCount={days.length || 1}
             fromLabel={squareName(dayAsk.fromKey)}
             toLabel={squareName(cellKey(dayAsk.target.person, dayAsk.target.day))}
+            toDay={dayName(cellKey(dayAsk.target.person, dayAsk.target.day))}
             covered={dayAsk.target.day !== fromDay && days.includes(dayAsk.target.day)}
             onCancel={() => setDayAsk(null)}
             onDone={resolveDayChoice}

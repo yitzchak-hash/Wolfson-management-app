@@ -1902,6 +1902,8 @@ export interface MainUiStrings {
   dlMarksWord: string;
   dlPagesWord: string;
   printPlanLabel: string;
+  unknownUser: string;
+  daysWord: string;
   settingsLabel: string;
   statusLabel: string;
   hideLabel: string;
@@ -2480,6 +2482,8 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   dlMarksWord: 'Markings',
   dlPagesWord: 'Pages',
   printPlanLabel: 'Print',
+  unknownUser: 'Someone',
+  daysWord: 'days',
   settingsLabel: 'Settings',
   statusLabel: 'Status',
   hideLabel: 'Hide',
@@ -3057,6 +3061,8 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   dlMarksWord: 'סימונים',
   dlPagesWord: 'עמודים',
   printPlanLabel: 'הדפסה',
+  unknownUser: 'מישהו',
+  daysWord: 'ימים',
   settingsLabel: 'הגדרות',
   statusLabel: 'סטטוס',
   hideLabel: 'הסתר',

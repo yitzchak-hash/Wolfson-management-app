@@ -5542,3 +5542,69 @@ is handed over in a millisecond and reads as "no file arrived"; and
 Playwright reports a blob download's `suggestedFilename()` as "download"
 whatever the anchor says, so the honest measurement is the value assigned to
 the `download` attribute.
+
+---
+
+# v2 — the job window round (days on a task, the worker on a stage, a nameless history entry)
+
+## A history entry with no name crashed the whole tab
+`ActivitySection` rendered `log.userName.charAt(0)` for the avatar. `fsSet`
+turns an `undefined` value into a `deleteField()`, so an activity log written
+with no `userName` — which is what `addContractorAssignment` produced for a
+task created without a `createdByName` — came back from Firestore with the
+field GONE, and the History tab threw `Cannot read properties of undefined
+(reading 'charAt')`, taking the drawer down with it. Two-sided fix, and both
+sides are the rule:
+- **The writer always supplies a name**: `a.createdByName || currentUser?.name
+  || 'Office'`. A log line nobody can attribute is not a log line.
+- **The reader never trusts a stored optional**: `const who = log.userName ||
+  s.unknownUser` (a real MainUiStrings key in both presets, not a hardcoded
+  word). Any field that has ever been optional can arrive absent from an old
+  record, and a render that assumes otherwise is one deleted field from a
+  white screen.
+
+## The task editor opens on the START day, never the due date
+`dueDate` is pinned to the LAST day by the multi-day model, so seeding the
+editor's date box from it shifted a three-day run three days forward the
+moment somebody opened it to look. `startTaskEdit` seeds from
+`daysOf(task)[0]`; `saveTaskEdit` writes `...daysFields(dueDate, days)`, which
+re-pins the due date. Anything that EDITS a dated task reads the start; only
+sorting, badges and "late" read `dueDate`.
+
+## A saved day list reads back into the picker's boxes
+`stretchesFromDays(days)` in `taskDays.ts` — pure, tested offline. The picker's
+controls are "how many days, from here"; a task on disk is a list of dates, so
+opening one for editing has to work out what to put in the boxes or the editor
+shows "1 day" over a task covering three and saving throws two away. It takes
+the longest working run that is a PREFIX of the list (no-Friday tried first,
+since that is the default) and hands the remainder to the second stretch; a
+list nobody could have built from two stretches reports `exact: false` and the
+caller keeps the stored days until something is actually changed.
+`TaskDaysPicker` gained `initialDays` and is reset by bumping its `key`.
+The drawer's Tasks tab also shows a `data-task-days-chip` ("3 days") on the
+card itself, so the day count is visible without opening the editor.
+
+## Reading a stage's worker forgives; writing one does not
+The drawer's stage notes said "assigned a worker: none" while somebody was
+plainly working that stage — the lookup demanded an OPEN task carrying that
+exact `stageId`, which a task created before the stage was picked never has.
+Split in two:
+- `getAssignment` (DISPLAY) falls back: open-on-this-stage → any-on-this-stage
+  → an open task with no stage at all, and that last one only when the
+  apartment's `currentStageId` IS this stage.
+- `stagedAssignment` (WRITE, used by `handleContractorChange`) stays strict, so
+  changing the worker on one stage can never silently re-point a task that
+  belongs to another.
+A forgiving read and a strict write are two different questions; one function
+answering both is how a display fix becomes a data bug.
+
+## The day dialog says what will happen, and nothing else
+Per the owner: the renumbering explainer is gone (day numbers are labels
+derived from calendar order — saying so out loud helps nobody mid-drag), and
+both new-task choices read "A completely separate task on Friday 28 August" —
+the real day, from `dayName()` in `PlannerWidget`, passed in as `toDay`.
+
+Harness: `scratchpad/drawerround.mjs` (8 checks) — the dialog's wording and
+named day, the days chip, the editor opening on the run's real start with the
+right readout, the stage's worker showing, and a nameless log rendering
+instead of crashing.

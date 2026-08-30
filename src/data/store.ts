@@ -1987,7 +1987,10 @@ export const useStore = create<AppState>((set, get) => ({
     if (apt) {
       get().addActivityLog({
         userId: a.createdBy,
-        userName: a.createdByName,
+        // Never undefined: fsSet turns an undefined into a field DELETE, so a
+        // task made without a createdByName produced a history entry with no
+        // name at all — which the History tab then crashed on.
+        userName: a.createdByName || get().currentUser?.name || 'Office',
         buildingId: a.buildingId,
         apartmentId: a.apartmentId,
         apartmentNumber: apt.displayName || apt.apartmentNumber || a.apartmentId,
