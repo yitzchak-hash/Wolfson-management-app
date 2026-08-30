@@ -1,5 +1,6 @@
 import { writeFileSync } from 'fs';
 import { img, HEAD } from './shared.mjs';
+import { BUILD, TRAPS } from './buildlist.mjs';
 const OUT = '/tmp/claude-0/-home-user-Wolfson-management-app/38623ef8-73c0-5354-912b-cb672cfed81c/scratchpad/ui-decisions.html';
 const PROPOSAL_A = 'https://claude.ai/code/artifact/01c73e8b-9bad-4e38-aa15-ba884f12e601';
 
@@ -66,6 +67,12 @@ const LOCKED = [
     body: `Closing is a <strong>milestone in the thread, not the end of it</strong>. Both sides can keep writing afterwards &mdash; the office can ask about an old job weeks later and the worker can answer, right there where the whole story already is. And because the conversation stays open, <strong>nothing in it is ever edited or deleted</strong>: a correction is simply a new message. That is what makes the thread a record you can trust when you go back through the history of a job.`,
     owner: 'For comfortability, allow the conversation to go on even after a job was closed. If I go back and look at the history of my jobs…',
     pics: [['chat-after.png', 'The green marker is a milestone — the talking carries on beneath it']],
+  },
+  {
+    n: 11, title: 'A closed job says so — it does not keep offering the button',
+    body: `Once a task is closed, the green <strong>Close job</strong> button at the bottom is replaced by a plain <strong>Job closed</strong> state. The message box above it stays live, because the conversation carries on (decision 10) &mdash; it is only the button that goes.`,
+    owner: 'If job was closed, it shouldn’t leave a Close job on the bottom. It should say job closed.',
+    pics: [],
   },
 ];
 
@@ -140,11 +147,35 @@ const html = `${HEAD('UI Decisions')}
     ${areasHtml}
   </section>
 
-  <section>
+  <section id="build">
     <h2 style="font-size:24px">Build list</h2>
-    <div class="empty">
-      <div class="big">Written when you say “we’re done”</div>
-      One numbered line per change, naming the exact file it touches, so the building session can work straight from it with nothing left to ask.
+    <p style="color:var(--muted);margin:0 0 6px">Written for the building session, from the eleven decisions above. Fifteen numbered changes, each naming the file it touches. Nothing here is guesswork &mdash; every line comes from something approved on this page.</p>
+    <div class="card" style="border-left:4px solid var(--blue)">
+      <h3>Before starting</h3>
+      <p><strong>No <code>src/</code> file was changed during this round</strong> &mdash; it was design only. The pictures above are the real app with its own markup rearranged, so what was approved is reachable with the components that already exist.</p>
+      <p style="margin-top:8px">Two thresholds, and they are deliberately different: <strong>800px</strong> decides where the plan sits, <strong>900px</strong> decides the diagram. On a sideways Fold (829px) the plan is beside the details <em>and</em> the diagram shows one building. That is correct, not a mistake.</p>
+    </div>
+    ${BUILD.map(part => `
+      <h3 style="font-family:Archivo;font-size:17px;margin:26px 0 4px">${part.part}</h3>
+      <p style="color:var(--muted);font-size:13.5px;margin:0 0 12px">From ${part.from}</p>
+      ${part.items.map(it => `
+        <div class="card">
+          <h3>${it.n}. ${it.t}</h3>
+          <p style="margin:6px 0 0">${it.f.map(f => `<code style="background:var(--paper);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:12.5px">${f}</code>`).join(' ')}</p>
+          <p style="margin-top:9px">${it.d}</p>
+        </div>`).join('')}
+    `).join('')}
+
+    <div class="card" style="border-left:4px solid var(--pin);margin-top:26px">
+      <h3>Rules this build must not break</h3>
+      <ul style="margin:10px 0 0;padding-left:20px;color:var(--muted)">
+        ${TRAPS.map(t => `<li style="margin:7px 0">${t}</li>`).join('')}
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3>How to check it</h3>
+      <p>The harnesses that cover this ground already exist and should all stay green: <code>folddrawer</code> (the plan pane fits at five widths), <code>deskcheck</code> (the drawer&rsquo;s desktop row stays one line), <code>plantabs</code>, <code>planviewer</code>, <code>planzoom</code>, <code>planphone</code>, <code>portalround</code>, <code>multiday</code>, <code>stagereport</code>, <code>foldswap</code>, <code>ipadcheck</code>. Re-run <code>scratchpad/shots.mjs</code> at 344, 390, 402, 768&times;1024 and 1024&times;768 &mdash; overflow and clipped must both be 0 &mdash; and <code>node scratchpad/backupaudit.mjs</code> after item 15.</p>
     </div>
   </section>
 </div>`;
