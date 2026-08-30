@@ -37,6 +37,36 @@ const LOCKED = [
     body: `Below 900 pixels the top of the diagram becomes: <strong>search plus one Filters button</strong> (the type filter, Changes, Bulk update, Print and clear all live inside it, as they already do on the phone), the building tabs, and then <strong>one bar showing the whole project</strong> — each stage a block sized by how many apartments are in it, tap a block to filter to that stage. The eight wrapping bubbles and the separate row of bare numbers are both replaced by that bar, so the counts finally sit inside the thing they count. Above 900 pixels the toolbar stays exactly as it is today.`,
     pics: [['b-opt2.png', 'The approved layout — the bar reads as the project’s state at a glance']],
   },
+  {
+    n: 6, title: 'One Close job button, and the task screen shows what the office sent',
+    body: `The big green button in the middle of the worker&rsquo;s screen goes &mdash; there is one Close job, at the end. <strong>Urgent</strong> loses its box and is just a red dot and the word. The <strong>Download</strong> button on the plan gets repaired. The <strong>Add File</strong> button leaves the office&rsquo;s block (the worker&rsquo;s paperclip lives in the message box and on the closing screen).`,
+    pics: [['c-now.png', 'Before — two Close job buttons and an empty section'],
+           ['c-prop1.png', 'After — one button, and the office&rsquo;s material in its place']],
+  },
+  {
+    n: 7, title: 'Closing a job is a screen of its own',
+    body: `Pressing Close job opens its own screen instead of dropping a panel under the task. Two things on it: <strong>Tap to add photos, videos, or files</strong> at the top, and <strong>one comment box with the paperclip and the microphone inside it</strong>. No separate file section &mdash; the button at the top already takes files. Then <strong>Send and close the job</strong>. The line about pictures is <strong>not fixed text</strong>: it follows each worker&rsquo;s own permission, so a worker marked photos-optional sees no demand, no counter, and is never locked out.`,
+    pics: [['c-now2.png', 'Before — the closing panel stacked under everything, two of each control'],
+           ['c-prop2.png', 'After — two things and a button']],
+  },
+  {
+    n: 8, title: 'The task&rsquo;s notes become a conversation, the same on the phone and the computer',
+    body: `The office speaks from the left in white, the worker answers from the right in blue. A file is a card you press to <strong>open and download</strong>; a photo shows as a <strong>preview you press to expand</strong>, with download on the expanded view. One drawing of it, used in the worker&rsquo;s portal and in the apartment window&rsquo;s Tasks tab &mdash; on a monitor the bubbles stop at a readable width rather than running the whole way across.`,
+    owner: 'More of a WhatsApp chat style over there — the notes in the office come in like a WhatsApp chat, and my note becomes like a reply message… This is how it should be in the tasks in the main thing as well, from the computer.',
+    pics: [['chat-phone.png', 'On the worker&rsquo;s phone'],
+           ['chat-desk.png', 'The same conversation at computer width']],
+  },
+  {
+    n: 9, title: 'The closing comment is the last message in that conversation',
+    body: `What the worker writes on the closing screen lands <strong>in the thread</strong>, with his photos attached to it, followed by a green <strong>Job closed &middot; 15:47</strong> marker. Not a separate field filed somewhere else &mdash; one history per task, in the order things actually happened. If he leaves the comment empty the photos still post and the marker still lands; the comment is never compulsory.`,
+    pics: [['chat-closed.png', 'The closing comment and its photos, arriving as the last message']],
+  },
+  {
+    n: 10, title: 'The conversation carries on after the job is closed',
+    body: `Closing is a <strong>milestone in the thread, not the end of it</strong>. Both sides can keep writing afterwards &mdash; the office can ask about an old job weeks later and the worker can answer, right there where the whole story already is. And because the conversation stays open, <strong>nothing in it is ever edited or deleted</strong>: a correction is simply a new message. That is what makes the thread a record you can trust when you go back through the history of a job.`,
+    owner: 'For comfortability, allow the conversation to go on even after a job was closed. If I go back and look at the history of my jobs…',
+    pics: [['chat-after.png', 'The green marker is a milestone — the talking carries on beneath it']],
+  },
 ];
 
 const AREAS = [
@@ -47,17 +77,14 @@ const AREAS = [
     link: 'https://claude.ai/code/artifact/3226a721-b537-4fdb-ad7f-4b38ce4e8151',
     blurb: 'The row of coloured stage bubbles, and three buildings squeezed side by side on a screen that is not wide enough for them.',
     pins: [] },
-  { key: 'D', title: 'The task as a conversation', state: 'open',
+  { key: 'D', title: 'The task as a conversation', state: 'done',
     link: 'https://claude.ai/code/artifact/7113a269-5687-4d55-94d0-1a472bdd2ba9',
     blurb: 'The office’s notes and the worker’s replies as one WhatsApp-style chat on the task — the same on his phone and on your computer — with the closing comment as its last message.',
     pins: [] },
-  { key: 'C', title: 'How the worker closes a job', state: 'open',
+  { key: 'C', title: 'How the worker closes a job', state: 'done',
     link: 'https://claude.ai/code/artifact/2cd1d84f-e771-497f-b626-5ee7c8b8e688',
     blurb: 'Two Close job buttons on one screen, and closing a job becoming its own clean screen instead of a panel inside the task.',
-    pins: [
-      { n: 2, crop: 'pincrop-2.png', where: 'Fold, opened sideways · the worker’s page',
-        text: 'There are two close job buttons, and notes. Remove the big Close job button under files and photos — there should be one close button at the end. The worker should be able to add general notes while he works, and a voice recording, and see the plan. So: the information on top, then the plan, then the task, then any files and photos the office attached, and the option to add a note. Then Close job should take him to a completely new screen — a new pop-up: add the images, add a comment, a file, a recording, pictures, that whole thing, and then send. That way it is a lot cleaner.' },
-    ] },
+    pins: [] },
 ];
 
 const lockedHtml = LOCKED.map(d => `
@@ -98,7 +125,7 @@ const html = `${HEAD('UI Decisions')}
 
   <div class="card" style="border-left:4px solid var(--good)">
     <span class="tag good">Where things stand</span>
-    <p><strong>5 decisions locked · Areas A and B settled.</strong> Areas C and D are drawn and waiting for you — the Close job flow, and the task as a conversation.</p>
+    <p><strong>10 decisions locked · every area settled.</strong> Nothing is left open. Say “we’re done” and the build list gets written at the bottom of this page for the building session.</p>
   </div>
 
   <section>

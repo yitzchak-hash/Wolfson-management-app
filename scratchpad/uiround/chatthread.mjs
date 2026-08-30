@@ -101,5 +101,13 @@ export const THREAD_JS = `(function (opts) {
       text: 'Concealed unit in, drain run to the riser and pressure tested.', at: '15:47' }));
     wrap.appendChild(marker('\\u2713 Job closed \\u00b7 15:47'));
   }
+  // Closing is a MILESTONE in the conversation, not the end of it — the owner
+  // asked for the thread to stay open so an old job can still be talked about.
+  if (opts && opts.after) {
+    wrap.appendChild(bubble('in', { who: 'Esther \\u00b7 office',
+      text: 'Thanks. The inspector is coming Thursday \\u2014 was the access panel left off?', at: 'Tue 08:30' }));
+    wrap.appendChild(bubble('out', {
+      text: 'Panel is on, screws in the bag taped inside the ceiling.', at: 'Tue 08:41' }));
+  }
   return wrap;
 })`;

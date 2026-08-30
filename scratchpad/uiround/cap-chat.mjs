@@ -40,7 +40,7 @@ async function portal(w, h, phone) {
 }
 
 /** Put the thread where the office block is, and tidy the rest as decided. */
-const INSTALL = ([threadJs, closed]) => {
+const INSTALL = ([threadJs, closed, after]) => {
   const smallest = re => [...document.querySelectorAll('*')]
     .filter(el => re.test(el.textContent.trim()) && el.getBoundingClientRect().width > 0)
     .sort((a, z) => { const r = a.getBoundingClientRect(), s = z.getBoundingClientRect();
@@ -57,7 +57,7 @@ const INSTALL = ([threadJs, closed]) => {
   if (!head) return 'no head';
   head.textContent = 'THIS TASK';
   const sect = head.closest('div');
-  const thread = eval(threadJs)({ closed });
+  const thread = eval(threadJs)({ closed, after });
   sect.parentElement.insertBefore(thread, sect.nextSibling);
 
   // the old office-note list and the duplicate heading go
@@ -104,6 +104,15 @@ async function shot(page, path) {
   console.log('  closed:', await page.evaluate(INSTALL, [THREAD_JS, true]));
   await page.waitForTimeout(500);
   await shot(page, 'scratchpad/chat-closed.png');
+  await ctx.close();
+}
+
+// 2b · the conversation carries on AFTER the close
+{
+  const { ctx, page } = await portal(402, 874, true);
+  console.log('  after:', await page.evaluate(INSTALL, [THREAD_JS, true, true]));
+  await page.waitForTimeout(500);
+  await shot(page, 'scratchpad/chat-after.png');
   await ctx.close();
 }
 

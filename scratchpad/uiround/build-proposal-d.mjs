@@ -4,7 +4,11 @@ const OUT = '/tmp/claude-0/-home-user-Wolfson-management-app/38623ef8-73c0-5354-
 
 const html = `${HEAD('The Task as a Conversation')}
 <div class="wrap">
-  <div class="eyebrow">Proposal D · design only, nothing built yet</div>
+  <div class="eyebrow">Proposal D · approved, with the conversation left open</div>
+  <div class="card" style="border-left:4px solid var(--good);margin-top:14px">
+    <span class="tag good">Approved &mdash; with one change you made</span>
+    <p><strong>Closing no longer ends the conversation.</strong> The green marker is a milestone in the thread, and both sides can keep writing underneath it &mdash; so an old job can still be talked about when you go back through the history. That also settles the no-edit question properly: nothing in the thread is ever edited or rewritten, because a correction is simply the next message. Locked as decisions 8, 9 and 10 on the <a href="https://claude.ai/code/artifact/18d71433-a44e-4268-b63b-29f8bc03fe99" style="color:var(--blue);font-weight:700">UI Decisions page</a>.</p>
+  </div>
   <h1>The task as a conversation</h1>
   <p class="lede">The office's notes and the worker's replies become one chat on the task — the same conversation on his phone and on your computer. And you asked what I think the closing comment should do. My answer is in here, drawn rather than argued.</p>
 
@@ -25,6 +29,13 @@ const html = `${HEAD('The Task as a Conversation')}
         <p class="cap">The closing comment and the photos arrive as the <strong>last message</strong>, and a green marker closes the conversation: <strong>Job closed · 15:47</strong>.</p>
       </div>
     </div>
+  </section>
+
+  <section>
+    <h2>And it carries on after the job is closed</h2>
+    <p>Your change. The marker records <em>when</em> the job was closed without shutting the thread &mdash; the office can come back a week later about the inspector, and the answer lands in the same place as the rest of the story.</p>
+    <img src="${img('chat-after.png')}" alt="The conversation continuing after the job was closed" style="display:block;width:100%;max-width:420px;border-radius:10px;border:1px solid var(--line);margin:14px auto 0;background:var(--shot-bg)">
+    <p class="cap" style="text-align:center">One small thing this picture gets wrong: the green button at the bottom still reads <strong>Close job</strong> on an already-closed task. In the build it shows the closed state instead.</p>
   </section>
 
   <section>
@@ -49,14 +60,14 @@ const html = `${HEAD('The Task as a Conversation')}
     </div>
   </section>
 
-  <div class="ask">
-    <h3>What I need from you</h3>
+  <div class="ask" style="border-left:4px solid var(--good)">
+    <h3>Settled</h3>
     <ol>
-      <li><strong>The chat, as drawn</strong> — on the phone and on the computer.</li>
-      <li><strong>The closing comment as the last message</strong> — yes, or you had something else in mind.</li>
-      <li><strong>The no-edit rule</strong> on the closing message — reasonable, or too strict?</li>
+      <li><strong>The chat</strong> — approved, phone and computer.</li>
+      <li><strong>The closing comment as the last message</strong> — approved.</li>
+      <li><strong>The conversation stays open after closing</strong> — your change, and it replaces the no-edit question: nothing is edited because a correction is the next message.</li>
     </ol>
-    <p style="margin-top:12px;color:var(--muted)">Say “yes to D” and Areas C and D lock together — then I write the build list.</p>
+    <p style="margin-top:12px;color:var(--muted)">Every area in this round is now decided — ten locked decisions in all.</p>
   </div>
 </div>`;
 writeFileSync(OUT, html);
