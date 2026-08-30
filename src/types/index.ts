@@ -1896,6 +1896,12 @@ export interface MainUiStrings {
   dlPagesTitle: string;
   dlPagesAll: string;
   dlPagesThis: string;
+  dlPrintTitle: string;
+  dlPrintBuilding: string;
+  dlPrintBlocked: string;
+  dlMarksWord: string;
+  dlPagesWord: string;
+  printPlanLabel: string;
   settingsLabel: string;
   statusLabel: string;
   hideLabel: string;
@@ -2468,6 +2474,12 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   dlPagesTitle: 'How much of it?',
   dlPagesAll: 'Every page',
   dlPagesThis: 'Only the page I am on',
+  dlPrintTitle: 'Print this plan',
+  dlPrintBuilding: 'Building the print sheet…',
+  dlPrintBlocked: 'Your browser blocked the print window.',
+  dlMarksWord: 'Markings',
+  dlPagesWord: 'Pages',
+  printPlanLabel: 'Print',
   settingsLabel: 'Settings',
   statusLabel: 'Status',
   hideLabel: 'Hide',
@@ -3039,6 +3051,12 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   dlPagesTitle: 'איזה חלק?',
   dlPagesAll: 'כל העמודים',
   dlPagesThis: 'רק העמוד שאני נמצא בו',
+  dlPrintTitle: 'הדפסת התוכנית',
+  dlPrintBuilding: 'מכין את גיליון ההדפסה…',
+  dlPrintBlocked: 'הדפדפן חסם את חלון ההדפסה.',
+  dlMarksWord: 'סימונים',
+  dlPagesWord: 'עמודים',
+  printPlanLabel: 'הדפסה',
   settingsLabel: 'הגדרות',
   statusLabel: 'סטטוס',
   hideLabel: 'הסתר',

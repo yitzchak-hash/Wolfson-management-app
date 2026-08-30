@@ -169,6 +169,44 @@ check(markedImg.ok && cleanImg.ok && markedImg.size > cleanImg.size,
   'and the marked picture carries more than the clean one (the pins landed)',
   markedImg.ok && cleanImg.ok ? `${markedImg.size} vs ${cleanImg.size}` : '');
 
+// ── Print asks the SAME first question, and honours it ────────────────────
+// The print sheet is built in a popup, so the assertion is on what lands in
+// that window: the composited pages, and the header's own count of markings.
+async function printAnd(sel) {
+  const popup = page.waitForEvent('popup', { timeout: 30000 }).catch(() => null);
+  await page.locator('[data-plan-print]').first().click();
+  await page.waitForTimeout(500);
+  const sheet = page.locator('[data-plan-download-sheet]');
+  if (!await sheet.count()) return { ok: false, why: 'print did not ask' };
+  const askedFormat = await sheet.locator('[data-dl-pdf]').count();
+  await sheet.locator(sel).click();
+  const w = await popup;
+  if (!w) return { ok: false, why: 'no print window' };
+  await w.waitForTimeout(2500);
+  const out = await w.evaluate(() => ({
+    imgs: document.querySelectorAll('img').length,
+    hd: document.querySelector('.hd')?.textContent ?? '',
+    bytes: [...document.querySelectorAll('img')].reduce((n, i) => n + (i.getAttribute('src') || '').length, 0),
+  })).catch(() => null);
+  await w.close().catch(() => {});
+  return { ok: !!out, askedFormat, ...out };
+}
+
+const pMark = await printAnd('[data-dl-markup]');
+check(pMark.ok && pMark.askedFormat === 0,
+  'Print asks about the markings and does NOT ask for a format — paper IS the format',
+  pMark.ok ? `imgs ${pMark.imgs}` : pMark.why);
+check(pMark.ok && /2/.test(pMark.hd) && pMark.imgs === 2,
+  'and it builds every page', pMark.hd.slice(0, 60));
+
+const pClean = await printAnd('[data-dl-clean]');
+check(pClean.ok && pClean.bytes < pMark.bytes,
+  'WITH the markings prints a heavier sheet than the clean one — the pins are on the paper',
+  pMark.ok && pClean.ok ? `${pMark.bytes} vs ${pClean.bytes}` : '');
+// The header counts what it actually drew: two pins, nothing drawn by hand.
+check(pMark.ok && /2/.test(pMark.hd.split('·')[0] || ''),
+  'the printed header counts the markings it drew', pMark.hd.split('·')[0]);
+
 // ── no hardcoded English: the sheet speaks Hebrew when the app does ────────
 const he = await browser.newContext({ viewport: { width: 1500, height: 950 }, acceptDownloads: true });
 await applySeed(he, blob);

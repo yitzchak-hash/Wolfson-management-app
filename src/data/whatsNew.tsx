@@ -52,6 +52,14 @@ export const WHATS_NEW: WhatsNewEntry[] = [
           + 'architect\'s original file untouched.',
         demo: 'list',
       },
+      {
+        title: 'Print asks the same question',
+        body: 'Print now asks the same thing before it builds the sheet — '
+          + 'with the markings, or just the plan — and "with the markings" '
+          + 'means the same on paper as in a file: the drawings AND the snag '
+          + 'pins. It used to print the drawings only, and never the pins.',
+        demo: 'sparkle',
+      },
     ],
   },
   {

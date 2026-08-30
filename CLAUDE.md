@@ -5514,6 +5514,18 @@ Rules worth keeping:
 - **Several files from one press are spaced 350ms apart** — a browser drops
   a burst of automatic downloads silently.
 
+## Print asks the same question, and means the same thing by it
+`print(withMarkup, pages)` runs off the SAME sheet: pressing Print opens it
+at the first question and, because paper IS the format, goes straight to the
+paper once answered (no second question; the pages question still appears for
+a set past `BULK_LIMIT`, and Back from it returns to `what` rather than to a
+format step that was never shown). "With the markings" therefore means the
+same on paper as in a file — the ink AND the pins — or the two exports would
+disagree about what a marking is. `Ctrl/⌘+P` goes through the same door, so
+the keyboard and the button can never print different things. The sheet's
+header, its two toasts and the Print label all come from the strings object
+now, and the interpolated plan name is run through `printEsc`.
+
 ## Escape backs out of the PLAN, not the apartment behind it
 The annotator's keydown moved to the **capture** phase and stops the key
 when it consumed it. The drawer hosting the plan pane has its own Escape on

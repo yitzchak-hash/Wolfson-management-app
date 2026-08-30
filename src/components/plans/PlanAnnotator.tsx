@@ -16,6 +16,7 @@ import { useOrientation } from '../../data/useOrientation';
 import { AnnStroke, AnnTool, PlanAnnotation } from '../../types';
 import { stampPlanToDrive, extractFolderId, isUploadBackendConfigured } from '../../data/driveApi';
 import { fetchPlanCached, prefetchPlans, acquirePlanCache, releasePlanCache } from '../../data/planCache';
+import { printEsc } from '../../data/printing';
 import {
   exportScale, drawPins, canvasBlob, imagesToPdf, imageBytesToPdf,
   safeFileName, saveBytes, saveMany,
@@ -424,6 +425,13 @@ function PlanEditor({
   const [dlStep, setDlStep] = useState<'what' | 'format' | 'pages' | null>(null);
   const [dlMarkup, setDlMarkup] = useState(true);
   const [dlPdf, setDlPdf] = useState(true);
+  /**
+   * Which errand the sheet is running. Print asks the same first question as
+   * a download — "with the markings, or just the plan?" — and then goes
+   * straight to the paper: printing IS the format, so there is no second
+   * question for it.
+   */
+  const [dlMode, setDlMode] = useState<'download' | 'print'>('download');
   const [showPlans, setShowPlans] = useState(false);
   /**
    * The rest of the header, on a screen that cannot hold it.
@@ -2136,7 +2144,7 @@ function PlanEditor({
        */
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
         e.preventDefault();
-        void print();
+        setDlMode('print'); setDlMarkup(true); setDlStep('what');
       }
       // Escape backs out one step at a time. Closing the whole studio because a
       // panel happened to be open loses the sketch's context for no reason.
@@ -2312,11 +2320,17 @@ function PlanEditor({
     return all ? Array.from({ length: doc.numPages }, (_, i) => i) : [page];
   }
 
-  async function print() {
+  /**
+   * Print asks the same first question the download does.
+   *
+   * "With the markings" means the SAME thing on paper as in a file — the ink
+   * and the snag pins — or the two exports would disagree about what a
+   * marking is. Pins go on the first printed page only, for the reason
+   * `drawPins` documents: a pin belongs to the apartment, not to a page.
+   */
+  async function print(withMarkup: boolean, wanted: number[]) {
     if (!doc) return;
-    const wanted = pagesToExport();
-    if (!wanted) return;
-    onToast?.('Building the print sheet…');
+    onToast?.(s.dlPrintBuilding);
     const imgs: string[] = [];
     for (const i of wanted) {
       const p = await doc.getPage(i + 1);
@@ -2326,12 +2340,16 @@ function PlanEditor({
       const ctx = c.getContext('2d')!;
       ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
       await p.render({ canvasContext: ctx, viewport: vp }).promise;
-      for (const s of strokes) if (s.page === i) paintStroke(ctx, c, s);
+      if (withMarkup) {
+        for (const st of strokes) if (st.page === i) paintStroke(ctx, c, st);
+        if (i === wanted[0]) drawPins(ctx, c.width, c.height, myPins);
+      }
       imgs.push(c.toDataURL('image/jpeg', 0.92));
     }
     const w = window.open('', '_blank');
-    if (!w) { onToast?.('Your browser blocked the print window.', 'error'); return; }
-    w.document.write(`<!doctype html><title>${planName || 'Plan'} — ${apartmentLabel}</title>
+    if (!w) { onToast?.(s.dlPrintBlocked, 'error'); return; }
+    const marks = withMarkup ? strokes.length + myPins.length : 0;
+    w.document.write(`<!doctype html><title>${printEsc(planName || s.engineeringPlans)} — ${printEsc(apartmentLabel)}</title>
       <style>
         @page { margin: 8mm; }
         body { margin:0; font:12px Segoe UI,Helvetica,Arial,sans-serif; }
@@ -2339,9 +2357,9 @@ function PlanEditor({
         img { width:100%; display:block; page-break-after:always; }
         img:last-child { page-break-after:auto; }
       </style>
-      <div class="hd"><b>${apartmentLabel} — ${planName || 'Plan'}</b>
-        <span>${strokes.length} mark${strokes.length === 1 ? '' : 's'} · `
-      + `${wanted.length} of ${doc.numPages} page${doc.numPages === 1 ? '' : 's'} · `
+      <div class="hd"><b>${printEsc(apartmentLabel)} — ${printEsc(planName || s.engineeringPlans)}</b>
+        <span>${s.dlMarksWord}: ${marks} · `
+      + `${s.dlPagesWord}: ${wanted.length}/${doc.numPages} · `
       + `${new Date().toLocaleString()}</span></div>
       ${imgs.map(src => `<img src="${src}">`).join('')}`);
     w.document.close();
@@ -2445,13 +2463,31 @@ function PlanEditor({
     }
   }
 
-  /** Answer the sheet: run it now, or ask about the pages first. */
+  /** Every page, unless the set is big enough to be worth asking about. */
+  function allPages(): number[] {
+    return doc ? Array.from({ length: doc.numPages }, (_, i) => i) : [0];
+  }
+
+  /** Run whichever errand the sheet was opened for, over these pages. */
+  function runChoice(markup: boolean, asPdf: boolean, pages: number[]) {
+    setDlStep(null);
+    if (dlMode === 'print') void print(markup, pages);
+    else void runDownload(markup, asPdf, pages);
+  }
+
+  /** Answered "what goes in it": print goes now, a download asks the format. */
+  function chooseWhat(markup: boolean) {
+    setDlMarkup(markup);
+    if (dlMode !== 'print') { setDlStep('format'); return; }
+    if (doc && doc.numPages > BULK_LIMIT) { setDlStep('pages'); return; }
+    runChoice(markup, dlPdf, allPages());
+  }
+
+  /** Answered "as what": run it now, or ask about the pages first. */
   function chooseFormat(asPdf: boolean) {
     setDlPdf(asPdf);
     if (doc && doc.numPages > BULK_LIMIT) { setDlStep('pages'); return; }
-    setDlStep(null);
-    const all = doc ? Array.from({ length: doc.numPages }, (_, i) => i) : [0];
-    void runDownload(dlMarkup, asPdf, all);
+    runChoice(dlMarkup, asPdf, allPages());
   }
 
 
@@ -2732,14 +2768,15 @@ function PlanEditor({
             )}
           </button>
 
-          <button data-plan-download onClick={() => { setDlMarkup(true); setDlStep('what'); }} title={s.dlTitle}
+          <button data-plan-download onClick={() => { setDlMode('download'); setDlMarkup(true); setDlStep('what'); }} title={s.dlTitle}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold text-white/85 hover:bg-white/10">
             <Download size={14} /> {s.downloadLabel}
           </button>
 
-          <button onClick={print} title="Print this plan with the markup on it"
+          <button data-plan-print onClick={() => { setDlMode('print'); setDlMarkup(true); setDlStep('what'); }}
+            title={s.dlPrintTitle}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold text-white/90 hover:bg-white/10">
-            <Printer size={14} /> Print
+            <Printer size={14} /> {s.printPlanLabel}
           </button>
         </>)}
 
@@ -3450,10 +3487,10 @@ function PlanEditor({
               onClick={() => { setShowMore(false); setShowLayers(true); }} />
             <SheetRow icon={Download} label={s.downloadLabel}
               hint={s.dlTitle}
-              onClick={() => { setShowMore(false); setDlMarkup(true); setDlStep('what'); }} />
-            <SheetRow icon={Printer} label="Print"
-              hint="This plan with the markup on it"
-              onClick={() => { setShowMore(false); void print(); }} />
+              onClick={() => { setShowMore(false); setDlMode('download'); setDlMarkup(true); setDlStep('what'); }} />
+            <SheetRow icon={Printer} label={s.printPlanLabel}
+              hint={s.dlPrintTitle}
+              onClick={() => { setShowMore(false); setDlMode('print'); setDlMarkup(true); setDlStep('what'); }} />
             {askWho && who && (
               <SheetRow icon={UserIcon} label={who}
                 hint="Not you? Hand over to somebody else"
@@ -3487,7 +3524,7 @@ function PlanEditor({
                      boxShadow: '0 24px 60px -12px rgba(15,23,42,.45)' }}>
             <div className="px-4 py-2.5 text-[13px] font-bold text-white flex items-center gap-2"
               style={{ backgroundColor: NAVY }}>
-              <span className="flex-1">{s.dlTitle}</span>
+              <span className="flex-1">{dlMode === 'print' ? s.dlPrintTitle : s.dlTitle}</span>
               <span className="text-[11px] font-semibold text-white/70">
                 {dlStep === 'what' ? s.dlWhatStep : dlStep === 'format' ? s.dlFormatStep : s.dlPagesTitle}
               </span>
@@ -3496,13 +3533,13 @@ function PlanEditor({
               {dlStep === 'what' && (
                 <>
                   <button data-dl-markup
-                    onClick={() => { setDlMarkup(true); setDlStep('format'); }}
+                    onClick={() => chooseWhat(true)}
                     className="w-full text-left px-3 py-2.5 rounded-xl border border-gray-200 hover:border-[#4aa8d8] transition-colors">
                     <div className="text-[13px] font-bold text-gray-900">{s.dlWithMarkup}</div>
                     <div className="text-[11px] text-gray-500">{s.dlWithMarkupHint}</div>
                   </button>
                   <button data-dl-clean
-                    onClick={() => { setDlMarkup(false); setDlStep('format'); }}
+                    onClick={() => chooseWhat(false)}
                     className="w-full text-left px-3 py-2.5 rounded-xl border border-gray-200 hover:border-[#4aa8d8] transition-colors">
                     <div className="text-[13px] font-bold text-gray-900">{s.dlClean}</div>
                     <div className="text-[11px] text-gray-500">{s.dlCleanHint}</div>
@@ -3534,22 +3571,18 @@ function PlanEditor({
               {dlStep === 'pages' && (
                 <>
                   <button data-dl-all
-                    onClick={() => {
-                      setDlStep(null);
-                      void runDownload(dlMarkup, dlPdf,
-                        Array.from({ length: doc?.numPages ?? 1 }, (_, i) => i));
-                    }}
+                    onClick={() => runChoice(dlMarkup, dlPdf, allPages())}
                     className="w-full text-left px-3 py-2.5 rounded-xl border border-gray-200 hover:border-[#4aa8d8] transition-colors">
                     <div className="text-[13px] font-bold text-gray-900">{s.dlPagesAll}</div>
                     <div className="text-[11px] text-gray-500">{doc?.numPages}</div>
                   </button>
                   <button data-dl-one
-                    onClick={() => { setDlStep(null); void runDownload(dlMarkup, dlPdf, [page]); }}
+                    onClick={() => runChoice(dlMarkup, dlPdf, [page])}
                     className="w-full text-left px-3 py-2.5 rounded-xl border border-gray-200 hover:border-[#4aa8d8] transition-colors">
                     <div className="text-[13px] font-bold text-gray-900">{s.dlPagesThis}</div>
                     <div className="text-[11px] text-gray-500">{page + 1}</div>
                   </button>
-                  <button data-dl-back onClick={() => setDlStep('format')}
+                  <button data-dl-back onClick={() => setDlStep(dlMode === 'print' ? 'what' : 'format')}
                     className="w-full text-center px-3 py-2 rounded-xl text-[12px] font-semibold text-gray-500 hover:bg-gray-50">
                     {s.dlBack}
                   </button>
