@@ -1,0 +1,81 @@
+Build the approved UI round for the Wolfson management app.
+
+REPO / BRANCH
+Work in yitzchak-hash/Wolfson-management-app. Branch off
+claude/ipad-flip-phone-views-f2gqnv (it already carries the spec file and is
+merged up to date with production) and develop on a new branch named
+claude/ui-round-build. Do NOT push to claude/blissful-cray-spTFY — that is the
+production branch that deploys to the live site. Pull before you push; other
+sessions move these branches.
+
+WHAT TO BUILD
+Read docs/UI-BUILD-LIST.md. It is the specification: eleven decisions the owner
+approved, and fifteen numbered changes, each naming the exact files it touches.
+Build all fifteen, in order.
+
+The pictures of every approved screen are here — open it for reference when a
+line is ambiguous, using the Artifact tool with action "read" and this url:
+https://claude.ai/code/artifact/18d71433-a44e-4268-b63b-29f8bc03fe99
+
+Also read CLAUDE.md before you start. It is long, but the sections on the plan
+pane, the contractor portal, the phone rules and the backup rule all bear
+directly on this work, and it records traps that have already been paid for
+once.
+
+THE DESIGN IS SEALED — BUILD IT, DON'T REDESIGN IT
+Every one of these was drawn on the real app and approved by the owner one at a
+time, including changes he made to my first proposals. Do not improve, simplify
+or reinterpret them. If a line genuinely cannot be built as written — it fights
+the architecture, or two decisions contradict each other — STOP and ask the
+owner rather than choosing for him. Say which item, what the conflict is, and
+what you would do instead.
+
+If you find a real bug while working, fix it and say so, but do not widen the
+round: no new features, no refactors that were not asked for.
+
+WHAT WILL BITE YOU
+The build list ends with a "Rules this build must not break" section. Read it
+before the first edit, not after. In particular:
+- There are at most 12 serverless functions allowed under /api and the folder is
+  full. Adding a 13th turns every deployment red while the local build stays
+  green. Item 8 uses the existing /api/drive-fetch.
+- New user-facing strings come from the strings objects. A new
+  ContractorUiStrings key must be optional with a fallback — those are
+  user-edited and stored with no merge-fresh, so a required key renders blank
+  for everyone who used the app before today.
+- Width tests are subscribed matchMedia listeners, never a value cached at
+  mount. A folding phone changes width with the window open and breaks anything
+  cached, first.
+- photoIds on ContractorNote is the ONLY new field in the list, and it rides a
+  collection that is already persisted, exported, imported and synced. If you
+  add any other state key, it goes into persist + export (top level) + import
+  and you re-run node scratchpad/backupaudit.mjs.
+
+DONE MEANS
+- npx tsc --noEmit clean.
+- These harnesses green (node scratchpad/<name>.mjs with a dev server on 5173):
+  folddrawer, deskcheck, plantabs, planviewer, planzoom, planphone, portalround,
+  multiday, stagereport, foldswap, ipadcheck. plantabs and planaddr need a
+  second server started with VITE_DRIVE_API_KEY=testkey npx vite --port 5174.
+- The sweep clean at every size it covers: W=344, W=390, W=402,
+  W=768 H=1024, and VIEW=landscape W=1024 H=768, each run as
+  node scratchpad/shots.mjs. Overflow and clipped must both be 0 everywhere.
+- node scratchpad/backupaudit.mjs green after item 15.
+- Committed and pushed to claude/ui-round-build.
+
+Two harnesses carry standing pre-existing failures unrelated to this work —
+boardsize.mjs (left-edge auto-pan) and touchpan.mjs (pinch zoom). Confirm they
+fail identically with your changes stashed before blaming yourself for them.
+
+ONE THING YOU CANNOT VERIFY HERE
+Item 8, the plan's Download button, needs real Google Drive credentials and this
+container has none. Build it, reason carefully about it, and tell the owner
+plainly that it is the one item needing a look on a real phone. Do not claim it
+works.
+
+WHEN YOU FINISH
+Tell the owner what you built in plain language — no code blocks in the reply —
+which items are done, anything you could not verify, and anything you had to
+ask about. If he wants a preview, the method is in
+.claude/skills/device-gallery/SKILL.md: real screenshots of the running app on
+every device, republished to the same link.
