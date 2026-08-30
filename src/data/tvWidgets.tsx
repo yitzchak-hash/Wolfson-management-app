@@ -453,22 +453,42 @@ export function MonthHeat({ c }: { c: WidgetCtx }) {
     }
   }
   const busiest = Math.max(1, ...counts.values());
+  /**
+   * The shade is a RAMP OF THE COMPANY BLUE — a light accent tint walking
+   * into the navy — instead of the old translucent amber, whose quarter-
+   * strength orange over white read as dirty ("the colors are just ugly",
+   * the owner). Solid computed colors, so every step of the ramp is a
+   * deliberate shade rather than an alpha accident.
+   */
+  const shade = (t: number) => {
+    const a = [227, 242, 251], b = [30, 58, 95];
+    const c = a.map((v, i) => Math.round(v + (b[i] - v) * t));
+    return `rgb(${c[0]},${c[1]},${c[2]})`;
+  };
+  const wd = Array.from({ length: 7 }, (_, i) =>
+    new Date(2026, 7, 2 + i).toLocaleDateString(undefined, { weekday: 'narrow' }));
   return (
     <Card label={first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}>
       <div className="grid grid-cols-7 gap-1 h-full content-start">
+        {wd.map((w, i) => (
+          <span key={`w${i}`} className="flex items-center justify-center font-bold"
+            style={{ fontSize: 10, color: '#94a3b8', letterSpacing: '.04em' }}>{w}</span>
+        ))}
         {Array.from({ length: first.getDay() }, (_, i) => <span key={`x${i}`} />)}
         {Array.from({ length: days }, (_, i) => {
           const n = counts.get(i + 1) ?? 0;
-          const heat = n ? 0.25 + 0.75 * (n / busiest) : 0;
+          const t = n ? 0.14 + 0.86 * (n / busiest) : 0;
           const today = i + 1 === now.getDate();
           return (
             <span key={i} className="rounded-md flex items-center justify-center tabular-nums"
               style={{
                 aspectRatio: '1', fontSize: 12,
-                backgroundColor: n ? `rgba(217,119,6,${heat.toFixed(2)})` : '#f1f5f9',
-                color: n && heat > 0.55 ? '#fff' : '#64748b',
+                backgroundColor: n ? shade(t) : '#fbfcfe',
+                boxShadow: n ? undefined : 'inset 0 0 0 1px #eef2f7',
+                color: n && t > 0.5 ? '#fff' : n ? '#1e3a5f' : '#94a3b8',
                 outline: today ? '2px solid #4aa8d8' : undefined,
-                fontWeight: today ? 800 : 500,
+                outlineOffset: today ? 1 : undefined,
+                fontWeight: today ? 800 : n ? 700 : 500,
               }}>{i + 1}</span>
           );
         })}

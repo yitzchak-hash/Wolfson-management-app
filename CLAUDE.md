@@ -5690,3 +5690,80 @@ design is sealed: do not "improve" these.
 - `plantabs.mjs` re-encoded to decision 2 (pane strip gone, tabs live in
   the studio); its slow-plan stub is one-shot and long enough to survive
   the walk into the studio.
+
+---
+
+# v2 — the touchscreen round (pinch rebuilt, trash-not-delete, the TV bar behind one ⋯)
+
+## The pinch is ABSOLUTE, anchored at the first-touch centre
+`useTouchGestures` hands the consumer a GESTURE, not increments:
+`onGestureStart(cx, cy)` (snapshot the zoom and pan, stand the single-finger
+pan down), `onGesture(scale, dx, dy)` — scale and midpoint travel SINCE THE
+START — and `onGestureEnd`. The board derives every frame from the snapshot:
+the world point under the first-touch centre stays under it, the midpoint's
+travel pans on top. The old version fed per-frame ratios anchored at a
+drifting midpoint AND panned by the midpoint delta (double-counting), fought
+the single-finger pointer pan finger one had already started, and called
+setPan inside the setZoom updater — an impure updater that under a pinch
+storm is a maximum-update-depth (#185) crash in waiting. That crash, the
+dead sidebar and "buttons don't work" were one stale tab running the old
+bundle through a deploy — reproduce reports against the CURRENT build with
+`scratchpad/hisboard-crash.mjs` (his real board via `fetch-his.mjs` in the
+/tmp scratchpad; real data never enters the repo) before hunting.
+`touchpan.mjs` is ALL GREEN now and guards the pinch — its standing red was
+the harness measuring `[data-board-world]`'s own transform, which is NONE:
+the transform lives on the PARENT (the documented grouplock lesson, paid
+again by the harness that documented it).
+
+## Deleting a job on the board FILES IT INTO TRASH (owner, 2026-08-30)
+`handleDeleteJobs` = `fileInBin(ids, 'trash')`: the menu row says "Move to
+Trash", the Delete key does the same, there is NO confirm (a trip to Trash
+is reversible) and the scary modal is gone. `deleteApartment` — the
+permanent cascade — is reachable only from the Trash window's own "Delete
+forever" and the drawer's danger zone. Never put a destroying delete back
+on the board.
+
+## Context menus clamp by their REAL size
+The board menu's wrapper measures itself in a callback ref and clamps into
+the viewport (`maxHeight: calc(100vh - 16px)`, overflow-y auto). The old
+fixed 300px guess let the 600px job menu run off the bottom exactly when a
+tile near the bottom edge was right-clicked.
+
+## A finger DRAG over a widget button pans the board
+`deferredPan` in GeneralJobsPage: a finger press on `a,button` inside the
+viewport (not `data-no-drag`/`data-el-action`/text fields — those own their
+gestures) is WATCHED, not captured. Past 10px of slop the board takes the
+pointer mid-gesture (capture on the viewport, one click swallowed in the
+capture phase); a clean tap never notices. Most of a widget's surface is
+button rows, so without this a finger dragged across a widget went nowhere.
+The pinch's onGestureStart clears the watch.
+
+## The TV bar: views left, one ⋯ menu right (owner, 2026-08-30)
+Workspace views + Dashboard + Goals stay on the LEFT; Full screen stays on
+the bar; everything that sets the screen up — zoom −/%/+, button size, About
+this screen, the PX test pattern, the arrange pen — lives behind `[data-tv-more]`,
+a ⋯ button sitting just before the overdue pill. Its dropdown is
+`[data-tv-more-menu]`; harnesses that press zoom/PX must open the menu first
+(tvsize.mjs shows the manner).
+
+## The TV diagram FITS, aspect intact
+The building view no longer draws at `zoom: autoScale×boost` with columns
+flexing to the panel (two buildings stretched into wide flat cells; the
+picture sat tiny while the bar's buttons stayed normal). Columns get a fixed
+620px width, the natural size is measured (ResizeObserver pair, damped), and
+the zoom is `fit × boost` — at 100% the whole project fills the panel. The
+scroller stays INSIDE the zoom (the sticky building-bar rule) and the sheet
+centres by `m-auto` (the planzoom flex-overflow rule).
+
+## The region picker draws the JOB BOARD wherever you stand
+`TvSettings` reads the general workspace's jobs and elements from the live
+store only when it IS the open workspace, else from `loadProjectSnapshot('general')`
+(subscribed to `snapshotTick`). The live store holds only the open
+workspace, so configuring the TV from Wolfson drew an empty white sheet
+under the green frame.
+
+## The month heat map is a ramp of the company blue
+`MonthHeat` shades days by interpolating `#e3f2fb → #1e3a5f` as SOLID
+computed colors, with a weekday-initials row and hairline empty days — the
+old quarter-strength translucent amber over white read as dirty. Ink flips
+white past half strength; today keeps the accent ring.

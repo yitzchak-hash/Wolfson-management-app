@@ -17,13 +17,29 @@ import { useEffect, useRef } from 'react';
 export function useTouchGestures(
   el: HTMLElement | null,
   {
-    onPinch,
-    onPan,
+    onGestureStart,
+    onGesture,
+    onGestureEnd,
     enabled = true,
   }: {
-    /** scaleDelta > 1 zooms in. Centre is in client coordinates. */
-    onPinch: (scaleDelta: number, centerX: number, centerY: number) => void;
-    onPan: (dx: number, dy: number) => void;
+    /**
+     * Two fingers landed. The consumer snapshots its zoom and pan HERE and
+     * derives every frame of the gesture from that snapshot — and stands
+     * down any single-finger pan already running, or the two systems fight
+     * over the board and it jumps (the owner's exact report on the Samsung
+     * display).
+     */
+    onGestureStart: (centerX: number, centerY: number) => void;
+    /**
+     * The gesture, ABSOLUTE since its start — never an increment:
+     * `scale` is currentDistance / startDistance, `dx`/`dy` is how far the
+     * midpoint has travelled. The zoom ANCHOR is the first-touch centre
+     * (handed to onGestureStart), fixed for the whole gesture — per-frame
+     * ratios anchored at a drifting midpoint accumulate error and double-
+     * count the pan, which is what made the pinch jump all over.
+     */
+    onGesture: (scale: number, dx: number, dy: number) => void;
+    onGestureEnd?: () => void;
     enabled?: boolean;
   },
 ) {
@@ -38,11 +54,10 @@ export function useTouchGestures(
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length !== 2) return;
       const [a, b] = [e.touches[0], e.touches[1]];
-      state.current = {
-        dist: dist(a, b),
-        cx: (a.clientX + b.clientX) / 2,
-        cy: (a.clientY + b.clientY) / 2,
-      };
+      const cx = (a.clientX + b.clientX) / 2;
+      const cy = (a.clientY + b.clientY) / 2;
+      state.current = { dist: Math.max(1, dist(a, b)), cx, cy };
+      onGestureStart(cx, cy);
     };
 
     const onTouchMove = (e: TouchEvent) => {
@@ -50,20 +65,19 @@ export function useTouchGestures(
       // Two fingers always mean navigate, never move a tile.
       e.preventDefault();
       const [a, b] = [e.touches[0], e.touches[1]];
-      const d = dist(a, b);
-      const cx = (a.clientX + b.clientX) / 2;
-      const cy = (a.clientY + b.clientY) / 2;
-
-      const prev = state.current;
-      if (prev.dist > 0 && Math.abs(d - prev.dist) > 2) {
-        onPinch(d / prev.dist, cx, cy);
-      }
-      onPan(cx - prev.cx, cy - prev.cy);
-      state.current = { dist: d, cx, cy };
+      const st = state.current;
+      onGesture(
+        dist(a, b) / st.dist,
+        (a.clientX + b.clientX) / 2 - st.cx,
+        (a.clientY + b.clientY) / 2 - st.cy,
+      );
     };
 
     const onTouchEnd = (e: TouchEvent) => {
-      if (e.touches.length < 2) state.current = null;
+      if (e.touches.length < 2 && state.current) {
+        state.current = null;
+        onGestureEnd?.();
+      }
     };
 
     el.addEventListener('touchstart', onTouchStart, { passive: false });
@@ -76,7 +90,7 @@ export function useTouchGestures(
       el.removeEventListener('touchend', onTouchEnd);
       el.removeEventListener('touchcancel', onTouchEnd);
     };
-  }, [el, enabled, onPinch, onPan]);
+  }, [el, enabled, onGestureStart, onGesture, onGestureEnd]);
 }
 
 /**

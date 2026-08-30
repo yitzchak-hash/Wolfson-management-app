@@ -38,6 +38,10 @@ async function measure(scaleSetting, { url = 'http://localhost:5173/tv?view=dash
   const page = await ctx.newPage();
   await page.goto(url);
   await page.waitForTimeout(3000);
+  // The zoom readout moved into the ⋯ menu (the 2026-08-30 bar ruling) —
+  // open it so the % is on screen to read.
+  await page.locator('[data-tv-more]').first().click();
+  await page.waitForTimeout(300);
   const out = await page.evaluate(() => {
     // The card grid is inside the zoom wrapper; measure a card's VISUAL box —
     // getBoundingClientRect folds the layout zoom in.
@@ -87,6 +91,9 @@ ok(over.pct === '300', `a saved 900% clamps to the 300% ceiling (bar shows ${ove
 
   ok(await page.locator('[data-size-note]').count() === 0, 'no chip on first load');
 
+  // The zoom lives in the ⋯ menu now — open it first.
+  await page.locator('[data-tv-more]').first().click();
+  await page.waitForTimeout(300);
   // Press + : the size changes and the wall answers.
   await page.locator('button[title*="Bigger"], button[title="Bigger"]').first().click();
   await page.waitForTimeout(400);
@@ -100,7 +107,10 @@ ok(over.pct === '300', `a saved 900% clamps to the 300% ceiling (bar shows ${ove
   ok(await chip.count() === 0, 'chip goes by itself');
 
   // The + button ceiling: from 290% one press lands on 300 and stays.
-  await page.evaluate(() => { /* nothing — the next presses walk it up */ });
+  if (!(await page.locator('[data-tv-more-menu]').count())) {
+    await page.locator('[data-tv-more]').first().click();
+    await page.waitForTimeout(300);
+  }
   for (let i = 0; i < 25; i++) {
     await page.locator('button[title*="Bigger"], button[title="Bigger"]').first().click();
     await page.waitForTimeout(60);

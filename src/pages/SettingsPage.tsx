@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { useStore } from '../data/store';
+import { useStore, loadProjectSnapshot } from '../data/store';
 import {
   Plus, Trash2, Save, Palette, ChevronUp, ChevronDown, Shield, Sun, Moon,
   Copy, Check, Download, Upload, HardDrive, X, HardDriveDownload, ToggleLeft, ToggleRight,
@@ -1691,6 +1691,7 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
     boardSettings, setTvSetting, apartments, canvasElements, stages,
     boardViews, currentProjectId, currentUser, users,
     contractorAssignments, contractors, contractorPhotos, activityLogs, addCanvasElement,
+    snapshotTick,
   } = useStore();
   const tv = boardSettings.__tv ?? {};
 
@@ -1763,13 +1764,24 @@ function TvSettings({ onToast }: { onToast: (msg: string, type?: 'success' | 'er
   const chosen = boardsHere.find(v => v.id === tvBoard);
 
   // Jobs and things as they sit ON THE CHOSEN BOARD, so the region you drag is
-  // measured against what the wall will actually show.
-  const boardJobs = apartments
+  // measured against what the wall will actually show — and taken from the
+  // JOB BOARD's own data whatever workspace the office is standing in. The
+  // live store holds only the OPEN workspace, so configuring the TV from
+  // Wolfson used to draw an empty white sheet under the green frame (the
+  // owner's exact report: "I don't see the actual board under the frame").
+  const generalBoard = useMemo(() => {
+    if (currentProjectId === 'general') return { apts: apartments, els: canvasElements };
+    const snap = loadProjectSnapshot('general');
+    return { apts: snap.apartments, els: snap.canvasElements };
+  // snapshotTick: a cloud hydration landing must redraw the miniature.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentProjectId, apartments, canvasElements, snapshotTick]);
+  const boardJobs = generalBoard.apts
     .filter(a => a.buildingId === 'G' && !a.isUnnamed && !a.boardBin)
     .map(a => (tvBoard
       ? { ...a, canvasX: a.viewPos?.[tvBoard]?.x ?? a.canvasX, canvasY: a.viewPos?.[tvBoard]?.y ?? a.canvasY }
       : a));
-  const boardThings = canvasElements.filter(el => (el.board ?? '') === tvBoard);
+  const boardThings = generalBoard.els.filter(el => (el.board ?? '') === tvBoard);
   const lang = tv.tvLang ?? 'en';
   const boost = tv.tvScale ?? 1;
   /**

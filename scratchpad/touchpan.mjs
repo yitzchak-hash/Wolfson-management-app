@@ -32,6 +32,7 @@ await ctx.addInitScript(() => {
   }));
 });
 const page = await ctx.newPage();
+page.on('console', m => { if (m.text().startsWith('[pinch]')) console.log('   ', m.text()); });
 await page.goto('http://localhost:5173/jobs');
 await page.waitForTimeout(3000);
 
@@ -122,17 +123,43 @@ async function fingerTap(x, y) {
     const opened = await page.locator('input[placeholder*="Search inside"]').count();
     if (!opened) await page.screenshot({ path: 'scratchpad/touch-bin-fail.png' });
     check(opened > 0, 'tap on the Done group opened its window');
-    await page.keyboard.press('Escape');
-    await page.waitForTimeout(500);
+    // Escape backs out ONE thing at a time (the documented rule) — inside
+    // the window it may first put down a tool or clear a selection. Press
+    // until the window is really gone, or its overlay swallows the pinch.
+    for (let i = 0; i < 4; i++) {
+      if (!(await page.locator('input[placeholder*="Search inside"]').count())) break;
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(400);
+    }
+    check((await page.locator('input[placeholder*="Search inside"]').count()) === 0,
+      'and the group window really closed');
   }
 }
 
 // ── 5. two fingers pinch-zoom ──
 {
-  const j0 = await box('G-j1');
-  const w0 = j0.width;
+  // The transform lives on the world div's PARENT (the grouplock lesson —
+  // "find the world by [data-board-world].parentElement").
+  const zoomOf = () => page.evaluate(() => {
+    const w = document.querySelector('[data-board-world]').parentElement;
+    const m = new DOMMatrixReadOnly(getComputedStyle(w).transform);
+    return m.a;
+  });
+  const z0 = await zoomOf();
   const cx = 195, cy = 450;
   const two = (d) => ([{ x: cx - d, y: cy }, { x: cx + d, y: cy }]);
+  // The standing rule: a press aimed at the board must first be shown to
+  // LAND on the board — an overlay left standing makes the pinch a no-op
+  // and blames the feature.
+  const under = await page.evaluate(([x, y]) => {
+    const n = document.elementFromPoint(x, y);
+    return !!(n && n.closest('[data-board-viewport]'));
+  }, [cx, cy]);
+  console.log('   under fingers:', await page.evaluate(([l, r, y]) => [l, r].map(x => {
+    const n = document.elementFromPoint(x, y);
+    return (n?.closest('[data-node-id]')?.getAttribute('data-node-id')) ?? n?.tagName ?? 'none';
+  }).join(' | '), [cx - 40, cx + 40, cy]));
+  check(under, 'the pinch point is really on the board');
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: two(40) });
   for (let d = 48; d <= 120; d += 8) {
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: two(d) });
@@ -140,9 +167,11 @@ async function fingerTap(x, y) {
   }
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await page.waitForTimeout(700);
-  const j1 = await box('G-j1');
-  console.log(`   tile width ${Math.round(w0)} -> ${Math.round(j1?.width ?? 0)}`);
-  check((j1?.width ?? 0) > w0 * 1.3, 'pinch zoomed the board in');
+  // Read the world transform, not a tile's box — a strong zoom-in CULLS the
+  // seeded tile right off the screen, which is the feature working.
+  const z1 = await zoomOf();
+  console.log(`   zoom ${z0.toFixed(2)} -> ${z1.toFixed(2)}`);
+  check(z1 > z0 * 1.3, 'pinch zoomed the board in');
 }
 
 console.log(fails === 0 ? '\nALL PASS' : `\n${fails} FAILURES`);

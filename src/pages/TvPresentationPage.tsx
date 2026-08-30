@@ -18,7 +18,7 @@ import { useOrientation } from '../data/useOrientation';
 import { WidgetStore } from '../components/board/WidgetStore';
 import { WidgetListPopup } from '../components/board/WidgetListPopup';
 import { extractFileId } from '../data/driveApi';
-import { PenLine, Maximize, Minimize, Pencil, X as CloseIcon, Plus, Info, Search as SearchIcon } from 'lucide-react';
+import { PenLine, Maximize, Minimize, Pencil, X as CloseIcon, Plus, Info, Search as SearchIcon, MoreVertical } from 'lucide-react';
 
 /**
  * Lazy, like everywhere else — the wallboard is the last place that should
@@ -308,6 +308,7 @@ export function TvPresentationPage() {
     projects, apartments, stages, contractorAssignments, contractorPhotos, canvasElements,
     boardSettings, currentProjectId, setCurrentProject, startFirebaseSync, firebaseListening,
     users, contractors, activityLogs, addCanvasElement, updateCanvasElement, setTvSetting,
+    buildings,
   } = useStore();
 
   /**
@@ -635,6 +636,46 @@ export function TvPresentationPage() {
    */
   const [editing, setEditing] = useState(false);
   const [diag, setDiag] = useState(false);
+  /** The ⋯ menu by the overdue pill — the screen-setup controls live in it. */
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  /**
+   * The building-diagram view FITS the whole project to the panel — aspect
+   * intact, at 100% zoom the whole thing fills the screen. It used to draw
+   * at `zoom: scale` with the columns FLEXING to the panel's width: on a
+   * wide TV two buildings stretched into wide flat cells ("the diagrams
+   * look horrible"), and the picture sat small in a scroller while the bar's
+   * buttons stayed normal ("really tiny at 95–100%"). The columns get a
+   * fixed desktop-proportioned width now, the natural size is measured, and
+   * the zoom is the FIT times the panel's own display size.
+   */
+  const [diagBox, setDiagBox] = useState({ w: 0, h: 0 });
+  const diagBoxRO = useRef<ResizeObserver | null>(null);
+  const setDiagBoxEl = (el: HTMLDivElement | null) => {
+    diagBoxRO.current?.disconnect();
+    diagBoxRO.current = null;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      const r = entries[0].contentRect;
+      setDiagBox(b => (Math.abs(b.w - r.width) > 2 || Math.abs(b.h - r.height) > 2)
+        ? { w: r.width, h: r.height } : b);
+    });
+    ro.observe(el);
+    diagBoxRO.current = ro;
+  };
+  const [diagNatH, setDiagNatH] = useState(0);
+  const diagNatRO = useRef<ResizeObserver | null>(null);
+  const setDiagNatEl = (el: HTMLDivElement | null) => {
+    diagNatRO.current?.disconnect();
+    diagNatRO.current = null;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      const h = entries[0].contentRect.height;
+      setDiagNatH(prev => (Math.abs(prev - h) > 2 ? h : prev));
+    });
+    ro.observe(el);
+    diagNatRO.current = ro;
+  };
 
   /**
    * The panel turns. Everything below reads this rather than the window
@@ -844,59 +885,12 @@ export function TvPresentationPage() {
 
       <span className="w-px h-6 mx-1" style={{ backgroundColor: '#e2e8f0' }} />
 
-      {/* Full screen, and the way back out — beside the views, as asked. */}
+      {/* Full screen, and the way back out — it STAYS on the bar (the
+          owner's ruling); everything else that sets the screen up lives in
+          the three-dot menu by the overdue pill. */}
       <button onClick={toggleFull} title={t('Full screen', 'מסך מלא')}
         className={`${barBtn} px-3 py-1.5`} style={off}>
         {full ? <Minimize size={16} /> : <Maximize size={16} />}
-      </button>
-
-      {/* Zoom, as a minus and a plus. The percentage between them is the
-          automatic figure with your nudge applied, and tapping it resets. */}
-      <div className="flex items-center rounded-full overflow-hidden" style={off}>
-        <button onClick={() => setBoost(Math.max(0.6, Math.round((boost - 0.1) * 100) / 100))}
-          title={t('Smaller', 'קטן')} className="px-3 py-1.5 font-black">−</button>
-        <button onClick={() => setBoost(1)} title={t('Automatic', 'אוטומטי')}
-          className="px-2 py-1.5 font-bold tabular-nums" style={{ fontSize: '.85em' }}>
-          {Math.round(boost * 100)}%
-        </button>
-        <button onClick={() => setBoost(Math.min(3, Math.round((boost + 0.1) * 100) / 100))}
-          title={t('Bigger', 'גדול')} className="px-3 py-1.5 font-black">+</button>
-      </div>
-
-      {/* Button size — a different thing from the zoom beside it.
-          The zoom magnifies what is ON the board; this makes the CONTROLS
-          bigger, for a panel driven with a finger and a fat pen. Tapping steps
-          through the sizes rather than opening a menu: one control, one tap,
-          and the effect is visible immediately in the button you just hit. */}
-      <button
-        onClick={() => {
-          const i = TOUCH_STEPS.findIndex(v => Math.abs(v - touchScale) < 0.02);
-          setTouchScale(TOUCH_STEPS[(i + 1) % TOUCH_STEPS.length] ?? 1);
-        }}
-        title={t('How big the buttons are — for fingers and the pen',
-                 'גודל הכפתורים — למגע ולעט')}
-        className={`${barBtn} px-3 py-1.5 flex items-center gap-1.5`}
-        style={touchScale > 1.02 ? { backgroundColor: '#1e3a5f', color: '#fff' } : off}>
-        <span className="font-black leading-none" style={{ fontSize: '1.15em' }}>A</span>
-        <span className="font-black leading-none" style={{ fontSize: '.8em' }}>a</span>
-        <span className="font-bold" style={{ fontSize: '.8em' }}>
-          {t(TOUCH_LABEL[String(touchScale)]?.[0] ?? `${Math.round(touchScale * 100)}%`,
-             TOUCH_LABEL[String(touchScale)]?.[1] ?? `${Math.round(touchScale * 100)}%`)}
-        </span>
-      </button>
-
-      {/* What this screen actually IS.
-          A wall panel that looks fuzzy has two completely different causes —
-          the browser drawing at 1080 and the TV stretching it to 4K, which
-          nothing in the app can fix, or our own scaling drawing once and
-          stretching the picture, which we can. They are told apart by what the
-          browser reports, and the only way to read that off a TV in another
-          building is to put it on the screen. */}
-      <button onClick={() => setDiag(v => !v)}
-        title={t('About this screen', 'על המסך הזה')}
-        className={`${barBtn} px-3 py-1.5`}
-        style={diag ? { backgroundColor: '#1e3a5f', color: '#fff' } : off}>
-        <Info size={16} />
       </button>
       {diag && (
         <ScreenReport
@@ -910,24 +904,6 @@ export function TvPresentationPage() {
           t={t}
         />
       )}
-
-      {/* The test pattern (sealed pick 10) — rulers and sample words at known
-          REAL pixel sizes, for standing in front of the panel and deciding
-          with your own eyes. */}
-      <button onClick={() => setTestPattern(v => !v)}
-        title={t('Test pattern — sample text at known sizes', 'תבנית בדיקה — טקסט לדוגמה בגדלים ידועים')}
-        className={`${barBtn} px-3 py-1.5`}
-        style={testPattern ? { backgroundColor: '#1e3a5f', color: '#fff' } : off}>
-        <span className="font-black tabular-nums" style={{ fontSize: '.85em', letterSpacing: '.05em' }}>PX</span>
-      </button>
-
-      {/* Edit mode. Off by default and never sticky — see the note on `editing`. */}
-      <button onClick={() => setEditing(v => !v)}
-        title={t('Arrange the wallboard', 'סידור לוח הקיר')}
-        className={`${barBtn} px-3 py-1.5`}
-        style={editing ? { backgroundColor: '#f59e0b', color: '#fff' } : off}>
-        <Pencil size={16} />
-      </button>
 
       {/* The company mark, large, in the middle of the room's eyeline.
           In portrait it sits IN the flow instead of centred absolutely — a
@@ -944,6 +920,91 @@ export function TvPresentationPage() {
       )}
 
       <span className="flex-1" />
+
+      {/* The three-dot menu (owner's ruling, 2026-08-30): the screen-setup
+          controls — zoom, button size, the PX test pattern, About this
+          screen, and the arrange pen — off the bar and behind one ⋯, sitting
+          just before the overdue pill. The views stay on the left; full
+          screen stays on the bar. */}
+      <div className="relative">
+        <button data-tv-more onClick={() => setMoreOpen(v => !v)}
+          title={t('Screen controls', 'בקרות מסך')}
+          className={`${barBtn} px-3 py-1.5`}
+          style={moreOpen || editing ? on : off}>
+          <MoreVertical size={16} />
+        </button>
+        {moreOpen && (<>
+          <div className="fixed inset-0 z-[240]" onClick={() => setMoreOpen(false)} />
+          <div data-tv-more-menu
+            className="absolute top-full mt-2 z-[250] bg-white rounded-2xl shadow-2xl border border-slate-200 p-3 flex flex-col gap-2"
+            style={{ insetInlineEnd: 0, minWidth: 270 }}>
+
+            {/* Zoom — magnifies what is ON the screen. Tapping the number
+                goes back to automatic. */}
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-bold text-slate-500" style={{ fontSize: '.85em' }}>{t('Zoom', 'זום')}</span>
+              <div className="flex items-center rounded-full overflow-hidden" style={off}>
+                <button onClick={() => setBoost(Math.max(0.6, Math.round((boost - 0.1) * 100) / 100))}
+                  title={t('Smaller', 'קטן')} className="px-3 py-1.5 font-black">−</button>
+                <button onClick={() => setBoost(1)} title={t('Automatic', 'אוטומטי')}
+                  className="px-2 py-1.5 font-bold tabular-nums" style={{ fontSize: '.85em' }}>
+                  {Math.round(boost * 100)}%
+                </button>
+                <button onClick={() => setBoost(Math.min(3, Math.round((boost + 0.1) * 100) / 100))}
+                  title={t('Bigger', 'גדול')} className="px-3 py-1.5 font-black">+</button>
+              </div>
+            </div>
+
+            {/* Button size — a different thing from the zoom above: this makes
+                the CONTROLS bigger, for a panel driven with a finger. */}
+            <button
+              onClick={() => {
+                const i = TOUCH_STEPS.findIndex(v => Math.abs(v - touchScale) < 0.02);
+                setTouchScale(TOUCH_STEPS[(i + 1) % TOUCH_STEPS.length] ?? 1);
+              }}
+              title={t('How big the buttons are — for fingers and the pen',
+                       'גודל הכפתורים — למגע ולעט')}
+              className={`${barBtn} px-3 py-1.5 justify-between`}
+              style={touchScale > 1.02 ? { backgroundColor: '#1e3a5f', color: '#fff' } : off}>
+              <span className="flex items-center gap-1.5">
+                <span className="font-black leading-none" style={{ fontSize: '1.15em' }}>A</span>
+                <span className="font-black leading-none" style={{ fontSize: '.8em' }}>a</span>
+                <span className="font-bold" style={{ fontSize: '.85em' }}>{t('Button size', 'גודל כפתורים')}</span>
+              </span>
+              <span className="font-bold" style={{ fontSize: '.8em' }}>
+                {t(TOUCH_LABEL[String(touchScale)]?.[0] ?? `${Math.round(touchScale * 100)}%`,
+                   TOUCH_LABEL[String(touchScale)]?.[1] ?? `${Math.round(touchScale * 100)}%`)}
+              </span>
+            </button>
+
+            {/* What this screen actually IS — the fuzzy-wall diagnosis. */}
+            <button onClick={() => { setDiag(v => !v); setMoreOpen(false); }}
+              title={t('About this screen', 'על המסך הזה')}
+              className={`${barBtn} px-3 py-1.5`}
+              style={diag ? { backgroundColor: '#1e3a5f', color: '#fff' } : off}>
+              <Info size={16} /> <span style={{ fontSize: '.9em' }}>{t('About this screen', 'על המסך הזה')}</span>
+            </button>
+
+            {/* The test pattern (sealed pick 10) — sample words at known REAL
+                pixel sizes, for deciding with your own eyes. */}
+            <button onClick={() => { setTestPattern(v => !v); setMoreOpen(false); }}
+              title={t('Test pattern — sample text at known sizes', 'תבנית בדיקה — טקסט לדוגמה בגדלים ידועים')}
+              className={`${barBtn} px-3 py-1.5`}
+              style={testPattern ? { backgroundColor: '#1e3a5f', color: '#fff' } : off}>
+              <span className="font-black tabular-nums" style={{ fontSize: '.85em', letterSpacing: '.05em' }}>PX</span>
+              <span style={{ fontSize: '.9em' }}>{t('Test pattern', 'תבנית בדיקה')}</span>
+            </button>
+
+            {/* Edit mode. Off by default and never sticky — see `editing`. */}
+            <button onClick={() => { setEditing(v => !v); setMoreOpen(false); }}
+              title={t('Arrange the wallboard', 'סידור לוח הקיר')}
+              className={`${barBtn} px-3 py-1.5`}
+              style={editing ? { backgroundColor: '#f59e0b', color: '#fff' } : off}>
+              <Pencil size={16} /> <span style={{ fontSize: '.9em' }}>{t('Arrange', 'סידור')}</span>
+            </button>
+          </div>
+        </>)}
+      </div>
 
       {overdue > 0 && (
         /* The number opens its list — the board's standing rule reaches the
@@ -1420,31 +1481,50 @@ export function TvPresentationPage() {
           result is scaled afterwards. The box is sized at 1/scale in both
           directions so that scaling it lands exactly on the frame.
         */}
-        <div className="flex-1 overflow-hidden p-3">
-          {/* `zoom`, not a transform — see the note on the board surface. The
-              sizing arithmetic is identical: a percentage inside a zoomed box
-              still resolves against the unzoomed containing block, so 100/scale
-              lands exactly on the frame either way. */}
-          <div style={{
-            zoom: scale,
-            width: `${100 / scale}%`,
-            height: `${100 / scale}%`,
-          }}>
-            <div className="h-full overflow-auto">
-            <BuildingDiagram
-              apartments={jobs}
-              stages={stages}
-              activeStageIds={stageFilter}
-              classFilter="all"
-              searchQuery=""
-              selectedBuilding="all"
-              onApartmentClick={j => { setPhotoAt(0); setOpenJob(j); }}
-              showShinuiBadge
-              compact
-            />
+        {(() => {
+          /* FIT, aspect intact. Columns get a fixed desktop-proportioned
+             width so a wide panel can never stretch the cells flat; the
+             natural size is measured and the whole picture is zoomed to fill
+             the frame, times the panel's own display size — so 100% means
+             "the whole project fills the screen". `zoom`, not a transform —
+             see the note on the board surface — and the scroller stays
+             INSIDE the zoom (the sticky building-bar rule). */
+          const nB = Math.max(1, buildings.length);
+          const DIAG_COL_W = 620;
+          const natW = nB * DIAG_COL_W + (nB - 1) * 12 + 24;
+          const fit = diagBox.w > 20 && diagNatH > 20
+            ? Math.min(diagBox.w / natW, diagBox.h / diagNatH)
+            : 0;
+          const diagZoom = Math.max(0.3, (fit || autoScale) * boost);
+          return (
+            <div className="flex-1 overflow-hidden p-3" ref={setDiagBoxEl}>
+              <div style={{
+                zoom: diagZoom,
+                width: `${100 / diagZoom}%`,
+                height: `${100 / diagZoom}%`,
+                // Nothing draws until the first measurement lands — a single
+                // frame at the wrong size reads as a flash.
+                visibility: fit ? 'visible' : 'hidden',
+              }}>
+                <div className="h-full overflow-auto flex">
+                  <div ref={setDiagNatEl} className="m-auto flex-shrink-0" style={{ width: natW }}>
+                    <BuildingDiagram
+                      apartments={jobs}
+                      stages={stages}
+                      activeStageIds={stageFilter}
+                      classFilter="all"
+                      searchQuery=""
+                      selectedBuilding="all"
+                      onApartmentClick={j => { setPhotoAt(0); setOpenJob(j); }}
+                      showShinuiBadge
+                      compact
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          );
+        })()}
       </div>
     );
   }

@@ -37,7 +37,6 @@ import { SnapGuides } from '../components/board/SnapGuides';
 import { MiniMap } from '../components/board/MiniMap';
 import type { StickyNoteRecord } from '../components/board/StickyNoteWidget';
 import { DriveDesktopPath } from '../components/apartment/DriveDesktopPath';
-import { DeleteImpact } from '../components/ui/DeleteImpact';
 import { BinBoard } from '../components/board/BinBoard';
 import { BoardSearch, BoardHit } from '../components/board/BoardSearch';
 import { NodeSettings } from '../components/board/NodeSettings';
@@ -353,7 +352,6 @@ export function GeneralJobsPage() {
   const {
     apartments,
     addApartment,
-    deleteApartment,
     updateApartment,
     canvasElements, activeBoardView, boardViews,
     addCanvasElement,
@@ -511,7 +509,6 @@ export function GeneralJobsPage() {
     useState<{ entry: PlannerEntry; done: (alsoDelete: boolean) => void } | null>(null);
   /** The whole schedule, opened from a planner. */
   const [scheduleFor, setScheduleFor] = useState<string | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<{ ids: string[]; taskCount: number } | null>(null);
 
   const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set());
   /** Whether the pressed job was already the picked one — see onJobPointerDown. */
@@ -3153,20 +3150,22 @@ export function GeneralJobsPage() {
   }
 
   // ── Delete / duplicate ────────────────────────────────────────────
+  /**
+   * Deleting a job from the board FILES IT INTO TRASH — it never destroys
+   * (owner's ruling, 2026-08-30): nothing in Trash is ever purged, and
+   * `deleteApartment` — the permanent cascading delete — stays reachable
+   * only from the Trash window and the drawer's danger zone. No confirm:
+   * a trip to Trash is reversible, so a scary modal here was crying wolf.
+   */
   function handleDeleteJobs(ids: string[]) {
-    const taskCount = contractorAssignments.filter(a => ids.includes(a.apartmentId)).length;
-    setDeleteConfirm({ ids, taskCount });
-    setCtxMenu(null);
-  }
-
-  function confirmDeleteJobs() {
-    if (!deleteConfirm) return;
-    deleteConfirm.ids.forEach(id => {
-      if (selectedJob?.id === id) setSelectedJob(null);
-      deleteApartment(id);
-    });
+    const trash = binNodes.find(b => binKeyOf(b) === 'trash');
+    fileInBin(ids, 'trash', trash);
+    if (selectedJob && ids.includes(selectedJob.id)) setSelectedJob(null);
     setSelectedJobIds(new Set());
-    setDeleteConfirm(null);
+    setCtxMenu(null);
+    setToast(ids.length > 1
+      ? (s.isRtl ? `${ids.length} עבודות הועברו לפח — כלום לא נמחק` : `${ids.length} jobs moved to Trash — nothing is deleted`)
+      : (s.isRtl ? 'הועבר לפח — כלום לא נמחק' : 'Moved to Trash — nothing is deleted'));
   }
 
   function handleDeleteEls(ids: string[]) {
@@ -4830,21 +4829,81 @@ export function GeneralJobsPage() {
    * display. Without this every scroll attempt on a touchscreen drags a tile,
    * because the pointer handlers fire on touch as well as mouse.
    */
+  /**
+   * The whole gesture is derived from a SNAPSHOT taken when the second
+   * finger lands: start zoom, start pan, and the first-touch centre as the
+   * one fixed anchor (the owner's ask). Every frame recomputes from that —
+   * absolute, never incremental — so nothing accumulates and nothing
+   * oscillates. The old version fed per-frame ratios anchored at a drifting
+   * midpoint AND panned by the midpoint's delta (double-counting), and
+   * called setPan inside the setZoom updater — an impure updater that under
+   * a pinch storm is a maximum-update-depth crash waiting to happen.
+   */
+  const pinchStart = useRef<{ zoom: number; pan: { x: number; y: number }; px: number; py: number } | null>(null);
+  /** A finger resting on a widget button, watched for the drag that turns it
+   *  into a board pan (see onViewportPointerDown). */
+  const deferredPan = useRef<{ id: number; px: number; py: number } | null>(null);
+  useEffect(() => {
+    const move = (e: PointerEvent) => {
+      const d = deferredPan.current;
+      if (!d || e.pointerId !== d.id) return;
+      if (Math.hypot(e.clientX - d.px, e.clientY - d.py) < 10) return;
+      deferredPan.current = null;
+      panRef.current = { px: e.clientX, py: e.clientY, ox: panRef2.current.x, oy: panRef2.current.y };
+      setPanning(true);
+      try { viewportRef.current?.setPointerCapture(e.pointerId); } catch { /* pointer gone */ }
+      // The release still dispatches the control's click — swallow exactly one.
+      const swallow = (ce: MouseEvent) => { ce.stopPropagation(); ce.preventDefault(); };
+      window.addEventListener('click', swallow, { capture: true, once: true });
+      setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 800);
+    };
+    const up = (e: PointerEvent) => {
+      if (deferredPan.current?.id === e.pointerId) deferredPan.current = null;
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useTouchGestures(viewportRef.current, {
-    onPinch: (delta, cx, cy) => {
+    onGestureStart: useCallback((cx: number, cy: number) => {
+      // Two fingers own the board now — the single-finger pan that finger
+      // one started must stand down, or the two fight and the view jumps.
+      panRef.current = null;
+      panFromJob.current = null;
+      panFromEl.current = null;
+      deferredPan.current = null;
+      setPanning(false);
       const r = viewportRef.current?.getBoundingClientRect();
-      if (!r) return;
-      setZoom(prev => {
-        const next = Math.min(3, Math.max(0.25, prev * delta));
-        const px = cx - r.left, py = cy - r.top;
-        setPan(pp => clampPanRef.current({
-          x: px - (px - pp.x) * (next / prev),
-          y: py - (py - pp.y) * (next / prev),
-        }));
-        return next;
-      });
-    },
-    onPan: (dx, dy) => setPan(p => clampPanRef.current({ x: p.x + dx, y: p.y + dy })),
+      pinchStart.current = {
+        zoom: zoomRef.current,
+        pan: panRef2.current,
+        px: cx - (r?.left ?? 0),
+        py: cy - (r?.top ?? 0),
+      };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []),
+    onGesture: useCallback((scale: number, dx: number, dy: number) => {
+      const st = pinchStart.current;
+      if (!st) return;
+      const floor = Math.min(0.25, fitZoomRef.current || 0.25);
+      const next = Math.min(3, Math.max(floor, st.zoom * scale));
+      const k = next / st.zoom;
+      setZoom(next);
+      // The world point under the FIRST-touch centre stays under it (scaled
+      // about the anchor), and the midpoint's travel pans on top.
+      setPan(clampPanRef.current({
+        x: st.px - (st.px - st.pan.x) * k + dx,
+        y: st.py - (st.py - st.pan.y) * k + dy,
+      }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []),
+    onGestureEnd: useCallback(() => { pinchStart.current = null; }, []),
   });
 
   /**
@@ -4901,6 +4960,22 @@ export function GeneralJobsPage() {
       panRef.current = { px: e.clientX, py: e.clientY, ox: pan.x, oy: pan.y };
       setPanning(true);
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      return;
+    }
+    /**
+     * A finger on a BUTTON or LINK inside a widget: the TAP must stay the
+     * control's, but a DRAG from it belongs to the board (the owner's ask —
+     * most of a widget's surface is rows of buttons, so a finger dragged
+     * across one went nowhere). The pointer is watched instead of captured:
+     * past the slop the board takes it mid-gesture and the control's click
+     * is swallowed; a clean tap never notices. Controls that own a gesture
+     * of their own (`data-no-drag` / `data-el-action` — the map, the TikTok
+     * tap ladder) are left entirely alone, as are text fields.
+     */
+    if (isFingerTouch(e) && e.button === 0
+        && (e.target as HTMLElement).closest('a,button')
+        && !(e.target as HTMLElement).closest('[data-no-drag],[data-el-action],input,textarea,select')) {
+      deferredPan.current = { id: e.pointerId, px: e.clientX, py: e.clientY };
     }
   }
   function onViewportPointerMove(e: React.PointerEvent) {
@@ -6745,8 +6820,22 @@ export function GeneralJobsPage() {
       {ctxMenu && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setCtxMenu(null)} />
-          <div className="fixed z-50 bg-white rounded-xl shadow-xl border border-gray-100 py-1 min-w-[196px]"
-            style={{ left: Math.min(ctxMenu.x, window.innerWidth - 220), top: Math.min(ctxMenu.y, window.innerHeight - 300) }}>
+          <div className="fixed z-50 bg-white rounded-xl shadow-xl border border-gray-100 py-1 min-w-[196px] overflow-y-auto"
+            /* Clamped by the menu's REAL size, measured once it exists — the
+               old fixed 300px guess let the job menu (twice that tall) run
+               off the bottom of the screen, cutting Move-to and Trash off
+               exactly when a tile near the bottom edge was right-clicked. */
+            ref={el => {
+              if (!el) return;
+              const r = el.getBoundingClientRect();
+              el.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - r.width - 8))}px`;
+              el.style.top = `${Math.max(8, Math.min(r.top, window.innerHeight - r.height - 8))}px`;
+            }}
+            style={{
+              left: Math.min(ctxMenu.x, window.innerWidth - 220),
+              top: Math.min(ctxMenu.y, window.innerHeight - 300),
+              maxHeight: 'calc(100vh - 16px)',
+            }}>
             {ctxMenu.kind === 'selection' ? (
               /* Right-click ANYWHERE with things selected — the approved
                  Magnific menu: the count, Copy, Cut, paste-here, Arrange. */
@@ -6927,10 +7016,12 @@ export function GeneralJobsPage() {
                 })}
 
                 <div className="h-px bg-gray-100 my-1" />
+                {/* Filing into Trash, never destroying — deleting forever is
+                    the Trash window's job alone (owner's ruling). */}
                 <button onClick={() => handleDeleteJobs(ctxMenu.ids)}
                   className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2.5">
                   <Trash2 size={14} />
-                  {ctxMenu.ids.length > 1 ? `Delete forever (${ctxMenu.ids.length})` : 'Delete forever'}
+                  {ctxMenu.ids.length > 1 ? `Move to Trash (${ctxMenu.ids.length})` : 'Move to Trash'}
                 </button>
               </>
             ) : ctxMenu.kind === 'ghost' ? (
@@ -7906,38 +7997,6 @@ export function GeneralJobsPage() {
 
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
 
-      {/* Delete confirmation modal */}
-      {deleteConfirm && (
-        <>
-          <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setDeleteConfirm(null)} />
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm pointer-events-auto p-6 flex flex-col items-center text-center">
-              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-4">
-                <AlertTriangle size={22} className="text-red-500" />
-              </div>
-              <h2 className="text-lg font-bold text-gray-900 mb-2">
-                {deleteConfirm.ids.length === 1 ? s.deleteJobConfirm : `Delete ${deleteConfirm.ids.length} jobs?`}
-              </h2>
-              <DeleteImpact aptIds={deleteConfirm.ids} />
-              <p className="text-xs text-gray-400 mb-6">This cannot be undone.</p>
-              <div className="flex gap-3 w-full">
-                <button
-                  onClick={() => setDeleteConfirm(null)}
-                  className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-                >
-                  {s.cancel}
-                </button>
-                <button
-                  onClick={confirmDeleteJobs}
-                  className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-colors"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
     </div>
   );
 }
