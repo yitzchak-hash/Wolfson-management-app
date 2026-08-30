@@ -33,6 +33,26 @@ async function openTask() {
     for (const a of d.apartments ?? []) if (want.has(a.id)) a.plansPdfLink = `https://drive.google.com/file/d/${id}/view`;
     localStorage.setItem('wolfson_app_data', JSON.stringify(d));
   }, PLAN_ID);
+  // Office notes — one plain, one carrying a file — so the section the owner
+  // asked for has REAL content rather than a drawn stand-in.
+  await ctx.addInitScript(() => {
+    const raw = localStorage.getItem('wolfson_app_data'); if (!raw) return;
+    const d = JSON.parse(raw);
+    const a = (d.contractorAssignments ?? [])[0]; if (!a) return;
+    d.contractorNotes = [
+      { id: 'N-off-1', assignmentId: a.id, apartmentId: a.apartmentId, contractorId: a.contractorId,
+        text: 'Riser is on the north wall — Shimon has the key to the shaft.',
+        authorType: 'office', authorId: 'U-1', authorName: 'Esther',
+        createdAt: new Date(Date.now() - 36e5 * 5).toISOString() },
+      { id: 'N-off-2', assignmentId: a.id, apartmentId: a.apartmentId, contractorId: a.contractorId,
+        text: 'Updated drain detail from the engineer:',
+        authorType: 'office', authorId: 'U-1', authorName: 'Esther',
+        createdAt: new Date(Date.now() - 36e5 * 2).toISOString(),
+        attachmentFilename: 'drain-detail-rev-C.pdf', attachmentMimeType: 'application/pdf',
+        attachmentDataUrl: 'data:application/pdf;base64,JVBERi0xLjQK' },
+    ];
+    localStorage.setItem('wolfson_app_data', JSON.stringify(d));
+  });
   await ctx.route('**/api/drive-fetch', r => r.fulfill({ status: 200, contentType: 'application/pdf', body: planBytes }));
   const page = await ctx.newPage();
   await page.goto(`http://localhost:5173/c/${PORTAL_TOKEN}`);
@@ -77,53 +97,96 @@ async function fullSheet(page, path) {
   await ctx.close(); console.log('c-now ok');
 }
 
-// ── PROPOSED screen 1: reordered, one Close job ──
+// ── PROPOSED screen 1 ──
 {
   const { ctx, page } = await openTask();
   await page.evaluate(() => {
     const leaf = re => [...document.querySelectorAll('*')].find(el =>
       el.children.length === 0 && re.test(el.textContent.trim()) && el.getBoundingClientRect().width > 0);
-    // 1 · the plan moves ABOVE the task. Found through the two headings'
-    //     nearest COMMON ancestor, then the branch each one sits in — a fixed
-    //     number of parentElement hops lands on a shared wrapper and moves
-    //     nothing, which is what a looser version of this did.
-    const chain = el => { const out = []; for (let n = el; n; n = n.parentElement) out.push(n); return out; };
-    const planHead = leaf(/^ENGINEERING PLANS$/i);
-    const taskHead = leaf(/^TASK$/i);
-    if (planHead && taskHead) {
-      const up = chain(planHead), set = new Set(chain(taskHead));
-      const root = up.find(n => set.has(n));
-      if (root) {
-        const tUp = chain(taskHead);
-        const planBranch = up[up.indexOf(root) - 1];
-        const taskBranch = tUp[tUp.indexOf(root) - 1];
-        if (planBranch && taskBranch) root.insertBefore(planBranch, taskBranch);
+    // A pill that holds a coloured dot has ONE child, so it is not a leaf —
+    // the same trap the building name bar set. Allow a single child.
+    const nearLeaf = re => [...document.querySelectorAll('*')].find(el =>
+      el.children.length <= 1 && re.test(el.textContent.trim()) && el.getBoundingClientRect().width > 0);
+
+    // the middle Close job button goes — one close, in the footer
+    const mid = document.querySelector('[data-close-job]');
+    if (mid) mid.remove();
+
+    // Urgent loses its box — walk up to whatever is actually PAINTING the
+    // pill (a fixed hop lands on a plain wrapper and strips nothing)
+    // The pill's exact text and child count are not dependable (a dot span,
+    // an icon, a translated label) — take the SMALLEST element that says it.
+    const smallest = re => [...document.querySelectorAll('*')]
+      .filter(el => re.test(el.textContent.trim()) && el.getBoundingClientRect().width > 0)
+      .sort((a, z) => { const r = a.getBoundingClientRect(), s2 = z.getBoundingClientRect();
+        return r.width * r.height - s2.width * s2.height; })[0];
+    // The pill's text is "\uD83D\uDD34 Urgent" — the dot is an EMOJI inside the
+    // same leaf, so an exact-text match finds nothing. Take the smallest
+    // element that mentions it.
+    const urgent = smallest(/Urgent|\u05d3\u05d7\u05d5\u05e3/i);
+    if (urgent) {
+      for (let n = urgent, i = 0; n && i < 3; n = n.parentElement, i++) {
+        const cs = getComputedStyle(n);
+        const painted = cs.backgroundColor !== 'rgba(0, 0, 0, 0)' && cs.backgroundColor !== 'transparent';
+        const bordered = cs.borderTopWidth !== '0px';
+        if (painted || bordered) {
+          n.style.background = 'transparent'; n.style.border = 'none';
+          n.style.padding = '0'; n.style.boxShadow = 'none';
+          break;
+        }
       }
     }
-    // 2 · the big middle Close job button goes; the footer one stays
-    const mid = document.querySelector('[data-close-job]');
-    if (mid) {
-      const empty = document.createElement('button');
-      empty.style.cssText = 'width:100%;border:2px dashed #e5e7eb;border-radius:12px;padding:22px 0;'
-        + 'display:flex;flex-direction:column;align-items:center;gap:6px;color:#9ca3af;background:#fff;font:500 14px Figtree,sans-serif';
-      const t = document.createElement('span');
-      t.textContent = 'Nothing from the office yet';
-      empty.appendChild(t);
-      mid.replaceWith(empty);
-    }
-    // 3 · the files section is the OFFICE's files, and says so
+
+    // the section is the OFFICE's — its label says so, its own Add File goes
+    // (the worker's paperclip lives in the note box and in the closing
+    // screen), and the office's NOTES move up into it, beside its files
     const files = leaf(/^FILES & PHOTOS/i);
     if (files) files.textContent = 'FROM THE OFFICE';
-    // 4 · the note box says what it is for
+    const addFile = [...document.querySelectorAll('button')].find(b => /Add File/i.test(b.textContent));
+    if (addFile) addFile.remove();
+
+    const officeHead = leaf(/^FROM OFFICE$/i);
+    if (officeHead && files) {
+      const chain = el => { const o = []; for (let n = el; n; n = n.parentElement) o.push(n); return o; };
+      const up = chain(officeHead), set = new Set(chain(files));
+      const root = up.find(n => set.has(n));
+      if (root) {
+        const fUp = chain(files);
+        const officeBranch = up[up.indexOf(root) - 1];
+        const filesBranch = fUp[fUp.indexOf(root) - 1];
+        if (officeBranch && filesBranch && filesBranch.nextSibling !== officeBranch) {
+          root.insertBefore(officeBranch, filesBranch.nextSibling);
+        }
+        officeHead.textContent = '';           // the section heading already says it
+        officeHead.style.display = 'none';
+      }
+      // the NOTES heading carries a speech-bubble icon, so it is not a leaf
+      const notesHead = smallest(/^\s*NOTES\s*$/i);
+      if (notesHead) notesHead.style.display = 'none';
+      const inputRow = [...document.querySelectorAll('input,textarea')]
+        .find(x => /note/i.test(x.placeholder || ''));
+      if (inputRow) {
+        const row = inputRow.closest('div');
+        const lab = document.createElement('div');
+        lab.textContent = 'YOUR NOTE';
+        lab.style.cssText = 'font:700 12px Figtree,sans-serif;letter-spacing:.07em;color:#6b7280;margin:16px 0 7px';
+        if (row && row.parentElement) row.parentElement.insertBefore(lab, row);
+      }
+      // whatever empty-state placeholder is left in the files block goes
+      const empty = [...document.querySelectorAll('*')].find(el =>
+        /Nothing from the office yet|Tap to add photos/i.test(el.textContent) && el.children.length === 0);
+      if (empty) { const b = empty.closest('button,div'); if (b) b.remove(); }
+    }
+
     const inp = [...document.querySelectorAll('input,textarea')].find(x => /note/i.test(x.placeholder || ''));
     if (inp) inp.placeholder = 'Add a note while you work…';
   });
-  await page.waitForTimeout(600);
+  await page.waitForTimeout(700);
   await fullSheet(page, 'scratchpad/c-prop1.png');
   await ctx.close(); console.log('c-prop1 ok');
 }
 
-// ── NOW screen 2: today's closing panel, inside the same sheet ──
+// ── NOW screen 2 ──
 {
   const { ctx, page } = await openTask();
   await page.locator('[data-close-job]').first().click();
@@ -132,7 +195,7 @@ async function fullSheet(page, path) {
   await ctx.close(); console.log('c-now2 ok');
 }
 
-// ── PROPOSED screen 2: a screen of its own ──
+// ── PROPOSED screen 2 — the owner's revision ──
 {
   const { ctx, page } = await openTask();
   await page.locator('[data-close-job]').first().click();
@@ -140,7 +203,6 @@ async function fullSheet(page, path) {
   await page.evaluate(() => {
     const panel = document.querySelector('[data-closing-panel]');
     if (!panel) return;
-    // lift the REAL closing controls onto a screen of their own
     const screen = document.createElement('div');
     screen.style.cssText = 'position:fixed;inset:0;z-index:9999;background:#fff;display:flex;flex-direction:column';
     screen.innerHTML =
@@ -155,59 +217,47 @@ async function fullSheet(page, path) {
       + '\u2713 Send and close the job</button></div>';
     document.body.appendChild(screen);
     const body = screen.querySelector('#cbody');
-    const sect = (title, hint) => {
+    const sect = (title, hint, hintTag) => {
       const d = document.createElement('div');
-      d.style.cssText = 'margin-bottom:18px';
+      d.style.cssText = 'margin-bottom:20px';
       d.innerHTML = `<div style="font:700 12px Figtree,sans-serif;letter-spacing:.07em;color:#6b7280;margin-bottom:7px">${title}</div>`
-        + (hint ? `<div style="font-size:13px;color:#9ca3af;margin:-3px 0 8px">${hint}</div>` : '');
+        + (hint ? `<div style="font-size:13px;color:#9ca3af;margin:-3px 0 ${hintTag ? '6px' : '9px'}">${hint}</div>` : '')
+        + (hintTag ? `<div style="margin:0 0 9px"><span style="display:inline-block;font:700 10.5px Figtree,sans-serif;letter-spacing:.05em;color:#c2560f;background:#fdf1e7;border:1px solid #f0c9a8;border-radius:999px;padding:2px 9px">${hintTag}</span></div>` : '');
       body.appendChild(d); return d;
     };
-    // the pictures — the app's OWN add-media button and its own 0/3 badge,
-    // cloned rather than redrawn, so the icons are the real ones
-    const pics = sect('PICTURES', 'At least 3 before the job can be closed');
+
+    // 1 · the app's OWN add-media button at the top, with its own 0/3 badge
+    const pics = sect('PICTURES', 'At least 3 before the job can be closed', 'follows the worker&rsquo;s permission');
     const realAdd = panel.querySelector('button');
     const count = panel.querySelector('[data-close-count]');
-    const wrap = document.createElement('div');
-    wrap.style.cssText = 'border:2px dashed #cbd5e1;border-radius:14px;padding:20px 14px;background:#f8fafc;'
-      + 'display:flex;flex-direction:column;align-items:center;gap:10px';
-    if (realAdd) {
-      const c = realAdd.cloneNode(true);
-      c.style.width = '100%';
-      c.style.justifyContent = 'center';
-      wrap.appendChild(c);
-    }
-    if (count) wrap.appendChild(count.cloneNode(true));
-    pics.appendChild(wrap);
+    if (realAdd) { const c = realAdd.cloneNode(true); c.style.width = '100%'; c.style.justifyContent = 'center'; pics.appendChild(c); }
+    if (count) { const w = document.createElement('div');
+      w.style.cssText = 'display:flex;justify-content:center;margin-top:9px';
+      w.appendChild(count.cloneNode(true)); pics.appendChild(w); }
 
-    // a comment, with the app's own paperclip and microphone
+    // 2 · one comment box, with the paperclip and the microphone INSIDE it
     const note = sect('A COMMENT', 'Anything the office should know');
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex;gap:8px;align-items:flex-start';
-    const clip = panel.querySelector('button svg')?.closest('button');
-    const realBtns = [...panel.querySelectorAll('button')].filter(x => x.querySelector('svg') && x.offsetWidth < 60);
+    const box = document.createElement('div');
+    box.style.cssText = 'position:relative;border:1px solid #e5e7eb;border-radius:12px;background:#fff';
     const ta = document.createElement('textarea');
     ta.placeholder = 'Type what you did\u2026';
-    ta.style.cssText = 'flex:1;min-height:84px;border:1px solid #e5e7eb;border-radius:12px;padding:10px;'
-      + 'font:15px Figtree,sans-serif;resize:vertical';
-    row.appendChild(ta);
-    const side = document.createElement('div');
-    side.style.cssText = 'display:flex;flex-direction:column;gap:8px';
-    realBtns.slice(0, 2).forEach(x => side.appendChild(x.cloneNode(true)));
-    row.appendChild(side);
-    note.appendChild(row);
-    // files
-    const files = sect('A FILE', 'A delivery note, a photo of a label — anything');
-    const fbtn = document.createElement('button');
-    fbtn.style.cssText = 'width:100%;border:1px dashed #cbd5e1;border-radius:12px;padding:13px;background:#fff;'
-      + 'color:#475569;font:600 14.5px Figtree,sans-serif';
-    const clipIcon = realBtns[0] ? realBtns[0].querySelector('svg') : null;
-    fbtn.style.display = 'flex'; fbtn.style.alignItems = 'center';
-    fbtn.style.justifyContent = 'center'; fbtn.style.gap = '8px';
-    if (clipIcon) fbtn.appendChild(clipIcon.cloneNode(true));
-    fbtn.appendChild(document.createTextNode('Attach a file'));
-    files.appendChild(fbtn);
+    ta.style.cssText = 'width:100%;min-height:104px;border:0;outline:none;border-radius:12px;padding:11px 11px 40px;'
+      + 'font:15px Figtree,sans-serif;resize:vertical;background:transparent';
+    box.appendChild(ta);
+    const corner = document.createElement('div');
+    corner.style.cssText = 'position:absolute;right:9px;bottom:8px;display:flex;gap:6px;align-items:center';
+    const realIcons = [...panel.querySelectorAll('button')].filter(x => x.querySelector('svg') && x.offsetWidth < 60);
+    realIcons.slice(0, 2).forEach(x => {
+      const c = x.cloneNode(true);
+      c.style.border = 'none'; c.style.background = 'transparent'; c.style.padding = '2px';
+      corner.appendChild(c);
+    });
+    box.appendChild(corner);
+    note.appendChild(box);
+    // NOTE: no separate file section — the owner cut it as repetitive; the
+    // add-media button at the top already takes files.
   });
-  await page.waitForTimeout(600);
+  await page.waitForTimeout(700);
   await page.screenshot({ path: 'scratchpad/c-prop2.png' });
   await ctx.close(); console.log('c-prop2 ok');
 }
