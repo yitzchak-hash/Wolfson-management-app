@@ -5851,3 +5851,36 @@ bar alive afterwards). `round29.mjs` re-encoded: closing a drawer opened by
 cross-workspace travel redeems the RETURN TICKET by itself — its manual
 walk-home through the header was asserting a journey the app no longer
 needs (pre-existing rot, failed identically with this diff stashed).
+
+## The pinch-time #185: a widget that measured itself in circles
+The owner's crash mid-pinch on the live build — minified React #185, stack
+landing in ProjectMini (the Building-progress miniature). The defect: its
+`units` was a bare `.filter()` (a NEW array identity every render), so the
+`byBuilding` memo re-made its array every render, and the measure effect
+keyed on `[byBuilding]` re-ran on EVERY render and unconditionally wrote a
+fresh `{w,h}` object into state — render → effect → setState → render,
+forever, whenever the workspace snapshot behind the widget exists (with no
+snapshot the empty branch renders and the grid never mounts, which is why
+it hid). Passive effects yield between cycles, so it only SMOULDERED —
+measured: an idle board with the widget burnt **854ms of script per second**
+(a whole core, 69 style recalcs/s), which is also what made machines slow
+enough for the router-transition starvation to bite; the two diseases fed
+each other. A pinch is a storm of discrete touch events, React flushes
+pending passive effects synchronously on each one, the cascade goes
+synchronous, and the 50-update ceiling throws.
+
+The fix is both halves of the standing measurement rule, and BOTH are
+load-bearing: memoise the arrays feeding a measure effect's deps, AND damp
+the write (`setCellBox(prev => unchanged ? prev : next)` — returning the
+previous object lets React bail). Audited every `new ResizeObserver` in the
+app: ProjectMini was the only site combining unstable effect deps with an
+undamped fresh-object write.
+
+Harness: `scratchpad/pinch185.mjs` — a real two-finger pinch storm through
+CDP touch events over a board carrying the widget (with a Wolfson snapshot
+seeded, or the loop never engages), then THE SMOULDER METER: CDP
+Performance metrics while the page sits idle. The crash itself needs
+production's scheduling and does not reproduce in dev — the idle churn is
+the non-vacuous anchor (pre-fix 834ms/s script FAILS it; fixed 13ms/s
+passes). When hunting any "app is mysteriously slow" report, run that meter
+first.

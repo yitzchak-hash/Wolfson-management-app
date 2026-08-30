@@ -164,8 +164,21 @@ export function ProjectMini({ projectId: chosen, buildingId, onOpen, onOpenUnit,
   const project = projects.find(p => p.id === projectId);
   const tone = projectColor(projects, projectId);
 
-  const units = snap.apartments.filter(isCountableApartment)
-    .filter(a => !buildingId || a.buildingId === buildingId);
+  /**
+   * MEMOISED, and it is load-bearing: `units` used to be a bare `.filter()`,
+   * a new array identity every render, so `byBuilding`'s memo re-made ITS
+   * array every render too — and the measure effect below, keyed on
+   * `byBuilding`, then re-ran on every render and unconditionally wrote a
+   * fresh state object: an endless render→effect→setState loop. Passive
+   * effects usually yield between cycles so it only smouldered — until a
+   * PINCH: React flushes pending effects synchronously on each discrete
+   * touch event, the cascade goes synchronous, and the 50-update ceiling
+   * throws the owner's minified #185 mid-gesture.
+   */
+  const units = useMemo(() =>
+    snap.apartments.filter(isCountableApartment)
+      .filter(a => !buildingId || a.buildingId === buildingId),
+    [snap, buildingId]);
   const byBuilding = useMemo(() => {
     const m = new Map<string, Apartment[]>();
     for (const a of units) {
@@ -214,7 +227,11 @@ export function ProjectMini({ projectId: chosen, buildingId, onOpen, onOpenUnit,
       const rows = Math.max(1, ...byBuilding.map(([, apts]) => Math.ceil(Math.min(apts.length, 64) / 4)));
       // 11px for the building label above each grid.
       const h = Math.max(6, Math.floor((node.clientHeight - 11 - (rows - 1) * 2) / rows));
-      setCellBox({ w, h });
+      // DAMPED (the WorldClocks rule): returning the previous object when
+      // nothing moved lets React bail out of the re-render, so a measure can
+      // never feed its own loop even if the deps above go unstable again.
+      setCellBox(prev =>
+        Math.abs(prev.w - w) < 0.5 && Math.abs(prev.h - h) < 0.5 ? prev : { w, h });
     };
     measure();
     const ro = new ResizeObserver(measure);
