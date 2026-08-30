@@ -344,7 +344,15 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    * monitor — the owner's unfolded Fold showed only the left half of the plan
    * (his 2026-08-27 screenshot).
    */
-  const fitW = Math.max(280, Math.round(window.innerWidth * 0.96) - 560);
+  /**
+   * "The details column GIVES WAY" (decision 1): 560px is the column's full
+   * width, but on a screen just past the 800 line — a sideways Fold at 829 —
+   * a fixed 560 would leave the plan a sliver. The column narrows toward
+   * 400px so the plan keeps real room, exactly as the approved picture drew
+   * it; at ~940px and up nothing changes.
+   */
+  const fieldsW = Math.max(400, Math.min(560, Math.round(window.innerWidth * 0.96) - 340));
+  const fitW = Math.max(280, Math.round(window.innerWidth * 0.96) - fieldsW);
   const planW = Math.min(Math.round((maxModalH - 56) * sheetRatio), fitW);
   /**
    * When the width cap bit, the sheet needs less height too — the whole
@@ -1347,7 +1355,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               // Wide enough to hold the fields AND the plan side by side, but still
               // inset on every edge so it reads as a window over the board rather
               // than as a page you have navigated to.
-              width: planSideOn ? `min(${560 + planW}px, 96vw)` : 'min(1020px, 94vw)',
+              width: planSideOn ? `min(${fieldsW + planW}px, 96vw)` : 'min(1020px, 94vw)',
               height: planSideOn ? `${modalH}px` : 'min(980px, 93vh)',
               transition: 'width 180ms ease',
             }}
@@ -1456,7 +1464,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         <div className="flex-1 min-h-0 flex">
         {/* ── Everything written down ── */}
         <div className="flex flex-col min-h-0 min-w-0"
-          style={{ flex: planSideOn ? '0 0 560px' : '1 1 100%' }}>
+          style={{ flex: planSideOn ? `0 0 ${fieldsW}px` : '1 1 100%' }}>
 
         {/* Tabs */}
         <div className="flex border-b border-gray-200 flex-shrink-0 overflow-x-auto">

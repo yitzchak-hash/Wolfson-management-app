@@ -5608,3 +5608,85 @@ Harness: `scratchpad/drawerround.mjs` (8 checks) — the dialog's wording and
 named day, the days chip, the editor opening on the run's real start with the
 right readout, the stage's worker showing, and a nameless log rendering
 instead of crashing.
+
+---
+
+# v2 — the UI round (the 11 sealed decisions, built)
+
+The specification is `docs/UI-BUILD-LIST.md` — eleven decisions the owner
+approved one at a time (sealed 2026-08-30), fifteen numbered changes. The
+design is sealed: do not "improve" these.
+
+## Two thresholds, deliberately different
+- **800px of screen decides where the PLAN sits** (`planWide` in the drawer,
+  a subscribed `useMedia('(min-width: 800px)')`): above it the plan is a side
+  pane beside the details, below it a Plan tab. `usePhone` no longer gates
+  any of this — an upright iPad (768) gets the tab, a sideways Fold (829)
+  the side pane.
+- **900px decides the DIAGRAM** (`useNarrow()` in ProjectDiagramPage + the
+  `diag` Tailwind screen): below it one building at a time behind big tabs,
+  the Filters button, and the `StageBar`; at 900+ the desktop toolbar is
+  untouched. On a sideways Fold both are true at once — plan beside details
+  AND one building. That is correct, not a bug.
+- `useMedia(query)` in `src/data/usePhone.ts` is the shared subscribed width
+  test — never cache a matchMedia at mount (the Fold rule).
+
+## New pieces
+- **`src/components/diagram/StageBar.tsx`** — the whole project as one bar:
+  a flex segment per stage sized by count, count written inside only when
+  the measured segment can hold it, tap toggles the page's stage filter, a
+  grey unpressable block keeps not-started units in the picture. Counts go
+  through `isCountableApartment` and NOTHING else. It replaces (below 900)
+  the stage bubbles and the bare-number strip; both survive untouched at
+  900+.
+- **`src/components/tasks/TaskThread.tsx`** — the task as a conversation,
+  ONE drawing used by the worker's portal (THIS TASK section) and the
+  office's drawer (under each task card, bubbles capped 640px). Office
+  left/white with the author name in accent, worker right/blue. Files are
+  press-to-download cards through `/api/drive-fetch` (never a
+  drive.google.com link); photos expand to a portalled lightbox (the drawer
+  panel carries a transform, so the lightbox must portal to body). The
+  "Job closed · time" marker is DERIVED from `assignment.completedAt`,
+  never stored; later messages render below it — the conversation stays
+  open, and nothing in it is ever edited or deleted.
+- **`ContractorNote.photoIds?: string[]`** — the round's ONLY new field:
+  the closing comment's photos, riding `contractorNotes` (already in
+  persist/export/import/sync, so the backup trio needed no new entry).
+
+## The worker's flow now
+- ONE Close job button (the sticky footer); the old empty-media green
+  button is gone. A closed task shows a static "Job closed · time" in the
+  footer instead of the button — the composer above stays live.
+- **The closing screen is `fixed inset-0`** (`data-closing-panel`): navy
+  header with back arrow + apartment name; the add-media button with its
+  `data-close-count` pill; ONE comment box with the paperclip and
+  microphone INSIDE it (the General-notes idiom); footer = Send and close
+  (`data-close-now`). The finish-early ask renders INSIDE this surface.
+  `handleConfirmComplete` also does `setClosing(false)` — without it a
+  later Undo re-opens the surface. The picture rule names
+  `MIN_CLOSE_MEDIA` via the `addPicturesRule` string ({n} placeholder) and
+  follows `contractor.photosOptional` — an optional-photos worker sees no
+  line, no counter, and is never locked out.
+- `postClosingNote()` writes the ONE closing note (comment may be empty;
+  with nothing at all to say no empty bubble is minted — the marker alone
+  records the close). It runs on the final press AND on finish-early Yes.
+- The portal's plan Download fetches bytes through `fetchPlanBytes`
+  (`/api/drive-fetch`) and saves via `saveBytes` — sniffs pdf/png/jpg.
+- Priority pills lost their boxes: a dot and the word, every priority.
+
+## Traps this round paid for
+- The plan tab strip renders ONLY when `!readOnly && !embedded` — that one
+  condition is every preview (drawer pane, phone Plan tab, wallboard,
+  portal). The picker's open-in-new-tab rows are gated the same way: no
+  visible strip, no third door.
+- `.fade-clip` (index.css, mirrored under RTL) fades text behind a box's
+  edge — the Drive/Zoho pair never stacks and never pushes its column
+  (LinkField's EMPTY state was the culprit: a bare text-node placeholder
+  set the button's min-content width). The sweep's clip detector exempts
+  `fade-clip` like `truncate`.
+- `portalround.mjs` seeds its task dueDate from the REAL clock now — the
+  fixed '2026-08-24' went red the week after it was written (the standing
+  date-drift trap, again).
+- `plantabs.mjs` re-encoded to decision 2 (pane strip gone, tabs live in
+  the studio); its slow-plan stub is one-shot and long enough to survive
+  the walk into the studio.

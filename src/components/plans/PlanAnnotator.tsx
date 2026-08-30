@@ -4255,7 +4255,9 @@ export function PlanAnnotator(props: PlanHostProps) {
       workRef={workRef}
       onUnsavedChange={setActiveUnsaved}
       onPickPlan={handlePick}
-      onOpenPlanNewTab={openInNewTab}
+      /* No strip means no visible tab to open into — the picker's
+         open-in-new-tab rows exist only where the strip does. */
+      onOpenPlanNewTab={(!readOnly && !embedded) ? openInNewTab : undefined}
     />
 
     {/* The one question, only when closing would lose marks Drive never got. */}

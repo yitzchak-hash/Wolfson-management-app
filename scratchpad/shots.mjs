@@ -80,7 +80,10 @@ async function audit(label) {
       // A `truncate` element is cut off ON PURPOSE — a one-line summary that
       // ends in an ellipsis is a design decision, and it does the same on a
       // desktop. Flagging those buries the accidental clipping in noise.
-      const deliberate = (el.className || '').toString().includes('truncate');
+      // `fade-clip` is the same decision drawn as a fade (the Drive/Zoho
+      // placeholder slips behind the field's edge — decision 3, 2026-08-30).
+      const cls = (el.className || '').toString();
+      const deliberate = cls.includes('truncate') || cls.includes('fade-clip');
       if (!deliberate && el.scrollWidth > el.clientWidth + 1 && cs.overflow !== 'visible') {
         out.clipped.push({ text: t.slice(0, 22), w: `${el.scrollWidth}>${el.clientWidth}` });
       }

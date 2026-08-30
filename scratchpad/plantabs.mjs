@@ -50,11 +50,17 @@ await ctx.route('**/api/drive-files', async route => {
   }
   return route.fulfill({ json: { files: [] } });
 });
+let pdf3Slow = true;
 await ctx.route('**/api/drive-fetch', async route => {
   const { fileId } = route.request().postDataJSON();
-  // The roof plan is SLOW, so the downloading indicators can be seen.
-  if (fileId === 'PDF3') await new Promise(r => setTimeout(r, 8000));
-  return route.fulfill({ body: PLANS[fileId] ?? PLANS.PDF1, contentType: 'application/pdf' });
+  // The roof plan is SLOW — once, and slow enough to survive the walk
+  // through the pane AND into the studio (the strip lives only there now,
+  // per decision 2) so the indicators can be seen. After the reload it
+  // loads normally, or section 5 draws on a sheet that never arrives.
+  if (fileId === 'PDF3' && pdf3Slow) { pdf3Slow = false; await new Promise(r => setTimeout(r, 22000)); }
+  try {
+    return await route.fulfill({ body: PLANS[fileId] ?? PLANS.PDF1, contentType: 'application/pdf' });
+  } catch { /* the page reloaded out from under the slow response */ }
 });
 await ctx.route('**/api/plan-annotate', route => {
   stamped++;
@@ -89,26 +95,42 @@ await ctx.addInitScript(() => {
 const page = await ctx.newPage();
 page.on('pageerror', e => { console.log('PAGE ERROR', e.message); fails++; });
 
-// ── 1 · the viewer pane: strip on its own row, one tab, no clouds ──────────
+// ── 1 · the viewer pane is a PREVIEW: no tab strip anywhere on it ──────────
+// (Owner's decision 2, sealed 2026-08-30: the strip is gone from every
+// preview — drawer pane, phone Plan tab, wallboard, portal — and stays
+// exactly as it is inside Mark up.)
 await page.goto(`${APP}/jobs`);
 await page.waitForTimeout(2800);
 await page.locator('[data-node-id="G-aaron"]').dblclick();
 await page.waitForTimeout(3500);
 
-check(await page.locator('[data-plan-tabs]').count() === 1, 'the viewer pane has the tab strip');
-check(await page.locator('[data-plan-tab]').count() === 1, 'one tab for the open plan');
-check(await page.locator('[data-plan-tab] svg').count() === 0, 'no clouds in the read-only viewer');
+check(await page.locator('[data-plan-tabs]').count() === 0,
+  'no tab strip on the viewer pane — a preview never draws it (decision 2)');
 
-// ── 2 · the Plans chooser: indicators + open in new tab ────────────────────
+// The pane's Plans chooser still lists and still shows the download
+// indicators — but with no strip there is no open-in-new-tab door either.
 await page.locator('[data-open-plans]').first().click();
 await page.waitForTimeout(1200);
-check(await page.locator('[data-plan-row]').count() >= 3, 'three plans listed');
-check(await page.locator('[data-open-new-tab]').count() >= 3, 'each row offers open-in-new-tab');
+check(await page.locator('[data-plan-row]').count() >= 3, 'three plans listed in the pane chooser');
+check(await page.locator('[data-open-new-tab]').count() === 0,
+  'no open-in-new-tab rows where there is no strip');
 check(await page.locator('[data-plan-ready]').count() >= 1,
   'a background-downloaded plan says READY', `${await page.locator('[data-plan-ready]').count()} ready`);
 check(await page.locator('[data-plan-downloading]').count() >= 1,
   'the slow one shows downloading…');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(500);
 
+// ── 2 · the studio keeps the tabs: new tab from ITS chooser ────────────────
+await page.locator('button:has-text("Mark up")').first().click();
+await page.waitForTimeout(3500);
+check(await page.locator('[data-plan-tabs]').count() === 1, 'the studio has the tab strip');
+check(await page.locator('[data-plan-tab]').count() === 1, 'one tab for the open plan');
+
+await page.locator('[data-open-plans]').last().click();
+await page.waitForTimeout(1200);
+check(await page.locator('[data-open-new-tab]').count() >= 3,
+  'in the studio each chooser row offers open-in-new-tab');
 // New tab on the SLOW plan — its tab wears the spinner, then the sheet lands.
 await page.locator('[data-open-new-tab="PDF3"]').click();
 await page.waitForTimeout(500);
@@ -124,7 +146,10 @@ const tabIds = await page.evaluate(() =>
 await page.locator(`[data-plan-tab="${tabIds[0]}"]`).click();
 await page.waitForTimeout(1800);
 const inked = await page.evaluate(() => {
-  const cs = [...document.querySelectorAll('canvas')].filter(x => x.width > 200);
+  // Only the STUDIO's canvases — the pane below draws the same sheet and
+  // would pass the check for the wrong surface.
+  const root = document.querySelector('div.z-\\[150\\]') ?? document;
+  const cs = [...root.querySelectorAll('canvas')].filter(x => x.width > 200);
   let best = 0;
   for (const c of cs) {
     const d = c.getContext('2d').getImageData(0, 0, Math.min(c.width, 400), Math.min(c.height, 300)).data;
@@ -137,7 +162,7 @@ const inked = await page.evaluate(() => {
 check(inked > 300, 'switching back lands the cached sheet quickly (no re-download)',
   `${inked} inked px in 1.8s`);
 
-// ── 4 · + duplicates, and the strip survives a reload ──────────────────────
+// ── 4 · + duplicates, and the tabs survive a reload ────────────────────────
 await page.locator('[data-plan-tab-new]').click();
 await page.waitForTimeout(600);
 check(await page.locator('[data-plan-tab]').count() === 3, 'the + opens this plan again in a fresh tab');
@@ -145,11 +170,13 @@ await page.reload();
 await page.waitForTimeout(2800);
 await page.locator('[data-node-id="G-aaron"]').dblclick();
 await page.waitForTimeout(3500);
+check(await page.locator('[data-plan-tabs]').count() === 0,
+  'after a reload the pane is still a preview — no strip');
+await page.locator('button:has-text("Mark up")').first().click();
+await page.waitForTimeout(3500);
 check(await page.locator('[data-plan-tab]').count() === 3, 'the tabs come back after a reload');
 
 // ── 5 · the studio: strip boxed in the bar, clouds, the unsaved ask ────────
-await page.locator('button:has-text("Mark up")').first().click();
-await page.waitForTimeout(3500);
 const barShape = await page.evaluate(() => {
   const strips = [...document.querySelectorAll('[data-plan-tabs]')];
   const strip = strips[strips.length - 1];

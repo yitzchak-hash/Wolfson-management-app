@@ -21,7 +21,8 @@ const files = n => Array.from({ length: n }, (_, i) => ({
 
 const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const ctx = await b.newContext({ viewport: { width: 390, height: 844 } });
-await ctx.addInitScript(() => {
+const TODAY = new Date().toISOString().slice(0, 10);
+await ctx.addInitScript(today => {
   localStorage.setItem('active_project', 'general');
   localStorage.setItem('general_app_version', '3');
   localStorage.setItem('whats_new_seen', '2099-01-01');
@@ -33,7 +34,7 @@ await ctx.addInitScript(() => {
       perms: { seeSchedule: true, seePlanner: true } }],
     contractorAssignments: [{
       id: 'T-1', contractorId: 'C-jo', apartmentId: 'G-cohen', buildingId: 'G',
-      taskDescription: 'Hang the unit', stageId: null, dueDate: '2026-08-24',
+      taskDescription: 'Hang the unit', stageId: null, dueDate: today,
       priority: 'normal', completedAt: null, createdAt: '2026-08-01', createdBy: 'A', createdByName: 'A',
     }],
     apartments: [{
@@ -49,7 +50,7 @@ await ctx.addInitScript(() => {
       data: { people: ['c:C-jo'], firstWeek: '2026-08-23', weekCount: 1, span: 5, cells: {} },
     }],
   }));
-});
+}, TODAY);
 const page = await ctx.newPage();
 page.on('pageerror', e => { console.log('PAGE ERROR', e.message); fails++; });
 await page.goto(`${APP}/c/tok-jo`);
@@ -112,8 +113,10 @@ await page.waitForTimeout(900);
 let d = await store();
 check(!!d.contractorAssignments[0].completedAt, 'the final press really closes the task');
 check(await page.locator('[data-closing-panel]').count() === 0
-  && (await page.evaluate(() => document.body.innerText.includes('(3)'))),
-  'after closing, the sheet shows the three photos as before');
+  && await page.locator('[data-thread-closed]').count() === 1
+  && await page.locator('[data-thread] img').count() >= 3,
+  'after closing, the thread carries the Job closed marker and the three photos',
+  `${await page.locator('[data-thread] img').count()} imgs, ${await page.locator('[data-thread-closed]').count()} markers`);
 
 // ── 4 · the planner sheet scrolls sideways instead of smushing ──────────────
 // The finish celebration (the WhatsApp report, z-220) covers the page until
