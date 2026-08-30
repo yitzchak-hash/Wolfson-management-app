@@ -52,6 +52,26 @@ for (const [tag, W, H, phone] of PROFILES) {
   }, PLAN_ID);
   await ctx.route('**/api/drive-fetch', r => r.fulfill({ status: 200, contentType: 'application/pdf', body: planBytes }));
   await ctx.route('**://drive.google.com/**', r => r.abort());
+  // A word each way on the first task, so the portal shot shows the task's
+  // CONVERSATION (the UI round's decision 8) rather than an empty box.
+  await ctx.addInitScript(() => {
+    const raw = localStorage.getItem('wolfson_app_data');
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    const a = (d.contractorAssignments ?? [])[0];
+    if (!a || (d.contractorNotes ?? []).length) return;
+    d.contractorNotes = [
+      { id: 'N-gal-1', assignmentId: a.id, apartmentId: a.apartmentId, contractorId: a.contractorId,
+        text: 'Riser is on the north wall — Shimon has the key to the shaft.',
+        authorType: 'office', authorId: 'U-1', authorName: 'Esther',
+        createdAt: new Date(Date.now() - 36e5 * 5).toISOString() },
+      { id: 'N-gal-2', assignmentId: a.id, apartmentId: a.apartmentId, contractorId: a.contractorId,
+        text: 'Got it. Starting on the riser now.',
+        authorType: 'contractor', authorId: a.contractorId, authorName: 'Moshe Aharonov',
+        createdAt: new Date(Date.now() - 36e5 * 2).toISOString() },
+    ];
+    localStorage.setItem('wolfson_app_data', JSON.stringify(d));
+  });
   const page = await ctx.newPage();
   const snap = name => page.screenshot({ path: `scratchpad/gal-${tag}-${name}.png` });
 
@@ -59,10 +79,12 @@ for (const [tag, W, H, phone] of PROFILES) {
   await page.waitForTimeout(2200);
   await snap('diagram');
 
-  // the drawer, plan showing: desktop = side pane; phone = the Plan tab
+  // the drawer, plan showing: 800px of screen decides (the UI round's
+  // decision 1) — at 800+ the plan sits beside the details, below it the
+  // window carries a Plan tab, whatever kind of device it is.
   await page.locator('[class*="cursor-pointer"]', { hasText: /^53/ }).first().click();
-  await page.waitForTimeout(phone ? 1500 : 6000);
-  if (phone) {
+  await page.waitForTimeout(W >= 800 ? 6000 : 1500);
+  if (W < 800) {
     await page.locator('.drawer-panel button', { hasText: /^(Plan|תוכנית)/ }).first().click();
     await page.waitForTimeout(5000);
   }
