@@ -6,6 +6,14 @@ export default {
   ],
   theme: {
     extend: {
+      screens: {
+        // The diagram's own line (owner's decisions 4–5): below 900px it
+        // shows one building behind big tabs with the stage bar; at 900 and
+        // up the desktop toolbar and the all-buildings view are untouched.
+        // Deliberately NOT the drawer's 800px plan line — two thresholds,
+        // two different questions.
+        diag: '900px',
+      },
       colors: {
         brand: {
           navy: '#1e3a5f',

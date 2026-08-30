@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { Mic, X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer, Phone as PhoneIcon, Loader2 } from 'lucide-react';
-import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel } from '../../types';
+import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel, ContractorAssignment } from '../../types';
+import { TaskThread } from '../tasks/TaskThread';
+import { Send } from 'lucide-react';
 import { useStore } from '../../data/store';
 import { TaskDaysPicker, daysFields } from '../tasks/TaskDaysPicker';
 import { daysOf } from '../../data/taskDays';
-import { usePhone } from '../../data/usePhone';
+import { usePhone, useMedia } from '../../data/usePhone';
 import { VoiceRecorderButton, VoiceMemoPlayer } from '../ui/VoiceMemo';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import { StageNotesSection } from './StageNotesSection';
@@ -161,7 +163,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     officeNoteFiles, addOfficeNoteFile, deleteOfficeNoteFile, addActivityLog,
     contractorAssignments, contractors, updateContractorAssignment, deleteContractorAssignment,
     deleteApartment, getGeneralNoteVersions, currentProjectId,
-    contractorPhotos, updateContractorPhoto, planAnnotations, stageNotes, planPins } = useStore();
+    contractorPhotos, updateContractorPhoto, planAnnotations, stageNotes, planPins,
+    contractorNotes, addContractorNote } = useStore();
   const isGeneralProject = currentProjectId === 'general';
   const backendConfigured = isUploadBackendConfigured();
 
@@ -240,6 +243,14 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [phoneLocal, setPhoneLocal] = useState('');
   const [mergedWithId, setMergedWithId] = useState<string>('');
   const isPhone = usePhone();
+  /**
+   * Where the plan SITS: beside the details above 800px of screen, its own
+   * tab below (owner's decision 1 — sealed 2026-08-30). 800 is deliberately
+   * not the diagram's 900 line: a sideways Fold (829) keeps the plan beside
+   * the details while its diagram shows one building. A subscribed test, so
+   * turning a tablet moves the plan between the two with the window open.
+   */
+  const planWide = useMedia('(min-width: 800px)');
   const [activeTab, setActiveTab] = useState<'details' | 'tasks' | 'stages' | 'history' | 'photos' | 'plan'>('details');
   const [drivePhotos, setDrivePhotos] = useState<DrivePhotoItem[]>([]);
   const [loadingPhotos, setLoadingPhotos] = useState(false);
@@ -382,6 +393,26 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [drawerEditDays, setDrawerEditDays] = useState<string[]>([]);
   const [drawerDaysEpoch, setDrawerDaysEpoch] = useState(0);
   const [drawerEditAttachments, setDrawerEditAttachments] = useState<TaskAttachment[]>([]);
+  /**
+   * The office's half of each task's conversation (decisions 8 and 10): a
+   * draft per task card, sent as an ordinary office note into the thread the
+   * worker holds on his phone. Both sides keep writing after the close.
+   */
+  const [officeNoteDrafts, setOfficeNoteDrafts] = useState<Record<string, string>>({});
+  function sendOfficeNote(a: ContractorAssignment) {
+    const text = (officeNoteDrafts[a.id] ?? '').trim();
+    if (!text || !currentUser || !apartment) return;
+    addContractorNote({
+      assignmentId: a.id,
+      apartmentId: apartment.id,
+      contractorId: a.contractorId,
+      text,
+      authorType: 'office',
+      authorId: currentUser.id,
+      authorName: currentUser.name,
+    });
+    setOfficeNoteDrafts(d => ({ ...d, [a.id]: '' }));
+  }
   const [drawerEditProgress, setDrawerEditProgress] = useState<number | null>(null);
   const [keepHistoryModal, setKeepHistoryModal] = useState(false);
 
@@ -495,12 +526,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     }
   }, [apartment?.id]);
 
-  // The Plan tab is only in the phone's tab row. A window growing past the
-  // breakpoint takes it out of the row, so anyone left standing on it would be
-  // looking at a tab they cannot leave.
+  // The Plan tab is only in the narrow tab row. A window growing past the
+  // 800px line takes it out of the row, so anyone left standing on it would
+  // be looking at a tab they cannot leave.
   useEffect(() => {
-    if (!isPhone) setActiveTab(t => (t === 'plan' ? 'details' : t));
-  }, [isPhone]);
+    if (planWide) setActiveTab(t => (t === 'plan' ? 'details' : t));
+  }, [planWide]);
 
   /**
    * Every plan the drawer shows becomes link-shared (owner's decision): the
@@ -545,11 +576,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    */
   const planPaneOn = planWanted && (!!detectedPdfId || (fetchingPdf && !!apartment.driveLink));
   /**
-   * Splitting the window is a DESKTOP arrangement. A phone has no side to put
-   * the plan on — it reaches the same pane through its own Plan tab — so at
-   * 390px the fields keep the whole width.
+   * Splitting the window is a WIDE-screen arrangement. Below 800px there is
+   * no side to put the plan on — an upright iPad (768) and every phone reach
+   * the same pane through the Plan tab instead — so the fields keep the
+   * whole width there.
    */
-  const planSideOn = planPaneOn && !isPhone;
+  const planSideOn = planPaneOn && planWide;
   const setPlanPaneOn = setPlanWanted;
   const planVersionCount = planVersions.length ? planVersions[0].version : 0;
 
@@ -1428,10 +1460,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
 
         {/* Tabs */}
         <div className="flex border-b border-gray-200 flex-shrink-0 overflow-x-auto">
-          {/* The phone gets a Plan tab. On a desktop the plan lives in a side
-              pane beside the fields; a phone has no side, so the plan needs a
-              place of its own rather than being unreachable. */}
-          {(isPhone
+          {/* Below 800px the window gets a Plan tab. Above it the plan lives
+              in a side pane beside the fields; a narrow screen has no side,
+              so the plan needs a place of its own rather than being
+              unreachable. */}
+          {(!planWide
             ? (['details', 'plan', 'tasks', 'stages', 'photos', 'history'] as const)
             : (['details', 'tasks', 'stages', 'photos', 'history'] as const)
           ).map(tab => (
@@ -2256,6 +2289,50 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                             </div>
                           </div>
                         )}
+
+                        {/* The task's conversation — the SAME drawing the
+                            worker holds on his phone (decisions 8–10, one
+                            component so the two can never drift). Bubbles cap
+                            near 640px on a monitor rather than running the
+                            whole window. The office writes from here, and
+                            keeps writing after the close — nothing in the
+                            thread is ever edited or deleted. */}
+                        {!isEditing && (
+                          <div className="px-3 pb-3 pt-1 border-t border-gray-100">
+                            <TaskThread
+                              assignment={a}
+                              notes={contractorNotes.filter(n => n.assignmentId === a.id)}
+                              photos={contractorPhotos.filter(p => p.assignmentId === a.id)}
+                              viewer="office"
+                              maxBubble={640}
+                              words={{
+                                rtl: !!ui.isRtl,
+                                tapToOpen: ui.threadTapToOpen,
+                                jobClosed: ui.threadJobClosed,
+                                download: ui.downloadLabel,
+                              }}
+                            />
+                            <div className="flex gap-2 items-end mt-2">
+                              <input
+                                value={officeNoteDrafts[a.id] ?? ''}
+                                onChange={e => setOfficeNoteDrafts(d => ({ ...d, [a.id]: e.target.value }))}
+                                onKeyDown={e => { if (e.key === 'Enter') sendOfficeNote(a); }}
+                                placeholder={ui.threadWriteToWorker}
+                                data-enter-own
+                                className="flex-1 min-w-0 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                              />
+                              <button
+                                onClick={() => sendOfficeNote(a)}
+                                disabled={!(officeNoteDrafts[a.id] ?? '').trim()}
+                                className="w-9 h-9 flex items-center justify-center rounded-xl text-white disabled:opacity-40 flex-shrink-0"
+                                style={{ backgroundColor: '#1e3a5f' }}
+                                title={ui.threadWriteToWorker}
+                              >
+                                <Send size={15} />
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -2481,9 +2558,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         {planSideOn && planPane('side')}
         </div>
 
-        {/* Bring it back — the side pane only. On a phone the plan was never
+        {/* Bring it back — the side pane only. Below 800px the plan was never
             put away, it lives in its own tab. */}
-        {!isPhone && !planPaneOn && detectedPdfId && (
+        {planWide && !planPaneOn && detectedPdfId && (
           <button
             onClick={() => setPlanPaneOn(true)}
             title="Show the plan beside the details"

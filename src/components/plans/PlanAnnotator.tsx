@@ -4232,7 +4232,15 @@ export function PlanAnnotator(props: PlanHostProps) {
       key={`${active.id}:${active.fileId}`}
       planFileId={active.fileId}
       planName={active.name || planName}
-      tabStrip={(
+      /*
+        The tab strip belongs to the markup STUDIO alone (owner's decision 2,
+        sealed 2026-08-30): no preview draws it — not the drawer's side pane,
+        not the phone's Plan tab, not the wallboard, not the worker's portal.
+        `!readOnly && !embedded` is exactly that set. The tab STATE stays: a
+        preview simply does not draw the strip, and its + and per-tab close
+        do not exist there.
+      */
+      tabStrip={(!readOnly && !embedded) ? (
         <PlanTabsStrip
           tabs={tabs}
           activeId={active.id}
@@ -4242,7 +4250,7 @@ export function PlanAnnotator(props: PlanHostProps) {
           onCloseTab={closeTab}
           onNewTab={newTabPlus}
         />
-      )}
+      ) : undefined}
       initialWork={initialWork}
       workRef={workRef}
       onUnsavedChange={setActiveUnsaved}

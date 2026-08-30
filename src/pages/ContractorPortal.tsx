@@ -5,7 +5,7 @@ import { ContractorAssignment, ContractorPhoto, DEFAULT_CONTRACTOR_UI_STRINGS, H
 import { daysOf, futureDaysOf } from '../data/taskDays';
 import { PlanPinOverlay } from '../components/apartment/PlanPinOverlay';
 import { printSheet, printEsc } from '../data/printing';
-import { format, isPast, parseISO, differenceInCalendarDays, startOfDay, startOfWeek, addDays as addDaysFns } from 'date-fns';
+import { format, isPast, parseISO, isToday, differenceInCalendarDays, startOfDay, startOfWeek, addDays as addDaysFns } from 'date-fns';
 import { usePhone } from '../data/usePhone';
 import {
   Camera, CheckCircle2, Clock, Building2, CalendarDays, FileText, Hammer,
@@ -25,7 +25,10 @@ import {
   extractFileId, drivePreviewUrl, driveDownloadUrl, driveThumbUrl,
   extractFolderId, isUploadBackendConfigured, findOrCreateFolderViaBackend,
   uploadFileViaResumableSession, shareFileToDrive, ensureDriveShared,
+  fetchPlanBytes,
 } from '../data/driveApi';
+import { saveBytes, safeFileName } from '../data/planExport';
+import { TaskThread } from '../components/tasks/TaskThread';
 
 const CATEGORY_LABELS: Record<string, string> = {
   drywall: 'Drywall', ac: 'AC', general: 'General',
@@ -422,6 +425,13 @@ export function ContractorPortal() {
    * the finish-early ask and completion run.
    */
   const [closing, setClosing] = useState(false);
+  /** The closing screen's own comment (decision 9) — one message, sent with
+   *  the photos when the job is closed. Separate from the composer's text. */
+  const [closingComment, setClosingComment] = useState('');
+  /** The media that existed when the closing screen opened, so "the photos
+   *  taken on that screen" is exactly the difference. */
+  const preClosingIds = useRef<Set<string>>(new Set());
+  const [planDlBusy, setPlanDlBusy] = useState(false);
   /** The map's "I did work here" flow — one small screen at a time. */
   const [workHere, setWorkHere] = useState<null | {
     aptId: string; step: 'view' | 'stage' | 'finished' | 'note'; stageId?: string;
@@ -813,25 +823,16 @@ export function ContractorPortal() {
     setClosing(false);
   }, [selectedAssignment?.id]);
 
-  function handleComplete() {
-    if (!selectedAssignment) return;
-    // At least three pictures close a job (the owner's rule) — unless the
-    // office relaxed photos for this worker.
-    if (getMedia(selectedAssignment.id).length < MIN_CLOSE_MEDIA && !contractor?.photosOptional) return;
-    /**
-     * FINISHING EARLY (the owner's locked decision): a multi-day task closed
-     * while it still has days AHEAD asks the worker — after the photos, in
-     * his own language, in big simple words — whether he is completely done.
-     * Yes crosses the remaining days off (they stay on the calendar, struck
-     * through, as the record); No cancels the close and the task stays open.
-     *
-     * The old are-you-sure step is gone: the closing screen IS the deliberate
-     * act now, so the final press completes outright.
-     */
-    const future = futureDaysOf(selectedAssignment.days, format(new Date(), 'yyyy-MM-dd'));
-    if (future.length) { setFinishAsk(future); return; }
-    handleConfirmComplete();
-  }
+  // The moment the closing screen opens, remember which media already existed
+  // — the closing comment carries exactly the photos taken ON that screen.
+  useEffect(() => {
+    if (closing && selectedAssignment) {
+      preClosingIds.current = new Set(getMedia(selectedAssignment.id).map(m => m.id));
+      setClosingComment('');
+      setFinishAsk(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [closing]);
 
   function handleConfirmComplete() {
     if (!selectedAssignment) return;
@@ -851,6 +852,7 @@ export function ContractorPortal() {
       stageId: selectedAssignment.stageId ?? '',
     });
     setShowCompleteConfirm(false);
+    setClosing(false);
     setCompleting(true);
     setTimeout(() => setCompleting(false), 800);
 
@@ -884,6 +886,93 @@ export function ContractorPortal() {
   function handleUncomplete() {
     if (!selectedAssignment) return;
     updateContractorAssignment(selectedAssignment.id, { completedAt: null });
+  }
+
+  /**
+   * The plan handed over as a FILE, through the app's own /api/drive-fetch —
+   * never a drive.google.com link, which turns away a worker not signed into
+   * Google (decision 6). The Drive URL survives only as the last resort when
+   * the fetch itself fails.
+   */
+  async function downloadPlanFile(fileId: string, jobName: string) {
+    setPlanDlBusy(true);
+    try {
+      const buf = await fetchPlanBytes(fileId);
+      const bytes = new Uint8Array(buf);
+      const isPdf = bytes[0] === 0x25 && bytes[1] === 0x50;
+      const isPng = bytes[0] === 0x89 && bytes[1] === 0x50;
+      const ext = isPdf ? 'pdf' : isPng ? 'png' : 'jpg';
+      const mime = isPdf ? 'application/pdf' : isPng ? 'image/png' : 'image/jpeg';
+      saveBytes(bytes, `${safeFileName(`${jobName} — ${s.engineeringPlans}`)}.${ext}`, mime);
+    } catch {
+      window.open(driveDownloadUrl(fileId), '_blank', 'noopener');
+    } finally {
+      setPlanDlBusy(false);
+    }
+  }
+
+  /**
+   * The closing comment lands in the conversation (decision 9): ONE
+   * contractor note carrying the comment — which may be empty — and the ids
+   * of the photos taken on the closing screen, written just before the task
+   * completes so it sits right above the "Job closed" marker. Attachments
+   * from the comment box's paperclip and microphone ride along (the first on
+   * the closing note, any others as their own messages just before it).
+   * With nothing at all to say, no empty bubble is minted — the marker alone
+   * records the close.
+   */
+  function postClosingNote() {
+    if (!selectedAssignment) return;
+    const text = closingComment.trim();
+    const newPhotoIds = getMedia(selectedAssignment.id)
+      .map(m => m.id)
+      .filter(id => !preClosingIds.current.has(id));
+    if (!text && newPhotoIds.length === 0 && noteAttachments.length === 0) return;
+    const base = {
+      assignmentId: selectedAssignment.id,
+      apartmentId: selectedAssignment.apartmentId,
+      contractorId,
+      authorType: 'contractor' as const,
+      authorId: contractorId,
+      authorName: contractor?.name ?? '',
+    };
+    const [first, ...rest] = noteAttachments;
+    rest.forEach(att => {
+      addContractorNote({
+        ...base,
+        text: att.filename,
+        attachmentDataUrl: att.driveFileId ? '' : att.dataUrl,
+        attachmentFilename: att.filename,
+        attachmentMimeType: att.mimeType,
+        attachmentDriveFileId: att.driveFileId,
+        attachmentDriveUrl: att.driveUrl,
+      });
+    });
+    addContractorNote({
+      ...base,
+      text,
+      photoIds: newPhotoIds.length ? newPhotoIds : undefined,
+      ...(first ? {
+        attachmentDataUrl: first.driveFileId ? '' : first.dataUrl,
+        attachmentFilename: first.filename,
+        attachmentMimeType: first.mimeType,
+        attachmentDriveFileId: first.driveFileId,
+        attachmentDriveUrl: first.driveUrl,
+      } : {}),
+    });
+    setClosingComment('');
+    setNoteAttachments([]);
+  }
+
+  /** The final press on the closing screen: the finish-early ask still fires
+   *  first when the task has days left; otherwise the comment posts and the
+   *  job closes in one motion. */
+  function handleSendAndClose() {
+    if (!selectedAssignment || !canComplete) return;
+    const future = futureDaysOf(selectedAssignment.days, format(new Date(), 'yyyy-MM-dd'));
+    if (future.length) { setFinishAsk(future); return; }
+    postClosingNote();
+    handleConfirmComplete();
   }
 
   /**
@@ -1812,9 +1901,11 @@ export function ContractorPortal() {
                 <div>
                   <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{s.sectionTask}</h3>
                   <p className="text-gray-800 text-sm leading-relaxed">{a.taskDescription}</p>
+                  {/* No box (decision 6): a red dot and the word — the same
+                      treatment for every priority so they stay consistent. */}
                   {a.priority && a.priority !== 'normal' && (
-                    <span className={`inline-flex items-center gap-1 mt-1.5 text-xs px-2 py-0.5 rounded border font-medium ${
-                      a.priority === 'urgent' ? 'text-red-600 bg-red-50 border-red-200' : 'text-green-600 bg-green-50 border-green-200'
+                    <span className={`inline-flex items-center gap-1 mt-1.5 text-xs font-medium ${
+                      a.priority === 'urgent' ? 'text-red-600' : 'text-green-600'
                     }`}>
                       {a.priority === 'urgent' ? '🔴' : '🟢'} {a.priority === 'urgent' ? 'Urgent' : 'Low priority'}
                     </span>
@@ -1889,10 +1980,15 @@ export function ContractorPortal() {
                         <BookOpen size={12} /> {s.engineeringPlans}
                       </h3>
                       <div className="flex items-center gap-2">
-                        <a href={driveDownloadUrl(plansPdfFileId)} target="_blank" rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-xs text-[#1e3a5f] hover:underline">
-                          <Download size={11} /> {s.download}
-                        </a>
+                        {/* Through the app's own /api/drive-fetch (decision 6):
+                            a drive.google.com link turns away a worker who is
+                            not signed into Google. The service account reads
+                            the bytes; the phone just gets a file. */}
+                        <button onClick={() => void downloadPlanFile(plansPdfFileId, apt ? aptLabel(apt) : a.buildingId)}
+                          disabled={planDlBusy}
+                          className="flex items-center gap-1 text-xs text-[#1e3a5f] hover:underline disabled:opacity-50">
+                          <Download size={11} /> {planDlBusy ? '…' : s.download}
+                        </button>
                         <button onClick={() => setShowPlansPdf(v => !v)}
                           className="text-xs px-2.5 py-1 rounded-lg bg-[#1e3a5f] text-white font-medium">
                           {showPlansPdf ? s.hide : s.view}
@@ -1973,185 +2069,42 @@ export function ContractorPortal() {
                   </div>
                 )}
 
-                {/* Media */}
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                      {s.filesAndPhotos} ({selMedia.length})
-                    </h3>
-                    <button
-                      onClick={() => mediaInputRef.current?.click()}
-                      disabled={uploading}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all active:scale-95"
-                      style={{ backgroundColor: '#1e3a5f' }}
-                    >
-                      <Plus size={14} />
-                      {uploading ? s.uploading : s.addFile}
-                    </button>
-                    <input ref={mediaInputRef} type="file"
-                      accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip"
-                      multiple className="hidden" onChange={handleMediaUpload} />
-                  </div>
-
-                  {uploadProgress && (
-                    <div className="mb-3">
-                      <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                        <span className="flex items-center gap-1.5 truncate">
-                          <CloudUpload size={13} className="flex-shrink-0 text-[#4aa8d8]" />
-                          <span className="truncate">{uploadProgress.name}</span>
-                        </span>
-                        <span className="flex-shrink-0 ml-2 font-medium">{uploadProgress.pct}%</span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                        <div className="h-full bg-[#4aa8d8] transition-all duration-150"
-                          style={{ width: `${uploadProgress.pct}%` }} />
-                      </div>
-                    </div>
-                  )}
-
-                  {uploadError && (
-                    <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-3 border border-amber-200">
-                      <AlertCircle size={13} className="flex-shrink-0" /> {uploadError}
-                    </div>
-                  )}
-
-                  {selMedia.length === 0 ? (
-                    !a.completedAt && !closing ? (
-                      /* The owner's flow: the old "press here to add
-                         pictures…" prompt IS the Close job button now — one
-                         press opens the closing screen where the pictures,
-                         the memo and the note all live. */
-                      <button data-close-job onClick={() => setClosing(true)}
-                        className="w-full rounded-xl py-6 flex flex-col items-center gap-2 text-white font-bold transition-all active:scale-[0.98]"
-                        style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}>
-                        <CheckCircle2 size={26} />
-                        <span className="text-base">{s.closeJobBtn || (s.isRtl ? 'סגירת עבודה' : 'Close job')}</span>
-                      </button>
-                    ) : (
-                      <button onClick={() => mediaInputRef.current?.click()}
-                        className="w-full border-2 border-dashed border-gray-200 rounded-xl py-8 flex flex-col items-center gap-2 text-gray-400 hover:border-[#4aa8d8] hover:text-[#4aa8d8] transition-all">
-                        <Camera size={28} />
-                        <span className="text-sm font-medium">{s.tapToAddMedia}</span>
-                      </button>
-                    )
-                  ) : (
-                    <div className="grid grid-cols-3 gap-2">
-                      {selMedia.map((m, i) => (
-                        <MediaItem
-                          key={m.id}
-                          photo={m}
-                          onDelete={() => deleteContractorPhoto(m.id)}
-                          onOpen={() => setLightboxInfo({ photos: selMedia, index: i })}
-                        />
-                      ))}
-                      <button onClick={() => mediaInputRef.current?.click()}
-                        className="aspect-square rounded-xl border-2 border-dashed border-gray-200 flex items-center justify-center hover:border-[#4aa8d8] transition-all">
-                        <Plus size={20} className="text-gray-400" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Notes */}
+                {/* THIS TASK — the conversation (decisions 8–10). It replaces
+                    the FILES & PHOTOS block and the two separate note lists:
+                    photos, files and words from both sides are ONE thread,
+                    the same drawing the office sees in the apartment window.
+                    The office's Add File button left this section (owner's
+                    decision — the worker's paperclip lives in the composer
+                    and on the closing screen). */}
                 <div>
                   <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                    <MessageSquare size={12} /> {s.sectionNotes}
+                    <MessageSquare size={12} /> {s.thisTaskLabel || (s.isRtl ? 'המשימה הזאת' : 'This task')}
                   </h3>
+                  <TaskThread
+                    assignment={a}
+                    notes={selNotes}
+                    photos={selMedia}
+                    viewer="contractor"
+                    words={{
+                      rtl: !!s.isRtl,
+                      tapToOpen: s.tapToOpenLabel || (s.isRtl ? 'הקישו לפתיחה' : 'tap to open'),
+                      jobClosed: s.jobClosedLabel || (s.isRtl ? 'העבודה נסגרה' : 'Job closed'),
+                      download: s.download,
+                    }}
+                  />
 
-                  {selOfficeNotes.length > 0 && (
-                    <div className="mb-3 space-y-2">
-                      <p className="text-[10px] font-semibold text-blue-600 uppercase tracking-wider">{s.fromOffice}</p>
-                      {selOfficeNotes.map(n => (
-                        <div key={n.id} className="px-3 py-2.5 rounded-xl text-sm bg-blue-50 border border-blue-100">
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <span className="text-xs font-semibold text-gray-600">{n.authorName}</span>
-                            <span className="text-[10px] text-gray-400 ml-auto">{format(new Date(n.createdAt), 'MMM d, HH:mm')}</span>
-                          </div>
-                          <p className="text-gray-700 leading-relaxed">{n.text}</p>
-                          {(n.attachmentDataUrl || n.attachmentDriveFileId) && (() => {
-                            const isImg = n.attachmentMimeType?.startsWith('image/');
-                            const isAudio = n.attachmentMimeType?.startsWith('audio/');
-                            const thumbSrc = n.attachmentDriveFileId
-                              ? driveThumbUrl(n.attachmentDriveFileId, 400)
-                              : (isImg ? n.attachmentDataUrl : null);
-                            const openHref = n.attachmentDriveUrl || n.attachmentDataUrl;
-                            if (isAudio && openHref) {
-                              return (
-                                <div className="mt-1.5">
-                                  <VoiceMemoPlayer src={openHref} />
-                                </div>
-                              );
-                            }
-                            return (
-                              <div className="mt-1.5">
-                                {isImg && thumbSrc ? (
-                                  <a href={openHref} target="_blank" rel="noopener noreferrer" className="block">
-                                    <img src={thumbSrc} alt={n.attachmentFilename} className="max-h-32 rounded-lg object-cover border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity" />
-                                  </a>
-                                ) : (
-                                  <a href={openHref} target={n.attachmentDriveUrl ? '_blank' : undefined}
-                                    download={!n.attachmentDriveUrl ? n.attachmentFilename : undefined}
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-1 text-xs text-[#1e3a5f] hover:underline">
-                                    <Paperclip size={10} /> {n.attachmentFilename}
-                                  </a>
-                                )}
-                              </div>
-                            );
-                          })()}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {selContractorNotes.length > 0 && (
-                    <div className="mb-3 space-y-2">
-                      {selOfficeNotes.length > 0 && <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{s.yourNotes}</p>}
-                      {selContractorNotes.map(n => (
-                        <div key={n.id} className="px-3 py-2.5 rounded-xl text-sm bg-gray-50 border border-gray-100">
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <span className="text-xs font-semibold text-gray-600">{n.authorName}</span>
-                            <span className="text-[10px] text-gray-400 ml-auto">{format(new Date(n.createdAt), 'MMM d, HH:mm')}</span>
-                          </div>
-                          <p className="text-gray-700 leading-relaxed">{n.text}</p>
-                          {(n.attachmentDataUrl || n.attachmentDriveFileId) && (() => {
-                            const isImg = n.attachmentMimeType?.startsWith('image/');
-                            const isAudio = n.attachmentMimeType?.startsWith('audio/');
-                            const thumbSrc = n.attachmentDriveFileId
-                              ? driveThumbUrl(n.attachmentDriveFileId, 400)
-                              : (isImg ? n.attachmentDataUrl : null);
-                            const openHref = n.attachmentDriveUrl || n.attachmentDataUrl;
-                            if (isAudio && openHref) {
-                              return (
-                                <div className="mt-1.5">
-                                  <VoiceMemoPlayer src={openHref} />
-                                </div>
-                              );
-                            }
-                            return (
-                              <div className="mt-1.5">
-                                {isImg && thumbSrc ? (
-                                  <a href={openHref} target="_blank" rel="noopener noreferrer" className="block">
-                                    <img src={thumbSrc} alt={n.attachmentFilename} className="max-h-32 rounded-lg object-cover border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity" />
-                                  </a>
-                                ) : (
-                                  <a href={openHref} target={n.attachmentDriveUrl ? '_blank' : undefined}
-                                    download={!n.attachmentDriveUrl ? n.attachmentFilename : undefined}
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-1 text-xs text-[#1e3a5f] hover:underline">
-                                    <Paperclip size={10} /> {n.attachmentFilename}
-                                  </a>
-                                )}
-                              </div>
-                            );
-                          })()}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  {/* The hidden pickers stay mounted at sheet level — the
+                      closing screen's add button and the composer's paperclip
+                      both reach them. */}
+                  <input ref={mediaInputRef} type="file"
+                    accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip"
+                    multiple className="hidden" onChange={handleMediaUpload} />
+                  <input ref={noteAttachRef} type="file"
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip"
+                    multiple className="hidden" onChange={handleNoteAttachmentPick} />
 
                   {noteAttachments.length > 0 && (
-                    <div className="mb-2 flex flex-wrap gap-2">
+                    <div className="mt-3 flex flex-wrap gap-2">
                       {noteAttachments.map((att, idx) => (
                         att.mimeType.startsWith('audio/') ? (
                           // Check it before you send it — the whole point of a
@@ -2185,7 +2138,9 @@ export function ContractorPortal() {
                       ))}
                     </div>
                   )}
-                  <div className="flex gap-2 items-end">
+                  {/* The composer — both sides keep writing, before the close
+                      and after it (decision 10 keeps the conversation open). */}
+                  <div className="flex gap-2 items-end mt-3">
                     <button
                       onClick={() => noteAttachRef.current?.click()}
                       className="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 text-gray-400 hover:text-[#1e3a5f] hover:border-[#1e3a5f] transition-all flex-shrink-0"
@@ -2193,9 +2148,6 @@ export function ContractorPortal() {
                     >
                       <Paperclip size={15} />
                     </button>
-                    <input ref={noteAttachRef} type="file"
-                      accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip"
-                      multiple className="hidden" onChange={handleNoteAttachmentPick} />
                     {/* Talking is faster than typing on a site, in gloves, in
                         whichever language the worker actually thinks in. */}
                     <VoiceRecorderButton onRecorded={handleNoteVoiceMemo} title={s.addNote} />
@@ -2204,9 +2156,9 @@ export function ContractorPortal() {
                       onChange={e => setNoteText(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSendNote()}
                       placeholder={s.addNote}
-                      className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                      className="flex-1 min-w-0 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                     />
-                    <button onClick={handleSendNote} disabled={!noteText.trim()}
+                    <button onClick={handleSendNote} disabled={!noteText.trim() && noteAttachments.length === 0}
                       className="w-10 h-10 flex items-center justify-center rounded-xl text-white disabled:opacity-40 transition-all active:scale-95 flex-shrink-0"
                       style={{ backgroundColor: '#1e3a5f' }}>
                       <Send size={16} />
@@ -2215,59 +2167,112 @@ export function ContractorPortal() {
                 </div>
               </div>
 
-              {/* Complete button — sticky */}
+              {/* The footer: ONE Close job button (decision 6) — and once
+                  the task is closed, a plain "Job closed" state instead of
+                  the button (decision 11). The message box above stays live
+                  either way: decision 10 keeps the conversation open. */}
               <div className="px-5 py-4 border-t border-gray-100 flex-shrink-0 bg-white">
-                {!a.completedAt && (
-                  <>
-                    {finishAsk ? (
-                      /* The finish-early ask — big simple words in the
-                         worker's own language, only reachable after the
-                         photos are in and Close task was pressed. */
-                      <div className="space-y-3" data-finish-early>
-                        <p className="text-center font-extrabold text-gray-800"
-                          style={{ fontSize: 17, lineHeight: 1.35 }}>
-                          {s.finishEarlyStill || (s.isRtl
-                            ? 'העבודה הזאת עדיין ביומן שלך בתאריכים:'
-                            : 'This job is still on your calendar for:')}
-                        </p>
-                        <p className="text-center font-bold" style={{ color: '#0369a1', fontSize: 16 }}>
-                          {finishAsk.map(d => format(parseISO(d), 'EEEE d MMMM')).join(' · ')}
-                        </p>
-                        <p className="text-center text-sm text-gray-500">
-                          {s.finishEarlyQuestion || (s.isRtl
-                            ? 'סיימת לגמרי, או שתצטרך לחזור?'
-                            : 'Are you completely finished, or do you need to come back?')}
-                        </p>
-                        <button
-                          onClick={() => { setFinishAsk(null); handleConfirmComplete(); }}
-                          className="w-full py-3.5 rounded-xl font-bold text-white text-base"
-                          style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}>
-                          {s.finishEarlyYes || (s.isRtl
-                            ? 'סיימתי הכול — אפשר למחוק את הימים'
-                            : 'I finished everything — cross those days off')}
-                        </button>
-                        <button
-                          onClick={() => setFinishAsk(null)}
-                          className="w-full py-3.5 rounded-xl font-bold text-slate-600 text-base"
-                          style={{ backgroundColor: '#eef2f7' }}>
-                          {s.finishEarlyNo || (s.isRtl ? 'לא — אני אחזור' : "No — I'm coming back")}
-                        </button>
-                      </div>
-                    ) : closing ? (
-                      /**
-                       * THE CLOSING SCREEN — everything a close needs in one
-                       * place: the picture count against the rule, the add
-                       * button, the paperclip, the voice memo and the note,
-                       * and the FINAL Close job press. The old are-you-sure
-                       * step is gone; this screen is the deliberate act.
-                       */
-                      <div className="space-y-3" data-closing-panel>
+                {a.completedAt ? (
+                  <div data-job-closed
+                    className="w-full py-3.5 rounded-xl text-base font-bold flex items-center justify-center gap-2"
+                    style={{ backgroundColor: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0' }}>
+                    <CheckCircle2 size={18} />
+                    {s.jobClosedLabel || (s.isRtl ? 'העבודה נסגרה' : 'Job closed')}
+                    {' · '}
+                    {format(new Date(a.completedAt), isToday(new Date(a.completedAt)) ? 'HH:mm' : 'MMM d · HH:mm')}
+                  </div>
+                ) : (
+                  /* One button. Pressing it opens the closing screen —
+                     it never sits greyed-out wondering why. */
+                  <button
+                    data-close-job
+                    onClick={() => setClosing(true)}
+                    className="w-full py-3.5 rounded-xl text-base font-bold tracking-wide transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-white"
+                    style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}
+                  >
+                    <CheckCircle2 size={18} />
+                    {s.closeJobBtn || (s.isRtl ? 'סגירת עבודה' : 'Close job')}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* THE CLOSING SCREEN — a screen of its own (decision 7): its
+                own navy header with a back arrow and the apartment name; the
+                add-media button with its counter at the top; then ONE
+                comment box with the paperclip and the microphone INSIDE it,
+                the same idiom as the drawer's General Notes box. The footer
+                is Send and close the job. There is NO separate file section
+                — the add-media button already takes files. The picture rule
+                follows each worker's own permission (decision 7 / item 11):
+                a photos-optional worker sees no demand, no counter, and is
+                never locked out. The finish-early ask still fires on the
+                final press when the task has days left. */}
+            {closing && !a.completedAt && (
+              <div data-closing-panel className="fixed inset-0 z-[60] bg-white flex flex-col">
+                <div className="flex items-center gap-3 px-4 py-3.5 flex-shrink-0 text-white"
+                  style={{ backgroundColor: '#1e3a5f' }}>
+                  <button onClick={() => { setFinishAsk(null); setClosing(false); }}
+                    className="p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0" title={s.cancel}>
+                    {s.isRtl ? <ChevronRight size={22} /> : <ChevronLeft size={22} />}
+                  </button>
+                  <div className="min-w-0">
+                    <div className="font-extrabold leading-tight" style={{ fontSize: 17 }}>
+                      {s.closingTitle || (s.isRtl ? 'סגירת העבודה' : 'Closing the job')}
+                    </div>
+                    <div className="truncate opacity-70" style={{ fontSize: 12.5 }}>
+                      {apt ? aptLabel(apt) : a.buildingId}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto px-4 py-5" style={{ overscrollBehavior: 'contain' }}>
+                  {finishAsk ? (
+                    /* The finish-early ask — big simple words in the
+                       worker's own language, only reachable after the
+                       photos are in and Send and close was pressed. */
+                    <div className="space-y-3 max-w-md mx-auto w-full" data-finish-early>
+                      <p className="text-center font-extrabold text-gray-800"
+                        style={{ fontSize: 17, lineHeight: 1.35 }}>
+                        {s.finishEarlyStill || (s.isRtl
+                          ? 'העבודה הזאת עדיין ביומן שלך בתאריכים:'
+                          : 'This job is still on your calendar for:')}
+                      </p>
+                      <p className="text-center font-bold" style={{ color: '#0369a1', fontSize: 16 }}>
+                        {finishAsk.map(d => format(parseISO(d), 'EEEE d MMMM')).join(' · ')}
+                      </p>
+                      <p className="text-center text-sm text-gray-500">
+                        {s.finishEarlyQuestion || (s.isRtl
+                          ? 'סיימת לגמרי, או שתצטרך לחזור?'
+                          : 'Are you completely finished, or do you need to come back?')}
+                      </p>
+                      <button
+                        onClick={() => { setFinishAsk(null); postClosingNote(); handleConfirmComplete(); }}
+                        className="w-full py-3.5 rounded-xl font-bold text-white text-base"
+                        style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}>
+                        {s.finishEarlyYes || (s.isRtl
+                          ? 'סיימתי הכול — אפשר למחוק את הימים'
+                          : 'I finished everything — cross those days off')}
+                      </button>
+                      <button
+                        onClick={() => setFinishAsk(null)}
+                        className="w-full py-3.5 rounded-xl font-bold text-slate-600 text-base"
+                        style={{ backgroundColor: '#eef2f7' }}>
+                        {s.finishEarlyNo || (s.isRtl ? 'לא — אני אחזור' : "No — I'm coming back")}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="max-w-md mx-auto w-full space-y-6">
+                      {/* 1 · the pictures — the rule names MIN_CLOSE_MEDIA, so
+                          changing the constant changes the sentence. */}
+                      <div>
                         {!contractor?.photosOptional && (
-                          <p className="text-center font-extrabold text-gray-800"
+                          <p className="text-center font-extrabold text-gray-800 mb-3"
                             style={{ fontSize: 16, lineHeight: 1.35 }}>
-                            {s.addThreePictures || (s.isRtl
-                              ? 'הוסיפו לפחות 3 תמונות כדי לסגור את העבודה'
-                              : 'Add at least 3 pictures to close the job')}
+                            {(s.addPicturesRule || (s.isRtl
+                              ? 'הוסיפו לפחות {n} תמונות כדי לסגור את העבודה'
+                              : 'Add at least {n} pictures to close the job'))
+                              .replace('{n}', String(MIN_CLOSE_MEDIA))}
                           </p>
                         )}
                         <div className="flex items-center gap-2">
@@ -2289,65 +2294,102 @@ export function ContractorPortal() {
                             </span>
                           )}
                         </div>
-                        {/* A word with the pictures — the same note thread as
-                            always, its paperclip and memo included. */}
-                        <div className="flex gap-2 items-end">
-                          <button
-                            onClick={() => noteAttachRef.current?.click()}
-                            className="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 text-gray-400 hover:text-[#1e3a5f] hover:border-[#1e3a5f] flex-shrink-0"
-                            title="Attach file">
-                            <Paperclip size={15} />
-                          </button>
-                          <VoiceRecorderButton onRecorded={handleNoteVoiceMemo} title={s.addNote} />
-                          <input
-                            value={noteText}
-                            onChange={e => setNoteText(e.target.value)}
-                            onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSendNote()}
-                            placeholder={s.addNote}
-                            className="flex-1 min-w-0 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
-                          />
-                          <button onClick={handleSendNote} disabled={!noteText.trim() && noteAttachments.length === 0}
-                            className="w-10 h-10 flex items-center justify-center rounded-xl text-white disabled:opacity-40 flex-shrink-0"
-                            style={{ backgroundColor: '#1e3a5f' }}>
-                            <Send size={16} />
-                          </button>
-                        </div>
-                        <button
-                          data-close-now
-                          onClick={handleComplete}
-                          disabled={!canComplete || completing}
-                          className="w-full py-3.5 rounded-xl text-base font-bold tracking-wide transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                          style={{
-                            background: canComplete ? 'linear-gradient(135deg, #22c55e, #16a34a)' : undefined,
-                            backgroundColor: !canComplete ? '#e5e7eb' : undefined,
-                            color: canComplete ? 'white' : '#9ca3af',
-                          }}>
-                          <CheckCircle2 size={18} />
-                          {completing ? s.markingComplete
-                            : (s.closeJobBtn || (s.isRtl ? 'סגירת עבודה' : 'Close job'))}
-                        </button>
-                        <button onClick={() => setClosing(false)}
-                          className="w-full text-center text-xs font-semibold text-gray-400 hover:text-gray-600">
-                          {s.cancel}
-                        </button>
+                        {uploadProgress && (
+                          <div className="mt-3">
+                            <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                              <span className="flex items-center gap-1.5 truncate">
+                                <CloudUpload size={13} className="flex-shrink-0 text-[#4aa8d8]" />
+                                <span className="truncate">{uploadProgress.name}</span>
+                              </span>
+                              <span className="flex-shrink-0 ml-2 font-medium">{uploadProgress.pct}%</span>
+                            </div>
+                            <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                              <div className="h-full bg-[#4aa8d8] transition-all duration-150"
+                                style={{ width: `${uploadProgress.pct}%` }} />
+                            </div>
+                          </div>
+                        )}
+                        {uploadError && (
+                          <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mt-3 border border-amber-200">
+                            <AlertCircle size={13} className="flex-shrink-0" /> {uploadError}
+                          </div>
+                        )}
                       </div>
-                    ) : (
-                      /* One button. Pressing it opens the closing screen —
-                         it never sits greyed-out wondering why. */
-                      <button
-                        data-close-job
-                        onClick={() => setClosing(true)}
-                        className="w-full py-3.5 rounded-xl text-base font-bold tracking-wide transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-white"
-                        style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}
-                      >
-                        <CheckCircle2 size={18} />
-                        {s.closeJobBtn || (s.isRtl ? 'סגירת עבודה' : 'Close job')}
-                      </button>
-                    )}
-                  </>
+
+                      {/* 2 · one comment box — paperclip and microphone
+                          INSIDE it, bottom corner, the General-notes idiom. */}
+                      <div>
+                        <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-0.5">
+                          {s.closingCommentLabel || (s.isRtl ? 'הערה' : 'A comment')}
+                        </div>
+                        <div className="text-gray-400 mb-2" style={{ fontSize: 13 }}>
+                          {s.closingCommentHint || (s.isRtl ? 'כל מה שהמשרד צריך לדעת' : 'Anything the office should know')}
+                        </div>
+                        <div className="relative border border-gray-200 rounded-xl bg-white">
+                          <textarea
+                            value={closingComment}
+                            onChange={e => setClosingComment(e.target.value)}
+                            placeholder={s.typeWhatYouDid || (s.isRtl ? 'כתבו מה עשיתם…' : 'Type what you did…')}
+                            className="w-full min-h-[104px] border-0 outline-none rounded-xl px-3 pt-2.5 pb-10 text-[15px] resize-y bg-transparent"
+                          />
+                          <div className="absolute bottom-2 flex items-center gap-1.5" style={{ insetInlineEnd: 9 }}>
+                            <button
+                              onClick={() => noteAttachRef.current?.click()}
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-[#1e3a5f]"
+                              title="Attach file">
+                              <Paperclip size={16} />
+                            </button>
+                            <VoiceRecorderButton onRecorded={handleNoteVoiceMemo} title={s.addNote} />
+                          </div>
+                        </div>
+                        {noteAttachments.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {noteAttachments.map((att, idx) => (
+                              att.mimeType.startsWith('audio/') ? (
+                                <div key={idx} className="flex items-center gap-1">
+                                  <VoiceMemoPlayer src={att.driveUrl || att.dataUrl || ''} className="max-w-[220px]" />
+                                  <button
+                                    onClick={() => setNoteAttachments(prev => prev.filter((_, i) => i !== idx))}
+                                    className="w-6 h-6 flex items-center justify-center rounded-full text-gray-400 hover:text-red-500"
+                                  ><X size={12} /></button>
+                                </div>
+                              ) : (
+                                <div key={idx} className="flex items-center gap-2 px-2 py-1.5 bg-blue-50 rounded-lg border border-blue-100 text-xs text-blue-700">
+                                  <Paperclip size={11} />
+                                  <span className="flex-1 truncate max-w-[140px]">{att.filename}</span>
+                                  <button onClick={() => setNoteAttachments(prev => prev.filter((_, i) => i !== idx))}
+                                    className="text-blue-400 hover:text-blue-600"><X size={12} /></button>
+                                </div>
+                              )
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {!finishAsk && (
+                  <div className="px-4 py-3 border-t border-gray-100 flex-shrink-0"
+                    style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}>
+                    <button
+                      data-close-now
+                      onClick={handleSendAndClose}
+                      disabled={!canComplete || completing}
+                      className="w-full py-3.5 rounded-xl text-base font-bold tracking-wide transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      style={{
+                        background: canComplete ? 'linear-gradient(135deg, #22c55e, #16a34a)' : undefined,
+                        backgroundColor: !canComplete ? '#e5e7eb' : undefined,
+                        color: canComplete ? 'white' : '#9ca3af',
+                      }}>
+                      <CheckCircle2 size={18} />
+                      {completing ? s.markingComplete
+                        : (s.sendAndClose || (s.isRtl ? 'שליחה וסגירת העבודה' : 'Send and close the job'))}
+                    </button>
+                  </div>
                 )}
               </div>
-            </div>
+            )}
           </>
         );
       })()}

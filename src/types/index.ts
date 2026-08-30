@@ -1120,6 +1120,15 @@ export interface ContractorNote {
   attachmentMimeType?: string;
   attachmentDriveFileId?: string;  // Drive file ID for note attachments uploaded to Drive
   attachmentDriveUrl?: string;     // Drive web view link
+  /**
+   * The closing comment's photos (decision 9, sealed 2026-08-30): ids of the
+   * ContractorPhoto records taken on the closing screen, so the comment and
+   * its pictures land in the task's conversation as ONE message. The only
+   * new field of the whole UI round — it rides inside `contractorNotes`,
+   * which is already persisted, exported, imported and synced, so the backup
+   * trio needs no new entry.
+   */
+  photoIds?: string[];
 }
 
 export interface DataSummary {
@@ -1292,6 +1301,17 @@ export interface ContractorUiStrings {
   whatsLeft?: string;
   sendToOffice?: string;
   halfDoneSaved?: string;
+  /** The closing screen and the task thread (the 2026-08-30 UI round) — optional, same rule. */
+  jobClosedLabel?: string;
+  closingTitle?: string;
+  sendAndClose?: string;
+  closingCommentLabel?: string;
+  closingCommentHint?: string;
+  typeWhatYouDid?: string;
+  /** Names MIN_CLOSE_MEDIA through {n} — change the constant and the sentence follows. */
+  addPicturesRule?: string;
+  thisTaskLabel?: string;
+  tapToOpenLabel?: string;
 }
 
 export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
@@ -1361,6 +1381,15 @@ export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   whatsLeft: 'What is left to do?',
   sendToOffice: 'Send to the office',
   halfDoneSaved: 'Sent — the office will see it as half done.',
+  jobClosedLabel: 'Job closed',
+  closingTitle: 'Closing the job',
+  sendAndClose: 'Send and close the job',
+  closingCommentLabel: 'A comment',
+  closingCommentHint: 'Anything the office should know',
+  typeWhatYouDid: 'Type what you did…',
+  addPicturesRule: 'Add at least {n} pictures to close the job',
+  thisTaskLabel: 'This task',
+  tapToOpenLabel: 'tap to open',
 };
 
 export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
@@ -1430,6 +1459,15 @@ export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   whatsLeft: 'מה נשאר לעשות?',
   sendToOffice: 'שליחה למשרד',
   halfDoneSaved: 'נשלח — המשרד יראה את זה כחצי גמור.',
+  jobClosedLabel: 'העבודה נסגרה',
+  closingTitle: 'סגירת העבודה',
+  sendAndClose: 'שליחה וסגירת העבודה',
+  closingCommentLabel: 'הערה',
+  closingCommentHint: 'כל מה שהמשרד צריך לדעת',
+  typeWhatYouDid: 'כתבו מה עשיתם…',
+  addPicturesRule: 'הוסיפו לפחות {n} תמונות כדי לסגור את העבודה',
+  thisTaskLabel: 'המשימה הזאת',
+  tapToOpenLabel: 'הקישו לפתיחה',
 };
 
 // ─── Main Admin UI Strings ────────────────────────────────────────────────────
@@ -1524,6 +1562,12 @@ export interface MainUiStrings {
   buildingPrefix: string;
   standard: string;
   notStartedOption: string;
+  /** The stage bar's caption on the narrow diagram (decision 5). */
+  stageBarLabel: string;
+  // The task conversation in the drawer's Tasks tab (decisions 8–10)
+  threadTapToOpen: string;
+  threadJobClosed: string;
+  threadWriteToWorker: string;
   // Stage marks (done / pending bookkeeping in the stage picker)
   stagePendingLabel: string;
   stageMarkHint: string;
@@ -2106,6 +2150,10 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   buildingPrefix: 'Building',
   standard: 'Standard',
   notStartedOption: '— Not Started —',
+  stageBarLabel: 'Stages · tap to filter',
+  threadTapToOpen: 'tap to open',
+  threadJobClosed: 'Job closed',
+  threadWriteToWorker: 'Write to the worker…',
   stagePendingLabel: 'half done',
   stageMarkHint: 'Tap a box to cross a stage off · right-click marks it half done',
   stagePendingListTitle: 'Half-done stages',
@@ -2685,6 +2733,10 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   buildingPrefix: 'בניין',
   standard: 'סטנדרטי',
   notStartedOption: '— טרם התחיל —',
+  stageBarLabel: 'שלבים · הקישו לסינון',
+  threadTapToOpen: 'הקישו לפתיחה',
+  threadJobClosed: 'העבודה נסגרה',
+  threadWriteToWorker: 'כתבו לעובד…',
   stagePendingLabel: 'חצי גמור',
   stageMarkHint: 'לחיצה על התיבה מסמנת שלב כגמור · קליק ימני מסמן חצי גמור',
   stagePendingListTitle: 'שלבים חצי גמורים',

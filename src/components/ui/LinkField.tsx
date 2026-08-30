@@ -50,7 +50,10 @@ export function LinkField({
   }
 
   return (
-    <div>
+    /* min-w-0: as a grid or flex CELL this must be allowed to shrink below
+       its content's min-width, or a long placeholder makes the whole column
+       collide with its neighbour (decision 3 — the pair never stacks). */
+    <div className="min-w-0">
       <label className="block text-[10px] font-medium text-gray-500 mb-1 flex items-center gap-1.5">
         <Icon size={11} /> {label}
       </label>
@@ -98,9 +101,16 @@ export function LinkField({
           </button>
         </div>
       ) : (
+        /* The placeholder is a long URL: kept on one line and CLIPPED at the
+           box's edge (a fade, not an ellipsis — decision 3), so the button's
+           min-content width can never push the box past its grid column into
+           its neighbour. */
         <button onClick={() => setEditing(true)}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-gray-200 text-sm text-gray-400 hover:border-[#1e3a5f] hover:text-[#1e3a5f] transition-colors">
-          <Link2 size={13} /> {placeholder ?? `Add a ${label.toLowerCase()}`}
+          className="w-full min-w-0 overflow-hidden flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-gray-200 text-sm text-gray-400 hover:border-[#1e3a5f] hover:text-[#1e3a5f] transition-colors">
+          <Link2 size={13} className="flex-shrink-0" />
+          <span className="min-w-0 flex-1 overflow-hidden whitespace-nowrap text-left fade-clip rtl:text-right">
+            {placeholder ?? `Add a ${label.toLowerCase()}`}
+          </span>
         </button>
       )}
 

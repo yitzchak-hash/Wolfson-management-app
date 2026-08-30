@@ -638,6 +638,24 @@ main > * { min-width: 0; }
 }
 
 /**
+ * Text that slips away behind its box's edge instead of pushing the box wide.
+ *
+ * For the Drive/Zoho link pair (owner's decision 3): the two boxes stay side
+ * by side at every width, so a long address runs to the end of its box and
+ * FADES out at the edge — a fade rather than an ellipsis, and at every width,
+ * unlike `.edge-fade` which marks a phone scroller.
+ */
+.fade-clip {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent);
+}
+/* Mirrored, or the fade lands on the side the reading started from. */
+[dir="rtl"] .fade-clip {
+  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 22px), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - 22px), transparent);
+}
+
+/**
  * A phone lying on its side.
  *
  * The app decides desktop-vs-phone by WIDTH, so at 844x390 it lays out the

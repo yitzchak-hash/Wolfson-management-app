@@ -7,6 +7,7 @@ import { useStore } from '../data/store';
 import { Apartment, BuildingId, isCountableApartment } from '../types';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
 import { StageLegend } from '../components/diagram/StageLegend';
+import { StageBar } from '../components/diagram/StageBar';
 import { ApartmentDetailDrawer } from '../components/apartment/ApartmentDetailDrawer';
 import { QuickAddTaskPanel } from '../components/apartment/QuickAddTaskPanel';
 import { Toast } from '../components/ui/Toast';
@@ -28,11 +29,32 @@ function usePhone(): boolean {
   return phone;
 }
 
+/**
+ * Below 900px the diagram shows ONE building at a time behind big tabs, with
+ * the stage bar in place of the desktop toolbar (owner's decisions 4–5,
+ * sealed 2026-08-30). Matches the `diag` Tailwind screen, and — the standing
+ * rule — a SUBSCRIBED matchMedia test, never a value cached at mount: a
+ * folding phone crosses this line with the page open. Deliberately not the
+ * drawer's 800px plan line; on a sideways Fold (829) the plan sits beside
+ * the details while this page shows one building. That is correct.
+ */
+function useNarrow(): boolean {
+  const [narrow, setNarrow] = useState(() => window.matchMedia('(max-width: 899px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 899px)');
+    const onChange = () => setNarrow(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return narrow;
+}
+
 export function ProjectDiagramPage() {
   const { apartments, stages, buildings, currentUser, bulkUpdateApartments, updateApartment, contractorAssignments, contractors, mainUiStrings: s, pendingOpenAptId, setPendingOpenAptId, pendingFocus, setPendingFocus, currentProjectId, projects, setCurrentProject } = useStore();
   const navigate = useNavigate();
 
   const isPhone = usePhone();
+  const isNarrow = useNarrow();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedBuilding, setSelectedBuilding] = useState<BuildingId | 'all'>('all');
   const [activeStageIds, setActiveStageIds] = useState<string[]>([]);
@@ -190,13 +212,15 @@ export function ProjectDiagramPage() {
   }, [apartments, sortedStages]);
 
   /**
-   * On a phone the diagram shows ONE building — 'all' resolves to the first.
-   * The stored selection is left alone, so going back to a desktop window
-   * restores the all-buildings view exactly as it was.
+   * Below 900px the diagram shows ONE building — 'all' resolves to the first.
+   * The stored selection is left alone, so going back to a wide window
+   * restores the all-buildings view exactly as it was. `phone` on the
+   * diagram itself stays on the REAL phone test: taller rows and bigger
+   * type is a different question from how many buildings are on screen.
    */
   const phoneBuilding: BuildingId | 'all' =
     selectedBuilding === 'all' ? (buildings[0]?.id ?? 'all') : selectedBuilding;
-  const effectiveBuilding = isPhone ? phoneBuilding : selectedBuilding;
+  const effectiveBuilding = isNarrow ? phoneBuilding : selectedBuilding;
   // Chips beyond the stage legend that the phone Filters button should count.
   const phoneFilterCount = activeStageIds.length + (classFilter !== 'all' ? 1 : 0);
 
@@ -330,11 +354,14 @@ export function ProjectDiagramPage() {
 
       <div className="short-scroll flex flex-col h-full overflow-hidden print:h-auto print:overflow-visible">
         {/*
-          Phone bar. One building at a time behind big tabs, and the whole
-          filter block folded into a single Filters button — the diagram used
-          to start a full screen of chips further down.
+          Narrow bar — everything below the diag (900px) line, phones and
+          tablets alike. One building at a time behind big tabs, and the
+          whole filter block folded into a single Filters button — the
+          diagram used to start a full screen of chips further down. Kept in
+          CSS (the diag screen), not inline display from React, so it keeps
+          working while React is deciding.
         */}
-        <div className="md:hidden bg-white border-b border-gray-200 px-2.5 pt-1.5 pb-1.5 flex-shrink-0 print:hidden flex flex-col gap-1.5">
+        <div className="diag:hidden bg-white border-b border-gray-200 px-2.5 pt-1.5 pb-1.5 flex-shrink-0 print:hidden flex flex-col gap-1.5">
           <div className="flex items-center gap-1.5">
             <div className="relative flex-1">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -397,8 +424,21 @@ export function ProjectDiagramPage() {
           </div>
         </div>
 
-        {/* Top bar — hidden on print */}
-        <div className="hidden md:block bg-white border-b border-gray-200 px-5 py-3 flex-shrink-0 print:hidden">
+        {/* The stage bar — the narrow diagram's picture of the whole project,
+            in place of the desktop toolbar's bubbles and the bare-number
+            strip (decision 5). */}
+        <div className="diag:hidden print:hidden">
+          <StageBar
+            stages={sortedStages}
+            apartments={apartments}
+            activeStageIds={bulkMode ? [] : activeStageIds}
+            onToggle={bulkMode ? () => {} : toggleStage}
+            s={s}
+          />
+        </div>
+
+        {/* Top bar — untouched at 900px and up; hidden on print */}
+        <div className="hidden diag:block bg-white border-b border-gray-200 px-5 py-3 flex-shrink-0 print:hidden">
           <div className="flex items-center gap-3 flex-wrap">
             {/* Building selector */}
             <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
@@ -519,8 +559,9 @@ export function ProjectDiagramPage() {
           </div>
         </div>
 
-        {/* Stage progress mini bar — hidden on print */}
-        <div className="hidden md:flex bg-gray-50 border-b border-gray-200 px-5 py-2 items-center gap-3 overflow-x-auto flex-shrink-0 print:hidden">
+        {/* Stage progress mini bar — wide screens only (below 900 the counts
+            live inside the stage bar); hidden on print */}
+        <div className="hidden diag:flex bg-gray-50 border-b border-gray-200 px-5 py-2 items-center gap-3 overflow-x-auto flex-shrink-0 print:hidden">
           {stageStats.map(({ stage, count }) => (
             count > 0 && (
               <div key={stage.id} className="flex items-center gap-1.5 flex-shrink-0">
@@ -666,7 +707,7 @@ export function ProjectDiagramPage() {
       */}
       {filtersOpen && (
         <div
-          className="md:hidden fixed inset-0 z-50 print:hidden"
+          className="diag:hidden fixed inset-0 z-50 print:hidden"
           onClick={() => setFiltersOpen(false)}
           onKeyDown={e => { if (e.key === 'Escape') setFiltersOpen(false); }}
         >

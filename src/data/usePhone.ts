@@ -15,13 +15,27 @@ import { useEffect, useState } from 'react';
  * working while React is deciding, and cannot disagree with the media query.
  */
 export function usePhone(): boolean {
-  const [phone, setPhone] = useState(() =>
-    typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches);
+  return useMedia('(max-width: 767px)');
+}
+
+/**
+ * A subscribed width test for the lines Tailwind does not have.
+ *
+ * Same shape as usePhone — a matchMedia LISTENER, never a value cached at
+ * mount, because a folding phone changes width with the window still open
+ * and anything cached breaks on it first. The query string must be a
+ * constant at the call site (it is read once, in the effect's closure).
+ */
+export function useMedia(query: string): boolean {
+  const [on, setOn] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia(query).matches);
   useEffect(() => {
-    const mq = window.matchMedia('(max-width: 767px)');
-    const onChange = () => setPhone(mq.matches);
+    const mq = window.matchMedia(query);
+    const onChange = () => setOn(mq.matches);
+    // Catch a width that moved between the first render and the subscription.
+    setOn(mq.matches);
     mq.addEventListener('change', onChange);
     return () => mq.removeEventListener('change', onChange);
-  }, []);
-  return phone;
+  }, [query]);
+  return on;
 }
