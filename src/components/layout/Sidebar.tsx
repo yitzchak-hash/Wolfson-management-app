@@ -38,13 +38,13 @@ function useNavItems() {
     { to: '/activity',         icon: Activity,        label: s.navActivity },
     { to: '/settings',         icon: Settings,        label: s.navProjectSettings },
     /**
-     * What the TV sees, from a computer.
-     *
-     * After a divider, because it is not another page of this workspace — it
-     * is a look at a different screen, and arranging what goes on that screen
-     * happens there rather than in a settings form.
+     * What the TV sees, from a computer — Job Board only. The wall is ONE
+     * shared screen whatever workspace you stand in, so a TV tab repeated in
+     * Wolfson and Netiv was two more buttons that opened the same thing
+     * (owner's ruling, 2026-08-27). After a divider, because it is not
+     * another page of this workspace — it is a look at a different screen.
      */
-    { to: '/tv-view', icon: Tv, label: 'TV', divider: true },
+    ...(isGeneral ? [{ to: '/tv-view', icon: Tv, label: 'TV', divider: true }] : []),
   ];
 }
 

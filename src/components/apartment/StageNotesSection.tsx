@@ -168,14 +168,47 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
     return getStageNote(apartmentId, stageId)?.noteText ?? '';
   }
 
+  /**
+   * Who is on this stage.
+   *
+   * Two things were wrong with matching on `stageId` alone. A task's stage is
+   * OPTIONAL in every form that makes one, so the ordinary case — "put Moshe
+   * on this job" without touching the stage field — left every stage reading
+   * "none" while a worker was plainly working. And a finished task counted
+   * the same as a live one, so a stage could name somebody who left months
+   * ago in preference to whoever is there now.
+   *
+   * So: an OPEN task naming this stage wins; then a finished one, because the
+   * record of who did it is still worth showing; and finally, only for the
+   * stage the job is actually AT, an open task carrying no stage at all —
+   * which is what "assigned to this job, right now" means when nobody filled
+   * the field in.
+   */
   function getAssignment(stageId: string) {
+    const mine = contractorAssignments.filter(a => a.apartmentId === apartmentId);
+    return mine.find(a => a.stageId === stageId && !a.completedAt)
+      ?? mine.find(a => a.stageId === stageId)
+      ?? (apt?.currentStageId === stageId
+        ? mine.find(a => !a.stageId && !a.completedAt)
+        : undefined);
+  }
+
+  /**
+   * Writing is STRICT where showing is forgiving.
+   *
+   * `getAssignment` will fall back to an unstaged task so the row can show
+   * who is really here — but picking a worker for a stage must never reach
+   * out and silently re-point some other task that happens to have no stage
+   * on it. This only ever touches a task genuinely on this stage.
+   */
+  function stagedAssignment(stageId: string) {
     return contractorAssignments.find(
-      a => a.apartmentId === apartmentId && a.stageId === stageId
+      a => a.apartmentId === apartmentId && a.stageId === stageId,
     );
   }
 
   function handleContractorChange(stageId: string, contractorId: string) {
-    const existing = getAssignment(stageId);
+    const existing = stagedAssignment(stageId);
     if (!contractorId) {
       if (existing) deleteContractorAssignment(existing.id);
       return;

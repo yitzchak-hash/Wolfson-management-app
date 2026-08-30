@@ -485,7 +485,7 @@ function DayChoiceButton({ id, title, sub, danger, onPick }: {
  * that cannot mean what they say.
  */
 export function PlannerDayDialog({
-  jobName, dayNum, dayCount, fromLabel, toLabel, covered, onCancel, onDone,
+  jobName, dayNum, dayCount, fromLabel, toLabel, toDay, covered, onCancel, onDone,
 }: {
   jobName: string;
   /** Which day of the task the dragged card is (1-based), and how many it has. */
@@ -494,6 +494,8 @@ export function PlannerDayDialog({
   /** "Moshe · Tue 18 Aug" for where it came from and where it landed. */
   fromLabel: string;
   toLabel: string;
+  /** The landing day ALONE — "Friday 28 August" — with nobody's name in it. */
+  toDay: string;
   /** The landing day is already one of this task's days. */
   covered: boolean;
   onCancel: () => void;
@@ -514,7 +516,7 @@ export function PlannerDayDialog({
               sub={`The card from ${fromLabel} comes off and the task drops to ${dayCount - 1} `
                 + `day${dayCount - 1 === 1 ? '' : 's'}. Nothing else about the task changes.`} />
             <Choice id="new" title="New task on this day"
-              sub={`Opens the task form for ${jobName} starting ${toLabel} — a separate task.`} />
+              sub={`A completely separate task on ${toDay}.`} />
           </>
         ) : (
           <>
@@ -522,13 +524,12 @@ export function PlannerDayDialog({
               This card is one day of a task that covers {dayCount} days.
             </p>
             <Choice id="move" title="Move this day"
-              sub={`The work planned for ${fromLabel} happens on ${toLabel} instead. `
-                + 'The day numbers follow the calendar and renumber themselves.'} />
+              sub={`The work planned for ${fromLabel} happens on ${toLabel} instead.`} />
             <Choice id="add" title="Add this day to the existing task"
               sub={`${fromLabel} stays as well — the task grows to ${dayCount + 1} days, `
                 + 'and the worker\'s schedule grows with it.'} />
             <Choice id="new" title="New task on this day"
-              sub={`Opens the task form for ${jobName} starting ${toLabel} — a completely separate task.`} />
+              sub={`A completely separate task on ${toDay}.`} />
           </>
         )}
       </div>

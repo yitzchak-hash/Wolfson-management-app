@@ -30,6 +30,71 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-09-19',
+    title: 'The job window: days on tasks, the worker on the stage',
+    items: [
+      {
+        title: 'A task that takes days says so, and can be changed',
+        body: 'The Tasks tab in a job window now shows "3 days" on a task '
+          + 'that takes three, and opening it to edit gives you the same day '
+          + 'picker every other task form has — already set to the days it '
+          + 'has. Editing one used to quietly collapse it back to a single '
+          + 'day.',
+        demo: 'tap',
+      },
+      {
+        title: 'The stage shows who is actually on it',
+        body: 'A stage said "none" whenever the worker\'s task did not have '
+          + 'that stage filled in — which is most of the time, since the '
+          + 'stage box is optional. The stage the job is at now names the '
+          + 'worker who is on the job, and a finished task no longer hides a '
+          + 'live one.',
+        demo: 'list',
+      },
+      {
+        title: 'History does not break any more',
+        body: 'Opening History on a job could show the error screen. One old '
+          + 'entry had lost the name of who did it, and that was enough to '
+          + 'take the whole tab down. It copes now, and new entries always '
+          + 'carry a name.',
+        demo: 'sparkle',
+      },
+    ],
+  },
+  {
+    date: '2026-09-18',
+    title: 'Downloading a plan asks what you want in it',
+    items: [
+      {
+        title: 'Two questions, then the file',
+        body: 'Press Download on a plan and it asks what should be in it — '
+          + 'with the markings (the snag pins and everything drawn on the '
+          + 'sheet) or just the clean plan — and only then whether you want '
+          + 'a PDF or pictures. The file is named after the job and the plan '
+          + 'instead of arriving called "download".',
+        demo: 'tap',
+      },
+      {
+        title: 'And it works on every plan now',
+        body: 'The PDF button used to need somebody to have saved a marked-up '
+          + 'version to Drive first, so on an ordinary plan it simply did '
+          + 'nothing — that is fixed. All four answers are made right in the '
+          + 'browser, so a download works with no internet and without saving '
+          + 'anything first. Asking for the clean PDF hands back the '
+          + 'architect\'s original file untouched.',
+        demo: 'list',
+      },
+      {
+        title: 'Print asks the same question',
+        body: 'Print now asks the same thing before it builds the sheet — '
+          + 'with the markings, or just the plan — and "with the markings" '
+          + 'means the same on paper as in a file: the drawings AND the snag '
+          + 'pins. It used to print the drawings only, and never the pins.',
+        demo: 'sparkle',
+      },
+    ],
+  },
+  {
     date: '2026-09-17',
     title: 'The goals board, on the board',
     items: [
@@ -58,6 +123,14 @@ export const WHATS_NEW: WhatsNewEntry[] = [
           + 'from the pencil: the tile grid, the summary strip, a progress '
           + 'ring, a big number, and a slim progress bar — clicking a drawn '
           + 'one opens the full goals page.',
+        demo: 'tap',
+      },
+      {
+        title: 'One TV, one button',
+        body: 'The TV tab in the left bar shows only on the Job Board now — '
+          + 'the wall is one shared screen whichever workspace you are in, '
+          + 'so Wolfson and Netiv no longer carry a second and third button '
+          + 'that opened the same thing.',
         demo: 'tap',
       },
       {

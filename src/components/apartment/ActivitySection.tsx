@@ -46,13 +46,25 @@ export function ActivitySection({ logs, autoBackup, backupSnapshots, onRestore }
         const hasNoteContent = (log.actionType === 'note' || log.actionType === 'contractor_note' || log.fieldChanged === 'generalNotes') && log.newValue;
         const hasStageChange = log.fieldChanged === 'currentStageId';
 
+        /**
+         * A history entry whose name did not survive the round trip.
+         *
+         * `userName` is REQUIRED by the type and was still undefined on real
+         * records: a task created without a `createdByName` writes the field
+         * as undefined, and `fsSet` turns an undefined into a delete — so the
+         * stored entry has no name at all, and `.charAt(0)` on it took the
+         * whole History tab down with it. The type cannot protect a value
+         * that came back from the cloud; the render has to cope.
+         */
+        const who = log.userName || s.unknownUser;
+
         return (
           <div key={log.id} className="flex gap-3 text-xs">
             <div className="flex-shrink-0 w-7 h-7 rounded-full bg-[#1e3a5f]/10 flex items-center justify-center text-[#1e3a5f] font-bold">
-              {log.userName.charAt(0)}
+              {who.charAt(0)}
             </div>
             <div className="flex-1 min-w-0">
-              <span className="font-medium text-gray-800">{log.userName}</span>
+              <span className="font-medium text-gray-800">{who}</span>
               {' '}
               <span className="text-gray-600">{actionLabel(log)}</span>
               {log.apartmentNumber && (

@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { DayStretch, workingRun, stretchDays, nextWorkingDay } from '../../data/taskDays';
+import {
+  DayStretch, workingRun, stretchDays, nextWorkingDay, stretchesFromDays,
+} from '../../data/taskDays';
 
 /**
  * "How many days" — the multi-day block, shared by every task form.
@@ -23,14 +25,21 @@ import { DayStretch, workingRun, stretchDays, nextWorkingDay } from '../../data/
  * pinned to the last (the model's standing invariant). Reset the picker by
  * changing its `key`.
  */
-export function TaskDaysPicker({ start, onDaysChange }: {
+export function TaskDaysPicker({ start, initialDays, onDaysChange }: {
   start: string;
+  /**
+   * The days a task ALREADY covers, when this is editing one rather than
+   * making one. Without it the editor opened showing "1 day" over a
+   * three-day task, and saving threw the other two away.
+   */
+  initialDays?: string[];
   onDaysChange: (days: string[]) => void;
 }) {
-  const [count, setCount] = useState(1);
-  const [friday, setFriday] = useState(false);
-  const [noncon, setNoncon] = useState(false);
-  const [second, setSecond] = useState<DayStretch>({ start: '', days: 1 });
+  const seed = useMemo(() => stretchesFromDays(initialDays ?? []), [initialDays]);
+  const [count, setCount] = useState(seed.count);
+  const [friday, setFriday] = useState(seed.friday);
+  const [noncon, setNoncon] = useState(!!seed.second);
+  const [second, setSecond] = useState<DayStretch>(seed.second ?? { start: '', days: 1 });
 
   const stretches: DayStretch[] = useMemo(() => {
     if (!start) return [];

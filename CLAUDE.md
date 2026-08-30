@@ -22,33 +22,44 @@ The entire admin UI and contractor portal are fully bilingual (English/Hebrew wi
 ## Repository
 `yitzchak-hash/wolfson-management-app` — development branch: `claude/blissful-cray-spTFY`
 
-### STANDING RULE — every round ends on the production branch
+### STANDING RULE — ONE BRANCH. Commit straight to production.
 **There is no branch called `main`.** The repo's default branch — the one Vercel
 deploys to `wolfson-management-app.vercel.app` — is
 **`claude/blissful-cray-spTFY`**. When the owner says "push to main", that is
 the branch he means: work sitting anywhere else only ever produces a PREVIEW
 build behind Vercel's sign-in.
 
-So, at the end of every round, without being asked again:
-1. commit everything and push the working branch;
-2. **fast-forward `claude/blissful-cray-spTFY` to it** and push that too.
+**OWNER RULING (2026-08-27): work on that branch DIRECTLY.** No per-session
+working branch, no fast-forward dance. The old two-branch habit put two rows
+on the Vercel deployments page for every single commit — a Preview and a
+Production — which is most of what made that page read as "a big mess", and
+a branch that forks for a day inherits whatever platform limit was fixed
+meanwhile (see the 12-function rule below: the Flip/iPad branch was red for
+a day for exactly that reason). One branch, one row, one truth.
 
-Before pushing, prove nothing is being dropped — do not assume:
-- `git merge-base --is-ancestor origin/claude/blissful-cray-spTFY HEAD`
-  must succeed. If it does, the push is a fast-forward and no commit can be
-  lost. **If it does NOT, stop and merge** — never force.
-- Check the other live branches for content that exists nowhere else:
-  `comm -23 <(git ls-tree -r --name-only origin/<branch> | sort)
-            <(git ls-tree -r --name-only HEAD | sort)`
-  Old branches carry hundreds of commits whose SHAs differ because they were
-  squashed in — that is not lost work, and a commit count says nothing. The
-  file list is what answers the question.
+So every round: commit on `claude/blissful-cray-spTFY` and push it. Before
+pushing, `git merge-base --is-ancestor origin/claude/blissful-cray-spTFY HEAD`
+must succeed — if it does not, another session pushed; **merge, never force**.
 
-Audited 2026-08-29: `claude/tzviair-platform` has 205 commits not reachable
-from the production branch and **zero files** missing from it;
-`claude/firebase-save-diagnostics-Px3rx` has 57 and one missing file,
-`SYNC_REPORT.md`, a June diagnostics note rather than code (its fixes — the
-cloud-sync badge, dropping `persistentLocalCache` — are all in the tree).
+**When another session DOES need its own branch** (a parallel round, a design
+session), it merges PRODUCTION INTO ITSELF while it works and its branch is
+merged back the moment its round lands. Judge such a branch by FILES, never
+by commit count:
+  `comm -13 <(git ls-tree -r --name-only origin/claude/blissful-cray-spTFY | sort) \
+            <(git ls-tree -r --name-only origin/<branch> | sort)`
+Old branches carry hundreds of commits whose SHAs differ because they were
+squashed in — that is not lost work, and a commit count says nothing.
+
+Audited 2026-08-27, everything folded into production and re-checked by that
+file test: `claude/tzviair-platform` (205 commits) and
+`claude/firebase-save-diagnostics-Px3rx` (57) hold **nothing** production
+lacks except `api/health.js`, which was deliberately RETIRED to stay inside
+Vercel's 12-function limit — merging either branch would put it back and turn
+every deployment red again. Their one genuine document was rescued to
+`docs/SYNC_REPORT.md` (a June 2026 report on how the platforms do sync).
+`claude/jobs-notebook-drag-drop-hf5xlz`, `claude/skill-installation-h5hfp0`,
+`claude/mobile-buildings-domain-il3khp` and `claude/tv-green-border-scaling-rknz7j`
+are strict ancestors of production — dead weight, safe to delete.
 
 ## Deployment
 - **Hosting**: Vercel (connected to GitHub repo, auto-deploys on push)
@@ -5321,6 +5332,29 @@ production bundle. Noted on the way: the TV dashboard's add-widget writes
 TvDashboard only sorts by z). If the crash recurs, the CrashScreen's copied
 text is the next step.
 
+
+---
+
+# v2 — the dead-sidebar hunt (round 2) and NAV WATCH
+
+The owner's refined report: the sidebar links REACT (address moves) but the
+page does not change, on the Job Board workspace, on his machine only. Ruled
+out by experiment against his real board: element coverage (elementFromPoint
+sweeps), a standing invisible backdrop (interaction sweeps with cleanup),
+and React Router v7 transition STARVATION — `scratchpad/navstarve.mjs`
+injects presence-peer churn at up to 60Hz during a sidebar click and the
+navigation still commits.
+
+Two things shipped from the round:
+- **The TV sidebar tab is Job Board-only** (`isGeneral` gate in
+  `useNavItems`) — one wall, one door, per the owner.
+- **NAV WATCH** (`AppLayout`): open the site with `?debugnav=1` and every
+  in-app link click is watched — if 1.5s later the address has not moved, a
+  red banner paints the facts (target, where the click landed, the history
+  stamp, fullscreen state, recent page errors). Zero cost without the flag.
+  `scratchpad/navwatch.mjs` proves silent-when-working, loud-when-blocked,
+  absent-without-flag. The next report of dead buttons starts from that
+  banner's photograph, not from a guess.
 ---
 
 # v2 — the Flip and the iPad round
@@ -5425,3 +5459,152 @@ capability). When the owner says to check his gallery notes, READ the
 artifact and work the pins. `docs/DEVICE-GALLERY-PROMPT.md` is the portable
 version for other projects. The newest-phone sweeps: iPhone 17 Pro is
 `W=402 H=874`, Galaxy S25 Ultra `W=384 H=832` — both clean 2026-08-27.
+
+---
+
+# v2 — the plan download, asked in two questions
+
+## What was broken
+Download was two buttons and neither answered the real question. **PDF only
+worked once somebody had SAVED a marked-up version to Drive** — it opened
+`drive.google.com/uc?export=download&id=…` for `versions[0]`, so on an
+ordinary plan (nobody had marked it up) it did nothing but toast an
+apology: the owner's "download pdf doesn't work anywhere". **Pictures**
+always burnt the drawings in with no way to say otherwise, and left the
+snag PINS out of the file completely. Every word of the sheet was hardcoded
+English, as was the many-pages `window.confirm`.
+
+## The shape now
+`Download` opens ONE sheet that walks two questions, in the order somebody
+actually thinks in: **what goes in it** (with the markings / just the plan),
+then **what kind of file** (PDF / pictures), then — only for a set past
+`BULK_LIMIT` — how much of it. Every string comes from `MainUiStrings`
+(`dlTitle` … `dlPagesThis`, both presets), so the sheet is Hebrew when the
+app is.
+
+`src/data/planExport.ts` is the mechanism, and all four answers are made
+**in the browser from bytes it already has** (planCache) — no Drive, no
+upload backend, nothing to save first, works on a train:
+
+| | PDF | Pictures |
+|---|---|---|
+| clean | the ORIGINAL file, byte for byte | pages rendered plain → PNG |
+| with markings | pages rendered with ink + pins → embedded in a PDF (pdf-lib) | the same, as PNG |
+
+Rules worth keeping:
+- **The clean PDF is never re-rendered** — it is the architect's own file,
+  so it keeps its vector text and its own layers. The harness asserts the
+  byte count matches the original exactly.
+- **The marked PDF is FLATTENED, and that is deliberate.** The LAYERED
+  vector one — markup on a switchable OCG — is `api/plan-annotate.js` and is
+  what Save files into Annotated Plans. A download is "give me a file to
+  send someone now"; it must not depend on the server being reachable.
+- **Pins are drawn on the FIRST exported page only.** A `PlanPin` is
+  anchored to the apartment, not to a page (that is how the overlay draws
+  it), so repeating them on every page would invent snags that do not exist.
+  `drawPins` reproduces the overlay's geometry — the point is at
+  `xPct/yPct`, the numbered circle sits ABOVE it on a short stem — or an
+  exported plan would mark a different spot from the one on screen.
+- **`exportScale` caps the canvas** (long edge ~2400px, area 24 MP). An A0
+  sheet at a naive scale asks for a hundred million pixels, the allocation is
+  refused, and that shows up as a BLANK page rather than an error.
+- **The filename is set on our own anchor, not through file-saver.** That
+  library dispatches its own synthetic MouseEvent and the name never
+  survived: every plan arrived called "download".
+- **Several files from one press are spaced 350ms apart** — a browser drops
+  a burst of automatic downloads silently.
+
+## Print asks the same question, and means the same thing by it
+`print(withMarkup, pages)` runs off the SAME sheet: pressing Print opens it
+at the first question and, because paper IS the format, goes straight to the
+paper once answered (no second question; the pages question still appears for
+a set past `BULK_LIMIT`, and Back from it returns to `what` rather than to a
+format step that was never shown). "With the markings" therefore means the
+same on paper as in a file — the ink AND the pins — or the two exports would
+disagree about what a marking is. `Ctrl/⌘+P` goes through the same door, so
+the keyboard and the button can never print different things. The sheet's
+header, its two toasts and the Print label all come from the strings object
+now, and the interpolated plan name is run through `printEsc`.
+
+## Escape backs out of the PLAN, not the apartment behind it
+The annotator's keydown moved to the **capture** phase and stops the key
+when it consumed it. The drawer hosting the plan pane has its own Escape on
+window, registered first, so closing the download sheet used to close the
+whole apartment in the same press.
+
+Harness: `scratchpad/plandownload.mjs` (14 checks) — a real 2-page PDF via
+pdf-lib on `/api/drive-fetch` (the planphone precedent), two seeded pins,
+all four answers driven through the real sheet, the clean PDF's byte count
+against the original, the marked picture proven heavier than the clean one
+(the pins landed), and the sheet in Hebrew. Two traps it paid for: a
+`waitForEvent('download')` armed AFTER the click misses the clean PDF, which
+is handed over in a millisecond and reads as "no file arrived"; and
+Playwright reports a blob download's `suggestedFilename()` as "download"
+whatever the anchor says, so the honest measurement is the value assigned to
+the `download` attribute.
+
+---
+
+# v2 — the job window round (days on a task, the worker on a stage, a nameless history entry)
+
+## A history entry with no name crashed the whole tab
+`ActivitySection` rendered `log.userName.charAt(0)` for the avatar. `fsSet`
+turns an `undefined` value into a `deleteField()`, so an activity log written
+with no `userName` — which is what `addContractorAssignment` produced for a
+task created without a `createdByName` — came back from Firestore with the
+field GONE, and the History tab threw `Cannot read properties of undefined
+(reading 'charAt')`, taking the drawer down with it. Two-sided fix, and both
+sides are the rule:
+- **The writer always supplies a name**: `a.createdByName || currentUser?.name
+  || 'Office'`. A log line nobody can attribute is not a log line.
+- **The reader never trusts a stored optional**: `const who = log.userName ||
+  s.unknownUser` (a real MainUiStrings key in both presets, not a hardcoded
+  word). Any field that has ever been optional can arrive absent from an old
+  record, and a render that assumes otherwise is one deleted field from a
+  white screen.
+
+## The task editor opens on the START day, never the due date
+`dueDate` is pinned to the LAST day by the multi-day model, so seeding the
+editor's date box from it shifted a three-day run three days forward the
+moment somebody opened it to look. `startTaskEdit` seeds from
+`daysOf(task)[0]`; `saveTaskEdit` writes `...daysFields(dueDate, days)`, which
+re-pins the due date. Anything that EDITS a dated task reads the start; only
+sorting, badges and "late" read `dueDate`.
+
+## A saved day list reads back into the picker's boxes
+`stretchesFromDays(days)` in `taskDays.ts` — pure, tested offline. The picker's
+controls are "how many days, from here"; a task on disk is a list of dates, so
+opening one for editing has to work out what to put in the boxes or the editor
+shows "1 day" over a task covering three and saving throws two away. It takes
+the longest working run that is a PREFIX of the list (no-Friday tried first,
+since that is the default) and hands the remainder to the second stretch; a
+list nobody could have built from two stretches reports `exact: false` and the
+caller keeps the stored days until something is actually changed.
+`TaskDaysPicker` gained `initialDays` and is reset by bumping its `key`.
+The drawer's Tasks tab also shows a `data-task-days-chip` ("3 days") on the
+card itself, so the day count is visible without opening the editor.
+
+## Reading a stage's worker forgives; writing one does not
+The drawer's stage notes said "assigned a worker: none" while somebody was
+plainly working that stage — the lookup demanded an OPEN task carrying that
+exact `stageId`, which a task created before the stage was picked never has.
+Split in two:
+- `getAssignment` (DISPLAY) falls back: open-on-this-stage → any-on-this-stage
+  → an open task with no stage at all, and that last one only when the
+  apartment's `currentStageId` IS this stage.
+- `stagedAssignment` (WRITE, used by `handleContractorChange`) stays strict, so
+  changing the worker on one stage can never silently re-point a task that
+  belongs to another.
+A forgiving read and a strict write are two different questions; one function
+answering both is how a display fix becomes a data bug.
+
+## The day dialog says what will happen, and nothing else
+Per the owner: the renumbering explainer is gone (day numbers are labels
+derived from calendar order — saying so out loud helps nobody mid-drag), and
+both new-task choices read "A completely separate task on Friday 28 August" —
+the real day, from `dayName()` in `PlannerWidget`, passed in as `toDay`.
+
+Harness: `scratchpad/drawerround.mjs` (8 checks) — the dialog's wording and
+named day, the days chip, the editor opening on the run's real start with the
+right readout, the stage's worker showing, and a nameless log rendering
+instead of crashing.

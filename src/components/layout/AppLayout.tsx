@@ -68,6 +68,63 @@ export function AppLayout() {
   }, [location, currentProjectId]);
 
 
+  /**
+   * NAV WATCH — a diagnostic for the owner's "the sidebar buttons don't do
+   * anything" report, which no replay of his data reproduces. Armed only by
+   * opening the site with `?debugnav=1`. It watches every in-app link click:
+   * if 1.5s later the address has not reached the link's target, a red
+   * banner paints what actually happened — where the click landed, what the
+   * address says, the history entry's stamp, fullscreen state, and the last
+   * few page errors — so the fault names itself on the one machine that
+   * shows it. Zero cost when the flag is absent.
+   */
+  useEffect(() => {
+    if (!new URLSearchParams(window.location.search).has('debugnav')) return;
+    const errs: string[] = [];
+    const onErr = (e: ErrorEvent) => { errs.push(String(e.message ?? e).slice(0, 180)); };
+    const onRej = (e: PromiseRejectionEvent) => { errs.push(('rejection: ' + String(e.reason)).slice(0, 180)); };
+    window.addEventListener('error', onErr);
+    window.addEventListener('unhandledrejection', onRej);
+    const onClick = (e: MouseEvent) => {
+      const el = e.target as HTMLElement;
+      const a = el.closest?.('a[href^="/"]') as HTMLAnchorElement | null;
+      const hitDesc = (() => {
+        const at = document.elementFromPoint(e.clientX, e.clientY);
+        if (!at) return 'nothing';
+        const cls = String((at as HTMLElement).className ?? '').split(' ').slice(0, 3).join('.');
+        return `${at.tagName.toLowerCase()}${cls ? '.' + cls : ''}`;
+      })();
+      if (!a) return;
+      const target = a.getAttribute('href') ?? '';
+      const from = window.location.pathname;
+      if (!target || target === from) return;
+      window.setTimeout(() => {
+        const now = window.location.pathname;
+        if (now !== from) return;    // the navigation happened — all good
+        const d = document.createElement('div');
+        d.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;'
+          + 'background:#dc2626;color:#fff;padding:10px 14px;border-radius:12px;'
+          + 'font:600 12px/1.5 system-ui;white-space:pre-wrap;cursor:pointer;direction:ltr';
+        d.textContent = 'NAV WATCH — the click did not navigate.\n'
+          + `clicked: ${target}   still on: ${now}\n`
+          + `click landed on: ${hitDesc}\n`
+          + `history stamp: ${JSON.stringify(window.history.state ?? null).slice(0, 160)}\n`
+          + `fullscreen: ${!!document.fullscreenElement}   `
+          + `errors: ${errs.slice(-3).join(' | ') || 'none'}\n`
+          + '(tap this banner to dismiss — send a photo of it to Claude)';
+        d.onclick = () => d.remove();
+        document.body.appendChild(d);
+        window.setTimeout(() => d.remove(), 60000);
+      }, 1500);
+    };
+    document.addEventListener('click', onClick, true);
+    return () => {
+      document.removeEventListener('click', onClick, true);
+      window.removeEventListener('error', onErr);
+      window.removeEventListener('unhandledrejection', onRej);
+    };
+  }, []);
+
   // If the user was already logged in (skipped the login page), Firebase sync
   // never gets triggered by the login action — start it here on first mount.
   useEffect(() => {

@@ -1877,6 +1877,33 @@ export interface MainUiStrings {
   stageNameEnglishPlaceholder: string;
   // Apartment Drawer extra
   downloadLabel: string;
+  /** The plan download's two questions — see PlanAnnotator's download sheet. */
+  dlTitle: string;
+  dlWhatStep: string;
+  dlWithMarkup: string;
+  dlWithMarkupHint: string;
+  dlClean: string;
+  dlCleanHint: string;
+  dlFormatStep: string;
+  dlPdf: string;
+  dlPdfHint: string;
+  dlImages: string;
+  dlImagesHint: string;
+  dlBack: string;
+  dlWorking: string;
+  dlSaved: string;
+  dlFailed: string;
+  dlPagesTitle: string;
+  dlPagesAll: string;
+  dlPagesThis: string;
+  dlPrintTitle: string;
+  dlPrintBuilding: string;
+  dlPrintBlocked: string;
+  dlMarksWord: string;
+  dlPagesWord: string;
+  printPlanLabel: string;
+  unknownUser: string;
+  daysWord: string;
   settingsLabel: string;
   statusLabel: string;
   hideLabel: string;
@@ -2431,6 +2458,32 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   stageNameEnglishPlaceholder: 'English name',
   // Apartment Drawer extra
   downloadLabel: 'Download',
+  dlTitle: 'Download this plan',
+  dlWhatStep: 'What should be in it?',
+  dlWithMarkup: 'With the markings',
+  dlWithMarkupHint: 'The snag pins and everything drawn on the plan, included in the file.',
+  dlClean: 'Just the plan',
+  dlCleanHint: 'The original sheet on its own, nothing added.',
+  dlFormatStep: 'As what?',
+  dlPdf: 'PDF',
+  dlPdfHint: 'One file, every page in it.',
+  dlImages: 'Pictures',
+  dlImagesHint: 'A PNG for each page.',
+  dlBack: 'Back',
+  dlWorking: 'Preparing the download…',
+  dlSaved: 'Saved',
+  dlFailed: 'The download did not work. Try again.',
+  dlPagesTitle: 'How much of it?',
+  dlPagesAll: 'Every page',
+  dlPagesThis: 'Only the page I am on',
+  dlPrintTitle: 'Print this plan',
+  dlPrintBuilding: 'Building the print sheet…',
+  dlPrintBlocked: 'Your browser blocked the print window.',
+  dlMarksWord: 'Markings',
+  dlPagesWord: 'Pages',
+  printPlanLabel: 'Print',
+  unknownUser: 'Someone',
+  daysWord: 'days',
   settingsLabel: 'Settings',
   statusLabel: 'Status',
   hideLabel: 'Hide',
@@ -2984,6 +3037,32 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   stageNameEnglishPlaceholder: 'שם באנגלית',
   // Apartment Drawer extra
   downloadLabel: 'הורד',
+  dlTitle: 'הורדת התוכנית',
+  dlWhatStep: 'מה ייכלל בקובץ?',
+  dlWithMarkup: 'כולל הסימונים',
+  dlWithMarkupHint: 'נעצי הליקויים וכל מה שסומן על התוכנית, בתוך הקובץ.',
+  dlClean: 'התוכנית בלבד',
+  dlCleanHint: 'הגיליון המקורי, בלי שום תוספת.',
+  dlFormatStep: 'באיזה פורמט?',
+  dlPdf: 'PDF',
+  dlPdfHint: 'קובץ אחד עם כל העמודים.',
+  dlImages: 'תמונות',
+  dlImagesHint: 'קובץ PNG לכל עמוד.',
+  dlBack: 'חזרה',
+  dlWorking: 'מכין את ההורדה…',
+  dlSaved: 'נשמר',
+  dlFailed: 'ההורדה לא הצליחה. נסו שוב.',
+  dlPagesTitle: 'איזה חלק?',
+  dlPagesAll: 'כל העמודים',
+  dlPagesThis: 'רק העמוד שאני נמצא בו',
+  dlPrintTitle: 'הדפסת התוכנית',
+  dlPrintBuilding: 'מכין את גיליון ההדפסה…',
+  dlPrintBlocked: 'הדפדפן חסם את חלון ההדפסה.',
+  dlMarksWord: 'סימונים',
+  dlPagesWord: 'עמודים',
+  printPlanLabel: 'הדפסה',
+  unknownUser: 'מישהו',
+  daysWord: 'ימים',
   settingsLabel: 'הגדרות',
   statusLabel: 'סטטוס',
   hideLabel: 'הסתר',

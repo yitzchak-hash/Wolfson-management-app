@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'rea
 import { Mic, X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer, Phone as PhoneIcon, Loader2 } from 'lucide-react';
 import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel } from '../../types';
 import { useStore } from '../../data/store';
+import { TaskDaysPicker, daysFields } from '../tasks/TaskDaysPicker';
+import { daysOf } from '../../data/taskDays';
 import { usePhone } from '../../data/usePhone';
 import { VoiceRecorderButton, VoiceMemoPlayer } from '../ui/VoiceMemo';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
@@ -368,6 +370,17 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [prevStageId, setPrevStageId] = useState<string>('');
   const [drawerEditingTaskId, setDrawerEditingTaskId] = useState<string | null>(null);
   const [drawerEditFields, setDrawerEditFields] = useState<{ taskDescription: string; dueDate: string; stageId: string; priority: string }>({ taskDescription: '', dueDate: '', stageId: '', priority: '' });
+  /**
+   * The days an edited task covers.
+   *
+   * This editor was written before a task could take days, so it saved
+   * `dueDate` alone — opening a three-day task here and pressing save quietly
+   * collapsed it to one. It carries the same picker every other task form
+   * has now, and `daysEpoch` re-keys it so switching tasks cannot leave the
+   * last one's days in the box.
+   */
+  const [drawerEditDays, setDrawerEditDays] = useState<string[]>([]);
+  const [drawerDaysEpoch, setDrawerDaysEpoch] = useState(0);
   const [drawerEditAttachments, setDrawerEditAttachments] = useState<TaskAttachment[]>([]);
   const [drawerEditProgress, setDrawerEditProgress] = useState<number | null>(null);
   const [keepHistoryModal, setKeepHistoryModal] = useState(false);
@@ -658,18 +671,29 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     setDrawerEditingTaskId(task.id);
     setDrawerEditFields({
       taskDescription: task.taskDescription,
-      dueDate: task.dueDate ?? '',
+      /**
+       * The date box means the day the work STARTS, in every task form.
+       *
+       * `dueDate` is the model's LAST day, so seeding the box with it and
+       * then counting days forward from there shifted a three-day task three
+       * days into the future the moment somebody opened it to edit. Saving
+       * recomputes `dueDate` from the run, so nothing else has to change.
+       */
+      dueDate: daysOf(task)[0] ?? '',
       stageId: task.stageId ?? '',
       priority: task.priority ?? '',
     });
     setDrawerEditAttachments(task.attachments ?? []);
+    setDrawerEditDays(daysOf(task));
+    setDrawerDaysEpoch(e => e + 1);
   }
 
   function saveTaskEdit() {
     if (!drawerEditingTaskId) return;
     updateContractorAssignment(drawerEditingTaskId, {
       taskDescription: drawerEditFields.taskDescription,
-      dueDate: drawerEditFields.dueDate || null,
+      // The whole run, not just the last day — the model's standing rule.
+      ...daysFields(drawerEditFields.dueDate, drawerEditDays),
       stageId: drawerEditFields.stageId || null,
       priority: (drawerEditFields.priority as TaskPriority) || undefined,
       attachments: drawerEditAttachments.length > 0 ? drawerEditAttachments : undefined,
@@ -2049,6 +2073,14 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                   {a.taskDescription}
                                 </p>
                                 <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                  {/* A task that takes days says so here, or the
+                                      card claims a one-day job. */}
+                                  {daysOf(a).length > 1 && (
+                                    <span data-task-days-chip
+                                      className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#1e3a5f]/10 text-[#1e3a5f]">
+                                      {daysOf(a).length} {ui.daysWord}
+                                    </span>
+                                  )}
                                   {a.dueDate && (
                                     <span className="flex items-center gap-0.5 text-[10px] text-gray-400">
                                       <CalendarDays size={9} /> {format(parseISO(a.dueDate), 'MMM d')}
@@ -2154,6 +2186,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                 className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                               />
                             </div>
+                            <TaskDaysPicker
+                              key={`${a.id}:${drawerDaysEpoch}`}
+                              start={drawerEditFields.dueDate}
+                              initialDays={drawerEditDays}
+                              onDaysChange={setDrawerEditDays}
+                            />
                             <select
                               value={drawerEditFields.priority}
                               onChange={e => setDrawerEditFields(f => ({ ...f, priority: e.target.value }))}
