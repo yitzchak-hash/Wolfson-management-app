@@ -25,22 +25,30 @@ const LOCKED = [
     pics: [['ref-links-now.png', 'Before — the two addresses print on top of each other'],
            ['ref-links-fixed.png', 'After — side by side, each fading out at its own edge']],
   },
+  {
+    n: 4, title: 'Below 900 pixels the diagram shows one building at a time',
+    body: `Big <strong>A1 / A2 / A3</strong> tabs pick the building — the control your phone already uses, raised to tablets. Above 900 pixels nothing changes: wide monitors keep showing all three buildings side by side. This one decision is what takes an apartment cell from <strong>75 pixels wide to 311</strong>, which is the difference between a name reading &ldquo;G&hellip;&rdquo; and reading &ldquo;Goldstein, Menachem &middot; Concealed Units Installed&rdquo;.`,
+    owner: 'option 2, apply it below 900',
+    pics: [['b-now.png', 'Today at iPad width — three buildings, no readable names'],
+           ['b-opt2.png', 'Approved — one building, every name readable']],
+  },
+  {
+    n: 5, title: 'The stage bubbles become one stage bar, and the loose row of numbers goes away',
+    body: `Below 900 pixels the top of the diagram becomes: <strong>search plus one Filters button</strong> (the type filter, Changes, Bulk update, Print and clear all live inside it, as they already do on the phone), the building tabs, and then <strong>one bar showing the whole project</strong> — each stage a block sized by how many apartments are in it, tap a block to filter to that stage. The eight wrapping bubbles and the separate row of bare numbers are both replaced by that bar, so the counts finally sit inside the thing they count. Above 900 pixels the toolbar stays exactly as it is today.`,
+    pics: [['b-opt2.png', 'The approved layout — the bar reads as the project’s state at a glance']],
+  },
 ];
 
 const AREAS = [
   { key: 'A', title: 'The plan in the apartment window', state: 'done', link: PROPOSAL_A,
     blurb: 'Where the plan sits on each screen, and the row of tabs above it.',
     pins: [] },
-  { key: 'B', title: 'The building diagram on a tablet', state: 'open',
+  { key: 'B', title: 'The building diagram on a tablet', state: 'done',
     link: 'https://claude.ai/code/artifact/3226a721-b537-4fdb-ad7f-4b38ce4e8151',
     blurb: 'The row of coloured stage bubbles, and three buildings squeezed side by side on a screen that is not wide enough for them.',
-    pins: [
-      { n: 3, crop: 'pincrop-3.png', where: 'iPad upright · building diagram',
-        text: 'bubbles ui part needs to be rethought for mobile from scratch' },
-      { n: 4, crop: 'pincrop-4.png', where: 'iPad upright · building diagram',
-        text: 'too smushed — maybe we should use a selector for 1 building at a time' },
-    ] },
-  { key: 'C', title: 'How the worker closes a job', state: 'queued',
+    pins: [] },
+  { key: 'C', title: 'How the worker closes a job', state: 'open',
+    link: 'https://claude.ai/code/artifact/2cd1d84f-e771-497f-b626-5ee7c8b8e688',
     blurb: 'Two Close job buttons on one screen, and closing a job becoming its own clean screen instead of a panel inside the task.',
     pins: [
       { n: 2, crop: 'pincrop-2.png', where: 'Fold, opened sideways · the worker’s page',
@@ -60,7 +68,7 @@ const lockedHtml = LOCKED.map(d => `
   </div>`).join('');
 
 const stateTag = s => s === 'done' ? '<span class="tag good">Settled</span>'
-  : s === 'open' ? '<span class="tag pin">Three options waiting for you</span>'
+  : s === 'open' ? '<span class="tag pin">Drawn — waiting for you</span>'
   : '<span class="tag wait">Queued</span>';
 
 const areasHtml = AREAS.map(a => `
@@ -68,8 +76,8 @@ const areasHtml = AREAS.map(a => `
     ${stateTag(a.state)}
     <h2 style="margin-top:10px">Area ${a.key} — ${a.title}</h2>
     <p>${a.blurb}</p>
-    ${a.state === 'done' ? `<p style="margin-top:8px"><strong>Approved.</strong> Three decisions locked above. <a href="${a.link}" style="color:var(--blue);font-weight:700">The proposal that got us there →</a></p>` : ''}
-    ${a.state === 'open' ? `<p style="margin-top:8px"><a href="${a.link}" style="color:var(--blue);font-weight:700">Open Proposal B — three options →</a></p>` : ''}
+    ${a.state === 'done' ? `<p style="margin-top:8px"><strong>Approved.</strong> Locked above. <a href="${a.link}" style="color:var(--blue);font-weight:700">The proposal that got us there →</a></p>` : ''}
+    ${a.state === 'open' ? `<p style="margin-top:8px"><a href="${a.link}" style="color:var(--blue);font-weight:700">Open Proposal ${a.key} →</a></p>` : ''}
     ${a.pins.map(p => `
       <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
         <h3>Your note ${p.n} · <span style="font-weight:400;color:var(--muted);font-size:13px">${p.where}</span></h3>
@@ -86,7 +94,7 @@ const html = `${HEAD('UI Decisions')}
 
   <div class="card" style="border-left:4px solid var(--good)">
     <span class="tag good">Where things stand</span>
-    <p><strong>3 decisions locked · Area A settled.</strong> Area B now has three options waiting for your pick. Area C — the worker’s Close job flow — comes after.</p>
+    <p><strong>5 decisions locked · Areas A and B settled.</strong> Area C — the worker’s Close job flow — is drawn and waiting for you. It is the last one.</p>
   </div>
 
   <section>
