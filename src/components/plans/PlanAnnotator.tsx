@@ -16,6 +16,10 @@ import { useOrientation } from '../../data/useOrientation';
 import { AnnStroke, AnnTool, PlanAnnotation } from '../../types';
 import { stampPlanToDrive, extractFolderId, isUploadBackendConfigured } from '../../data/driveApi';
 import { fetchPlanCached, prefetchPlans, acquirePlanCache, releasePlanCache } from '../../data/planCache';
+import {
+  exportScale, drawPins, canvasBlob, imagesToPdf, imageBytesToPdf,
+  safeFileName, saveBytes, saveMany,
+} from '../../data/planExport';
 import { PlanTab, PlanTabsStrip, mintTab, loadTabState, saveTabState } from './PlanTabs';
 import { PenStroke, PenSample, NibWatch, samplesOf, simplify, nearSegment } from './penInput';
 import { TOOLS, toolById, INK_COLORS, HIGHLIGHT_COLORS, rememberColor } from './annotTools';
@@ -326,6 +330,14 @@ function PlanEditor({
   /** The rail runs across the bottom only when the screen is taller than it is wide. */
   const railRow = compact && !landscape;
 
+  const s = useStore(st => st.mainUiStrings);
+  /**
+   * The snag pins belong to the APARTMENT, not to this component — the
+   * overlay that draws them on screen is the host's. Read here so a download
+   * can put them in the file, which is what "with the markings" means to the
+   * person asking for it.
+   */
+  const myPins = useStore(st => st.planPins).filter(p => p.apartmentId === apartmentId);
   const planAnnotations = useStore(s => s.planAnnotations);
   const savePlanAnnotation = useStore(s => s.savePlanAnnotation);
   const updatePlanAnnotation = useStore(s => s.updatePlanAnnotation);
@@ -404,7 +416,14 @@ function PlanEditor({
    */
   const [loadedIsImage, setLoadedIsImage] = useState(false);
   const isImagePlan = loadedIsImage || !!plans.find(p => p.id === planFileId)?.isImage;
-  const [showDownload, setShowDownload] = useState(false);
+  /**
+   * The download sheet walks two questions, so it is a STEP rather than a
+   * boolean: what goes in the file, then what kind of file, and only for a
+   * set too big to render whole, how much of it.
+   */
+  const [dlStep, setDlStep] = useState<'what' | 'format' | 'pages' | null>(null);
+  const [dlMarkup, setDlMarkup] = useState(true);
+  const [dlPdf, setDlPdf] = useState(true);
   const [showPlans, setShowPlans] = useState(false);
   /**
    * The rest of the header, on a screen that cannot hold it.
@@ -2129,15 +2148,25 @@ function PlanEditor({
         // A question on top owns the key. Without this, one Escape dismissed
         // the question AND closed the studio behind it — so backing out of
         // "rub every mark off?" threw you out of the plan as well.
-        if (confirmReset || confirmClose) return;
+        if (confirmReset || confirmClose) { e.stopPropagation(); return; }
+        let mine = true;
         if (textDraft) setTextDraft(null);
         else if (showPalette) setShowPalette(false);
         else if (showMore) setShowMore(false);
         else if (showLayers) setShowLayers(false);
-        else if (showDownload) setShowDownload(false);
+        else if (dlStep) setDlStep(dlStep === 'what' ? null : 'what');
         else if (showPlans) setShowPlans(false);
         else if (picked) setPicked(null);
-        else onClose();
+        else { mine = false; onClose(); }
+        /**
+         * One press backs out ONE thing — including out of the HOST.
+         *
+         * This runs in the capture phase and stops the key when it has taken
+         * it, because the drawer that hosts the plan pane has its own Escape
+         * on window, registered first. Without this, closing the download
+         * sheet closed the whole apartment behind it in the same press.
+         */
+        if (mine) { e.stopPropagation(); e.stopImmediatePropagation(); }
       }
       if (!readOnly && !e.ctrlKey && !e.metaKey) {
         const map: Record<string, string> = {
@@ -2148,8 +2177,10 @@ function PlanEditor({
         if (map[e.key.toLowerCase()]) pick(map[e.key.toLowerCase()]);
       }
     }
-    window.addEventListener('keydown', key);
-    return () => window.removeEventListener('keydown', key);
+    // Capture, so a panel of this plan's own gets the key before the host's
+    // Escape does — see the note in the Escape branch.
+    window.addEventListener('keydown', key, true);
+    return () => window.removeEventListener('keydown', key, true);
   }); // no dep array — the handler closes over live state and is cheap to reattach
 
   function pick(id: string) {
@@ -2268,21 +2299,22 @@ function PlanEditor({
    * somebody printing a plan almost always wants anyway.
    */
   const BULK_LIMIT = 12;
-  function pagesToExport(what: string): number[] | null {
+  function pagesToExport(): number[] | null {
     if (!doc) return null;
     if (doc.numPages <= BULK_LIMIT) return Array.from({ length: doc.numPages }, (_, i) => i);
+    // Worded from the strings object like everything else — this was the
+    // last hardcoded English left in the export paths.
     const all = window.confirm(
-      `This plan has ${doc.numPages} pages.\n\n`
-      + `OK — ${what} all ${doc.numPages} of them. On a set this size that takes a long `
-      + `time and a lot of memory.\n`
-      + `Cancel — just page ${page + 1}, the one you are looking at.`,
+      `${s.dlPagesTitle}\n\n`
+      + `${s.dlPagesAll}: ${doc.numPages}\n`
+      + `${s.dlPagesThis}: ${page + 1}`,
     );
     return all ? Array.from({ length: doc.numPages }, (_, i) => i) : [page];
   }
 
   async function print() {
     if (!doc) return;
-    const wanted = pagesToExport('print');
+    const wanted = pagesToExport();
     if (!wanted) return;
     onToast?.('Building the print sheet…');
     const imgs: string[] = [];
@@ -2330,56 +2362,98 @@ function PlanEditor({
 
   // ---- download ----------------------------------------------------------
 
-  /** The newest saved version of THIS plan, when there is one. */
-  const latest = versions[0];
-
   /**
-   * The PDF is the saved one, because that is the file with the layer in it.
+   * ONE download, asked in two plain questions.
    *
-   * We cannot build a PDF in the browser — the point of the whole server route
-   * is that the original's bytes are not ours to touch here. So this hands over
-   * the version that was filed, and says so plainly when there is not one yet.
+   * The old pair of buttons could not answer the question people actually
+   * have. "PDF" only worked once a marked-up version had been SAVED to Drive
+   * — on a plan nobody had marked up it did nothing but apologise, which is
+   * why it read as broken everywhere — and "Pictures" always burnt the
+   * drawings in whether you wanted them or not, while leaving the snag pins
+   * out of the file completely.
+   *
+   * So the sheet asks what goes IN it first (the markings, or the clean
+   * sheet), and only then what KIND of file. All four answers work from
+   * bytes the browser already has: no Drive, no upload backend, nothing to
+   * save first.
+   *
+   * The clean PDF is the original file byte for byte — not a re-render — so
+   * it keeps its vector text and its own layers. Everything else is drawn
+   * from the same canvas the screen uses, which is what makes a downloaded
+   * markup look like the markup you were just looking at.
    */
-  async function downloadPdf() {
-    if (latest?.driveFileId) {
-      window.open(`https://drive.google.com/uc?export=download&id=${latest.driveFileId}`, '_blank');
-      return;
+  async function runDownload(withMarkup: boolean, asPdf: boolean, pages: number[]) {
+    const base = safeFileName(`${apartmentLabel} — ${planName || s.engineeringPlans}`);
+    try {
+      onToast?.(s.dlWorking);
+
+      // The untouched original: hand back exactly what Drive holds.
+      if (!withMarkup && asPdf) {
+        const buf = await fetchPlanCached(planFileId);
+        const bytes = new Uint8Array(buf);
+        const isPdf = bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46;
+        if (isPdf) {
+          saveBytes(bytes, `${base}.pdf`, 'application/pdf');
+        } else {
+          // A plan that is a photograph still has to come out as a PDF when
+          // that is what was asked for.
+          const isPng = bytes[0] === 0x89 && bytes[1] === 0x50;
+          saveBytes(await imageBytesToPdf(bytes, isPng), `${base}.pdf`, 'application/pdf');
+        }
+        onToast?.(s.dlSaved);
+        return;
+      }
+
+      if (!doc) return;
+      const blobs: Blob[] = [];
+      for (const i of pages) {
+        const pg = await doc.getPage(i + 1);
+        const probe = pg.getViewport({ scale: 1 });
+        const vp = pg.getViewport({ scale: exportScale(probe.width, probe.height) });
+        const c = document.createElement('canvas');
+        c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+        const ctx = c.getContext('2d')!;
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+        await pg.render({
+          canvasContext: ctx, viewport: vp,
+          ...(ocRef.current ? { optionalContentConfigPromise: Promise.resolve(ocRef.current) } : {}),
+        }).promise;
+        if (withMarkup) {
+          for (const st of strokes) if (st.page === i) paintStroke(ctx, c, st);
+          // The pins are anchored to the sheet as a whole rather than to a
+          // page, exactly as the overlay draws them, so they belong on the
+          // first page of the export and nowhere else — repeating them on
+          // every page would invent snags that do not exist.
+          if (i === pages[0]) drawPins(ctx, c.width, c.height, myPins);
+        }
+        blobs.push(await canvasBlob(c));
+      }
+
+      if (asPdf) {
+        saveBytes(await imagesToPdf(blobs), `${base}.pdf`, 'application/pdf');
+      } else if (blobs.length === 1) {
+        saveBytes(blobs[0], `${base}.png`, 'image/png');
+      } else {
+        await saveMany(blobs.map((blob, n) => ({
+          blob, name: `${base} — ${n + 1}.png`,
+        })));
+      }
+      onToast?.(s.dlSaved);
+    } catch (err) {
+      console.error('plan download failed', err);
+      onToast?.(s.dlFailed, 'error');
     }
-    onToast?.('Save it first — the PDF is stamped on the server from the original plan.', 'error');
   }
 
-  /**
-   * Pictures, straight from what is on screen.
-   *
-   * Works with no network and without saving, which is the case this is for:
-   * somebody about to walk out of the office wanting the marked-up sheet on
-   * their phone.
-   */
-  async function downloadImages() {
-    if (!doc) return;
-    const wanted = pagesToExport('save');
-    if (!wanted) return;
-    onToast?.('Making the pictures…');
-    for (const i of wanted) {
-      const p = await doc.getPage(i + 1);
-      const vp = p.getViewport({ scale: 2 });
-      const c = document.createElement('canvas');
-      c.width = Math.round(vp.width); c.height = Math.round(vp.height);
-      const ctx = c.getContext('2d')!;
-      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
-      await p.render({
-        canvasContext: ctx, viewport: vp,
-        ...(ocRef.current ? { optionalContentConfigPromise: Promise.resolve(ocRef.current) } : {}),
-      }).promise;
-      for (const s of strokes) if (s.page === i) paintStroke(ctx, c, s);
-
-      const a = document.createElement('a');
-      a.download = `${apartmentLabel} — ${planName || 'plan'}${doc.numPages > 1 ? ` — page ${i + 1}` : ''}.png`;
-      a.href = c.toDataURL('image/png');
-      a.click();
-    }
-    onToast?.(wanted.length === 1 ? 'Picture saved' : `${wanted.length} pictures saved`);
+  /** Answer the sheet: run it now, or ask about the pages first. */
+  function chooseFormat(asPdf: boolean) {
+    setDlPdf(asPdf);
+    if (doc && doc.numPages > BULK_LIMIT) { setDlStep('pages'); return; }
+    setDlStep(null);
+    const all = doc ? Array.from({ length: doc.numPages }, (_, i) => i) : [0];
+    void runDownload(dlMarkup, asPdf, all);
   }
+
 
   // ---- UI ----------------------------------------------------------------
 
@@ -2658,9 +2732,9 @@ function PlanEditor({
             )}
           </button>
 
-          <button onClick={() => setShowDownload(true)} title="Download as a PDF or as pictures"
+          <button data-plan-download onClick={() => { setDlMarkup(true); setDlStep('what'); }} title={s.dlTitle}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold text-white/85 hover:bg-white/10">
-            <Download size={14} /> Download
+            <Download size={14} /> {s.downloadLabel}
           </button>
 
           <button onClick={print} title="Print this plan with the markup on it"
@@ -3374,9 +3448,9 @@ function PlanEditor({
               hint={isImagePlan ? 'A picture has no layers of its own'
                 : layers.length ? `${layers.length} on this plan` : "The plan's own layers, and yours"}
               onClick={() => { setShowMore(false); setShowLayers(true); }} />
-            <SheetRow icon={Download} label="Download"
-              hint="As a PDF, or as pictures"
-              onClick={() => { setShowMore(false); setShowDownload(true); }} />
+            <SheetRow icon={Download} label={s.downloadLabel}
+              hint={s.dlTitle}
+              onClick={() => { setShowMore(false); setDlMarkup(true); setDlStep('what'); }} />
             <SheetRow icon={Printer} label="Print"
               hint="This plan with the markup on it"
               onClick={() => { setShowMore(false); void print(); }} />
@@ -3395,35 +3469,92 @@ function PlanEditor({
         </>
       )}
 
-      {/* Download: as a PDF, or as pictures. */}
-      {showDownload && (
+      {/*
+        Download — two questions, in the order somebody actually thinks in.
+
+        What goes IN the file first ("do you want my markings on it?"), then
+        what KIND of file. A set too big to render whole asks one more. Every
+        word comes from the strings object, so the sheet is Hebrew when the
+        app is: this is the standing rule, and the old sheet broke it in five
+        places.
+      */}
+      {dlStep && (
         <>
-          <div className="fixed inset-0 z-[158] bg-black/35" onClick={() => setShowDownload(false)} />
-          <div className="fixed z-[159] rounded-2xl overflow-hidden bg-white"
+          <div className="fixed inset-0 z-[158] bg-black/35" onClick={() => setDlStep(null)} />
+          <div data-plan-download-sheet
+            className="fixed z-[159] rounded-2xl overflow-hidden bg-white"
             style={{ left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: 'min(400px,92vw)',
                      boxShadow: '0 24px 60px -12px rgba(15,23,42,.45)' }}>
-            <div className="px-4 py-2.5 text-[13px] font-bold text-white" style={{ backgroundColor: NAVY }}>
-              Download this plan
+            <div className="px-4 py-2.5 text-[13px] font-bold text-white flex items-center gap-2"
+              style={{ backgroundColor: NAVY }}>
+              <span className="flex-1">{s.dlTitle}</span>
+              <span className="text-[11px] font-semibold text-white/70">
+                {dlStep === 'what' ? s.dlWhatStep : dlStep === 'format' ? s.dlFormatStep : s.dlPagesTitle}
+              </span>
             </div>
             <div className="p-4 space-y-2">
-              <button
-                onClick={() => { setShowDownload(false); void downloadPdf(); }}
-                className="w-full text-left px-3 py-2.5 rounded-xl border border-gray-200 hover:border-[#4aa8d8] transition-colors">
-                <div className="text-[13px] font-bold text-gray-900">PDF</div>
-                <div className="text-[11px] text-gray-500">
-                  {latest?.driveFileId
-                    ? 'The saved version, markup on its own layer you can switch off.'
-                    : 'Save it first — the PDF is made on the server from the original.'}
-                </div>
-              </button>
-              <button
-                onClick={() => { setShowDownload(false); void downloadImages(); }}
-                className="w-full text-left px-3 py-2.5 rounded-xl border border-gray-200 hover:border-[#4aa8d8] transition-colors">
-                <div className="text-[13px] font-bold text-gray-900">Pictures</div>
-                <div className="text-[11px] text-gray-500">
-                  One PNG per page, exactly as it looks now. Nothing can be switched off.
-                </div>
-              </button>
+              {dlStep === 'what' && (
+                <>
+                  <button data-dl-markup
+                    onClick={() => { setDlMarkup(true); setDlStep('format'); }}
+                    className="w-full text-left px-3 py-2.5 rounded-xl border border-gray-200 hover:border-[#4aa8d8] transition-colors">
+                    <div className="text-[13px] font-bold text-gray-900">{s.dlWithMarkup}</div>
+                    <div className="text-[11px] text-gray-500">{s.dlWithMarkupHint}</div>
+                  </button>
+                  <button data-dl-clean
+                    onClick={() => { setDlMarkup(false); setDlStep('format'); }}
+                    className="w-full text-left px-3 py-2.5 rounded-xl border border-gray-200 hover:border-[#4aa8d8] transition-colors">
+                    <div className="text-[13px] font-bold text-gray-900">{s.dlClean}</div>
+                    <div className="text-[11px] text-gray-500">{s.dlCleanHint}</div>
+                  </button>
+                </>
+              )}
+
+              {dlStep === 'format' && (
+                <>
+                  <button data-dl-pdf
+                    onClick={() => chooseFormat(true)}
+                    className="w-full text-left px-3 py-2.5 rounded-xl border border-gray-200 hover:border-[#4aa8d8] transition-colors">
+                    <div className="text-[13px] font-bold text-gray-900">{s.dlPdf}</div>
+                    <div className="text-[11px] text-gray-500">{s.dlPdfHint}</div>
+                  </button>
+                  <button data-dl-images
+                    onClick={() => chooseFormat(false)}
+                    className="w-full text-left px-3 py-2.5 rounded-xl border border-gray-200 hover:border-[#4aa8d8] transition-colors">
+                    <div className="text-[13px] font-bold text-gray-900">{s.dlImages}</div>
+                    <div className="text-[11px] text-gray-500">{s.dlImagesHint}</div>
+                  </button>
+                  <button data-dl-back onClick={() => setDlStep('what')}
+                    className="w-full text-center px-3 py-2 rounded-xl text-[12px] font-semibold text-gray-500 hover:bg-gray-50">
+                    {s.dlBack}
+                  </button>
+                </>
+              )}
+
+              {dlStep === 'pages' && (
+                <>
+                  <button data-dl-all
+                    onClick={() => {
+                      setDlStep(null);
+                      void runDownload(dlMarkup, dlPdf,
+                        Array.from({ length: doc?.numPages ?? 1 }, (_, i) => i));
+                    }}
+                    className="w-full text-left px-3 py-2.5 rounded-xl border border-gray-200 hover:border-[#4aa8d8] transition-colors">
+                    <div className="text-[13px] font-bold text-gray-900">{s.dlPagesAll}</div>
+                    <div className="text-[11px] text-gray-500">{doc?.numPages}</div>
+                  </button>
+                  <button data-dl-one
+                    onClick={() => { setDlStep(null); void runDownload(dlMarkup, dlPdf, [page]); }}
+                    className="w-full text-left px-3 py-2.5 rounded-xl border border-gray-200 hover:border-[#4aa8d8] transition-colors">
+                    <div className="text-[13px] font-bold text-gray-900">{s.dlPagesThis}</div>
+                    <div className="text-[11px] text-gray-500">{page + 1}</div>
+                  </button>
+                  <button data-dl-back onClick={() => setDlStep('format')}
+                    className="w-full text-center px-3 py-2 rounded-xl text-[12px] font-semibold text-gray-500 hover:bg-gray-50">
+                    {s.dlBack}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </>

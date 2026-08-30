@@ -30,6 +30,31 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-09-18',
+    title: 'Downloading a plan asks what you want in it',
+    items: [
+      {
+        title: 'Two questions, then the file',
+        body: 'Press Download on a plan and it asks what should be in it — '
+          + 'with the markings (the snag pins and everything drawn on the '
+          + 'sheet) or just the clean plan — and only then whether you want '
+          + 'a PDF or pictures. The file is named after the job and the plan '
+          + 'instead of arriving called "download".',
+        demo: 'tap',
+      },
+      {
+        title: 'And it works on every plan now',
+        body: 'The PDF button used to need somebody to have saved a marked-up '
+          + 'version to Drive first, so on an ordinary plan it simply did '
+          + 'nothing — that is fixed. All four answers are made right in the '
+          + 'browser, so a download works with no internet and without saving '
+          + 'anything first. Asking for the clean PDF hands back the '
+          + 'architect\'s original file untouched.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2026-09-17',
     title: 'The goals board, on the board',
     items: [

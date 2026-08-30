@@ -5459,3 +5459,74 @@ capability). When the owner says to check his gallery notes, READ the
 artifact and work the pins. `docs/DEVICE-GALLERY-PROMPT.md` is the portable
 version for other projects. The newest-phone sweeps: iPhone 17 Pro is
 `W=402 H=874`, Galaxy S25 Ultra `W=384 H=832` — both clean 2026-08-27.
+
+---
+
+# v2 — the plan download, asked in two questions
+
+## What was broken
+Download was two buttons and neither answered the real question. **PDF only
+worked once somebody had SAVED a marked-up version to Drive** — it opened
+`drive.google.com/uc?export=download&id=…` for `versions[0]`, so on an
+ordinary plan (nobody had marked it up) it did nothing but toast an
+apology: the owner's "download pdf doesn't work anywhere". **Pictures**
+always burnt the drawings in with no way to say otherwise, and left the
+snag PINS out of the file completely. Every word of the sheet was hardcoded
+English, as was the many-pages `window.confirm`.
+
+## The shape now
+`Download` opens ONE sheet that walks two questions, in the order somebody
+actually thinks in: **what goes in it** (with the markings / just the plan),
+then **what kind of file** (PDF / pictures), then — only for a set past
+`BULK_LIMIT` — how much of it. Every string comes from `MainUiStrings`
+(`dlTitle` … `dlPagesThis`, both presets), so the sheet is Hebrew when the
+app is.
+
+`src/data/planExport.ts` is the mechanism, and all four answers are made
+**in the browser from bytes it already has** (planCache) — no Drive, no
+upload backend, nothing to save first, works on a train:
+
+| | PDF | Pictures |
+|---|---|---|
+| clean | the ORIGINAL file, byte for byte | pages rendered plain → PNG |
+| with markings | pages rendered with ink + pins → embedded in a PDF (pdf-lib) | the same, as PNG |
+
+Rules worth keeping:
+- **The clean PDF is never re-rendered** — it is the architect's own file,
+  so it keeps its vector text and its own layers. The harness asserts the
+  byte count matches the original exactly.
+- **The marked PDF is FLATTENED, and that is deliberate.** The LAYERED
+  vector one — markup on a switchable OCG — is `api/plan-annotate.js` and is
+  what Save files into Annotated Plans. A download is "give me a file to
+  send someone now"; it must not depend on the server being reachable.
+- **Pins are drawn on the FIRST exported page only.** A `PlanPin` is
+  anchored to the apartment, not to a page (that is how the overlay draws
+  it), so repeating them on every page would invent snags that do not exist.
+  `drawPins` reproduces the overlay's geometry — the point is at
+  `xPct/yPct`, the numbered circle sits ABOVE it on a short stem — or an
+  exported plan would mark a different spot from the one on screen.
+- **`exportScale` caps the canvas** (long edge ~2400px, area 24 MP). An A0
+  sheet at a naive scale asks for a hundred million pixels, the allocation is
+  refused, and that shows up as a BLANK page rather than an error.
+- **The filename is set on our own anchor, not through file-saver.** That
+  library dispatches its own synthetic MouseEvent and the name never
+  survived: every plan arrived called "download".
+- **Several files from one press are spaced 350ms apart** — a browser drops
+  a burst of automatic downloads silently.
+
+## Escape backs out of the PLAN, not the apartment behind it
+The annotator's keydown moved to the **capture** phase and stops the key
+when it consumed it. The drawer hosting the plan pane has its own Escape on
+window, registered first, so closing the download sheet used to close the
+whole apartment in the same press.
+
+Harness: `scratchpad/plandownload.mjs` (14 checks) — a real 2-page PDF via
+pdf-lib on `/api/drive-fetch` (the planphone precedent), two seeded pins,
+all four answers driven through the real sheet, the clean PDF's byte count
+against the original, the marked picture proven heavier than the clean one
+(the pins landed), and the sheet in Hebrew. Two traps it paid for: a
+`waitForEvent('download')` armed AFTER the click misses the clean PDF, which
+is handed over in a millisecond and reads as "no file arrived"; and
+Playwright reports a blob download's `suggestedFilename()` as "download"
+whatever the anchor says, so the honest measurement is the value assigned to
+the `download` attribute.
