@@ -1691,7 +1691,17 @@ function PlannerCard({
    * still opens on a click — which is the point of putting a second copy on a
    * screen somebody is standing in front of.
    */
-  const openHandlers = openOnly && entry.jobId
+  /**
+   * ANY job card opens on a click when the drag handlers are not installed —
+   * not only a projection's. This was gated on `openOnly`, so a READ-ONLY
+   * planner (the TV wall, a view-only board) rendered its cards with no
+   * handler at all: the owner's "I press an apartment inside the notebook…
+   * nothing is clicking". The hosts whose taps must stay inert (the worker's
+   * portal) pass a no-op openJob/openUnit, so the gate belongs there, not
+   * here. When the card is editable the drag handlers replace these and
+   * their pointerup does the opening.
+   */
+  const openHandlers = entry.jobId
     ? { onClick: (e: React.MouseEvent) => {
         if (!(e.target as HTMLElement).closest('a,[data-card-action]')) onOpen();
       } }

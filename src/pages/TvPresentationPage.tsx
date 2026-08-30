@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useStore, loadAllProjectsTaskData, ensureProjectSnapshot } from '../data/store';
 import { Apartment, CanvasElement, isCountableApartment, binKeyOf, binLabelOf, getStageName, TV_DASH_BOARD } from '../types';
@@ -17,15 +17,10 @@ import { loadGoalsScript, GoalsMountHandle } from '../components/board/GoalsWidg
 import { useOrientation } from '../data/useOrientation';
 import { WidgetStore } from '../components/board/WidgetStore';
 import { WidgetListPopup } from '../components/board/WidgetListPopup';
-import { extractFileId } from '../data/driveApi';
-import { PenLine, Maximize, Minimize, Pencil, X as CloseIcon, Plus, Info, Search as SearchIcon, MoreVertical } from 'lucide-react';
-
-/**
- * Lazy, like everywhere else — the wallboard is the last place that should
- * download a megabyte of PDF engine before it can show a board.
- */
-const PlanAnnotator = lazy(() =>
-  import('../components/plans/PlanAnnotator').then(m => ({ default: m.PlanAnnotator })));
+import { ApartmentDetailDrawer } from '../components/apartment/ApartmentDetailDrawer';
+import { QuickAddTaskPanel } from '../components/apartment/QuickAddTaskPanel';
+import { Toast } from '../components/ui/Toast';
+import { Maximize, Minimize, Pencil, X as CloseIcon, Plus, Info, Search as SearchIcon, MoreVertical } from 'lucide-react';
 
 /**
  * The office wall display.
@@ -361,7 +356,14 @@ export function TvPresentationPage() {
   };
   const t = (en: string, he: string) => (isRtl ? he : en);
 
-  const [openJob, setOpenJob] = useState<Apartment | null>(null);
+  /**
+   * OWNER RULING (2026-08-30): opening a job on the wall opens the REAL job
+   * window — the same ApartmentDetailDrawer as a PC, edits included. The old
+   * wall-only job screen ("a job screen I never want to see") is gone. The id
+   * is stored rather than the record so the window always renders the LIVE
+   * apartment — the standing re-resolve rule.
+   */
+  const [openJobId, setOpenJobId] = useState<string | null>(null);
   const [now, setNow] = useState(new Date());
   const frameRef = useRef<HTMLDivElement>(null);
 
@@ -582,9 +584,6 @@ export function TvPresentationPage() {
     '2.2': ['Giant', 'עצום'],
   };
 
-  /** The wallboard's single writable action: marking up a plan. */
-  const [markUp, setMarkUp] = useState(false);
-
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(t);
@@ -687,8 +686,6 @@ export function TvPresentationPage() {
   /** A group opened by tapping it — read-only, like everything else here. */
   const [openBin, setOpenBin] = useState<CanvasElement | null>(null);
   const [binQuery, setBinQuery] = useState('');
-  /** Which site photo the carousel is showing. Resets whenever a job opens. */
-  const [photoAt, setPhotoAt] = useState(0);
   const [tvStoreOpen, setTvStoreOpen] = useState(false);
   const [dragEl, setDragEl] = useState<{ id: string; dx: number; dy: number } | null>(null);
   const [sizeEl, setSizeEl] = useState<{ id: string; w: number; h: number; x: number; y: number } | null>(null);
@@ -771,6 +768,22 @@ export function TvPresentationPage() {
   /** A widget figure clicked open on the wall: the list behind it. */
   const [wallList, setWallList] = useState<{ title: string; jobIds: string[] } | null>(null);
 
+  /**
+   * A unit tapped in another workspace's widget (a notebook card, a Building
+   * Progress cell) — the wall switches there and opens it the moment that
+   * workspace's apartments land. The OWNER REVERSAL (2026-08-26) reaches the
+   * wall too: a foreign unit opens the FULL job window, never nothing.
+   */
+  const pendingOpenRef = useRef<string | null>(null);
+  useEffect(() => {
+    const id = pendingOpenRef.current;
+    if (!id) return;
+    if (apartments.some(a => a.id === id)) {
+      pendingOpenRef.current = null;
+      setOpenJobId(id);
+    }
+  }, [apartments]);
+
   /** One context for every widget on the wall — live figures, nothing editable. */
   const wallCtx: WidgetCtx = useMemo(() => ({
     jobs: apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed && !a.boardBin),
@@ -780,13 +793,18 @@ export function TvPresentationPage() {
     photos: contractorPhotos,
     logs: activityLogs,
     update: () => {},                       // bound per element inside TvDashboard
-    openJob: (id: string) => {
-      const j = apartments.find(a => a.id === id);
-      if (j) { setPhotoAt(0); setOpenJob(j); }
+    openJob: (id: string) => setOpenJobId(id),
+    /**
+     * Tapping an apartment ANYWHERE — a notebook card, a task chip, a
+     * progress cell — opens the real job window (the owner's report: "I press
+     * an apartment inside the notebook… nothing is clicking"). A unit in
+     * another workspace switches the wall there first, then opens.
+     */
+    openUnit: (projectId: string, aptId: string) => {
+      if (projectId === currentProjectId) { setOpenJobId(aptId); return; }
+      pendingOpenRef.current = aptId;
+      setView(projectId);
     },
-    // A stray tap on a foreign notebook card must never switch the whole
-    // wall's workspace — without this the planner falls back to travelling.
-    openUnit: () => {},
     // A widget on the wall shows live figures and cannot be typed into. Only
     // the pen unlocks arranging, and that moves cards rather than editing them.
     readOnly: !editing,
@@ -794,12 +812,60 @@ export function TvPresentationPage() {
     // that refuses to be edited here even when the pen is out.
     wall: true,
     // Every number opens its list on the wall too — the board's standing rule.
-    // Rows open the wall's own job screen, never a drawer it does not have.
+    // Rows open the real job window, same as everywhere else now.
     showList: (title: string, jobIds: string[]) => setWallList({ title, jobIds }),
   }), [apartments, stages, contractorAssignments, contractors, users, contractorPhotos,
-       activityLogs, editing]);
+       activityLogs, editing, currentProjectId, params]);
 
   const theme = getBoardTheme(boardSettings[currentProjectId]?.themeId);
+
+  /** The LIVE record behind the open window — never a stale captured object. */
+  const openJob = openJobId ? apartments.find(a => a.id === openJobId) ?? null : null;
+
+  /**
+   * Who the wall's edits are attributed to. The TV has no login, so writes
+   * made through the job window carry the first active admin's name — a real
+   * person the office recognises, not a blank that crashes the history tab.
+   */
+  const tvUser = useMemo(() => {
+    const u = users.find(x => x.active !== false && x.role === 'admin')
+      ?? users.find(x => x.active !== false)
+      ?? users[0];
+    return u ?? { id: 'tv-wall', name: 'TV', role: 'admin', code: '', active: true, createdAt: '' };
+  }, [users]);
+
+  const [addTaskApt, setAddTaskApt] = useState<Apartment | null>(null);
+  const [tvToast, setTvToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+
+  /**
+   * The job window, on the wall — the REAL one (owner ruling 2026-08-30):
+   * exactly the drawer a PC shows, over whatever view the wall is on. It is
+   * rendered as a SIBLING of the frame, outside the real-pixel `zoom`
+   * compensation — a fixed modal inside a zoomed subtree is scaled past the
+   * panel's height on a dpr<1 screen and its bottom becomes unreachable.
+   */
+  const tvDrawer = (
+    <>
+      {openJob && (
+        <ApartmentDetailDrawer
+          apartment={openJob}
+          onClose={() => setOpenJobId(null)}
+          currentUser={tvUser}
+          onToast={(msg, type) => setTvToast({ msg, type: type ?? 'success' })}
+          onRequestAddTask={apt => { setOpenJobId(null); setAddTaskApt(apt); }}
+        />
+      )}
+      {addTaskApt && (
+        <QuickAddTaskPanel
+          apartment={addTaskApt}
+          currentUser={tvUser}
+          onClose={() => setAddTaskApt(null)}
+          onToast={msg => setTvToast({ msg, type: 'success' })}
+        />
+      )}
+      {tvToast && <Toast message={tvToast.msg} type={tvToast.type} onClose={() => setTvToast(null)} />}
+    </>
+  );
 
   const stageOf = (a: Apartment) => stages.find(s => s.id === a.currentStageId) ?? null;
   const pending = (a: Apartment) =>
@@ -861,14 +927,14 @@ export function TvPresentationPage() {
 
       {/* Views, on the left. */}
       {projects.map(p => (
-        <button key={p.id} onClick={() => { setView(p.id); setOpenJob(null); }}
+        <button key={p.id} onClick={() => { setView(p.id); setOpenJobId(null); }}
           className={`${barBtn} px-3 py-1.5`}
           style={view === p.id ? on : off}>
           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />
           {p.shortName}
         </button>
       ))}
-      <button onClick={() => { setView('dashboard'); setOpenJob(null); }}
+      <button onClick={() => { setView('dashboard'); setOpenJobId(null); }}
         className={`${barBtn} px-3 py-1.5`}
         style={view === 'dashboard' ? on : off}>
         {t('Dashboard', 'לוח בקרה')}
@@ -877,7 +943,7 @@ export function TvPresentationPage() {
       {/* The owner's placement: Goals right of Dashboard, a small vertical
           line separating the two buttons. */}
       <span className="w-px h-6" style={{ backgroundColor: '#e2e8f0' }} />
-      <button data-tv-goals onClick={() => { setView('goals'); setOpenJob(null); }}
+      <button data-tv-goals onClick={() => { setView('goals'); setOpenJobId(null); }}
         className={`${barBtn} px-3 py-1.5`}
         style={view === 'goals' ? on : off}>
         {t('Goals', 'יעדים')}
@@ -1101,246 +1167,6 @@ export function TvPresentationPage() {
       })()}
     </div>
   );
-  // ── Job detail ──
-  if (openJob) {
-    const planId = openJob.plansPdfLink ? extractFileId(openJob.plansPdfLink) : null;
-    const st = stageOf(openJob);
-    // The carousel shows one at a time, so there is no reason to stop at four
-    // any more — it used to be capped to fill a 2x2 grid of thumbnails.
-    const photos = contractorPhotos
-      .filter(p => contractorAssignments.some(a => a.id === p.assignmentId && a.apartmentId === openJob.id))
-      .sort((a, b) => (b.uploadedAt ?? '').localeCompare(a.uploadedAt ?? ''));
-    return (
-      <div ref={setFrame} dir={isRtl ? 'rtl' : 'ltr'} style={frameStyle} className="h-screen w-screen flex flex-col bg-slate-100 overflow-hidden">
-        {bar}
-        {markUp && planId && (
-          <Suspense fallback={null}>
-            <PlanAnnotator
-              planFileId={planId}
-              planName={t('Engineering plan', 'תוכנית הנדסית')}
-              apartmentId={openJob.id}
-              apartmentLabel={openJob.displayName || openJob.apartmentNumber || 'Job'}
-              driveFolderUrl={openJob.driveLink}
-              authorName=""
-              askWho
-              touchScale={touchScale}
-              people={users.filter(u => u.active !== false).map(u => u.name)}
-              onClose={() => setMarkUp(false)}
-            />
-          </Suspense>
-        )}
-        {/**
-          * The job, on the wall.
-          *
-          * The plan is the reason anybody opened this, so it gets the room: the
-          * left two-thirds, full height, drawn by pdf.js onto white and fitted
-          * to the space. It used to be a Drive preview iframe, which frames
-          * every sheet in a black surround it cannot be told to drop — on an A3
-          * landscape sheet in a portrait-ish box that black was most of the
-          * panel.
-          *
-          * What is left is a photo, ONE at a time and as large as it will go,
-          * with a way into the folder; four thumbnails on a screen read from
-          * ten feet away are four smudges. Everything else — the name, the
-          * stage, the links, the outstanding work — is a section of its own
-          * underneath, rather than being scattered across three cards.
-          */}
-        {/* Turned on its side, the plan goes on TOP and the rest below it —
-            side by side in a 1080-wide window leaves the drawing a sliver. */}
-        <div className="flex-1 grid gap-3 p-3 min-h-0"
-          style={{
-            ...(shape.orientation === 'portrait'
-              ? { gridTemplateRows: '1.6fr 1fr', gridTemplateColumns: '1fr' }
-              : { gridTemplateColumns: '1.9fr 1fr' }),
-            fontSize: 15 * Math.min(scale, 1.6),
-          }}>
-
-          <div className="relative bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col min-h-0">
-            <div className="px-3 py-2 font-extrabold border-b border-gray-200 flex items-center gap-2 flex-shrink-0">
-              <PlanIcon size={16} /> {t('Engineering plan', 'תוכנית הנדסית')}
-              {planId && (
-                <>
-                  {/*
-                    The one thing the wallboard is allowed to change.
-                    Everything else here stays read-only on purpose — but the
-                    screen is in the middle of the office and marking a plan up
-                    on it is the reason anybody walks over to it. It asks who is
-                    drawing first, so the version carries a real name rather than
-                    "the office". Saving is automatic, and it warns you if you
-                    walk away before Drive has it.
-                  */}
-                  <button
-                    onClick={() => setMarkUp(true)}
-                    className="ml-auto flex items-center gap-1.5 px-3 py-1 rounded-lg font-bold text-white"
-                    style={{ backgroundColor: '#4aa8d8' }}>
-                    <PenLine size={14} /> {t('Mark up', 'סימון')}
-                  </button>
-                  <a href={openJob.plansPdfLink} target="_blank" rel="noopener noreferrer"
-                    className="text-[#4aa8d8] font-bold">{t('open in Drive', 'פתח בדרייב')} ↗</a>
-                </>
-              )}
-            </div>
-            <div className="flex-1 min-h-0 relative bg-white">
-              {planId ? (
-                <Suspense fallback={
-                  <div className="absolute inset-0 flex items-center justify-center text-gray-400">
-                    {t('Opening the plan…', 'פותח את התוכנית…')}
-                  </div>
-                }>
-                  <PlanAnnotator
-                    embedded
-                    readOnly
-                    planFileId={planId}
-                    planName={t('Engineering plan', 'תוכנית הנדסית')}
-                    apartmentId={openJob.id}
-                    apartmentLabel={openJob.displayName || openJob.apartmentNumber || 'Job'}
-                    driveFolderUrl={openJob.driveLink}
-                    authorName=""
-                    touchScale={touchScale}
-                    onClose={() => { /* it is part of the page here */ }}
-                  />
-                </Suspense>
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-gray-400">
-                  {t('No plan linked', 'לא צורפה תוכנית')}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className={`gap-3 min-h-0 ${shape.orientation === 'portrait'
-            ? 'grid grid-cols-2' : 'flex flex-col'}`}>
-            {/* One photo, large, with the folder a tap away. */}
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col"
-              style={{ flex: '1.5 1 0%', minHeight: 0 }}>
-              <div className="px-3 py-2 font-extrabold border-b border-gray-200 flex items-center gap-2 flex-shrink-0">
-                {t('From site', 'מהאתר')}
-                {photos.length > 1 && (
-                  <span className="text-gray-400 tabular-nums" style={{ fontSize: '.8em' }}>
-                    {Math.min(photoAt + 1, photos.length)} / {photos.length}
-                  </span>
-                )}
-                {openJob.driveLink && (
-                  <a href={openJob.driveLink} target="_blank" rel="noopener noreferrer"
-                    className="ml-auto flex items-center gap-1.5 font-bold text-[#4aa8d8]">
-                    <DriveIcon size={15} /> {t('Folder', 'תיקייה')} ↗
-                  </a>
-                )}
-              </div>
-              {/* Dark only when there is a photo to sit on it — a photo needs
-                  a dark surround to read, an empty panel does not, and a slab
-                  of black is the loudest thing in a room. */}
-              <div className={`flex-1 min-h-0 relative ${photos.length ? 'bg-slate-900' : 'bg-slate-50'}`}>
-                {photos.length === 0 ? (
-                  <div className="absolute inset-0 flex items-center justify-center text-gray-400">
-                    {t('No photos yet', 'אין עדיין תמונות')}
-                  </div>
-                ) : (
-                  <>
-                    {(() => {
-                      const p = photos[Math.min(photoAt, photos.length - 1)];
-                      const src = p?.storageUrl || p?.driveUrl || p?.dataUrl;
-                      return src
-                        ? <img src={src} alt="" className="absolute inset-0 w-full h-full object-contain" />
-                        : <div className="absolute inset-0 flex items-center justify-center text-gray-500">
-                            {t('This one is only in Drive', 'זו נמצאת רק בדרייב')}
-                          </div>;
-                    })()}
-                    {photos.length > 1 && (
-                      <>
-                        <button
-                          onClick={() => setPhotoAt(i => (i - 1 + photos.length) % photos.length)}
-                          className="absolute left-2 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full
-                                     flex items-center justify-center text-white font-black"
-                          style={{ backgroundColor: 'rgba(15,23,42,.5)', fontSize: '1.3em' }}>‹</button>
-                        <button
-                          onClick={() => setPhotoAt(i => (i + 1) % photos.length)}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full
-                                     flex items-center justify-center text-white font-black"
-                          style={{ backgroundColor: 'rgba(15,23,42,.5)', fontSize: '1.3em' }}>›</button>
-                      </>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* Everything else, in one place. */}
-            <div className="bg-white rounded-xl border border-gray-200 p-4 overflow-y-auto"
-              style={{ flex: '1 1 0%', minHeight: 0 }}>
-              <div className="font-black leading-tight" style={{ fontSize: '1.7em' }}>
-                {openJob.displayName || t('Job', 'עבודה')}
-              </div>
-              {openJob.address && <div className="text-gray-500 mt-1">{openJob.address}</div>}
-
-              <div className="flex flex-wrap gap-2 mt-3">
-                {st && (
-                  <span className="font-bold px-3 py-1 rounded-full"
-                    style={{ backgroundColor: `${st.color}22`, color: st.color }}>
-                    {getStageName(st, isRtl)}
-                  </span>
-                )}
-                {pending(openJob) > 0 && (
-                  <span className="font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-700">
-                    {pending(openJob)} {t('open', 'פתוחות')}
-                  </span>
-                )}
-              </div>
-
-              <div className="flex flex-wrap gap-2 mt-3">
-                {openJob.driveLink && (
-                  <a href={openJob.driveLink} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200">
-                    <DriveIcon size={17} /> Drive
-                  </a>
-                )}
-                {openJob.zohoLink && (
-                  <a href={openJob.zohoLink} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200">
-                    <ZohoIcon size={17} /> Zoho
-                  </a>
-                )}
-              </div>
-
-              {/* What is actually outstanding on it. */}
-              {(() => {
-                const open = contractorAssignments
-                  .filter(a => a.apartmentId === openJob.id && !a.completedAt)
-                  .slice(0, 5);
-                if (!open.length) return null;
-                return (
-                  <div className="mt-4">
-                    <div className="font-extrabold mb-1" style={{ fontSize: '.85em' }}>
-                      {t('Still to do', 'עוד לעשות')}
-                    </div>
-                    {open.map(a => (
-                      <div key={a.id} className="flex items-center gap-2 py-0.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" />
-                        <span className="flex-1 min-w-0 truncate text-gray-600" style={{ fontSize: '.85em' }}>
-                          {a.taskDescription}
-                        </span>
-                        {a.dueDate && (
-                          <span className="text-gray-400 tabular-nums" style={{ fontSize: '.75em' }}>
-                            {a.dueDate.slice(5)}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
-            </div>
-          </div>
-        </div>
-        {exitFull}
-        <button onClick={() => setOpenJob(null)}
-          className="absolute left-4 bottom-4 px-4 py-2 rounded-full bg-[#1e3a5f] text-white font-bold shadow-lg">
-          ← {t('Back to board', 'חזרה ללוח')}
-        </button>
-      </div>
-    );
-  }
-
   // ── Company dashboard ──
   if (view === 'dashboard') {
     /**
@@ -1352,7 +1178,7 @@ export function TvPresentationPage() {
      * been put on it, out of the same shelf the office dashboard uses — and it
      * reflows for a panel turned on its side, because a Flip screen does that.
      */
-    return (
+    return (<>
       <div ref={setFrame} dir={isRtl ? 'rtl' : 'ltr'} style={frameStyle}
         className="h-screen w-screen flex flex-col bg-slate-100 overflow-hidden">
         {bar}
@@ -1402,12 +1228,13 @@ export function TvPresentationPage() {
           />
         )}
       </div>
-    );
+      {tvDrawer}
+    </>);
   }
 
   // ── The goals board, full screen on the wall — read-only always ──
   if (view === 'goals') {
-    return (
+    return (<>
       <div ref={setFrame} dir={isRtl ? 'rtl' : 'ltr'} style={frameStyle}
         className="h-screen w-screen flex flex-col bg-slate-100 overflow-hidden">
         {bar}
@@ -1424,12 +1251,13 @@ export function TvPresentationPage() {
           </div>
         </div>
       </div>
-    );
+      {tvDrawer}
+    </>);
   }
 
   // ── A building project: its diagram, scaled to the wall ──
   if (view !== 'general' && projects.some(p => p.id === view)) {
-    return (
+    return (<>
       <div ref={setFrame} dir={isRtl ? 'rtl' : 'ltr'} style={frameStyle} className="h-screen w-screen flex flex-col overflow-hidden bg-white">
         {bar}
         {exitFull}
@@ -1515,7 +1343,7 @@ export function TvPresentationPage() {
                       classFilter="all"
                       searchQuery=""
                       selectedBuilding="all"
-                      onApartmentClick={j => { setPhotoAt(0); setOpenJob(j); }}
+                      onApartmentClick={j => setOpenJobId(j.id)}
                       showShinuiBadge
                       compact
                     />
@@ -1526,7 +1354,8 @@ export function TvPresentationPage() {
           );
         })()}
       </div>
-    );
+      {tvDrawer}
+    </>);
   }
 
   /**
@@ -1588,7 +1417,7 @@ export function TvPresentationPage() {
   const boardOrigin = vb ? vb.origin : { x: 0, y: 0 };
 
   // ── The board itself ──
-  return (
+  return (<>
     <div ref={setFrame} dir={isRtl ? 'rtl' : 'ltr'} style={frameStyle} className="h-screen w-screen flex flex-col overflow-hidden bg-white">
       {bar}
       {/* The board surface is the project's own theme, so the wall matches what
@@ -1684,13 +1513,13 @@ export function TvPresentationPage() {
                    * zoom. The surface scales each widget's natural drawing to
                    * fill its own box first, the same as every other screen.
                    */
+                  /* And through the SHARED wall context, not a stub: these
+                     widgets carried `openJob: () => {}`, so tapping a job in
+                     the notebook, a task row or New this week did NOTHING —
+                     the owner's exact report. wallCtx opens the real job
+                     window and travels for a foreign unit. */
                   <WidgetSurface el={el} w={live.w} h={live.h}>
-                    {renderWidget(el, {
-                      jobs: apartments.filter(a => a.buildingId === 'G' && !a.isUnnamed),
-                      stages, assignments: contractorAssignments, contractors, users,
-                      photos: contractorPhotos, logs: [],
-                      update: () => {}, openJob: () => {}, readOnly: true,
-                    })}
+                    {renderWidget(el, wallCtx)}
                   </WidgetSurface>
                 )
                   : el.type === 'countdown' ? <CountdownNode el={el} />
@@ -1743,7 +1572,7 @@ export function TvPresentationPage() {
             const x = at?.x ?? job.canvasX ?? 24 + (i % 6) * 240;
             const y = at?.y ?? job.canvasY ?? 24 + Math.floor(i / 6) * 150;
             return (
-              <button key={job.id} onClick={() => { setPhotoAt(0); setOpenJob(job); }}
+              <button key={job.id} onClick={() => setOpenJobId(job.id)}
                 className="absolute text-left rounded-xl bg-white p-2.5"
                 style={{ left: x, top: y, width: 215, height: 132, zIndex: 5, border: `4px solid ${st?.color ?? '#cbd5e1'}` }}>
                 <div className="font-bold text-sm text-gray-900 leading-tight">{job.displayName || t('Job', 'עבודה')}</div>
@@ -1850,7 +1679,7 @@ export function TvPresentationPage() {
                   const st = stageOf(job);
                   return (
                     <button key={job.id}
-                      onClick={() => { setOpenBin(null); setPhotoAt(0); setOpenJob(job); }}
+                      onClick={() => { setOpenBin(null); setOpenJobId(job.id); }}
                       className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left
                                  hover:bg-slate-50 transition-colors">
                       <span className="w-3 h-3 rounded-full flex-shrink-0"
@@ -1900,14 +1729,11 @@ export function TvPresentationPage() {
         <WidgetListPopup
           title={wallList.title}
           jobIds={wallList.jobIds}
-          onOpenJob={id => {
-            setWallList(null);
-            const j = apartments.find(a => a.id === id);
-            if (j) { setPhotoAt(0); setOpenJob(j); }
-          }}
+          onOpenJob={id => { setWallList(null); setOpenJobId(id); }}
           onClose={() => setWallList(null)}
         />
       )}
     </div>
-  );
+    {tvDrawer}
+  </>);
 }

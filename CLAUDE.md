@@ -5767,3 +5767,87 @@ under the green frame.
 computed colors, with a weekday-initials row and hairline empty days — the
 old quarter-strength translucent amber over white read as dirty. Ink flips
 white past half strength; today keeps the accent ring.
+
+---
+
+# v2 — the dead-buttons round (urgent navigation, and the TV opens the real job window)
+
+## NAVIGATION IS URGENT AGAIN — the one cause behind every dead button
+react-router v7 wraps EVERY navigation state update in `React.startTransition`
+with no opt-out (v6 did not), and a transition render is restarted from
+scratch by any urgent update. This app ticks — countdown widgets at 1s, wall
+clocks, photo walls, presence cursors — so on a machine where rendering the
+Job Board takes longer than the gap between ticks the router's render never
+finishes: the URL moves (history is written synchronously) and the screen
+does not. That is the office's "the sidebar buttons don't work, only refresh
+works" AND the TV bar's dead buttons — on the TV every dead button went
+through `setSearchParams` (a router transition) while the two that kept
+working (full screen, the overdue pill) are plain component state, which is
+the fingerprint to recognise this disease by.
+
+**The fix**: the `router-urgent-nav` plugin in `vite.config.ts` resolves
+`'react'` to `src/shims/react-inline-transition.js` ONLY for react-router's
+own imports; the shim re-exports the real React with a `startTransition`
+that runs its callback inline. Navigation is an ordinary urgent update again
+— v6's behaviour, which this app shipped on for months. Rules that were paid
+for:
+- The shim is a **.js file with EXPLICIT per-name re-exports**, not
+  `export * from 'react'`: `@types/react` is an `export =` module tsc
+  refuses to star-export, and in dev Vite serves react as a CJS facade whose
+  only ESM export is `default` — a star re-export delivers nothing and
+  react-router dies on "React.createContext is not a function". The
+  default/namespace pick (`ReactDefault.createContext ? ReactDefault :
+  ReactStar`) handles dev and the built bundle alike.
+- `optimizeDeps.exclude: ['react-router', 'react-router-dom']` or the
+  prebundle resolves react past the plugin in dev — and then
+  `include: ['react-router > cookie', 'react-router > set-cookie-parser']`
+  or its CJS sub-deps lose their ESM interop and throw.
+- No route here is lazy and none has a loader, so there is nothing for a
+  transition to keep interactive during. If a lazy route is ever added, its
+  Suspense fallback will flash on navigation — decide then, knowingly.
+
+`scratchpad/urgentnav.mjs` is the guard. Its signature check: with the shim,
+a sidebar click swaps the DOM **by the end of the click's own microtask
+queue** (urgent; no timer can get in ahead of a microtask) — without it the
+swap waits on the scheduler's macrotask and can be starved. Measured both
+ways before encoding. It also drives a navigation under 10× CPU throttle
+plus presence churn.
+
+## OWNER RULING (2026-08-30): the TV opens the REAL job window
+The wall-only job screen (plan two-thirds, photo carousel, "Back to board")
+is DELETED — "a job screen I never want to see. I want to see exactly the
+job drawer that I would see on a PC." Tapping a job anywhere on the wall —
+a tile, a diagram cell, a group row, a widget list row, the overdue pill's
+list — opens the real `ApartmentDetailDrawer` over the wall, edits included
+(this supersedes "always read-only" for the job window, by his ruling).
+Wiring rules:
+- `openJobId` (an id, never the record — the standing live re-resolve rule);
+  the drawer, `QuickAddTaskPanel` and `Toast` render as SIBLINGS of the
+  frame, OUTSIDE the dpr `zoom` compensation — a fixed modal inside a zoomed
+  subtree scales past a dpr<1 panel's height and its bottom is unreachable.
+- Writes are attributed to the first active admin (`tvUser`) — the TV has no
+  login, and a nameless log entry is the crash the drawerround already paid
+  for.
+- `wallCtx.openUnit` TRAVELS now (the 2026-08-26 reversal reaches the wall):
+  a foreign unit sets the view param and a `pendingOpenRef` opens it when
+  that workspace's apartments land. The old `openUnit: () => {}` stub is
+  gone from the wall (the portal keeps its no-ops).
+- The board view's widgets render through `renderWidget(el, wallCtx)` — they
+  carried an inline ctx with `openJob: () => {}`, so every widget tap on the
+  wall's board view did nothing.
+
+## A READ-ONLY planner card still opens on a click
+`PlannerCard`'s `openHandlers` were gated on `openOnly` (projections), so a
+read-only planner — the TV wall, a view-only board — rendered its job cards
+with NO handler at all: the owner's "I press an apartment inside the
+notebook… nothing is clicking". Any job card now opens on click whenever the
+drag handlers are not installed; hosts whose taps must stay inert (the
+worker's portal) pass no-op `openJob`/`openUnit`, which is where that gate
+belongs.
+
+Harness: `scratchpad/tvdrawer.mjs` (tile→real drawer, old screen gone,
+Escape, foreign notebook card switches the wall's view and opens the unit,
+bar alive afterwards). `round29.mjs` re-encoded: closing a drawer opened by
+cross-workspace travel redeems the RETURN TICKET by itself — its manual
+walk-home through the header was asserting a journey the app no longer
+needs (pre-existing rot, failed identically with this diff stashed).

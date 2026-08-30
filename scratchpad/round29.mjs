@@ -72,16 +72,13 @@ check(await page.evaluate(() =>
   'the FULL drawer is open — no peek window');
 check(await page.evaluate(() => document.body.innerText.includes('Artzi')),
   'showing the unit itself');
-// Close the drawer and walk home through the header, so the next section
-// starts where it always did — standing on the Job Board.
+// Closing the drawer redeems the RETURN TICKET (the touch round's
+// unitTravel): the app itself carries you back to where you were standing —
+// no header walk needed any more.
 await page.keyboard.press('Escape');
-await page.waitForTimeout(500);
-await page.locator('header button', { hasText: /Wolfson/ }).first().click();
-await page.waitForTimeout(500);
-await page.getByRole('menu').getByText(/Job Board/).first().click();
 await page.waitForTimeout(2200);
 check((await pid()) === 'general' && page.url().includes('/jobs'),
-  'the header brings you back to the board', `${await pid()} ${page.url()}`);
+  'closing the drawer redeems the return ticket back to the board', `${await pid()} ${page.url()}`);
 
 // ── 2 · the browser back button returns to the workspace you SAW ────────────
 // Switch to Wolfson the way a person does — through the real header dropdown.
