@@ -227,11 +227,14 @@ export function MapWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   useEffect(() => {
     const node = box.current;
     if (!node) return;
-    const ro = new ResizeObserver(() => {
-      setSize({ w: node.clientWidth || 300, h: node.clientHeight || 200 });
+    // Damped (the standing measure rule) — a measure never feeds its own loop.
+    const read = () => setSize(prev => {
+      const w = node.clientWidth || 300, h = node.clientHeight || 200;
+      return prev.w === w && prev.h === h ? prev : { w, h };
     });
+    const ro = new ResizeObserver(read);
     ro.observe(node);
-    setSize({ w: node.clientWidth || 300, h: node.clientHeight || 200 });
+    read();
     return () => ro.disconnect();
   }, []);
 

@@ -451,7 +451,10 @@ export function TikTokWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   useEffect(() => {
     const node = boxRef.current;
     if (!node) return;
-    const read = () => setBox({ w: node.clientWidth, h: node.clientHeight });
+    // Damped (the standing measure rule) — a measure never feeds its own loop.
+    const read = () => setBox(prev =>
+      prev.w === node.clientWidth && prev.h === node.clientHeight
+        ? prev : { w: node.clientWidth, h: node.clientHeight });
     read();
     const ro = new ResizeObserver(read);
     ro.observe(node);

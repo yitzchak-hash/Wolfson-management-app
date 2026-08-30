@@ -5884,3 +5884,39 @@ production's scheduling and does not reproduce in dev — the idle churn is
 the non-vacuous anchor (pre-fix 834ms/s script FAILS it; fixed 13ms/s
 passes). When hunting any "app is mysteriously slow" report, run that meter
 first.
+
+## The three standing audits born of the dead-buttons day
+Run after any change to a measuring component, and after ANY dependency
+bump touching react / react-dom / react-router / vite:
+- **`scratchpad/loopaudit.mjs`** — static, offline, instant. Rule 1: every
+  setState reachable from a ResizeObserver callback that writes an OBJECT
+  literal must be the damped functional form (`set(prev => unchanged ? prev
+  : next)`); scalars self-damp via Object.is and pass. No excuse list for
+  rule 1 — the damped form costs two lines, so every RO write in the app is
+  now damped, uniformly. Rule 2: an effect that calls setState must not
+  depend on an array rebuilt bare every render (the #185 recipe); findings
+  are fixed or excused in the file with a reason, stale excuses fail.
+  Its own traps, paid for: a named RO callback must be read INCLUDING its
+  declaration text (a braceless arrow puts the setState before the first
+  brace), and chains ending in `.length`/`.some(`/`.includes(` are scalars,
+  not identity traps.
+- **`scratchpad/navaudit.mjs`** — static, offline. Holds the urgent-nav fix
+  against tomorrow's upgrade: the vite plugin is wired, the shim re-exports
+  EVERY export of the INSTALLED react (compared live — a React upgrade that
+  adds an export react-router needs would otherwise leave a silent hole),
+  react-router still imports bare 'react' and still calls startTransition,
+  and every react-router dependency is on the optimizeDeps include list
+  (the `cookie` lesson).
+- **`scratchpad/smoulder.mjs`** — runtime. Seeds one of every widget WITH
+  real data behind them (a data-gated loop never engages on an empty seed —
+  the ProjectMini lesson) plus a Wolfson snapshot, then measures idle CPU
+  on thirteen screens via CDP Performance metrics. The verdict reads SCRIPT
+  TIME first — a render loop's true signature (the real one burnt 830ms/s;
+  healthy screens 0-90) — because style recalcs alone are a decorative
+  infinite CSS pulse (the TV board idles at 60 recalc/s and 2ms/s script,
+  harmlessly). Verified non-vacuous: the pre-fix DashWidgets fails it at
+  783ms/s. When any "the app is mysteriously slow" report arrives, run
+  this first.
+Alongside them: every ResizeObserver write in the app (BinBoard's overview,
+TvViewPage, TikTokWidget, MapWidget, TvDashboard's Card) now uses the damped
+functional form, so the loopaudit's rule 1 holds with zero exceptions.

@@ -83,7 +83,10 @@ export function TvViewPage() {
       const wide = availW / availH > shape.w / shape.h;
       const w = wide ? (availH * shape.w) / shape.h : availW;
       const h = wide ? availH : (availW * shape.h) / shape.w;
-      setBox({ w: Math.round(w), h: Math.round(h) });
+      // Damped (the standing measure rule) — equal values return the previous
+      // object so React bails and a measure can never feed its own loop.
+      const rw = Math.round(w), rh = Math.round(h);
+      setBox(prev => (prev.w === rw && prev.h === rh ? prev : { w: rw, h: rh }));
     };
     measure();
     const ro = new ResizeObserver(measure);

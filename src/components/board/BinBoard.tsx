@@ -139,8 +139,12 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
     const el = surfaceRef.current;
     if (!el) return;
     cancelAnimationFrame(viewTick.current);
-    viewTick.current = requestAnimationFrame(() => setView({
-      x: el.scrollLeft, y: el.scrollTop, w: el.clientWidth, h: el.clientHeight,
+    // Damped (the standing measure rule): returning the previous object when
+    // nothing moved lets React bail, so a measure can never feed its own loop.
+    viewTick.current = requestAnimationFrame(() => setView(prev => {
+      const next = { x: el.scrollLeft, y: el.scrollTop, w: el.clientWidth, h: el.clientHeight };
+      return prev.x === next.x && prev.y === next.y && prev.w === next.w && prev.h === next.h
+        ? prev : next;
     }));
   }, []);
   useEffect(() => {

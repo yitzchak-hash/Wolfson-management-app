@@ -267,8 +267,10 @@ function TvCard({ el, ctx, columns, editing, shapeKey, registry, onSize, onPlace
   React.useEffect(() => {
     const node = ref.current;
     if (!node) return;
+    // Damped (the standing measure rule) — a measure never feeds its own loop.
     const ro = new ResizeObserver(() => {
-      setBox({ w: node.clientWidth, h: node.clientHeight });
+      setBox(prev => prev.w === node.clientWidth && prev.h === node.clientHeight
+        ? prev : { w: node.clientWidth, h: node.clientHeight });
     });
     ro.observe(node);
     return () => ro.disconnect();
