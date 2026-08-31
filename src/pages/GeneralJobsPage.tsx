@@ -12,7 +12,10 @@ import { useStore, isTombstoned } from '../data/store';
 import { useBoardTrack } from '../data/useBoardUndo';
 import { UndoButtons } from '../components/board/UndoLayer';
 import { isPlannerElement, purgeJobsFromPlanner } from '../data/plannerPurge';
-import { rotaCellAt, setRotaHover, anyRota, RotaHit, registerBoardDrop, BoardPlacer } from '../data/rotaDrop';
+import {
+  rotaCellAt, setRotaHover, anyRota, RotaHit, registerBoardDrop, BoardPlacer,
+  registerQuickBox, watchNotebookDrag,
+} from '../data/rotaDrop';
 import { PlannerEntry, personOf, weekStartOf, iso as isoDay } from '../components/board/PlannerWidget';
 import { PlannerTaskDialog, PlannerRemoveDialog, QuickAssignDialog } from '../components/board/PlannerDialogs';
 import { ScheduleWindow } from '../components/board/ScheduleWindow';
@@ -513,9 +516,24 @@ export function GeneralJobsPage() {
    * whole notebook. Only drawn when the workspace has a MAIN weekly notebook
    * to write into.
    */
-  const [quickAssign, setQuickAssign] = useState<Apartment | null>(null);
+  const [quickAssign, setQuickAssign] = useState<{
+    name: string;
+    /** Set for a board tile — Next runs the standing task dialog. */
+    job?: Apartment;
+    /** Set for a card dragged out of the NOTEBOOK — Next hands the chosen
+     *  person + day back to the notebook's own move machinery. */
+    apply?: (person: string, day: string) => void;
+  } | null>(null);
   const [quickHot, setQuickHot] = useState(false);
+  /** A notebook card drag is live — the box must show for it too. */
+  const [notebookDragging, setNotebookDragging] = useState(false);
   const quickBoxRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => watchNotebookDrag(setNotebookDragging), []);
+  useEffect(() => registerQuickBox({
+    rect: () => quickBoxRef.current?.getBoundingClientRect() ?? null,
+    hot: setQuickHot,
+    take: (name, apply) => setQuickAssign({ name, apply }),
+  }), []);
   /** A slot being emptied that has a task behind it. */
   const [plannerRemove, setPlannerRemove] =
     useState<{ entry: PlannerEntry; done: (alsoDelete: boolean) => void } | null>(null);
@@ -3908,7 +3926,7 @@ export function GeneralJobsPage() {
         setQuickHot(false);
         setRotaHover(null);
         setSelectedJobIds(new Set());
-        setQuickAssign(job);
+        setQuickAssign({ name: job.displayName || 'this job', job });
       } else if (cell) {
         dropOnRota(cell, drag.ids);
         setSelectedJobIds(new Set());
@@ -8105,7 +8123,7 @@ export function GeneralJobsPage() {
           dragged, over everything (the floating chrome is z-40/50).
           pointer-events-none on purpose: the drag holds pointer capture, so
           the box is found by coordinates (overQuickBox), never by events. */}
-      {drag?.kind === 'job' && drag.moved && mainRota && (
+      {((drag?.kind === 'job' && drag.moved) || notebookDragging) && mainRota && (
         <div
           ref={quickBoxRef}
           data-quick-box
@@ -8126,19 +8144,23 @@ export function GeneralJobsPage() {
 
       {quickAssign && mainRota && (
         <QuickAssignDialog
-          job={quickAssign}
+          jobName={quickAssign.name}
           people={((mainRota.data ?? {}) as { people?: string[] }).people ?? []}
           contractors={contractors}
           users={users}
           isRtl={s.isRtl}
           onCancel={() => setQuickAssign(null)}
           onNext={(person, dayIso) => {
-            // Hand over to the standing task dialog exactly as if the tile
-            // had been dropped on that square of the notebook.
             setQuickAssign(null);
+            // A card dragged out of the NOTEBOOK: the answer goes back to the
+            // notebook's own move machinery, asks included.
+            if (quickAssign.apply) { quickAssign.apply(person, dayIso); return; }
+            // A board tile: hand over to the standing task dialog exactly as
+            // if it had been dropped on that square of the notebook.
+            if (!quickAssign.job) return;
             setPlannerDrop({
               cell: { elId: mainRota.id, probeId: 'quick-assign', person, day: dayIso },
-              job: quickAssign,
+              job: quickAssign.job,
             });
           }}
         />

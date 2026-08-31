@@ -65,6 +65,57 @@ export function rotaCellAt(clientX: number, clientY: number): RotaHit | null {
 /** True when at least one rota is on the board — lets the drag skip the work. */
 export const anyRota = () => probes.size > 0;
 
+// ── The QUICK-ASSIGN box, for cards already ON the notebook ─────────────────
+//
+// The box at the top of the screen takes board tiles by the board's own drag
+// machinery; a card dragged out of a notebook SQUARE lives in PlannerWidget,
+// which knows nothing about the page. The same registry idea bridges them:
+// the board page registers the box (its rect, its hover highlight, and what
+// to do with a drop), and the notebook announces its card drags so the page
+// can show the box at all.
+
+export interface QuickBoxReg {
+  /** The box's screen rect — null while it is not on screen. */
+  rect: () => { left: number; top: number; right: number; bottom: number } | null;
+  /** Light the box up (or down) while a card hovers it. */
+  hot: (on: boolean) => void;
+  /** A drop landed: ask who + which day, then run `apply` with the answer. */
+  take: (name: string, apply: (person: string, day: string) => void) => void;
+}
+
+let quickBoxReg: QuickBoxReg | null = null;
+export function registerQuickBox(q: QuickBoxReg): () => void {
+  quickBoxReg = q;
+  return () => { if (quickBoxReg === q) quickBoxReg = null; };
+}
+
+/** Update the box's highlight for a card at this screen point. */
+export function quickBoxHover(x: number, y: number): void {
+  const r = quickBoxReg?.rect();
+  quickBoxReg?.hot(!!r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom);
+}
+
+/** True when the release landed on the box — the question is now the page's. */
+export function quickBoxTake(
+  x: number, y: number, name: string, apply: (person: string, day: string) => void,
+): boolean {
+  const r = quickBoxReg?.rect();
+  if (!r || x < r.left || x > r.right || y < r.top || y > r.bottom) return false;
+  quickBoxReg!.hot(false);
+  quickBoxReg!.take(name, apply);
+  return true;
+}
+
+/** The notebook says a card drag went live (or ended), so the box can show. */
+const dragWatchers = new Set<(on: boolean) => void>();
+export function watchNotebookDrag(fn: (on: boolean) => void): () => void {
+  dragWatchers.add(fn);
+  return () => { dragWatchers.delete(fn); };
+}
+export function announceNotebookDrag(on: boolean): void {
+  dragWatchers.forEach(f => f(on));
+}
+
 // ── Dropping a job on the BOARD itself ──────────────────────────────────────
 //
 // The same registry idea as the rota probes, for the board's own surface: a

@@ -6,7 +6,10 @@ import {
   Apartment, CanvasElement, Contractor, User, ContractorAssignment, Stage, personColor,
   aptLabel,
 } from '../../types';
-import { registerRota, onRotaHover, rotaCellAt, setRotaHover, RotaHit } from '../../data/rotaDrop';
+import {
+  registerRota, onRotaHover, rotaCellAt, setRotaHover, RotaHit,
+  announceNotebookDrag, quickBoxHover, quickBoxTake,
+} from '../../data/rotaDrop';
 import { daysOf, dayNumberOf, moveTaskDay, removeTaskDay, addTaskDay } from '../../data/taskDays';
 import { useStore, loadProjectSnapshot } from '../../data/store';
 import { useBoardTrack } from '../../data/useBoardUndo';
@@ -788,6 +791,26 @@ export function PlannerWidget({
     return landed;
   }
 
+  /**
+   * firstWeek/weekCount patch covering `day`, or {} when the run already does.
+   *
+   * A day picked in the quick-assign box can sit PAST the drawn run — the
+   * same trap placeOnPlanner paid for: the entry landed in `cells` invisibly.
+   * Mirrors the widget's own plus buttons, in the SAME write as the cells.
+   */
+  function runCover(dayIso: string): Partial<PlannerData> {
+    const wk = weekStartOf(new Date(`${dayIso}T00:00:00`), weekStart);
+    const WEEK = 7 * 86400000;
+    if (wk.getTime() < firstWeek.getTime()) {
+      return {
+        firstWeek: iso(wk),
+        weekCount: Math.min(520, weekCount + Math.round((firstWeek.getTime() - wk.getTime()) / WEEK)),
+      };
+    }
+    const idx = Math.round((wk.getTime() - firstWeek.getTime()) / WEEK);
+    return idx >= weekCount ? { weekCount: Math.min(520, idx + 1) } : {};
+  }
+
   function moveEntryNow(
     fromKey: string, entry: PlannerEntry, copy: boolean, toKey: string,
   ): boolean {
@@ -800,7 +823,7 @@ export function PlannerWidget({
     // The same job twice in ONE square says nothing the first one did not.
     if (entry.jobId && landing.some(e => e.jobId === entry.jobId)) return false;
     next[toKey] = [...landing, { ...entry, id: newEntryId() }];
-    write({ cells: next });
+    write({ cells: next, ...runCover(toKey.slice(toKey.indexOf('|') + 1)) });
     return true;
   }
 
@@ -1814,22 +1837,40 @@ function PlannerCard({
       const d = drag.current;
       if (!d) return;
       if (!d.live && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 4) return;
+      // Announce the drag the moment it goes live — the board page shows the
+      // quick-assign box for it, exactly as it does for a board tile.
+      if (!d.live) announceNotebookDrag(true);
       d.live = true;
       // Held and moving: the card goes see-through, so what is UNDER the hand
       // — the square it will land in — is what the eye reads.
       setHeld(true);
       setRotaHover(rotaCellAt(e.clientX, e.clientY));
+      quickBoxHover(e.clientX, e.clientY);
     },
     onPointerUp: (e: React.PointerEvent) => {
       const d = drag.current;
       drag.current = null;
       setHeld(false);
+      announceNotebookDrag(false);
       (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
       if (!d?.live) {
         // A press that never travelled IS a click, and a click opens the job —
         // the same thing it does anywhere else. Done here rather than in a
         // separate onClick so there is one path, not two that must agree.
         if (!(e.target as HTMLElement).closest('a,[data-card-action]')) onOpen();
+        return;
+      }
+      /**
+       * The quick-assign box FIRST — it floats over everything, so a release
+       * on it can never also mean the square visually underneath. The chosen
+       * person + day come back as a synthetic square and go through the SAME
+       * onDragTo doors as a real drop — the multi-day ask included. elId is
+       * blank on purpose: every door writes this notebook's own cells.
+       */
+      if (quickBoxTake(e.clientX, e.clientY,
+        job ? (aptLabel(job) || 'this job') : (entry.text || 'this note'),
+        (person, dayIso) => onDragTo!({ elId: '', probeId: 'quick-assign', person, day: dayIso }, false))) {
+        setRotaHover(null);
         return;
       }
       const target = rotaCellAt(e.clientX, e.clientY);
@@ -1845,7 +1886,10 @@ function PlannerCard({
        */
       if (entry.jobId && onDragOff) onDragOff();
     },
-    onPointerCancel: () => { drag.current = null; setHeld(false); setRotaHover(null); },
+    onPointerCancel: () => {
+      drag.current = null; setHeld(false); setRotaHover(null);
+      announceNotebookDrag(false);
+    },
   };
 
   if (entry.jobId) {

@@ -6321,3 +6321,34 @@ optional ContractorUiStrings: `notifTitle` / `notifEmpty` / `notifNew`.
 
 Harness: `scratchpad/round33-probe.mjs` (15 checks, three contexts).
 `stripsrow-probe` carries 2 PRE-EXISTING reds (verified identical stashed).
+
+---
+
+# v2 — the quick-assign box takes notebook cards too
+
+The box at the top of the screen was wired to the BOARD's drag machinery, so
+a card already on the notebook could not reach it. Bridged through
+`rotaDrop.ts` (the registry idiom, third use): the page registers the box
+(`registerQuickBox` — its rect, its highlight setter, and `take`), the card
+drag announces itself (`announceNotebookDrag`) so the page can SHOW the box
+at all, hovers through `quickBoxHover`, and a release checks `quickBoxTake`
+FIRST — the box floats over everything, so a release on it can never also
+mean the square visually underneath.
+
+- The chosen person + day come back as a synthetic `RotaHit` with a BLANK
+  `elId` (nothing in the widget reads it — every door writes this notebook's
+  own cells) and go through the card's standing `onDragTo` doors: the plain
+  drag still asks move/copy/off, a day of a multi-day task still asks its
+  three-door question. One path, not two that must agree.
+- `quickAssign` state grew `{ name, job?, apply? }`: `job` = a board tile
+  (Next → the standing task dialog), `apply` = a notebook card (Next → the
+  callback into the widget). `QuickAssignDialog` takes `jobName`, so a
+  free-words card assigns by its own text.
+- **`moveEntryNow` extends the drawn run** (`runCover` — firstWeek/weekCount
+  in the SAME write as the cells, mirroring the plus buttons): a far-future
+  day picked in the box used to land in `cells` invisibly, the exact trap
+  `placeOnPlanner` paid for.
+
+Harness: `scratchpad/round34-probe.mjs` (8 checks — box shows and lights for
+a card drag, the who+day ask, the move door, landed/left cells, the run
+extension). round32/multiday/notebook2way/round22 stay green.

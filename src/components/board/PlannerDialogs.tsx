@@ -348,8 +348,9 @@ function PendingAudio({ file, onDelete }: { file: File; onDelete: () => void }) 
  * square. It exists so a job can be planned into the far future without
  * dragging across weeks of notebook.
  */
-export function QuickAssignDialog({ job, people, contractors, users, isRtl, onCancel, onNext }: {
-  job: Apartment;
+export function QuickAssignDialog({ jobName, people, contractors, users, isRtl, onCancel, onNext }: {
+  /** What is being assigned — a job's name, or a free-words card's text. */
+  jobName: string;
   /** The notebook's own rows ('c:<id>' / 'u:<id>' / 'n:<name>'). */
   people: string[];
   contractors: Contractor[];
@@ -372,7 +373,7 @@ export function QuickAssignDialog({ job, people, contractors, users, isRtl, onCa
 
   return (
     <Shell onCancel={onCancel}
-      title={isRtl ? `לשבץ את ${job.displayName || 'העבודה'}` : `Assign ${job.displayName || 'this job'}`}>
+      title={isRtl ? `לשבץ את ${jobName || 'העבודה'}` : `Assign ${jobName || 'this job'}`}>
       <div className="p-4 space-y-3" data-quick-assign>
         <label className="block">
           <span className="block text-[11px] font-bold text-gray-500 mb-1">
