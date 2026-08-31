@@ -1117,14 +1117,33 @@ export function PlannerWidget({
                     at 11px in a huddle they were hard to press. */}
                 <div className="flex flex-col justify-end gap-0.5 pb-0.5 min-w-0">
                   <div className="flex items-center gap-1 min-w-0">
-                    <span className="truncate leading-none">
-                      <span className="font-black tracking-wide" style={{ fontSize: dateSize, color: '#334155' }}>
-                        {wkStart.toLocaleDateString(undefined, { month: 'short' }).toUpperCase()}
-                      </span>
-                      <span className="font-bold tabular-nums" style={{ fontSize: dateSize, color: '#94a3b8' }}>
-                        {' '}{wkStart.getDate()}
-                      </span>
-                    </span>
+                    {(() => {
+                      /**
+                       * "AUG 30" SHRINKS to fit the label column instead of
+                       * being cut off — the column is sized to the names
+                       * beside it, and on a sheet of short names the bold
+                       * month at full date-size ran out of room (the owner's
+                       * "the name of the month is getting cut off").
+                       * Measured with the sheet's own nameEms, rounded
+                       * down, with the scroll arrows' room taken out first.
+                       */
+                      const mon = wkStart.toLocaleDateString(undefined, { month: 'short' }).toUpperCase();
+                      const label = `${mon} ${wkStart.getDate()}`;
+                      const arrowsW = 2 * Math.max(11, Math.round(z(12))) + z(10);
+                      const avail = Math.max(z(24), nameColW - arrowsW);
+                      const fit = Math.max(z(8),
+                        Math.min(dateSize, Math.floor(avail / (nameEms(label) * 1.08))));
+                      return (
+                        <span className="whitespace-nowrap leading-none" data-week-label>
+                          <span className="font-black tracking-wide" style={{ fontSize: fit, color: '#334155' }}>
+                            {mon}
+                          </span>
+                          <span className="font-bold tabular-nums" style={{ fontSize: fit, color: '#94a3b8' }}>
+                            {' '}{wkStart.getDate()}
+                          </span>
+                        </span>
+                      );
+                    })()}
                     <span className="flex-1" />
                     {/* Just scrollers, nothing more: up shows the week above,
                         down the week below. They replace the ‹ Today › cluster

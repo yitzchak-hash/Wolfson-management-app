@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useStore } from './data/store';
 import { AppLayout } from './components/layout/AppLayout';
 import { LoginPage } from './pages/LoginPage';
@@ -25,7 +25,12 @@ armWorkspaceHistoryRestore();
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { currentUser } = useStore();
-  if (!currentUser) return <Navigate to="/login" replace />;
+  const location = useLocation();
+  // The gate remembers the URL it bounced — the login page returns there,
+  // switching workspace to match. Landing by last-used workspace instead of
+  // the address somebody actually opened is what made "the job board URL"
+  // show Wolfson until a second click.
+  if (!currentUser) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   return <>{children}</>;
 }
 

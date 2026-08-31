@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { useStore } from '../data/store';
 import { personColor } from '../types';
@@ -25,8 +25,9 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const [shake, setShake] = useState(false);
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
-  const { login, mainUiStrings: s, users, currentProjectId, authReady, loadUsersForLogin } = useStore();
+  const { login, mainUiStrings: s, users, currentProjectId, authReady, loadUsersForLogin, setCurrentProject } = useStore();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Load the real user list before any code can be checked (see store.loadUsersForLogin)
   useEffect(() => { loadUsersForLogin(); }, []);
@@ -84,7 +85,23 @@ export function LoginPage() {
     if (picked.code !== code) { rejectCode(); return; }
     const user = login(code);
     if (user && user.id === picked.id) {
-      navigate(currentProjectId === 'general' ? '/jobs' : '/project');
+      /**
+       * Go where the person actually ASKED to go. The auth gate stamps the
+       * URL it bounced (`state.from`); landing by last-used workspace
+       * instead meant opening the job board's address on a machine that
+       * last showed Wolfson put you on the Wolfson diagram, and the board
+       * needed a second click. The board route also switches the workspace
+       * to match — a URL is a destination, not a suggestion.
+       */
+      const from = (location.state as { from?: string } | null)?.from;
+      if (from === '/jobs' || from === '/list') {
+        if (currentProjectId !== 'general') setCurrentProject('general');
+        navigate(from);
+      } else if (from && from !== '/' && from !== '/project') {
+        navigate(from);
+      } else {
+        navigate(currentProjectId === 'general' ? '/jobs' : '/project');
+      }
     } else {
       rejectCode();
     }
