@@ -964,6 +964,25 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
                     </Tooltip>
                   );
                 })()}
+                {/* What his portal BELL shows. Some workers are not techy and
+                    a stream of updates only confuses — the office decides per
+                    worker, down to no bell at all. */}
+                <Tooltip text="What his notification bell shows in the portal — everything, only today and tomorrow, only today, or no bell at all">
+                  <select
+                    data-notify-scope
+                    value={c.notifyScope ?? 'all'}
+                    onChange={e => updateContractor(c.id, {
+                      notifyScope: e.target.value === 'all'
+                        ? undefined
+                        : e.target.value as 'near' | 'today' | 'off',
+                    })}
+                    className="text-[11px] font-semibold px-1.5 py-1 rounded-lg border border-gray-200 bg-white text-gray-600">
+                    <option value="all">bell: everything</option>
+                    <option value="near">bell: today + tomorrow</option>
+                    <option value="today">bell: today only</option>
+                    <option value="off">no bell</option>
+                  </select>
+                </Tooltip>
                 <button
                   onClick={() => setOpenPerms(o => (o === c.id ? null : c.id))}
                   className="text-[11px] font-semibold"

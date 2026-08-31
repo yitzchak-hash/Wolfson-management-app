@@ -94,7 +94,19 @@ function variantsOf(l: Line): string[] {
   const rtl = [...l.parts].sort((a, b) => b.x - a.x).map(p => p.str).join(' ').replace(/\s+/g, ' ').trim();
   if (!l.hebrew) return [rtl];
   const ltr = [...l.parts].sort((a, b) => a.x - b.x).map(p => p.str).join(' ').replace(/\s+/g, ' ').trim();
-  const out = [rtl, ltr, fixVisual(ltr), fixVisual(rtl)];
+  /**
+   * PLAIN full reversal, beside fixVisual — and deliberately AHEAD of it.
+   *
+   * pdf.js runs its own bidi over every text item: on a visually-stored
+   * Hebrew line it hands back the Hebrew still reversed but the DIGIT runs
+   * already flipped ("מגיני הגוש 48" arrives as "84 שוגה יניגמ"). Undoing
+   * that is a bare character reversal; fixVisual's digit re-reverse — right
+   * for a raw visual layer — turns the house number into its mirror ("84").
+   * The two recoveries tie on every quality signal, so list order decides,
+   * and the pdf.js-shaped one is what the reader actually receives.
+   */
+  const flip = (s: string) => [...s].reverse().join('');
+  const out = [rtl, ltr, flip(ltr), fixVisual(ltr), flip(rtl), fixVisual(rtl)];
   return [...new Set(out.filter(Boolean))];
 }
 
@@ -103,6 +115,70 @@ function digitShare(s: string): number {
   const chars = s.replace(/\s/g, '');
   if (!chars.length) return 0;
   return (chars.match(/\d/g)?.length ?? 0) / chars.length;
+}
+
+/**
+ * Does this read like Hebrew the right way round?
+ *
+ * Final letters (ך ם ן ף ץ) are the giveaway: real Hebrew carries them at
+ * word ENDS; a reversed line carries them at word STARTS or mid-word. A line
+ * like "מגיני הגוש 48" has no finals at all, which is why this is a SCORE the
+ * variants compete on rather than a yes/no — the reversed junk in the same
+ * set usually loses points even when the right answer earns none.
+ */
+export function hebrewQuality(s: string): number {
+  let q = 0;
+  for (const w of s.split(/\s+/)) {
+    const core = w.replace(/[^֐-׿]/g, '');
+    if (!core) continue;
+    if (/[םןץףך]$/.test(core)) q += 2;
+    if (/^[םןץףך]/.test(core)) q -= 3;
+    if (core.length > 2 && /[םןץףך]/.test(core.slice(1, -1))) q -= 2;
+  }
+  return q;
+}
+
+/**
+ * The most Hebrew-plausible reading of a line. Street words help; and in a
+ * Hebrew address the house NUMBER comes last — "מגיני הגוש 48" — so digits
+ * trailing earn a point and digits leading lose one, which is what separates
+ * the right reading from its mirror when neither carries a final letter.
+ */
+function pickReading(vs: string[]): string {
+  let best = vs[0] ?? '';
+  let bq = -Infinity;
+  for (const v of vs) {
+    const q = hebrewQuality(v)
+      + (STREET.test(v) ? 3 : 0)
+      + (HEB.test(v) && /\d\s*$/.test(v) ? 1 : 0)
+      - (HEB.test(v) && /^\s*\d/.test(v) ? 1 : 0);
+    if (q > bq) { bq = q; best = v; }
+  }
+  return best;
+}
+
+/**
+ * Only the parts of a line that sit in the LABEL'S OWN COLUMN.
+ *
+ * A "line" here is a y-band across the WHOLE sheet, so the band level with a
+ * title-block value can pick up dimension text from the middle of the floor
+ * plan — which is exactly the Miller gibberish: the address came back with
+ * half the drawing's annotations glued on. The value under a label lives in
+ * the label's column; everything else in the band is scenery.
+ */
+function columnLine(label: Line, band: Line): Line {
+  const cx = (label.x1 + label.x2) / 2;
+  const halfW = Math.max(160, (label.x2 - label.x1) * 3);
+  const parts = band.parts.filter(pt => Math.abs(pt.x - cx) < halfW);
+  if (!parts.length || parts.length === band.parts.length) return band;
+  return { ...band, parts };
+}
+
+/** A believable address VALUE: carries a number, a street word, or at least
+ *  two real Hebrew words. Anything less is scenery, and silence beats junk. */
+function plausibleAddress(s: string): boolean {
+  if (/\d/.test(s) || STREET.test(s)) return true;
+  return s.split(/\s+/).filter(w => w.replace(/[^֐-׿]/g, '').length >= 2).length >= 2;
 }
 
 const cache = new Map<string, PlanAddressResult>();
@@ -197,14 +273,21 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
       for (const v of variantsOf(l)) {
         if (LABEL.test(v)) {
           const stripped = stripLabel(v);
-          if (100 > score) { score = 100; text = stripped; }
+          if (score < 100) { score = 100; text = stripped; }
+          // Several variants can carry the label; keep the value that reads
+          // most like real Hebrew rather than the first one that turned up.
+          else if (stripped.length >= 3 && hebrewQuality(stripped) > hebrewQuality(text)) text = stripped;
           if (stripped.length < 3) {
             // "כתובת:" alone — the value sits on the neighbouring line.
             const next = lines[i + 1];
             if (next && Math.abs(next.y1 - l.y1) < (l.y2 - l.y1) * 3
                 && !PHONE_LABEL.test(next.text) && !PHONE.test(next.text)) {
-              const nv = variantsOf(next);
-              text = (nv.find(x => STREET.test(x)) ?? nv[0]) ?? '';
+              // Only the label's own column of that band, read in the most
+              // Hebrew-plausible order — and if what is there does not look
+              // like an address at all, say nothing rather than gibberish.
+              const sub = columnLine(l, next);
+              const read = pickReading(variantsOf(sub));
+              text = plausibleAddress(read) ? read : '';
               extra = next;
             }
           }
@@ -309,3 +392,4 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
     void doc.destroy().catch(() => {});
   }
 }
+

@@ -6259,3 +6259,65 @@ data-URL chip, memo player on the office pin, delete gating both ways).
 Its manner: the portal task card opens via `getByText().click()` — a
 hand-rolled element hunt with size filters misfired, and the plan iframe
 route must be stubbed or drive.google.com hangs the container.
+
+---
+
+# v2 — the worker-visibility round (bell, open-work switch, honest Hebrew, centred cards)
+
+## The plan reader survives the Miller sheet (`planAddress.ts`)
+Two real faults behind "לשל תיאהש תה לה" under the Address field, both
+reproduced offline (`scratchpad/planaddr2.mjs` builds the exact title block
+with a Hebrew-capable font via `@pdf-lib/fontkit` — installed `--no-save`,
+NEVER into package.json; note `npm install --no-save X` PRUNES other ad-hoc
+packages, playwright included, so reinstall both together):
+- **A "line" is a y-band across the whole sheet**, so the band level with a
+  title-block value glued the floor plan's own annotations onto the address.
+  `columnLine(label, band)` keeps only the parts in the label's column.
+- **pdf.js runs its own bidi on every text item**: a visually-stored Hebrew
+  line arrives with the Hebrew still reversed but the DIGIT runs already
+  flipped ("מגיני הגוש 48" → "84 שוגה יניגמ"). Recovery is a PLAIN character
+  reversal — `fixVisual`'s digit re-reverse mirrors the house number — so
+  `variantsOf` now offers `flip()` AHEAD of `fixVisual` and
+  `pickReading`/`hebrewQuality` choose: final letters at word ends (+) vs
+  starts/middles (−), street words +3, and the Hebrew-address tiebreak that
+  the house number TRAILS (+1 trailing digits, −1 leading). An implausible
+  neighbour value (no digit, no street word, <2 Hebrew words) suggests
+  NOTHING — silence beats gibberish. The read cache is in-memory per visit,
+  so "old finds reset" ships with the deploy by itself.
+
+## The portal follows OPEN work
+- **The auto-switch counts OPEN tasks, not total** — one DONE task in the
+  open workspace used to satisfy the guard while tomorrow's real work sat
+  invisible on the Job Board (the owner's exact repro). His history only
+  holds him when NOWHERE has open work.
+- **The Today pill must not hide his work**: once per visit, when today
+  holds nothing and open tasks exist on other days, the filter widens to
+  All (`filterWidened` ref, the settle idiom; his own pill press is never
+  fought). Note the effect sits ABOVE `const contractor` — it resolves the
+  worker by token itself.
+
+## The bell (`PortalBell` in ContractorPortal.tsx)
+DERIVED, never stored: overdue / today / tomorrow / new-this-week items
+from his open tasks across EVERY workspace (live store for the open one,
+`loadAllProjectsTaskData` snapshots for the rest, re-read on
+`snapshotTick`), each a tap from its task — a foreign item wears its
+workspace tag and travels there (the auto-switch precedent). The red dot is
+a per-device hash (`portal_bell_seen_<id>`, try/catch). Scope is
+**`Contractor.notifyScope`** ('all' absent-default / 'near' today+tomorrow /
+'today' / 'off' = no bell drawn), set per worker in Settings → Workers
+(`data-notify-scope` select) — rides `contractors`, no new store key. New
+optional ContractorUiStrings: `notifTitle` / `notifEmpty` / `notifNew`.
+
+## Smaller fixes
+- **The map names its project**: `data-map-project` line above the map tab's
+  filters — project name + building. The permission-gated project bubbles
+  stay the toggle.
+- **The drawer's multi-day chip says the RANGE** ("Sep 1–2 · 2 days",
+  CalendarDays glyph) and swallows the bare date beside it — "2 days" next
+  to the "2d" countdown badge read as the same thing twice.
+- **Notebook tile cards centre their text** (name row justify-centered with
+  the stage dot riding beside, sub-line/pills/task rows centred; the strip
+  branch keeps its left dot row).
+
+Harness: `scratchpad/round33-probe.mjs` (15 checks, three contexts).
+`stripsrow-probe` carries 2 PRE-EXISTING reds (verified identical stashed).

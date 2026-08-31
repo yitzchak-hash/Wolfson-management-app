@@ -1009,6 +1009,13 @@ export interface Contractor {
    * photograph.
    */
   photosOptional?: boolean;
+  /**
+   * What his portal BELL shows. Absent = 'all'. Set from Settings → Workers,
+   * because some workers are not techy and a bell full of updates "can mess
+   * their brain up" (the owner's words): 'near' keeps it to today + tomorrow,
+   * 'today' to today alone, 'off' draws no bell at all.
+   */
+  notifyScope?: 'all' | 'near' | 'today' | 'off';
   /** Their colour on the rota. Falls back to one derived from the name. */
   color?: string;
   token: string; // 24-char random alphanumeric — used in shareable /c/:token URL
@@ -1314,6 +1321,10 @@ export interface ContractorUiStrings {
   pinAddBtn?: string;
   pinClickPlan?: string;
   pinNotePlaceholder?: string;
+  /** The portal's notification bell — optional, same rule. */
+  notifTitle?: string;
+  notifEmpty?: string;
+  notifNew?: string;
   /** The "I did work here" stage-report flow on the building map — optional, same rule. */
   workHereBtn?: string;
   whatDidYouDo?: string;
@@ -1397,6 +1408,9 @@ export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   pinAddBtn: 'Pin',
   pinClickPlan: 'Tap the plan',
   pinNotePlaceholder: 'What needs doing here?',
+  notifTitle: 'Updates',
+  notifEmpty: 'Nothing new — you are all caught up',
+  notifNew: 'New job for you',
   calendarTab: 'Calendar',
   workHereBtn: 'I did work here',
   whatDidYouDo: 'What did you do?',
@@ -1478,6 +1492,9 @@ export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   pinAddBtn: 'נעץ',
   pinClickPlan: 'געו בתוכנית',
   pinNotePlaceholder: 'מה צריך לעשות כאן?',
+  notifTitle: 'עדכונים',
+  notifEmpty: 'אין חדש — אתם מעודכנים',
+  notifNew: 'עבודה חדשה בשבילך',
   calendarTab: 'לוח שנה',
   workHereBtn: 'עבדתי כאן',
   whatDidYouDo: 'מה עשית?',

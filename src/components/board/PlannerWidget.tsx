@@ -1965,12 +1965,14 @@ function PlannerCard({
         {/* The name, on top and WHOLE. `break-words`, never `truncate` — a
             card whose whole point is saying which job it is must not say
             "Wein…". */}
-        <div className="flex items-start gap-1 min-w-0">
+        {/* Centred, per the owner ("center the text in the tiles as a
+            default in the notebook"). The stage dot rides beside the words. */}
+        <div className="flex items-start justify-center gap-1 min-w-0">
           <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1"
             style={{ backgroundColor: stage?.color ?? '#cbd5e1' }}
             title={stage ? stage.name : 'Not started'} />
           <span
-            className="flex-1 min-w-0 text-left break-words"
+            className="min-w-0 text-center break-words"
             style={{
               fontSize: size + z(1.5), fontWeight: 800, color: '#1e293b',
               lineHeight: 1.15, overflowWrap: 'break-word',
@@ -1993,7 +1995,7 @@ function PlannerCard({
           </span>
         </div>
         {(workspace || stage || entry.text) && (
-          <span className="block truncate font-medium ps-2.5"
+          <span className="block truncate font-medium text-center px-1"
             style={{ fontSize: Math.max(z(7), size - z(2)), color: '#64748b' }}>
             {/* The workspace FIRST when it is not this one: "Artzi" here and
                 "Artzi" in Wolfson are two different answers to "where am I
@@ -2008,7 +2010,7 @@ function PlannerCard({
         {/* "day 2 of 3" — the same task wearing several faces — and, once the
             task is closed, what this day's line through it means. */}
         {(pill || closed) && (
-          <span className="flex items-center gap-1 ps-2.5 mt-0.5">
+          <span className="flex items-center justify-center gap-1 mt-0.5">
             {pill && (
               <span data-day-pill className="px-1.5 rounded-full font-bold tabular-nums"
                 style={{ fontSize: Math.max(z(7), size - z(3)), backgroundColor: '#e0e7ff', color: '#3730a3' }}>
@@ -2026,14 +2028,14 @@ function PlannerCard({
         {/* The job's own open tasks, INSIDE the card, one per row — no more
             separate tiles for the job and for what is to be done on it. */}
         {shownTasks.map(t => (
-          <span key={t.id} className="flex items-baseline gap-1 min-w-0 ps-2.5"
+          <span key={t.id} className="flex items-baseline justify-center gap-1 min-w-0 px-1"
             style={{ fontSize: Math.max(z(7), size - z(1.5)), color: '#475569' }}>
             <span className="flex-shrink-0" style={{ fontSize: '.8em' }}>•</span>
-            <span className="flex-1 min-w-0 truncate font-medium">{t.taskDescription}</span>
+            <span className="min-w-0 truncate font-medium">{t.taskDescription}</span>
           </span>
         ))}
         {pending > shownTasks.length && (
-          <span className="ps-2.5 font-semibold"
+          <span className="block text-center font-semibold"
             style={{ fontSize: Math.max(z(7), size - z(2)), color: '#94a3b8' }}>
             +{pending - shownTasks.length} more
           </span>

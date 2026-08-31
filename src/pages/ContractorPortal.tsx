@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useStore, loadAllProjectsTaskData, ensureProjectSnapshot } from '../data/store';
-import { ContractorAssignment, ContractorPhoto, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, getStageName, aptLabel } from '../types';
+import { ContractorAssignment, ContractorPhoto, Contractor, Apartment, Project, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, getStageName, aptLabel } from '../types';
 import { daysOf, futureDaysOf } from '../data/taskDays';
 import { PlanPinOverlay } from '../components/apartment/PlanPinOverlay';
 import { printSheet, printEsc } from '../data/printing';
@@ -12,7 +12,7 @@ import {
   Plus, Send, AlertCircle, X, Play, File as FileIcon, MapPin,
   BookOpen, Download, Paperclip, MessageSquare, CloudUpload,
   ChevronLeft, ChevronRight, Languages, History, PenLine, Printer,
-  Settings as SettingsIcon,
+  Settings as SettingsIcon, Bell,
 } from 'lucide-react';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
 import { permsOf } from '../data/workerLevels';
@@ -304,6 +304,158 @@ function MediaItem({ photo, onDelete, onOpen }: { photo: ContractorPhoto; onDele
   );
 }
 
+// ── The worker's notification bell ─────────────────────────────────────────
+
+interface BellItem {
+  id: string;
+  kind: 'overdue' | 'today' | 'tomorrow' | 'new';
+  text: string;
+  where: string;
+  /** Named only when the task lives in ANOTHER workspace. */
+  workspace?: string;
+  projectId: string;
+  taskId: string;
+}
+
+/**
+ * A small bell in the portal header — the worker's updates, DERIVED from his
+ * own tasks across every workspace, never stored: overdue, today, tomorrow
+ * and newly-assigned work, each one tap from its task. What it shows follows
+ * the per-worker scope the office sets (`Contractor.notifyScope`, Settings →
+ * Workers): everything / today + tomorrow / today only — and 'off' draws no
+ * bell at all, for the worker a stream of updates would only confuse.
+ *
+ * The red dot is per device (`portal_bell_seen_<id>` holds a hash of what the
+ * bell currently says; opening it marks it read) — the localStorage rule, in
+ * try/catch like every per-machine convenience.
+ */
+function PortalBell({ contractor, s, currentProjectId, allAssignments, allApartments, projects, snapshotTick, onPick }: {
+  contractor: Contractor;
+  s: typeof DEFAULT_CONTRACTOR_UI_STRINGS;
+  currentProjectId: string;
+  allAssignments: ContractorAssignment[];
+  allApartments: Apartment[];
+  projects: Project[];
+  snapshotTick: number;
+  onPick: (item: BellItem) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const scope = contractor.notifyScope ?? 'all';
+
+  const items = useMemo(() => {
+    const d0 = new Date();
+    const isoOf = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const today = isoOf(d0);
+    const d1 = new Date(d0); d1.setDate(d1.getDate() + 1);
+    const tomorrow = isoOf(d1);
+    const weekAgo = Date.now() - 6 * 86400000;
+    const out: BellItem[] = [];
+    for (const p of loadAllProjectsTaskData()) {
+      // The open workspace is LIVE; the snapshots stand in for the rest.
+      const asg = p.projectId === currentProjectId ? allAssignments : p.assignments;
+      const apts = p.projectId === currentProjectId ? allApartments : p.apartments;
+      const wsName = projects.find(x => x.id === p.projectId)?.name ?? p.projectId;
+      for (const a of asg) {
+        if (a.contractorId !== contractor.id || a.completedAt) continue;
+        const apt = apts.find(x => x.id === a.apartmentId);
+        const where = apt ? (aptLabel(apt) || apt.address || '') : a.buildingId;
+        const mk = (kind: BellItem['kind'], id: string) => out.push({
+          id, kind, text: a.taskDescription || where, where,
+          workspace: p.projectId === currentProjectId ? undefined : wsName,
+          projectId: p.projectId, taskId: a.id,
+        });
+        const ds = daysOf(a);
+        if (ds.includes(today)) mk('today', `t|${a.id}|${today}`);
+        else if (scope !== 'today' && ds.includes(tomorrow)) mk('tomorrow', `m|${a.id}|${tomorrow}`);
+        else if (scope === 'all' && a.dueDate && a.dueDate < today) mk('overdue', `o|${a.id}`);
+        else if (scope === 'all' && a.createdAt && Date.parse(a.createdAt) > weekAgo) mk('new', `n|${a.id}`);
+      }
+    }
+    const order: Record<BellItem['kind'], number> = { overdue: 0, today: 1, tomorrow: 2, new: 3 };
+    return out.sort((a, b) => order[a.kind] - order[b.kind]).slice(0, 30);
+    // snapshotTick: a hydrated snapshot landing must recompute this.
+  }, [contractor.id, scope, currentProjectId, allAssignments, allApartments, projects, snapshotTick]);
+
+  const hash = items.map(i => i.id).join(',');
+  const seenKey = `portal_bell_seen_${contractor.id}`;
+  const [seen, setSeen] = useState(() => {
+    try { return localStorage.getItem(seenKey) ?? ''; } catch { return ''; }
+  });
+  const unseen = items.length > 0 && seen !== hash;
+
+  const KIND: Record<BellItem['kind'], { word: string; color: string }> = {
+    overdue: { word: s.filterOverdue, color: '#dc2626' },
+    today: { word: s.filterToday, color: '#f97316' },
+    tomorrow: { word: s.filterTomorrow, color: '#0ea5e9' },
+    new: { word: s.notifNew || (s.isRtl ? 'עבודה חדשה בשבילך' : 'New job for you'), color: '#16a34a' },
+  };
+
+  return (
+    <>
+      <button
+        onClick={() => {
+          setOpen(v => !v);
+          try { localStorage.setItem(seenKey, hash); } catch { /* private mode */ }
+          setSeen(hash);
+        }}
+        title={s.notifTitle || 'Updates'}
+        data-portal-bell
+        className="relative flex-shrink-0 p-2 rounded-xl border border-white/15 text-white/85 hover:bg-white/10"
+      >
+        <Bell size={17} />
+        {unseen && (
+          <span data-bell-dot className="absolute top-1 end-1 w-2 h-2 rounded-full bg-red-500" />
+        )}
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-[119]" onClick={() => setOpen(false)} />
+          <div data-bell-panel
+            className="fixed z-[120] top-16 inset-x-2 sm:inset-x-auto sm:end-4 sm:w-[380px]
+                       bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 bg-[#1e3a5f]">
+              <span className="text-[14px] font-bold text-white">{s.notifTitle || 'Updates'}</span>
+              <button onClick={() => setOpen(false)} className="p-1 text-white/70 hover:text-white">
+                <X size={15} />
+              </button>
+            </div>
+            <div className="max-h-[60vh] overflow-y-auto">
+              {items.length === 0 ? (
+                <p className="text-[13px] text-gray-400 text-center py-8 px-4">
+                  {s.notifEmpty || (s.isRtl ? 'אין חדש — אתם מעודכנים' : 'Nothing new — you are all caught up')}
+                </p>
+              ) : items.map(it => (
+                <button key={it.id}
+                  onClick={() => { setOpen(false); onPick(it); }}
+                  data-bell-item
+                  className="flex items-start gap-2.5 w-full text-start px-4 py-2.5 border-b border-gray-100 hover:bg-gray-50">
+                  <span className="mt-1 w-2.5 h-2.5 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: KIND[it.kind].color }} />
+                  <span className="min-w-0">
+                    <span className="block text-[11px] font-bold" style={{ color: KIND[it.kind].color }}>
+                      {KIND[it.kind].word}
+                      {it.workspace && (
+                        <span className="ms-1.5 px-1.5 rounded-full text-[10px]"
+                          style={{ backgroundColor: '#ede9fe', color: '#6d28d9' }}>{it.workspace}</span>
+                      )}
+                    </span>
+                    <span className="block text-[13px] font-semibold text-gray-800 truncate">{it.text}</span>
+                    {it.where && it.where !== it.text && (
+                      <span className="block text-[11px] text-gray-400 truncate">{it.where}</span>
+                    )}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
 export function ContractorPortal() {
   const { token } = useParams<{ token: string }>();
   const {
@@ -413,6 +565,28 @@ export function ContractorPortal() {
   const [lightboxInfo, setLightboxInfo] = useState<{ photos: ContractorPhoto[]; index: number } | null>(null);
   const [uploadError, setUploadError] = useState('');
   const [mapFilter, setMapFilter] = useState<'yesterday' | 'today' | 'tomorrow' | 'week' | 'all'>('today');
+  /**
+   * The Today filter must not HIDE his work. A worker whose next job is
+   * tomorrow opened onto the default Today pill and an empty list — which
+   * read as "it doesn't show the task for him" (the owner's exact report).
+   * Once per visit, when today holds nothing and open work exists on other
+   * days, the filter falls back to All; his own later pill press is never
+   * fought.
+   */
+  const filterWidened = useRef(false);
+  useEffect(() => {
+    if (filterWidened.current || mapFilter !== 'today') return;
+    // By token, not the `contractor` binding — that is declared further down.
+    const meId = contractors.find(c => c.token === token && c.active)?.id;
+    const open = contractorAssignments.filter(a => a.contractorId === meId && !a.completedAt);
+    if (!open.length) return;
+    filterWidened.current = true;
+    const today = new Date();
+    const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const anyToday = open.some(a => daysOf(a).includes(todayIso));
+    if (!anyToday) setMapFilter('all');
+    // contractorAssignments settling in is exactly the moment to decide.
+  }, [contractorAssignments, contractors, token, mapFilter]);
   const [showPlansPdf, setShowPlansPdf] = useState(false);
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
   /** The days a multi-day task still has ahead when the worker closes it. */
@@ -491,9 +665,17 @@ export function ContractorPortal() {
   useEffect(() => {
     if (autoSwitched.current || !contractor) return;
     const here = myProjects.find(p => p.id === currentProjectId);
-    if (here && here.total > 0) { autoSwitched.current = true; return; }
-    const best = myProjects.filter(p => p.total > 0)
+    /**
+     * OPEN tasks decide, not total. A single finished task in the open
+     * workspace used to satisfy the guard, so a worker with one done job in
+     * Wolfson and tomorrow's real work on the Job Board opened onto the done
+     * one and never saw tomorrow ("I have a task for a contractor tomorrow
+     * and it doesn't show it for him"). Only when NOWHERE has open work does
+     * his history count as a reason to stay.
+     */
+    const best = myProjects.filter(p => p.open > 0)
       .sort((a, b) => (b.open - a.open) || (b.total - a.total))[0];
+    if (here && (here.open > 0 || (!best && here.total > 0))) { autoSwitched.current = true; return; }
     if (!best) return;
     const t = setTimeout(() => {
       if (autoSwitched.current) return;
@@ -1022,6 +1204,31 @@ export function ContractorPortal() {
             while his own name two items along came out as "Moshe Aha…". */}
         <img src="/tzviair-logo.png" alt="TzviAir" className="flex-shrink-0 h-6 md:h-8 w-auto" style={{ filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.9)) drop-shadow(0 1px 3px rgba(0,0,0,0.7))' }} />
         <div className="flex items-center gap-1.5 md:gap-2.5 min-w-0">
+          {/* His updates — scope set per worker by the office; 'off' draws
+              nothing at all. */}
+          {workerNow && (workerNow.notifyScope ?? 'all') !== 'off' && (
+            <PortalBell
+              contractor={workerNow}
+              s={s}
+              currentProjectId={currentProjectId}
+              allAssignments={contractorAssignments}
+              allApartments={apartments}
+              projects={projects}
+              snapshotTick={snapshotTick}
+              onPick={it => {
+                if (it.projectId !== currentProjectId) {
+                  // The task lives in another workspace — go where it is (the
+                  // auto-switch precedent); the list there shows it.
+                  setCurrentProject(it.projectId);
+                  setMapBuilding('');
+                  setActiveTab('tasks');
+                  return;
+                }
+                const a = contractorAssignments.find(x => x.id === it.taskId);
+                if (a) { setActiveTab('tasks'); setSelectedAssignment(a); setShowHistory(false); }
+              }}
+            />
+          )}
           {/* A work list for the van. Contractors are the people most likely to
               want the day on paper — no signal in a stairwell, no battery
               anxiety on a site. */}
@@ -1684,6 +1891,18 @@ export function ContractorPortal() {
               </div>
             ) : (
               <>
+                {/* WHICH project this diagram is — said out loud, per the
+                    owner: a worker allowed on two sites must never have to
+                    guess whose building he is looking at. The building's own
+                    name follows in the pill row below. */}
+                <div className="px-4 pt-2.5 pb-0.5 flex items-baseline gap-1.5" data-map-project>
+                  <span className="text-[14px] font-black text-[#1e3a5f]">
+                    {projects.find(p => p.id === currentProjectId)?.name ?? currentProjectId}
+                  </span>
+                  <span className="text-[11px] text-gray-400">
+                    {s.isRtl ? 'בניין' : 'Building'} {shown}
+                  </span>
+                </div>
                 <div className="sticky top-0 z-20 bg-gray-100/95 backdrop-blur px-3 py-2
                                 flex items-center gap-1.5 overflow-x-auto border-b border-gray-200">
                   {diagramProjects.length > 1 && (

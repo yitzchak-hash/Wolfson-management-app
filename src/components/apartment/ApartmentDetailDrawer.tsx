@@ -2129,15 +2129,26 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                   {a.taskDescription}
                                 </p>
                                 <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                                  {/* A task that takes days says so here, or the
-                                      card claims a one-day job. */}
-                                  {daysOf(a).length > 1 && (
+                                  {/* A multi-day task shows its RANGE — "Sep 1–2 · 2
+                                      days" — and swallows the bare date beside it.
+                                      The old pair ("2 days" chip + the "2d" countdown
+                                      badge) read as the same thing said twice, the
+                                      owner's report; a range and a countdown cannot
+                                      be confused. */}
+                                  {daysOf(a).length > 1 ? (
                                     <span data-task-days-chip
-                                      className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#1e3a5f]/10 text-[#1e3a5f]">
-                                      {daysOf(a).length} {ui.daysWord}
+                                      className="flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#1e3a5f]/10 text-[#1e3a5f]">
+                                      <CalendarDays size={9} />
+                                      {(() => {
+                                        const ds = daysOf(a);
+                                        const first = parseISO(ds[0]);
+                                        const last = parseISO(ds[ds.length - 1]);
+                                        const range = format(first, 'MMM d')
+                                          + '–' + format(last, first.getMonth() === last.getMonth() ? 'd' : 'MMM d');
+                                        return `${range} · ${ds.length} ${ui.daysWord}`;
+                                      })()}
                                     </span>
-                                  )}
-                                  {a.dueDate && (
+                                  ) : a.dueDate && (
                                     <span className="flex items-center gap-0.5 text-[10px] text-gray-400">
                                       <CalendarDays size={9} /> {format(parseISO(a.dueDate), 'MMM d')}
                                     </span>

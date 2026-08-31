@@ -30,6 +30,55 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-10-11',
+    title: 'The worker\'s portal wakes up',
+    items: [
+      {
+        title: 'A bell for the workers',
+        body: 'The portal has a little notification bell: overdue, today, '
+          + 'tomorrow and newly-assigned work — across every workspace, each '
+          + 'one tap from its task. In Settings → Workers you decide per '
+          + 'worker what his bell shows: everything, today + tomorrow, today '
+          + 'only, or no bell at all for the ones a stream of updates would '
+          + 'only confuse.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'His work finds him',
+        body: 'A worker whose next job lives in another workspace — or on '
+          + 'another day — used to open onto an empty list. The portal now '
+          + 'follows his OPEN work: it lands on the workspace that has some, '
+          + 'and when today is quiet the list shows everything instead of '
+          + 'hiding tomorrow behind the Today pill.',
+        demo: 'tap',
+      },
+      {
+        title: 'The map says whose building it is',
+        body: 'The building map names the project and the building out loud, '
+          + 'so a worker on two sites never has to guess what he is looking '
+          + 'at. The project bubbles for switching are still there for '
+          + 'workers allowed to switch.',
+        demo: 'pin',
+      },
+      {
+        title: 'Plans read their Hebrew properly',
+        body: 'The "On the plan" address reader was tripped up by some '
+          + 'consultant sheets and offered gibberish. It now reads those '
+          + 'title blocks correctly — and every plan is re-read with the '
+          + 'smarter eyes the next time you open it.',
+        demo: 'zoom',
+      },
+      {
+        title: 'Notebook polish',
+        body: 'Card text is centred in the weekly notebook, and a multi-day '
+          + 'task\'s card in the job window now says its real range — '
+          + '"Sep 1–2 · 2 days" — instead of two chips that read like the '
+          + 'same thing twice.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2026-10-04',
     title: 'The board teaches itself, and planning jumps the queue',
     items: [
