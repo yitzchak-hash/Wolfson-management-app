@@ -6071,3 +6071,25 @@ real card drag, drop fills + emptied row squishes, strips-mode heights) ·
 `planphone-probe` grew the office-number decoy line and the normaliser
 check. What's New carries the round (its dates run AHEAD of the wall clock —
 a new entry must postdate the previous top one or the red dot never shows).
+
+## The plan chooser tells the truth, and the + asks which file
+- **The picker re-lists LIVE on open** (`PlanPicker`): the handed-over list
+  keeps it instant, and the live listing lands over it as a UNION (fresh
+  first — a version stamped seconds ago that Drive's listing has not caught
+  up to survives from the handed list). `listPlansViaBackend`, never
+  listMarkable, wherever a folder is listed — the folder's files PLUS its
+  Annotated Plans child, kinds intact; the folder dropdown also appends the
+  plans folder's own subfolders, because "Annotated Plans" lives one level
+  deeper than the job-folder listing reaches and was the one folder the
+  chooser could not open.
+- **A save announces itself**: `PlanEditor.onSavedToDrive` fires on every
+  successful `stampPlanToDrive` (Save, the idle push, the close-ask); the
+  wrapper folds the new file into `mergedPlans`, so the picker shows the
+  version saved ten seconds ago without reopening the drawer.
+- **The + on the tab strip opens the FILE CHOOSER** (owner's ask) — every
+  pick opens in a fresh tab; picking a file already open in another tab is
+  a deliberate COPY, a clean sketch named "… · copy". Opening from + is
+  looking, never choosing: it never writes `plansPdfLink`.
+- **renderPage guards its blit**: the canvas can be unmounted while the
+  render is awaited (tab churn), and drawing into null was a crash.
+`plantabs.mjs` re-encoded to the new + contract (26 checks).

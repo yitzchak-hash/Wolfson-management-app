@@ -64,7 +64,10 @@ await ctx.route('**/api/drive-fetch', async route => {
 });
 await ctx.route('**/api/plan-annotate', route => {
   stamped++;
-  return route.fulfill({ json: { fileId: `ANN-${stamped}`, webViewLink: 'https://drive.google.com/file/d/ANN/view' } });
+  return route.fulfill({ json: {
+    fileId: `ANN-${stamped}`, name: `annotated version ${stamped} — probe`,
+    webViewLink: 'https://drive.google.com/file/d/ANN/view',
+  } });
 });
 await ctx.route('**/api/share', route => route.fulfill({ json: { ok: true } }));
 await ctx.route('**/api/folder', route => route.fulfill({ json: { folderId: 'F-photos' } }));
@@ -162,10 +165,16 @@ const inked = await page.evaluate(() => {
 check(inked > 300, 'switching back lands the cached sheet quickly (no re-download)',
   `${inked} inked px in 1.8s`);
 
-// ── 4 · + duplicates, and the tabs survive a reload ────────────────────────
+// ── 4 · + opens the CHOOSER; the same file again is a deliberate copy ──────
 await page.locator('[data-plan-tab-new]').click();
-await page.waitForTimeout(600);
-check(await page.locator('[data-plan-tab]').count() === 3, 'the + opens this plan again in a fresh tab');
+await page.waitForTimeout(800);
+check(await page.locator('[data-plan-picker]').count() === 1, 'the + opens the file chooser');
+await page.locator('[data-plan-picker] [data-plan-row]').first().click();
+await page.waitForTimeout(700);
+check(await page.locator('[data-plan-tab]').count() === 3,
+  'picking a file already open makes a copy in a fresh tab');
+check((await page.locator('[data-plan-tab]').allInnerTexts()).some(t => /copy/i.test(t)),
+  'the copy tab says so on its label');
 await page.reload();
 await page.waitForTimeout(2800);
 await page.locator('[data-node-id="G-aaron"]').dblclick();
@@ -260,12 +269,25 @@ await page.waitForTimeout(1500);
 check(stamped === 1, 'Save files it through the real Annotated Plans pipeline', `${stamped} stamp calls`);
 check(await page.locator('[data-tab-ask]').count() === 0, 'and the ask closes with the tab');
 
+// ── 5b · the version saved a moment ago is IN the chooser ──────────────────
+await page.locator('[data-plan-tab-new]').click();
+await page.waitForTimeout(800);
+check(await page.locator('[data-plan-picker] [data-plan-row="ANN-1"]').count() === 1,
+  'the markup saved a moment ago is listed in the chooser');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(400);
+
 // ── 6 · too many tabs: the picked one scrolls into view ────────────────────
 for (let i = 0; i < 6; i++) {
   await studioEval(strip => {
     strip.parentElement.querySelector('[data-plan-tab-new]').click();
   });
-  await page.waitForTimeout(250);
+  await page.waitForTimeout(450);
+  await page.evaluate(() => {
+    const row = document.querySelector('[data-plan-picker] [data-plan-row]');
+    row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+  await page.waitForTimeout(300);
 }
 const first = await studioEval(strip =>
   strip.querySelector('[data-plan-tab]').getAttribute('data-plan-tab'));

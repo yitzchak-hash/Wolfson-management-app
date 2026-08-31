@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Search, Folder, FileText, Image as ImageIcon, Loader2, X, ExternalLink } from 'lucide-react';
 import {
   DriveFolder, PlanEntry, listFoldersViaBackend, listMarkableViaBackend,
+  listPlansViaBackend, listPlanSubfoldersViaBackend,
 } from '../../data/driveApi';
 import { usePlanDownload } from '../../data/planCache';
 
@@ -83,9 +84,8 @@ export function PlanPicker({
    * actually in is worse than no chooser.
    */
   useEffect(() => {
-    if (files.length) return;
     let dead = false;
-    setBusy(true);
+    if (!files.length) setBusy(true);
     (async () => {
       let id = plansFolderId ?? null;
       let name = plansFolderName;
@@ -104,10 +104,27 @@ export function PlanPicker({
         if (plansFolder) { id = plansFolder.id; name = plansFolder.name; }
       }
       if (!id || dead) { setBusy(false); return; }
-      const rows = await listMarkableViaBackend(id);
+      setFolder(cur => cur ?? { id: id!, name });
+      /**
+       * ALWAYS re-list live, even when the caller handed a list over. The
+       * handed list is what the drawer fetched when it OPENED — a version
+       * saved since then is already sitting in Annotated Plans and was not
+       * on it, which was "why can't I see the annotated plans once I save?".
+       * The handed list keeps the picker instant; the live one replaces it
+       * the moment it lands. `listPlansViaBackend`, not listMarkable: the
+       * folder's own files PLUS its Annotated Plans child, kinds and all.
+       */
+      const { plans: fresh } = await listPlansViaBackend(id);
       if (dead) return;
-      setFolder({ id, name });
-      setFiles(rows);
+      // UNION, fresh first: the live listing brings what was saved since the
+      // handed list was fetched, and the handed list keeps a version stamped
+      // seconds ago that Drive's listing may not return yet.
+      if (fresh.length || !files.length) {
+        setFiles(prev => {
+          const have = new Set(fresh.map(f => f.id));
+          return [...fresh, ...prev.filter(f => !have.has(f.id))];
+        });
+      }
       setBusy(false);
     })();
     return () => { dead = true; };
@@ -127,19 +144,34 @@ export function PlanPicker({
     return () => window.removeEventListener('keydown', key, true);
   }, [onClose]);
 
-  // The job's folders, once, when the list is first opened.
+  // The job's folders, once, when the list is first opened — PLUS the plans
+  // folder's own subfolders. "Annotated Plans" lives INSIDE Engineered Plans,
+  // one level deeper than the job-folder listing reaches, so the folder every
+  // saved markup goes to was the one folder the chooser could not open.
   useEffect(() => {
     if (!openList || folders.length || !driveLink) return;
     let dead = false;
-    listFoldersViaBackend(driveLink).then(rows => { if (!dead) setFolders(rows); });
+    (async () => {
+      const rows = await listFoldersViaBackend(driveLink);
+      if (dead) return;
+      const plansId = folder?.id ?? plansFolderId ?? null;
+      const subs = plansId ? await listPlanSubfoldersViaBackend(plansId) : [];
+      if (dead) return;
+      const have = new Set(rows.map(r => r.id));
+      setFolders([...rows, ...subs.filter(f => !have.has(f.id)).map(f => ({ id: f.id, name: f.name }))]);
+    })();
     return () => { dead = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openList, folders.length, driveLink]);
 
   async function chooseFolder(f: DriveFolder) {
     setFolder(f);
     setOpenList(false);
     setBusy(true);
-    setFiles(await listMarkableViaBackend(f.id));
+    // The merged listing here too, so choosing Engineered Plans by hand shows
+    // its Annotated Plans child's markups exactly like the opening view.
+    const { plans: rows } = await listPlansViaBackend(f.id);
+    setFiles(rows);
     setBusy(false);
   }
 

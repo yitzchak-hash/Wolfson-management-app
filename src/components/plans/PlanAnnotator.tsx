@@ -216,7 +216,7 @@ function PlanEditor({
   barExtrasRef, barInto, barInto2,
   touchScale = 1,
   tabStrip, initialWork, workRef, onOpenPlanNewTab, onUnsavedChange,
-  onClose, onToast, onPickPlan, onStartMarkup,
+  onClose, onToast, onPickPlan, onStartMarkup, onSavedToDrive,
 }: {
   planFileId: string;
   planName?: string;
@@ -305,6 +305,12 @@ function PlanEditor({
   onPickPlan?: (p: PlanChoice) => void;
   /** Turns a read-only viewing into an editing session, in place. */
   onStartMarkup?: () => void;
+  /**
+   * A markup just landed in Drive's Annotated Plans. The wrapper folds it
+   * into the plan list on the spot, so the picker shows the version that was
+   * saved ten seconds ago without waiting for the drawer to reopen.
+   */
+  onSavedToDrive?: (p: PlanChoice) => void;
 }) {
   /**
    * The shape of the screen, which on a phone is two different problems.
@@ -783,6 +789,10 @@ function PlanEditor({
       c.style.width = `${cssW}px`;
       c.style.height = `${cssH}px`;
     }
+    // The tab can be closed — or swapped for another — while the render
+    // above was awaited; the canvas is gone with it, and blitting into null
+    // was a crash the tab churn of the + chooser made easy to hit.
+    if (!pdfRef.current) return;
     const ctx = pdfRef.current.getContext('2d')!;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(off, 0, 0);
@@ -2084,6 +2094,7 @@ function PlanEditor({
           driveFileId: out.fileId, driveUrl: out.webViewLink,
         });
       }
+      onSavedToDrive?.({ id: out.fileId, name: out.name, kind: 'annotated' });
       setSaveState('sent');
     } catch {
       setSaveState('failed');
@@ -2091,7 +2102,8 @@ function PlanEditor({
       pushingRef.current = false;
     }
   }, [locked, strokes.length, backendReady, plansFolderId, parentFolderId, planFileId,
-      strokesForDrive, claimVersion, apartmentLabel, who, authorName, updatePlanAnnotation]);
+      strokesForDrive, claimVersion, apartmentLabel, who, authorName, updatePlanAnnotation,
+      onSavedToDrive]);
 
   // Every change: keep it here now, and set the clock running for Drive.
   useEffect(() => {
@@ -2295,6 +2307,7 @@ function PlanEditor({
         author: who || authorName,
       });
       storeVersion(out.fileId, out.webViewLink);
+      onSavedToDrive?.({ id: out.fileId, name: out.name, kind: 'annotated' });
       onToast?.(`Version ${claimVersion()} filed in Drive under “Annotated Plans”.`);
     } catch (err) {
       storeVersion();
@@ -4021,6 +4034,22 @@ export function PlanAnnotator(props: PlanHostProps) {
   const [activeUnsaved, setActiveUnsaved] = useState(false);
   const [ask, setAsk] = useState<{ tabId: string } | null>(null);
   const [askBusy, setAskBusy] = useState(false);
+  /** The + on the strip opens the file chooser — see newTabPlus. */
+  const [plusOpen, setPlusOpen] = useState(false);
+  /**
+   * Markups saved WHILE the studio is open. The host's plan list is what it
+   * fetched when it opened, so a version filed ten seconds ago is not on
+   * it — these are folded in so the picker shows what was just saved.
+   */
+  const [savedExtras, setSavedExtras] = useState<PlanChoice[]>([]);
+  const noteSaved = useCallback((p: PlanChoice) => {
+    setSavedExtras(prev => (prev.some(x => x.id === p.id) ? prev : [p, ...prev]));
+  }, []);
+  const mergedPlans = useMemo(() => {
+    const have = new Set(plans.map(x => x.id));
+    const extra = savedExtras.filter(x => !have.has(x.id));
+    return extra.length ? [...extra, ...plans] : plans;
+  }, [plans, savedExtras]);
 
   const wkey = useCallback((t: PlanTab) => `${apartmentId}:${surface}:${t.id}:${t.fileId}`,
     [apartmentId, surface]);
@@ -4127,9 +4156,9 @@ export function PlanAnnotator(props: PlanHostProps) {
   }, []);
   // Download the job's OTHER plans in the background, one at a time.
   useEffect(() => {
-    const others = plans.map(p => p.id).filter(id => id !== activeRef.current?.fileId);
+    const others = mergedPlans.map(p => p.id).filter(id => id !== activeRef.current?.fileId);
     if (others.length) prefetchPlans(others);
-  }, [plans]);
+  }, [mergedPlans]);
 
   const pickTab = useCallback((id: string) => {
     if (id === activeRef.current?.id) return;
@@ -4143,12 +4172,21 @@ export function PlanAnnotator(props: PlanHostProps) {
     setState(s => ({ tabs: [...apply(s.tabs), t], activeId: t.id }));
   }, []);
 
-  /** The + on the strip: this plan again, in a fresh tab — a clean sketch. */
-  const newTabPlus = useCallback(() => {
-    const act = activeRef.current;
-    if (!act) return;
+  /**
+   * The + on the strip opens the FILE CHOOSER (the owner's ask: "upon
+   * opening a new tab, I should see the file picker"). Whatever is picked
+   * opens in a fresh tab; picking a file already open in another tab
+   * deliberately makes a COPY — a clean sketch of the same sheet, named so
+   * the strip tells the two apart. Opening is looking, never choosing: the
+   * + never writes plansPdfLink, so the contractor's plan cannot change
+   * because somebody opened a tab.
+   */
+  const newTabPlus = useCallback(() => { setPlusOpen(true); }, []);
+  const plusPick = useCallback((p: PlanChoice) => {
+    setPlusOpen(false);
     const apply = stashRef.current();
-    const t = mintTab(act.fileId, act.name, act.kind);
+    const alreadyOpen = tabsRef.current.tabs.some(t => t.fileId === p.id);
+    const t = mintTab(p.id, alreadyOpen ? `${p.name} · copy` : p.name, p.kind);
     setState(s => ({ tabs: [...apply(s.tabs), t], activeId: t.id }));
   }, []);
 
@@ -4215,6 +4253,7 @@ export function PlanAnnotator(props: PlanHostProps) {
       if (w.versionId) {
         updatePlanAnnotation(w.versionId, { driveFileId: out.fileId, driveUrl: out.webViewLink });
       }
+      noteSaved({ id: out.fileId, name: out.name, kind: 'annotated' });
       onToast?.(`Version ${version} filed in Drive under “Annotated Plans”.`);
       setAsk(null);
       reallyClose(t.id);
@@ -4224,7 +4263,7 @@ export function PlanAnnotator(props: PlanHostProps) {
       setAskBusy(false);
     }
   }, [ask, liveWorkOf, reallyClose, plansFolderId, driveFolderUrl, planAnnotations,
-      apartmentId, apartmentLabel, authorName, updatePlanAnnotation, onToast]);
+      apartmentId, apartmentLabel, authorName, updatePlanAnnotation, onToast, noteSaved]);
 
   const unsavedOf = useCallback((t: PlanTab): boolean => {
     if (readOnly) return false;
@@ -4291,12 +4330,27 @@ export function PlanAnnotator(props: PlanHostProps) {
       ) : undefined}
       initialWork={initialWork}
       workRef={workRef}
+      plans={mergedPlans}
+      onSavedToDrive={noteSaved}
       onUnsavedChange={setActiveUnsaved}
       onPickPlan={handlePick}
       /* No strip means no visible tab to open into — the picker's
          open-in-new-tab rows exist only where the strip does. */
       onOpenPlanNewTab={(!readOnly && !embedded) ? openInNewTab : undefined}
     />
+
+    {/* The + pressed: which file goes in the new tab? Every pick opens in a
+        fresh tab; the same file again is a deliberate copy. */}
+    {plusOpen && (
+      <PlanPicker
+        driveLink={driveFolderUrl}
+        plansFolderId={plansFolderId ?? undefined}
+        plans={mergedPlans}
+        current={active.fileId}
+        onPick={p => plusPick(p)}
+        onClose={() => setPlusOpen(false)}
+      />
+    )}
 
     {/* The one question, only when closing would lose marks Drive never got. */}
     {ask && (<>
