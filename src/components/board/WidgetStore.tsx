@@ -94,6 +94,7 @@ const SHELF: Record<string, string> = {
   // Getting to a job, and seeing what changed.
   'job-find': 'Finding and following',
   'search-tile': 'Finding and following',
+  'file-tray': 'Your own lists and tools',
   'job-list': 'Finding and following', 'recent-jobs': 'Finding and following',
   'activity-feed': 'Finding and following',
   // Who is where, and the week's plan.

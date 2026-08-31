@@ -2,7 +2,7 @@ import React from 'react';
 import {
   Globe2, Flame, Images, Rows3, Trophy, Disc3, Grid3x3, PartyPopper, Calculator,
   Fingerprint, Map as MapIcon, CloudSun, Music2, Building2, Search,
-  GitCommitHorizontal,
+  GitCommitHorizontal, Inbox,
 } from 'lucide-react';
 import { UnitCard } from '../components/board/UnitCard';
 import { WidgetDef } from './widgets';
@@ -16,6 +16,7 @@ import { TikTokWidget } from '../components/board/TikTokWidget';
 import { PhotosAlbumWidget } from '../components/board/PhotosAlbumWidget';
 import { GoalsWidget } from '../components/board/GoalsWidget';
 import { SearchTileWidget } from '../components/board/SearchTileWidget';
+import { FileTrayWidget } from '../components/board/FileTrayWidget';
 import { TimelineWidget } from '../components/board/TimelineWidget';
 
 /**
@@ -154,6 +155,14 @@ export const MORE_WIDGETS: WidgetDef[] = [
      * with the app's forgiving search plus a microphone to speak the query.
      * "Find a job" stays the inline-input style; this one is a door.
      */
+    id: 'file-tray', rank: 4, name: 'File tray', category: 'live',
+    icon: Inbox, w: 270, h: 230,
+    blurb: 'Drop a file on it at the desk and it shows on every screen — the TV included — '
+      + 'with a download button. PDFs preview in place with a Mark up button on top.',
+    data: {},
+    render: (el, c) => <FileTrayWidget el={el} c={c} />,
+  },
+  {
     id: 'search-tile', rank: 4, name: 'Search button', category: 'live',
     icon: Search, w: 210, h: 210,
     blurb: 'One big button. Press it and a search window pops up — forgiving like the board\'s '

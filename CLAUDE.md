@@ -6352,3 +6352,55 @@ mean the square visually underneath.
 Harness: `scratchpad/round34-probe.mjs` (8 checks — box shows and lights for
 a card drag, the who+day ask, the move door, landed/left cells, the run
 extension). round32/multiday/notebook2way/round22 stay green.
+
+---
+
+# v2 — the File Tray, and a refresh that keeps full screen
+
+## TV refresh (`smartRefresh` in TvPresentationPage)
+A page reload always drops element full-screen and no page may re-enter it
+without a tap — the browser's rule, not a choice. So the refresh button now
+reloads ONLY when a genuinely new build is waiting (the served
+`/assets/index-*.js` name differs from the running one); otherwise it
+re-runs `startFirebaseSync()` in place and shows a green
+`data-refresh-note` chip — full screen never breaks. Before a real reload
+it stamps `tv_refullscreen` in sessionStorage; on the next load a pulsing
+`data-refullscreen` overlay says "tap anywhere to go back to full screen"
+and a one-time capture pointerdown re-enters. In dev there is no /assets
+bundle, so the in-place path always runs — the probe leans on that.
+
+## The File Tray (`src/components/board/FileTrayWidget.tsx`, id `file-tray`)
+The owner's "file receiver / file sender", built as ONE widget because the
+board already syncs: Esther drops a file on the tray at her PC (or clicks
+to browse) and the SAME widget on the TV shows it seconds later — sender
+and receiver are one tray seen from two desks. Registered in all five
+places (MORE_WIDGETS · WIDGET_FIELDS · WIDGET_PREVIEW `{sample:1}` · SHELF
+"Your own lists and tools" · TV_ALLOWED).
+- **Bytes**: uploaded to a "File Tray" subfolder of the Drive backup folder
+  (the Board Files precedent), shared on upload; the record carries only a
+  URL + `fileId`. No backend → data-URL fallback capped at 700KB, bigger
+  refused OUT LOUD. `data.folderId` is remembered so markup saves land in
+  Annotated Plans beside the original. One `c.update` per dropped batch.
+- **Rows**: kind icon, size · who · time, a "new" glow for ~3 min (a 30s
+  tick), eye (pdf/image), download (data-URL → blob save; Drive →
+  `fetchPlanBytes` + `saveBytes`), remove (tray only — the Drive copy
+  stays). The WALL hides the drop zone (`c.readOnly`) but download and
+  preview taps stay live — a TV is where the tray is read.
+- **Preview** (`TrayPreview`, portalled to body, z-[240], SEALS pointer
+  events — the portal-in-a-node trap): PDFs draw through
+  `<PlanAnnotator embedded readOnly>` (lazy — it carries pdf.js; no Google
+  login, the plan-pane precedent), images through fetched-bytes blob URLs.
+  **Mark up** on the bar swaps to the full studio
+  (`apartmentId: FT-<elId>`, `plansFolderId: data.folderId`). Escape
+  closes, capture-phase.
+- **The FileList trap, paid for**: a file input's `files` is LIVE — 
+  clearing `input.value` before copying it EMPTIES the list and the picked
+  files silently vanish. Copy first (`[...e.target.files]`), then reset.
+
+Harness: `scratchpad/filetray-probe.mjs` (17 checks: add/attribution/new
+glow, PDF preview overlay + Escape, oversize refusal, download event, the
+wall's read-only tray with live downloads, in-place refresh with no
+reload, the one-tap full-screen restore). Its trap is the standing one:
+seed only when the key is absent, or the TV navigation's init script wipes
+the files the board page just saved. tvcrash (built bundle) stays green
+with the tray on the wall.

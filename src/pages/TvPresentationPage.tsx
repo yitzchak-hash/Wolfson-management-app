@@ -738,6 +738,52 @@ export function TvPresentationPage() {
   };
 
   /**
+   * REFRESH THAT KEEPS FULL SCREEN (the owner's ask).
+   *
+   * A page reload always drops element full-screen — the browser's rule, and
+   * no page may re-enter it without a fresh tap. So the button now reloads
+   * ONLY when a genuinely new build is waiting (the served bundle name
+   * differs from the one running); otherwise it re-syncs the data in place
+   * and the panel never leaves full screen at all. After a real reload, a
+   * one-tap overlay puts full screen back (`tv_refullscreen` in
+   * sessionStorage — this tab only, gone once used).
+   */
+  const [refreshNote, setRefreshNote] = useState('');
+  const [wantFull, setWantFull] = useState(() => {
+    try { return sessionStorage.getItem('tv_refullscreen') === '1'; } catch { return false; }
+  });
+  useEffect(() => {
+    if (!wantFull) return;
+    try { sessionStorage.removeItem('tv_refullscreen'); } catch { /* private mode */ }
+    const tap = () => {
+      void document.documentElement.requestFullscreen?.().catch(() => {});
+      setWantFull(false);
+    };
+    window.addEventListener('pointerdown', tap, { capture: true, once: true });
+    return () => window.removeEventListener('pointerdown', tap, { capture: true });
+  }, [wantFull]);
+  async function smartRefresh() {
+    let newBuild = false;
+    try {
+      const html = await (await fetch('/', { cache: 'no-store' })).text();
+      const served = html.match(/\/assets\/index-[^"']+\.js/)?.[0];
+      const running = [...document.querySelectorAll('script[src*="/assets/index-"]')]
+        .map(el => (el as HTMLScriptElement).getAttribute('src') || '')[0];
+      newBuild = !!served && !!running && served !== running;
+    } catch { /* offline — the in-place path still refreshes the data */ }
+    if (!newBuild) {
+      startFirebaseSync();
+      setRefreshNote(t('Up to date — data refreshed', 'מעודכן — הנתונים רועננו'));
+      window.setTimeout(() => setRefreshNote(''), 3500);
+      return;
+    }
+    if (document.fullscreenElement) {
+      try { sessionStorage.setItem('tv_refullscreen', '1'); } catch { /* private mode */ }
+    }
+    window.location.reload();
+  }
+
+  /**
    * Moving and resizing on the wall.
    *
    * Coordinates come back through the board's scale, exactly as they must on
@@ -1042,11 +1088,10 @@ export function TvPresentationPage() {
 
       <span className="flex-1" />
 
-      {/* Refresh, left of the ⋯ (owner's ask, 2026-08-31): one press reloads
-          the page, which is how a wall panel picks up a fresh deploy and a
-          clean re-sync without anybody hunting for the browser's own
-          controls. */}
-      <button data-tv-refresh onClick={() => window.location.reload()}
+      {/* Refresh, left of the ⋯ (owner's ask, 2026-08-31): re-syncs in place
+          (full screen survives), reloading only when a new deploy is really
+          waiting — see smartRefresh. */}
+      <button data-tv-refresh onClick={() => void smartRefresh()}
         title={t('Refresh the screen', 'רענון המסך')}
         className={`${barBtn} px-3 py-1.5`} style={off}>
         <RefreshCw size={16} />
@@ -1181,6 +1226,29 @@ export function TvPresentationPage() {
                      shadow-2xl pointer-events-none tabular-nums"
           style={{ top: 76, backgroundColor: '#1e3a5f', fontSize: 22 }}>
           {t('Display size', 'גודל תצוגה')} {Math.round(sizeNote.from * 100)}% → {Math.round(sizeNote.to * 100)}%
+        </div>
+      )}
+
+      {/* The refresh that stayed put says so. */}
+      {refreshNote && (
+        <div data-refresh-note
+          className="fixed left-1/2 -translate-x-1/2 z-[290] px-6 py-3 rounded-full text-white font-extrabold
+                     shadow-2xl pointer-events-none"
+          style={{ top: 76, backgroundColor: '#166534', fontSize: 20 }}>
+          {refreshNote}
+        </div>
+      )}
+
+      {/* After a real reload the browser will not re-enter full screen by
+          itself — one tap anywhere puts it back. */}
+      {wantFull && (
+        <div data-refullscreen
+          className="fixed inset-x-0 flex justify-center z-[290] pointer-events-none"
+          style={{ top: 76 }}>
+          <div className="px-6 py-3 rounded-full text-white font-extrabold shadow-2xl animate-pulse"
+            style={{ backgroundColor: '#1e3a5f', fontSize: 20 }}>
+            {t('Tap anywhere to go back to full screen', 'געו בכל מקום לחזרה למסך מלא')}
+          </div>
         </div>
       )}
 

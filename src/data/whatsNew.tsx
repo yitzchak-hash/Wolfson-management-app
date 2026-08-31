@@ -30,6 +30,30 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-10-18',
+    title: 'Files fly to the TV, and refresh behaves',
+    items: [
+      {
+        title: 'The File Tray',
+        body: 'A new widget from the store: drag a file onto it at the desk — '
+          + 'or press it to browse — and seconds later it is on the TV and '
+          + 'every other screen, glowing "new", with a download button. A '
+          + 'PDF opens a preview right over everything with a Mark up '
+          + 'button on top; pictures preview too. Files go to a File Tray '
+          + 'folder in Drive.',
+        demo: 'drag',
+      },
+      {
+        title: 'Refresh without leaving full screen',
+        body: 'The TV\'s refresh button now refreshes the data in place — '
+          + 'full screen stays. It only really reloads when a new version '
+          + 'of the app is waiting, and then one tap anywhere puts full '
+          + 'screen straight back.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2026-10-11',
     title: 'The worker\'s portal wakes up',
     items: [
