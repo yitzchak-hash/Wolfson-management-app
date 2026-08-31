@@ -427,6 +427,7 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
         + 'the board show its cover.',
     },
   ],
+  'search-tile': [title()],
   goals: [
     title(),
     {
@@ -1044,6 +1045,9 @@ export const WIDGET_PREVIEW: Record<string, Record<string, unknown>> = {
   // Canned tiles — the goals live in another app's iframe, and the store
   // makes no network calls.
   goals: { sample: 1 },
+  // The tile IS the preview; sample keeps the shelf's press from opening the
+  // real search window over the store.
+  'search-tile': { sample: 1 },
   // Three real, long-standing TikTok links, so the card plays rather than
   // showing its own paste box — which is what a shopper would otherwise see.
   tiktok: {

@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   Globe2, Flame, Images, Rows3, Trophy, Disc3, Grid3x3, PartyPopper, Calculator,
-  Fingerprint, Map as MapIcon, CloudSun, Music2, Building2,
+  Fingerprint, Map as MapIcon, CloudSun, Music2, Building2, Search,
 } from 'lucide-react';
 import { UnitCard } from '../components/board/UnitCard';
 import { WidgetDef } from './widgets';
@@ -14,6 +14,7 @@ import { WeatherWidget } from '../components/board/WeatherWidget';
 import { TikTokWidget } from '../components/board/TikTokWidget';
 import { PhotosAlbumWidget } from '../components/board/PhotosAlbumWidget';
 import { GoalsWidget } from '../components/board/GoalsWidget';
+import { SearchTileWidget } from '../components/board/SearchTileWidget';
 
 /**
  * The widgets whose render is a real component rather than a few lines.
@@ -145,6 +146,20 @@ export const MORE_WIDGETS: WidgetDef[] = [
      * embed through that app's own widget.js — this codebase never touches
      * its data API (see GoalsWidget.tsx for the rule and why).
      */
+    /**
+     * The big search BUTTON — the walk-up-and-press style (the owner's ask):
+     * the company's mark, a huge magnifying glass, and a window that pops up
+     * with the app's forgiving search plus a microphone to speak the query.
+     * "Find a job" stays the inline-input style; this one is a door.
+     */
+    id: 'search-tile', rank: 4, name: 'Search button', category: 'live',
+    icon: Search, w: 210, h: 210,
+    blurb: 'One big button. Press it and a search window pops up — forgiving like the board\'s '
+      + 'own search (Hebrew against English, near misses), and you can talk instead of typing.',
+    data: {},
+    render: (el, c) => <SearchTileWidget el={el} c={c} />,
+  },
+  {
     id: 'goals', rank: 30, name: 'Goals', category: 'live',
     icon: Trophy, w: 340, h: 320,
     blurb: 'The shared goals board, live — running timers, start and finish from the tiles.',

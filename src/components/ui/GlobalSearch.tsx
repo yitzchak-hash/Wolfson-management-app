@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Search, X, Building2, ClipboardList, FileText, MessageSquare,
-  HardHat, Layers, FolderOpen, StickyNote, PenLine, Crosshair, Clock,
+  HardHat, Layers, FolderOpen, StickyNote, PenLine, Crosshair, Clock, Mic,
 } from 'lucide-react';
 import Fuse from 'fuse.js';
 import { queryVariants, skeleton } from '../../data/translit';
+import { useSpeechToText } from '../../data/voiceSearch';
 import { usePlannerDrag } from '../../data/plannerDrop';
 import { useStore, loadProjectSnapshot } from '../../data/store';
 import { aptLabel, binLabelOf, binKeyOf, CanvasElement, FocusIntent } from '../../types';
@@ -219,6 +220,9 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
   const [snaps, setSnaps] = useState<Record<string, ReturnType<typeof loadProjectSnapshot>>>({});
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+  // Talking instead of typing — the same microphone the search tile carries.
+  const { listening, toggle: toggleVoice, supported: voiceOk } = useSpeechToText(
+    s.isRtl ? 'he-IL' : 'en-US', text => setQuery(text));
 
   useEffect(() => {
     if (open) {
@@ -664,6 +668,19 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
             placeholder={s.searchPlaceholder}
             className="flex-1 text-sm focus:outline-none text-gray-900 placeholder:text-gray-400"
           />
+          {voiceOk && (
+            <button
+              data-search-mic
+              onClick={toggleVoice}
+              title={listening ? 'Stop listening' : 'Speak the search'}
+              className="p-1.5 rounded-full flex-shrink-0 transition-colors"
+              style={listening
+                ? { backgroundColor: '#dc2626', color: '#fff', boxShadow: '0 0 0 4px rgba(220,38,38,.2)' }
+                : { color: '#1e3a5f', backgroundColor: '#eef2f7' }}
+            >
+              <Mic size={14} />
+            </button>
+          )}
           <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600">
             <X size={16} />
           </button>

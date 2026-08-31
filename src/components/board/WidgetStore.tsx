@@ -93,6 +93,7 @@ const SHELF: Record<string, string> = {
   goals: 'Counts and progress',
   // Getting to a job, and seeing what changed.
   'job-find': 'Finding and following',
+  'search-tile': 'Finding and following',
   'job-list': 'Finding and following', 'recent-jobs': 'Finding and following',
   'activity-feed': 'Finding and following',
   // Who is where, and the week's plan.

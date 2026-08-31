@@ -6021,3 +6021,25 @@ chip) · `planphone-probe` (phone row, fixVisual) · `planpinch-probe`
 (CDP two-finger pinch, drift ≤ 1px) · `tvdiag-probe` (fit floor at
 scale=0.7). planaddr, tvcrash (built bundle), loopaudit, navaudit,
 backupaudit all green.
+
+## The refresh button and the search tile (same day, owner's asks)
+- **The TV bar has a refresh button** (`data-tv-refresh`, RefreshCw), left of
+  the ⋯ menu: one press runs `window.location.reload()` — how a wall panel
+  picks up a fresh deploy without hunting for browser chrome.
+- **`search-tile`** (`SearchTileWidget.tsx`, shelf "Finding and following",
+  natural 210×210, TV_ALLOWED): the walk-up-and-press search — the company
+  mark, a huge magnifying glass, and a portalled window (`data-search-window`)
+  with one big input. Three tiers, GlobalSearch's manner: substring, then
+  Fuse fuzzy **over the NAME alone** (over the whole hay it matched task
+  words against half the query — "coen" ≈ "condenser" — and buried the real
+  Cohen), then skeleton/translit. Searches every workspace (snapshots +
+  `snapshotTick`); Trash never appears, groups appear labeled; rows go
+  through `openJob` / `openUnit`, so the same tile works on the board AND
+  the wall. The window portals to body (fixed-inside-a-transform), SEALS its
+  pointer events (portal-in-a-node), and closes on capture-phase Escape.
+- **`src/data/voiceSearch.ts`** — `useSpeechToText(lang, onText)`: the
+  browser's own speech recognition streaming interim words into a query.
+  The search tile AND the header's GlobalSearch carry the mic
+  (`data-search-mic`); a browser without the API never shows it.
+Probes: `tvrefresh-probe` · `searchtile-probe` (fuzzy cross-workspace hit,
+Escape ladder, travel + drawer).

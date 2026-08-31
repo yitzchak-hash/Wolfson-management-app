@@ -20,7 +20,7 @@ import { WidgetListPopup } from '../components/board/WidgetListPopup';
 import { ApartmentDetailDrawer } from '../components/apartment/ApartmentDetailDrawer';
 import { QuickAddTaskPanel } from '../components/apartment/QuickAddTaskPanel';
 import { Toast } from '../components/ui/Toast';
-import { Maximize, Minimize, Pencil, X as CloseIcon, Plus, Info, Search as SearchIcon, MoreVertical } from 'lucide-react';
+import { Maximize, Minimize, Pencil, X as CloseIcon, Plus, Info, Search as SearchIcon, MoreVertical, RefreshCw } from 'lucide-react';
 
 /**
  * The office wall display.
@@ -1041,6 +1041,16 @@ export function TvPresentationPage() {
       )}
 
       <span className="flex-1" />
+
+      {/* Refresh, left of the ⋯ (owner's ask, 2026-08-31): one press reloads
+          the page, which is how a wall panel picks up a fresh deploy and a
+          clean re-sync without anybody hunting for the browser's own
+          controls. */}
+      <button data-tv-refresh onClick={() => window.location.reload()}
+        title={t('Refresh the screen', 'רענון המסך')}
+        className={`${barBtn} px-3 py-1.5`} style={off}>
+        <RefreshCw size={16} />
+      </button>
 
       {/* The three-dot menu (owner's ruling, 2026-08-30): the screen-setup
           controls — zoom, button size, the PX test pattern, About this
