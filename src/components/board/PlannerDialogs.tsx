@@ -335,6 +335,86 @@ function PendingAudio({ file, onDelete }: { file: File; onDelete: () => void }) 
  * is relying on. If the slot never made a task there is nothing to ask, and the
  * card just comes off.
  */
+// ── The quick-assign drop box's question ────────────────────────────────────
+
+/**
+ * "Who, and which day?" — the first half of a drop that never touched the
+ * notebook.
+ *
+ * A job dropped on the board's quick-assign box (the hover target that appears
+ * mid-drag) is headed for the weekly notebook, but the drop itself carries no
+ * square — so this asks for the row and the date, and Next hands over to the
+ * standing PlannerTaskDialog exactly as if the tile had been dropped on that
+ * square. It exists so a job can be planned into the far future without
+ * dragging across weeks of notebook.
+ */
+export function QuickAssignDialog({ job, people, contractors, users, isRtl, onCancel, onNext }: {
+  job: Apartment;
+  /** The notebook's own rows ('c:<id>' / 'u:<id>' / 'n:<name>'). */
+  people: string[];
+  contractors: Contractor[];
+  users: User[];
+  isRtl: boolean;
+  onCancel: () => void;
+  onNext: (person: string, dayIso: string) => void;
+}) {
+  const nameOf = (pid: string): string => {
+    if (pid.startsWith('c:')) return contractors.find(c => c.id === pid.slice(2))?.name ?? pid.slice(2);
+    if (pid.startsWith('u:')) return users.find(u => u.id === pid.slice(2))?.name ?? pid.slice(2);
+    return pid.replace(/^n:/, '');
+  };
+  const [person, setPerson] = useState(people[0] ?? '');
+  const todayIso = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  })();
+  const [day, setDay] = useState(todayIso);
+
+  return (
+    <Shell onCancel={onCancel}
+      title={isRtl ? `לשבץ את ${job.displayName || 'העבודה'}` : `Assign ${job.displayName || 'this job'}`}>
+      <div className="p-4 space-y-3" data-quick-assign>
+        <label className="block">
+          <span className="block text-[11px] font-bold text-gray-500 mb-1">
+            {isRtl ? 'למי' : 'Who'}
+          </span>
+          <select
+            value={person} onChange={e => setPerson(e.target.value)}
+            data-quick-person
+            className="w-full text-sm border border-gray-200 rounded-xl px-2.5 py-2 bg-white">
+            {people.map(pid => (
+              <option key={pid} value={pid}>{nameOf(pid)}</option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className="block text-[11px] font-bold text-gray-500 mb-1">
+            {isRtl ? 'לאיזה יום' : 'Which day'}
+          </span>
+          <input
+            type="date" value={day}
+            onChange={e => setDay(e.target.value)}
+            data-quick-day
+            className="w-full text-sm border border-gray-200 rounded-xl px-2.5 py-2 bg-white" />
+        </label>
+        <div className="flex justify-end gap-2 pt-1">
+          <button onClick={onCancel}
+            className="text-sm font-bold px-3 py-2 rounded-xl text-gray-500 hover:bg-gray-100">
+            {isRtl ? 'ביטול' : 'Cancel'}
+          </button>
+          <button
+            onClick={() => { if (person && day) onNext(person, day); }}
+            disabled={!person || !day}
+            data-quick-next
+            className="text-sm font-bold px-4 py-2 rounded-xl bg-[#1e3a5f] text-white hover:bg-[#2c4f78] disabled:opacity-40">
+            {isRtl ? 'הבא' : 'Next'}
+          </button>
+        </div>
+      </div>
+    </Shell>
+  );
+}
+
 export function PlannerRemoveDialog({ jobName, taskName, onCancel, onDone }: {
   jobName: string;
   taskName: string;

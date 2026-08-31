@@ -6155,3 +6155,65 @@ with the return ticket, the strip dot's exact colour). Its traps: the
 overdue seed must fall INSIDE the chosen window (a 2-week window starts on
 Sunday and dropped it — seed `window:'month'`), and theme distinctness must
 compare border too (light and minimal share a white ground).
+
+---
+
+# v2 — the controls round (tutorial, quick-assign, right-button gestures, typed zoom)
+
+## TUTORIAL MODE (`src/components/ui/Tutorial.tsx`)
+The ? beside the What's New sparkle opens a full-screen training session, the
+game-tutorial manner: a self-contained MINI CANVAS (fake tiles, its own
+state — nothing a trainee does can touch a real job or the cloud) walks
+through eleven steps, each `do`-step validated by the gesture really
+happening (the canvas reports events through a ref-backed reporter; the step
+advances only on ITS event, so practising an earlier gesture changes
+nothing). Ends in a printable control sheet — TzviAir-branded via
+`printSheet` with a css override hiding the generic chrome — in a picked
+size (`sticky` 100×100mm / A5 / A4 through `@page size`). Strings are a
+local EN/HE table keyed off isRtl, deliberately not 60 new MainUiStrings
+keys (preset-only strings, same guarantee). Hooks: `data-tutorial*`,
+`data-mini-tile`, `data-mini-canvas`.
+
+## The quick-assign drop box
+While a JOB drag is live (`drag.moved`), a fixed drop target appears at the
+top-middle (`data-quick-box`, z-95, `pointer-events-none` — the drag holds
+pointer capture, so it is hit-tested by COORDINATES via `overQuickBox`,
+never by events). Dropping a job there: the job does NOT move (the box is a
+question, not a place); `QuickAssignDialog` (PlannerDialogs) asks who +
+which day (`data-quick-person`/`data-quick-day`/`data-quick-next`), and
+Next hands over to the standing `PlannerTaskDialog` with a synthetic
+`RotaHit` on the MAIN rota — exactly the dropped-on-a-square flow. Drawn
+only when a main `rota` exists (`mainRota` memo — `week-planner` has no
+squares; projections are never the target). **`placeOnPlanner` now extends
+the notebook's run** (`firstWeek`/`weekCount`, mirroring the widget's own
+plus buttons) to cover every landing day IN THE SAME data write — a
+far-future day used to land in `cells` invisibly, off the drawn weeks.
+
+## Right-button gestures (additive — no existing control changed)
+- **Right-drag on empty board lassoes** (beside Ctrl+drag). Nothing is
+  decided at the press — a motionless right-click keeps every menu,
+  including the selection menu (the press must NOT clear the selection).
+  `rightDrag` ref arms on button-2 canvas pointerdown; >6px of movement
+  starts the lasso and closes any menu (Linux opens it at the press).
+- **Right button held + wheel zooms** — registered on the WINDOW in the
+  CAPTURE phase, not the viewport: on press-time-menu platforms the menu
+  overlay sits under the pointer and the viewport's wheel listener never
+  hears the event (the probe found the gesture dead exactly where it was
+  tried). Synthetic wheels carry `buttons: 0` while a button is held, so
+  `rightDown` (tracked beside `leftDown`) is the primary check.
+- **`suppressMenu` is a TIMESTAMP, not a boolean** (<400ms consume): on
+  platforms where the menu fires at the press there is no release-time
+  contextmenu to consume, and a stale boolean would swallow the next
+  genuine right-click. Consumed by a capture-phase `contextmenu` guard on
+  the viewport, covering tile and node menus too.
+
+## Typed default zoom
+Board settings' "Opens at" select became a typed % field
+(`data-default-zoom`, 25–300, committed on blur/Enter — half-typed numbers
+never yank the view; 100 removes the key). Same per-machine
+`board_default_zoom_<pid>` storage; "use now" unchanged.
+
+Harness: `scratchpad/round32-probe.mjs` (21 checks). Its finds: Chromium on
+Linux fires `contextmenu` at the PRESS (the wheeldbg experiment), and
+Playwright's `mouse.wheel` reports `buttons: 0` mid-hold — both now
+designed for, not just probed around.

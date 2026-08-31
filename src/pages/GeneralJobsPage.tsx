@@ -5,7 +5,7 @@ import {
   Ghost, ThumbsUp, ThumbsDown, ClipboardPaste, LayoutGrid, Columns3, Archive, CheckCircle2, PlayCircle,
   Image as ImageIcon, ImageOff, History, MoveUpRight, Unlink, FileText, Search, FolderPlus, Printer,
   Settings2 as Settings, BringToFront, SendToBack, ChevronUp, ChevronDown, Eye,
-  Eraser, GripVertical, Lock, Unlock, Group, Ungroup, Info as InfoGlyph,
+  Eraser, GripVertical, Lock, Unlock, Group, Ungroup, Info as InfoGlyph, CalendarDays,
 } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useStore, isTombstoned } from '../data/store';
@@ -13,8 +13,8 @@ import { useBoardTrack } from '../data/useBoardUndo';
 import { UndoButtons } from '../components/board/UndoLayer';
 import { isPlannerElement, purgeJobsFromPlanner } from '../data/plannerPurge';
 import { rotaCellAt, setRotaHover, anyRota, RotaHit, registerBoardDrop, BoardPlacer } from '../data/rotaDrop';
-import { PlannerEntry, personOf } from '../components/board/PlannerWidget';
-import { PlannerTaskDialog, PlannerRemoveDialog } from '../components/board/PlannerDialogs';
+import { PlannerEntry, personOf, weekStartOf, iso as isoDay } from '../components/board/PlannerWidget';
+import { PlannerTaskDialog, PlannerRemoveDialog, QuickAssignDialog } from '../components/board/PlannerDialogs';
 import { ScheduleWindow } from '../components/board/ScheduleWindow';
 import { boardAccess } from '../types';
 import { Apartment, CanvasElement, BinKind, BIN_KINDS, BIN_META, binKeyOf, binLabelOf, isBuiltInBin, getStageName, relativeTime, personColor, PLANNER_ARCHIVE_MAX, BOARD_MARGIN, BoardLayout } from '../types';
@@ -504,6 +504,18 @@ export function GeneralJobsPage() {
   }, [jobDrive, showAddModal]);
   /** A drop waiting on the "make it a task?" answer. */
   const [plannerDrop, setPlannerDrop] = useState<{ cell: RotaHit; job: Apartment } | null>(null);
+  /**
+   * The QUICK-ASSIGN drop box (the owner's ask): while a job is being dragged
+   * a target appears at the top-middle of the screen, over everything.
+   * Dropping the job there asks who + which day, then hands over to the
+   * standing task dialog as if the tile had been dropped on that notebook
+   * square — so a job can be planned weeks ahead without dragging across the
+   * whole notebook. Only drawn when the workspace has a MAIN weekly notebook
+   * to write into.
+   */
+  const [quickAssign, setQuickAssign] = useState<Apartment | null>(null);
+  const [quickHot, setQuickHot] = useState(false);
+  const quickBoxRef = useRef<HTMLDivElement | null>(null);
   /** A slot being emptied that has a task behind it. */
   const [plannerRemove, setPlannerRemove] =
     useState<{ entry: PlannerEntry; done: (alsoDelete: boolean) => void } | null>(null);
@@ -620,6 +632,24 @@ export function GeneralJobsPage() {
   /** Left button currently held, tracked here because a wheel event's
    *  `buttons` is not dependable across browsers or synthetic input. */
   const leftDown = useRef(false);
+  /** Right button held — right-click + scroll zooms (the owner's ask). */
+  const rightDown = useRef(false);
+  /**
+   * A live right-button press on empty board, watched for the drag that turns
+   * it into a LASSO (the owner's second selection gesture, beside Ctrl+drag).
+   * A motionless right-click keeps meaning the context menu, exactly as today.
+   */
+  const rightDrag = useRef<{ px: number; py: number; wx: number; wy: number; lasso: boolean } | null>(null);
+  /**
+   * Swallow the NEXT contextmenu event once: a right-drag that lassoed, or a
+   * right-held wheel zoom, ends with the browser offering the menu — which
+   * the hand did not ask for. Consumed by a capture-phase listener on the
+   * viewport so tile and node menus are covered too, not just the canvas's.
+   * A TIMESTAMP, not a boolean: on platforms where the menu opens at the
+   * press there is no release-time contextmenu to consume, and a stale flag
+   * would swallow the next genuine right-click instead.
+   */
+  const suppressMenu = useRef(0);
   const panFromJob = useRef<Apartment | null>(null);
   /** A finger pan that began on a NODE — the touch twin of panFromJob. */
   const panFromEl = useRef<CanvasElement | null>(null);
@@ -2488,6 +2518,34 @@ export function GeneralJobsPage() {
      * back; without them this is the single square that was dropped on.
      */
     const landDays = taskDays?.length ? taskDays : [cell.day];
+    /**
+     * A quick-assigned day can sit PAST the notebook's drawn run — a date
+     * typed into the drop box's question has no square yet, so without this
+     * the entry landed in `cells` invisibly. The run is extended to cover
+     * every landing day, in the SAME write as the cells (the standing
+     * one-updateCanvasElement rule — a second write would spread stale data
+     * straight back over the first).
+     */
+    const ws = Number(data.weekStart) === 1 ? 1 : 0;
+    const anchorIso = (data.firstWeek || data.start) as string | undefined;
+    const runFirst = weekStartOf(anchorIso ? new Date(`${anchorIso}T00:00:00`) : new Date(), ws);
+    let newFirst = runFirst;
+    let newCount = Math.max(1, Math.min(520, Math.round(Number(data.weekCount) || 1)));
+    const WEEK_MS = 7 * 86400000;
+    for (const dRaw of landDays) {
+      const wk = weekStartOf(new Date(`${dRaw}T00:00:00`), ws);
+      if (wk.getTime() < newFirst.getTime()) {
+        newCount += Math.round((newFirst.getTime() - wk.getTime()) / WEEK_MS);
+        newFirst = wk;
+      } else {
+        const idx = Math.round((wk.getTime() - newFirst.getTime()) / WEEK_MS);
+        if (idx >= newCount) newCount = Math.min(520, idx + 1);
+      }
+    }
+    const runPatch = (newFirst.getTime() !== runFirst.getTime()
+        || newCount !== Math.max(1, Math.min(520, Math.round(Number(data.weekCount) || 1))))
+      ? { firstWeek: isoDay(newFirst), weekCount: newCount }
+      : {};
     const key = `${cell.person}|${cell.day}`;
     const already = cells[key] ?? [];
 
@@ -2539,7 +2597,7 @@ export function GeneralJobsPage() {
         : `${what} comes off ${who}’s row on ${cell.day} in the weekly notebook and goes back onto the board. `
           + 'No job is deleted — only the planning of that day changes.',
     }, () => {
-      updateCanvasElement(el.id, { data: { ...data, cells } });
+      updateCanvasElement(el.id, { data: { ...data, ...runPatch, cells } });
 
     /**
      * The job MOVES IN: the board stops drawing it and the square holds it.
@@ -2571,6 +2629,23 @@ export function GeneralJobsPage() {
    * three-quarters filled in before it opens. It is a setting because a planner
    * used purely as a whiteboard should not interrogate every drop.
    */
+  /**
+   * The main weekly notebook — where the quick-assign box writes. `rota`
+   * only: `week-planner` is the seven-free-columns widget and has no
+   * person/day squares for placeOnPlanner to land on. A projection renders
+   * the main's element and must never be the target itself.
+   */
+  const mainRota = useMemo(
+    () => canvasElements.find(el => el.type === 'widget' && el.widget === 'rota'
+      && ((el.data ?? {}) as Record<string, unknown>).role !== 'projection') ?? null,
+    [canvasElements]);
+
+  /** Is this screen point on the quick-assign drop box? */
+  function overQuickBox(cx: number, cy: number): boolean {
+    const r = quickBoxRef.current?.getBoundingClientRect();
+    return !!r && cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom;
+  }
+
   function dropOnRota(cell: RotaHit, ids: string[]) {
     const el = canvasElements.find(c => c.id === cell.elId);
     const ask = !!(el?.data as Record<string, unknown> | undefined)?.askOnDrop;
@@ -3672,6 +3747,9 @@ export function GeneralJobsPage() {
     });
     setHoverBin(overBin?.id ?? null);
     setRotaHover(overCell);
+    // The quick-assign box lights up while a job hovers it. A boolean write,
+    // so React bails when nothing changed.
+    setQuickHot(drag.kind === 'job' && overQuickBox(e.clientX, e.clientY));
   }
 
   // ── The board grows while you hold something at its edge ───────────
@@ -3823,7 +3901,15 @@ export function GeneralJobsPage() {
       // would never fire for it anyway, and it is the more specific target.
       const cell = anyRota() ? rotaCellAt(e.clientX, e.clientY) : null;
       const bin = binAt(w0.x, w0.y);
-      if (cell) {
+      // The quick-assign box outranks everything: it floats OVER the board,
+      // so a release on it can never also mean a bin or a square. The job is
+      // not moved — the box is a question, not a place.
+      if (mainRota && overQuickBox(e.clientX, e.clientY)) {
+        setQuickHot(false);
+        setRotaHover(null);
+        setSelectedJobIds(new Set());
+        setQuickAssign(job);
+      } else if (cell) {
         dropOnRota(cell, drag.ids);
         setSelectedJobIds(new Set());
       } else if (bin) {
@@ -4627,6 +4713,21 @@ export function GeneralJobsPage() {
    * before stopped working.
    */
   function onCanvasPointerDown(e: React.PointerEvent) {
+    /**
+     * RIGHT-drag lassoes (in addition to Ctrl+drag — the owner's ask).
+     *
+     * Nothing is decided at the press: a motionless right-click still opens
+     * the context menu exactly as before (including the selection menu, so
+     * the selection is NOT cleared here). Only once the pointer has really
+     * moved does the press become a lasso — and on platforms where the menu
+     * opens at the press itself, the move closes it again.
+     */
+    if (e.button === 2 && (e.target as Element) === canvasRef.current) {
+      const w = toWorld(e.clientX, e.clientY);
+      rightDrag.current = { px: e.clientX, py: e.clientY, wx: w.x, wy: w.y, lasso: false };
+      canvasRef.current!.setPointerCapture(e.pointerId);
+      return;
+    }
     if (e.button !== 0) return;
     if ((e.target as Element) !== canvasRef.current) return;
     setCtxMenu(null); setColorPicker(null);
@@ -4658,6 +4759,14 @@ export function GeneralJobsPage() {
   }
 
   function onCanvasPointerMove(e: React.PointerEvent) {
+    // The watched right press becomes a lasso the moment it really moves.
+    const rd = rightDrag.current;
+    if (rd && !rd.lasso && (e.buttons & 2) === 2
+        && Math.hypot(e.clientX - rd.px, e.clientY - rd.py) > 6) {
+      rd.lasso = true;
+      setCtxMenu(null); // platforms that open the menu at the press
+      setLasso({ sx: rd.wx, sy: rd.wy, ex: rd.wx, ey: rd.wy });
+    }
     if (zoomingWithButton.current) return;
     if (erasing.current) { eraseAt(e.clientX, e.clientY); return; }
     if (panRef.current) {
@@ -4685,6 +4794,11 @@ export function GeneralJobsPage() {
   function onCanvasPointerUp() {
     setGuides([]);
     stopEdgePush();
+    if (rightDrag.current) {
+      // A right press that lassoed must not ALSO raise the menu on release.
+      if (rightDrag.current.lasso) suppressMenu.current = Date.now();
+      rightDrag.current = null;
+    }
     if (erasing.current) { erasing.current = false; return; }
     if (panRef.current) { panRef.current = null; setPanning(false); return; }
     if (drawing) {
@@ -4733,11 +4847,50 @@ export function GeneralJobsPage() {
   useEffect(() => {
     const vp = viewportRef.current;
     if (!vp) return;
-    const down = (e: PointerEvent) => { if (e.button === 0) leftDown.current = true; };
-    const up = () => { leftDown.current = false; };
+    const down = (e: PointerEvent) => {
+      if (e.button === 0) leftDown.current = true;
+      if (e.button === 2) rightDown.current = true;
+    };
+    const up = () => { leftDown.current = false; rightDown.current = false; };
     vp.addEventListener('pointerdown', down);
     window.addEventListener('pointerup', up);
     window.addEventListener('pointercancel', up);
+    // Right-drag lassoes and right-held wheel zooms both end with the browser
+    // offering the context menu; the flag says the hand meant a gesture, not a
+    // menu. Capture phase, so tile and node menus are covered too.
+    const menuGuard = (e: MouseEvent) => {
+      const stamp = suppressMenu.current;
+      suppressMenu.current = 0;
+      if (stamp && Date.now() - stamp < 400) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    vp.addEventListener('contextmenu', menuGuard, { capture: true });
+    /**
+     * Right button held + wheel ZOOMS, always (the owner's ask). Registered
+     * on the WINDOW in the capture phase, not on the viewport: on platforms
+     * where the right press opens the context menu immediately (Linux), the
+     * menu overlay sits under the pointer and the viewport's own wheel
+     * listener never hears the event — so the gesture read as dead exactly
+     * where it was being tried. Capture wins the race, closes the menu, and
+     * zooms. Synthetic wheels can carry `buttons: 0` while a button is held
+     * (the standing leftDown lesson), so `rightDown` is the primary check.
+     */
+    const rightWheel = (e: WheelEvent) => {
+      if (!(rightDown.current || (e.buttons & 2) === 2)) return;
+      const r = vp.getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return;
+      e.preventDefault();
+      e.stopPropagation();
+      suppressMenu.current = Date.now();
+      setCtxMenu(null); // platforms that opened the menu at the press
+      zoomingWithButton.current = true;
+      clearTimeout(zoomHold.current);
+      zoomHold.current = window.setTimeout(() => { zoomingWithButton.current = false; }, 260);
+      zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1 : -1);
+    };
+    window.addEventListener('wheel', rightWheel, { passive: false, capture: true });
     const onWheel = (e: WheelEvent) => {
       /**
        * A widget that OWNS the wheel outright, scrollable or not.
@@ -4829,6 +4982,8 @@ export function GeneralJobsPage() {
     return () => {
       vp.removeEventListener('wheel', onWheel);
       vp.removeEventListener('pointerdown', down);
+      vp.removeEventListener('contextmenu', menuGuard, { capture: true });
+      window.removeEventListener('wheel', rightWheel, { capture: true });
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', up);
     };
@@ -6090,24 +6245,31 @@ export function GeneralJobsPage() {
             {/* Per machine on purpose — a synced default would push one
                 person's screen onto everybody else's monitor. */}
             <div className="mb-2">
-              <span className="block text-[10px] font-bold text-gray-500 mb-1">
-                Opens at (this computer)
+              <span className="flex items-center gap-1.5 text-[10px] font-bold text-gray-500 mb-1">
+                Default zoom (this computer)
+                <Hint text="The zoom the board opens at. Type any number from 25 to 300 — 100 is the usual." />
               </span>
               <div className="flex items-center gap-1.5">
-                <select
-                  value={String(Number(localStorage.getItem(defaultZoomKey)) || '')}
-                  onChange={e => {
-                    const v = e.target.value;
-                    if (v) localStorage.setItem(defaultZoomKey, v);
-                    else localStorage.removeItem(defaultZoomKey);
-                    if (v) { setZoom(Number(v)); setPan(pp => clampPanRef.current(pp, Number(v))); }
-                  }}
-                  className="flex-1 text-[10.5px] border border-gray-200 rounded-lg px-1.5 py-1 bg-white">
-                  <option value="">100% (the usual)</option>
-                  {[0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.25, 1.5, 2].map(z => (
-                    <option key={z} value={z}>{Math.round(z * 100)}%</option>
-                  ))}
-                </select>
+                {/* A typed number, per the owner — the fixed rungs only offered
+                    the ladder's own stops. Committed on blur/Enter so half-typed
+                    numbers ("1" on the way to "150") never yank the view. */}
+                <div className="flex items-center gap-1 flex-1">
+                  <input
+                    type="number" min={25} max={300} step={5}
+                    key={String(Number(localStorage.getItem(defaultZoomKey)) || 1)}
+                    defaultValue={Math.round((Number(localStorage.getItem(defaultZoomKey)) || 1) * 100)}
+                    data-default-zoom
+                    onBlur={e => {
+                      const pct = Math.round(Number(e.target.value));
+                      if (!Number.isFinite(pct) || pct === 100) { localStorage.removeItem(defaultZoomKey); return; }
+                      const v = Math.min(3, Math.max(0.25, pct / 100));
+                      localStorage.setItem(defaultZoomKey, String(v));
+                      setZoom(v); setPan(pp => clampPanRef.current(pp, v));
+                      setToast(`The board will open at ${Math.round(v * 100)}%`);
+                    }}
+                    className="w-16 text-[10.5px] border border-gray-200 rounded-lg px-1.5 py-1 bg-white text-right tabular-nums" />
+                  <span className="text-[10.5px] text-gray-500">%</span>
+                </div>
                 <button
                   onClick={() => {
                     localStorage.setItem(defaultZoomKey, String(zoom));
@@ -7935,6 +8097,50 @@ export function GeneralJobsPage() {
           onClose={() => setAddTaskJob(null)}
           currentUser={currentUser}
           onToast={msg => setToast(msg)}
+        />
+      )}
+
+      {/* ── The quick-assign drop box ───────────────────────────────────
+          Appears at the top-middle only while a job is genuinely being
+          dragged, over everything (the floating chrome is z-40/50).
+          pointer-events-none on purpose: the drag holds pointer capture, so
+          the box is found by coordinates (overQuickBox), never by events. */}
+      {drag?.kind === 'job' && drag.moved && mainRota && (
+        <div
+          ref={quickBoxRef}
+          data-quick-box
+          className="fixed left-1/2 -translate-x-1/2 z-[95] pointer-events-none flex items-center gap-2 px-5 py-3 rounded-2xl border-2 border-dashed transition-all"
+          style={{
+            top: 14,
+            borderColor: quickHot ? '#16a34a' : '#4aa8d8',
+            backgroundColor: quickHot ? 'rgba(22,163,74,.14)' : 'rgba(255,255,255,.92)',
+            boxShadow: '0 10px 30px -8px rgba(15,23,42,.35)',
+            transform: `translateX(-50%) scale(${quickHot ? 1.06 : 1})`,
+          }}>
+          <CalendarDays size={18} className={quickHot ? 'text-green-600' : 'text-[#1e3a5f]'} />
+          <span className={`text-[13px] font-bold ${quickHot ? 'text-green-700' : 'text-[#1e3a5f]'}`}>
+            {s.isRtl ? 'שחררו כאן לשיבוץ ביומן' : 'Drop here to assign a day'}
+          </span>
+        </div>
+      )}
+
+      {quickAssign && mainRota && (
+        <QuickAssignDialog
+          job={quickAssign}
+          people={((mainRota.data ?? {}) as { people?: string[] }).people ?? []}
+          contractors={contractors}
+          users={users}
+          isRtl={s.isRtl}
+          onCancel={() => setQuickAssign(null)}
+          onNext={(person, dayIso) => {
+            // Hand over to the standing task dialog exactly as if the tile
+            // had been dropped on that square of the notebook.
+            setQuickAssign(null);
+            setPlannerDrop({
+              cell: { elId: mainRota.id, probeId: 'quick-assign', person, day: dayIso },
+              job: quickAssign,
+            });
+          }}
         />
       )}
 

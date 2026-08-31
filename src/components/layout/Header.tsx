@@ -10,6 +10,7 @@ import { pendingStages } from '../../data/stageMarks';
 import { Tooltip } from '../ui/Tooltip';
 import { ActivityTicker } from '../ui/ActivityTicker';
 import { WhatsNewButton } from '../ui/WhatsNew';
+import { TutorialButton } from '../ui/Tutorial';
 import { GlobalSearch } from '../ui/GlobalSearch';
 import { subscribeCloudSync, isFirebaseConfigured, SyncStatus } from '../../data/firebase';
 import { clearReturnTicket } from '../../data/unitTravel';
@@ -494,6 +495,8 @@ export function Header() {
       <div className="flex items-center gap-0.5 md:gap-2 flex-shrink-0">
         {/* What the APP learned to do — left of what the office just did. */}
         {currentUser && <WhatsNewButton />}
+        {/* The training session — a practice board that teaches every gesture. */}
+        {currentUser && <TutorialButton />}
         {/* What just changed, and who did it — see ActivityTicker. */}
         {currentUser && <ActivityTicker light={lightTheme} />}
         {/* Half-done stages — pending shows on BOTH the apartment and here. */}

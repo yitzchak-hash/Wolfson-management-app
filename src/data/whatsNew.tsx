@@ -30,6 +30,45 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-10-04',
+    title: 'The board teaches itself, and planning jumps the queue',
+    items: [
+      {
+        title: 'A training session — press the ? in the header',
+        body: 'A little practice board walks you through every gesture, one '
+          + 'step at a time — click, drag, open, pan, zoom, the lasso, the '
+          + 'right-click menu — and checks you really did each one. At the '
+          + 'end it prints a TzviAir control sheet in the size you pick: '
+          + 'sticky note, A5 or A4.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'Drop a job at the top of the screen to plan it',
+        body: 'While you drag a job, a drop box appears at the top. Let go '
+          + 'there and it asks who and which day — any day, weeks ahead — '
+          + 'then opens the usual task form, exactly as if you had dropped '
+          + 'it on that square of the notebook. No more dragging across '
+          + 'months of planner.',
+        demo: 'drag',
+      },
+      {
+        title: 'Two new mouse moves',
+        body: 'Drag with the RIGHT button held to select a box-full — the '
+          + 'same as Ctrl+drag. Hold the right button and scroll to zoom. '
+          + 'A plain right-click still opens the menu, and nothing else '
+          + 'changed.',
+        demo: 'zoom',
+      },
+      {
+        title: 'Type your own default zoom',
+        body: 'Board settings now take a typed number for the zoom the '
+          + 'board opens at on this computer — 87%, 140%, whatever suits '
+          + 'your screen — instead of a fixed list of steps.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2026-09-27',
     title: 'A real timeline, search in four coats, and tiles that behave',
     items: [
