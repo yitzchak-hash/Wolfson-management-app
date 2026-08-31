@@ -1,0 +1,413 @@
+<title>Notebook Strips</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&display=swap">
+<style>
+/*__APP_CSS__*/
+</style>
+<style>
+  /* The drafting table. The app's compiled stylesheet is inlined above so
+     every UI part below is drawn by the app's real classes and values; these
+     rules are the TABLE the parts sit on, and they come after, so they win on
+     the page chrome without touching the parts. App material is app-coloured;
+     every mark of ours is china-marker red — the two can never be confused. */
+  html, body { background: #d7dce3 !important; color: #16212e; }
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+    margin: 0; padding: 28px 16px 90px;
+  }
+  .table { max-width: 940px; margin: 0 auto; }
+  .lede { max-width: 62ch; }
+  .step { margin-top: 46px; }
+  .step-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+  .step-num {
+    font-family: 'Caveat', 'Comic Sans MS', 'Segoe Print', cursive; font-weight: 700; font-size: 30px;
+    line-height: 1; color: #c2402f; flex-shrink: 0; transform: rotate(-2deg);
+  }
+  .step-title { font-size: 19px; font-weight: 800; color: #1e3a5f; text-wrap: balance; margin: 0; }
+  .lay { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+  .stage { flex: 1 1 480px; min-width: 0; }
+  .notes { flex: 1 1 210px; min-width: 210px; max-width: 300px; display: grid; gap: 12px; }
+  .note {
+    font-family: 'Caveat', 'Comic Sans MS', 'Segoe Print', cursive; font-weight: 500;
+    font-size: 19.5px; line-height: 1.25; color: #c2402f; transform: rotate(-1deg);
+  }
+  .note b { font-weight: 700; }
+  .sheet {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 14px;
+    padding: 12px; box-shadow: 0 10px 26px -18px rgba(15,23,42,.4);
+  }
+  .sheet-cap {
+    font-family: 'Caveat', 'Comic Sans MS', 'Segoe Print', cursive; font-weight: 700;
+    font-size: 17px; color: #c2402f; margin: 0 0 6px 2px; transform: rotate(-1deg);
+  }
+
+  /* ── The notebook, in the app's own values ─────────────────────────────── */
+  .wk { display: grid; grid-template-columns: 92px repeat(5, minmax(0, 1fr)); gap: 1px; }
+  .dayhead {
+    background: #f1f5f9; padding: 4px 6px; border-radius: 4px;
+    font-size: 10.5px; color: #64748b; line-height: 1.2;
+  }
+  .dayhead b { display: block; font-size: 12px; color: #334155; }
+  .dayhead.today { background: #e0f2fe; }
+  .dayhead.today b { color: #0369a1; }
+  .wklabel { display: flex; flex-direction: column; justify-content: flex-end; padding-bottom: 2px; }
+  .wklabel .mon { font-weight: 900; letter-spacing: .02em; color: #334155; font-size: 13px; }
+  .wklabel .mon span { color: #94a3b8; font-weight: 700; }
+  .wklabel .icons { display: flex; gap: 7px; margin-top: 3px; color: #cbd5e1; font-size: 12px; }
+  .prow { display: contents; }
+  .pname {
+    background: #fdf6ec; border-radius: 4px; padding: 5px 6px; min-width: 0;
+    display: flex; align-items: flex-start; gap: 5px; font-size: 11.5px; font-weight: 700; color: #334155;
+  }
+  .pdot { width: 9px; height: 9px; border-radius: 999px; flex-shrink: 0; margin-top: 2px; }
+  .cell {
+    background: #fbfcfd; outline: 1px solid #eef2f7; outline-offset: -1px; border-radius: 4px;
+    min-height: 58px; padding: 3px; display: flex; flex-direction: column; gap: 3px; min-width: 0;
+  }
+  .cell.today { background: #e0f2fe33; }
+  .pcard {
+    border-radius: 6px; padding: 5px 7px; border: 1px solid rgba(15,23,42,.07);
+    font-size: 11.5px; line-height: 1.15; min-width: 0;
+  }
+  .pcard .nm { font-weight: 800; color: #1e293b; display: flex; gap: 4px; align-items: flex-start; }
+  .pcard .nm i { width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; margin-top: 3px; font-style: normal; }
+  .pcard .sub { color: #64748b; font-size: 10px; font-weight: 500; padding-inline-start: 10px; margin-top: 1px; }
+  .pcard .tsk { color: #475569; font-size: 10px; padding-inline-start: 10px; margin-top: 1px; }
+
+  /* ── Proposal 1: the squished empty row ────────────────────────────────── */
+  .strip-name {
+    background: #fdf6ec; border-radius: 4px; padding: 1px 6px; display: flex; align-items: center; gap: 5px;
+    font-size: 9.5px; font-weight: 700; color: #94a3b8; min-width: 0;
+  }
+  .strip-name .pdot { width: 6px; height: 6px; margin-top: 0; opacity: .55; }
+  .strip-cell {
+    background: #fbfcfd; outline: 1px solid #eef2f7; outline-offset: -1px; border-radius: 4px;
+    min-height: 14px; transition: min-height .18s ease, background .18s ease, outline-color .18s ease;
+  }
+  .puffed .strip-cell, .strip-cell.puff {
+    min-height: 58px; background: #dbeafe; outline: 2px solid #4aa8d8; outline-offset: -2px;
+  }
+  .puffed .strip-name { font-size: 11.5px; color: #334155; padding: 5px 6px; align-items: flex-start; }
+  .puffed .strip-name .pdot { width: 9px; height: 9px; opacity: 1; margin-top: 2px; }
+  .strip-row-anim .strip-cell, .strip-row-anim .strip-name { transition: all .18s ease; }
+
+  /* ── Proposal 2: strips mode ───────────────────────────────────────────── */
+  .mode .pcard { transition: padding .15s ease; }
+  .mode.strips .cell { min-height: 30px; }
+  .mode.strips .pcard { padding: 2px 6px; border-radius: 4px; }
+  .mode.strips .pcard .nm i, .mode.strips .pcard .sub { display: none; }
+  .mode.strips .pcard .nm { font-size: 10.5px; }
+  .mode.strips .pcard .tsk { padding-inline-start: 0; }
+  .mode.strips .dash { display: none; }
+  .modebar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .modebtn {
+    border: 1px solid #e2e8f0; background: #f8fafc; color: #475569; border-radius: 999px;
+    padding: 4px 14px; font-size: 12px; font-weight: 700; cursor: pointer;
+  }
+  .modebtn.on { background: #1e3a5f; border-color: #1e3a5f; color: #fff; }
+  .hmeter {
+    font-family: 'Caveat', 'Comic Sans MS', 'Segoe Print', cursive; font-weight: 700;
+    color: #c2402f; font-size: 18px; margin-inline-start: auto;
+  }
+
+  /* The settings row, the NodeSettings manner. */
+  .setrow {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px 12px; max-width: 380px;
+  }
+  .setrow label { font-size: 12px; font-weight: 700; color: #475569; }
+  .setrow select {
+    font-size: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 4px 8px; color: #1e293b;
+  }
+  .new-tag {
+    font-family: 'Caveat', 'Comic Sans MS', 'Segoe Print', cursive; font-weight: 700; font-size: 15px; color: #fff;
+    background: #c2402f; border-radius: 999px; padding: 0 8px 2px; margin-left: 6px;
+    display: inline-block; transform: rotate(-2deg); vertical-align: middle;
+  }
+
+  /* The draggable demo card. */
+  .dragme {
+    touch-action: none; cursor: grab; user-select: none; display: inline-block;
+    box-shadow: 0 6px 16px -8px rgba(15,23,42,.5); position: relative; z-index: 5;
+  }
+  .dragme.held { cursor: grabbing; opacity: .85; }
+  .rules {
+    margin-top: 52px; border: 2.5px solid #c2402f; border-radius: 16px; padding: 18px 22px;
+    max-width: 640px; transform: rotate(-.4deg); background: rgba(255,255,255,.35);
+  }
+  .rules h2 {
+    font-family: 'Caveat', 'Comic Sans MS', 'Segoe Print', cursive; font-weight: 700;
+    font-size: 26px; color: #c2402f; margin: 0 0 8px;
+  }
+  .rules li {
+    font-family: 'Caveat', 'Comic Sans MS', 'Segoe Print', cursive; font-weight: 500;
+    font-size: 19.5px; color: #c2402f; line-height: 1.3; margin: 6px 0;
+  }
+  h1 { font-size: 27px; font-weight: 900; color: #1e3a5f; margin: 0 0 4px; text-wrap: balance; }
+  .sub { color: #475569; font-size: 14px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  button:focus-visible, select:focus-visible { outline: 2px solid #1e3a5f; outline-offset: 2px; }
+</style>
+
+<div class="table">
+  <h1>The notebook loses its empty space</h1>
+  <p class="sub lede">Two changes, drawn with the app's own parts so you can judge them as they would really look.
+    Nothing here is built yet — say the word and it gets built exactly as approved.</p>
+
+  <!-- ── 1 · today ── -->
+  <div class="step">
+    <div class="step-head"><span class="step-num">1</span>
+      <h2 class="step-title">Today: a worker with nothing planned still costs a full row</h2></div>
+    <div class="lay">
+      <div class="stage"><div class="sheet">
+        <p class="sheet-cap">as it draws now</p>
+        <div class="wk">
+          <div class="wklabel"><span class="mon">AUG <span>30</span></span>
+            <span class="icons">⌃ ⌄ &nbsp;+ 👁 ▦</span></div>
+          <div class="dayhead"><b>30</b> Sunday</div>
+          <div class="dayhead today"><b>31</b> Monday</div>
+          <div class="dayhead"><b>1</b> Tuesday</div>
+          <div class="dayhead"><b>2</b> Wednesday</div>
+          <div class="dayhead"><b>3</b> Thursday</div>
+
+          <div class="pname"><span class="pdot" style="background:#c2410c"></span>Motti</div>
+          <div class="cell"><div class="pcard" style="background:rgba(194,65,12,.16)">
+            <span class="nm"><i style="background:#4aa8d8"></i>Artzi, Avital</span>
+            <span class="tsk">• Fit the concealed units</span></div></div>
+          <div class="cell today"><div class="pcard" style="background:rgba(194,65,12,.16)">
+            <span class="nm"><i style="background:#16a34a"></i>Goldman Family</span>
+            <span class="tsk">• Close the ceiling</span></div></div>
+          <div class="cell"></div>
+          <div class="cell"><div class="pcard" style="background:rgba(194,65,12,.16)">
+            <span class="nm"><i style="background:#7c3aed"></i>Liff, Diane</span></div></div>
+          <div class="cell"></div>
+
+          <div class="pname"><span class="pdot" style="background:#0d9488"></span>Sasha</div>
+          <div class="cell"></div><div class="cell today"></div><div class="cell"></div>
+          <div class="cell"></div><div class="cell"></div>
+
+          <div class="pname"><span class="pdot" style="background:#7c3aed"></span>Avi &amp; crew</div>
+          <div class="cell"></div><div class="cell today"></div><div class="cell"></div>
+          <div class="cell"></div><div class="cell"></div>
+        </div>
+      </div></div>
+      <div class="notes">
+        <div class="note">Sasha and Avi have <b>nothing this week</b> — and still take 60px of paper each, every week.</div>
+        <div class="note">Four workers, two quiet → half the sheet says nothing.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2 · squished rows ── -->
+  <div class="step">
+    <div class="step-head"><span class="step-num">2</span>
+      <h2 class="step-title">Empty rows squish down to a strip — and open the moment you bring them work</h2></div>
+    <div class="lay">
+      <div class="stage"><div class="sheet">
+        <p class="sheet-cap">drag this card onto Sasha's strip ⤵</p>
+        <div style="margin: 0 0 10px 96px;">
+          <div class="pcard dragme" id="dragme" style="background:rgba(194,65,12,.16); width: 150px;">
+            <span class="nm"><i style="background:#f59e0b"></i>Rosenberg, Sharon</span>
+            <span class="tsk">• Hang the outdoor unit</span></div>
+        </div>
+        <div class="wk" id="squishwk">
+          <div class="wklabel"><span class="mon">AUG <span>30</span></span>
+            <span class="icons">⌃ ⌄ &nbsp;+ 👁 ▦</span></div>
+          <div class="dayhead"><b>30</b> Sunday</div>
+          <div class="dayhead today"><b>31</b> Monday</div>
+          <div class="dayhead"><b>1</b> Tuesday</div>
+          <div class="dayhead"><b>2</b> Wednesday</div>
+          <div class="dayhead"><b>3</b> Thursday</div>
+
+          <div class="pname"><span class="pdot" style="background:#c2410c"></span>Motti</div>
+          <div class="cell"><div class="pcard" style="background:rgba(194,65,12,.16)">
+            <span class="nm"><i style="background:#4aa8d8"></i>Artzi, Avital</span>
+            <span class="tsk">• Fit the concealed units</span></div></div>
+          <div class="cell today"><div class="pcard" style="background:rgba(194,65,12,.16)">
+            <span class="nm"><i style="background:#16a34a"></i>Goldman Family</span>
+            <span class="tsk">• Close the ceiling</span></div></div>
+          <div class="cell"></div>
+          <div class="cell"><div class="pcard" style="background:rgba(194,65,12,.16)">
+            <span class="nm"><i style="background:#7c3aed"></i>Liff, Diane</span></div></div>
+          <div class="cell"></div>
+
+          <div class="prow strip-row-anim" id="sasharow">
+            <div class="strip-name"><span class="pdot" style="background:#0d9488"></span>Sasha</div>
+            <div class="strip-cell" data-strip data-day="Sun"></div>
+            <div class="strip-cell" data-strip data-day="Mon"></div>
+            <div class="strip-cell" data-strip data-day="Tue"></div>
+            <div class="strip-cell" data-strip data-day="Wed"></div>
+            <div class="strip-cell" data-strip data-day="Thu"></div>
+          </div>
+          <div class="prow strip-row-anim">
+            <div class="strip-name"><span class="pdot" style="background:#7c3aed"></span>Avi &amp; crew</div>
+            <div class="strip-cell"></div><div class="strip-cell"></div><div class="strip-cell"></div>
+            <div class="strip-cell"></div><div class="strip-cell"></div>
+          </div>
+        </div>
+      </div></div>
+      <div class="notes">
+        <div class="note">A quiet row keeps its <b>name on a thin strip</b> — nobody disappears off the sheet.</div>
+        <div class="note">Drag anything over the strip and it <b>puffs open</b> under your hand; drop, and the row is a full row again.</div>
+        <div class="note">Per week: busy this week = full row this week, quiet next week = strip there.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 3 · strips mode ── -->
+  <div class="step">
+    <div class="step-head"><span class="step-num">3</span>
+      <h2 class="step-title">A new look in the notebook's settings: Tiles, or Strips<span class="new-tag">new</span></h2></div>
+    <div class="lay">
+      <div class="stage">
+        <div class="setrow" style="margin-bottom:12px;">
+          <label>Cards</label>
+          <select id="modepick"><option>Tiles — as today</option><option>Strips — name and task only</option></select>
+        </div>
+        <div class="sheet">
+          <p class="sheet-cap">press the buttons — same week, both looks</p>
+          <div class="modebar">
+            <button class="modebtn on" id="btn-tiles">Tiles</button>
+            <button class="modebtn" id="btn-strips">Strips</button>
+            <span class="hmeter" id="hmeter"></span>
+          </div>
+          <div class="mode" id="modewk">
+            <div class="wk">
+              <div class="wklabel"><span class="mon">SEP <span>6</span></span>
+                <span class="icons">⌃ ⌄ &nbsp;+ 👁 ▦</span></div>
+              <div class="dayhead"><b>6</b> Sunday</div>
+              <div class="dayhead"><b>7</b> Monday</div>
+              <div class="dayhead"><b>8</b> Tuesday</div>
+              <div class="dayhead"><b>9</b> Wednesday</div>
+              <div class="dayhead"><b>10</b> Thursday</div>
+
+              <div class="pname"><span class="pdot" style="background:#c2410c"></span>Motti</div>
+              <div class="cell"><div class="pcard" style="background:rgba(194,65,12,.16)">
+                <span class="nm"><i style="background:#4aa8d8"></i>Artzi, Avital</span>
+                <span class="sub dash">Wolfson · Piping</span>
+                <span class="tsk">• Pressure-test the lines</span></div></div>
+              <div class="cell"><div class="pcard" style="background:rgba(194,65,12,.16)">
+                <span class="nm"><i style="background:#16a34a"></i>Goldman Family</span>
+                <span class="tsk">• Second fix</span></div></div>
+              <div class="cell"><div class="pcard" style="background:rgba(194,65,12,.16)">
+                <span class="nm"><i style="background:#16a34a"></i>Goldman Family</span>
+                <span class="tsk">• Second fix</span></div></div>
+              <div class="cell"></div>
+              <div class="cell"><div class="pcard" style="background:rgba(194,65,12,.16)">
+                <span class="nm"><i style="background:#7c3aed"></i>Liff, Diane</span>
+                <span class="tsk">• Hand over</span></div></div>
+
+              <div class="pname"><span class="pdot" style="background:#0d9488"></span>Sasha</div>
+              <div class="cell"><div class="pcard" style="background:rgba(13,148,136,.16)">
+                <span class="nm"><i style="background:#f59e0b"></i>Rosenberg, Sharon</span>
+                <span class="sub dash">Netiv · Geves</span>
+                <span class="tsk">• Board the shaft</span></div></div>
+              <div class="cell"><div class="pcard" style="background:rgba(13,148,136,.16)">
+                <span class="nm"><i style="background:#f59e0b"></i>Rosenberg, Sharon</span>
+                <span class="tsk">• Board the shaft</span></div></div>
+              <div class="cell"></div>
+              <div class="cell"><div class="pcard" style="background:rgba(13,148,136,.16)">
+                <span class="nm"><i style="background:#0ea5e9"></i>Klein, Shmulik</span>
+                <span class="tsk">• Fill and sand</span></div></div>
+              <div class="cell"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="notes">
+        <div class="note">A strip says <b>only the job's name, and the task right under it</b> — nothing else.</div>
+        <div class="note">Weeks come out roughly <b>half the height</b>, so months sit close together on one screen.</div>
+        <div class="note">The switch lives in the notebook's pencil, next to the text-size controls. Per notebook.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── rules ── -->
+  <div class="rules">
+    <h2>The rules this would be built to</h2>
+    <ul>
+      <li>Nothing is hidden — a quiet worker keeps a named strip, never vanishes.</li>
+      <li>A strip takes drops exactly like a full row; it opens as the card passes over it.</li>
+      <li>Squishing is per week and automatic. Strips-vs-tiles is a setting, per notebook.</li>
+      <li>Strips still open the job on a click, still cross off done tasks, still drag between days.</li>
+      <li>Approve this page and say “build it” — it gets built to exactly this drawing.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+  // ── demo 1: drag the card onto a strip ────────────────────────────────────
+  (function () {
+    var card = document.getElementById('dragme');
+    var home = { x: 0, y: 0 };
+    var held = null;
+    card.addEventListener('pointerdown', function (e) {
+      card.setPointerCapture(e.pointerId);
+      var r = card.getBoundingClientRect();
+      held = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+      card.classList.add('held');
+      card.style.position = 'fixed';
+      card.style.left = r.left + 'px'; card.style.top = r.top + 'px';
+      e.preventDefault();
+    });
+    card.addEventListener('pointermove', function (e) {
+      if (!held) return;
+      card.style.left = (e.clientX - held.dx) + 'px';
+      card.style.top = (e.clientY - held.dy) + 'px';
+      var under = null;
+      document.querySelectorAll('[data-strip]').forEach(function (s) {
+        var r = s.getBoundingClientRect();
+        var hit = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top - 6 && e.clientY <= r.bottom + 6;
+        s.classList.toggle('puff', hit);
+        if (hit) under = s;
+      });
+      var row = document.getElementById('sasharow');
+      row.classList.toggle('puffed', !!under);
+    });
+    function drop(e) {
+      if (!held) return;
+      held = null;
+      card.classList.remove('held');
+      var target = document.querySelector('[data-strip].puff');
+      var row = document.getElementById('sasharow');
+      document.querySelectorAll('[data-strip]').forEach(function (s) { s.classList.remove('puff'); });
+      if (target) {
+        row.classList.add('puffed');
+        card.style.position = ''; card.style.left = ''; card.style.top = '';
+        card.style.width = ''; card.classList.remove('dragme');
+        target.appendChild(card);
+        target.style.background = '#fbfcfd'; target.style.outline = '';
+      } else {
+        row.classList.remove('puffed');
+        card.style.position = ''; card.style.left = ''; card.style.top = '';
+      }
+    }
+    card.addEventListener('pointerup', drop);
+    card.addEventListener('pointercancel', drop);
+  })();
+
+  // ── demo 2: tiles ↔ strips, with the real height read back ───────────────
+  (function () {
+    var wk = document.getElementById('modewk');
+    var bT = document.getElementById('btn-tiles');
+    var bS = document.getElementById('btn-strips');
+    var meter = document.getElementById('hmeter');
+    var pick = document.getElementById('modepick');
+    var tilesH = 0;
+    function measure() { return Math.round(wk.getBoundingClientRect().height); }
+    function set(strips) {
+      wk.classList.toggle('strips', strips);
+      bT.classList.toggle('on', !strips);
+      bS.classList.toggle('on', strips);
+      pick.selectedIndex = strips ? 1 : 0;
+      requestAnimationFrame(function () {
+        var h = measure();
+        if (!strips) { tilesH = h; meter.textContent = 'this week: ' + h + 'px'; }
+        else meter.textContent = 'this week: ' + (tilesH || '—') + 'px → ' + h + 'px';
+      });
+    }
+    bT.addEventListener('click', function () { set(false); });
+    bS.addEventListener('click', function () { set(true); });
+    pick.addEventListener('change', function () { set(pick.selectedIndex === 1); });
+    set(false);
+  })();
+</script>
