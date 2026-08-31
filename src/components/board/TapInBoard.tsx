@@ -3,7 +3,7 @@ import { Fingerprint, LogIn, LogOut } from 'lucide-react';
 import { CanvasElement, personColor } from '../../types';
 import { Frame, d, useTick, WidgetCtx } from '../../data/widgets';
 import { useStore } from '../../data/store';
-import { isClockedIn, clockedInSince, hhmm } from '../../data/timeClock';
+import { isClockedIn, clockedInSince, hhmm, dayOf, niceDay } from '../../data/timeClock';
 
 /**
  * The tap-in board.
@@ -54,7 +54,9 @@ export function TapInBoard({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
     })), [employees, punches]);
 
   const here = rows.filter(r => r.inNow).length;
-  const cols = Math.max(1, Math.min(6, Number(data.cols ?? 3)));
+  // Never more columns than people — two workers on a three-across grid
+  // squeezed both into narrow tiles beside a permanently empty cell.
+  const cols = Math.max(1, Math.min(6, Number(data.cols ?? 3), rows.length || 1));
 
   // The box the tiles have to fill, measured off the grid itself. Damped —
   // writing state for a sub-pixel resize echo is the feedback loop that made
@@ -80,7 +82,14 @@ export function TapInBoard({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   // tiles untappable — past the floor the grid scrolls instead of shrinking.
   const share = fit.h > 0 ? (fit.h - (rowCount - 1) * GAP) / rowCount : 46;
   const tileH = Math.max(44, share);
-  const f = Math.max(1, Math.min(3, tileH / 46));
+  /**
+   * The type follows the SMALLER of the tile's two dimensions. Height alone
+   * decided it before, so two people on a tall board got one enormous row
+   * whose 37px names truncated to a single letter — a dot and a sliver where
+   * a name should be. A narrow tile keeps readable type however tall it is.
+   */
+  const tileW = fit.w > 0 ? (fit.w - (cols - 1) * GAP) / cols : 110;
+  const f = Math.max(1, Math.min(3, Math.min(tileH / 46, tileW / 110)));
 
   const tap = (id: string, inNow: boolean) => {
     // Only the shelf's sample board is inert. The wall passes readOnly — and
@@ -105,7 +114,7 @@ export function TapInBoard({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
 
   return (
     <Frame title={`${data.title || 'Tap in'} · ${here} here`} icon={Fingerprint}
-      tone={here > 0 ? '#16a34a' : undefined}>
+      tone={here > 0 ? '#1e3a5f' : undefined}>
       <div className="h-full flex flex-col min-h-0">
         <div ref={gridRef}
           className="flex-1 min-h-0 overflow-y-auto grid content-start"
@@ -117,9 +126,18 @@ export function TapInBoard({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
           {rows.map(({ e, inNow, since }) => {
             const col = personColor(e.name, e.color);
             const saying = flash?.id === e.id;
+            /** The date rides along whenever the shift is not today's. */
+            const sinceLabel = since
+              ? (dayOf(since) === dayOf(new Date())
+                ? `in since ${hhmm(since)}`
+                : `in since ${niceDay(dayOf(since))} ${hhmm(since)}`)
+              : '';
             return (
               // The WHOLE tile is the button — name, time, icon and every
-              // pixel of colour around them press as one thing.
+              // pixel of colour around them press as one thing. Dressed in
+              // the company's own navy and sky (the owner's "TzviAir colors,
+              // look nicer") — the person's colour survives as the small dot
+              // beside the name.
               <button
                 key={e.id}
                 data-no-drag data-el-action
@@ -132,27 +150,45 @@ export function TapInBoard({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
                   // A tile that is on is FILLED, not merely outlined. From five
                   // metres down a corridor an outline is invisible and the
                   // board stops answering the question it exists for.
-                  backgroundColor: inNow ? col : 'rgba(148,163,184,.12)',
-                  color: inNow ? '#fff' : '#334155',
-                  boxShadow: inNow ? `0 2px 10px ${col}44` : 'none',
-                  padding: `${Math.round(6 * f)}px ${Math.round(8 * f)}px`,
+                  background: inNow
+                    ? 'linear-gradient(135deg, #1e3a5f 0%, #2c5a8f 100%)'
+                    : '#f6f9fc',
+                  color: inNow ? '#fff' : '#1e3a5f',
+                  border: inNow ? '1px solid #16304f' : '1px solid #dbe4ee',
+                  boxShadow: inNow
+                    ? '0 3px 12px rgba(30,58,95,.35), inset 0 1px 0 rgba(255,255,255,.12)'
+                    : '0 1px 2px rgba(15,23,42,.05)',
+                  padding: `${Math.round(6 * f)}px ${Math.round(9 * f)}px`,
                 }}
               >
-                <span className="block font-black leading-tight truncate"
-                  style={{ fontSize: Math.round(12 * f) }}>{e.name}</span>
-                <span className="block leading-tight truncate"
-                  style={{ opacity: inNow ? 0.85 : 0.55, fontSize: Math.max(8.5, 8.5 * f) }}>
-                  {inNow && since ? `in since ${hhmm(since)}` : (e.role || 'tap to clock in')}
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <span className="rounded-full flex-shrink-0"
+                    style={{
+                      width: Math.round(7 * f), height: Math.round(7 * f),
+                      backgroundColor: inNow ? '#4aa8d8' : col,
+                      boxShadow: inNow ? '0 0 0 2px rgba(255,255,255,.25)' : 'none',
+                    }} />
+                  <span className="block font-black leading-tight truncate"
+                    style={{ fontSize: Math.round(12.5 * f) }}>{e.name}</span>
+                </span>
+                <span className="block leading-tight truncate font-semibold"
+                  style={{
+                    color: inNow ? '#a8d4ee' : '#8aa0b8',
+                    fontSize: Math.max(8.5, 8.5 * f),
+                    paddingInlineStart: Math.round(7 * f) + 6,
+                  }}>
+                  {inNow ? sinceLabel : (e.role || 'tap to clock in')}
                 </span>
                 <span className="absolute"
-                  style={{ top: Math.round(5 * f), right: Math.round(5 * f), opacity: inNow ? 0.9 : 0.35 }}>
+                  style={{ top: Math.round(5 * f), right: Math.round(5 * f),
+                           color: inNow ? '#4aa8d8' : '#b6c6d6' }}>
                   {inNow ? <LogOut size={Math.round(11 * f)} /> : <LogIn size={Math.round(11 * f)} />}
                 </span>
                 {saying && (
                   <span className="absolute inset-0 flex items-center justify-center px-1 text-center
                                    font-bold leading-tight"
                     style={{
-                      backgroundColor: 'rgba(15,23,42,.88)', color: '#fff',
+                      backgroundColor: 'rgba(30,58,95,.92)', color: '#fff',
                       fontSize: Math.max(8.5, 8.5 * f),
                     }}>
                     {flash!.text}

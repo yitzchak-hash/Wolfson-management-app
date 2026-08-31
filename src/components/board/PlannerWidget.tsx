@@ -875,7 +875,7 @@ export function PlannerWidget({
   const taskChips = useMemo(() => {
     const map = new Map<string, {
       id: string; desc: string; label: string; jobId: string;
-      projectId?: string; workspace?: string;
+      projectId?: string; workspace?: string; done?: boolean;
     }[]>();
     if (!tasksOn) return map;
     const rows = new Set(people.filter(p => p.startsWith('c:')).map(p => p.slice(2)));
@@ -885,7 +885,14 @@ export function PlannerWidget({
       for (const e of list ?? []) if (e?.taskId) linked.add(e.taskId);
     }
     const put = (a: ContractorAssignment, apts: Apartment[], pid?: string, ws?: string) => {
-      if (!a.dueDate || a.completedAt || !a.contractorId) return;
+      /**
+       * A CLOSED task keeps its chip and wears a line through it — the
+       * owner's rule ("if it's done, it's crossed off"): closing a task used
+       * to make its chip vanish from the notebook, which read as the day's
+       * work being REMOVED rather than finished. The chip is the record now,
+       * exactly like a placed card whose task closed.
+       */
+      if (!a.dueDate || !a.contractorId) return;
       if (!rows.has(a.contractorId) || linked.has(a.id)) return;
       const apt = apts.find(x => x.id === a.apartmentId);
       // A task that takes days shows itself on EVERY one of them — it carries
@@ -899,6 +906,7 @@ export function PlannerWidget({
           label: apt ? (aptLabel(apt) || apt.address?.trim() || 'Job') : 'Job',
           jobId: a.apartmentId,
           projectId: pid, workspace: ws,
+          done: !!a.completedAt,
         });
         map.set(key, list);
       }
@@ -1459,13 +1467,27 @@ export function PlannerWidget({
                                 }
                                 openJob(t.jobId);
                               }}
-                              title="From the task list — change its day or worker on the task itself"
-                              className="w-full text-left rounded-md px-1.5 py-1 min-w-0"
+                              title={t.done
+                                ? 'Done — crossed off, never removed'
+                                : 'From the task list — change its day or worker on the task itself'}
+                              className="relative w-full text-left rounded-md px-1.5 py-1 min-w-0"
                               style={{
                                 border: '1px dashed rgba(15,23,42,.28)',
                                 backgroundColor: 'rgba(255,255,255,.65)',
+                                // Crossed off, not gone — a finished day is a
+                                // record, and deleting the record read as the
+                                // notebook losing the work.
+                                opacity: t.done ? 0.55 : undefined,
                               }}
                             >
+                              {t.done && (
+                                <span aria-hidden="true" className="pointer-events-none absolute"
+                                  style={{
+                                    left: 4, right: 4, top: '50%',
+                                    borderTop: `${Math.max(2, z(2.5))}px solid #475569`,
+                                    transform: 'rotate(-4deg)', opacity: 0.8,
+                                  }} />
+                              )}
                               <span className="flex items-start gap-1 min-w-0">
                                 <ClipboardList
                                   size={Math.max(9, Math.round(z(10)))}
@@ -1483,6 +1505,12 @@ export function PlannerWidget({
                                     <span className="block truncate font-medium"
                                       style={{ fontSize: Math.max(z(7), textSize - z(2)), color: '#64748b' }}>
                                       {t.desc}
+                                    </span>
+                                  )}
+                                  {t.done && (
+                                    <span className="block font-semibold"
+                                      style={{ fontSize: Math.max(z(7), textSize - z(3)), color: '#64748b' }}>
+                                      done
                                     </span>
                                   )}
                                 </span>

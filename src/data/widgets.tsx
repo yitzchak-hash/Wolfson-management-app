@@ -1884,6 +1884,30 @@ function CalcWidget() {
   const KEYS = ['7','8','9','/','4','5','6','*','1','2','3','-','0','.','=','+'];
 
   /**
+   * The type follows the box. `WidgetSurface` scales the drawing with the
+   * node's WIDTH; making the node TALLER grows the keys but left 11px labels
+   * marooned inside them — which on the TV read as "the numbers on the
+   * calculator are way too small". Measured off the widget's own root
+   * (damped, the standing rule), in natural units, so the fonts grow with
+   * the height the surface deliberately does not scale.
+   */
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [boxH, setBoxH] = useState(0);
+  useEffect(() => {
+    const node = rootRef.current;
+    if (!node) return;
+    const read = () => {
+      const h = node.clientHeight;
+      setBoxH(prev => (Math.abs(prev - h) > 2 ? h : prev));
+    };
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(node);
+    return () => ro.disconnect();
+  }, []);
+  const f = Math.max(1, Math.min(3, boxH / 165));
+
+  /**
    * Evaluated by a tiny parser rather than `eval`. Only digits and the four
    * operators are ever accepted, so nothing that arrives here can be code.
    */
@@ -1910,10 +1934,10 @@ function CalcWidget() {
   }
 
   return (
-    <div className="w-full h-full flex flex-col p-1.5 gap-1">
+    <div ref={rootRef} className="w-full h-full flex flex-col p-1.5 gap-1">
       <div className="bg-slate-50 rounded px-2 py-1 text-right flex-shrink-0">
-        <div className="text-[10px] text-gray-400 truncate h-3.5">{expr || '\u00a0'}</div>
-        <div className="text-[15px] font-black tabular-nums">{out || '0'}</div>
+        <div className="text-gray-400 truncate" style={{ fontSize: 10 * f, height: 14 * f }}>{expr || '\u00a0'}</div>
+        <div className="font-black tabular-nums" style={{ fontSize: 15 * f }}>{out || '0'}</div>
       </div>
       {/* The keypad scrolls rather than losing its bottom row. Squeezed to a
           third of its size it is an awkward calculator, but it is still a
@@ -1925,12 +1949,14 @@ function CalcWidget() {
               if (k === '=') { setOut(calc(expr)); return; }
               setExpr(e => e + k);
             }}
-            className="rounded text-[11px] font-bold text-gray-700 bg-slate-50 hover:bg-slate-100">
+            className="rounded font-bold text-gray-700 bg-slate-50 hover:bg-slate-100"
+            style={{ fontSize: 11 * f }}>
             {k}
           </button>
         ))}
         <button data-no-drag data-el-action onClick={() => { setExpr(''); setOut(''); }}
-          className="col-span-4 rounded text-[10px] font-bold text-gray-500 bg-slate-50 hover:bg-slate-100 py-0.5">
+          className="col-span-4 rounded font-bold text-gray-500 bg-slate-50 hover:bg-slate-100 py-0.5"
+          style={{ fontSize: 10 * f }}>
           clear
         </button>
       </div>
@@ -2851,12 +2877,27 @@ function PlannerHost({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
     if (!main) return;
     useStore.getState().updateCanvasElement(main.id, patch);
   }, [main?.id]);
+  /**
+   * The notebook resolves its cards against jobs INCLUDING the binned ones.
+   * `c.jobs` excludes anything filed into Done / Ready / Archive / Trash —
+   * right for every counting widget, and exactly wrong here: a job filed
+   * into Done still has its card on the week it was worked, and resolving it
+   * against the binned-free list drew that card as "(job removed)" — the
+   * owner's "why do I see a bunch of job removed?". Nothing was removed; the
+   * list the card was looked up in was too narrow.
+   */
+  const binned = useStore(s => s.apartments);
+  const plannerJobs = useMemo(() => {
+    const have = new Set(c.jobs.map(j => j.id));
+    const extra = binned.filter(a => a.boardBin && !have.has(a.id));
+    return extra.length ? [...c.jobs, ...extra] : c.jobs;
+  }, [c.jobs, binned]);
   return (
     <div className="relative w-full h-full">
       <PlannerWidget
         el={src}
         data={(src.data ?? {}) as PlannerData}
-        jobs={c.jobs}
+        jobs={plannerJobs}
         contractors={c.contractors}
         users={c.users}
         assignments={c.assignments}

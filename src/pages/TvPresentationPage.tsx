@@ -257,10 +257,14 @@ class WallGuard extends React.Component<{ children?: React.ReactNode }, { dead: 
 /**
  * The goals board on the wall — the owner's placement: a Goals button on the
  * TV bar right of Dashboard, a vertical line between the two. Mounted through
- * the goals app's own widget.js exactly like the board widget, but ALWAYS
- * read-only: the wall never edits, whatever any setting says. Module-level,
- * not declared inside the page's render (the standing new-type-every-render
- * trap — a nested component would remount the iframe on every wall tick).
+ * the goals app's own widget.js exactly like the board widget — and
+ * INTERACTIVE now, by the owner's 2026-08-31 ask ("I can't click to end a
+ * goal or to start a goal or to add a goal"): the wall is his touchscreen,
+ * and a goal edit is not a board edit — it goes to the goals app, the same
+ * rule that lets the tap-in board take punches on a read-only wall.
+ * Module-level, not declared inside the page's render (the standing
+ * new-type-every-render trap — a nested component would remount the iframe
+ * on every wall tick).
  */
 function TvGoalsBoard({ lang }: { lang: 'en' | 'he' }) {
   const slotRef = useRef<HTMLDivElement | null>(null);
@@ -273,7 +277,7 @@ function TvGoalsBoard({ lang }: { lang: 'en' | 'he' }) {
       .then(api => {
         if (cancelled || !slotRef.current) return;
         handle = api.mount(slotRef.current, {
-          view: 'board', lang, interactive: false,
+          view: 'board', lang, interactive: true,
           transparent: false, header: true, link: false, height: 'auto',
         });
       })
@@ -294,8 +298,15 @@ function TvGoalsBoard({ lang }: { lang: 'en' | 'he' }) {
       </div>
     );
   }
-  return <div ref={slotRef} data-goals-slot className="max-w-5xl mx-auto w-full px-6 py-4" />;
+  // A FIXED design width, so the caller can zoom the whole board to fill the
+  // panel — a fluid width would just add columns instead of making the tiles
+  // bigger, which is the opposite of "the tiles should fill up the screen".
+  return <div ref={slotRef} data-goals-slot className="mx-auto px-6 py-4"
+    style={{ width: GOALS_DESIGN_W }} />;
 }
+
+/** The width the goals grid is laid out at before the wall zooms it to fit. */
+const GOALS_DESIGN_W = 1120;
 
 export function TvPresentationPage() {
   const [params, setParams] = useSearchParams();
@@ -329,6 +340,11 @@ export function TvPresentationPage() {
     const p = new URLSearchParams(params);
     p.set('view', v);
     setParams(p, { replace: true });
+  };
+  /** A view picked BY HAND from the bar — it also tears up any return ticket. */
+  const pickView = (v: string) => {
+    wallReturnRef.current = null;
+    setView(v);
   };
 
   /**
@@ -364,6 +380,17 @@ export function TvPresentationPage() {
    * apartment — the standing re-resolve rule.
    */
   const [openJobId, setOpenJobId] = useState<string | null>(null);
+  /**
+   * The RETURN TICKET, the wall's copy of the app's own rule: tapping a
+   * foreign unit (a Building Progress cell, a notebook card) switches the
+   * wall's view there and opens the job window — and closing that window must
+   * put the wall straight back on the view it was showing ("when I click X to
+   * exit the job workspace, it doesn't go back to the job board"). Redeemed
+   * only when the job being closed is the one the travel opened — opening a
+   * different unit over there means you stayed; a view picked from the bar
+   * tears the ticket up.
+   */
+  const wallReturnRef = useRef<{ view: string; aptId: string } | null>(null);
   const [now, setNow] = useState(new Date());
   const frameRef = useRef<HTMLDivElement>(null);
 
@@ -802,6 +829,9 @@ export function TvPresentationPage() {
      */
     openUnit: (projectId: string, aptId: string) => {
       if (projectId === currentProjectId) { setOpenJobId(aptId); return; }
+      // The journey buys a return ticket: closing the window over there puts
+      // the wall back on the view it was showing.
+      wallReturnRef.current = { view, aptId };
       pendingOpenRef.current = aptId;
       setView(projectId);
     },
@@ -849,7 +879,14 @@ export function TvPresentationPage() {
       {openJob && (
         <ApartmentDetailDrawer
           apartment={openJob}
-          onClose={() => setOpenJobId(null)}
+          onClose={() => {
+            // Redeem the return ticket: a window a cross-workspace tap opened
+            // closes back onto the view the tap was made from.
+            const ticket = wallReturnRef.current;
+            wallReturnRef.current = null;
+            setOpenJobId(null);
+            if (ticket && ticket.aptId === openJobId) setView(ticket.view);
+          }}
           currentUser={tvUser}
           onToast={(msg, type) => setTvToast({ msg, type: type ?? 'success' })}
           onRequestAddTask={apt => { setOpenJobId(null); setAddTaskApt(apt); }}
@@ -866,6 +903,24 @@ export function TvPresentationPage() {
       {tvToast && <Toast message={tvToast.msg} type={tvToast.type} onClose={() => setTvToast(null)} />}
     </>
   );
+
+  /**
+   * A widget number (or the bar's overdue pill) opened its list.
+   *
+   * Shared by EVERY view's return — it used to render only on the board view,
+   * so the overdue pill on the diagram, dashboard and goals screens set state
+   * nothing drew, and the button read as dead ("the five overdue thing should
+   * work from all screens"). Closing it — or the job window a row opens —
+   * changes no view, so the wall stays on the screen it was showing.
+   */
+  const wallListPopup = wallList ? (
+    <WidgetListPopup
+      title={wallList.title}
+      jobIds={wallList.jobIds}
+      onOpenJob={id => { setWallList(null); setOpenJobId(id); }}
+      onClose={() => setWallList(null)}
+    />
+  ) : null;
 
   const stageOf = (a: Apartment) => stages.find(s => s.id === a.currentStageId) ?? null;
   const pending = (a: Apartment) =>
@@ -927,14 +982,14 @@ export function TvPresentationPage() {
 
       {/* Views, on the left. */}
       {projects.map(p => (
-        <button key={p.id} onClick={() => { setView(p.id); setOpenJobId(null); }}
+        <button key={p.id} onClick={() => { pickView(p.id); setOpenJobId(null); }}
           className={`${barBtn} px-3 py-1.5`}
           style={view === p.id ? on : off}>
           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />
           {p.shortName}
         </button>
       ))}
-      <button onClick={() => { setView('dashboard'); setOpenJobId(null); }}
+      <button onClick={() => { pickView('dashboard'); setOpenJobId(null); }}
         className={`${barBtn} px-3 py-1.5`}
         style={view === 'dashboard' ? on : off}>
         {t('Dashboard', 'לוח בקרה')}
@@ -943,7 +998,7 @@ export function TvPresentationPage() {
       {/* The owner's placement: Goals right of Dashboard, a small vertical
           line separating the two buttons. */}
       <span className="w-px h-6" style={{ backgroundColor: '#e2e8f0' }} />
-      <button data-tv-goals onClick={() => { setView('goals'); setOpenJobId(null); }}
+      <button data-tv-goals onClick={() => { pickView('goals'); setOpenJobId(null); }}
         className={`${barBtn} px-3 py-1.5`}
         style={view === 'goals' ? on : off}>
         {t('Goals', 'יעדים')}
@@ -1228,12 +1283,21 @@ export function TvPresentationPage() {
           />
         )}
       </div>
+      {wallListPopup}
       {tvDrawer}
     </>);
   }
 
-  // ── The goals board, full screen on the wall — read-only always ──
+  // ── The goals board, full screen on the wall — interactive, tiles filling
+  //    the panel (the owner's 2026-08-31 ask) ──
   if (view === 'goals') {
+    /**
+     * The grid is laid out at its fixed design width and zoomed so the TILES
+     * fill the panel — the same fit-then-boost idiom as the diagram view. A
+     * fluid width would spread more columns instead of growing the tiles.
+     */
+    const frameW = frameRef.current?.clientWidth ?? window.innerWidth;
+    const goalsZoom = Math.max(0.5, (frameW / GOALS_DESIGN_W) * Math.max(1, boost));
     return (<>
       <div ref={setFrame} dir={isRtl ? 'rtl' : 'ltr'} style={frameStyle}
         className="h-screen w-screen flex flex-col bg-slate-100 overflow-hidden">
@@ -1243,14 +1307,15 @@ export function TvPresentationPage() {
             stays INSIDE the zoom. */}
         <div className="flex-1 min-h-0 overflow-hidden">
           <div className="overflow-y-auto widget-scroll" style={{
-            zoom: scale,
-            width: `${100 / scale}%`,
-            height: `${100 / scale}%`,
+            zoom: goalsZoom,
+            width: `${100 / goalsZoom}%`,
+            height: `${100 / goalsZoom}%`,
           }}>
             <TvGoalsBoard lang={lang} />
           </div>
         </div>
       </div>
+      {wallListPopup}
       {tvDrawer}
     </>);
   }
@@ -1323,7 +1388,15 @@ export function TvPresentationPage() {
           const fit = diagBox.w > 20 && diagNatH > 20
             ? Math.min(diagBox.w / natW, diagBox.h / diagNatH)
             : 0;
-          const diagZoom = Math.max(0.3, (fit || autoScale) * boost);
+          /**
+           * The FIT is the floor (the plan viewer's own rule): a display size
+           * under 100% used to multiply straight into the fit, shrinking the
+           * whole project into a corner of the panel with dead space around
+           * it — the owner's "the diagrams don't fill up the screen". Below
+           * the fit there is nothing to see but blank wall, so the size knob
+           * only ever ZOOMS IN from the filled picture.
+           */
+          const diagZoom = Math.max(0.3, (fit || autoScale) * Math.max(1, boost));
           return (
             <div className="flex-1 overflow-hidden p-3" ref={setDiagBoxEl}>
               <div style={{
@@ -1346,6 +1419,7 @@ export function TvPresentationPage() {
                       onApartmentClick={j => setOpenJobId(j.id)}
                       showShinuiBadge
                       compact
+                      fixedColW={DIAG_COL_W}
                     />
                   </div>
                 </div>
@@ -1354,6 +1428,7 @@ export function TvPresentationPage() {
           );
         })()}
       </div>
+      {wallListPopup}
       {tvDrawer}
     </>);
   }
@@ -1725,14 +1800,7 @@ export function TvPresentationPage() {
       )}
 
       {/* A widget number (or the bar's overdue pill) opened its list. */}
-      {wallList && (
-        <WidgetListPopup
-          title={wallList.title}
-          jobIds={wallList.jobIds}
-          onOpenJob={id => { setWallList(null); setOpenJobId(id); }}
-          onClose={() => setWallList(null)}
-        />
-      )}
+      {wallListPopup}
     </div>
     {tvDrawer}
   </>);

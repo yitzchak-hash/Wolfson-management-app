@@ -494,6 +494,10 @@ export function TikTokWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
       + `?autoplay=${wantAutoRef.current ? 1 : 0}&muted=${mutedRef.current ? 1 : 0}`
       + `&loop=${playingAuto.current ? 0 : 1}`
       + '&music_info=0&description=0&rel=0&native_context_menu=0'
+      // The player's OWN volume control is off: pressing it navigated to the
+      // video's tiktok.com page instead of changing the sound, so the
+      // widget's sound button is the one control and cannot be undermined.
+      + '&volume_control=0'
       + '&closed_caption=0&fullscreen_button=0&timestamp=0';
   }, [videoId, playToken]);
 
@@ -656,6 +660,13 @@ export function TikTokWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
           const next = !muted;
           setMuted(next);
           post(next ? 'mute' : 'unMute');
+          /**
+           * A player that never said ready cannot hear the message — for that
+           * one the remount path is the lever (the play button's own
+           * fallback): the fresh frame's address carries the new mute choice,
+           * and this press is the user gesture the browser wants.
+           */
+          if (!ready) setPlayToken(t => t + 1);
         }}
         className="p-1 rounded hover:bg-gray-100"
         style={{ color: muted ? '#94a3b8' : '#ec4899' }}>

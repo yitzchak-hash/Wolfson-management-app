@@ -39,6 +39,15 @@ export const hhmm = (t: Date | string): string => {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 };
 
+/**
+ * A day as a person reads it — "Mon, Aug 31", never a bare "2026-08-31".
+ * The punch messages carry real dates (the owner's ask), and an ISO stamp in
+ * a flash somebody reads at arm's length is a code, not a date.
+ */
+export const niceDay = (day: string): string =>
+  new Date(`${day}T00:00:00`).toLocaleDateString(undefined,
+    { weekday: 'short', day: 'numeric', month: 'short' });
+
 export interface Shift {
   employeeId: string;
   /** The day the shift STARTED on. A shift never spans two days here. */
@@ -183,7 +192,7 @@ export function resolvePunch(
       auto: true, source: 'auto',
       note: `no clock-out was recorded, closed at ${settings.dayEnd}`,
     });
-    notes.push(`${staleDay} was still open — closed at ${settings.dayEnd}`);
+    notes.push(`${niceDay(staleDay)} was still open — closed at ${settings.dayEnd}`);
   }
 
   if (kind === 'in') {
@@ -192,7 +201,7 @@ export function resolvePunch(
       return { writes: [], message: 'already clocked in today' };
     }
     writes.push({ employeeId, day: today, at: now.toISOString(), kind: 'in', source });
-    notes.push(`clocked in at ${hhmm(now)}`);
+    notes.push(`clocked in ${niceDay(today)} at ${hhmm(now)}`);
   } else {
     const openToday = openIn && dayOf(openIn.at) === today;
     if (!openToday) {
@@ -205,10 +214,10 @@ export function resolvePunch(
         auto: true, source: 'auto',
         note: `no clock-in was recorded, opened at ${hhmm(startAt)}`,
       });
-      notes.push(`no clock-in today — opened at ${hhmm(startAt)}`);
+      notes.push(`no clock-in ${niceDay(today)} — opened at ${hhmm(startAt)}`);
     }
     writes.push({ employeeId, day: today, at: now.toISOString(), kind: 'out', source });
-    notes.push(`clocked out at ${hhmm(now)}`);
+    notes.push(`clocked out ${niceDay(today)} at ${hhmm(now)}`);
   }
 
   return { writes, message: notes.join(' · ') };

@@ -942,8 +942,19 @@ function PlanEditor({
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return;
-    let base: { dist: number; scale: number } | null = null;
-    let lastMid: { x: number; y: number } | null = null;
+    /**
+     * ABSOLUTE, anchored at the first-touch centre — the board's own pinch
+     * fix, applied here after the same report ("if I zoom with my two
+     * fingers, it jumps, just like the board did"). The old version panned
+     * by the midpoint's per-frame travel AND re-took the zoom anchor from
+     * the sheet's CURRENT rect on every move — a rect that lags a render
+     * behind the last setScale, so each frame corrected against stale
+     * geometry and the two writes fought. Now the gesture snapshots ONE
+     * sheet fraction at touch-down and every frame derives scale and scroll
+     * from that snapshot alone: the sheet point under the first-touch
+     * centre stays under the fingers, and the midpoint's travel is the pan.
+     */
+    let base: { dist: number; scale: number; fx: number; fy: number } | null = null;
 
     const gap = (t: TouchList) =>
       Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
@@ -951,41 +962,68 @@ function PlanEditor({
       x: (t[0].clientX + t[1].clientX) / 2,
       y: (t[0].clientY + t[1].clientY) / 2,
     });
+    /** Which sheet point sits under (clientX, clientY) right now. */
+    const sheetFraction = (x: number, y: number) => {
+      const sr = pdfRef.current?.getBoundingClientRect();
+      if (!sr || sr.width <= 0 || sr.height <= 0) return null;
+      return {
+        fx: Math.min(1, Math.max(0, (x - sr.left) / sr.width)),
+        fy: Math.min(1, Math.max(0, (y - sr.top) / sr.height)),
+      };
+    };
+    /** Put the snapshot's sheet point under the fingers, on the live layout. */
+    const applyAnchor = (fx: number, fy: number, cx: number, cy: number) => {
+      const sheet = pdfRef.current;
+      if (!sheet) return;
+      const er = el!.getBoundingClientRect();
+      const sr = sheet.getBoundingClientRect();
+      const offX = sr.left - er.left + el!.scrollLeft;
+      const offY = sr.top - er.top + el!.scrollTop;
+      el!.scrollLeft = offX + fx * sr.width - cx;
+      el!.scrollTop = offY + fy * sr.height - cy;
+    };
 
     function start(e: TouchEvent) {
       if (e.touches.length !== 2) return;
       cancelStroke();
-      base = { dist: gap(e.touches), scale: scaleRef.current };
-      lastMid = mid(e.touches);
+      const m = mid(e.touches);
+      const f = sheetFraction(m.x, m.y);
+      base = f ? { dist: gap(e.touches), scale: scaleRef.current, fx: f.fx, fy: f.fy } : null;
     }
     function move(e: TouchEvent) {
       if (e.touches.length !== 2 || !base) return;
       e.preventDefault();
       const m = mid(e.touches);
-      if (lastMid) {
-        el!.scrollLeft -= m.x - lastMid.x;
-        el!.scrollTop -= m.y - lastMid.y;
-      }
-      lastMid = m;
-
-      const d = gap(e.touches);
-      if (base.dist < 8) return;
+      const er = el!.getBoundingClientRect();
+      const cx = m.x - er.left, cy = m.y - er.top;
       /**
-       * UNROUNDED while the fingers are down. Rounding to whole per-cents made
-       * the sheet grow in visible 1% ticks, each tick re-running the anchor
-       * scroll correction — which is the stutter that read as "pinch jumps".
-       * The number is snapped once, when the gesture ends, so the readout and
-       * every later step still land on tidy values.
+       * UNROUNDED while the fingers are down (rounding per frame was its own
+       * stutter), floored at the fit, derived from the START distance — never
+       * from last frame's anything.
        */
-      const want = Math.min(6, Math.max(fitScaleRef.current, base.scale * (d / base.dist)));
-      anchorZoomAt(m.x, m.y);
+      const d = gap(e.touches);
+      const want = base.dist >= 8
+        ? Math.min(6, Math.max(fitScaleRef.current, base.scale * (d / base.dist)))
+        : scaleRef.current;
+      // The post-render correction gets the SAME frozen fraction at the live
+      // midpoint; the inline apply keeps the sheet on the fingers this frame
+      // and is what makes a clamped pinch still PAN.
+      zoomAnchor.current = { fx: base.fx, fy: base.fy, cx, cy };
       setFitting(false);
-      setScale(want);
+      if (want !== scaleRef.current) setScale(want);
+      applyAnchor(base.fx, base.fy, cx, cy);
     }
     function end(e: TouchEvent) {
       if (e.touches.length < 2) {
-        if (base) setScale(s => Math.round(s * 100) / 100);
-        base = null; lastMid = null;
+        if (base) {
+          const snapped = Math.round(scaleRef.current * 100) / 100;
+          // A gesture that ends exactly on a tidy value leaves no scale
+          // change to consume the anchor — clear it, or the NEXT zoom from a
+          // button would jump to this pinch's midpoint.
+          if (snapped === scaleRef.current) zoomAnchor.current = null;
+          else setScale(snapped);
+        }
+        base = null;
       }
     }
 

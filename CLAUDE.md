@@ -5920,3 +5920,104 @@ bump touching react / react-dom / react-router / vite:
 Alongside them: every ResizeObserver write in the app (BinBoard's overview,
 TvViewPage, TikTokWidget, MapWidget, TvDashboard's Card) now uses the damped
 functional form, so the loopaudit's rule 1 holds with zero exceptions.
+
+---
+
+# v2 — the touchscreen-TV round (2026-08-31): the wall behaves like a place you work
+
+## The TV's return ticket
+`wallReturnRef` in TvPresentationPage — the wall's copy of `unitTravel`'s
+rule: tapping a foreign unit (a Building Progress cell, a notebook card, a
+unit card) sets the ticket BEFORE `setView`, and the job window's close
+redeems it only when the job being closed is the one the travel opened —
+back to the view the tap was made from ("when I click X to exit the job
+workspace, it doesn't go back to the job board"). A view picked from the
+bar goes through `pickView`, which tears the ticket up.
+
+## The overdue pill works on every view
+`wallListPopup` is shared JSX rendered in ALL FOUR view returns. It used to
+live only in the board view's return, so on the diagram, dashboard and
+goals screens the pill set state nothing drew — a dead button. Closing the
+list (or the job window a row opens) changes no view.
+
+## OWNER RULING (2026-08-31): the wall EDITS GOALS
+Supersedes "the wall never edits" for the goals surface, same as the job
+window before it: the TV is his touchscreen. `TvGoalsBoard` mounts
+`interactive: true`, and `GoalsWidget`'s `interactive` is deliberately NOT
+gated on `c.readOnly` — a goal edit is not a board edit, it goes to the
+goals app (the tap-in punch rule). The goals VIEW lays out at a fixed
+`GOALS_DESIGN_W` (1120) and is zoomed to fill the panel — a fluid width
+would add columns instead of growing the tiles.
+
+## The diagram view: the fit is the FLOOR, and the columns are FIXED
+`diagZoom = fit × max(1, boost)` — a display size under 100% used to
+multiply straight into the fit and shrink the whole project into a corner
+of the panel. Below the fit there is nothing but blank wall (the plan
+viewer's own rule). And `BuildingDiagram` gained `fixedColW`: the TV passes
+`DIAG_COL_W` so every column is exactly that wide — the natural-size
+arithmetic assumed it while the columns still FLEXED, which is what let
+live boards draw unequal, stretched buildings.
+
+## Widgets that grow their type, not just their box
+- `CalcWidget` measures its own height (damped RO) and scales display and
+  key fonts by `boxH/165` — WidgetSurface scales with WIDTH only, so a tall
+  calculator kept 11px keys ("the numbers are way too small on our TV").
+- `WhoIsOut` rows wrap and the list scrolls (`widget-scroll`) — `truncate`
+  cut every job name on the wall's Tomorrow widget.
+- `TapInBoard` type follows the SMALLER of tile height and width (height
+  alone gave 37px names truncated to one letter on a two-person board), and
+  never draws more columns than people. Tiles wear the company navy
+  gradient when clocked in, the person's colour as a dot; punch messages
+  carry real dates via `niceDay()` in timeClock.ts.
+- Weather type bumped ~20% across the card.
+
+## The map obeys the render scale
+`localScale()` in MapWidget (rect ÷ clientWidth — the ScreenReport idiom):
+wheel-zoom anchors and drag deltas divide by it. Raw `clientX - r.left`
+was wrong at any WidgetSurface scale but 1, which is why the wheel did not
+zoom to the mouse on a resized map.
+
+## The plan pinch is ABSOLUTE (the board's fix, applied)
+The pinch in PlanAnnotator snapshots ONE sheet fraction at touch-down and
+derives every frame's scale and scroll from that snapshot: the sheet point
+under the first-touch centre stays under the fingers (probe: 1px max
+drift), the midpoint's travel is the pan, and an inline `applyAnchor` keeps
+a CLAMPED pinch panning without waiting a render. The old per-frame
+re-anchoring read rects a render stale and fought its own scroll writes —
+the jump. A gesture ending on an already-tidy scale clears the anchor, or
+the next button-zoom would jump to the pinch's midpoint.
+
+## The plan reads its address AND phone, quietly
+`planAddress.ts`: every Hebrew line is tried in both run orders and both
+character orders (`fixVisual` keeps digit/Latin runs forwards), and the
+variant matching the pattern is believed — the "reads the Hebrew very
+gibberish" fix. Phone/fax lines can never be address candidates (the
+"pulling it from the phone number" fix); a labelled Tel/נייד beats a bare
+number; fax is refused. `PlanAddressSuggest` takes `kind: 'address' |
+'phone'` and draws ONE quiet row under each field — "On the plan: <value>",
+the eye (cutout), a small blue plus that writes it. No standing read
+button, no failure sentences: a sheet that gave nothing shows nothing.
+Both rows cost one read (cached + de-duplicated).
+
+## The notebook keeps its record
+- A COMPLETED task's chip stays on the notebook, struck through and
+  dimmed, saying "done" — closing a task used to make the chip vanish,
+  which read as the work being REMOVED ("if it's done, it's crossed off").
+- `PlannerHost` resolves cards against jobs INCLUDING the binned ones —
+  `c.jobs` excludes Done/Ready/Archive/Trash, right for counting widgets
+  and exactly wrong here: a job filed into Done drew its card as
+  "(job removed)". Nothing was removed; the lookup list was too narrow.
+
+## TikTok
+`volume_control=0` on the player address — its own volume control
+navigated to tiktok.com instead of changing the sound. The widget's sound
+button stays the one control; on a player that never said ready it falls
+back to the remount-with-new-mute path (the play button's own fallback).
+Still unverifiable end-to-end from this container (no internet).
+
+Probes: `tvround-probe` (overdue on the diagram view, unit-card travel +
+return ticket) · `widgetsround-probe` (calculator scale, tap-in, done
+chip) · `planphone-probe` (phone row, fixVisual) · `planpinch-probe`
+(CDP two-finger pinch, drift ≤ 1px) · `tvdiag-probe` (fit floor at
+scale=0.7). planaddr, tvcrash (built bundle), loopaudit, navaudit,
+backupaudit all green.

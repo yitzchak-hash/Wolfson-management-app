@@ -1,13 +1,23 @@
 /**
- * Reading the job's ADDRESS off the plan itself.
+ * Reading the job's ADDRESS and PHONE NUMBER off the plan itself.
  *
- * Every consultant sheet carries the address in its title block, and the
- * secretary was retyping it. This reads the plan's own TEXT LAYER with pdf.js
- * — entirely local, in the browser, no service and nothing to install — finds
- * the line that looks like an address, and renders a CUTOUT image of that
- * part of the sheet big enough to read, so a person confirms against the
- * drawing before anything is written. A scanned plan has no text layer; that
- * is reported honestly rather than guessed at.
+ * Every consultant sheet carries both in its title block, and the secretary
+ * was retyping them. This reads the plan's own TEXT LAYER with pdf.js —
+ * entirely local, in the browser, no service and nothing to install — finds
+ * the line that looks like an address (and the one that looks like a phone
+ * number), and renders a CUTOUT image of that part of the sheet big enough to
+ * read, so a person confirms against the drawing before anything is written.
+ * A scanned plan has no text layer; that is reported honestly rather than
+ * guessed at.
+ *
+ * Hebrew arrives from PDF text layers in every order there is: logical,
+ * visual (each run's characters stored right-to-left), and mixtures. Reading
+ * it one way — which is what the first version did — is where the "a lot of
+ * times it reads the Hebrew very gibberish" report came from. Every Hebrew
+ * line is therefore tried in BOTH character orders and both run orders, and
+ * the variant that actually matches an address or phone pattern is the one
+ * believed; digit and Latin runs are kept forwards when a string is flipped,
+ * or "12" becomes "21" in the one field where that matters.
  *
  * pdf.js is imported lazily (the planAspect idiom): suggesting an address
  * must never add a megabyte of PDF engine to the main bundle.
@@ -19,6 +29,10 @@ export interface PlanAddressResult {
   address?: string;
   /** PNG data URL of the region around it, rendered large enough to read. */
   cutout?: string;
+  /** Best-effort phone number found on the sheet. */
+  phone?: string;
+  /** PNG data URL of the region the phone was read from. */
+  phoneCutout?: string;
   problem?: 'no-text' | 'no-address' | 'unreachable';
 }
 
@@ -26,15 +40,52 @@ interface Line {
   text: string;
   hebrew: boolean;
   x1: number; y1: number; x2: number; y2: number;
+  parts: { x: number; str: string }[];
 }
 
 const LABEL = /(כתובת|address)/i;
 const STREET = /(רח'|רחוב|שד'|שדרות|דרך|סמט|\bst\.?\b|\bstreet\b|\bave(nue)?\b|\brd\.?\b|\broad\b|\bblvd\b)/i;
 const HEB = /[֐-׿]/;
+/** An Israeli (or international) phone number as it is printed on a sheet. */
+const PHONE = /(?:\+\s?972[-\s.]?\(?0?\)?[-\s.]?|0)(?:[23489]|5\d|7[2-9])[-\s.]?\d{3}[-\s.]?\d{4}\b/;
+const PHONE_LABEL = /(טלפון|טל'?|נייד|פלאפון|סלולרי|\bphone\b|\btel\.?\b|\bmobile\b|\bcell\b)/i;
+const FAX = /(פקס|\bfax\b)/i;
 
 /** Strip the label word itself, so "כתובת: הרצל 12" suggests "הרצל 12". */
 function stripLabel(text: string): string {
   return text.replace(/.*?(כתובת|address)\s*[:\-–]?\s*/i, '').trim();
+}
+
+/**
+ * Flip a visually-stored string back to logical order: reverse the whole
+ * thing, then un-reverse every run of digits or Latin — numbers and English
+ * words are stored forwards even inside a visual Hebrew line.
+ */
+export function fixVisual(s: string): string {
+  const flipped = [...s].reverse().join('');
+  return flipped.replace(/[0-9A-Za-z][0-9A-Za-z ./-]*[0-9A-Za-z]|[0-9A-Za-z]/g,
+    run => [...run].reverse().join(''));
+}
+
+/**
+ * Every plausible reading of a line. A Hebrew line is offered in both run
+ * orders and both character orders; whichever variant matches the pattern
+ * being hunted is the one used, so a sheet whose text layer is stored
+ * visually still reads out as words rather than gibberish.
+ */
+function variantsOf(l: Line): string[] {
+  const rtl = [...l.parts].sort((a, b) => b.x - a.x).map(p => p.str).join(' ').replace(/\s+/g, ' ').trim();
+  if (!l.hebrew) return [rtl];
+  const ltr = [...l.parts].sort((a, b) => a.x - b.x).map(p => p.str).join(' ').replace(/\s+/g, ' ').trim();
+  const out = [rtl, ltr, fixVisual(ltr), fixVisual(rtl)];
+  return [...new Set(out.filter(Boolean))];
+}
+
+/** The share of a string that is digits — an "address" that is mostly digits is a number, not a street. */
+function digitShare(s: string): number {
+  const chars = s.replace(/\s/g, '');
+  if (!chars.length) return 0;
+  return (chars.match(/\d/g)?.length ?? 0) / chars.length;
 }
 
 const cache = new Map<string, PlanAddressResult>();
@@ -79,9 +130,8 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
 
     /**
      * Rebuild LINES from positioned glyph runs: group by baseline y (within
-     * most of a line height), then order runs by x. A line holding Hebrew is
-     * joined RIGHT-TO-LEFT — the runs sit visually and joining them
-     * left-to-right reads the words backwards. The cutout is still what the
+     * most of a line height), then keep the runs with their x positions so
+     * both joining orders stay available. The cutout is still what the
      * secretary trusts; the text is the convenience.
      */
     const runs = items.map(it => ({
@@ -98,98 +148,138 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
       if (line) {
         line.x1 = Math.min(line.x1, r.x); line.x2 = Math.max(line.x2, r.x + r.w);
         line.y2 = Math.max(line.y2, r.y + r.h);
-        (line as Line & { parts: { x: number; str: string }[] }).parts.push({ x: r.x, str: r.str });
+        line.parts.push({ x: r.x, str: r.str });
       } else {
-        lines.push(Object.assign(
-          { text: '', hebrew: false, x1: r.x, y1: r.y, x2: r.x + r.w, y2: r.y + r.h },
-          { parts: [{ x: r.x, str: r.str }] },
-        ) as Line);
+        lines.push({
+          text: '', hebrew: false, x1: r.x, y1: r.y, x2: r.x + r.w, y2: r.y + r.h,
+          parts: [{ x: r.x, str: r.str }],
+        });
       }
     }
-    for (const l of lines as (Line & { parts: { x: number; str: string }[] })[]) {
+    for (const l of lines) {
       l.hebrew = l.parts.some(p => HEB.test(p.str));
+      // The default reading — right-to-left for a Hebrew line, as before.
       l.parts.sort((a, b) => (l.hebrew ? b.x - a.x : a.x - b.x));
       l.text = l.parts.map(p => p.str).join(' ').replace(/\s+/g, ' ').trim();
     }
 
     const view = page.getViewport({ scale: 1 });
     const pageH = view.viewBox[3] - view.viewBox[1];
+    /** Title blocks live low on the sheet; PDF y grows upward. */
+    const titleBlockBonus = (l: Line) => (l.y1 < pageH / 3 ? 10 : 0);
 
-    /** Score every line; the label form wins, a street pattern stands in. */
-    let best: { line: Line; extra?: Line; text: string; score: number } | null = null;
+    // ── The ADDRESS ─────────────────────────────────────────────────────────
+    let bestAddr: { line: Line; extra?: Line; text: string; score: number } | null = null;
     lines.forEach((l, i) => {
+      // A phone or fax line is never an address, however address-shaped its
+      // digits look — this was "it's pulling it from the phone number".
+      if (PHONE_LABEL.test(l.text) || FAX.test(l.text)) return;
       let score = 0;
       let text = '';
       let extra: Line | undefined;
-      if (LABEL.test(l.text)) {
-        text = stripLabel(l.text);
-        score = 100;
-        if (text.length < 3) {
-          // "כתובת:" alone — the value sits on the neighbouring line.
-          const next = lines[i + 1];
-          if (next && Math.abs(next.y1 - l.y1) < (l.y2 - l.y1) * 3) {
-            text = next.text; extra = next;
+      for (const v of variantsOf(l)) {
+        if (LABEL.test(v)) {
+          const stripped = stripLabel(v);
+          if (100 > score) { score = 100; text = stripped; }
+          if (stripped.length < 3) {
+            // "כתובת:" alone — the value sits on the neighbouring line.
+            const next = lines[i + 1];
+            if (next && Math.abs(next.y1 - l.y1) < (l.y2 - l.y1) * 3
+                && !PHONE_LABEL.test(next.text) && !PHONE.test(next.text)) {
+              const nv = variantsOf(next);
+              text = (nv.find(x => STREET.test(x)) ?? nv[0]) ?? '';
+              extra = next;
+            }
           }
+        } else if (STREET.test(v) && /\d/.test(v) && 60 > score) {
+          score = 60; text = v;
         }
-      } else if (STREET.test(l.text) && /\d/.test(l.text)) {
-        text = l.text;
-        score = 60;
       }
       if (!score) return;
-      // Title blocks live low on the sheet; PDF y grows upward.
-      if (l.y1 < pageH / 3) score += 10;
       const clean = text.replace(/\s+/g, ' ').trim();
       if (clean.length < 3 || clean.length > 90) return;
-      if (!best || score > best.score) best = { line: l, extra, text: clean, score };
+      // Mostly digits is a number wearing a street word, not an address.
+      if (digitShare(clean) > 0.55 || PHONE.test(clean)) return;
+      score += titleBlockBonus(l);
+      if (!bestAddr || score > bestAddr.score) bestAddr = { line: l, extra, text: clean, score };
     });
 
-    if (!best) return { problem: 'no-address' };
-    const b = best as { line: Line; extra?: Line; text: string };
+    // ── The PHONE ───────────────────────────────────────────────────────────
+    let bestPhone: { line: Line; text: string; score: number } | null = null;
+    lines.forEach(l => {
+      if (FAX.test(l.text)) return;
+      for (const v of variantsOf(l)) {
+        const m = PHONE.exec(v);
+        if (!m) continue;
+        let score = 50;
+        if (PHONE_LABEL.test(v)) score += 50;
+        // A mobile is the number the office actually calls.
+        if (/^0?5/.test(m[0].replace(/^\+\s?972[-\s.]?\(?0?\)?[-\s.]?/, '0'))) score += 5;
+        score += titleBlockBonus(l);
+        if (!bestPhone || score > bestPhone.score) bestPhone = { line: l, text: m[0].trim(), score };
+        break;
+      }
+    });
 
     /**
      * The cutout: the found line with generous surroundings, rendered at a
      * scale that makes the words genuinely readable — never a thumbnail of
      * the whole sheet.
      */
-    const rx1 = Math.min(b.line.x1, b.extra?.x1 ?? b.line.x1);
-    const rx2 = Math.max(b.line.x2, b.extra?.x2 ?? b.line.x2);
-    const ry1 = Math.min(b.line.y1, b.extra?.y1 ?? b.line.y1);
-    const ry2 = Math.max(b.line.y2, b.extra?.y2 ?? b.line.y2);
-    const lineH = Math.max(8, ry2 - ry1);
-    const [px1, py1, px2, py2] = view.viewBox;
-    const cx1 = Math.max(px1, rx1 - Math.max(30, (rx2 - rx1) * 0.25));
-    const cx2 = Math.min(px2, rx2 + Math.max(30, (rx2 - rx1) * 0.25));
-    const cy1 = Math.max(py1, ry1 - lineH * 2.5);
-    const cy2 = Math.min(py2, ry2 + lineH * 2.5);
+    const cutoutOf = async (line: Line, extra?: Line): Promise<string | undefined> => {
+      const rx1 = Math.min(line.x1, extra?.x1 ?? line.x1);
+      const rx2 = Math.max(line.x2, extra?.x2 ?? line.x2);
+      const ry1 = Math.min(line.y1, extra?.y1 ?? line.y1);
+      const ry2 = Math.max(line.y2, extra?.y2 ?? line.y2);
+      const lineH = Math.max(8, ry2 - ry1);
+      const [px1, py1, px2, py2] = view.viewBox;
+      const cx1 = Math.max(px1, rx1 - Math.max(30, (rx2 - rx1) * 0.25));
+      const cx2 = Math.min(px2, rx2 + Math.max(30, (rx2 - rx1) * 0.25));
+      const cy1 = Math.max(py1, ry1 - lineH * 2.5);
+      const cy2 = Math.min(py2, ry2 + lineH * 2.5);
 
-    let scale = Math.min(8, Math.max(2, 1000 / Math.max(1, cx2 - cx1)));
-    // A refused canvas is a blank cutout — cap the AREA, not just the scale.
-    const MAX_AREA = 4_000_000;
-    if ((cx2 - cx1) * (cy2 - cy1) * scale * scale > MAX_AREA) {
-      scale = Math.sqrt(MAX_AREA / ((cx2 - cx1) * (cy2 - cy1)));
+      let scale = Math.min(8, Math.max(2, 1000 / Math.max(1, cx2 - cx1)));
+      // A refused canvas is a blank cutout — cap the AREA, not just the scale.
+      const MAX_AREA = 4_000_000;
+      if ((cx2 - cx1) * (cy2 - cy1) * scale * scale > MAX_AREA) {
+        scale = Math.sqrt(MAX_AREA / ((cx2 - cx1) * (cy2 - cy1)));
+      }
+      const vp = page.getViewport({ scale });
+      const [vx1, vy1a, vx2, vy2a] = vp.convertToViewportRectangle([cx1, cy1, cx2, cy2]);
+      const left = Math.min(vx1, vx2), top = Math.min(vy1a, vy2a);
+      const w = Math.abs(vx2 - vx1), h = Math.abs(vy2a - vy1a);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(w));
+      canvas.height = Math.max(1, Math.round(h));
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return undefined;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({
+        canvasContext: ctx,
+        viewport: vp,
+        // Device-space shift so the crop lands at the canvas origin — the
+        // standard pdf.js crop trick; a full-page render at this scale could be
+        // a canvas the browser refuses.
+        transform: [1, 0, 0, 1, -left, -top],
+      } as never).promise;
+      return canvas.toDataURL('image/png');
+    };
+
+    if (!bestAddr && !bestPhone) return { problem: 'no-address' };
+    const out: PlanAddressResult = {};
+    const ba = bestAddr as { line: Line; extra?: Line; text: string } | null;
+    const bp = bestPhone as { line: Line; text: string } | null;
+    if (ba) {
+      out.address = ba.text;
+      out.cutout = await cutoutOf(ba.line, ba.extra).catch(() => undefined);
     }
-    const vp = page.getViewport({ scale });
-    const [vx1, vy1a, vx2, vy2a] = vp.convertToViewportRectangle([cx1, cy1, cx2, cy2]);
-    const left = Math.min(vx1, vx2), top = Math.min(vy1a, vy2a);
-    const w = Math.abs(vx2 - vx1), h = Math.abs(vy2a - vy1a);
-
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(w));
-    canvas.height = Math.max(1, Math.round(h));
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return { address: b.text };
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    await page.render({
-      canvasContext: ctx,
-      viewport: vp,
-      // Device-space shift so the crop lands at the canvas origin — the
-      // standard pdf.js crop trick; a full-page render at this scale could be
-      // a canvas the browser refuses.
-      transform: [1, 0, 0, 1, -left, -top],
-    } as never).promise;
-
-    return { address: b.text, cutout: canvas.toDataURL('image/png') };
+    if (bp) {
+      out.phone = bp.text;
+      out.phoneCutout = await cutoutOf(bp.line).catch(() => undefined);
+    }
+    return out;
   } finally {
     void doc.destroy().catch(() => {});
   }

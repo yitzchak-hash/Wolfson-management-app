@@ -24,6 +24,13 @@ interface BuildingDiagramProps {
   /** Larger rows and type for a one-building-at-a-time phone view. */
   phone?: boolean;
   onNameUnnamed?: (apt: Apartment) => void; // opens naming dialog for unnamed slots
+  /**
+   * Every column exactly this many pixels wide — no flexing. The TV wall
+   * fits the whole project to the panel by measuring a NATURAL size computed
+   * from a fixed per-column width; letting the columns flex under that
+   * arithmetic is what let live boards draw unequal, stretched buildings.
+   */
+  fixedColW?: number;
 }
 
 // Darkens a hex colour. Used to outline stage-coloured cells so two neighbours
@@ -733,7 +740,7 @@ function BuildingColumn({
   buildingId, apartments, mergedLabels, stages, activeStageIds, classFilter, searchQuery,
   onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, aptSubLabels,
   aptTaskData, nextStageLabels, onAddTask, aptCompletedData, compact, phone, onNameUnnamed,
-  hoverGroup, onHoverApt,
+  hoverGroup, onHoverApt, fixedColW,
 }: {
   buildingId: BuildingId;
   apartments: Apartment[];
@@ -756,6 +763,7 @@ function BuildingColumn({
   onNameUnnamed?: (apt: Apartment) => void;
   hoverGroup?: Set<string> | null;
   onHoverApt?: (id: string | null) => void;
+  fixedColW?: number;
 }) {
   const ui = useStore(state => state.mainUiStrings);
   const stageMap = useMemo(() => new Map(stages.map(s => [s.id, s])), [stages]);
@@ -841,7 +849,10 @@ function BuildingColumn({
   }
 
   return (
-    <div className="flex flex-col flex-1" style={{ minWidth: compact ? '110px' : '180px' }}>
+    <div className="flex flex-col flex-1"
+      style={fixedColW
+        ? { width: fixedColW, minWidth: fixedColW, maxWidth: fixedColW, flex: '0 0 auto' }
+        : { minWidth: compact ? '110px' : '180px' }}>
       {/* Pinned while its own column is in view, so you always know which
           building you are looking at.
           The 2px gap is padding rather than margin so nothing scrolls through it.
@@ -1007,7 +1018,7 @@ function NetivBuildingColumn({
   buildingId, apartments, mergedLabels, stages, activeStageIds, classFilter, searchQuery,
   onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, aptSubLabels,
   aptTaskData, nextStageLabels, onAddTask, aptCompletedData, compact, phone, onNameUnnamed,
-  hoverGroup, onHoverApt,
+  hoverGroup, onHoverApt, fixedColW,
 }: {
   buildingId: BuildingId;
   apartments: Apartment[];
@@ -1030,6 +1041,7 @@ function NetivBuildingColumn({
   onNameUnnamed?: (apt: Apartment) => void;
   hoverGroup?: Set<string> | null;
   onHoverApt?: (id: string | null) => void;
+  fixedColW?: number;
 }) {
   const ui = useStore(state => state.mainUiStrings);
   const stageMap = useMemo(() => new Map(stages.map(s => [s.id, s])), [stages]);
@@ -1196,7 +1208,10 @@ function NetivBuildingColumn({
   const rightCols = totalCols - leftCols;
 
   return (
-    <div className="flex flex-col flex-1" style={{ minWidth: compact ? '140px' : '220px' }}>
+    <div className="flex flex-col flex-1"
+      style={fixedColW
+        ? { width: fixedColW, minWidth: fixedColW, maxWidth: fixedColW, flex: '0 0 auto' }
+        : { minWidth: compact ? '140px' : '220px' }}>
       {/* See BuildingColumn — same pinning behaviour, and hidden on a phone for
           the same reason: one building on screen, already named by the tabs. */}
       {/* z-10, not z-30: this is a STICKY element, so it paints above anything
@@ -1266,6 +1281,7 @@ export function BuildingDiagram({
   apartments, stages, activeStageIds, classFilter, searchQuery, selectedBuilding,
   onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, aptSubLabels,
   aptTaskData, nextStageLabels, onAddTask, aptCompletedData, compact, phone, onNameUnnamed,
+  fixedColW,
 }: BuildingDiagramProps) {
   const { isRtl } = useStore(state => state.mainUiStrings);
   const buildings = useStore(state => state.buildings);
@@ -1350,6 +1366,7 @@ export function BuildingDiagram({
           onNameUnnamed,
           hoverGroup,
           onHoverApt: setHoverAptId,
+          fixedColW,
         };
         return isWolfsonBuilding
           ? <BuildingColumn key={bId} {...colProps} />

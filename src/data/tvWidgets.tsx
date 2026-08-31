@@ -105,19 +105,26 @@ export function WhoIsOut({ c, dayIso, label, tone }: {
       {rows.length === 0 ? (
         <span className="text-[13px] text-slate-400">Nothing on the planner for that day.</span>
       ) : (
-        <div className="grid gap-2 h-full overflow-hidden content-start">
-          {rows.slice(0, 8).map(r => {
+        /* The rows WRAP, and the list scrolls past eight — `truncate` here
+           cut every job name off with three dots on the wall ("the tomorrow
+           widget, the text is getting cut off"). A widget scrolls, it does
+           not clip. */
+        <div className="grid gap-2 h-full overflow-y-auto widget-scroll content-start">
+          {rows.map(r => {
             const who = personOf(r.person, c.contractors, users);
             const names = r.entries.map(e => (e.jobId
               ? c.jobs.find(j => j.id === e.jobId)?.displayName ?? 'a job'
               : e.text)).filter(Boolean);
             return (
-              <div key={r.person} className="flex items-center gap-2.5 min-w-0">
-                <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: who.color }} />
-                <span className="text-[15px] font-bold text-slate-700 w-[120px] truncate flex-shrink-0">
+              <div key={r.person} className="flex items-start gap-2.5 min-w-0">
+                <span className="w-3 h-3 rounded-full flex-shrink-0 mt-1" style={{ backgroundColor: who.color }} />
+                <span className="text-[15px] font-bold text-slate-700 flex-shrink-0 break-words leading-tight"
+                  style={{ maxWidth: '42%' }}>
                   {who.name}
                 </span>
-                <span className="text-[14px] text-slate-500 truncate flex-1">{names.join(' · ')}</span>
+                <span className="text-[14px] text-slate-500 flex-1 min-w-0 break-words leading-tight">
+                  {names.join(' · ')}
+                </span>
               </div>
             );
           })}

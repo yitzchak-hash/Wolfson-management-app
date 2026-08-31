@@ -358,13 +358,32 @@ export function MapWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   const setCenterFromPixel = (px: number, py: number, atZoom: number) =>
     ({ lat: yToLat(py, atZoom), lon: xToLon(px, atZoom) });
 
+  /**
+   * Screen pixels → the map's OWN pixels.
+   *
+   * The map draws inside `WidgetSurface`'s scale (and the board's zoom, and
+   * the wall's), so `getBoundingClientRect()` is in SCALED screen pixels
+   * while `size.w` is local units. Raw `clientX - r.left` was therefore
+   * wrong at any scale but 1 — which is why the wheel did not zoom to where
+   * the mouse was, and why a drag panned at the wrong speed on a resized
+   * widget. The ratio of the rect to the client box is the live scale (the
+   * ScreenReport idiom: measure, never trust a prop).
+   */
+  const localScale = () => {
+    const node = box.current;
+    if (!node || node.clientWidth === 0) return 1;
+    const k = node.getBoundingClientRect().width / node.clientWidth;
+    return k > 0.01 ? k : 1;
+  };
+
   /** Zoom, keeping whatever is under the pointer under the pointer. */
   const zoomAt = (delta: number, clientX?: number, clientY?: number) => {
     const nz = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z + delta));
     if (nz === z) return;
     const r = box.current?.getBoundingClientRect();
-    const ox = clientX !== undefined && r ? clientX - r.left : size.w / 2;
-    const oy = clientY !== undefined && r ? clientY - r.top : size.h / 2;
+    const k = localScale();
+    const ox = clientX !== undefined && r ? (clientX - r.left) / k : size.w / 2;
+    const oy = clientY !== undefined && r ? (clientY - r.top) / k : size.h / 2;
     // The world point under the cursor, before and after — the difference is
     // how far the centre has to move so it stays put.
     const worldLon = xToLon(originX + ox, z);
@@ -457,7 +476,10 @@ export function MapWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
         onPointerMove={e => {
           const st = drag.current;
           if (!st) return;
-          const dx = e.clientX - st.x, dy = e.clientY - st.y;
+          const k = localScale();
+          // Divided by the render scale, or the map pans at the wrong speed
+          // on any resized widget — the board's own toWorld lesson.
+          const dx = (e.clientX - st.x) / k, dy = (e.clientY - st.y) / k;
           if (!st.moved && Math.abs(dx) + Math.abs(dy) < 3) return;
           st.moved = true;
           st.x = e.clientX; st.y = e.clientY;

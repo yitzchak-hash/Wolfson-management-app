@@ -99,10 +99,13 @@ export function GoalsWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
     ? (data.lang as 'he' | 'en')
     : (isRtl ? 'he' : 'en');
   // Buttons default by surface too: the board is where people work, the
-  // dashboard's compact card is a glance — and the wall or any other
-  // read-only surface never gets them whatever is set.
-  const interactive = (data.interactive === '1'
-    || (data.interactive !== '0' && style === 'board')) && !c.readOnly;
+  // dashboard's compact card is a glance. Deliberately NOT gated on
+  // `c.readOnly`: the TV wall renders read-only, but the wall is the
+  // owner's touchscreen and a goal edit is not a board edit — it goes to
+  // the goals app, the same rule that lets the tap-in board take punches
+  // there ("I can't click to end a goal or to start a goal").
+  const interactive = data.interactive === '1'
+    || (data.interactive !== '0' && style === 'board');
   const max = Number(data.max) > 0 ? Number(data.max) : undefined;
 
   const slotRef = useRef<HTMLDivElement | null>(null);

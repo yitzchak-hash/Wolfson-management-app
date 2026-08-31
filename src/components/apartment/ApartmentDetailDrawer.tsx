@@ -1623,10 +1623,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   />
                   {/* The plan usually knows the address — read it off the
                       sheet's own text, with the cutout behind the eye so the
-                      words are confirmed against the drawing before Use. */}
+                      words are confirmed against the drawing, and the small
+                      blue plus writing it in. */}
                   <PlanAddressSuggest
                     fileId={shownPlanId ?? detectedPdfId}
-                    address={addressLocal}
+                    kind="address"
+                    current={addressLocal}
                     onUse={v => {
                       setAddressLocal(v);
                       if (currentUser) updateApartment(apartment!.id, { address: v }, currentUser);
@@ -1655,6 +1657,18 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                       </a>
                     )}
                   </div>
+                  {/* The plans carry the phone number too — same row, same
+                      eye, same blue plus as the address. */}
+                  <PlanAddressSuggest
+                    fileId={shownPlanId ?? detectedPdfId}
+                    kind="phone"
+                    current={phoneLocal}
+                    onUse={v => {
+                      setPhoneLocal(v);
+                      if (currentUser) updateApartment(apartment!.id, { phone: v }, currentUser);
+                      onToast(`Phone: ${v}`);
+                    }}
+                  />
                 </div>
               </div>
 

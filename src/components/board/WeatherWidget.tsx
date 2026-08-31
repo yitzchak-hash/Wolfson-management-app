@@ -132,17 +132,17 @@ export function WeatherWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
       tone={wettest.rain >= 50 ? '#0ea5e9' : undefined}>
       <div className="h-full flex flex-col min-h-0 gap-1">
         <div className="flex items-center gap-2 flex-shrink-0">
-          <span style={{ fontSize: 26, lineHeight: 1 }}>{nowW.icon}</span>
+          <span style={{ fontSize: 30, lineHeight: 1 }}>{nowW.icon}</span>
           <div className="min-w-0">
             <div className="flex items-baseline gap-1">
-              <span className="text-[22px] font-black tabular-nums leading-none text-slate-800">
+              <span className="text-[26px] font-black tabular-nums leading-none text-slate-800">
                 {fc.now.temp}°
               </span>
-              <span className="text-[9px] text-gray-400 truncate">{nowW.word}</span>
+              <span className="text-[10.5px] text-gray-400 truncate">{nowW.word}</span>
             </div>
-            <div className="flex items-center gap-2 text-[8.5px] text-gray-400">
-              <span className="flex items-center gap-0.5"><Wind size={8} /> {fc.now.wind} km/h</span>
-              <span className="flex items-center gap-0.5"><Droplets size={8} /> {fc.now.humidity}%</span>
+            <div className="flex items-center gap-2 text-[10px] text-gray-400">
+              <span className="flex items-center gap-0.5"><Wind size={9} /> {fc.now.wind} km/h</span>
+              <span className="flex items-center gap-0.5"><Droplets size={9} /> {fc.now.humidity}%</span>
             </div>
           </div>
         </div>
@@ -155,14 +155,14 @@ export function WeatherWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
                 className="flex-1 min-w-0 rounded-md flex flex-col items-center justify-center py-0.5"
                 style={{ backgroundColor: day.rain >= 50 ? 'rgba(14,165,233,.12)' : 'rgba(148,163,184,.08)' }}
                 title={`${dayName(day.date)} — ${w.word}, ${day.lo}° to ${day.hi}°, ${day.rain}% chance of rain`}>
-                <span className="text-[8px] font-bold text-slate-500">
+                <span className="text-[9.5px] font-bold text-slate-500">
                   {i === 0 ? 'today' : dayName(day.date)}
                 </span>
-                <span style={{ fontSize: 13, lineHeight: 1.2 }}>{w.icon}</span>
-                <span className="text-[9px] font-black tabular-nums text-slate-700">{day.hi}°</span>
-                <span className="text-[7.5px] tabular-nums text-slate-400">{day.lo}°</span>
+                <span style={{ fontSize: 16, lineHeight: 1.2 }}>{w.icon}</span>
+                <span className="text-[11px] font-black tabular-nums text-slate-700">{day.hi}°</span>
+                <span className="text-[9px] tabular-nums text-slate-400">{day.lo}°</span>
                 {day.rain >= 30 && (
-                  <span className="text-[7px] font-bold" style={{ color: '#0ea5e9' }}>{day.rain}%</span>
+                  <span className="text-[8.5px] font-bold" style={{ color: '#0ea5e9' }}>{day.rain}%</span>
                 )}
               </div>
             );
@@ -170,7 +170,7 @@ export function WeatherWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
         </div>
 
         {wettest.rain >= 50 && (
-          <div className="text-[8px] font-semibold flex-shrink-0 truncate" style={{ color: '#0284c7' }}>
+          <div className="text-[9.5px] font-semibold flex-shrink-0 truncate" style={{ color: '#0284c7' }}>
             {wettest.rain}% rain {wettest.date === fc.days[0].date ? 'today' : `on ${dayName(wettest.date)}`}
             {' '}— worth checking anything open to the sky.
           </div>
