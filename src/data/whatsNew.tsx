@@ -60,6 +60,16 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'zoom',
       },
       {
+        title: 'Pins on the plan — now with a voice',
+        body: 'Workers can drop pins on the plan straight from their phone — '
+          + 'press Pin, tap the spot. And every pin, office and worker alike, '
+          + 'now takes a voice note and file attachments: the little clip and '
+          + 'microphone at the bottom right of the pin. Say what to change '
+          + 'and where, instead of typing it. A worker can only remove pins '
+          + 'they placed themselves.',
+        demo: 'pin',
+      },
+      {
         title: 'Type your own default zoom',
         body: 'Board settings now take a typed number for the zoom the '
           + 'board opens at on this computer — 87%, 140%, whatever suits '

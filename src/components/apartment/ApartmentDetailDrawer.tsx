@@ -1166,6 +1166,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
             apartmentLabel={aptLabel(apartment!)}
             authorName={currentUser?.name ?? ''}
             controlsInto={planBarSlot}
+            driveFolderLink={apartment!.driveLink}
           />
         </div>
       </div>

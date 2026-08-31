@@ -2037,14 +2037,18 @@ export function ContractorPortal() {
                         style={{ border: 'none', display: 'block', pointerEvents: showPlansPdf ? 'auto' : 'none' }}
                       />
                       {/* The SAME pins the office sees, drawn from the same
-                          coordinates — read-only here, because the punch list
-                          is the office's to write. */}
+                          coordinates. Workers WRITE now too (the owner's
+                          2026-08-31 ask): a worker on site can drop a pin,
+                          speak a memo into it or attach a photo — but only
+                          delete a pin they placed themselves. */}
                       {showPlansPdf && apt && (
                         <div onClick={e => e.stopPropagation()}>
                           <PlanPinOverlay
                             apartmentId={apt.id}
                             apartmentLabel={aptLabel(apt)}
-                            readOnly
+                            authorName={contractor?.name ?? ''}
+                            driveFolderLink={apt.driveLink}
+                            workerMode
                           />
                         </div>
                       )}

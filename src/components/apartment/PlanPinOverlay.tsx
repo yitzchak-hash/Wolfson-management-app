@@ -1,8 +1,14 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { MapPin, Check, X, Printer, Plus, Trash2, RotateCcw } from 'lucide-react';
+import { MapPin, Check, X, Printer, Plus, Trash2, RotateCcw, Paperclip, Loader2, FileText } from 'lucide-react';
 import { useStore } from '../../data/store';
-import { PlanPin } from '../../types';
+import { PinFile } from '../../types';
+import { storeVoiceMemo, RecordedMemo, LOCAL_MEMO_LIMIT } from '../../data/voiceMemo';
+import { VoiceRecorderButton, VoiceMemoPlayer } from '../ui/VoiceMemo';
+import {
+  isUploadBackendConfigured, extractFolderId, findOrCreateFolderViaBackend,
+  uploadFileViaBackend, shareFileToDrive,
+} from '../../data/driveApi';
 
 /**
  * Punch-list pins drawn OVER the engineering plan.
@@ -21,6 +27,7 @@ import { PlanPin } from '../../types';
  */
 export function PlanPinOverlay({
   apartmentId, apartmentLabel, readOnly = false, authorName = '', controlsInto = null,
+  driveFolderLink, workerMode = false,
 }: {
   apartmentId: string;
   apartmentLabel: string;
@@ -34,13 +41,76 @@ export function PlanPinOverlay({
    * drawer's pane.
    */
   controlsInto?: HTMLElement | null;
+  /** The job's Drive folder — where a pin's memo and files upload (a
+   *  "Punch List" subfolder). Absent, small files fall back to data URLs. */
+  driveFolderLink?: string;
+  /**
+   * The worker's portal passes true: a worker may add pins and speak into
+   * any of them, but may only DELETE a pin they placed themselves — the
+   * office's punch list is not theirs to tear up. Labels then come from the
+   * worker's own strings (ContractorUiStrings), not the office presets.
+   */
+  workerMode?: boolean;
 }) {
-  const { planPins, addPlanPin, updatePlanPin, deletePlanPin } = useStore();
+  const { planPins, addPlanPin, updatePlanPin, deletePlanPin, contractorUiStrings: cs } = useStore();
   const [placing, setPlacing] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [savedFlash, setSavedFlash] = useState(false);
   const [armDelete, setArmDelete] = useState(false);
+  const [busy, setBusy] = useState<'' | 'audio' | 'file'>('');
+  const [attachError, setAttachError] = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  /**
+   * A pin's memo and files are stored as URLS, never bytes: uploaded to a
+   * "Punch List" subfolder of the job's Drive folder when the backend is
+   * configured, else kept as a small data URL (the voice-memo rule and cap).
+   * That is what lets the fields ride the synced `planPins` record with no
+   * strip-and-merge machinery.
+   */
+  async function saveMemo(pinId: string, memo: RecordedMemo) {
+    setBusy('audio'); setAttachError('');
+    const res = await storeVoiceMemo(memo.blob, memo.seconds, driveFolderLink, 'Punch List');
+    setBusy('');
+    if ('error' in res) { setAttachError(res.error); return; }
+    updatePlanPin(pinId, { audioUrl: res.url, audioSeconds: Math.round(memo.seconds) });
+  }
+
+  async function attachFile(pinId: string, f: File, existing: PinFile[]) {
+    setBusy('file'); setAttachError('');
+    const parent = driveFolderLink ? extractFolderId(driveFolderLink) : null;
+    let url: string | null = null;
+    if (isUploadBackendConfigured() && parent) {
+      try {
+        const folderId = await findOrCreateFolderViaBackend(parent, 'Punch List');
+        const res = await uploadFileViaBackend(folderId, f);
+        if (res?.fileId) void shareFileToDrive(res.fileId);
+        if (res?.webViewLink) url = res.webViewLink;
+      } catch { /* fall through to the local path */ }
+    }
+    if (!url) {
+      if (f.size > LOCAL_MEMO_LIMIT) {
+        setBusy('');
+        setAttachError('Too big to keep on this device — set the job\'s Drive folder and it will upload instead.');
+        return;
+      }
+      url = await new Promise<string | null>(resolve => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(String(fr.result));
+        fr.onerror = () => resolve(null);
+        fr.readAsDataURL(f);
+      });
+    }
+    setBusy('');
+    if (!url) { setAttachError('That file could not be saved.'); return; }
+    updatePlanPin(pinId, {
+      files: [...existing, {
+        id: 'PF-' + Date.now().toString(36),
+        filename: f.name, mimeType: f.type || 'application/octet-stream', url,
+      }],
+    });
+  }
 
   const pins = useMemo(
     () => planPins
@@ -69,6 +139,13 @@ export function PlanPinOverlay({
     setOpen(id);
     setDraft('');
   }
+
+  /** Worker mode reads the worker's own strings; the office keeps its presets. */
+  const L = {
+    pin: workerMode ? (cs.pinAddBtn || 'Pin') : 'Pin',
+    clickPlan: workerMode ? (cs.pinClickPlan || 'Tap the plan') : 'Click the plan',
+    placeholder: workerMode ? (cs.pinNotePlaceholder || 'What needs doing here?') : 'What needs doing here?',
+  };
 
   /**
    * A printable punch list.
@@ -128,7 +205,7 @@ export function PlanPinOverlay({
               : { backgroundColor: 'rgba(255,255,255,.94)', color: '#374151', borderColor: '#e5e7eb' }}
           >
             {placing ? <MapPin size={12} /> : <Plus size={12} />}
-            {placing ? 'Click the plan' : 'Pin'}
+            {placing ? L.clickPlan : L.pin}
           </button>
         )}
         {pins.length > 0 && (
@@ -170,6 +247,7 @@ export function PlanPinOverlay({
               setDraft(p.text);
               setArmDelete(false);
               setSavedFlash(false);
+              setAttachError('');
             }}
             title={p.resolvedAt
               ? `Item ${i + 1} — closed by ${p.resolvedBy || 'Office'}`
@@ -204,9 +282,11 @@ export function PlanPinOverlay({
               onClick={e => e.stopPropagation()}
               className="absolute z-20 bg-white rounded-xl shadow-2xl border border-gray-200 p-2.5"
               style={{
-                left: `min(${p.xPct}%, calc(100% - 264px))`,
+                left: `min(${p.xPct}%, calc(100% - 292px))`,
                 top: `calc(${p.yPct}% + 8px)`,
-                width: 256,
+                // 284, not 256: the footer carries Save · Done · clip · mic ·
+                // trash, and at 256 the microphone wrapped onto its own line.
+                width: 284,
                 pointerEvents: 'auto',
               }}
             >
@@ -233,9 +313,56 @@ export function PlanPinOverlay({
                   onChange={e => setDraft(e.target.value)}
                   onBlur={() => updatePlanPin(p.id, { text: draft })}
                   rows={3}
-                  placeholder="What needs doing here?"
+                  placeholder={L.placeholder}
                   className="w-full text-[12px] border border-gray-200 rounded-lg p-2 outline-none focus:ring-2 focus:ring-[#1e3a5f]/25 resize-none"
                 />
+              )}
+
+              {/* The voice memo — the spoken half of "what to change here",
+                  drawn as a real player for everyone, deletable by writers. */}
+              {p.audioUrl && (
+                <VoiceMemoPlayer
+                  src={p.audioUrl}
+                  seconds={p.audioSeconds}
+                  className="mt-1.5"
+                  onDelete={readOnly ? undefined
+                    : () => updatePlanPin(p.id, { audioUrl: undefined, audioSeconds: undefined })}
+                />
+              )}
+
+              {/* Attached files, as small chips that open the file. */}
+              {(p.files ?? []).length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1.5" data-pin-files>
+                  {(p.files ?? []).map(f => (
+                    <span key={f.id}
+                      className="flex items-center gap-1 max-w-full pl-1.5 pr-1 py-0.5 rounded-lg border border-gray-200 bg-gray-50 text-[10px] text-gray-600">
+                      <FileText size={10} className="flex-shrink-0 text-[#1e3a5f]" />
+                      <a
+                        href={f.url}
+                        {...(f.url.startsWith('data:')
+                          ? { download: f.filename }
+                          : { target: '_blank', rel: 'noreferrer' })}
+                        className="truncate max-w-[150px] hover:underline"
+                        title={f.filename}>
+                        {f.filename}
+                      </a>
+                      {!readOnly && (
+                        <button
+                          onClick={() => updatePlanPin(p.id, {
+                            files: (p.files ?? []).filter(x => x.id !== f.id),
+                          })}
+                          title="Remove this file"
+                          className="p-0.5 rounded text-gray-400 hover:text-red-500">
+                          <X size={9} />
+                        </button>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {attachError && (
+                <p className="text-[10px] text-red-600 mt-1">{attachError}</p>
               )}
 
               {p.resolvedAt && (
@@ -248,7 +375,7 @@ export function PlanPinOverlay({
               )}
 
               {!readOnly && (
-                <div className="flex items-center gap-1.5 mt-1.5">
+                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                   <button
                     onClick={() => {
                       updatePlanPin(p.id, { text: draft });
@@ -288,20 +415,50 @@ export function PlanPinOverlay({
                     </button>
                   )}
                   <div className="flex-1" />
+                  {/* Bottom-right, per the owner: a little paperclip and a
+                      slightly BIGGER microphone beside it — attach a file, or
+                      just say what to do here and where. */}
+                  <input
+                    ref={fileRef} type="file" className="hidden" data-pin-file-input
+                    onChange={e => {
+                      const f = e.target.files?.[0];
+                      e.target.value = '';
+                      if (f) void attachFile(p.id, f, p.files ?? []);
+                    }} />
                   <button
-                    onClick={() => {
-                      if (!armDelete) { setArmDelete(true); return; }
-                      deletePlanPin(p.id);
-                      setOpen(null);
-                      setArmDelete(false);
-                    }}
-                    title={armDelete ? 'Really remove this pin' : 'Remove this pin'}
-                    className={armDelete
-                      ? 'px-2 py-1 rounded-lg text-[11px] font-bold bg-red-600 text-white'
-                      : 'p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50'}
+                    onClick={() => fileRef.current?.click()}
+                    disabled={busy !== ''}
+                    title="Attach a file"
+                    data-pin-attach
+                    className="flex items-center justify-center w-7 h-7 rounded-full text-gray-500 hover:text-[#1e3a5f] hover:bg-gray-100 disabled:opacity-40"
                   >
-                    {armDelete ? 'Delete?' : <Trash2 size={13} />}
+                    {busy === 'file' ? <Loader2 size={13} className="animate-spin" /> : <Paperclip size={13} />}
                   </button>
+                  <span data-pin-mic className="flex-shrink-0">
+                    <VoiceRecorderButton
+                      compact
+                      busy={busy === 'audio'}
+                      title="Record what to do here"
+                      onRecorded={memo => saveMemo(p.id, memo)}
+                    />
+                  </span>
+                  {/* A worker may only tear up a pin they placed themselves. */}
+                  {(!workerMode || p.createdBy === authorName) && (
+                    <button
+                      onClick={() => {
+                        if (!armDelete) { setArmDelete(true); return; }
+                        deletePlanPin(p.id);
+                        setOpen(null);
+                        setArmDelete(false);
+                      }}
+                      title={armDelete ? 'Really remove this pin' : 'Remove this pin'}
+                      className={armDelete
+                        ? 'px-2 py-1 rounded-lg text-[11px] font-bold bg-red-600 text-white'
+                        : 'p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50'}
+                    >
+                      {armDelete ? 'Delete?' : <Trash2 size={13} />}
+                    </button>
+                  )}
                 </div>
               )}
             </div>

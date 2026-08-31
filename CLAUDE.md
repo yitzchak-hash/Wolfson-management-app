@@ -6217,3 +6217,45 @@ Harness: `scratchpad/round32-probe.mjs` (21 checks). Its finds: Chromium on
 Linux fires `contextmenu` at the PRESS (the wheeldbg experiment), and
 Playwright's `mouse.wheel` reports `buttons: 0` mid-hold — both now
 designed for, not just probed around.
+
+---
+
+# v2 — pins that speak (worker add-pin, voice memos and files on every pin)
+
+## OWNER REVERSAL (2026-08-31): workers WRITE the punch list too
+Supersedes "the punch list is the office's to write". The portal's plan
+overlay is no longer `readOnly`: a worker on site drops pins from the phone
+(the floating Pin button over the expanded plan), and every pin — office
+and worker alike — takes a VOICE MEMO and FILE attachments. The one guard
+left: `workerMode` on `PlanPinOverlay` limits DELETE to pins the worker
+placed themselves (`p.createdBy === authorName`), and switches the three
+labels to the worker's own strings (new optional ContractorUiStrings keys
+`pinAddBtn` / `pinClickPlan` / `pinNotePlaceholder`, fallback rule as
+always).
+
+## URLs, never bytes
+`PlanPin.audioUrl`/`audioSeconds` + `files?: PinFile[]` ({id, filename,
+mimeType, url}) — every attachment is stored the voice-memo way: uploaded
+to a **"Punch List"** subfolder of the job's Drive folder when the backend
+is configured (shared on upload), else a small data URL capped at
+`LOCAL_MEMO_LIMIT`. A URL rides the synced `planPins` record with NO
+strip-and-merge machinery, and clearing with `undefined` really removes
+the field (the fsSet sanitizer). Both hosts pass `driveFolderLink`
+(the apartment's `driveLink`).
+
+## The bubble
+Memo renders as a real `VoiceMemoPlayer` (deletable by writers); files as
+chips (`data-pin-files`; a data URL downloads, a Drive link opens). Footer:
+Save · Mark as done · spacer · **paperclip then a slightly BIGGER mic**
+bottom-right (`data-pin-attach` w-7/13px, `data-pin-mic` w-8/16px — the
+owner's exact sizing ask), then the (gated) trash. **Bubble width is 284,
+not 256** — at 256 the mic wrapped onto its own line. The footer wraps
+(`flex-wrap`) so the recorder's expanding strip takes a second line
+cleanly while recording.
+
+Harness: `scratchpad/pinvoice-probe.mjs` (12 checks, portal end to end:
+add-pin attribution, clip/mic present with the size relation, file →
+data-URL chip, memo player on the office pin, delete gating both ways).
+Its manner: the portal task card opens via `getByText().click()` — a
+hand-rolled element hunt with size filters misfired, and the plan iframe
+route must be stubbed or drive.google.com hangs the container.

@@ -840,6 +840,24 @@ export interface PlanPin {
   /** Set when the item is done. Resolved pins stay, greyed, as a record. */
   resolvedAt?: string;
   resolvedBy?: string;
+  /**
+   * A voice memo explaining the item — a Drive view link, or a small data
+   * URL when no upload backend is configured. A URL, never raw bytes, so
+   * the record needs no Firestore strip-and-merge.
+   */
+  audioUrl?: string;
+  audioSeconds?: number;
+  /** Files attached to the pin — same URL-not-bytes rule as the memo. */
+  files?: PinFile[];
+}
+
+/** One file hanging off a punch-list pin. */
+export interface PinFile {
+  id: string;
+  filename: string;
+  mimeType: string;
+  /** A Drive view link, or a small data URL when no backend is configured. */
+  url: string;
 }
 
 /** The drawing tools available when marking up a plan. */
@@ -1292,6 +1310,10 @@ export interface ContractorUiStrings {
   addThreePictures?: string;
   weeklyLabel?: string;
   monthlyLabel?: string;
+  /** The punch-list pins on the plan — optional, same rule. */
+  pinAddBtn?: string;
+  pinClickPlan?: string;
+  pinNotePlaceholder?: string;
   /** The "I did work here" stage-report flow on the building map — optional, same rule. */
   workHereBtn?: string;
   whatDidYouDo?: string;
@@ -1372,6 +1394,9 @@ export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   addThreePictures: 'Add at least 3 pictures to close the job',
   weeklyLabel: 'Weekly',
   monthlyLabel: 'Monthly',
+  pinAddBtn: 'Pin',
+  pinClickPlan: 'Tap the plan',
+  pinNotePlaceholder: 'What needs doing here?',
   calendarTab: 'Calendar',
   workHereBtn: 'I did work here',
   whatDidYouDo: 'What did you do?',
@@ -1450,6 +1475,9 @@ export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   addThreePictures: 'הוסיפו לפחות 3 תמונות כדי לסגור את העבודה',
   weeklyLabel: 'שבועי',
   monthlyLabel: 'חודשי',
+  pinAddBtn: 'נעץ',
+  pinClickPlan: 'געו בתוכנית',
+  pinNotePlaceholder: 'מה צריך לעשות כאן?',
   calendarTab: 'לוח שנה',
   workHereBtn: 'עבדתי כאן',
   whatDidYouDo: 'מה עשית?',
