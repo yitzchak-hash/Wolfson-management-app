@@ -47,6 +47,8 @@ export interface PlannerEntry {
 
 export interface PlannerData {
   title?: string;
+  /** 'tiles' (default) or 'strips' — the approved slim one-line cards. */
+  cardStyle?: string;
   /** Who is on it: `c:<contractorId>`, `u:<userId>` or `n:<free name>`. */
   people?: string[];
   /**
@@ -391,6 +393,12 @@ export function PlannerWidget({
   const todayBg = String(data.todayBg || '#e0f2fe');
   const cellBg = String(data.cellBg || '#fbfcfd');
   const rowScale = frac(data.rowScale, 1, 0.6, 3);
+  /**
+   * Tiles or STRIPS — the approved Notebook Strips setting, per notebook:
+   * strips draw every card as one slim line (name, task under it) so weeks
+   * come out about half the height and months sit close together.
+   */
+  const strips = String(data.cardStyle || 'tiles') === 'strips';
   const cells = data.cells ?? {};
   const people = data.people ?? [];
   const offFrom = data.offFrom ?? {};
@@ -1283,6 +1291,20 @@ export function PlannerWidget({
                 return rows;
               })().map(({ pid, divider }) => {
                 const person = personOf(pid, contractors, users);
+                /**
+                 * A worker with NOTHING this week squishes to a strip — the
+                 * approved Notebook Strips rule: the name stays on a thin
+                 * row (nobody vanishes), the row puffs open while a drag
+                 * hovers any of its squares, and a drop makes it a full row
+                 * again by itself, because then it has something in it.
+                 * Per week and automatic: busy next week = full row there.
+                 */
+                const weekEmpty = days.every(dt => {
+                  const k = cellKey(pid, iso(dt));
+                  return !(cells[k]?.length) && !(taskChips.get(k)?.length);
+                });
+                const rowLit = hover?.person === pid && days.some(dt => iso(dt) === hover.day);
+                const squished = weekEmpty && !rowLit;
                 return (
                   <React.Fragment key={pid}>
                   {divider && (
@@ -1295,11 +1317,26 @@ export function PlannerWidget({
                     </div>
                   )}
                   <div className="grid gap-px mb-px" style={{ gridTemplateColumns: cols }}>
-                    <div className="flex items-start gap-1 px-1 py-1 rounded-l-md min-w-0"
-                      style={{ backgroundColor: tint(person.color, 0.10) }}>
-                      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1"
-                        style={{ backgroundColor: person.color }} />
-                      <span className="truncate font-bold" style={{ fontSize: nameSize, color: '#334155' }}>
+                    <div className="flex items-center gap-1 px-1 rounded-l-md min-w-0"
+                      style={{
+                        backgroundColor: tint(person.color, 0.10),
+                        paddingTop: squished ? 1 : z(4), paddingBottom: squished ? 1 : z(4),
+                        transition: 'padding 160ms ease',
+                        alignItems: squished ? 'center' : 'flex-start',
+                      }}>
+                      <span className="rounded-full flex-shrink-0"
+                        style={{
+                          backgroundColor: person.color,
+                          width: squished ? z(4.5) : z(6), height: squished ? z(4.5) : z(6),
+                          opacity: squished ? 0.55 : 1,
+                          marginTop: squished ? 0 : z(4),
+                        }} />
+                      <span className="truncate font-bold"
+                        style={{
+                          fontSize: squished ? Math.max(z(8), nameSize - z(2.5)) : nameSize,
+                          color: squished ? '#94a3b8' : '#334155',
+                          transition: 'font-size 160ms ease, color 160ms ease',
+                        }}>
                         {person.name}
                       </span>
                     </div>
@@ -1317,13 +1354,17 @@ export function PlannerWidget({
                             if (node && state !== 'ending') cellRefs.current.set(key, node);
                             else cellRefs.current.delete(key);
                           }}
-                          className="group/cell p-0.5 flex flex-col gap-0.5 transition-colors items-stretch"
+                          className="group/cell p-0.5 flex flex-col gap-0.5 items-stretch"
                           style={{
                             // A slot is a rectangle a job card fits in, and it
                             // grows by whole cards — never by squeezing them.
                             // Through `z` as well, or the sheet's type grows
-                            // and the square it sits in does not.
-                            minHeight: z(SLOT_H) * rowScale,
+                            // and the square it sits in does not. A squished
+                            // row keeps only a sliver — and the height is
+                            // TRANSITIONED, which is the puff-open under a
+                            // hovering drag.
+                            minHeight: squished ? z(12) : z(strips ? 26 : SLOT_H) * rowScale,
+                            transition: 'min-height 160ms ease, background-color 150ms ease',
                             backgroundColor: lit ? '#dbeafe'
                               : state === 'ending' ? '#f1f5f9' : cellBg,
                             backgroundImage: state === 'ending'
@@ -1347,6 +1388,7 @@ export function PlannerWidget({
                               bold={data.bold}
                               readOnly={ro || state === 'ending'}
                               openOnly={!!projection}
+                              strip={strips}
                               onOpen={() => {
                                 if (!en.jobId) return;
                                 // Another workspace's job PEEKS — the owner's
@@ -1684,7 +1726,7 @@ const SLOT_H = 58;
  */
 function PlannerCard({
   entry, job, workspace, stages, assignments, color, size, scale = 1, bold, readOnly, openOnly,
-  day, onOpen, onText, onRemove, onDragOff, onDragTo,
+  day, strip, onOpen, onText, onRemove, onDragOff, onDragTo,
 }: {
   entry: PlannerEntry;
   job?: Apartment;
@@ -1708,6 +1750,12 @@ function PlannerCard({
   readOnly?: boolean;
   /** Read-only, but a job still opens on a click — a projection. */
   openOnly?: boolean;
+  /**
+   * STRIPS mode (the approved Notebook Strips page): the card is one slim
+   * line — the job's name with the task right under it, nothing else. It
+   * still opens, still drags, still wears the line through a closed task.
+   */
+  strip?: boolean;
   onOpen: () => void;
   onText: (v: string) => void;
   onRemove: () => void;
@@ -1822,6 +1870,55 @@ function PlannerCard({
      * Zoho and plan buttons along the bottom-right.
      */
     const shownTasks = open.slice(0, 3);
+    if (strip) {
+      /**
+       * The STRIP: name, and the task right under it — that's it (the
+       * owner's approved drawing). Everything behavioural survives: the
+       * same drag handlers, the same click-to-open, the same line through
+       * a closed task. Only the dressing is gone.
+       */
+      const taskLine = (cardTask?.taskDescription
+        ?? shownTasks[0]?.taskDescription ?? entry.text ?? '').trim();
+      return (
+        <div
+          {...dragHandlers}
+          data-no-drag data-el-action
+          className="group/en relative rounded planner-card min-w-0 flex-1"
+          style={{
+            backgroundColor: tint(color, 0.16), border: '1px solid rgba(15,23,42,.07)',
+            padding: `${Math.max(1, Math.round(z(2)))}px ${Math.max(4, Math.round(z(6)))}px`,
+            cursor: readOnly && !openOnly ? undefined : 'pointer', touchAction: 'none',
+            opacity: held ? 0.45 : closed ? 0.6 : undefined,
+            transition: 'opacity 120ms ease',
+          }}
+          title={closed
+            ? (early ? 'Finished early — this day was crossed off' : 'Done')
+            : 'Click to open · drag to another day · hold Ctrl to leave a copy'}
+        >
+          {closed && (
+            <span aria-hidden="true" className="pointer-events-none absolute"
+              style={{
+                left: 4, right: 4, top: '50%',
+                borderTop: `${Math.max(2, z(2))}px solid #475569`,
+                transform: 'rotate(-3deg)', opacity: 0.8,
+              }} />
+          )}
+          <span className="block truncate text-left"
+            style={{ fontSize: size, fontWeight: 800, color: '#1e293b', lineHeight: 1.2 }}>
+            {workspace && <span style={{ color: '#7c3aed' }}>{workspace} · </span>}
+            {job
+              ? (aptLabel(job) || job.address?.trim() || 'Job')
+              : entry.projectId ? 'Open that workspace to see this' : '(job removed)'}
+          </span>
+          {taskLine && (
+            <span className="block truncate text-left font-medium"
+              style={{ fontSize: Math.max(z(7), size - z(2)), color: '#475569', lineHeight: 1.2 }}>
+              {taskLine}
+            </span>
+          )}
+        </div>
+      );
+    }
     return (
       <div
         {...dragHandlers}

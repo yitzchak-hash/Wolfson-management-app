@@ -30,6 +30,45 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-09-20',
+    title: 'The notebook loses its empty space, and search grows a voice',
+    items: [
+      {
+        title: 'Quiet workers squish down to a strip',
+        body: 'A worker with nothing planned that week no longer costs a full '
+          + 'row of the notebook — just a thin strip with their name. Drag a '
+          + 'card over the strip and it puffs open under your hand; drop, '
+          + 'and it is a full row again. Automatic, per week.',
+        demo: 'drag',
+      },
+      {
+        title: 'Strips: the notebook, half the height',
+        body: 'A new Cards choice in the notebook\'s settings — Tiles as '
+          + 'today, or Strips: every card one slim line, the job\'s name '
+          + 'with its task right under it. Weeks come out about half the '
+          + 'height, so months sit close together on one screen.',
+        demo: 'list',
+      },
+      {
+        title: 'One big Search button — and you can talk to it',
+        body: 'A new Search widget for the board and the wall: press the big '
+          + 'magnifying glass and a window pops up that forgives mistakes — '
+          + 'Hebrew for English, near misses, the wrong keyboard. Press the '
+          + 'microphone and just say the name. The header search got the '
+          + 'microphone too.',
+        demo: 'tap',
+      },
+      {
+        title: 'The plan reader knows our own number',
+        body: 'The phone read off a plan now skips the office\'s own number '
+          + 'and prefers the customer\'s mobile — and a screen that had been '
+          + 'open across a new update reloads itself instead of showing an '
+          + 'error.',
+        demo: 'sparkle',
+      },
+    ],
+  },
+  {
     date: '2026-09-19',
     title: 'The job window: days on tasks, the worker on the stage',
     items: [

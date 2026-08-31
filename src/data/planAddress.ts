@@ -51,6 +51,23 @@ const PHONE = /(?:\+\s?972[-\s.]?\(?0?\)?[-\s.]?|0)(?:[23489]|5\d|7[2-9])[-\s.]?
 const PHONE_LABEL = /(טלפון|טל'?|נייד|פלאפון|סלולרי|\bphone\b|\btel\.?\b|\bmobile\b|\bcell\b)/i;
 const FAX = /(פקס|\bfax\b)/i;
 
+/**
+ * TzviAir's OWN numbers, never a suggestion. The consultant's title block
+ * usually carries the company's phone right beside the customer's, and the
+ * reader kept offering the office back to itself ("it recognizes our office
+ * number — that's a problem"). Compared digit-for-digit after normalising,
+ * so 02-628-8282, (02) 6288282 and +972-2-6288282 are all the same number.
+ */
+const OWN_NUMBERS = new Set(['026288282']);
+
+/** A printed number reduced to bare local digits for comparison. */
+export function normalizePhoneDigits(s: string): string {
+  let d = s.replace(/[^\d+]/g, '');
+  if (d.startsWith('+972')) d = '0' + d.slice(4).replace(/^0/, '');
+  else if (d.startsWith('972')) d = '0' + d.slice(3).replace(/^0/, '');
+  return d.replace(/[^\d]/g, '');
+}
+
 /** Strip the label word itself, so "כתובת: הרצל 12" suggests "הרצל 12". */
 function stripLabel(text: string): string {
   return text.replace(/.*?(כתובת|address)\s*[:\-–]?\s*/i, '').trim();
@@ -209,15 +226,23 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
     lines.forEach(l => {
       if (FAX.test(l.text)) return;
       for (const v of variantsOf(l)) {
-        const m = PHONE.exec(v);
-        if (!m) continue;
-        let score = 50;
-        if (PHONE_LABEL.test(v)) score += 50;
-        // A mobile is the number the office actually calls.
-        if (/^0?5/.test(m[0].replace(/^\+\s?972[-\s.]?\(?0?\)?[-\s.]?/, '0'))) score += 5;
-        score += titleBlockBonus(l);
-        if (!bestPhone || score > bestPhone.score) bestPhone = { line: l, text: m[0].trim(), score };
-        break;
+        // EVERY number on the line, not just the first: a title-block line
+        // often prints the office number right before the customer's, and
+        // stopping at the first match handed back our own number.
+        const all = v.match(new RegExp(PHONE.source, 'g')) ?? [];
+        let hitAny = false;
+        for (const raw of all) {
+          if (OWN_NUMBERS.has(normalizePhoneDigits(raw))) continue;   // the office calling itself
+          hitAny = true;
+          let score = 50;
+          if (PHONE_LABEL.test(v)) score += 50;
+          // A mobile is almost always the CUSTOMER — the office and the
+          // consultant print landlines.
+          if (normalizePhoneDigits(raw).startsWith('05')) score += 15;
+          score += titleBlockBonus(l);
+          if (!bestPhone || score > bestPhone.score) bestPhone = { line: l, text: raw.trim(), score };
+        }
+        if (hitAny) break;
       }
     });
 

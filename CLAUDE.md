@@ -6043,3 +6043,31 @@ backupaudit all green.
   (`data-search-mic`); a browser without the API never shows it.
 Probes: `tvrefresh-probe` · `searchtile-probe` (fuzzy cross-workspace hit,
 Escape ladder, travel + drawer).
+
+## Notebook Strips, built as approved (owner: "approved!", 2026-08-31)
+The drawing is the "Notebook Strips" artifact; the build matches it.
+- **Empty rows squish** (`PlannerWidget`): per week and automatic — a worker
+  with no entries AND no task chips that week draws as a thin named strip
+  (cells `z(12)`, small grey name). `squished` is suspended while the rota
+  hover sits anywhere on the row (`rowLit`), which with the cells'
+  `min-height` transition IS the puff-open under a hovering drag; a drop
+  fills the row so it expands by itself. Cell refs stay registered, so a
+  strip takes drops exactly like a full row. Nothing is hidden — the name
+  stays.
+- **Strips mode** (`data.cardStyle: '' | 'strips'` on the rota, in
+  `PlannerData` + the pencil's Cards select): `PlannerCard` takes `strip` —
+  one slim line, the job's name with ONE task line under it (its own task,
+  else the first open task, else the entry's words). Same drag handlers,
+  same click-to-open, same closed-task strike; cells drop to `z(26)`.
+  Per notebook.
+- **The plan's phone reader refuses TzviAir's own number**: `OWN_NUMBERS`
+  ('026288282') + `normalizePhoneDigits` (exported; +972/972/0 forms fold
+  together) in planAddress.ts — the title block prints the office number
+  beside the customer's, and the reader was offering the office back to
+  itself. Every number ON a line is scanned (not just the first), and a
+  mobile (05x) now outranks a landline by +15: the customer is the mobile.
+Probes: `stripsrow-probe` (strip vs row heights, puff-open mid-drag by a
+real card drag, drop fills + emptied row squishes, strips-mode heights) ·
+`planphone-probe` grew the office-number decoy line and the normaliser
+check. What's New carries the round (its dates run AHEAD of the wall clock —
+a new entry must postdate the previous top one or the red dot never shows).

@@ -534,6 +534,16 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
   rota: [
     title(),
     {
+      key: 'cardStyle', label: 'Cards', kind: 'select', group: 'People and days',
+      options: [
+        { value: '', label: 'Tiles — as today' },
+        { value: 'strips', label: 'Strips — name and task only' },
+      ],
+      hint: 'Strips draw every card as one slim line — the job\'s name with its task '
+        + 'right under it — so weeks come out about half the height and months sit '
+        + 'close together. Everything still opens, drags and crosses off the same.',
+    },
+    {
       key: 'role', label: 'This copy is', kind: 'plannerRole', group: 'People and days',
       hint: 'The MAIN notebook is the record that holds the week; every other copy is a '
         + 'window onto it. Both carry every control and stay in step — the label only '

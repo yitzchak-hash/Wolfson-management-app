@@ -17,6 +17,10 @@ const logical = 'רחוב הרצל 12 חולון';
 const visual = [...logical].reverse().join('').replace('21', '12');
 check(fixVisual(visual) === logical, 'fixVisual restores a visual Hebrew line, digits forwards',
   fixVisual(visual));
+const { normalizePhoneDigits } = await vite.ssrLoadModule('/src/data/planAddress.ts');
+check(normalizePhoneDigits('+972-2-628-8282') === '026288282'
+  && normalizePhoneDigits('(02) 6288282') === '026288282',
+  'the office number normalises the same in every printed form');
 await vite.close();
 
 // ── The sheet: address AND phone in the title block, plus a fax decoy ───────
@@ -29,7 +33,8 @@ async function makePlan() {
   t('Project: Bornstein residence', 40, 540);
   page.drawRectangle({ x: 520, y: 20, width: 300, height: 110, borderColor: rgb(0.2, 0.25, 0.3), borderWidth: 1 });
   t('Address: 8 Weizmann St, Bnei Brak', 532, 104, 11);
-  t('Fax: 03-6161616', 532, 84);
+  t('TzviAir office Tel: 02-628-8282', 532, 92);
+  t('Fax: 03-6161616', 532, 80);
   t('Tel: 052-123-4567', 532, 64, 11);
   t('Drawn by: R. Levi', 532, 40);
   return Buffer.from(await doc.save());
