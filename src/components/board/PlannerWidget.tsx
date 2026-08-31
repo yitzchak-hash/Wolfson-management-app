@@ -1903,16 +1903,29 @@ function PlannerCard({
                 transform: 'rotate(-3deg)', opacity: 0.8,
               }} />
           )}
-          <span className="block truncate text-left"
-            style={{ fontSize: size, fontWeight: 800, color: '#1e293b', lineHeight: 1.2 }}>
-            {workspace && <span style={{ color: '#7c3aed' }}>{workspace} · </span>}
-            {job
-              ? (aptLabel(job) || job.address?.trim() || 'Job')
-              : entry.projectId ? 'Open that workspace to see this' : '(job removed)'}
+          <span className="flex items-center gap-1 min-w-0 text-left">
+            {/* The stage, as the same dot the tile wears — the one glance
+                that says where the job stands, kept even at strip size. */}
+            <span className="rounded-full flex-shrink-0"
+              style={{
+                width: Math.max(5, z(6)), height: Math.max(5, z(6)),
+                backgroundColor: stage?.color ?? '#cbd5e1',
+              }}
+              title={stage ? stage.name : 'Not started'} />
+            <span className="block truncate min-w-0 flex-1"
+              style={{ fontSize: size, fontWeight: 800, color: '#1e293b', lineHeight: 1.2 }}>
+              {workspace && <span style={{ color: '#7c3aed' }}>{workspace} · </span>}
+              {job
+                ? (aptLabel(job) || job.address?.trim() || 'Job')
+                : entry.projectId ? 'Open that workspace to see this' : '(job removed)'}
+            </span>
           </span>
           {taskLine && (
             <span className="block truncate text-left font-medium"
-              style={{ fontSize: Math.max(z(7), size - z(2)), color: '#475569', lineHeight: 1.2 }}>
+              style={{
+                fontSize: Math.max(z(7), size - z(2)), color: '#475569', lineHeight: 1.2,
+                paddingInlineStart: Math.max(5, z(6)) + z(4),
+              }}>
               {taskLine}
             </span>
           )}

@@ -2,6 +2,7 @@ import React from 'react';
 import {
   Globe2, Flame, Images, Rows3, Trophy, Disc3, Grid3x3, PartyPopper, Calculator,
   Fingerprint, Map as MapIcon, CloudSun, Music2, Building2, Search,
+  GitCommitHorizontal,
 } from 'lucide-react';
 import { UnitCard } from '../components/board/UnitCard';
 import { WidgetDef } from './widgets';
@@ -15,6 +16,7 @@ import { TikTokWidget } from '../components/board/TikTokWidget';
 import { PhotosAlbumWidget } from '../components/board/PhotosAlbumWidget';
 import { GoalsWidget } from '../components/board/GoalsWidget';
 import { SearchTileWidget } from '../components/board/SearchTileWidget';
+import { TimelineWidget } from '../components/board/TimelineWidget';
 
 /**
  * The widgets whose render is a real component rather than a few lines.
@@ -158,6 +160,22 @@ export const MORE_WIDGETS: WidgetDef[] = [
       + 'own search (Hebrew against English, near misses), and you can talk instead of typing.',
     data: {},
     render: (el, c) => <SearchTileWidget el={el} c={c} />,
+  },
+  {
+    /**
+     * The Timeline, rebuilt to the researched spec (2026-08-31): a Gantt
+     * strip — lanes, bars for multi-day tasks, diamonds for single days,
+     * weekend shading, a red today line, +N clusters that open their lists,
+     * and window / group-by / show-done in the pencil. Registered HERE (the
+     * component imports Frame out of widgets.tsx — the standing no-cycle
+     * rule), same id, so every placed timeline upgrades in place.
+     */
+    id: 'timeline', rank: 5, name: 'Timeline', category: 'plan',
+    icon: GitCommitHorizontal, w: 380, h: 150,
+    blurb: 'The next two weeks as bars on a calendar strip — who is on what, what runs long, '
+      + 'what is overdue, with today marked in red. Zoom to a month or a quarter.',
+    data: {},
+    render: (el, c) => <TimelineWidget el={el} c={c} />,
   },
   {
     id: 'goals', rank: 30, name: 'Goals', category: 'live',

@@ -39,10 +39,76 @@ import { useSpeechToText } from '../../data/voiceSearch';
  *  - Trash never appears; other groups appear, labeled — the board search's
  *    standing visibility rule.
  */
+/**
+ * The tile's LOOKS — a few deliberate dressings, chosen in the pencil.
+ * All of them stay in the company's own palette; what changes is the ground
+ * the magnifying glass stands on.
+ */
+const TILE_THEMES: Record<string, {
+  card: React.CSSProperties;
+  ring: React.CSSProperties;
+  icon: string;
+  label: React.CSSProperties;
+  logo: 'plate' | 'plain' | 'none';
+}> = {
+  navy: {
+    card: {
+      background: 'linear-gradient(155deg, #16304f 0%, #1e3a5f 52%, #2c5a8f 100%)',
+      boxShadow: 'inset 0 1px 0 rgba(255,255,255,.14), inset 0 -18px 34px rgba(9,20,36,.35)',
+    },
+    ring: {
+      width: 96, height: 96, borderRadius: 999,
+      border: '2px solid rgba(255,255,255,.28)',
+      background: 'radial-gradient(circle at 35% 28%, rgba(74,168,216,.5), rgba(74,168,216,.08) 70%)',
+      boxShadow: '0 10px 24px rgba(9,20,36,.45)',
+    },
+    icon: '#ffffff',
+    label: { color: '#cfe6f5', fontWeight: 800, letterSpacing: '.16em', fontSize: 12.5 },
+    logo: 'plate',
+  },
+  light: {
+    card: {
+      background: '#ffffff', border: '1px solid #dbe4ee',
+      boxShadow: '0 2px 10px rgba(15,23,42,.06)',
+    },
+    ring: {
+      width: 96, height: 96, borderRadius: 999,
+      background: 'linear-gradient(155deg, #e8f2fa, #d3e8f6)',
+      border: '1px solid #c4ddf0',
+    },
+    icon: '#1e3a5f',
+    label: { color: '#1e3a5f', fontWeight: 800, letterSpacing: '.14em', fontSize: 12.5 },
+    logo: 'plain',
+  },
+  sky: {
+    card: {
+      background: 'linear-gradient(155deg, #4aa8d8 0%, #2f86bd 60%, #1e3a5f 140%)',
+      boxShadow: 'inset 0 1px 0 rgba(255,255,255,.3)',
+    },
+    ring: {
+      width: 96, height: 96, borderRadius: 999,
+      background: 'rgba(255,255,255,.94)',
+      boxShadow: '0 10px 22px rgba(21,60,92,.35)',
+    },
+    icon: '#1e3a5f',
+    label: { color: '#ffffff', fontWeight: 800, letterSpacing: '.16em', fontSize: 12.5 },
+    logo: 'plate',
+  },
+  minimal: {
+    card: { background: '#ffffff', border: '1px solid #e6ebf2' },
+    ring: { width: 110, height: 110 },
+    icon: '#1e3a5f',
+    label: { color: '#8aa0b8', fontWeight: 700, letterSpacing: '.2em', fontSize: 10.5 },
+    logo: 'none',
+  },
+};
+
 export function SearchTileWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   const data = d(el);
   const sample = !!data.sample;
   const [open, setOpen] = useState(false);
+  const T = TILE_THEMES[String(data.theme || 'navy')] ?? TILE_THEMES.navy;
+  const label = String(data.title || (c.isRtl ? 'חיפוש' : 'SEARCH'));
 
   return (
     <>
@@ -50,24 +116,22 @@ export function SearchTileWidget({ el, c }: { el: CanvasElement; c: WidgetCtx })
         data-no-drag data-el-action data-search-tile
         onClick={() => { if (!sample) setOpen(true); }}
         title={c.isRtl ? 'חיפוש' : 'Search'}
-        className="w-full h-full flex flex-col items-center justify-center gap-2 rounded-xl
-                   active:scale-95 transition-transform select-none"
-        style={{ backgroundColor: '#ffffff' }}
+        className="w-full h-full flex flex-col items-center justify-center gap-3 rounded-xl
+                   active:scale-95 transition-transform select-none overflow-hidden"
+        style={T.card}
       >
-        <img src="/tzviair-logo.png" alt="TzviAir" className="h-9 object-contain" draggable={false} />
-        <span
-          className="flex items-center justify-center rounded-2xl"
-          style={{
-            width: 92, height: 92,
-            background: 'linear-gradient(135deg, #1e3a5f 0%, #2c5a8f 60%, #4aa8d8 130%)',
-            boxShadow: '0 6px 18px rgba(30,58,95,.35), inset 0 1px 0 rgba(255,255,255,.15)',
-          }}
-        >
-          <Search size={52} strokeWidth={2.4} color="#ffffff" />
+        {T.logo === 'plate' && (
+          <span className="rounded-lg px-2 py-1" style={{ backgroundColor: '#ffffff' }}>
+            <img src="/tzviair-logo.png" alt="TzviAir" className="h-5 object-contain" draggable={false} />
+          </span>
+        )}
+        {T.logo === 'plain' && (
+          <img src="/tzviair-logo.png" alt="TzviAir" className="h-7 object-contain" draggable={false} />
+        )}
+        <span className="flex items-center justify-center flex-shrink-0" style={T.ring}>
+          <Search size={T.logo === 'none' ? 78 : 46} strokeWidth={2.2} color={T.icon} />
         </span>
-        <span className="font-black tracking-wide" style={{ color: '#1e3a5f', fontSize: 15 }}>
-          {String(data.title || (c.isRtl ? 'חיפוש' : 'Search'))}
-        </span>
+        <span className="uppercase" style={T.label}>{label}</span>
       </button>
       {open && <SearchWindow c={c} onClose={() => setOpen(false)} />}
     </>

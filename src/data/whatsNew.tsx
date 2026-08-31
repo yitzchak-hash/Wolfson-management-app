@@ -30,6 +30,44 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-09-27',
+    title: 'A real timeline, search in four coats, and tiles that behave',
+    items: [
+      {
+        title: 'The Timeline widget grew up',
+        body: 'Rebuilt the way the professional planners draw one: every '
+          + 'dated task is a bar across its own days in its stage\'s colour, '
+          + 'single days are diamonds, a red line marks today, weekends are '
+          + 'shaded, and crowded days fold into a "+N" you can press to see '
+          + 'the list. Settings offer two weeks, a month or a quarter, and '
+          + 'grouping by worker.',
+        demo: 'list',
+      },
+      {
+        title: 'The Search tile picks its outfit',
+        body: 'The big search button was plain — now its settings offer four '
+          + 'looks: deep navy with the glowing ring, a clean light card, the '
+          + 'company sky-blue, or a minimal giant glass. Pick per tile.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'Unit cards drag like tiles',
+        body: 'A unit card pulled out of a building diagram used to open the '
+          + 'moment you touched it. Now one click selects it so you can drag '
+          + 'it around, and a double-click (or a second tap) is what travels '
+          + 'to the apartment — the same manners as every job tile.',
+        demo: 'drag',
+      },
+      {
+        title: 'Strips wear their stage',
+        body: 'In the notebook\'s Strips mode every slim card now carries a '
+          + 'small dot in its job\'s stage colour, left of the name — one '
+          + 'glance says where each job stands.',
+        demo: 'pin',
+      },
+    ],
+  },
+  {
     date: '2026-09-20',
     title: 'The notebook loses its empty space, and search grows a voice',
     items: [

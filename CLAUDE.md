@@ -6093,3 +6093,65 @@ a new entry must postdate the previous top one or the red dot never shows).
 - **renderPage guards its blit**: the canvas can be unmounted while the
   render is awaited (tab churn), and drawing into null was a crash.
 `plantabs.mjs` re-encoded to the new + contract (26 checks).
+
+---
+
+# v2 — the widget-quality round (timeline rebuilt, search themes, unit-card manners, strip dots)
+
+## The Timeline is a real Gantt strip now (`src/components/board/TimelineWidget.tsx`)
+The old timeline (a hand-typed `data.items` list on one line) is replaced —
+spec distilled by a research pass over how Linear / Asana / Monday / Notion /
+Google Calendar draw small timelines. The registry entry moved to
+`moreWidgets.tsx` (the component imports Frame — the no-cycle rule); the old
+entry in `widgets.tsx` is deleted, same id `'timeline'`, so nothing placed
+migrates. What it draws, and the rules under it:
+- **Every dated OPEN task is a bar across its days** (`liveAssignments`,
+  `daysOf`), one segment per consecutive-calendar run (`runsOf`) with dotted
+  connectors between runs, a 3px cap in the STAGE's colour, the worker's
+  colour as a dot. A single-day task is a rotated 10px diamond. Done tasks
+  (behind the `showDone` switch) draw dimmed with a strike and a check;
+  overdue wears red; urgent carries a red dot.
+- **Windows are discrete presets** (`''` two weeks / `month` / `quarter`),
+  never a free zoom — the axis relabels per preset (day initials+numbers
+  close in, Sundays and month names zoomed out; Hebrew initials under RTL).
+  Fri/Sat shaded (the Israeli weekend), a red today line with a triangle cap
+  and date chip, footer `‹ Today ›` with the visible range.
+- **Lanes are packed greedily** into what the measured height allows
+  (damped RO, loopaudit rule 1); days past the budget fold into a `+N`
+  cluster pill that opens the day's list through `ctx.showList` — the
+  standing numbers-open-their-lists rule.
+- `groupBy: 'worker'` gives each worker a named lane band. Empty states keep
+  the AXIS on screen (strings `tlToday`/`tlQuietWindow`/`tlNoDates`/
+  `tlJumpNext` in MainUiStrings, both presets) — a blank card reads as
+  broken; an empty month with its dates does not. Legacy `data.source==='own'`
+  hand items still draw as diamonds. `data.sample` draws a canned fortnight
+  for the shelf.
+
+## The search tile has THEMES (`data.theme` in the pencil)
+`TILE_THEMES` in SearchTileWidget: `navy` (default — deep navy gradient,
+glowing ring, logo on a white plate), `light`, `sky`, `minimal` (giant navy
+glass, no logo). The setting is per tile, in `WIDGET_FIELDS['search-tile']`.
+The search window itself is untouched.
+
+## A unit card obeys the tile gestures
+One click SELECTS (and a drag moves it); double-click — or a second tap on a
+touch screen — travels and opens the real drawer. Three coordinated pieces,
+and the trap is the standing one: **the node's pointer capture retargets a
+child's clicks to the node, so the card's own onDoubleClick never fires** —
+the double-click is handled in `BoardNode.onDoubleClick` (BoardItems.tsx),
+which special-cases `widget === 'unit-card'` BEFORE `H.elEdit`; the finger
+second-tap branch in GeneralJobsPage does the same instead of startEdit; and
+UnitCard itself dropped its whole-card `<button data-no-drag>` for a plain
+div so the press bubbles to the node at all.
+
+## Strip cards wear a stage dot
+`PlannerCard`'s strip branch: a small round dot in the job's stage colour
+(grey `#cbd5e1` when no stage) left of the name, the task line indented to
+clear it. One glance says where each job stands — the MiniJob idiom.
+
+Harness: `scratchpad/round31-probe.mjs` (10 checks — timeline marks/Today/
+overdue-red, four distinct tile grounds, the full unit-card gesture ladder
+with the return ticket, the strip dot's exact colour). Its traps: the
+overdue seed must fall INSIDE the chosen window (a 2-week window starts on
+Sunday and dropped it — seed `window:'month'`), and theme distinctness must
+compare border too (light and minimal share a white ground).

@@ -427,7 +427,18 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
         + 'the board show its cover.',
     },
   ],
-  'search-tile': [title()],
+  'search-tile': [
+    title(),
+    {
+      key: 'theme', label: 'Look', kind: 'select',
+      options: [
+        { value: '', label: 'Navy — deep company blue' },
+        { value: 'light', label: 'Light — white card' },
+        { value: 'sky', label: 'Sky — bright company blue' },
+        { value: 'minimal', label: 'Minimal — just the glass' },
+      ],
+    },
+  ],
   goals: [
     title(),
     {
@@ -687,7 +698,31 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
       hint: 'Read when the notebook is a source.',
     },
   ],
-  timeline: [title()],
+  timeline: [
+    title(),
+    {
+      key: 'window', label: 'Window', kind: 'select',
+      options: [
+        { value: '', label: 'Two weeks' },
+        { value: 'month', label: 'A month' },
+        { value: 'quarter', label: 'A quarter' },
+      ],
+    },
+    {
+      key: 'groupBy', label: 'Rows', kind: 'select',
+      options: [
+        { value: '', label: 'Packed — first free row' },
+        { value: 'worker', label: 'One row per worker' },
+      ],
+    },
+    {
+      key: 'showDone', label: 'Finished tasks', kind: 'select',
+      options: [
+        { value: '', label: 'Hidden — the strip is for what is coming' },
+        { value: '1', label: 'Shown, dimmed with a tick' },
+      ],
+    },
+  ],
   'multi-timer': [title()],
   'w-countdown': [
     { key: 'text', label: 'Label', kind: 'text', scope: 'element', placeholder: 'Countdown' },
@@ -964,14 +999,9 @@ export const WIDGET_PREVIEW: Record<string, Record<string, unknown>> = {
       { who: 'Yoni', where: 'Workshop' },
     ],
   },
-  timeline: {
-    items: [
-      { t: 'Start', on: iso(-21) },
-      { t: 'First fix', on: iso(-4) },
-      { t: 'Commission', on: iso(12) },
-      { t: 'Handover', on: iso(30) },
-    ],
-  },
+  // The canned fortnight lives in the widget itself — bars, one overdue,
+  // one done tick, a cluster — so the shelf card shows the design working.
+  timeline: { sample: 1, showDone: '1' },
   'multi-timer': {
     items: [
       { t: 'Crane booked', on: isoT(30) },

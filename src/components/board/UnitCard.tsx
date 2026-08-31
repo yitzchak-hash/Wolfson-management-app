@@ -53,11 +53,23 @@ export function UnitCard({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   }, [pid, aptId, currentProjectId, liveApartments, liveStages, projects, isSample, snapTick]);
 
   return (
-    <button
-      data-no-drag data-el-action
-      onClick={() => { if (!isSample && pid && aptId) c.openUnit?.(pid, aptId); }}
-      title={apt ? `Open ${aptLabel(apt)} in ${wsName}` : undefined}
-      className="w-full h-full text-left flex flex-col justify-center px-3 py-2 rounded-xl min-w-0"
+    /**
+     * A plain surface, NOT a button, and deliberately no data-no-drag: the
+     * card behaves like a job tile now (the owner's ask) — one click reaches
+     * the board node underneath, which selects it and lets it drag; only a
+     * DOUBLE-click travels and opens. The old whole-card button swallowed
+     * the press, so a card could neither be picked nor dragged, and every
+     * stray click teleported you to another workspace. On touch, the second
+     * tap on a picked card opens it — the board's own tile gesture.
+     */
+    <div
+      onDoubleClick={e => {
+        if (isSample || !pid || !aptId) return;
+        e.stopPropagation();
+        c.openUnit?.(pid, aptId);
+      }}
+      title={apt ? `${aptLabel(apt)} — double-click to open in ${wsName}` : undefined}
+      className="w-full h-full text-left flex flex-col justify-center px-3 py-2 rounded-xl min-w-0 select-none"
       style={{ borderLeft: `5px solid ${color}` }}
     >
       <div className="flex items-center gap-1.5 min-w-0">
@@ -99,6 +111,6 @@ export function UnitCard({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
           Open {wsName} once on this computer and this unit will show here.
         </div>
       )}
-    </button>
+    </div>
   );
 }

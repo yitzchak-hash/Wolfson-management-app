@@ -648,8 +648,20 @@ export const BoardNode = React.memo(function BoardNode({
        */
       onDoubleClick={() => {
         if (plain) return;
-        if (isBin) H.openBin(binKeyOf(el));
-        else H.elEdit(el);
+        if (isBin) { H.openBin(binKeyOf(el)); return; }
+        /**
+         * A UNIT CARD opens like a job tile: double-click travels to its
+         * workspace and opens the unit. Handled HERE, not on the card —
+         * the node's pointer capture retargets clicks to this container,
+         * so a handler on the card itself never hears the double-click
+         * (the standing capture trap).
+         */
+        if (el.type === 'widget' && el.widget === 'unit-card') {
+          const dd = (el.data ?? {}) as Record<string, unknown>;
+          const pid = String(dd.projectId ?? ''), aptId = String(dd.aptId ?? '');
+          if (pid && aptId && !dd.sample) { boundCtx.openUnit?.(pid, aptId); return; }
+        }
+        H.elEdit(el);
       }}
       data-node-id={el.id}
       title={isWidget ? 'Drag the strip at the top to move it' : undefined}

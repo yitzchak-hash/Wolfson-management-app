@@ -1478,6 +1478,11 @@ export interface MainUiStrings {
   navProject: string;
   navDashboard: string;
   navGoals: string;
+  /** The Timeline widget's own words. */
+  tlToday: string;
+  tlQuietWindow: string;
+  tlNoDates: string;
+  tlJumpNext: string;
   navTasks: string;
   navAnalytics: string;
   navReports: string;
@@ -2072,6 +2077,10 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   navProject: 'Project',
   navDashboard: 'Dashboard',
   navGoals: 'Goals',
+  tlToday: 'Today',
+  tlQuietWindow: 'Nothing scheduled in this window',
+  tlNoDates: 'No dated tasks yet — give tasks due dates and they show here',
+  tlJumpNext: 'Jump to the next task',
   navTasks: 'Tasks',
   navAnalytics: 'Analytics',
   navReports: 'Reports',
@@ -2655,6 +2664,10 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   navProject: 'פרויקט',
   navDashboard: 'לוח בקרה',
   navGoals: 'יעדים',
+  tlToday: 'היום',
+  tlQuietWindow: 'אין משימות בתקופה הזו',
+  tlNoDates: 'אין עדיין משימות עם תאריך — קבעו תאריכים והן יופיעו כאן',
+  tlJumpNext: 'קפיצה למשימה הבאה',
   navTasks: 'משימות',
   navAnalytics: 'ניתוח',
   navReports: 'דוחות',

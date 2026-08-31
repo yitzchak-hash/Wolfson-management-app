@@ -4183,9 +4183,19 @@ export function GeneralJobsPage() {
       // ONLY the node types that actually render a text editor. A widget has
       // no text to edit, and startEdit on one blinked a caret over the
       // weather — the touchscreen's "typing indicator" report.
-      && (el.type === 'note' || el.type === 'box' || el.type === 'title')
+      && (el.type === 'note' || el.type === 'box' || el.type === 'title'
+        || (el.type === 'widget' && el.widget === 'unit-card'))
     ) {
-      startEdit(el);
+      // A unit card behaves like a JOB TILE now (the owner's ask): one
+      // press picks it, the second opens it. On touch that second press
+      // lands here; the mouse's double-click lives on the card itself.
+      if (el.type === 'widget' && el.widget === 'unit-card') {
+        const d2 = (el.data ?? {}) as Record<string, unknown>;
+        const pid = String(d2.projectId ?? ''), aptId = String(d2.aptId ?? '');
+        if (pid && aptId) widgetCtx.openUnit?.(pid, aptId);
+      } else {
+        startEdit(el);
+      }
     }
     setDrag(null);
     setAttachHint(null);
