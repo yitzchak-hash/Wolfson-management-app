@@ -721,7 +721,38 @@ export const BoardNode = React.memo(function BoardNode({
           hover that reveals it also survives the pointer moving onto it.
           A drawing gets the strip even though it has no card — it is a thing on
           the board like any other, and removing one had no other route. */}
-      {el.type !== 'clipart' && (
+      {/* In a MULTI-selection the strip slims to TINY lock · focus · TV (the
+          owner's 2026-09-01 ask): a dozen selected nodes each wearing the
+          full strip drew a wall of repeated buttons across the screen, and
+          settings/remove speak for ONE node anyway — the selection menu is
+          where the group acts. */}
+      {el.type !== 'clipart' && inGroup && (
+        <div className="absolute right-0 flex gap-0.5 z-20"
+          style={{ bottom: '100%', marginBottom: 2, pointerEvents: 'auto' }}>
+          <button data-el-action
+            onClick={e => { e.stopPropagation(); H.elFocus(el); }}
+            title="Centre this on the screen"
+            className="w-5 h-5 rounded-md bg-white/95 hover:bg-white flex items-center justify-center shadow-sm border border-gray-100 text-gray-400 hover:text-[#1e3a5f]">
+            <Crosshair size={10} />
+          </button>
+          <button data-el-action
+            onClick={e => { e.stopPropagation(); H.elPatch(el.id, { locked: el.locked ? undefined : true }); }}
+            title={el.locked ? 'Locked in place — click to unlock' : 'Lock in place'}
+            className="w-5 h-5 rounded-md bg-white/95 hover:bg-white flex items-center justify-center shadow-sm border border-gray-100"
+            style={{ color: el.locked ? '#b45309' : '#94a3b8',
+                     backgroundColor: el.locked ? '#fef3c7' : undefined }}>
+            {el.locked ? <Lock size={10} /> : <Unlock size={10} />}
+          </button>
+          <button data-el-action
+            onClick={e => { e.stopPropagation(); H.elPatch(el.id, { showOnTv: el.showOnTv === false ? undefined : false }); }}
+            title={el.showOnTv === false ? 'Hidden from TV' : 'Showing on TV'}
+            className="w-5 h-5 rounded-md bg-white/95 hover:bg-white flex items-center justify-center shadow-sm border border-gray-100"
+            style={{ color: el.showOnTv === false ? '#dc2626' : '#94a3b8' }}>
+            <TvIcon size={10} hidden={el.showOnTv === false} />
+          </button>
+        </div>
+      )}
+      {el.type !== 'clipart' && !inGroup && (
         <div className={`absolute right-0 flex gap-1 z-20 transition-opacity ${
             isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'}`}
           style={{ bottom: '100%', marginBottom: 4, pointerEvents: 'auto' }}>

@@ -58,7 +58,7 @@ const FAX = /(פקס|\bfax\b)/i;
  * number — that's a problem"). Compared digit-for-digit after normalising,
  * so 02-628-8282, (02) 6288282 and +972-2-6288282 are all the same number.
  */
-const OWN_NUMBERS = new Set(['026288282']);
+const OWN_NUMBERS = new Set(['026288282', '037208000']);
 
 /** A printed number reduced to bare local digits for comparison. */
 export function normalizePhoneDigits(s: string): string {

@@ -6427,3 +6427,13 @@ riding the existing 30s tick) when in, red gradient when out. The LogOut
 corner glyph is gone from green tiles (the counter sits where it sat); the
 whole tile is still the button. `tapin2.mjs` re-encoded: backgroundImage,
 never backgroundColor — both states are gradients now.
+
+## Multi-selection strips are TINY (owner: 2026-09-01), and the second office number
+A node in a MULTI-selection (`inGroup`, the resize-handle flag) wears only
+tiny lock · focus · TV (w-5, icons 10) above it — a dozen selected nodes
+each drawing the full strip was a wall of repeated buttons across the
+screen, and settings/remove speak for one node anyway (the selection menu
+is where a group acts). Single selection keeps the full strip untouched.
+`scratchpad/slimstrip-probe.mjs` (3 checks). And `OWN_NUMBERS` gained
+'037208000' — the Tel Aviv office line printed on plans beside Beit
+Shemesh's, per the owner.
