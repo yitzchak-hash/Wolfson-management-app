@@ -51,14 +51,24 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'sparkle',
       },
       {
-        title: 'A line from the version to the plan',
-        body: 'The version you are looking at draws a green line from its '
-          + 'tab to the sheet — save or switch versions and the line '
-          + 'travels, so what is open is never a guess. And a version\'s '
-          + 'green Drive dot now greys honestly when its file was deleted '
-          + 'in Drive. Clicking through old versions no longer creates '
+        title: 'A scribble from the version to the plan',
+        body: 'The version you are looking at draws a playful green '
+          + 'scribble from its tab to the sheet — no stiff right angles, '
+          + 'and every version has its own squiggle. Save or switch and '
+          + 'the line doodles its way to the new one. A version\'s green '
+          + 'Drive dot now greys honestly when its file was deleted in '
+          + 'Drive, and clicking through old versions no longer creates '
           + 'anything — looking is looking.',
         demo: 'zoom',
+      },
+      {
+        title: 'The training board got fixed up',
+        body: 'The Learn-the-board lesson no longer has the real board\'s '
+          + 'buttons poking through it (and its X closes again). The '
+          + 'instructions are now a bouncy card floating over the practice '
+          + 'board, with a little face for every gesture and a "Nailed '
+          + 'it!" when you pull one off.',
+        demo: 'sparkle',
       },
       {
         title: 'One pen, a real pen tray',

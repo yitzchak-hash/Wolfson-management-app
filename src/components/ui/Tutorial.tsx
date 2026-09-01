@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
-  CircleHelp, X, Check, Printer, MousePointer2, Sparkles,
+  CircleHelp, X, Printer, Sparkles,
 } from 'lucide-react';
 import { useStore } from '../../data/store';
 import { printSheet } from '../../data/printing';
@@ -520,7 +521,19 @@ export function Tutorial({ onClose }: { onClose: () => void }) {
   const t = isRtl ? step.he : step.en;
   const doStep = !step.kind;
 
-  return (
+  /** A face per gesture, so every step card has its own little character. */
+  const EMOJI: Record<string, string> = {
+    select: '👆', drag: '✊', open: '🚪', pan: '🖐️', zoom: '🔍',
+    lasso: '🤠', menu: '🖱️', delete: '🧹', info: '👋', print: '🖨️',
+  };
+  const stepEmoji = EMOJI[step.waitFor ?? step.kind ?? 'info'] ?? '✨';
+
+  // PORTALLED to body: the help button lives in the Header, which is its own
+  // stacking context (z-30) — rendered inline, this whole full-screen session
+  // was CAPPED at the header's level and the board's floating chrome (zoom
+  // cluster, tool rail, minimap) painted straight over it, which also made
+  // the X unpressable. The workspace-picker disease, cured the same way.
+  return createPortal(
     <div className="fixed inset-0 z-[250] flex flex-col bg-slate-900/60 p-3 md:p-8"
       dir={isRtl ? 'rtl' : 'ltr'} data-tutorial>
       <div className="flex-1 flex flex-col bg-white rounded-2xl shadow-2xl overflow-hidden max-w-5xl w-full mx-auto">
@@ -546,30 +559,34 @@ export function Tutorial({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        {/* The practice board. */}
-        <div className="flex-1 flex flex-col p-3 md:p-5 gap-3 min-h-0">
+        {/* The practice board, with the step card FLOATING over its middle —
+            the instructions ride the stage like a game's, not a settings
+            form's (the owner's "funner, in the middle of the screen"). */}
+        <div className="flex-1 flex flex-col p-3 md:p-5 min-h-0 relative">
           <MiniCanvas onEvent={report} isRtl={isRtl} />
 
-          {/* The instruction card. */}
-          <div className="rounded-2xl border px-4 py-3 flex items-start gap-3 transition-colors"
-            data-tutorial-step
-            style={{
-              borderColor: flash ? '#22c55e' : '#e5e7eb',
-              backgroundColor: flash ? 'rgba(34,197,94,.08)' : '#fafbfc',
-            }}>
-            {flash ? (
-              <span className="mt-0.5 w-7 h-7 rounded-full bg-green-500 text-white flex items-center justify-center flex-shrink-0"
-                data-tutorial-done>
-                <Check size={16} />
-              </span>
-            ) : (
-              <span className="mt-0.5 w-7 h-7 rounded-full bg-[#1e3a5f] text-white flex items-center justify-center flex-shrink-0">
-                <MousePointer2 size={14} />
-              </span>
-            )}
+          {/* Position and animation live on DIFFERENT layers: the pop/party
+              animations animate transform, and a transform on the same node
+              as the centring translate would fight it and throw the card
+              across the panel mid-bounce. Keyed by step so every card
+              bounces in fresh. */}
+          <div className="absolute left-1/2 z-30 w-[min(500px,88%)]"
+            style={{ top: '64%', transform: 'translate(-50%,-50%)' }}>
+            <div key={`${at}-${flash ? 'y' : 'n'}`}
+              data-tutorial-step
+              className={`rounded-3xl px-5 py-4 flex items-start gap-3 bg-white shadow-2xl ${
+                flash ? 'tut-party' : 'tut-pop'}`}
+              style={{
+                border: `3px solid ${flash ? '#22c55e' : '#4aa8d8'}`,
+                rotate: '-1.2deg',
+              }}>
+            <span className="text-[30px] leading-none select-none flex-shrink-0"
+              data-tutorial-done={flash ? '1' : undefined}>
+              {flash ? '🎉' : stepEmoji}
+            </span>
             <div className="min-w-0 flex-1">
-              <div className="font-bold text-[14px] text-[#1e3a5f]">
-                {flash ? (isRtl ? 'כל הכבוד!' : 'Great job!') : t.title}
+              <div className="font-black text-[15px] text-[#1e3a5f]">
+                {flash ? (isRtl ? 'כל הכבוד! 🙌' : 'Nailed it! 🙌') : t.title}
               </div>
               {!flash && (
                 <p className="text-[12.5px] text-gray-600 whitespace-pre-line mt-0.5">{t.body}</p>
@@ -623,10 +640,12 @@ export function Tutorial({ onClose }: { onClose: () => void }) {
                 </button>
               )}
             </div>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

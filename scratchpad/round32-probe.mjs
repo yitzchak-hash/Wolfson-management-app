@@ -63,15 +63,18 @@ const menuAfterLasso = await page.evaluate(() =>
   [...document.querySelectorAll('button')].some(b => /SELECTED|Add job here|Paste/.test(b.textContent || '')
     && b.closest('[class*="fixed"]')));
 check(!menuAfterLasso, 'right-drag lasso raises no context menu');
-// …and a motionless right-click now speaks for the selection (2 SELECTED).
+// …and a motionless right-click now speaks for the selection. The lasso can
+// legitimately also catch the seeded Goals widget fixture (it lands at the
+// view centre since the goals round), so the count is 2 OR 3 — what matters
+// is that BOTH tiles are in it.
 await page.mouse.click(t1.x - 60, t1.y - 60, { button: 'right' });
 await page.waitForTimeout(300);
 const selHeader = await page.evaluate(() => {
   const el = [...document.querySelectorAll('div,span')].find(x =>
-    /2 SELECTED/i.test(x.textContent || '') && x.children.length === 0);
-  return !!el;
+    /^[23] SELECTED$/i.test((x.textContent || '').trim()) && x.children.length === 0);
+  return el ? el.textContent.trim() : null;
 });
-check(selHeader, 'right-drag selected both tiles (menu says 2 SELECTED)');
+check(!!selHeader, `right-drag selected the tiles (menu says ${selHeader ?? 'nothing'})`);
 await page.keyboard.press('Escape');
 await page.waitForTimeout(300);
 
@@ -167,6 +170,25 @@ check(stored === '1.5', `typing 150 stores 1.5 (${stored})`);
 await page.locator('[data-tutorial-button]').click();
 await page.waitForTimeout(400);
 check(await page.locator('[data-tutorial]').count() === 1, 'the help button opens the tutorial');
+// PORTALLED to body — rendered inline in the header it was capped at z-30
+// and the board's floating chrome painted over it (the owner's screenshot),
+// which also made the X unpressable.
+check(await page.evaluate(() => document.querySelector('[data-tutorial]')?.parentElement === document.body),
+  'the tutorial rides on body, above every board chrome');
+check(await page.evaluate(() => {
+  const x = document.querySelector('[data-tutorial-close]');
+  if (!x) return false;
+  const r = x.getBoundingClientRect();
+  return x.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
+}), 'and its X really takes the click');
+// The step card floats mid-screen with its emoji face and bounce class.
+check(await page.evaluate(() => {
+  const c = document.querySelector('[data-tutorial-step]');
+  if (!c) return false;
+  const r = c.getBoundingClientRect();
+  const centred = Math.abs((r.left + r.width / 2) - window.innerWidth / 2) < window.innerWidth * 0.2;
+  return centred && c.className.includes('tut-pop') && /\p{Extended_Pictographic}/u.test(c.textContent ?? '');
+}), 'the instructions float centre-stage, emoji and all');
 await page.locator('[data-tutorial-next]').click(); // welcome → click step
 await page.waitForTimeout(300);
 // Step 2: click a mini tile.

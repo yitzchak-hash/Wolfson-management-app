@@ -123,6 +123,11 @@ for (let i = 1; i <= 6; i++) { await page.mouse.move(stage.x + stage.w * (0.3 + 
 await page.mouse.up();
 await page.waitForTimeout(900);
 check(await page.locator('[data-version-link] path').count() === 1, 'drawing connects the sheet to v1');
+// A SCRIBBLE, not plumbing: curves only, no straight L segments (the
+// owner's "not ninety degree angles" ask).
+const linkD = await page.evaluate(() =>
+  document.querySelector('[data-version-link] path')?.getAttribute('d') ?? '');
+check(linkD.includes('C') && !/ L /.test(linkD), 'and the line is a curvy scribble, no right angles');
 check(await page.evaluate(() =>
   document.querySelector('[data-version-active]')?.textContent?.includes('v1') ?? false),
   'and v1\'s rail button is the marked one');

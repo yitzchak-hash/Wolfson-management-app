@@ -204,6 +204,45 @@ export interface PlanChoice {
 const INK_TOOL_IDS = ['pen', 'pencil', 'marker', 'highlighter'];
 
 /**
+ * The connector as a SCRIBBLE — a wavy hand-drawn line, never right-angle
+ * plumbing (the owner's ask: "not ninety degree angles, a fun scribbly way").
+ * Waypoints along the straight line are pushed sideways by a wobble that
+ * alternates sides, then smoothed Catmull-Rom-into-beziers so it reads as one
+ * relaxed pen stroke. The wobble is SEEDED (by the version number), never
+ * Math.random(): the line is re-measured on a slow tick, and a fresh random
+ * path each second would visibly squirm — seeded, every version instead gets
+ * its own signature squiggle that holds still.
+ */
+function scribblePath(x1: number, y1: number, x2: number, y2: number, seed: number): string {
+  const rnd = (i: number) => {
+    const s = Math.sin(seed * 127.1 + i * 311.7) * 43758.5453;
+    return s - Math.floor(s);
+  };
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.hypot(dx, dy) || 1;
+  const n = Math.max(4, Math.min(9, Math.round(len / 80)));
+  const px = -dy / len, py = dx / len;              // unit perpendicular
+  const amp = Math.min(24, len * 0.11);
+  const pts: [number, number][] = [[x1, y1]];
+  for (let i = 1; i < n; i++) {
+    const t = i / n;
+    const wob = (0.35 + rnd(i) * 0.9) * amp * (i % 2 ? -1 : 1);
+    const arc = Math.sin(t * Math.PI) * amp * 0.6;  // swings out, comes home
+    pts.push([x1 + dx * t + px * (wob + arc), y1 + dy * t + py * (wob + arc)]);
+  }
+  pts.push([x2, y2]);
+  let d = `M ${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i];
+    const p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+    d += ` C ${(p1[0] + (p2[0] - p0[0]) / 6).toFixed(1)} ${(p1[1] + (p2[1] - p0[1]) / 6).toFixed(1)},`
+      + ` ${(p2[0] - (p3[0] - p1[0]) / 6).toFixed(1)} ${(p2[1] - (p3[1] - p1[1]) / 6).toFixed(1)},`
+      + ` ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
+  }
+  return d;
+}
+
+/**
  * The pen tray — four drawn pens standing in a row, the one in the hand
  * LIFTED, the Samsung Notes manner. Picking another pen lifts it (spring
  * transition) while the old one settles; the tray stays open so the change
@@ -835,12 +874,12 @@ function PlanEditor({
       const br = btn.getBoundingClientRect();
       const sr = sheet.getBoundingClientRect();
       if (br.height < 4 || sr.width < 40) { setVlink(null); return; }
-      const x1 = br.right - rr.left - 4;
-      const y1 = br.top - rr.top + 8;                      // from the dot
-      const x2 = Math.max(x1 + 24, sr.left - rr.left);     // to the plan's edge
-      const y2 = sr.top - rr.top + sr.height * 0.2;        // 20% down the sheet
-      const midX = x1 + Math.max(12, (x2 - x1) * 0.4);
-      const d = `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`;
+      // Rounded endpoints, so a sub-pixel re-measure cannot rewrite the path.
+      const x1 = Math.round(br.right - rr.left - 4);
+      const y1 = Math.round(br.top - rr.top + 8);                  // from the dot
+      const x2 = Math.round(Math.max(x1 + 24, sr.left - rr.left)); // to the plan's edge
+      const y2 = Math.round(sr.top - rr.top + sr.height * 0.2);    // 20% down the sheet
+      const d = scribblePath(x1, y1, x2, y2, linkedVersion ?? 1);
       setVlink(prev => (prev && prev.d === d ? prev : { d, x2, y2 }));
     };
     measure();

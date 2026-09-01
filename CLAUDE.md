@@ -6626,3 +6626,27 @@ first (the saved markup is asserted UNDER Annotated Plans in the dropdown),
 and it closes the picker by its own X — an Escape there races the studio's
 per-render-re-registered key handler in the harness and can take the studio
 with it.
+
+## Same round, the owner's follow-ups
+- **The connector is a SCRIBBLE** (`scribblePath` in PlanAnnotator): waypoints
+  wobbled sideways and smoothed Catmull-Rom-into-beziers — his "not ninety
+  degree angles, a fun scribbly way". The wobble is SEEDED by the version
+  number, never Math.random(): the line re-measures on a slow tick, and a
+  fresh random path each second would visibly squirm; seeded, each version
+  keeps its own signature squiggle. Endpoints are rounded so sub-pixel
+  re-measures cannot rewrite the path. markup2-probe asserts curves-only.
+- **The Tutorial is PORTALLED to body.** It rendered inline in the Header — a
+  z-30 stacking context — so its z-[250] was capped and the board's floating
+  chrome (zoom cluster, tool rail, minimap) painted straight OVER it, which
+  also made its X unpressable (the owner's screenshot). The workspace-picker
+  disease, again, on the one full-screen surface that had not been checked.
+- **The tutorial's instructions are a floating card** centred over the
+  practice canvas (his "funner, in the middle of the screen"): an emoji per
+  gesture, a `tut-pop` bounce-in keyed by step, `tut-party` wiggle +
+  "Nailed it! 🙌" on success. Position and animation live on SEPARATE layers
+  — the animations animate transform, and one node carrying both the
+  centring translate and the keyframes throws the card across the panel
+  mid-bounce.
+- round32-probe's lasso count re-encoded to `[23] SELECTED`: the seeded Goals
+  widget fixture (a later round) legitimately lands in the probe's lasso
+  rect, so "3 SELECTED" is the product being right, not wrong.

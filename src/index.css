@@ -724,19 +724,19 @@ main > * { min-width: 0; }
 
 /* ── The plan studio: version connector + pen swap ──────────────────────── */
 
-/* The green line from the open version's rail button to the plan — drawn
-   like a wire being run, replayed whenever the version changes (the SVG is
-   keyed by version). pathLength=100 on the path makes the dash arithmetic
-   independent of the real geometry. */
+/* The green scribble from the open version's rail button to the plan —
+   drawn like a pen doodling its way across, replayed whenever the version
+   changes (the SVG is keyed by version). pathLength=100 on the path makes
+   the dash arithmetic independent of the real geometry. */
 .vlink-path {
   stroke-dasharray: 100;
   stroke-dashoffset: 100;
-  animation: vlinkDraw .55s ease-out forwards;
+  animation: vlinkDraw .7s ease-in-out forwards;
 }
 @keyframes vlinkDraw { to { stroke-dashoffset: 0; } }
 .vlink-dot {
   opacity: 0;
-  animation: vlinkDot .18s ease-out .4s forwards;
+  animation: vlinkDot .18s ease-out .55s forwards;
 }
 @keyframes vlinkDot { to { opacity: 1; } }
 
@@ -751,4 +751,21 @@ main > * { min-width: 0; }
   .vlink-path { animation: none; stroke-dashoffset: 0; }
   .vlink-dot  { animation: none; opacity: 1; }
   .pen-swap   { animation: none; }
+}
+
+/* ── Tutorial step cards: bounce in, party on success ───────────────────── */
+.tut-pop { animation: tutPop .38s cubic-bezier(.34,1.56,.64,1); }
+@keyframes tutPop {
+  from { transform: translateY(16px) scale(.92); opacity: 0; }
+  to   { transform: translateY(0)    scale(1);   opacity: 1; }
+}
+.tut-party { animation: tutParty .55s ease-in-out; }
+@keyframes tutParty {
+  0%   { transform: scale(.9)  rotate(0deg); }
+  35%  { transform: scale(1.06) rotate(2deg); }
+  65%  { transform: scale(1.02) rotate(-2deg); }
+  100% { transform: scale(1)   rotate(0deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tut-pop, .tut-party { animation: none; }
 }
