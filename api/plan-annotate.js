@@ -280,7 +280,8 @@ function strokeOps(stroke, pts, scale) {
   // wherever the hand slowed down — and a segment shorter than its own round cap
   // came out as a bead. One fill cannot darken against itself however much it
   // overlaps, and the discs supply the round joins and caps.
-  const flat = kind === 'highlighter';        // a felt chisel has no pressure
+  // Both highlighters (the soft wash included) — a felt chisel has no pressure.
+  const flat = String(kind).startsWith('highlighter');
   const half = (w) => Math.max(0.12, (base * (flat ? 1 : w)) / 2);
 
   for (let i = 1; i < pts.length; i++) {
@@ -369,7 +370,7 @@ export async function stamp(bytes, strokes, label, author) {
 
     for (const s of list) {
       const alpha = typeof s.opacity === 'number' ? s.opacity : 1;
-      const blend = s.tool === 'highlighter' ? 'Multiply' : 'Normal';
+      const blend = String(s.tool).startsWith('highlighter') ? 'Multiply' : 'Normal';
       s.gsKey = gsFor(pdf, page, alpha, blend);
 
       if (s.tool === 'bubble' && s.text) {

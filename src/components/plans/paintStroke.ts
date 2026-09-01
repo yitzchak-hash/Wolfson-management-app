@@ -115,7 +115,9 @@ export function paintStroke(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement,
   const unit = c.width / REF;
   ctx.save();
   ctx.globalAlpha = s.opacity;
-  ctx.globalCompositeOperation = s.tool === 'highlighter' ? 'multiply' : 'source-over';
+  // Both highlighters multiply — the soft one is a wider, paler wash, not a
+  // different kind of thing.
+  ctx.globalCompositeOperation = s.tool.startsWith('highlighter') ? 'multiply' : 'source-over';
   ctx.strokeStyle = s.color;
   ctx.fillStyle = s.color;
   ctx.lineCap = 'round';
@@ -213,12 +215,15 @@ export function paintStroke(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement,
     } else {
       ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(z.x, z.y); ctx.stroke();
     }
-  } else if (s.tool === 'highlighter') {
+  } else if (s.tool.startsWith('highlighter')) {
     // A highlighter is a flat band of one colour at one width — the nib is a
     // felt chisel, it has no pressure response — so it is one path, one fill.
     ribbon(ctx, pts.map(p => ({ ...p, w: 1 })), base);
   } else {
-    // Pen, pencil, marker: one fill, width still varying point to point.
+    // Every writing tool — pen, pencil, marker, fountain, calligraphy,
+    // crayon, brush: one fill, the width varying point to point. The
+    // CHARACTER lives entirely in those per-point widths, written at capture,
+    // which is what keeps this file free of per-pen code paths.
     ribbon(ctx, pts, base);
   }
   ctx.restore();

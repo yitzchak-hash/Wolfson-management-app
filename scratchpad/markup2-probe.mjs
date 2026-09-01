@@ -82,27 +82,55 @@ check(rail.pencilTile === 0 && rail.markerTile === 0 && rail.highTile === 0,
 check(rail.eraser === 1, 'the eraser keeps its own tile');
 
 // The pen is the studio's opening tool, so the tile is already armed — a
-// press on the tool in the hand opens the TRAY (pressing an unarmed tile
+// press on the tool in the hand opens the DRAWER (pressing an unarmed tile
 // would arm it instead).
 await page.evaluate(() => document.querySelector('[data-ink-tile]')?.click());
-await page.waitForTimeout(400);
-check(await page.locator('[data-pen-tray]').count() === 1, 'pressing the armed ink tile opens the pen tray');
-check(await page.locator('[data-pen-tray] [data-pen]').count() === 4, 'four pens stand in it');
+await page.waitForTimeout(500);
+check(await page.locator('[data-pen-tray]').count() === 1, 'pressing the armed ink tile opens the pen drawer');
+check(await page.locator('[data-pen-tray] [data-pen]').count() === 9,
+  'ALL NINE writing tools stand in ONE row', `${await page.locator('[data-pen-tray] [data-pen]').count()}`);
+check(await page.evaluate(() => {
+  const t = document.querySelector('[data-pen-tray]');
+  return t && getComputedStyle(t).backdropFilter.includes('blur');
+}), 'the drawer is frosted glass');
 
-// The chosen pen is LIFTED; picking another lifts that one while the tray stays.
+// The chosen pen is LIFTED; picking another lifts that one while the tray
+// stays — and the scribble REDRAWS in the new pen's handwriting.
 const liftOf = id => page.evaluate(pid => {
   const pen = document.querySelector(`[data-pen="${pid}"] span`);
   return pen ? new DOMMatrix(getComputedStyle(pen).transform === 'none' ? '' : getComputedStyle(pen).transform).f : null;
 }, id);
+const scribbleOf = () => page.evaluate(() =>
+  document.querySelector('[data-tray-scribble]')?.toDataURL() ?? '');
 check((await liftOf('pen')) < -6, `the pen in the hand is lifted (${await liftOf('pen')})`);
+const scribPen = await scribbleOf();
 await page.evaluate(() => document.querySelector('[data-pen="marker"]')?.click());
-await page.waitForTimeout(600);
+await page.waitForTimeout(700);
 check(await page.locator('[data-pen-tray]').count() === 1, 'the tray stays open so the change is seen');
 check((await liftOf('marker')) < -6 && (await liftOf('pen')) > -2,
   `the marker rises and the pen settles (${await liftOf('marker')} / ${await liftOf('pen')})`);
+const scribMarker = await scribbleOf();
+check(scribPen.length > 300 && scribMarker.length > 300 && scribPen !== scribMarker,
+  'the scribble redrew in the marker\'s own hand');
 const tileLabel = await page.evaluate(() =>
   document.querySelector('[data-ink-tile]')?.textContent?.trim());
 check(tileLabel === 'Marker', `the tile now wears the marker (${tileLabel})`);
+
+// The drawer carries size and colour, Samsung's manner — and a highlighter
+// swaps the chips to the HIGHLIGHT shades.
+check(await page.locator('[data-tray-size]').count() === 1, 'the size slider lives in the drawer');
+const inkChips = await page.locator('[data-tray-color]').count();
+await page.evaluate(() => document.querySelector('[data-pen="highlighter"]')?.click());
+await page.waitForTimeout(500);
+const hiChips = await page.locator('[data-tray-color]').count();
+check(inkChips === 11 && hiChips === 6,
+  `a highlighter swaps to the highlight shades (${inkChips} -> ${hiChips})`);
+
+// Arm the DIRECTIONAL nib and close the tray WITHOUT drawing — the sheet has
+// to stay blank for the connector section's first check, so the calligraphy
+// widths proof rides that section's own first stroke instead.
+await page.evaluate(() => document.querySelector('[data-pen="calligraphy"]')?.click());
+await page.waitForTimeout(400);
 // Escape closes the tray and nothing behind it.
 await page.keyboard.press('Escape');
 await page.waitForTimeout(300);
@@ -111,7 +139,10 @@ check(await page.locator('[data-pen-tray]').count() === 0
 
 // ── The connector line ────────────────────────────────────────────────────
 check(await page.locator('[data-version-link]').count() === 0, 'a blank sheet is connected to nothing');
-// draw one stroke → version 1 begins → the line appears at its button
+// draw one stroke → version 1 begins → the line appears at its button. It is
+// a ZIGZAG in the calligraphy hand, so the same stroke proves the directional
+// nib wrote varying per-point widths into the record (what makes the PDF
+// match) — a straight line holds one direction and one width.
 const stage = await page.evaluate(() => {
   const cs = [...document.querySelectorAll('canvas')].filter(c => c.getBoundingClientRect().width > 300);
   const r = cs[cs.length - 1].getBoundingClientRect();
@@ -119,10 +150,23 @@ const stage = await page.evaluate(() => {
 });
 await page.mouse.move(stage.x + stage.w * 0.3, stage.y + stage.h * 0.3);
 await page.mouse.down();
-for (let i = 1; i <= 6; i++) { await page.mouse.move(stage.x + stage.w * (0.3 + i * 0.04), stage.y + stage.h * 0.32); await page.waitForTimeout(25); }
+for (let i = 1; i <= 8; i++) {
+  await page.mouse.move(stage.x + stage.w * (0.3 + i * 0.03), stage.y + stage.h * (0.3 + (i % 2 ? 0.03 : -0.02)));
+  await page.waitForTimeout(25);
+}
 await page.mouse.up();
-await page.waitForTimeout(900);
+await page.waitForTimeout(1000);
 check(await page.locator('[data-version-link] path').count() === 1, 'drawing connects the sheet to v1');
+const calli = await page.evaluate(() => {
+  const d = JSON.parse(localStorage.getItem('wolfson_app_data') ?? '{}');
+  const st = (d.planAnnotations ?? []).flatMap(a => a.strokes ?? []).find(s => s.tool === 'calligraphy');
+  if (!st) return null;
+  const ws = [];
+  for (let i = 2; i < st.pts.length; i += 3) ws.push(st.pts[i]);
+  return { min: Math.min(...ws), max: Math.max(...ws) };
+});
+check(!!calli && calli.max > calli.min * 1.5,
+  `the calligraphy nib shaped the stroke (widths ${calli?.min?.toFixed(2)}..${calli?.max?.toFixed(2)})`);
 // A SCRIBBLE, not plumbing: curves only, no straight L segments (the
 // owner's "not ninety degree angles" ask).
 const linkD = await page.evaluate(() =>

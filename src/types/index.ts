@@ -871,6 +871,10 @@ export interface PinFile {
 /** The drawing tools available when marking up a plan. */
 export type AnnTool =
   | 'pen' | 'marker' | 'highlighter' | 'pencil'
+  // The full pen drawer (owner, 2026-09-01): every writing tool is still just
+  // a PRESET over the same freehand engine — per-point widths carry the
+  // character — so the PDF stamper renders them with no new code paths.
+  | 'fountain' | 'calligraphy' | 'crayon' | 'brush' | 'highlighter-soft'
   | 'line' | 'arrow' | 'rect' | 'ellipse' | 'text' | 'bubble';
 
 /**

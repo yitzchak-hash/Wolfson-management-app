@@ -30,6 +30,42 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-11-08',
+    title: 'A full pen drawer, and the plan reader sharpens up',
+    items: [
+      {
+        title: 'Nine pens in a frosted drawer',
+        body: 'Press the pen tile and a frosted-glass drawer slides up with '
+          + 'the whole set drawn as real pens: ballpoint, fountain, '
+          + 'calligraphy, pencil, crayon, marker, water brush and two '
+          + 'highlighters — all in one row, no separate shelves. Pick one '
+          + 'and it lifts into your hand while a scribble redraws itself '
+          + 'in that pen\'s own stroke, so you see what it writes like '
+          + 'before touching the plan. Size slider and colours live right '
+          + 'in the drawer.',
+        demo: 'tap',
+      },
+      {
+        title: 'Every pen keeps its character everywhere',
+        body: 'The fountain pen swells with speed, the calligraphy nib is '
+          + 'thick one way and thin the other, the crayon is broad and '
+          + 'grainy, the soft highlighter is a wide pale wash. What you '
+          + 'draw looks the same on screen, in the saved Drive PDF and on '
+          + 'paper — one stroke, one look.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'The plan reader stopped guessing',
+        body: 'The little "On the plan" row under Address no longer offers '
+          + 'unit labels like "building 2 apartment 5" as a street '
+          + 'address, and pressing the eye now opens a small box cropped '
+          + 'tight around the exact words it read — not a strip of the '
+          + 'whole sheet.',
+        demo: 'zoom',
+      },
+    ],
+  },
+  {
     date: '2026-11-01',
     title: 'The punch list files itself, and the studio tidies up',
     items: [

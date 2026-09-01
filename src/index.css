@@ -769,3 +769,12 @@ main > * { min-width: 0; }
 @media (prefers-reduced-motion: reduce) {
   .tut-pop, .tut-party { animation: none; }
 }
+
+/* The pen drawer's scribble draws itself in — a left-to-right wipe over the
+   engine-rendered sample, replayed (keyed) on every pen switch. */
+.tray-reveal { overflow: hidden; animation: trayReveal .55s ease-out both; }
+@keyframes trayReveal {
+  from { clip-path: inset(0 100% 0 0); }
+  to   { clip-path: inset(0 0 0 0); }
+}
+@media (prefers-reduced-motion: reduce) { .tray-reveal { animation: none; } }

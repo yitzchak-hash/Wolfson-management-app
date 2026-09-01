@@ -41,8 +41,28 @@ export const TOOLS: ToolPreset[] = [
     hint: 'Thick and even, for marking up on site',
   },
   {
+    id: 'fountain', label: 'Fountain', width: 2.6, opacity: 1, freehand: true, sensitivity: 1.8,
+    hint: 'A springy nib — thin when fast and light, broad when you lean in',
+  },
+  {
+    id: 'calligraphy', label: 'Calligraphy', width: 5, opacity: 1, freehand: true, sensitivity: 0.3,
+    hint: 'A chisel nib held at 45° — broad one way, hairline the other',
+  },
+  {
+    id: 'crayon', label: 'Crayon', width: 7, opacity: 0.82, freehand: true, sensitivity: 0.25,
+    hint: 'Waxy and even, for big friendly marks',
+  },
+  {
+    id: 'brush', label: 'Brush', width: 4.5, opacity: 0.92, freehand: true, sensitivity: 1.6,
+    hint: 'Swells and thins with the speed of your hand, like a wet brush',
+  },
+  {
     id: 'highlighter', label: 'Highlighter', width: 26, opacity: 0.38, freehand: true, sensitivity: 0,
     hint: 'Multiplies, so the linework underneath stays crisp',
+  },
+  {
+    id: 'highlighter-soft', label: 'Soft light', width: 34, opacity: 0.22, freehand: true, sensitivity: 0,
+    hint: 'A wider, gentler wash — for shading a whole area rather than a line',
   },
   {
     // Directly under the highlighter, where it was asked for — the two get used
@@ -142,4 +162,29 @@ export function rememberColor(hex: string) {
     const next = [hex, ...recentColors().filter(c => c !== hex)].slice(0, 8);
     localStorage.setItem(RECENT_KEY, JSON.stringify(next));
   } catch { /* private mode — a lost colour history is not worth an error */ }
+}
+
+/**
+ * Which tools take the HIGHLIGHT palette (and the highlighter's flat band +
+ * multiply blend). By prefix, so a third highlighter someday joins for free.
+ */
+export function isHighlighterTool(id: string): boolean {
+  return id.startsWith('highlighter');
+}
+
+/**
+ * Direction-shaped nibs, applied AT CAPTURE so the per-point width rides the
+ * stroke record — the screen, the print sheet and the stamped PDF then agree
+ * without any of them knowing the rule.
+ *
+ * The calligraphy chisel is held at 45°, the western manner: a segment drawn
+ * ALONG the nib's edge is a hairline, across it is the full breadth. Pure —
+ * the caller hands in the segment direction, this hands back the width
+ * multiplier the point should carry.
+ */
+export function nibShape(tool: string, w: number, dx: number, dy: number): number {
+  if (tool !== 'calligraphy') return w;
+  if (!dx && !dy) return w * 0.7;
+  const k = Math.abs(Math.sin(Math.atan2(dy, dx) - Math.PI / 4));
+  return w * (0.22 + 1.05 * k);
 }

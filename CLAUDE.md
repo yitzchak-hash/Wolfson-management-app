@@ -6650,3 +6650,66 @@ with it.
 - round32-probe's lasso count re-encoded to `[23] SELECTED`: the seeded Goals
   widget fixture (a later round) legitimately lands in the probe's lasso
   rect, so "3 SELECTED" is the product being right, not wrong.
+
+---
+
+# v2 — the full pen drawer, and the plan reader's tight crop
+
+## Nine pens, one drawer, ZERO new render paths
+The Samsung set built as approved: `fountain` · `calligraphy` · `crayon` ·
+`brush` · `highlighter-soft` join pen/pencil/marker/highlighter as AnnTool
+ids. **A pen is a PRESET plus per-point widths — never a renderer branch.**
+`annotTools.ts` carries the presets and two exports: `isHighlighterTool(id)`
+(prefix test — both highlighters and any future one) and `nibShape(tool, w,
+dx, dy)`, the capture-side character: fountain/brush swell against speed via
+`speedSensitivity`, calligraphy is directional (`|sin(angle − 45°)|` — thick
+one way, thin the other), crayon/pencil carry grain. The capture loop in
+PlanAnnotator writes those widths into `pts`; `paintStroke.ts`, printing and
+`api/plan-annotate.js` then agree for free because the character is IN the
+record. The only rule the three renderers share: `tool.startsWith('highlighter')`
+→ flat band + Multiply. Adding a pen = a preset + an ICONS entry + a
+TRAY_PENS drawing; touching paintStroke for one is the smell.
+
+## The drawer (`PenTray` in PlanAnnotator.tsx)
+Frosted glass (`rgba(255,255,255,.72)` + `backdropFilter: blur(16px)
+saturate(1.25)`), portalled to body z-[168]. All NINE stand in ONE row —
+the owner's explicit "I don't wanna do that" to Samsung's pens/highlighters
+split. Each pen is a drawn SVG (`TRAY_PENS[].head(color)`); the held pen
+lifts `translateY(-12k)` on a spring; picking another rises it in place and
+the tray STAYS OPEN so the change is seen. The scribble preview is drawn by
+the REAL `paintStroke` over a synthetic stroke whose widths come from
+`trayWidths(tool)` (nibShape for calligraphy, pulses for fountain/brush,
+grain for pencil) — the preview cannot drift from the ink because it IS the
+ink. `.tray-reveal` (index.css) wipes it in, keyed per pen. Size slider
+(`[data-tray-size]`, range scaled off the preset's own width) and colour
+chips (`[data-tray-color]`, 11 ink / 6 highlight — the palette swaps with
+`isHighlighterTool`) live in the drawer. Rail: `INK_TOOL_IDS` all collapse
+to the one tile (`t.id !== 'pen' → null`); the eraser keeps its tile.
+
+## The plan reader: unit labels are not addresses, and the eye shows the WORDS
+Two faults from the owner's Shwartz screenshot, both in `planAddress.ts`:
+- **`unitLabelOnly(s)`** — a candidate that is nothing but unit words + digits
+  ("בניין 2 דירה 5", "Apt 3 Floor 2") is refused as an address, in
+  `plausibleAddress` AND the candidate loop. The `UNIT_WORDS` regex is
+  non-global for `.test()` with a fresh `'gi'` copy for the strip — a /g
+  regex's `.test()` carries `lastIndex` state and answers wrongly every
+  second call (trap paid here).
+- **`cutoutOf` crops to the label's COLUMN**: the line's parts (widths now
+  carried on `Line.parts`) are searched for the label part and the crop is
+  `cx ± 240` units around it — 520-unit cap centred on the value otherwise,
+  padding down to 24 horizontal / 1.4 line-heights vertical. The old crop
+  padded the whole y-band, which on a wide sheet was "a strip of the whole
+  screen".
+100% accuracy on arbitrary title blocks is past local heuristics — the
+honest next step (owner-gated, not built): a vision model on the title-block
+crop, folded into an existing /api route (12-function limit), his API key in
+Vercel, cached per file id.
+
+## Probe notes (`markup2-probe.mjs` re-encoded, 24 checks)
+The tray section must NOT draw — its stroke dirties the sheet and the
+connector section's "a blank sheet is connected to nothing" fails on
+arrival. The calligraphy-widths proof rides the connector section's own
+first stroke instead, drawn as a ZIGZAG: calligraphy's width is direction,
+so a straight line holds one width and `max > min*1.5` fails for the wrong
+reason. Regressions green: planaddr, planaddr2, plantabs, drivesave-probe,
+planphone-probe, pinvoice-probe, pinauto-probe.

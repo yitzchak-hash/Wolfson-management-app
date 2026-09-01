@@ -6,7 +6,7 @@ import {
   Plus, Minus, Maximize2, Minimize2, Loader2, Pen, Pencil, Highlighter, Eraser, Minus as LineIcon,
   ArrowUpRight, Square, Circle, Type, Hand, Layers, FileDown, Check, ExternalLink,
   MessageSquare, Move, Layers2, ChevronsUpDown, User as UserIcon,
-  Monitor, ArrowRight, RotateCcw, RotateCw, MoreHorizontal,
+  Monitor, ArrowRight, RotateCcw, RotateCw, MoreHorizontal, PenTool, Brush,
 } from 'lucide-react';
 import './pdfCompat';   // must come before pdf.js
 import * as pdfjs from 'pdfjs-dist';
@@ -24,7 +24,7 @@ import {
 } from '../../data/planExport';
 import { PlanTab, PlanTabsStrip, mintTab, loadTabState, saveTabState } from './PlanTabs';
 import { PenStroke, PenSample, NibWatch, samplesOf, simplify, nearSegment } from './penInput';
-import { TOOLS, toolById, INK_COLORS, HIGHLIGHT_COLORS, rememberColor } from './annotTools';
+import { TOOLS, toolById, INK_COLORS, HIGHLIGHT_COLORS, rememberColor, isHighlighterTool, nibShape } from './annotTools';
 import { InkPicker } from './InkPicker';
 import { notePointer, isPalm, isPen, touchWasPalm } from '../../data/pencil';
 import { useMarkupScale } from '../../data/markupScale';
@@ -80,12 +80,14 @@ function useMedia(query: string): boolean {
 }
 
 /** The tools the pen flip is allowed to swap between. */
-const INK_TOOLS = new Set(['pen', 'pencil', 'marker', 'highlighter']);
+const INK_TOOLS = new Set(['pen', 'pencil', 'marker', 'fountain', 'calligraphy', 'crayon', 'brush', 'highlighter', 'highlighter-soft']);
 /** What the fat end of the Samsung pen draws with. */
 const FAT_NIB_TOOL = 'highlighter';
 
 const ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
   pen: Pen, pencil: Pencil, marker: Highlighter, highlighter: Highlighter,
+  fountain: PenTool, calligraphy: PenTool, crayon: Pencil, brush: Brush,
+  'highlighter-soft': Highlighter,
   line: LineIcon, arrow: ArrowUpRight, rect: Square, ellipse: Circle,
   text: Type, eraser: Eraser, 'eraser-object': SquareDashedMousePointer, pan: Hand, move: Move,
   bubble: MessageSquare,
@@ -200,8 +202,8 @@ export interface PlanChoice {
  * `workRef` — a mutable ref the editor writes every render, which costs no
  * re-renders and is always current when the wrapper stashes a tab away.
  */
-/** The four ink tools that share the one rail tile. */
-const INK_TOOL_IDS = ['pen', 'pencil', 'marker', 'highlighter'];
+/** Every writing tool in the pen drawer — they all share the one rail tile. */
+const INK_TOOL_IDS = ['pen', 'fountain', 'calligraphy', 'pencil', 'crayon', 'marker', 'brush', 'highlighter', 'highlighter-soft'];
 
 /**
  * The connector as a SCRIBBLE — a wavy hand-drawn line, never right-angle
@@ -243,34 +245,56 @@ function scribblePath(x1: number, y1: number, x2: number, y2: number, seed: numb
 }
 
 /**
- * The pen tray — four drawn pens standing in a row, the one in the hand
- * LIFTED, the Samsung Notes manner. Picking another pen lifts it (spring
- * transition) while the old one settles; the tray stays open so the change
- * is SEEN, and closes on the backdrop or Escape. Each pen wears a band of
- * the current ink colour.
+ * THE PEN DRAWER — the Samsung Notes manner, built as approved on the
+ * owner's preview page: a frosted rounded drawer floating over the sheet,
+ * every writing tool standing nib-up in ONE row (his ruling — no
+ * pens/highlighters split), the one in the hand LIFTED on a slow spring,
+ * and a scribble above them that redraws in the new pen's own handwriting.
+ *
+ * The scribble is drawn by the REAL ink engine (paintStroke) from a
+ * synthetic stroke whose per-point widths are shaped like the pen — a
+ * pulsing fountain nib, the calligraphy chisel via nibShape, a brush swell —
+ * so the preview cannot drift from what the pen actually draws. Size and
+ * colour live in the drawer, Samsung-style, and edit the studio's own
+ * width/colour state directly.
  */
-const TRAY_PENS: { id: string; label: string; barrel: string; tip: string; tipClip: string }[] = [
-  { id: 'pen', label: 'Pen',
-    barrel: 'linear-gradient(180deg,#2c4f78,#1e3a5f)',
-    tip: 'linear-gradient(180deg,#c9a94a,#8a7433)',
-    tipClip: 'polygon(0 0, 100% 0, 56% 100%, 44% 100%)' },
-  { id: 'pencil', label: 'Pencil',
-    barrel: 'repeating-linear-gradient(90deg,#f5b64a 0 5px,#e8a53b 5px 10px)',
-    tip: 'linear-gradient(180deg,#e8d5ae 0 55%,#4b5563 55%)',
-    tipClip: 'polygon(0 0, 100% 0, 54% 100%, 46% 100%)' },
-  { id: 'marker', label: 'Marker',
-    barrel: 'linear-gradient(180deg,#475569,#334155)',
-    tip: 'linear-gradient(180deg,#94a3b8,#64748b)',
-    tipClip: 'polygon(12% 0, 88% 0, 70% 100%, 30% 100%)' },
-  { id: 'highlighter', label: 'Highlight',
-    barrel: 'linear-gradient(180deg,rgba(253,224,71,.9),rgba(250,204,21,.9))',
-    tip: 'rgba(253,224,71,.95)',
-    tipClip: 'polygon(18% 0, 82% 0, 92% 100%, 42% 100%)' },
+const TRAY_PENS: { id: string; head: (c: string) => string }[] = [
+  { id: 'pen', head: c => `<path d="M17 4 L22 22 L12 22 Z" fill="#8b95a5"/><circle cx="17" cy="5" r="1.6" fill="#5b6572"/><rect x="10" y="22" width="14" height="8" rx="2" fill="#e5e9ef"/>` },
+  { id: 'fountain', head: () => `<path d="M17 2 C13 10 11 16 11 22 L11 30 L23 30 L23 22 C23 16 21 10 17 2 Z" fill="url(#trayNib)" stroke="#98a3b3" stroke-width=".8"/><line x1="17" y1="7" x2="17" y2="24" stroke="#7c8798" stroke-width="1.1"/><circle cx="17" cy="21" r="1.9" fill="#7c8798"/>` },
+  { id: 'calligraphy', head: () => `<path d="M11 6 L23 2 L24 12 L10 16 Z" fill="#aeb8c6" stroke="#8b95a5" stroke-width=".8"/><rect x="10" y="15" width="14" height="15" rx="2" fill="#dfe4ea"/>` },
+  { id: 'pencil', head: () => `<path d="M17 2 L21.5 14 L12.5 14 Z" fill="#3f4753"/><path d="M17 2 L24 26 L10 26 Z" fill="#e7cfa4" opacity=".9" transform="translate(0,4)"/>` },
+  { id: 'crayon', head: c => `<path d="M17 3 L23 16 L11 16 Z" fill="${c}" opacity=".85"/><rect x="10" y="16" width="14" height="14" rx="2" fill="${c}" opacity=".55"/>` },
+  { id: 'marker', head: () => `<path d="M13 4 L21 4 L23 14 L11 14 Z" fill="#525c6b"/><rect x="9" y="14" width="16" height="16" rx="3" fill="#3d4654"/>` },
+  { id: 'brush', head: c => `<path d="M17 2 C14 8 12.5 14 13 20 L21 20 C21.5 14 20 8 17 2 Z" fill="#4b5563"/><path d="M13 20 L21 20 L22 28 L12 28 Z" fill="#94a3b8"/>` },
+  { id: 'highlighter', head: c => `<path d="M13 4 L21 4 L24 18 L10 18 Z" fill="${c}" opacity=".6"/><rect x="9" y="18" width="16" height="12" rx="3" fill="#e8ebf0"/>` },
+  { id: 'highlighter-soft', head: c => `<path d="M17 4 C21 4 23 8 23 13 L23 18 L11 18 L11 13 C11 8 13 4 17 4 Z" fill="${c}" opacity=".45"/><rect x="9" y="18" width="16" height="12" rx="3" fill="#e8ebf0"/>` },
 ];
 
-function PenTray({ at, up, current, color, ts, onPick, onClose }: {
-  at: { x: number; y: number }; up: boolean; current: string; color: string; ts: number;
-  onPick: (id: string) => void; onClose: () => void;
+/** The squiggle every pen writes, normalised 0..1 — one relaxed wave. */
+const TRAY_PATH: [number, number][] = Array.from({ length: 48 }, (_, i) => {
+  const t = i / 47;
+  return [0.04 + t * 0.92, 0.5 - Math.sin(t * Math.PI * 3.1) * 0.3 - Math.sin(t * Math.PI) * 0.05];
+});
+
+/** Per-point widths in the pen's own character — the engine does the rest. */
+function trayWidths(tool: string): number[] {
+  return TRAY_PATH.map(([x, y], i) => {
+    const t = i / (TRAY_PATH.length - 1);
+    if (tool === 'fountain') return 0.55 + 0.9 * Math.abs(Math.sin(t * Math.PI * 3.1));
+    if (tool === 'brush') return 0.4 + 1.3 * Math.sin(t * Math.PI);
+    if (tool === 'calligraphy') {
+      const prev = TRAY_PATH[Math.max(0, i - 1)];
+      return nibShape('calligraphy', 1, x - prev[0], (y - prev[1]) * 0.28);
+    }
+    if (tool === 'pencil') return 0.85 + 0.3 * Math.sin(t * 40);   // grain
+    return 1;
+  });
+}
+
+function PenTray({ at, up, current, color, width, onPick, onColor, onWidth, onClose, ts }: {
+  at: { x: number; y: number }; up: boolean; current: string; color: string; width: number;
+  onPick: (id: string) => void; onColor: (c: string) => void; onWidth: (w: number) => void;
+  onClose: () => void; ts: number;
 }) {
   // The tray owns Escape — capture + stopImmediatePropagation, or one press
   // would also put the tool down and start closing the studio (the ladder).
@@ -285,53 +309,138 @@ function PenTray({ at, up, current, color, ts, onPick, onClose }: {
     return () => window.removeEventListener('keydown', key, true);
   }, [onClose]);
 
-  const penW = Math.round(26 * ts);
-  const penH = Math.round(84 * ts);
-  const slotW = Math.round(56 * ts);
-  const W = TRAY_PENS.length * (slotW + 8) + 24;
-  const H = penH + 52 * ts;
+  // The wall's giant button scale would make nine pens wider than the screen —
+  // the drawer grows more gently than the chrome.
+  const k = Math.min(ts, 1.5);
+  const slotW = Math.round(44 * k);
+  const penW = Math.round(34 * k);
+  const penH = Math.round(104 * k);
+  const W = Math.min(TRAY_PENS.length * (slotW + 4) + 40, window.innerWidth - 16);
+  const H = Math.round(penH + 178 * k);
   const left = Math.max(8, Math.min(window.innerWidth - W - 8, up ? at.x - W / 2 : at.x));
   const top = up
     ? Math.max(8, at.y - H)
     : Math.max(8, Math.min(window.innerHeight - H - 8, at.y - H / 2));
 
+  const preset = toolById(current);
+  const palette = isHighlighterTool(current) ? HIGHLIGHT_COLORS : INK_COLORS;
+  const lo = Math.max(0.5, preset.width * 0.35);
+  const hi = preset.width * 2.6;
+
+  /**
+   * The scribble, drawn by the app's own engine onto a small canvas. Re-keyed
+   * per pen so the wipe reveal replays — the "draws itself" moment.
+   */
+  const scribRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const c = scribRef.current;
+    if (!c) return;
+    const dpr = Math.max(2, window.devicePixelRatio || 1);
+    c.width = Math.round(c.clientWidth * dpr);
+    c.height = Math.round(c.clientHeight * dpr);
+    const g = c.getContext('2d')!;
+    g.clearRect(0, 0, c.width, c.height);
+    const ws = trayWidths(current);
+    const pts: number[] = [];
+    TRAY_PATH.forEach(([x, y], i) => { pts.push(x, y, ws[i]); });
+    paintStroke(g, c, {
+      id: 'tray', page: 0, tool: current as AnnTool, color,
+      // widths are against the 1000-unit reference page; the canvas is far
+      // narrower, so the same number draws far too thin — scale it so the
+      // sample reads at the weight the sheet will show.
+      width: Math.max(2, width * 2.6),
+      opacity: preset.opacity, pts,
+    });
+  }, [current, color, width, preset.opacity]);
+
   return createPortal(
     <>
       <div className="fixed inset-0 z-[168]" onClick={onClose} />
       <div data-pen-tray
-        className="fixed z-[169] rounded-2xl shadow-2xl flex items-end gap-2 px-3 pb-2"
-        style={{ left, top, paddingTop: Math.round(20 * ts),
-                 backgroundColor: NAVY, border: '1px solid rgba(255,255,255,.14)' }}>
-        {TRAY_PENS.map(p => {
-          const active = p.id === current;
-          return (
-            <button key={p.id} data-pen={p.id} onClick={() => onPick(p.id)}
-              className="flex flex-col items-center gap-1.5"
-              style={{ width: slotW }}>
-              <span style={{
-                width: penW, height: penH, display: 'block', position: 'relative',
-                transform: active ? `translateY(${-Math.round(13 * ts)}px)` : 'translateY(0)',
-                // A slower, silkier spring than the first cut — the snap read
-                // as a jump rather than a pen being picked up (the owner).
-                transition: 'transform .55s cubic-bezier(.3,1.25,.35,1.02), filter .4s ease',
-                filter: active ? 'drop-shadow(0 7px 9px rgba(0,0,0,.5))' : 'none',
-              }}>
-                <span style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: '22%',
-                  borderRadius: 6, background: p.barrel }} />
-                {/* a band of the ink colour actually in the pen */}
-                <span style={{ position: 'absolute', left: 0, right: 0, top: '56%', height: '9%',
-                  backgroundColor: color }} />
-                <span style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '23%',
-                  clipPath: p.tipClip, background: p.tip }} />
-              </span>
-              <span className="font-bold leading-none"
-                style={{ fontSize: Math.max(9, 9 * ts),
-                         color: active ? '#fff' : 'rgba(255,255,255,.6)' }}>
-                {p.label}
-              </span>
-            </button>
-          );
-        })}
+        className="fixed z-[169] rounded-3xl shadow-2xl"
+        style={{
+          left, top, width: W, padding: `${Math.round(10 * k)}px ${Math.round(14 * k)}px ${Math.round(12 * k)}px`,
+          backgroundColor: 'rgba(255,255,255,.72)',
+          WebkitBackdropFilter: 'blur(16px) saturate(1.25)',
+          backdropFilter: 'blur(16px) saturate(1.25)',
+          border: '1px solid rgba(255,255,255,.78)',
+          boxShadow: '0 22px 60px rgba(15,23,42,.30), 0 2px 8px rgba(15,23,42,.10)',
+          overflowX: W >= window.innerWidth - 16 ? 'auto' : 'visible',
+        }}>
+        {/* the scribble stage — keyed so the wipe replays on every switch */}
+        <div key={current} className="tray-reveal" style={{ height: Math.round(44 * k), margin: '0 4px' }}>
+          <canvas ref={scribRef} data-tray-scribble className="w-full h-full block" />
+        </div>
+        {/* the pens, ONE row */}
+        <div className="flex items-end justify-between" style={{ paddingBottom: Math.round(8 * k) }}>
+          {TRAY_PENS.map(p => {
+            const active = p.id === current;
+            const label = toolById(p.id).label;
+            return (
+              <button key={p.id} data-pen={p.id} onClick={() => onPick(p.id)}
+                title={toolById(p.id).hint}
+                className="flex flex-col items-center"
+                style={{ width: slotW, background: 'none', border: 0, cursor: 'pointer', gap: 4 }}>
+                <span style={{
+                  width: penW, height: penH, display: 'block', position: 'relative',
+                  transform: active ? `translateY(${-Math.round(12 * k)}px)` : 'translateY(4px)',
+                  transition: 'transform .55s cubic-bezier(.3,1.25,.35,1.02), filter .4s ease',
+                  filter: active ? 'drop-shadow(0 10px 10px rgba(15,23,42,.30))' : 'saturate(.85)',
+                }}>
+                  <svg viewBox="0 0 34 32" style={{ position: 'absolute', left: 0, top: 0, width: penW, height: Math.round(penW * 32 / 34), overflow: 'visible' }}>
+                    <defs><linearGradient id="trayNib" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0" stopColor="#dfe4ea" /><stop offset=".5" stopColor="#f8fafc" /><stop offset="1" stopColor="#c4ccd7" />
+                    </linearGradient></defs>
+                    <g dangerouslySetInnerHTML={{ __html: p.head(color) }} />
+                  </svg>
+                  {/* the shared white barrel + a band of the ink in the pen */}
+                  <span style={{ position: 'absolute', left: '13%', right: '13%', top: Math.round(penW * 0.86), bottom: 0,
+                    borderRadius: '7px 7px 9px 9px',
+                    background: 'linear-gradient(90deg,#f2f4f7 0%,#ffffff 34%,#f6f7f9 62%,#dde2e9 100%)',
+                    boxShadow: 'inset 0 0 0 1px rgba(15,23,42,.07)' }} />
+                  <span style={{ position: 'absolute', left: '13%', right: '13%', top: '62%', height: '10%',
+                    backgroundColor: color, transition: 'background .25s ease' }} />
+                </span>
+                <span style={{ font: `700 ${Math.max(8, 8.5 * k)}px Inter, sans-serif`,
+                  color: active ? NAVY : 'rgba(31,41,55,.45)', whiteSpace: 'nowrap' }}>
+                  {label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        {/* size, the Samsung manner */}
+        <div className="flex items-center" style={{ gap: 8, margin: `0 4px` }}>
+          <button data-tray-minus onClick={() => onWidth(Math.max(lo, width - (hi - lo) / 9))}
+            style={{ border: 0, background: 'none', color: '#475569', font: '700 16px Inter', cursor: 'pointer', padding: '2px 6px' }}>−</button>
+          <div style={{ position: 'relative', flex: 1, height: 26 }}>
+            <div style={{ position: 'absolute', inset: '11px 6px', borderRadius: 4,
+              backgroundImage: 'radial-gradient(circle, #cbd5e1 1.6px, transparent 1.8px)',
+              backgroundSize: 'calc((100% - 4px) / 9) 4px', backgroundPosition: '2px 0', backgroundRepeat: 'repeat-x' }} />
+            <input data-tray-size type="range" min={lo} max={hi} step={(hi - lo) / 18} value={width}
+              onChange={e => onWidth(+e.target.value)} className="ink-slider"
+              style={{ position: 'absolute', inset: 0, width: '100%', margin: 0 }}
+              aria-label="Pen size" />
+          </div>
+          <button data-tray-plus onClick={() => onWidth(Math.min(hi, width + (hi - lo) / 9))}
+            style={{ border: 0, background: 'none', color: '#475569', font: '700 16px Inter', cursor: 'pointer', padding: '2px 6px' }}>+</button>
+        </div>
+        {/* the app's own colours — highlighters take the highlight shades */}
+        <div data-tray-colors className="flex justify-center" style={{ gap: 7, marginTop: 8, flexWrap: 'wrap' }}>
+          {palette.map(c => (
+            <button key={c} data-tray-color={c} onClick={() => onColor(c)}
+              aria-label="colour"
+              style={{
+                width: 22, height: 22, borderRadius: 999, border: 0, cursor: 'pointer',
+                backgroundColor: c,
+                boxShadow: color === c
+                  ? `0 0 0 2px #fff, 0 0 0 4px ${NAVY}`
+                  : 'inset 0 0 0 1px rgba(15,23,42,.15)',
+                transform: color === c ? 'scale(1.15)' : 'none',
+                transition: 'transform .18s ease',
+              }} />
+          ))}
+        </div>
       </div>
     </>,
     document.body,
@@ -2048,11 +2157,17 @@ function PlanEditor({
         const { nx, ny } = norm(raw);
         const s = d.pen.push(raw, performance.now());
         const last = d.pts[d.pts.length - 1];
+        // Direction-shaped nibs (the calligraphy chisel) are applied HERE, at
+        // capture, so the width rides the point into the record — screen,
+        // print and stamped PDF then agree without knowing the rule.
+        const w = last
+          ? nibShape(d.tool ?? tool, s.w, (nx - last.x) * c.width, (ny - last.y) * c.height)
+          : nibShape(d.tool ?? tool, s.w, 0, 0);
         if (last && Math.abs(nx - last.x) < stepX && Math.abs(ny - last.y) < stepY) {
-          if (s.w > last.w) last.w = s.w;
+          if (w > last.w) last.w = w;
           continue;
         }
-        d.pts.push({ x: nx, y: ny, w: s.w });
+        d.pts.push({ x: nx, y: ny, w });
       }
       scheduleLiveDraw();
       setPenSource(d.pen.usedSource);
@@ -2566,8 +2681,8 @@ function PlanEditor({
     const p = toolById(id);
     if (p.width) setWidth(p.width);
     setOpacity(p.opacity);
-    if (id === 'highlighter' && !HIGHLIGHT_COLORS.includes(color)) setColor(HIGHLIGHT_COLORS[0]);
-    if (id !== 'highlighter' && HIGHLIGHT_COLORS.includes(color)) setColor(INK_COLORS[0]);
+    if (isHighlighterTool(id) && !HIGHLIGHT_COLORS.includes(color)) setColor(HIGHLIGHT_COLORS[0]);
+    if (!isHighlighterTool(id) && HIGHLIGHT_COLORS.includes(color)) setColor(INK_COLORS[0]);
   }
 
   // ---- versions ----------------------------------------------------------
@@ -2970,7 +3085,7 @@ function PlanEditor({
     setDirty(true);
   }
 
-  const palette = tool === 'highlighter' ? HIGHLIGHT_COLORS : INK_COLORS;
+  const palette = isHighlighterTool(tool) ? HIGHLIGHT_COLORS : INK_COLORS;
   const marksOnPage = strokes.filter(s => s.page === page).length;
 
   /**
@@ -2998,7 +3113,7 @@ function PlanEditor({
          * it, and a press while armed opens the pen tray. The three absorbed
          * tools render nothing of their own.
          */
-        if (t.id === 'pencil' || t.id === 'marker' || t.id === 'highlighter') return null;
+        if (INK_TOOL_IDS.includes(t.id) && t.id !== 'pen') return null;
         if (t.id === 'pen') {
           const cur = toolById(inkTool);
           const InkIcon = ICONS[inkTool] ?? Pen;
@@ -3137,8 +3252,9 @@ function PlanEditor({
     >
       {/* The pen tray, over everything, sealed to itself. */}
       {penTray && !locked && (
-        <PenTray at={penTray} up={penTray.up} current={inkTool} color={color} ts={ts}
-          onPick={id => pick(id)} onClose={() => setPenTray(null)} />
+        <PenTray at={penTray} up={penTray.up} current={inkTool} color={color} width={width} ts={ts}
+          onPick={id => pick(id)} onColor={c => setColor(c)} onWidth={w => setWidth(w)}
+          onClose={() => setPenTray(null)} />
       )}
       {/* The version-to-plan connector — replayed (keyed) on every switch. */}
       {vlink && (

@@ -40,7 +40,7 @@ interface Line {
   text: string;
   hebrew: boolean;
   x1: number; y1: number; x2: number; y2: number;
-  parts: { x: number; str: string }[];
+  parts: { x: number; str: string; w?: number }[];
 }
 
 const LABEL = /(כתובת|address)/i;
@@ -174,9 +174,27 @@ function columnLine(label: Line, band: Line): Line {
   return { ...band, parts };
 }
 
+/**
+ * A UNIT label wearing an address's clothes: "בניין 2 דירה 5", "קומה 3" —
+ * building/apartment/floor words plus digits and nothing else. That is which
+ * unit the sheet describes, not where the building stands, and offering it
+ * back as the address was the owner's Shwartz screenshot. A real address that
+ * merely ENDS in "דירה 5" survives — the street part is the something-else.
+ */
+const UNIT_WORDS = /(בניין|בנין|מבנה|דירה|קומה|מגרש|יחידה|כניסה|building|bldg|apt|apartment|floor|unit)/i;
+function unitLabelOnly(s: string): boolean {
+  if (!UNIT_WORDS.test(s)) return false;
+  // A fresh global copy per call — a shared /g regex's lastIndex is state,
+  // and a stateful test() answers wrongly every second time.
+  const rest = s.replace(new RegExp(UNIT_WORDS.source, 'gi'), ' ')
+    .replace(/[\d\s.,:/\-–—']+/g, ' ').trim();
+  return rest.length < 2;
+}
+
 /** A believable address VALUE: carries a number, a street word, or at least
  *  two real Hebrew words. Anything less is scenery, and silence beats junk. */
 function plausibleAddress(s: string): boolean {
+  if (unitLabelOnly(s)) return false;
   if (/\d/.test(s) || STREET.test(s)) return true;
   return s.split(/\s+/).filter(w => w.replace(/[^֐-׿]/g, '').length >= 2).length >= 2;
 }
@@ -241,11 +259,11 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
       if (line) {
         line.x1 = Math.min(line.x1, r.x); line.x2 = Math.max(line.x2, r.x + r.w);
         line.y2 = Math.max(line.y2, r.y + r.h);
-        line.parts.push({ x: r.x, str: r.str });
+        line.parts.push({ x: r.x, str: r.str, w: r.w });
       } else {
         lines.push({
           text: '', hebrew: false, x1: r.x, y1: r.y, x2: r.x + r.w, y2: r.y + r.h,
-          parts: [{ x: r.x, str: r.str }],
+          parts: [{ x: r.x, str: r.str, w: r.w }],
         });
       }
     }
@@ -298,8 +316,9 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
       if (!score) return;
       const clean = text.replace(/\s+/g, ' ').trim();
       if (clean.length < 3 || clean.length > 90) return;
-      // Mostly digits is a number wearing a street word, not an address.
-      if (digitShare(clean) > 0.55 || PHONE.test(clean)) return;
+      // Mostly digits is a number wearing a street word, not an address —
+      // and "בניין 2 דירה 5" is the UNIT, not the street.
+      if (digitShare(clean) > 0.55 || PHONE.test(clean) || unitLabelOnly(clean)) return;
       score += titleBlockBonus(l);
       if (!bestAddr || score > bestAddr.score) bestAddr = { line: l, extra, text: clean, score };
     });
@@ -335,16 +354,34 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
      * the whole sheet.
      */
     const cutoutOf = async (line: Line, extra?: Line): Promise<string | undefined> => {
-      const rx1 = Math.min(line.x1, extra?.x1 ?? line.x1);
-      const rx2 = Math.max(line.x2, extra?.x2 ?? line.x2);
+      let rx1 = Math.min(line.x1, extra?.x1 ?? line.x1);
+      let rx2 = Math.max(line.x2, extra?.x2 ?? line.x2);
       const ry1 = Math.min(line.y1, extra?.y1 ?? line.y1);
       const ry2 = Math.max(line.y2, extra?.y2 ?? line.y2);
       const lineH = Math.max(8, ry2 - ry1);
+      /**
+       * TIGHT, never a strip of the whole sheet. A "line" is a y-band across
+       * the page, so its box can span the full width with scenery in it —
+       * which rendered as "a strip of the whole screen" (the owner). Crop to
+       * the LABEL'S COLUMN when the band carries one (the value lives there),
+       * and failing that cap the width around the band's middle.
+       */
+      const lp = [...line.parts, ...(extra?.parts ?? [])]
+        .find(pt => LABEL.test(pt.str) || PHONE_LABEL.test(pt.str));
+      if (lp) {
+        const cx = lp.x + (lp.w ?? 40) / 2;
+        rx1 = Math.max(rx1, cx - 240);
+        rx2 = Math.min(rx2, cx + 240);
+      }
+      if (rx2 - rx1 > 520) {
+        const mid = (rx1 + rx2) / 2;
+        rx1 = mid - 260; rx2 = mid + 260;
+      }
       const [px1, py1, px2, py2] = view.viewBox;
-      const cx1 = Math.max(px1, rx1 - Math.max(30, (rx2 - rx1) * 0.25));
-      const cx2 = Math.min(px2, rx2 + Math.max(30, (rx2 - rx1) * 0.25));
-      const cy1 = Math.max(py1, ry1 - lineH * 2.5);
-      const cy2 = Math.min(py2, ry2 + lineH * 2.5);
+      const cx1 = Math.max(px1, rx1 - 24);
+      const cx2 = Math.min(px2, rx2 + 24);
+      const cy1 = Math.max(py1, ry1 - lineH * 1.4);
+      const cy2 = Math.min(py2, ry2 + lineH * 1.4);
 
       let scale = Math.min(8, Math.max(2, 1000 / Math.max(1, cx2 - cx1)));
       // A refused canvas is a blank cutout — cap the AREA, not just the scale.
