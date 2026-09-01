@@ -1,8 +1,9 @@
 // The save story, end to end on the keyed server: the countdown sits BESIDE
-// the arrow, the Save button wears the Drive mark, the first press files, a
-// press with nothing new SAYS so (and sends nothing), a press after a change
-// says "updated" and carries updateFileId so the server updates the same
-// file — and the pins ride in the stamp payload.
+// the arrow, the Save button wears the Drive mark, and Save LOCKS the
+// version (the owner's model) — v1 seals, the next mark starts v2 in a
+// fresh file, the autosave tends the OPEN version's one file (update, not
+// copies), a press with nothing new says so and sends nothing — and the
+// pins ride in the stamp payload.
 import { chromium } from 'playwright';
 import { PDFDocument, rgb } from 'pdf-lib';
 import { realisticWolfson, applySeed } from './seed.mjs';
@@ -100,28 +101,29 @@ const layout = await page.evaluate(() => {
 check(layout.count && /^\d+s$/.test(layout.text ?? ''), `the countdown shows seconds (${layout.text})`);
 check(layout.gap != null && layout.gap >= 0, `and sits beside the arrow, not over it (gap ${layout.gap}px)`);
 
-// First manual save: files in Drive, no updateFileId, pins in the payload.
+// First manual save: files v1, LOCKS it, no updateFileId, pins in the payload.
 await saveBtn.click();
 await page.waitForTimeout(1500);
 check(stampBodies.length === 1, 'the first Save sent one stamp request');
 const b1 = stampBodies[0] ?? {};
-check(!b1.updateFileId, 'the first filing creates (no updateFileId)');
+check(!b1.updateFileId && b1.version === 1, 'the first filing creates version 1 (no updateFileId)');
 check((b1.strokes ?? []).some(s => s.tool === 'ellipse') && (b1.strokes ?? []).some(s => s.tool === 'text' && s.text === '1'),
   'the punch-list pin rides in the stamp payload');
 let text = await page.evaluate(() => document.body.innerText);
-check(/filed in Drive/i.test(text), 'the toast says it was filed');
+check(/filed in Drive.*locked/i.test(text) && /starts version 2/i.test(text),
+  'the toast says v1 was filed AND locked, next mark starts v2');
+check((await saveBtn.textContent())?.trim() === 'Save v2',
+  `the button rolls to the NEXT version (${(await saveBtn.textContent())?.trim()}), was ${label0}`);
 
-// Nothing new: Save says so and sends nothing.
+// Nothing new on a sealed version: Save says so and sends nothing.
 await page.waitForTimeout(2600);
 await saveBtn.click();
 await page.waitForTimeout(900);
 text = await page.evaluate(() => document.body.innerText);
-check(/already in Drive/i.test(text), 'a press with nothing new says "already in Drive"');
+check(/already locked/i.test(text), 'a press on the sealed version says "already locked"');
 check(stampBodies.length === 1, 'and no second upload went out');
-check((await saveBtn.textContent())?.trim() === label0,
-  `the button still wears the sketch's own version (${label0})`);
 
-// A change, then Save: UPDATES the same file.
+// A new mark BEGINS version 2 by itself; Save files and locks it, fresh file.
 await page.mouse.move(stage.x + stage.w * 0.5, stage.y + stage.h * 0.6);
 await page.mouse.down();
 await page.mouse.move(stage.x + stage.w * 0.6, stage.y + stage.h * 0.62);
@@ -130,19 +132,40 @@ await page.mouse.up();
 await page.waitForTimeout(600);
 await saveBtn.click();
 await page.waitForTimeout(1500);
-check(stampBodies.length === 2, 'the changed sketch went up again');
-check(stampBodies[1]?.updateFileId === 'STAMPED1', '…as an UPDATE of the same Drive file');
+check(stampBodies.length === 2, 'the next mark + Save went up as its own stamp');
+check(!stampBodies[1]?.updateFileId && stampBodies[1]?.version === 2,
+  'version 2 gets its OWN fresh Drive file — v1\'s stays sealed');
 text = await page.evaluate(() => document.body.innerText);
-check(/updated in Drive/i.test(text), 'and the toast says "updated"');
+check(/Version 2 filed in Drive and locked/i.test(text), 'and the toast locks v2');
 
-// The idle autosave also updates in place — wait out the 9s clock.
+// The idle autosave tends the OPEN version's one file: first push creates
+// version 3's file, the next push UPDATES it — never a second copy.
 await page.mouse.move(stage.x + stage.w * 0.3, stage.y + stage.h * 0.7);
 await page.mouse.down();
 await page.mouse.move(stage.x + stage.w * 0.4, stage.y + stage.h * 0.72);
 await page.mouse.up();
 await page.waitForTimeout(11000);
-check(stampBodies.length === 3, 'the idle autosave pushed by itself');
-check(stampBodies[2]?.updateFileId === 'STAMPED2', 'and it too updates the sketch\'s one file');
+check(stampBodies.length === 3, 'the idle autosave pushed version 3 by itself');
+check(!stampBodies[2]?.updateFileId && stampBodies[2]?.version === 3,
+  'a freshly begun version creates its own file');
+await page.mouse.move(stage.x + stage.w * 0.32, stage.y + stage.h * 0.78);
+await page.mouse.down();
+await page.mouse.move(stage.x + stage.w * 0.45, stage.y + stage.h * 0.8);
+await page.mouse.up();
+await page.waitForTimeout(11000);
+check(stampBodies.length === 4, 'the second pause pushed again');
+check(stampBodies[3]?.updateFileId === 'STAMPED3' && stampBodies[3]?.version === 3,
+  'and it UPDATES version 3\'s one file — no pile of copies');
+
+// Save after the autosave already sent: the press SEALS v3 without another
+// upload — the bytes are up there, the lock is the news.
+await saveBtn.click();
+await page.waitForTimeout(900);
+text = await page.evaluate(() => document.body.innerText);
+check(/Version 3 locked/i.test(text) && /starts version 4/i.test(text),
+  'Save on an already-sent version locks it and announces v4');
+check(stampBodies.length === 4, 'without re-uploading anything');
+check((await saveBtn.textContent())?.trim() === 'Save v4', 'the button rolls to v4');
 
 console.log(fails ? `\n${fails} FAILURES` : '\nALL PASS');
 await browser.close();

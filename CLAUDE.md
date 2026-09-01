@@ -6530,3 +6530,20 @@ three toasts, updateFileId on re-save AND on the idle autosave, pins in
 the payload) · `pinstamp-probe` (9) · `plansubfolders-probe` (7) ·
 `tvzoom-probe` (12). Regressions green: planviewer, planlayers, plantabs,
 planphone, plandownload, planaddr, pinvoice-probe.
+
+## OWNER REFINEMENT (2026-09-01): Save LOCKS the version
+His model, built the same day: **Save v1 SEALS version 1** — record, number
+and Drive file frozen as they stand — and the very next mark begins version
+2 by itself, in a fresh Drive file, `basedOn` the sealed one. The autosave
+tends the OPEN version's single file (update-in-place, the anti-spam rule
+above, now scoped per version); the button always wears the NEXT thing a
+press would seal. A Save press whose bytes the autosave already pushed
+locks WITHOUT re-uploading ("Version 3 locked — … starts version 4"); a
+press on an already-sealed sketch is the one true no-op and says so.
+Sealing runs `startNewSketch()` + `setBasedOn(sealed)` — and must RESTORE
+`pinSigRef` after it (startNewSketch clears it, and a cleared pin signature
+made the very next press re-stamp and claim a number instead of answering
+"already locked"). `lastFiledRef` carries the sealed number for that toast
+— asking `claimVersion()` there would CLAIM the next version as a side
+effect of printing a sentence. Pins-only saves never seal (no record).
+`drivesave-probe` re-encoded: 22 checks, the whole ladder v1→v4.

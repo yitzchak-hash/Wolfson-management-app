@@ -34,23 +34,25 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     title: 'The markup knows exactly what Drive has',
     items: [
       {
-        title: 'One file per sketch — never a pile of copies',
+        title: 'One file per version — never a pile of copies',
         body: 'While you draw, the markup is kept on the computer instantly '
           + 'and pushed to Drive a few seconds after you pause — and every '
-          + 'push now brings the SAME file up to date instead of filing '
-          + 'another copy. A morning of colouring is one tidy PDF in '
-          + 'Annotated Plans, not twelve near-identical ones. Drive keeps '
-          + 'its own history of that file, so nothing pushed is ever lost.',
+          + 'push brings the open version\'s ONE file up to date instead '
+          + 'of filing another copy. A morning of colouring is one tidy '
+          + 'PDF per locked version in Annotated Plans, not twelve '
+          + 'near-identical ones — and the computer dying mid-scribble '
+          + 'loses nothing.',
         demo: 'sparkle',
       },
       {
-        title: 'Save says what actually happened',
-        body: 'The Save button wears the Drive mark so it is clear where it '
-          + 'files, and it answers every press: "filed in Drive" the first '
-          + 'time, "updated in Drive" after a change, and "already in Drive '
-          + '— nothing new" when there is nothing to send. The little '
-          + 'countdown to the automatic save now sits beside the arrow '
-          + 'instead of on top of it.',
+        title: 'Save LOCKS the version',
+        body: 'Press Save v1 and version 1 is sealed in Drive as it stands — '
+          + 'your very next mark starts version 2 by itself, in its own '
+          + 'file, and so on. The button wears the Drive mark so it is '
+          + 'clear where it files, and it answers every press in words: '
+          + 'filed and locked, updated and locked, or "already locked — '
+          + 'nothing new". The little countdown to the automatic save now '
+          + 'sits beside the arrow instead of on top of it.',
         demo: 'tap',
       },
       {

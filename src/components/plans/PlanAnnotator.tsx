@@ -2029,6 +2029,14 @@ function PlanEditor({
   myPinsRef.current = myPins;
   /** What the last stamp said about the pins, so "already in Drive" is honest. */
   const pinSigRef = useRef<string | null>(null);
+  /**
+   * The last version SEALED by a Save press (the owner's model, 2026-09-01):
+   * Save v1 LOCKS version 1 — the next mark begins version 2 by itself, in a
+   * fresh Drive file, and the autosave tends THAT file until v2 is sealed in
+   * turn. Kept in a ref so the "already in Drive" toast can name the sealed
+   * version without claiming a new number by asking claimVersion().
+   */
+  const lastFiledRef = useRef<number | null>(null);
   const pinSig = useCallback(() =>
     myPinsRef.current.map(p => `${p.id}${p.resolvedAt ? 'r' : ''}`).join(','), []);
   /** The sketch's Drive file — this session's stamp first, a restored tab's record second. */
@@ -2158,6 +2166,7 @@ function PlanEditor({
       });
       stampedFileRef.current = out.fileId;
       pinSigRef.current = pinSig();
+      lastFiledRef.current = claimVersion();
       if (versionIdRef.current) {
         updatePlanAnnotation(versionIdRef.current, {
           driveFileId: out.fileId, driveUrl: out.webViewLink,
@@ -2362,10 +2371,24 @@ function PlanEditor({
      */
     // 'sent' is only reachable while the strokes as-drawn have gone up — any
     // later mark flips it back to 'local' — so it, plus an unchanged pin list,
-    // IS "nothing new". (`dirty` is the wrong witness: the autosave leaves it
-    // raised after a push.)
+    // IS "nothing new in Drive". (`dirty` is the wrong witness: the autosave
+    // leaves it raised after a push.) But a Save press still means something
+    // here: it SEALS the version the autosave has been tending, so the next
+    // mark starts the one after (the owner's lock model). Only a press on an
+    // already-sealed sketch is a true no-op, and it says so.
     if (saveState === 'sent' && pinSig() === pinSigRef.current) {
-      onToast?.(`Version ${claimVersion()} is already in Drive — nothing new since it was filed.`);
+      if (strokes.length && sketchVersion.current != null) {
+        const sealed = sketchVersion.current;
+        lastFiledRef.current = sealed;
+        startNewSketch();
+        setBasedOn(sealed);
+        onToast?.(`Version ${sealed} locked — it is already in Drive, and your next mark starts version ${sealed + 1}.`);
+      } else {
+        const v = lastFiledRef.current;
+        onToast?.(v
+          ? `Version ${v} is already locked in Drive — nothing new since.`
+          : 'Already in Drive — nothing new since it was filed.');
+      }
       return;
     }
     if (!backendReady || !parentFolderId) {
@@ -2401,16 +2424,27 @@ function PlanEditor({
       pinSigRef.current = pinSig();
       // A pins-only stamp keeps no version record — the version list is a list
       // of SKETCHES, and an empty one would read as a fault.
+      const sealed = strokes.length ? claimVersion() : null;
       if (strokes.length) storeVersion(out.fileId, out.webViewLink);
       clearTimeout(idleTimer.current);
       setDriveIn(0);
       setSaveState('sent');
       onSavedToDrive?.({ id: out.fileId, name: out.name, kind: 'annotated' });
-      onToast?.(!strokes.length
-        ? `Punch-list pins filed in Drive under “Annotated Plans” (version ${claimVersion()}).`
-        : updating
-          ? `Version ${claimVersion()} updated in Drive — same file, brought up to date.`
-          : `Version ${claimVersion()} filed in Drive under “Annotated Plans”.`);
+      if (sealed != null) {
+        // Save LOCKS the version (the owner's model): the record and its Drive
+        // file are sealed as they stand, and the very next mark begins the
+        // following version in a fresh file — no button needed to start it.
+        lastFiledRef.current = sealed;
+        startNewSketch();
+        // startNewSketch clears the pin signature with the rest — put it back,
+        // or a second Save press straight after the seal would re-stamp (and
+        // claim a version) instead of answering "already locked".
+        pinSigRef.current = pinSig();
+        setBasedOn(sealed);
+      }
+      onToast?.(sealed == null
+        ? `Punch-list pins filed in Drive under “Annotated Plans”.`
+        : `Version ${sealed} ${updating ? 'updated in Drive' : 'filed in Drive'} and locked — your next mark starts version ${sealed + 1}.`);
     } catch (err) {
       if (strokes.length) storeVersion();
       onToast?.(`Saved here, but Drive refused it: ${err instanceof Error ? err.message : String(err)}`, 'error');
@@ -2978,9 +3012,9 @@ function PlanEditor({
 
         {!locked && (
           <button onClick={save} disabled={saving || (!strokes.length && !myPins.length)}
-            title={'File a PDF of this markup in Drive, under the plan\'s "Annotated Plans" folder. '
-              + 'The same sketch keeps ONE file there — saving again brings it up to date. '
-              + 'The chip beside this does the same by itself a few seconds after you stop drawing.'}
+            title={'File this markup in Drive (Annotated Plans) and LOCK it as this version — '
+              + 'your next mark starts the following version by itself. While a version is '
+              + 'open, the chip beside this keeps its one Drive file up to date automatically.'}
             className={`flex items-center gap-1.5 rounded-lg text-[12px] font-bold text-white disabled:opacity-40 flex-shrink-0 ${
               compact ? 'px-2.5 min-h-[38px]' : 'px-3 py-1.5'}`}
             style={{ backgroundColor: ACCENT }}>
@@ -4361,6 +4395,12 @@ export function PlanAnnotator(props: PlanHostProps) {
         version,
         jobName: apartmentLabel,
         author: authorName,
+        // The same one-file-per-version rule as the studio's own saves: if
+        // this sketch's autosave already made a Drive file, bring THAT file
+        // up to date rather than filing a second copy on the way out.
+        updateFileId: w.versionId
+          ? planAnnotations.find(a => a.id === w.versionId)?.driveFileId ?? null
+          : null,
       });
       if (w.versionId) {
         updatePlanAnnotation(w.versionId, { driveFileId: out.fileId, driveUrl: out.webViewLink });
