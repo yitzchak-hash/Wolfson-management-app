@@ -4,11 +4,14 @@ dist/
 *.local
 -.xml
 # Local Claude Code state stays out of the repo, but the SKILLS in it are
-# shared working method and travel with the project. Git cannot re-include a
-# file whose parent directory is excluded, so exclude the CONTENTS of .claude
-# and re-include the skills directory.
+# shared working method and travel with the project, and settings.json holds
+# the owner's standing permission grants (cloud sessions are ephemeral — an
+# allowance only survives if it is committed). Git cannot re-include a file
+# whose parent directory is excluded, so exclude the CONTENTS of .claude and
+# re-include the shared pieces. settings.local.json stays ignored.
 .claude/*
 !.claude/skills/
+!.claude/settings.json
 scratchpad/*.png
 scratchpad/*.log
 scratchpad/cap-*.html

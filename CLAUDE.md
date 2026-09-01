@@ -98,8 +98,14 @@ skill is shared working method, the same as anything else in here. Everything
 else under `.claude/` (settings, permissions, per-machine state) stays ignored.
 
 Git cannot re-include a file whose parent directory is excluded, so `.gitignore`
-excludes the CONTENTS (`.claude/*`) and re-includes `!.claude/skills/`. Writing
-it as `.claude/` would make the exception impossible.
+excludes the CONTENTS (`.claude/*`) and re-includes `!.claude/skills/` and
+`!.claude/settings.json`. Writing it as `.claude/` would make the exceptions
+impossible.
+
+**`.claude/settings.json` is tracked (owner ruling, 2026-09-01): permission
+prompts were slowing him down, and a cloud session's container is thrown away,
+so an "always allow" only survives by being committed.** It grants a broad
+allow list + `defaultMode: "dontAsk"`. `settings.local.json` stays ignored.
 
 Installed so far: **slow-plan** — planning any large piece of work one small
 visual sitting at a time, a batch of starred questions per page, every answer a

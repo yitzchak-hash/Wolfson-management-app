@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "defaultMode": "dontAsk",
+    "allow": [
+      "Bash",
+      "Read",
+      "Edit",
+      "Write",
+      "Glob",
+      "Grep",
+      "Artifact",
+      "Skill",
+      "WebFetch",
+      "WebSearch",
+      "SendUserFile",
+      "NotebookEdit",
+      "mcp__github",
+      "mcp__Google_Drive",
+      "mcp__Gmail",
+      "mcp__Google_Calendar",
+      "mcp__Claude_Code_Remote",
+      "mcp__Vercel",
+      "mcp__ccd_session"
+    ]
+  }
+}
