@@ -311,7 +311,9 @@ function PenTray({ at, up, current, color, ts, onPick, onClose }: {
               <span style={{
                 width: penW, height: penH, display: 'block', position: 'relative',
                 transform: active ? `translateY(${-Math.round(13 * ts)}px)` : 'translateY(0)',
-                transition: 'transform .28s cubic-bezier(.34,1.56,.64,1)',
+                // A slower, silkier spring than the first cut — the snap read
+                // as a jump rather than a pen being picked up (the owner).
+                transition: 'transform .55s cubic-bezier(.3,1.25,.35,1.02), filter .4s ease',
                 filter: active ? 'drop-shadow(0 7px 9px rgba(0,0,0,.5))' : 'none',
               }}>
                 <span style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: '22%',
