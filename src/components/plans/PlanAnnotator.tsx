@@ -18,7 +18,7 @@ import { stampPlanToDrive, extractFolderId, isUploadBackendConfigured } from '..
 import { fetchPlanCached, prefetchPlans, acquirePlanCache, releasePlanCache } from '../../data/planCache';
 import { printEsc } from '../../data/printing';
 import {
-  exportScale, drawPins, canvasBlob, imagesToPdf, imageBytesToPdf,
+  exportScale, drawPins, pinStamp, canvasBlob, imagesToPdf, imageBytesToPdf,
   safeFileName, saveBytes, saveMany,
 } from '../../data/planExport';
 import { PlanTab, PlanTabsStrip, mintTab, loadTabState, saveTabState } from './PlanTabs';
@@ -30,6 +30,7 @@ import { useMarkupScale } from '../../data/markupScale';
 import { paintStroke, bubbleTextBox, REF, LINE } from './paintStroke';
 import { PlanPicker } from './PlanPicker';
 import { usePhone } from '../../data/usePhone';
+import { DriveIcon } from '../ui/BrandIcons';
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -533,6 +534,14 @@ function PlanEditor({
       return Math.min(cap, Math.max(fitScaleRef.current, Math.round(next * 100) / 100));
     });
   }, []);
+  /**
+   * Standing ON the zoom-out floor. The floor itself is right — below the fit
+   * there is only blank stage — but a live-looking − that does nothing when
+   * pressed reads as the whole zoom being broken (the owner's TV report came
+   * from a sheet sitting exactly at its fit). Every zoom-out button greys and
+   * says why instead.
+   */
+  const atZoomFloor = scale <= fitScaleRef.current + 0.005;
   /**
    * REAL full screen, alongside the fit-to-page button that used to wear its
    * icon. The browser only grants it from a user gesture, and Esc leaves it
@@ -1998,12 +2007,59 @@ function PlanEditor({
   const idleTimer = useRef<number | undefined>(undefined);
   const versionIdRef = useRef<string | null>(initialWork?.versionId ?? null);
   const pushingRef = useRef(false);
+  /**
+   * The Drive file THIS SKETCH already made, so every later stamp UPDATES it
+   * instead of filing another copy. The autosave pushes a few seconds after
+   * each pause, and a file per push filled Annotated Plans with near-identical
+   * "annotated version 2"s a minute apart — the exact folder spam the owner
+   * asked to avoid. Drive keeps its own revision history of the one file, so
+   * nothing that was pushed is ever lost. Cleared by startNewSketch — a new
+   * sketch is a new file.
+   */
+  const stampedFileRef = useRef<string | null>(null);
+  /**
+   * Read through REFS inside the save callbacks, never as dependencies —
+   * saving writes a planAnnotations record, so a callback depending on the
+   * list re-arms the autosave effect that calls it: the documented
+   * maximum-update-depth loop, one step removed.
+   */
+  const annotationsRef = useRef(planAnnotations);
+  annotationsRef.current = planAnnotations;
+  const myPinsRef = useRef(myPins);
+  myPinsRef.current = myPins;
+  /** What the last stamp said about the pins, so "already in Drive" is honest. */
+  const pinSigRef = useRef<string | null>(null);
+  const pinSig = useCallback(() =>
+    myPinsRef.current.map(p => `${p.id}${p.resolvedAt ? 'r' : ''}`).join(','), []);
+  /** The sketch's Drive file — this session's stamp first, a restored tab's record second. */
+  const sketchDriveFile = useCallback(() =>
+    stampedFileRef.current
+      ?? (versionIdRef.current
+        ? annotationsRef.current.find(v => v.id === versionIdRef.current)?.driveFileId ?? null
+        : null), []);
 
   /** The strokes as the server wants them, minus our own ids. */
   const strokesForDrive = useCallback(
     () => strokes.map(({ id: _id, ...rest }) => rest),
     [strokes],
   );
+
+  /**
+   * The punch-list pins, as marks for the Drive copy. The pins live in the
+   * app's own data and every device draws them from it — but the PDF filed in
+   * Drive is what leaves the app (a printout, an email, an architect), and a
+   * copy without the pins says the snags do not exist. Page 1's real aspect
+   * keeps the discs round on a landscape sheet.
+   */
+  const pinsForDrive = useCallback(async () => {
+    const pins = myPinsRef.current;
+    if (!pins.length || !doc) return [];
+    try {
+      const p1 = await doc.getPage(1);
+      const vp = p1.getViewport({ scale: 1 });
+      return pinStamp(pins, vp.width / vp.height);
+    } catch { return pinStamp(pins, Math.SQRT2); }
+  }, [doc]);
 
   /**
    * The number this sketch will be filed as, claimed ONCE and then held.
@@ -2023,6 +2079,14 @@ function PlanEditor({
   const sketchVersion = useRef<number | null>(initialWork?.sketchVersion ?? null);
   const nextVersionRef = useRef(nextVersion);
   nextVersionRef.current = nextVersion;
+  /**
+   * The number the Save button WEARS. Once this sketch has claimed a version,
+   * the button keeps saying it — `nextVersion` grows the moment the sketch's
+   * own record lands in the list, so the label used to drift one ahead of the
+   * version the press would actually update ("Save v3" over a button that
+   * updates v2), which read as a save that never happened.
+   */
+  const shownVersion = sketchVersion.current ?? nextVersion;
 
   // The wrapper stashes a tab away by reading this — written every render so
   // it is always current, at the cost of nothing (a ref assignment).
@@ -2045,10 +2109,12 @@ function PlanEditor({
     return sketchVersion.current;
   }, []);
 
-  /** Begin a fresh working sketch: new record, new number. */
+  /** Begin a fresh working sketch: new record, new number, new Drive file. */
   const startNewSketch = useCallback(() => {
     versionIdRef.current = null;
     sketchVersion.current = null;
+    stampedFileRef.current = null;
+    pinSigRef.current = null;
   }, []);
 
   /**
@@ -2084,11 +2150,14 @@ function PlanEditor({
       const out = await stampPlanToDrive({
         planFileId,
         parentFolderId: plansFolderId || parentFolderId!,
-        strokes: strokesForDrive(),
+        strokes: [...strokesForDrive(), ...await pinsForDrive()],
         version: claimVersion(),
         jobName: apartmentLabel,
         author: who || authorName,
+        updateFileId: sketchDriveFile(),
       });
+      stampedFileRef.current = out.fileId;
+      pinSigRef.current = pinSig();
       if (versionIdRef.current) {
         updatePlanAnnotation(versionIdRef.current, {
           driveFileId: out.fileId, driveUrl: out.webViewLink,
@@ -2102,8 +2171,8 @@ function PlanEditor({
       pushingRef.current = false;
     }
   }, [locked, strokes.length, backendReady, plansFolderId, parentFolderId, planFileId,
-      strokesForDrive, claimVersion, apartmentLabel, who, authorName, updatePlanAnnotation,
-      onSavedToDrive]);
+      strokesForDrive, pinsForDrive, sketchDriveFile, pinSig, claimVersion, apartmentLabel,
+      who, authorName, updatePlanAnnotation, onSavedToDrive]);
 
   // Every change: keep it here now, and set the clock running for Drive.
   useEffect(() => {
@@ -2283,16 +2352,34 @@ function PlanEditor({
   }
 
   async function save() {
-    if (!strokes.length) { onToast?.('Nothing to save yet.', 'error'); return; }
+    const havePins = myPinsRef.current.length > 0;
+    if (!strokes.length && !havePins) { onToast?.('Nothing to save yet.', 'error'); return; }
+    /**
+     * Pressing Save on a sketch that is already filed used to re-upload the
+     * same bytes and say nothing — which read as the button doing nothing at
+     * all (the owner's exact report). Nothing new means saying so, not a
+     * silent round trip.
+     */
+    // 'sent' is only reachable while the strokes as-drawn have gone up — any
+    // later mark flips it back to 'local' — so it, plus an unchanged pin list,
+    // IS "nothing new". (`dirty` is the wrong witness: the autosave leaves it
+    // raised after a push.)
+    if (saveState === 'sent' && pinSig() === pinSigRef.current) {
+      onToast?.(`Version ${claimVersion()} is already in Drive — nothing new since it was filed.`);
+      return;
+    }
     if (!backendReady || !parentFolderId) {
       // Still worth keeping: the markup lives in the app and can be printed,
       // it just cannot be filed in Drive without the folder and the upload key.
-      storeVersion();
+      if (strokes.length) storeVersion();
       onToast?.(parentFolderId
         ? 'Saved here. Drive filing is off until the upload key is set.'
         : 'Saved here. Set the job\'s Drive folder to file a PDF copy too.', 'error');
       return;
     }
+    // Whether this sketch already has a file in Drive decides the wording:
+    // "filed" the first time, "updated" after — the same version, same file.
+    const updating = !!sketchDriveFile();
     setSaving(true);
     try {
       const out = await stampPlanToDrive({
@@ -2301,16 +2388,31 @@ function PlanEditor({
         // plan is a plan, and that is where the office goes looking. The job's
         // main folder is only the fallback.
         parentFolderId: plansFolderId || parentFolderId,
-        strokes: strokes.map(({ id: _id, ...rest }) => rest), // ids are ours, not the PDF's
+        strokes: [
+          ...strokes.map(({ id: _id, ...rest }) => rest), // ids are ours, not the PDF's
+          ...await pinsForDrive(),                        // the punch list travels too
+        ],
         version: claimVersion(),
         jobName: apartmentLabel,
         author: who || authorName,
+        updateFileId: sketchDriveFile(),
       });
-      storeVersion(out.fileId, out.webViewLink);
+      stampedFileRef.current = out.fileId;
+      pinSigRef.current = pinSig();
+      // A pins-only stamp keeps no version record — the version list is a list
+      // of SKETCHES, and an empty one would read as a fault.
+      if (strokes.length) storeVersion(out.fileId, out.webViewLink);
+      clearTimeout(idleTimer.current);
+      setDriveIn(0);
+      setSaveState('sent');
       onSavedToDrive?.({ id: out.fileId, name: out.name, kind: 'annotated' });
-      onToast?.(`Version ${claimVersion()} filed in Drive under “Annotated Plans”.`);
+      onToast?.(!strokes.length
+        ? `Punch-list pins filed in Drive under “Annotated Plans” (version ${claimVersion()}).`
+        : updating
+          ? `Version ${claimVersion()} updated in Drive — same file, brought up to date.`
+          : `Version ${claimVersion()} filed in Drive under “Annotated Plans”.`);
     } catch (err) {
-      storeVersion();
+      if (strokes.length) storeVersion();
       onToast?.(`Saved here, but Drive refused it: ${err instanceof Error ? err.message : String(err)}`, 'error');
     } finally {
       setSaving(false);
@@ -2775,8 +2877,9 @@ function PlanEditor({
               bar over the sheet — one set of controls, where Drive keeps them. */}
           {!locked && (
             <div className="flex items-center gap-0.5 text-white/85 mr-1">
-              <button onClick={() => zoomStep(-1, 0.2, 5)} title="Zoom out"
-                className="p-1.5 rounded-lg hover:bg-white/10"><Minus size={14} /></button>
+              <button onClick={() => zoomStep(-1, 0.2, 5)} disabled={atZoomFloor}
+                title={atZoomFloor ? 'The whole sheet is already in view — + zooms in' : 'Zoom out'}
+                className="p-1.5 rounded-lg hover:bg-white/10 disabled:opacity-30"><Minus size={14} /></button>
               <span className="text-[11px] tabular-nums w-11 text-center">{Math.round(scale * 100)}%</span>
               <button onClick={() => zoomStep(1, 0.2, 5)} title="Zoom in"
                 className="p-1.5 rounded-lg hover:bg-white/10"><Plus size={14} /></button>
@@ -2874,15 +2977,20 @@ function PlanEditor({
         )}
 
         {!locked && (
-          <button onClick={save} disabled={saving || !strokes.length}
-            title="Save this markup as a new version and file a PDF in Drive"
+          <button onClick={save} disabled={saving || (!strokes.length && !myPins.length)}
+            title={'File a PDF of this markup in Drive, under the plan\'s "Annotated Plans" folder. '
+              + 'The same sketch keeps ONE file there — saving again brings it up to date. '
+              + 'The chip beside this does the same by itself a few seconds after you stop drawing.'}
             className={`flex items-center gap-1.5 rounded-lg text-[12px] font-bold text-white disabled:opacity-40 flex-shrink-0 ${
               compact ? 'px-2.5 min-h-[38px]' : 'px-3 py-1.5'}`}
             style={{ backgroundColor: ACCENT }}>
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             {/* The word costs a fifth of a 390px row and says nothing the icon
                 does not. The version number is the part you check. */}
-            {saving ? (compact ? '' : 'Filing…') : compact ? `v${nextVersion}` : `Save v${nextVersion}`}
+            {saving ? (compact ? '' : 'Filing…') : compact ? `v${shownVersion}` : `Save v${shownVersion}`}
+            {/* WHERE it goes, answered by the mark everybody knows — the
+                owner's ask: "add a little Drive icon showing where it saves". */}
+            {!saving && <DriveIcon size={12} />}
           </button>
         )}
 
@@ -3156,8 +3264,9 @@ function PlanEditor({
                   className="px-2 py-1 rounded-full hover:bg-white/10 disabled:opacity-30">›</button>
                 <span className="mx-1 w-px self-stretch bg-white/20" />
               </>)}
-              <button onClick={() => zoomStep(-1, 0.15, 6)}
-                title="Zoom out" className="px-2.5 py-1 rounded-full hover:bg-white/10">
+              <button onClick={() => zoomStep(-1, 0.15, 6)} disabled={atZoomFloor}
+                title={atZoomFloor ? 'The whole sheet is already in view — + zooms in' : 'Zoom out'}
+                className="px-2.5 py-1 rounded-full hover:bg-white/10 disabled:opacity-30">
                 <Minus size={14} />
               </button>
               <button onClick={() => setFitting(true)} title="Fit the sheet to the window"
@@ -3508,8 +3617,9 @@ function PlanEditor({
             {/* Zoom, as one row. A pinch does this too, but a number you can
                 read is how you get back to a known size. */}
             <div className="flex items-center gap-1 px-1 py-1">
-              <button onClick={() => zoomStep(-1, 0.2, 5)} title="Zoom out"
-                className="rounded-lg flex items-center justify-center min-w-[42px] min-h-[42px]"
+              <button onClick={() => zoomStep(-1, 0.2, 5)} disabled={atZoomFloor}
+                title={atZoomFloor ? 'The whole sheet is already in view — + zooms in' : 'Zoom out'}
+                className="rounded-lg flex items-center justify-center min-w-[42px] min-h-[42px] disabled:opacity-40"
                 style={{ backgroundColor: '#f1f5f9', color: '#334155' }}><Minus size={16} /></button>
               <span className="flex-1 text-center text-[13px] font-bold tabular-nums text-slate-700">
                 {Math.round(scale * 100)}%
@@ -3887,14 +3997,16 @@ function SaveTrip({ state, secondsLeft, compact, onSendNow }: {
         : 'Kept on this computer. Press the Drive to send it now.'}
     >
       <Monitor size={13} />
-      <span className="relative flex items-center justify-center" style={{ width: 34, height: 16 }}>
+      {/* The count sits BESIDE the arrow, never over it — drawn on top of the
+          glyph the two were unreadable together (the owner's exact report).
+          minWidth keeps the row from breathing as the number counts down. */}
+      <span className="flex items-center justify-center gap-1" style={{ minWidth: 34, height: 16 }}>
         <span className={flying ? 'save-fly' : ''} style={{ display: 'flex' }}>
           <ArrowRight size={13} />
         </span>
         {!flying && !failed && secondsLeft > 0 && (
-          <span data-save-count
-            className="absolute inset-0 flex items-center justify-center text-[10px] font-bold tabular-nums">
-            {secondsLeft}
+          <span data-save-count className="text-[10px] font-bold tabular-nums leading-none">
+            {secondsLeft}s
           </span>
         )}
       </span>

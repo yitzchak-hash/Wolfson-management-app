@@ -20,7 +20,7 @@
  * "with the markings" means to the person asking for it.
  */
 import { PDFDocument } from 'pdf-lib';
-import { PlanPin } from '../types';
+import { AnnStroke, PlanPin } from '../types';
 
 /**
  * How big to render a page for export.
@@ -85,6 +85,53 @@ export function drawPins(ctx: CanvasRenderingContext2D, w: number, h: number, pi
     ctx.fillText(String(i + 1), x, cy + r * 0.06);
   });
   ctx.restore();
+}
+
+/**
+ * The same pins as STAMP MARKS, for the PDF filed in Drive.
+ *
+ * `drawPins` above burns them into a canvas for the in-browser export; this
+ * emits them as AnnStroke records in the stamp's normalised space (x and y
+ * each 0..1) so `api/plan-annotate.js` burns the identical figure into the
+ * Drive copy — stem, white ring, numbered disc. `aspect` is pageWidth ÷
+ * pageHeight: the radius is a fraction of the WIDTH on both axes, and the
+ * y-fractions must be corrected by the aspect or every pin comes out as an
+ * egg on a landscape sheet. First page only, exactly like the picture export
+ * — a pin is anchored to the apartment, not to a page, and repeating it on
+ * every page would invent snags that do not exist.
+ */
+export function pinStamp(pins: PlanPin[], aspect: number): AnnStroke[] {
+  const out: AnnStroke[] = [];
+  const A = aspect > 0 ? aspect : Math.SQRT2;
+  const rW = 12 / 900;                 // the overlay's 24px pin over a ~900px viewer
+  const tailW = 8 / 900;
+  const rY = rW * A;
+  const tailY = tailW * A;
+  pins.forEach((p, i) => {
+    const x = p.xPct / 100, y = p.yPct / 100;
+    const colour = p.resolvedAt ? '#94a3b8' : '#dc2626';
+    const cy = y - tailY - rY;
+    const label = String(i + 1);
+    out.push({ id: `pin-${p.id}-stem`, page: 0, tool: 'line', color: colour,
+      width: 1.1, opacity: 1, pts: [x, y, 1, x, y - tailY, 1] });
+    out.push({ id: `pin-${p.id}-ring`, page: 0, tool: 'ellipse', color: '#ffffff',
+      width: 0.8, opacity: 1, fill: true,
+      pts: [x - rW * 1.09, cy - rY * 1.09, 1, x + rW * 1.09, cy + rY * 1.09, 1] });
+    out.push({ id: `pin-${p.id}-disc`, page: 0, tool: 'ellipse', color: colour,
+      width: 0.8, opacity: 1, fill: true,
+      pts: [x - rW, cy - rY, 1, x + rW, cy + rY, 1] });
+    // The server draws text left-aligned with the BASELINE one em under the
+    // point, so centring the digits in the disc means backing the anchor up by
+    // half their width (Helvetica-Bold digits ≈ 0.556 em) and lifting it so
+    // the glyphs' visual middle lands on the disc's centre.
+    const size = 15;                   // against the 1000-unit reference page
+    const sx = size / 1000;
+    const sy = sx * A;
+    out.push({ id: `pin-${p.id}-num`, page: 0, tool: 'text', color: '#ffffff',
+      width: 1, opacity: 1, text: label, fontSize: size, bold: true,
+      pts: [x - label.length * 0.5 * 0.556 * sx, cy - 0.64 * sy, 1] });
+  });
+  return out;
 }
 
 /** A canvas as a PNG blob — never a data URL: a big sheet's is tens of MB. */

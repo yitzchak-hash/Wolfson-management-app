@@ -732,6 +732,12 @@ export async function stampPlanToDrive(input: {
   folderName?: string;
   /** Who marked it up — goes in the file name, the layer name and the PDF. */
   author?: string;
+  /**
+   * The Drive file this sketch already made, when it made one — the server
+   * then UPDATES that file (bytes and name) instead of creating another, so
+   * a session's autosaves keep Annotated Plans at one file per version.
+   */
+  updateFileId?: string | null;
 }): Promise<StampedPlan> {
   const resp = await fetch('/api/plan-annotate', {
     method: 'POST',

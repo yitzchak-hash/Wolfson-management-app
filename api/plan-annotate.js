@@ -454,6 +454,7 @@ export default async function handler(req, res) {
 
   const {
     planFileId, parentFolderId, strokes, version, jobName, folderName, author,
+    updateFileId,
   } = req.body || {};
   if (!planFileId || !parentFolderId) {
     return res.status(400).json({ error: 'Missing planFileId or parentFolderId' });
@@ -497,12 +498,38 @@ export default async function handler(req, res) {
     // where the plans are.
     const folderId = await folderFor(drive, parentFolderId, folderName || 'Annotated Plans');
 
-    const created = await drive.files.create({
-      requestBody: { name: filename, parents: [folderId], mimeType: 'application/pdf' },
-      media: { mimeType: 'application/pdf', body: Readable.from(Buffer.from(out)) },
-      fields: 'id,name,webViewLink,size',
-      supportsAllDrives: true,
-    });
+    /**
+     * ONE file per sketch version, brought up to date — never a new file per
+     * push. The autosave stamps a few seconds after every pause, so creating
+     * each time filled Annotated Plans with near-identical copies of the same
+     * sketch ("annotated version 2" five times over, a minute apart), which is
+     * exactly the folder spam the owner asked to avoid. When the caller names
+     * the file its sketch already made (`updateFileId`), the bytes and the
+     * timestamped name are UPDATED in place — Drive keeps its own revision
+     * history of the file, so nothing is lost — and only a sketch with no
+     * file yet creates one. A vanished file (someone tidied the folder) falls
+     * back to create rather than failing the save.
+     */
+    let created = null;
+    if (updateFileId) {
+      try {
+        created = await drive.files.update({
+          fileId: updateFileId,
+          requestBody: { name: filename },
+          media: { mimeType: 'application/pdf', body: Readable.from(Buffer.from(out)) },
+          fields: 'id,name,webViewLink,size',
+          supportsAllDrives: true,
+        });
+      } catch { /* deleted or unreachable — file it as new below */ }
+    }
+    if (!created) {
+      created = await drive.files.create({
+        requestBody: { name: filename, parents: [folderId], mimeType: 'application/pdf' },
+        media: { mimeType: 'application/pdf', body: Readable.from(Buffer.from(out)) },
+        fields: 'id,name,webViewLink,size',
+        supportsAllDrives: true,
+      });
+    }
 
     // The portal hands workers a PLAIN Drive link to this file, and Drive
     // demands a Google login for a private one — so every stamped plan is

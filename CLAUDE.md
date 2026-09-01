@@ -6449,3 +6449,84 @@ sat over whatever the board had there (the clock's date wore a grey X
 through it). The bar's own Full screen button toggles back out; `exitFull`
 is kept as `null` so the four render sites need no edits if a corner
 control ever returns.
+
+---
+
+# v2 — the markup save round (one file per sketch, pins in the PDF, honest buttons)
+
+## Drive gets ONE file per sketch, brought up to date
+`api/plan-annotate.js` takes `updateFileId`: when the caller names the file
+its sketch already made, the bytes AND the timestamped name are updated with
+`drive.files.update` — Drive keeps its own revision history of that file —
+and only a sketch with no file yet creates one (a vanished file falls back
+to create rather than failing the save). `stampPlanToDrive` passes it
+through; `PlanAnnotator` carries `stampedFileRef` (per sketch, cleared by
+`startNewSketch`, recovered from the annotation record's `driveFileId` for
+a restored tab via `sketchDriveFile()`). Before this, the 9-second idle
+autosave filed a NEW "annotated version 2 — <time>" on every pause — a
+morning of colouring was a folder of near-identical copies, the exact spam
+the owner asked to avoid. The read-through refs rule, paid for once
+already: the save callbacks read `planAnnotations` and `myPins` through
+refs (`annotationsRef`/`myPinsRef`), never as dependencies — a save WRITES
+an annotation record, and a callback depending on the list re-arms the
+autosave effect that calls it (the documented max-update-depth loop, one
+step removed).
+
+## Save answers every press
+- Nothing new (`saveState === 'sent'` and the pin signature unchanged —
+  `dirty` is the WRONG witness, the autosave leaves it raised after a push)
+  → "Version N is already in Drive" and NO upload.
+- First filing → "filed in Drive"; a re-file of the same sketch →
+  "updated in Drive". Manual save now also sets `saveState('sent')` and
+  clears the idle timer, so the trip chip and the button agree.
+- The button wears a small `DriveIcon` and says WHERE it files in its
+  title; its label reads the SKETCH's own claimed version (`shownVersion =
+  sketchVersion.current ?? nextVersion`) — deriving it from the list made
+  the label drift one ahead the moment the sketch's record landed ("Save
+  v3" over a button that updates v2), which read as a save that never
+  happened.
+- The SaveTrip countdown sits BESIDE the arrow (`data-save-count`, "8s"),
+  never absolute-inset over the glyph — drawn on top of it the two were
+  unreadable (the owner's photo).
+
+## The pins travel into the stamped PDF
+`pinStamp(pins, aspect)` in `planExport.ts` — pure, the stamp-marks twin of
+`drawPins`: stem (line), white ring + coloured disc (filled ellipses,
+red/grey by `resolvedAt`), the number as bold white text. Radii are
+fractions of page WIDTH with the y-extents corrected by `aspect`
+(pageW/pageH) or every pin is an egg on a landscape sheet; the text anchor
+backs up half the digits' width (Helvetica-Bold digits ≈ 0.556 em) and
+lifts 0.64 em because the server draws text with the baseline one em under
+the point. Appended in BOTH stamp payloads (`save()` and `pushToDrive` via
+`pinsForDrive()`, page-1 aspect read off the live doc); first page only,
+the picture-export rule. A pins-only Save (no ink) stamps a PDF but keeps
+NO version record — the version list is a list of sketches. Verified
+through the real server `stamp()` plus a pixel count of the rendered
+result (`scratchpad/pinstamp-probe.mjs`).
+
+## The plan chooser lists folders THEN their subfolders
+`PlanPicker`'s dropdown sweeps every top folder's children
+(`listPlanSubfoldersViaBackend`, chunked in threes) and slots them in under
+their parent, indented with a corner glyph (`data-folder-sub`). The sweep
+is guarded by a REF, not by `folders.length` — its own early
+`setFolders(rows)` changed the length, and with the length in the dep list
+that write re-ran the effect, whose cleanup raised `dead` and killed the
+subfolder batches mid-flight: top folders showed, children silently never
+arrived.
+
+## The TV zoom was the fit floor reading as broken
+`scratchpad/tvzoom-probe.mjs` drives the real wall (touch-emulated, job
+window → pane pill → studio) and the zoom WORKS everywhere — but a sheet
+opens AT its fit, where −, the %-press and Fit all legitimately do nothing
+and a touch tap on + moves only 8%. Every zoom-out button now disables at
+the floor (`atZoomFloor`, scale ≤ fit + 0.005) with the title "The whole
+sheet is already in view — + zooms in" — a live-looking button that does
+nothing is what reads as "the zoom doesn't work". The touch ×1.08 tap step
+is untouched (a settled ruling). The markup X / TV corner-X overlap was
+already resolved by the corner-X removal last round.
+
+Probes: `drivesave-probe` (17 — countdown beside arrow, Drive mark, the
+three toasts, updateFileId on re-save AND on the idle autosave, pins in
+the payload) · `pinstamp-probe` (9) · `plansubfolders-probe` (7) ·
+`tvzoom-probe` (12). Regressions green: planviewer, planlayers, plantabs,
+planphone, plandownload, planaddr, pinvoice-probe.

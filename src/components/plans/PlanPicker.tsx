@@ -1,10 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Search, Folder, FileText, Image as ImageIcon, Loader2, X, ExternalLink } from 'lucide-react';
+import { ChevronDown, Search, Folder, FileText, Image as ImageIcon, Loader2, X, ExternalLink, CornerDownRight } from 'lucide-react';
 import {
   DriveFolder, PlanEntry, listFoldersViaBackend, listMarkableViaBackend,
   listPlansViaBackend, listPlanSubfoldersViaBackend,
 } from '../../data/driveApi';
 import { usePlanDownload } from '../../data/planCache';
+
+/** A folder in the dropdown — `sub` marks a child slotted in under its parent. */
+type FolderRow = DriveFolder & { sub?: boolean };
 
 /**
  * How far a plan's background download has got — quiet, on the row's right.
@@ -63,7 +66,7 @@ export function PlanPicker({
   onClose: () => void;
 }) {
   const [openList, setOpenList] = useState(false);
-  const [folders, setFolders] = useState<DriveFolder[]>([]);
+  const [folders, setFolders] = useState<FolderRow[]>([]);
   const [folder, setFolder] = useState<{ id: string; name: string } | null>(
     plansFolderId ? { id: plansFolderId, name: plansFolderName } : null,
   );
@@ -144,25 +147,58 @@ export function PlanPicker({
     return () => window.removeEventListener('keydown', key, true);
   }, [onClose]);
 
-  // The job's folders, once, when the list is first opened — PLUS the plans
-  // folder's own subfolders. "Annotated Plans" lives INSIDE Engineered Plans,
-  // one level deeper than the job-folder listing reaches, so the folder every
-  // saved markup goes to was the one folder the chooser could not open.
+  // The job's folders, once, when the list is first opened — and then EVERY
+  // top folder's own subfolders, slotted in under their parent, indented
+  // (the owner's ask: "folders, then subfolders"). "Annotated Plans" lives
+  // INSIDE Engineered Plans, one level deeper than the job-folder listing
+  // reaches, and it was far from the only folder a level down — superseded
+  // issues, a contractor's own set. The top rows land first so the list is
+  // usable at once; children fill in as each small batch answers.
+  // Guarded by a REF, not by folders.length: the sweep's own early
+  // setFolders(rows) changes the length, and with the length in the dep list
+  // that very write re-ran the effect, whose cleanup raised `dead` and killed
+  // the subfolder batches mid-flight — the list showed the top folders and
+  // silently never grew.
+  const sweptRef = useRef(false);
+  const foldersRef = useRef(folders);
+  foldersRef.current = folders;
   useEffect(() => {
-    if (!openList || folders.length || !driveLink) return;
+    if (!openList || sweptRef.current || !driveLink) return;
+    sweptRef.current = true;
     let dead = false;
     (async () => {
-      const rows = await listFoldersViaBackend(driveLink);
-      if (dead) return;
+      let rows: FolderRow[] = foldersRef.current;
+      if (!rows.length) {
+        rows = await listFoldersViaBackend(driveLink);
+        if (dead) return;
+        setFolders(rows);
+      }
+      const tree = [...rows];
+      const tops: FolderRow[] = [...rows];
+      // The plans folder may sit outside the job folder's own children (a
+      // link straight to it) — its subfolders still belong on the list.
       const plansId = folder?.id ?? plansFolderId ?? null;
-      const subs = plansId ? await listPlanSubfoldersViaBackend(plansId) : [];
-      if (dead) return;
-      const have = new Set(rows.map(r => r.id));
-      setFolders([...rows, ...subs.filter(f => !have.has(f.id)).map(f => ({ id: f.id, name: f.name }))]);
+      if (plansId && !rows.some(r => r.id === plansId)) {
+        tops.push({ id: plansId, name: folder?.name ?? plansFolderName });
+      }
+      for (let i = 0; i < tops.length; i += 3) {           // gentle on the API
+        const batch = tops.slice(i, i + 3);
+        const subLists = await Promise.all(batch.map(f => listPlanSubfoldersViaBackend(f.id)));
+        if (dead) return;
+        batch.forEach((f, j) => {
+          const have = new Set(tree.map(r => r.id));
+          const at = tree.findIndex(r => r.id === f.id);
+          const subs = subLists[j]
+            .filter(sf => !have.has(sf.id))
+            .map(sf => ({ id: sf.id, name: sf.name, sub: at >= 0 }));
+          tree.splice(at >= 0 ? at + 1 : tree.length, 0, ...subs);
+        });
+        setFolders([...tree]);
+      }
     })();
     return () => { dead = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openList, folders.length, driveLink]);
+  }, [openList, driveLink]);
 
   async function chooseFolder(f: DriveFolder) {
     setFolder(f);
@@ -293,8 +329,11 @@ export function PlanPicker({
                 <p className="px-2 py-2 text-[11.5px] text-gray-400">No folders found.</p>
               )}
               {shownFolders.map(f => (
-                <button key={f.id} data-folder-row={f.id} onClick={() => chooseFolder(f)}
-                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg hover:bg-gray-50 text-left">
+                <button key={f.id} data-folder-row={f.id} data-folder-sub={f.sub ? '1' : undefined}
+                  onClick={() => chooseFolder(f)}
+                  className={`w-full flex items-center gap-2 py-2 rounded-lg hover:bg-gray-50 text-left ${
+                    f.sub ? 'pl-7 pr-2.5' : 'px-2.5'}`}>
+                  {f.sub && <CornerDownRight size={11} className="text-slate-300 flex-shrink-0" />}
                   <Folder size={14} className="text-[#4aa8d8] flex-shrink-0" />
                   <span className="truncate text-[12.5px] text-slate-700">{f.name}</span>
                 </button>

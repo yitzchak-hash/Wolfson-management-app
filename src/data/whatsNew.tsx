@@ -30,6 +30,57 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-10-25',
+    title: 'The markup knows exactly what Drive has',
+    items: [
+      {
+        title: 'One file per sketch — never a pile of copies',
+        body: 'While you draw, the markup is kept on the computer instantly '
+          + 'and pushed to Drive a few seconds after you pause — and every '
+          + 'push now brings the SAME file up to date instead of filing '
+          + 'another copy. A morning of colouring is one tidy PDF in '
+          + 'Annotated Plans, not twelve near-identical ones. Drive keeps '
+          + 'its own history of that file, so nothing pushed is ever lost.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'Save says what actually happened',
+        body: 'The Save button wears the Drive mark so it is clear where it '
+          + 'files, and it answers every press: "filed in Drive" the first '
+          + 'time, "updated in Drive" after a change, and "already in Drive '
+          + '— nothing new" when there is nothing to send. The little '
+          + 'countdown to the automatic save now sits beside the arrow '
+          + 'instead of on top of it.',
+        demo: 'tap',
+      },
+      {
+        title: 'The pins travel into the PDF',
+        body: 'Every markup filed in Drive now carries the punch-list pins — '
+          + 'red numbered circles for open items, grey for done — exactly '
+          + 'where they sit on screen. Pins placed from the plan preview '
+          + 'are saved with the job the moment they are placed, on every '
+          + 'device; a press of Save files them into a PDF even with no '
+          + 'drawing on the sheet.',
+        demo: 'pin',
+      },
+      {
+        title: 'The plan chooser opens subfolders',
+        body: 'The folder list in the Plans chooser now shows every folder '
+          + 'AND the folders inside them, indented underneath — Annotated '
+          + 'Plans, superseded issues, a photos subfolder — all one press '
+          + 'away.',
+        demo: 'tap',
+      },
+      {
+        title: 'The plan zoom tells you when it is at the edge',
+        body: 'When the whole sheet is already in view, the − button greys '
+          + 'out and says so instead of sitting there doing nothing — which '
+          + 'on the TV read as the zoom being broken. + always zooms in.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2026-10-18',
     title: 'Files fly to the TV, and refresh behaves',
     items: [
