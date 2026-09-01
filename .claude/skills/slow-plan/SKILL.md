@@ -98,8 +98,13 @@ typing in chat:
 - **"Add context" per question** — a small collapsed text box under each
   question, with a **microphone button** for dictation via the browser's own
   speech recognition (`SpeechRecognition`/`webkitSpeechRecognition`),
-  continuous mode, with a language toggle for the user's languages (e.g.
-  EN/עברית). No mic API in the browser → the box still types.
+  continuous mode. **The artifact sandbox usually refuses microphone
+  access** (learned the hard way: the button did nothing) — so the mic
+  button must handle failure honestly: on error, on an end with no words, or
+  after ~2.5s of silence from the engine, show an inline tip pointing at the
+  OS keyboard's own dictation (the 🎤 on a phone keyboard, Win+H on Windows,
+  the mic key on Mac), which types into the box regardless of page
+  permissions. Never leave a mic button that silently does nothing.
 - **One Save button** at the bottom. Saving embeds the answers as JSON in a
   `<script type="application/json" id="plan-state">` block, bakes any typed
   context into the document, and calls `artifact.publish()` with the whole
