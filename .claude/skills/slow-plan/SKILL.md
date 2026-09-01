@@ -77,12 +77,44 @@ together in one planning folder so the series survives.
   **⭐ starred recommendation with a one-line WHY**. The star matters: an
   overthinker given four naked options will orbit them for an hour; a starred
   default with a reason lets them either nod or push back, both fast.
-- **Answers come as plain chat** ("1A 2B, 3 — let's discuss"). Never use
-  popup question pickers or forms; they break the flow and some users can't
-  use them at all.
+- **Answers come as plain chat** ("1A 2B, 3 — let's discuss") — or on the
+  page itself when the interactive mode below is available. Never use popup
+  question pickers or chat-side forms; they break the flow and some users
+  can't use them at all. (The plan page's own tappable options are not a
+  popup — they ARE the page.)
 - A garbled or unclear answer gets gently re-asked, never guessed. An answer
   that's really a new question becomes a follow-up: finish follow-ups before
   opening the next sitting's topic.
+
+## The interactive page (answer on the page itself)
+
+When the artifact runtime's `artifact` capability is available (the page can
+publish new versions of itself — load the `artifact-capabilities` skill to
+check and wire it), build each sitting's page so the user can answer WITHOUT
+typing in chat:
+
+- **Tappable options.** Each question's lettered options are buttons; tapping
+  one selects it (visibly — the starred one still wears its ⭐).
+- **"Add context" per question** — a small collapsed text box under each
+  question, with a **microphone button** for dictation via the browser's own
+  speech recognition (`SpeechRecognition`/`webkitSpeechRecognition`),
+  continuous mode, with a language toggle for the user's languages (e.g.
+  EN/עברית). No mic API in the browser → the box still types.
+- **One Save button** at the bottom. Saving embeds the answers as JSON in a
+  `<script type="application/json" id="plan-state">` block, bakes any typed
+  context into the document, and calls `artifact.publish()` with the whole
+  regenerated document — never a serialized live DOM. After a successful
+  save the page tells the user plainly: "saved — now tell Claude 'saved' in
+  chat and we continue."
+- **Claude's side of the loop**: remote sessions get no republish
+  notification, so when the user says "saved", RE-READ the artifact (Artifact
+  tool, `action: "read"`), parse the `#plan-state` JSON, restate every answer
+  as a numbered locked pick in the next sitting's page, and carry any typed
+  context into the plan. A pick locked from the page is exactly as locked as
+  one typed in chat.
+- Chat answers stay valid at all times — the page is the preferred door, not
+  the only one. If the capability is unavailable (`claude.use("artifact")`
+  resolves null), the Save bar says so and points the user back to chat.
 
 ## Locked picks
 
