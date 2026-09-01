@@ -6442,3 +6442,10 @@ the board's own seeded bins, and a hover on an UNSELECTED node legitimately
 reveals its strip — scope counts to the seeded ids and park the mouse.
 And `OWN_NUMBERS` gained '037208000' — the Tel Aviv office line printed on
 plans beside Beit Shemesh's, per the owner.
+
+## The TV's corner X is gone (owner: 2026-09-01)
+Full screen on the wall no longer draws the floating X in the corner — it
+sat over whatever the board had there (the clock's date wore a grey X
+through it). The bar's own Full screen button toggles back out; `exitFull`
+is kept as `null` so the four render sites need no edits if a corner
+control ever returns.

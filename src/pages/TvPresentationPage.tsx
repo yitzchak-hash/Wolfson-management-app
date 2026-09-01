@@ -1002,23 +1002,15 @@ export function TvPresentationPage() {
   const portrait = shape.orientation === 'portrait';
 
   /**
-   * The way out of full screen, for a finger.
+   * The way out of full screen is the Full screen button itself.
    *
-   * Deliberately small and in the corner: it must be findable when somebody
-   * needs it and invisible the rest of the time, on a screen that spends its
-   * life being looked at rather than used.
+   * There used to be a small X floating in the corner as well — REMOVED by
+   * the owner (2026-09-01): it sat over whatever the board had in that
+   * corner (his clock's date wore a grey X through it), and the bar's own
+   * Full screen button already toggles back out. The variable stays so the
+   * four render sites need no edits if a corner control ever returns.
    */
-  const exitFull = full ? (
-    <button
-      onClick={toggleFull}
-      title={t('Leave full screen', 'יציאה ממסך מלא')}
-      className="fixed top-2 right-2 z-[200] w-11 h-11 rounded-full flex items-center justify-center
-                 text-white/70 hover:text-white transition-colors"
-      style={{ backgroundColor: 'rgba(15,23,42,.35)' }}
-    >
-      <CloseIcon size={20} />
-    </button>
-  ) : null;
+  const exitFull = null;
 
   const bar = (
     <div
