@@ -177,8 +177,12 @@ scans, so B6/B7 content can lag without blocking it).
 
 ## Open follow-ups (none block starting B1)
 
-1. The architects' plan PDF — the sheet format to copy (picks 29–30). From
-   the owner.
+1. ~~The architects' plan PDF~~ — **RECEIVED 2026-09-01**: a 2-page plot of
+   a real job (AC + lighting plans). It is TzviAir's OWN branded sheet
+   (AutoCAD LT 2024, Arial + Malgun Gothic, 77 CAD layers surviving as
+   OCGs). The format is recorded in `SHEET-FORMAT.md` + `sheet-frame.html`
+   beside this file; the PDF itself stays out of the repo (real client
+   name/phone/address).
 2. The master block catalog DWG (+DXF +SHX fonts) — from the architects
    (pick 20); settles the grill behaviors (19) and seeds the block-rules
    page (24).
