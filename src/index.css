@@ -372,6 +372,27 @@ html, body {
 }
 .ink-slider::-moz-range-track { height: 4px; border-radius: 999px; background: rgba(255,255,255,.18); }
 
+/* The see-through slider in the pen tray — the Samsung manner: the track IS a
+   ramp from nothing to the ink, drawn over a checkerboard so "nothing" is
+   visibly transparent rather than white. The two background layers (colour
+   ramp, checkerboard) are set inline, because the ramp needs the live ink. */
+.alpha-slider {
+  -webkit-appearance: none; appearance: none;
+  height: 14px; border-radius: 999px; outline: none;
+  box-shadow: inset 0 0 0 1px rgba(15,23,42,.14);
+}
+.alpha-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #ffffff; border: 3px solid #1e3a5f; cursor: pointer;
+  box-shadow: 0 1px 4px rgba(15,23,42,.35);
+}
+.alpha-slider::-moz-range-thumb {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #ffffff; border: 3px solid #1e3a5f; cursor: pointer;
+  box-shadow: 0 1px 4px rgba(15,23,42,.35);
+}
+
 .ink-hue {
   -webkit-appearance: none; appearance: none;
   height: 12px; border-radius: 999px; outline: none;

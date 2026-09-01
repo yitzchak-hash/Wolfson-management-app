@@ -772,6 +772,16 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
       key: 'holiday', label: 'Next holiday', kind: 'select',
       options: [{ value: '', label: 'Off' }, { value: '1', label: 'On' }],
     },
+    {
+      key: 'tz', label: 'Keeps', kind: 'select',
+      options: [
+        { value: '', label: 'Israel time (default)' },
+        { value: 'device', label: 'This screen\'s own time' },
+      ],
+      hint: 'A TV set to the wrong country shows the wrong hour — Israel time ignores what '
+        + 'the panel thinks its timezone is. A clock that is minutes off means the DEVICE\'s '
+        + 'own clock needs setting; no page can overrule that.',
+    },
   ],
   banner: [
     { key: 'text', label: 'Wording', kind: 'text', placeholder: 'THIS WEEK' },

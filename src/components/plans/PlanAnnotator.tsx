@@ -6,7 +6,7 @@ import {
   Plus, Minus, Maximize2, Minimize2, Loader2, Pen, Pencil, Highlighter, Eraser, Minus as LineIcon,
   ArrowUpRight, Square, Circle, Type, Hand, Layers, FileDown, Check, ExternalLink,
   MessageSquare, Move, Layers2, ChevronsUpDown, User as UserIcon,
-  Monitor, ArrowRight, RotateCcw, RotateCw, MoreHorizontal, PenTool, Brush,
+  Monitor, ArrowRight, RotateCcw, RotateCw, MoreHorizontal, PenTool, Brush, Shapes,
 } from 'lucide-react';
 import './pdfCompat';   // must come before pdf.js
 import * as pdfjs from 'pdfjs-dist';
@@ -25,6 +25,7 @@ import {
 import { PlanTab, PlanTabsStrip, mintTab, loadTabState, saveTabState } from './PlanTabs';
 import { PenStroke, PenSample, NibWatch, samplesOf, simplify, nearSegment } from './penInput';
 import { TOOLS, toolById, INK_COLORS, HIGHLIGHT_COLORS, rememberColor, isHighlighterTool, nibShape } from './annotTools';
+import { recognizeShape } from './shapeSnap';
 import { InkPicker } from './InkPicker';
 import { notePointer, isPalm, isPen, touchWasPalm } from '../../data/pencil';
 import { useMarkupScale } from '../../data/markupScale';
@@ -204,6 +205,12 @@ export interface PlanChoice {
  */
 /** Every writing tool in the pen drawer — they all share the one rail tile. */
 const INK_TOOL_IDS = ['pen', 'fountain', 'calligraphy', 'pencil', 'crayon', 'marker', 'brush', 'highlighter', 'highlighter-soft'];
+/**
+ * Line, arrow, box and circle are ONE Shapes tile (the ink tile's idiom, by
+ * the owner's ruling) — the tile wears whichever shape is in the hand and a
+ * press while armed opens a small flyout. The bubble stays its own tile.
+ */
+const SHAPE_TOOL_IDS = ['line', 'arrow', 'rect', 'ellipse'];
 
 /**
  * The connector as a SCRIBBLE — a wavy hand-drawn line, never right-angle
@@ -258,16 +265,105 @@ function scribblePath(x1: number, y1: number, x2: number, y2: number, seed: numb
  * colour live in the drawer, Samsung-style, and edit the studio's own
  * width/colour state directly.
  */
+/** Darken a hex colour by f (0..1) — for wrapper shades and colour-coded caps. */
+function dk(hex: string, f: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const ch = (v: number) => Math.round(v * (1 - f)).toString(16).padStart(2, '0');
+  return `#${ch((n >> 16) & 255)}${ch((n >> 8) & 255)}${ch(n & 255)}`;
+}
+/** Lighten a hex colour toward white by f (0..1). */
+function lt(hex: string, f: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const ch = (v: number) => Math.round(v + (255 - v) * f).toString(16).padStart(2, '0');
+  return `#${ch((n >> 16) & 255)}${ch((n >> 8) & 255)}${ch(n & 255)}`;
+}
+
+/**
+ * Each pen drawn as THE REAL OBJECT, tip up, in a 34×104 box — a Crayola-style
+ * crayon with its paper wrapper, a Sharpie-style marker with its colour-coded
+ * end, a wooden brush with ferrule and bristles, a gold fountain nib, a yellow
+ * pencil with its sharpening collar. The ink colour `c` appears wherever the
+ * real pen would show it (a crayon's whole body, a brush's dipped tip, a
+ * ballpoint's ink tube) — that is the live colour feedback, so there is no
+ * generic shared barrel any more.
+ */
 const TRAY_PENS: { id: string; head: (c: string) => string }[] = [
-  { id: 'pen', head: c => `<path d="M17 4 L22 22 L12 22 Z" fill="#8b95a5"/><circle cx="17" cy="5" r="1.6" fill="#5b6572"/><rect x="10" y="22" width="14" height="8" rx="2" fill="#e5e9ef"/>` },
-  { id: 'fountain', head: () => `<path d="M17 2 C13 10 11 16 11 22 L11 30 L23 30 L23 22 C23 16 21 10 17 2 Z" fill="url(#trayNib)" stroke="#98a3b3" stroke-width=".8"/><line x1="17" y1="7" x2="17" y2="24" stroke="#7c8798" stroke-width="1.1"/><circle cx="17" cy="21" r="1.9" fill="#7c8798"/>` },
-  { id: 'calligraphy', head: () => `<path d="M11 6 L23 2 L24 12 L10 16 Z" fill="#aeb8c6" stroke="#8b95a5" stroke-width=".8"/><rect x="10" y="15" width="14" height="15" rx="2" fill="#dfe4ea"/>` },
-  { id: 'pencil', head: () => `<path d="M17 2 L21.5 14 L12.5 14 Z" fill="#3f4753"/><path d="M17 2 L24 26 L10 26 Z" fill="#e7cfa4" opacity=".9" transform="translate(0,4)"/>` },
-  { id: 'crayon', head: c => `<path d="M17 3 L23 16 L11 16 Z" fill="${c}" opacity=".85"/><rect x="10" y="16" width="14" height="14" rx="2" fill="${c}" opacity=".55"/>` },
-  { id: 'marker', head: () => `<path d="M13 4 L21 4 L23 14 L11 14 Z" fill="#525c6b"/><rect x="9" y="14" width="16" height="16" rx="3" fill="#3d4654"/>` },
-  { id: 'brush', head: c => `<path d="M17 2 C14 8 12.5 14 13 20 L21 20 C21.5 14 20 8 17 2 Z" fill="#4b5563"/><path d="M13 20 L21 20 L22 28 L12 28 Z" fill="#94a3b8"/>` },
-  { id: 'highlighter', head: c => `<path d="M13 4 L21 4 L24 18 L10 18 Z" fill="${c}" opacity=".6"/><rect x="9" y="18" width="16" height="12" rx="3" fill="#e8ebf0"/>` },
-  { id: 'highlighter-soft', head: c => `<path d="M17 4 C21 4 23 8 23 13 L23 18 L11 18 L11 13 C11 8 13 4 17 4 Z" fill="${c}" opacity=".45"/><rect x="9" y="18" width="16" height="12" rx="3" fill="#e8ebf0"/>` },
+  { id: 'pen', head: c => `
+    <path d="M17 2 L20.4 16 L13.6 16 Z" fill="#b9c2cf"/><circle cx="17" cy="3.2" r="1.2" fill="#5b6572"/>
+    <rect x="12" y="16" width="10" height="72" rx="2" fill="#eef2f7" stroke="#c4ccd7" stroke-width=".8"/>
+    <rect x="15.8" y="17" width="2.4" height="58" fill="${c}"/>
+    <rect x="12" y="88" width="10" height="14" rx="3" fill="${c}" opacity=".85"/>` },
+  { id: 'fountain', head: c => `
+    <defs><linearGradient id="tpFn" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#e9cf8e"/><stop offset=".5" stop-color="#f7e6b4"/><stop offset="1" stop-color="#c9a24f"/>
+    </linearGradient><linearGradient id="tpFb" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2a3240"/><stop offset=".45" stop-color="#3d4757"/><stop offset="1" stop-color="#12161e"/>
+    </linearGradient></defs>
+    <path d="M17 2 C13.6 8 12 13 12 19 L12 27 L22 27 L22 19 C22 13 20.4 8 17 2 Z" fill="url(#tpFn)" stroke="#a8843c" stroke-width=".7"/>
+    <line x1="17" y1="6" x2="17" y2="22" stroke="#a8843c" stroke-width="1"/><circle cx="17" cy="19" r="1.6" fill="#a8843c"/>
+    <rect x="12.5" y="27" width="9" height="6" fill="#1f2430"/>
+    <rect x="11.5" y="33" width="11" height="60" rx="5" fill="url(#tpFb)"/>
+    <rect x="11.5" y="40" width="11" height="2.6" fill="#c9a24f"/>
+    <rect x="11.5" y="44" width="11" height="2" fill="${c}"/>
+    <rect x="20.3" y="49" width="2.1" height="30" rx="1" fill="#c9a24f"/>` },
+  { id: 'calligraphy', head: c => `
+    <rect x="10.5" y="2" width="13" height="3" fill="#9aa4b2"/>
+    <path d="M10.5 5 L23.5 5 L21.2 21 L12.8 21 Z" fill="#cfd6df" stroke="#8b95a5" stroke-width=".7"/>
+    <line x1="17" y1="6" x2="17" y2="19" stroke="#8b95a5" stroke-width="1"/>
+    <rect x="12.5" y="21" width="9" height="7" fill="#8b95a5"/>
+    <path d="M12.5 28 L21.5 28 L19.8 100 L14.2 100 Z" fill="#a5713d"/>
+    <path d="M12.5 28 L15 28 L14 100 L14.2 100 Z" fill="#7c522a" opacity=".6"/>
+    <rect x="13.2" y="58" width="7.6" height="3.5" fill="${c}"/>` },
+  { id: 'pencil', head: () => `
+    <path d="M17 2 L19.4 10 L14.6 10 Z" fill="#3f4753"/>
+    <path d="M17 2 L23 22 L11 22 Z" fill="#e7cfa4"/>
+    <path d="M11 22 Q13 19 15 21.5 Q17 18.6 19 21.5 Q21 19 23 22 L23 88 L11 88 Z" fill="#f5c542"/>
+    <rect x="14.6" y="21" width="1" height="67" fill="#d9a91f"/><rect x="18.4" y="21" width="1" height="67" fill="#d9a91f"/>
+    <rect x="11" y="88" width="12" height="7" fill="#b9c2cf"/>
+    <line x1="11" y1="90.4" x2="23" y2="90.4" stroke="#8b95a5" stroke-width=".8"/>
+    <line x1="11" y1="92.8" x2="23" y2="92.8" stroke="#8b95a5" stroke-width=".8"/>
+    <rect x="11.6" y="95" width="10.8" height="8" rx="4" fill="#f2a6b3"/>` },
+  { id: 'crayon', head: c => `
+    <path d="M17 3 C19.6 6 21 10 21 13.5 L13 13.5 C13 10 14.4 6 17 3 Z" fill="${c}"/>
+    <rect x="11.5" y="13.5" width="11" height="5" rx="2" fill="${c}"/>
+    <rect x="11.5" y="18.5" width="11" height="80" fill="${dk(c, 0.22)}"/>
+    <path d="M11.5 26 Q14.2 22.8 17 26 Q19.8 29.2 22.5 26" fill="none" stroke="${dk(c, 0.45)}" stroke-width="1.6"/>
+    <path d="M11.5 86 Q14.2 82.8 17 86 Q19.8 89.2 22.5 86" fill="none" stroke="${dk(c, 0.45)}" stroke-width="1.6"/>
+    <ellipse cx="17" cy="55" rx="7.2" ry="13" fill="#f8fafc" opacity=".88"/>
+    <ellipse cx="17" cy="55" rx="7.2" ry="13" fill="none" stroke="${dk(c, 0.4)}" stroke-width="1"/>
+    <ellipse cx="17" cy="55" rx="3.2" ry="5.6" fill="${c}"/>` },
+  { id: 'marker', head: c => `
+    <path d="M15 2 L19 2 L20.6 10 L13.4 10 Z" fill="${dk(c, 0.3)}"/>
+    <path d="M13.4 10 L20.6 10 L21.8 20 L12.2 20 Z" fill="#22262d"/>
+    <rect x="12" y="20" width="10" height="64" rx="2" fill="#d7dbe1"/>
+    <rect x="12" y="30" width="10" height="3.4" fill="#22262d"/>
+    <rect x="12" y="84" width="10" height="14" rx="3" fill="${dk(c, 0.12)}"/>` },
+  { id: 'brush', head: c => `
+    <defs><linearGradient id="tpBf" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#b9c2cf"/><stop offset=".5" stop-color="#eef2f7"/><stop offset="1" stop-color="#98a3b3"/>
+    </linearGradient></defs>
+    <path d="M17 2 C14.4 7 13 13 13 20 L21 20 C21 13 19.6 7 17 2 Z" fill="#caa262"/>
+    <path d="M17 2 C15.5 5 14.6 8.5 14.3 12 L19.7 12 C19.4 8.5 18.5 5 17 2 Z" fill="${c}"/>
+    <rect x="12.5" y="20" width="9" height="12" fill="url(#tpBf)"/>
+    <line x1="12.5" y1="24" x2="21.5" y2="24" stroke="#8b95a5" stroke-width=".8"/>
+    <line x1="12.5" y1="27.4" x2="21.5" y2="27.4" stroke="#8b95a5" stroke-width=".8"/>
+    <path d="M13 32 L21 32 L19.4 100 L14.6 100 Z" fill="#8b5a2b"/>
+    <path d="M13 32 L15.4 32 L14.6 100 L14.6 100 Z" fill="#6e441f" opacity=".6"/>` },
+  { id: 'highlighter', head: c => `
+    <path d="M14 2 L20 2 L23 14 L11 14 Z" fill="${c}" opacity=".8"/>
+    <rect x="10.5" y="14" width="13" height="5" rx="1" fill="#eef1f5"/>
+    <rect x="10" y="19" width="14" height="70" rx="4" fill="${lt(c, 0.25)}"/>
+    <rect x="10" y="42" width="14" height="16" fill="#f5f7fa" opacity=".92"/>
+    <rect x="10" y="89" width="14" height="10" rx="3" fill="${dk(c, 0.15)}"/>` },
+  { id: 'highlighter-soft', head: c => `
+    <path d="M17 3 C20.6 3 23 7 23 12 L23 16 L11 16 L11 12 C11 7 13.4 3 17 3 Z" fill="${c}" opacity=".55"/>
+    <rect x="10" y="16" width="14" height="76" rx="6" fill="${lt(c, 0.45)}"/>
+    <rect x="10" y="36" width="14" height="3" fill="${c}" opacity=".5"/>
+    <rect x="10" y="46" width="14" height="14" fill="#ffffff" opacity=".88"/>` },
 ];
 
 /** The squiggle every pen writes, normalised 0..1 — one relaxed wave. */
@@ -291,11 +387,15 @@ function trayWidths(tool: string): number[] {
   });
 }
 
-function PenTray({ at, up, current, color, width, onPick, onColor, onWidth, onClose, ts }: {
+function PenTray({ at, up, current, color, width, opacity, onPick, onColor, onWidth, onOpacity, onClose, ts }: {
   at: { x: number; y: number }; up: boolean; current: string; color: string; width: number;
+  opacity: number;
   onPick: (id: string) => void; onColor: (c: string) => void; onWidth: (w: number) => void;
+  onOpacity: (o: number) => void;
   onClose: () => void; ts: number;
 }) {
+  /** The custom colour picker, hung off the rainbow chip — in-app, never the OS dialog. */
+  const [customAt, setCustomAt] = useState<{ x: number; y: number } | null>(null);
   // The tray owns Escape — capture + stopImmediatePropagation, or one press
   // would also put the tool down and start closing the studio (the ladder).
   useEffect(() => {
@@ -316,7 +416,7 @@ function PenTray({ at, up, current, color, width, onPick, onColor, onWidth, onCl
   const penW = Math.round(34 * k);
   const penH = Math.round(104 * k);
   const W = Math.min(TRAY_PENS.length * (slotW + 4) + 40, window.innerWidth - 16);
-  const H = Math.round(penH + 178 * k);
+  const H = Math.round(penH + 212 * k);   // scribble + pens + size + see-through + colours
   const left = Math.max(8, Math.min(window.innerWidth - W - 8, up ? at.x - W / 2 : at.x));
   const top = up
     ? Math.max(8, at.y - H)
@@ -324,8 +424,15 @@ function PenTray({ at, up, current, color, width, onPick, onColor, onWidth, onCl
 
   const preset = toolById(current);
   const palette = isHighlighterTool(current) ? HIGHLIGHT_COLORS : INK_COLORS;
-  const lo = Math.max(0.5, preset.width * 0.35);
-  const hi = preset.width * 2.6;
+  /**
+   * The slider's range is the preset's neighbourhood, in the same half-point
+   * steps the top bar's Width slider uses — and it WIDENS to include whatever
+   * width is actually set, so a width chosen on the top bar always shows here
+   * at its true position instead of pinning the thumb at an end. One shared
+   * `width` state, two views of the same number.
+   */
+  const lo = Math.min(Math.max(0.5, Math.round(preset.width * 0.35 * 2) / 2), width);
+  const hi = Math.max(Math.round(preset.width * 2.6 * 2) / 2, width);
 
   /**
    * The scribble, drawn by the app's own engine onto a small canvas. Re-keyed
@@ -387,19 +494,12 @@ function PenTray({ at, up, current, color, width, onPick, onColor, onWidth, onCl
                   transition: 'transform .55s cubic-bezier(.3,1.25,.35,1.02), filter .4s ease',
                   filter: active ? 'drop-shadow(0 10px 10px rgba(15,23,42,.30))' : 'saturate(.85)',
                 }}>
-                  <svg viewBox="0 0 34 32" style={{ position: 'absolute', left: 0, top: 0, width: penW, height: Math.round(penW * 32 / 34), overflow: 'visible' }}>
-                    <defs><linearGradient id="trayNib" x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0" stopColor="#dfe4ea" /><stop offset=".5" stopColor="#f8fafc" /><stop offset="1" stopColor="#c4ccd7" />
-                    </linearGradient></defs>
+                  {/* the whole pen is the drawing now — crayon wrapper, Sharpie
+                      body, brush bristles — so there is no shared barrel */}
+                  <svg viewBox="0 0 34 104" preserveAspectRatio="xMidYMin meet"
+                    style={{ position: 'absolute', left: 0, top: 0, width: penW, height: penH }}>
                     <g dangerouslySetInnerHTML={{ __html: p.head(color) }} />
                   </svg>
-                  {/* the shared white barrel + a band of the ink in the pen */}
-                  <span style={{ position: 'absolute', left: '13%', right: '13%', top: Math.round(penW * 0.86), bottom: 0,
-                    borderRadius: '7px 7px 9px 9px',
-                    background: 'linear-gradient(90deg,#f2f4f7 0%,#ffffff 34%,#f6f7f9 62%,#dde2e9 100%)',
-                    boxShadow: 'inset 0 0 0 1px rgba(15,23,42,.07)' }} />
-                  <span style={{ position: 'absolute', left: '13%', right: '13%', top: '62%', height: '10%',
-                    backgroundColor: color, transition: 'background .25s ease' }} />
                 </span>
                 <span style={{ font: `700 ${Math.max(8, 8.5 * k)}px Inter, sans-serif`,
                   color: active ? NAVY : 'rgba(31,41,55,.45)', whiteSpace: 'nowrap' }}>
@@ -409,24 +509,48 @@ function PenTray({ at, up, current, color, width, onPick, onColor, onWidth, onCl
             );
           })}
         </div>
-        {/* size, the Samsung manner */}
+        {/* size, the Samsung manner — the SAME number as the top bar's Width,
+            so the fill and the thumb agree with the slider up top */}
         <div className="flex items-center" style={{ gap: 8, margin: `0 4px` }}>
-          <button data-tray-minus onClick={() => onWidth(Math.max(lo, width - (hi - lo) / 9))}
+          <button data-tray-minus onClick={() => onWidth(Math.max(lo, Math.round((width - Math.max(0.5, (hi - lo) / 9)) * 2) / 2))}
             style={{ border: 0, background: 'none', color: '#475569', font: '700 16px Inter', cursor: 'pointer', padding: '2px 6px' }}>−</button>
           <div style={{ position: 'relative', flex: 1, height: 26 }}>
             <div style={{ position: 'absolute', inset: '11px 6px', borderRadius: 4,
               backgroundImage: 'radial-gradient(circle, #cbd5e1 1.6px, transparent 1.8px)',
               backgroundSize: 'calc((100% - 4px) / 9) 4px', backgroundPosition: '2px 0', backgroundRepeat: 'repeat-x' }} />
-            <input data-tray-size type="range" min={lo} max={hi} step={(hi - lo) / 18} value={width}
+            <input data-tray-size type="range" min={lo} max={hi} step={0.5} value={width}
               onChange={e => onWidth(+e.target.value)} className="ink-slider"
-              style={{ position: 'absolute', inset: 0, width: '100%', margin: 0 }}
+              style={{ position: 'absolute', inset: 0, width: '100%', margin: 0, ...fillPct(width, lo, hi) }}
               aria-label="Pen size" />
           </div>
-          <button data-tray-plus onClick={() => onWidth(Math.min(hi, width + (hi - lo) / 9))}
+          <button data-tray-plus onClick={() => onWidth(Math.min(hi, Math.round((width + Math.max(0.5, (hi - lo) / 9)) * 2) / 2))}
             style={{ border: 0, background: 'none', color: '#475569', font: '700 16px Inter', cursor: 'pointer', padding: '2px 6px' }}>+</button>
+          <span data-tray-size-num className="tabular-nums"
+            style={{ font: `600 ${Math.max(10, 11 * k)}px Inter`, color: '#475569', minWidth: 26, textAlign: 'right' }}>
+            {width}</span>
         </div>
-        {/* the app's own colours — highlighters take the highlight shades */}
-        <div data-tray-colors className="flex justify-center" style={{ gap: 7, marginTop: 8, flexWrap: 'wrap' }}>
+        {/* see-through, the Samsung manner: the track runs from nothing to the
+            ink itself over a checkerboard, and it is the SAME number as the
+            top bar's See-through */}
+        <div className="flex items-center" style={{ gap: 8, margin: '6px 4px 0' }}>
+          <span style={{ font: `600 ${Math.max(9.5, 10 * k)}px Inter`, color: '#64748b' }}>See-through</span>
+          <input data-tray-alpha type="range" min={5} max={100} step={5}
+            value={Math.round(opacity * 100)}
+            onChange={e => onOpacity(+e.target.value / 100)}
+            className="alpha-slider" aria-label="See-through"
+            style={{
+              flex: 1, margin: 0,
+              backgroundImage: `linear-gradient(90deg, ${color}00, ${color}), `
+                + 'repeating-conic-gradient(#dde3ea 0% 25%, #ffffff 0% 50%)',
+              backgroundSize: '100% 100%, 12px 12px',
+            }} />
+          <span data-tray-alpha-num className="tabular-nums"
+            style={{ font: `600 ${Math.max(10, 11 * k)}px Inter`, color: '#475569', minWidth: 32, textAlign: 'right' }}>
+            {Math.round(opacity * 100)}%</span>
+        </div>
+        {/* the app's own colours — highlighters take the highlight shades —
+            plus the rainbow chip that opens the full in-app picker */}
+        <div data-tray-colors className="flex justify-center items-center" style={{ gap: 7, marginTop: 8, flexWrap: 'wrap' }}>
           {palette.map(c => (
             <button key={c} data-tray-color={c} onClick={() => onColor(c)}
               aria-label="colour"
@@ -440,7 +564,101 @@ function PenTray({ at, up, current, color, width, onPick, onColor, onWidth, onCl
                 transition: 'transform .18s ease',
               }} />
           ))}
+          <button data-tray-custom
+            onClick={e => {
+              const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              setCustomAt({ x: r.left - 120, y: r.bottom + 8 });
+            }}
+            title="Custom colour" aria-label="Custom colour"
+            style={{
+              width: 22, height: 22, borderRadius: 999, border: 0, cursor: 'pointer',
+              background: 'conic-gradient(#f43f5e,#f59e0b,#facc15,#22c55e,#06b6d4,#3b82f6,#8b5cf6,#f43f5e)',
+              boxShadow: !palette.includes(color)
+                ? `0 0 0 2px #fff, 0 0 0 4px ${NAVY}`
+                : 'inset 0 0 0 1px rgba(15,23,42,.15)',
+              transform: !palette.includes(color) ? 'scale(1.15)' : 'none',
+              transition: 'transform .18s ease',
+            }} />
         </div>
+      </div>
+      {/* The full picker, LIFTED above the tray — its usual z sits under the
+          tray's backdrop, which would leave it visible but unpressable. */}
+      {customAt && (
+        <InkPicker value={color} palette={palette} anchor={customAt} lift
+          onChange={c => { onColor(c); rememberColor(c); }}
+          onClose={() => setCustomAt(null)} />
+      )}
+    </>,
+    document.body,
+  );
+}
+
+/**
+ * The Shapes flyout — the pen tray's little sibling for line, arrow, box and
+ * circle. Four drawn buttons, the one in the hand lifted; picking closes it
+ * (there is no scribble show to watch here). Frosted like the tray so the two
+ * read as one family.
+ */
+function ShapeTray({ at, up, current, onPick, onClose, ts }: {
+  at: { x: number; y: number }; up: boolean; current: string;
+  onPick: (id: string) => void; onClose: () => void; ts: number;
+}) {
+  useEffect(() => {
+    function key(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      onClose();
+    }
+    window.addEventListener('keydown', key, true);
+    return () => window.removeEventListener('keydown', key, true);
+  }, [onClose]);
+
+  const k = Math.min(ts, 1.5);
+  const slotW = Math.round(54 * k);
+  const W = SHAPE_TOOL_IDS.length * (slotW + 6) + 24;
+  const H = Math.round(74 * k);
+  const left = Math.max(8, Math.min(window.innerWidth - W - 8, up ? at.x - W / 2 : at.x));
+  const top = up
+    ? Math.max(8, at.y - H)
+    : Math.max(8, Math.min(window.innerHeight - H - 8, at.y - H / 2));
+
+  return createPortal(
+    <>
+      <div className="fixed inset-0 z-[168]" onClick={onClose} />
+      <div data-shape-tray
+        className="fixed z-[169] rounded-2xl shadow-2xl flex items-center"
+        style={{
+          left, top, width: W, height: H, padding: `0 ${Math.round(12 * k)}px`, gap: 6,
+          backgroundColor: 'rgba(255,255,255,.72)',
+          WebkitBackdropFilter: 'blur(16px) saturate(1.25)',
+          backdropFilter: 'blur(16px) saturate(1.25)',
+          border: '1px solid rgba(255,255,255,.78)',
+          boxShadow: '0 22px 60px rgba(15,23,42,.30), 0 2px 8px rgba(15,23,42,.10)',
+        }}>
+        {SHAPE_TOOL_IDS.map(id => {
+          const Icon = ICONS[id] ?? LineIcon;
+          const active = id === current;
+          return (
+            <button key={id} data-shape={id}
+              onClick={() => { onPick(id); onClose(); }}
+              title={toolById(id).hint}
+              className="flex flex-col items-center justify-center rounded-xl"
+              style={{
+                width: slotW, height: Math.round(56 * k), gap: 3, border: 0, cursor: 'pointer',
+                backgroundColor: active ? NAVY : 'rgba(255,255,255,.55)',
+                color: active ? '#fff' : '#334155',
+                transform: active ? 'translateY(-3px)' : 'none',
+                transition: 'transform .3s cubic-bezier(.3,1.25,.35,1.02), background .2s ease',
+                boxShadow: active ? '0 8px 16px rgba(15,23,42,.25)' : 'inset 0 0 0 1px rgba(15,23,42,.08)',
+              }}>
+              <Icon size={Math.round(17 * k)} />
+              <span style={{ font: `700 ${Math.max(8, 8.5 * k)}px Inter, sans-serif` }}>
+                {toolById(id).label}
+              </span>
+            </button>
+          );
+        })}
       </div>
     </>,
     document.body,
@@ -703,6 +921,8 @@ function PlanEditor({
 
   const stageRef = useRef<HTMLDivElement>(null);
   const pdfRef = useRef<HTMLCanvasElement>(null);
+  /** The white sheet wrapper — the pinch scales THIS as a GPU transform. */
+  const sheetWrapRef = useRef<HTMLDivElement>(null);
   const inkRef = useRef<HTMLCanvasElement>(null);
   const liveRef = useRef<HTMLCanvasElement>(null);
   const renderTask = useRef<{ cancel(): void } | null>(null);
@@ -759,20 +979,26 @@ function PlanEditor({
   const scaleRef = useRef(scale);
   scaleRef.current = scale;
   /**
-   * The scale at which the WHOLE sheet fits the stage with its margin — the
-   * floor under every zoom-out. Written by renderPage each time it measures
-   * the stage, so a resized window or a rotated tablet moves the floor with
-   * it. Zooming below it only buys blank stage around a sheet that is already
-   * entirely visible, which read as the plan shrinking away to nothing.
+   * The scale at which the WHOLE sheet fits the stage with its margin.
+   * Written by renderPage each time it measures the stage, so a resized
+   * window or a rotated tablet moves it with them.
+   *
+   * OWNER REVERSAL (2026-09-01): the fit is no longer the FLOOR. His words —
+   * "if I click minus, it should show the plan getting smaller with the
+   * [stage] getting around it". Zooming out below the fit shrinks the sheet
+   * into the stage, centred by its auto margins; the only floor left is a
+   * quarter of the fit, past which the sheet is a postage stamp and minus
+   * greys out honestly.
    */
   const fitScaleRef = useRef(0.1);
+  const zoomFloor = useCallback(() =>
+    Math.max(0.02, fitScaleRef.current * 0.25), []);
   /**
-   * A touch screen zooms in gentler steps.
-   *
-   * A flat +0.2 per tap is a quarter of the sheet gone at 80% and barely a
-   * nudge at 400%; with a finger there is no wheel to make the fine moves in
-   * between, so each tap moves ~8% instead. Keyed off what the device can DO
-   * (`any-hover: none`), never off "is this a tablet" — the standing rule.
+   * A touch tap moves a real step. The old ×1.08 "gentle" tap was the owner's
+   * "the plus zoom thing we need to fix" — at the fit, eight taps bought one
+   * wheel notch and the button read as broken. ×1.25 per tap is the pace the
+   * desktop buttons move at; the pinch is there for the fine moves. Keyed off
+   * what the device can DO (`any-hover: none`), never "is this a tablet".
    */
   const touchUI = useMedia('(any-hover: none)');
   const touchUIRef = useRef(touchUI);
@@ -780,18 +1006,12 @@ function PlanEditor({
   const zoomStep = useCallback((dir: 1 | -1, step: number, cap: number) => {
     setFitting(false);
     setScale(s => {
-      const next = touchUIRef.current ? s * (dir > 0 ? 1.08 : 1 / 1.08) : s + dir * step;
-      return Math.min(cap, Math.max(fitScaleRef.current, Math.round(next * 100) / 100));
+      const next = touchUIRef.current ? s * (dir > 0 ? 1.25 : 1 / 1.25) : s + dir * step;
+      return Math.min(cap, Math.max(zoomFloor(), Math.round(next * 100) / 100));
     });
-  }, []);
-  /**
-   * Standing ON the zoom-out floor. The floor itself is right — below the fit
-   * there is only blank stage — but a live-looking − that does nothing when
-   * pressed reads as the whole zoom being broken (the owner's TV report came
-   * from a sheet sitting exactly at its fit). Every zoom-out button greys and
-   * says why instead.
-   */
-  const atZoomFloor = scale <= fitScaleRef.current + 0.005;
+  }, [zoomFloor]);
+  /** Standing on the (new, far lower) floor — minus greys out only there. */
+  const atZoomFloor = scale <= zoomFloor() + 0.005;
   /**
    * REAL full screen, alongside the fit-to-page button that used to wear its
    * icon. The browser only grants it from a user gesture, and Esc leaves it
@@ -974,6 +1194,24 @@ function PlanEditor({
    */
   const [inkTool, setInkTool] = useState<string>('pen');
   const [penTray, setPenTray] = useState<{ x: number; y: number; up: boolean } | null>(null);
+  /** The shape in the Shapes tile's hand — line, arrow, box or circle. */
+  const [shapeTool, setShapeTool] = useState<string>('line');
+  const [shapeTray, setShapeTray] = useState<{ x: number; y: number; up: boolean } | null>(null);
+  /**
+   * Neat shapes — the Samsung Notes idea: while this is on, a freehand stroke
+   * that plainly meant a shape (a line, a box, a circle, a triangle, a star,
+   * a heart) is replaced on pen-lift by the clean version in the same ink.
+   * Per machine, like every studio comfort setting.
+   */
+  const [shapeSnap, setShapeSnap] = useState<boolean>(() => {
+    try { return localStorage.getItem('plan_shape_snap') !== '0'; } catch { return true; }
+  });
+  const toggleShapeSnap = useCallback(() => {
+    setShapeSnap(v => {
+      try { localStorage.setItem('plan_shape_snap', v ? '0' : '1'); } catch { /* private mode */ }
+      return !v;
+    });
+  }, []);
   useEffect(() => {
     if (compact || linkedVersion == null) { setVlink(null); return; }
     const measure = () => {
@@ -1261,10 +1499,8 @@ function PlanEditor({
   const zoomAt = useCallback((clientX: number, clientY: number, factor: number) => {
     anchorZoomAt(clientX, clientY);
     setFitting(false);
-    // The floor is the fit: once the whole sheet is on screen with its
-    // margin, zooming out further only shrinks it into blank stage.
-    setScale(z => Math.min(6, Math.max(fitScaleRef.current, Math.round(z * factor * 100) / 100)));
-  }, [anchorZoomAt]);
+    setScale(z => Math.min(6, Math.max(zoomFloor(), Math.round(z * factor * 100) / 100)));
+  }, [anchorZoomAt, zoomFloor]);
 
   useEffect(() => {
     const el = stageRef.current;
@@ -1299,18 +1535,23 @@ function PlanEditor({
     const el = stageRef.current;
     if (!el) return;
     /**
-     * ABSOLUTE, anchored at the first-touch centre — the board's own pinch
-     * fix, applied here after the same report ("if I zoom with my two
-     * fingers, it jumps, just like the board did"). The old version panned
-     * by the midpoint's per-frame travel AND re-took the zoom anchor from
-     * the sheet's CURRENT rect on every move — a rect that lags a render
-     * behind the last setScale, so each frame corrected against stale
-     * geometry and the two writes fought. Now the gesture snapshots ONE
-     * sheet fraction at touch-down and every frame derives scale and scroll
-     * from that snapshot alone: the sheet point under the first-touch
-     * centre stays under the fingers, and the midpoint's travel is the pan.
+     * ABSOLUTE, anchored at the first-touch centre — and, since the owner's
+     * "still a tiny bit jumpy", drawn as a TRANSFORM while the fingers are
+     * down. The previous version set the real scale on every touchmove: each
+     * frame re-laid-out three canvases and wrote integer scroll positions,
+     * and the residual rounding was the last of the jitter. Now the gesture
+     * touches no layout at all — the sheet wrapper carries
+     * `translate(midpoint travel) scale(k)` about the grabbed sheet point,
+     * one compositor-only style write per move — and the REAL scale and
+     * scroll are committed once, on the last finger leaving. The raster
+     * re-sharpens right after, as it does for every zoom.
      */
-    let base: { dist: number; scale: number; fx: number; fy: number } | null = null;
+    let base: {
+      dist: number; scale: number; fx: number; fy: number;
+      mx: number; my: number;
+    } | null = null;
+    let lastMid = { x: 0, y: 0 };
+    let lastWant = 1;
 
     const gap = (t: TouchList) =>
       Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
@@ -1344,43 +1585,52 @@ function PlanEditor({
       cancelStroke();
       const m = mid(e.touches);
       const f = sheetFraction(m.x, m.y);
-      base = f ? { dist: gap(e.touches), scale: scaleRef.current, fx: f.fx, fy: f.fy } : null;
+      base = f ? {
+        dist: gap(e.touches), scale: scaleRef.current, fx: f.fx, fy: f.fy,
+        mx: m.x, my: m.y,
+      } : null;
+      lastMid = m;
+      lastWant = scaleRef.current;
+      setFitting(false);
     }
     function move(e: TouchEvent) {
       if (e.touches.length !== 2 || !base) return;
       e.preventDefault();
       const m = mid(e.touches);
-      const er = el!.getBoundingClientRect();
-      const cx = m.x - er.left, cy = m.y - er.top;
-      /**
-       * UNROUNDED while the fingers are down (rounding per frame was its own
-       * stutter), floored at the fit, derived from the START distance — never
-       * from last frame's anything.
-       */
       const d = gap(e.touches);
       const want = base.dist >= 8
-        ? Math.min(6, Math.max(fitScaleRef.current, base.scale * (d / base.dist)))
-        : scaleRef.current;
-      // The post-render correction gets the SAME frozen fraction at the live
-      // midpoint; the inline apply keeps the sheet on the fingers this frame
-      // and is what makes a clamped pinch still PAN.
-      zoomAnchor.current = { fx: base.fx, fy: base.fy, cx, cy };
-      setFitting(false);
-      if (want !== scaleRef.current) setScale(want);
-      applyAnchor(base.fx, base.fy, cx, cy);
+        ? Math.min(6, Math.max(zoomFloor(), base.scale * (d / base.dist)))
+        : base.scale;
+      lastMid = m;
+      lastWant = want;
+      const w = sheetWrapRef.current;
+      if (!w) return;
+      // Scaling about the grabbed sheet point holds it at its layout spot;
+      // the translate then carries it under the live midpoint. No layout, no
+      // scroll, no React — one compositor write.
+      w.style.transformOrigin = `${base.fx * 100}% ${base.fy * 100}%`;
+      w.style.transform =
+        `translate(${m.x - base.mx}px, ${m.y - base.my}px) scale(${want / base.scale})`;
     }
     function end(e: TouchEvent) {
-      if (e.touches.length < 2) {
-        if (base) {
-          const snapped = Math.round(scaleRef.current * 100) / 100;
-          // A gesture that ends exactly on a tidy value leaves no scale
-          // change to consume the anchor — clear it, or the NEXT zoom from a
-          // button would jump to this pinch's midpoint.
-          if (snapped === scaleRef.current) zoomAnchor.current = null;
-          else setScale(snapped);
-        }
-        base = null;
+      if (e.touches.length >= 2 || !base) return;
+      const w = sheetWrapRef.current;
+      if (w) { w.style.transform = ''; w.style.transformOrigin = ''; }
+      const er = el!.getBoundingClientRect();
+      const cx = lastMid.x - er.left, cy = lastMid.y - er.top;
+      const snapped = Math.round(lastWant * 100) / 100;
+      if (snapped !== scaleRef.current) {
+        // Commit once: the layout effect resizes the canvases and puts the
+        // grabbed sheet point back under where the fingers ended.
+        zoomAnchor.current = { fx: base.fx, fy: base.fy, cx, cy };
+        setScale(snapped);
+      } else {
+        // A pure two-finger PAN — no scale change to consume the anchor, so
+        // carry the travel into the scroll directly.
+        applyAnchor(base.fx, base.fy, cx, cy);
+        zoomAnchor.current = null;
       }
+      base = null;
     }
 
     el.addEventListener('touchstart', start, { passive: true });
@@ -2281,7 +2531,7 @@ function PlanEditor({
     }
     if (!pts.length) { clearLive(); return; }
 
-    const s: AnnStroke = {
+    let s: AnnStroke = {
       id: `S-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
       page, tool: drewWith as AnnTool, color, width, opacity,
       pts: pts.flatMap(p => [
@@ -2290,6 +2540,32 @@ function PlanEditor({
         Math.round(p.w * 100) / 100,
       ]),
     };
+
+    /**
+     * Neat shapes — while the toggle is on, a freehand ink stroke that
+     * plainly meant a shape lands as the clean version, in the same ink. A
+     * line, box or circle becomes the app's own first-class mark (so the
+     * eraser, Move and the PDF stamp treat it as the shape it is); a
+     * triangle, star, heart or tilted box has no tool of its own and lands
+     * as a clean polyline in the pen that drew it. A highlighter only ever
+     * snaps to a straight band — its other job is marking over things that
+     * are not shapes. Nothing confident stays exactly as drawn.
+     */
+    if (shapeSnap && pre.freehand && INK_TOOL_IDS.includes(drewWith)) {
+      const cv = liveRef.current;
+      const aspect = cv && cv.height > 0 ? cv.width / cv.height : 1.4;
+      const snap = recognizeShape(pts, aspect);
+      if (snap && (!isHighlighterTool(drewWith) || snap.kind === 'line')) {
+        const clean = snap.pts.flatMap(p => [
+          Math.round(p.x * 1e4) / 1e4, Math.round(p.y * 1e4) / 1e4, 1,
+        ]);
+        s = isHighlighterTool(drewWith)
+          ? { ...s, pts: clean }                             // a straight band
+          : snap.as === 'poly'
+            ? { ...s, pts: clean }                           // the pen's own ink, tidied
+            : { ...s, tool: snap.as as AnnTool, pts: clean };
+      }
+    }
     setStrokes(prev => [...prev, s]);
     setRedo([]);
     setDirty(true);
@@ -2678,6 +2954,7 @@ function PlanEditor({
   function pick(id: string) {
     setTool(id);
     if (INK_TOOL_IDS.includes(id)) setInkTool(id);   // the tray's pen follows every pick
+    if (SHAPE_TOOL_IDS.includes(id)) setShapeTool(id); // and the Shapes tile its shape
     const p = toolById(id);
     if (p.width) setWidth(p.width);
     setOpacity(p.opacity);
@@ -3143,6 +3420,41 @@ function PlanEditor({
             </button>
           );
         }
+        /**
+         * Line, arrow, box and circle are ONE Shapes tile the same way — it
+         * wears whichever shape is in the hand, a press arms it, a press
+         * while armed opens the shape flyout. The bubble keeps its own tile,
+         * by the owner's ruling.
+         */
+        if (SHAPE_TOOL_IDS.includes(t.id) && t.id !== 'line') return null;
+        if (t.id === 'line') {
+          const cur = toolById(shapeTool);
+          const ShIcon = ICONS[shapeTool] ?? LineIcon;
+          const armed = SHAPE_TOOL_IDS.includes(tool);
+          return (
+            <button key="shapes" data-shape-tile
+              onClick={e => {
+                if (armed) {
+                  const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  setShapeTray(railRow
+                    ? { x: r.left + r.width / 2, y: r.top - 8, up: true }
+                    : { x: r.right + 10, y: r.top + r.height / 2, up: false });
+                } else pick(shapeTool);
+              }}
+              title={`${cur.label} — press again to pick a shape (line, arrow, box, circle)`}
+              className="rounded-xl flex flex-col items-center transition-colors"
+              style={{
+                ...railBtn,
+                backgroundColor: armed ? ACCENT : 'transparent',
+                color: armed ? '#fff' : 'rgba(255,255,255,.62)',
+              }}>
+              <span key={shapeTool} className="pen-swap flex flex-col items-center" style={{ gap: 2 }}>
+                <ShIcon size={ui.icon} />
+                <span className="font-semibold leading-none" style={{ fontSize: ui.label }}>{cur.label}</span>
+              </span>
+            </button>
+          );
+        }
         const Icon = ICONS[t.id] ?? Pen;
         const on = tool === t.id;
         return (
@@ -3252,9 +3564,15 @@ function PlanEditor({
     >
       {/* The pen tray, over everything, sealed to itself. */}
       {penTray && !locked && (
-        <PenTray at={penTray} up={penTray.up} current={inkTool} color={color} width={width} ts={ts}
+        <PenTray at={penTray} up={penTray.up} current={inkTool} color={color} width={width}
+          opacity={opacity} ts={ts}
           onPick={id => pick(id)} onColor={c => setColor(c)} onWidth={w => setWidth(w)}
+          onOpacity={o => setOpacity(o)}
           onClose={() => setPenTray(null)} />
+      )}
+      {shapeTray && !locked && (
+        <ShapeTray at={shapeTray} up={shapeTray.up} current={shapeTool} ts={ts}
+          onPick={id => pick(id)} onClose={() => setShapeTray(null)} />
       )}
       {/* The version-to-plan connector — replayed (keyed) on every switch. */}
       {vlink && (
@@ -3358,7 +3676,7 @@ function PlanEditor({
           {!locked && (
             <div className="flex items-center gap-0.5 text-white/85 mr-1">
               <button onClick={() => zoomStep(-1, 0.2, 5)} disabled={atZoomFloor}
-                title={atZoomFloor ? 'The whole sheet is already in view — + zooms in' : 'Zoom out'}
+                title={atZoomFloor ? 'As small as it goes' : 'Zoom out'}
                 className="p-1.5 rounded-lg hover:bg-white/10 disabled:opacity-30"><Minus size={14} /></button>
               <span className="text-[11px] tabular-nums w-11 text-center">{Math.round(scale * 100)}%</span>
               <button onClick={() => zoomStep(1, 0.2, 5)} title="Zoom in"
@@ -3698,6 +4016,26 @@ function PlanEditor({
                 </label>
               )}
 
+              {/* Neat shapes — the Samsung Notes idea, as a plain on/off. On,
+                  a freehand stroke that plainly meant a line, box, circle,
+                  triangle, star or heart lands as the clean version in the
+                  same ink; off, every stroke stays exactly as drawn. */}
+              {!isEraser && (
+                <button data-shape-snap
+                  onClick={toggleShapeSnap}
+                  title={shapeSnap
+                    ? 'Neat shapes is ON — a drawn square becomes a straight square. Press to turn off.'
+                    : 'Neat shapes is OFF — strokes stay exactly as drawn. Press to turn on.'}
+                  className={`flex items-center gap-1.5 rounded-full flex-shrink-0 text-[10.5px] font-semibold transition-colors ${
+                    compact ? 'min-h-[34px] px-2.5' : 'py-1 px-2.5'}`}
+                  style={{
+                    backgroundColor: shapeSnap ? ACCENT : 'rgba(255,255,255,.08)',
+                    color: shapeSnap ? '#fff' : 'rgba(255,255,255,.6)',
+                  }}>
+                  <Shapes size={13} /> Neat shapes
+                </button>
+              )}
+
               {/* The pressure control is gone. The Samsung panel's pen has no
                   pressure sensor at all — it is infrared and passive — so the
                   slider was a control over a number that never moved. Width
@@ -3745,7 +4083,7 @@ function PlanEditor({
                 <span className="mx-1 w-px self-stretch bg-white/20" />
               </>)}
               <button onClick={() => zoomStep(-1, 0.15, 6)} disabled={atZoomFloor}
-                title={atZoomFloor ? 'The whole sheet is already in view — + zooms in' : 'Zoom out'}
+                title={atZoomFloor ? 'As small as it goes' : 'Zoom out'}
                 className="px-2.5 py-1 rounded-full hover:bg-white/10 disabled:opacity-30">
                 <Minus size={14} />
               </button>
@@ -3820,7 +4158,7 @@ function PlanEditor({
                 )}
               </div>
             ) : (
-              <div className="relative shadow-2xl m-auto" style={{ backgroundColor: '#fff' }}>
+              <div ref={sheetWrapRef} className="relative shadow-2xl m-auto" style={{ backgroundColor: '#fff' }}>
                 {/*
                   A wide sheet on an upright phone fits to width and comes out
                   about a third of the screen tall — big enough to see, too
@@ -4098,7 +4436,7 @@ function PlanEditor({
                 read is how you get back to a known size. */}
             <div className="flex items-center gap-1 px-1 py-1">
               <button onClick={() => zoomStep(-1, 0.2, 5)} disabled={atZoomFloor}
-                title={atZoomFloor ? 'The whole sheet is already in view — + zooms in' : 'Zoom out'}
+                title={atZoomFloor ? 'As small as it goes' : 'Zoom out'}
                 className="rounded-lg flex items-center justify-center min-w-[42px] min-h-[42px] disabled:opacity-40"
                 style={{ backgroundColor: '#f1f5f9', color: '#334155' }}><Minus size={16} /></button>
               <span className="flex-1 text-center text-[13px] font-bold tabular-nums text-slate-700">

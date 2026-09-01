@@ -79,16 +79,26 @@ async function planState() {
 const before = await planState();
 check(before.canvases >= 3 && before.w > 100, 'the sheet rendered in the pane', JSON.stringify(before));
 
-// At the fit floor the − is DISABLED and says why — a live-looking button
-// that does nothing at exactly the zoom every sheet opens on is what made
-// the whole pill read as broken on the wall.
-const minusFloored = await page.evaluate(() => {
+// OWNER REVERSAL (2026-09-01): the fit is no longer the floor. At the fit the
+// − is ALIVE, and pressing it shrinks the sheet into the stage — "the plan
+// getting smaller with the [stage] getting around it".
+const minusAtFit = await page.evaluate(() => {
   const b = [...document.querySelectorAll('.drawer-panel button')]
-    .filter(x => /already in view|Zoom out/.test(x.title)).pop();
-  return b ? { disabled: b.disabled, title: b.title } : null;
+    .filter(x => /As small as it goes|Zoom out/.test(x.title)).pop();
+  const out = b ? { disabled: b.disabled, title: b.title } : null;
+  if (b && !b.disabled) b.click();
+  return out;
 });
-check(!!minusFloored && minusFloored.disabled && /already in view/.test(minusFloored.title),
-  'at the fit, − is greyed and says the sheet is already all in view', JSON.stringify(minusFloored));
+await page.waitForTimeout(700);
+const belowFit = await planState();
+check(!!minusAtFit && !minusAtFit.disabled, 'at the fit, − is ALIVE (the owner reversed the floor)', JSON.stringify(minusAtFit));
+check(belowFit.w < before.w * 0.97, `and pressing it goes below the fit (${Math.round(before.w)} -> ${Math.round(belowFit.w)})`);
+// come back up to the fit so the sections below start where they always did
+await page.evaluate(() => {
+  const b = [...document.querySelectorAll('.drawer-panel button')].filter(x => x.title === 'Zoom in').pop();
+  b?.click();
+});
+await page.waitForTimeout(700);
 
 // Press + through the DOM (touch-emulated synthetic clicks hang).
 await page.evaluate(() => {

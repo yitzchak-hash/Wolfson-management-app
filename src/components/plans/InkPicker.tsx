@@ -18,7 +18,7 @@ import { savedColors, saveColor, forgetColor, recentColors, rememberColor } from
 /** Lightness steps for the tint/shade row. */
 const RAMP = [0.30, 0.48, 0.64, 0.78, 0.9, 1];
 
-export function InkPicker({ value, onChange, palette, onClose, anchor }: {
+export function InkPicker({ value, onChange, palette, onClose, anchor, lift }: {
   value: string;
   onChange: (hex: string) => void;
   /** The tool's own suggested colours, shown first. */
@@ -26,6 +26,12 @@ export function InkPicker({ value, onChange, palette, onClose, anchor }: {
   onClose: () => void;
   /** Where to hang the panel from, in viewport coordinates. */
   anchor: { x: number; y: number };
+  /**
+   * Raise the picker above the pen tray (z-169). Its usual z sits under the
+   * tray's backdrop, which leaves it visible but unpressable when opened from
+   * the tray's own custom-colour chip.
+   */
+  lift?: boolean;
 }) {
   const [saved, setSaved] = useState<string[]>(() => savedColors());
   const hasDropper = typeof window !== 'undefined' && 'EyeDropper' in window;
@@ -77,7 +83,7 @@ export function InkPicker({ value, onChange, palette, onClose, anchor }: {
 
   return (
     <>
-      <div className="fixed inset-0 z-[160]" onPointerDown={onClose} />
+      <div className="fixed inset-0" style={{ zIndex: lift ? 172 : 160 }} onPointerDown={onClose} />
       <div
         // overflow-Y auto, not hidden: the panel is ~450px tall and a phone held
         // in LANDSCAPE is only 390px, so the kept-colours shelf and the Done
@@ -85,8 +91,9 @@ export function InkPicker({ value, onChange, palette, onClose, anchor }: {
         // viewport and letting it scroll keeps every control reachable in both
         // orientations without changing how it looks on a desktop, where the
         // cap is never the binding constraint.
-        className="fixed z-[161] rounded-2xl overflow-x-hidden overflow-y-auto select-none"
+        className="fixed rounded-2xl overflow-x-hidden overflow-y-auto select-none"
         style={{
+          zIndex: lift ? 173 : 161,
           left, top, width: W,
           maxHeight: 'calc(100dvh - 16px)',
           background: '#ffffff',

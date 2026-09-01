@@ -22,7 +22,7 @@ import { ClipArtNode, ART_KINDS, ArtKind } from '../components/board/BoardNodes'
 import { MiniJob } from '../components/board/MiniJob';
 import { ProjectMini, BoardMini, CalendarMini } from '../components/board/DashWidgets';
 import {
-  TV_WIDGETS, WhoIsOut, WorkspaceCard, LatestPhoto, PhotoWall, MonthHeat, WallClock,
+  TV_WIDGETS, WhoIsOut, WorkspaceCard, LatestPhoto, PhotoWall, MonthHeat, WallClock, tzDate,
 } from './tvWidgets';
 import { INSIGHT_WIDGETS } from './insightWidgets';
 import { MORE_WIDGETS } from './moreWidgets';
@@ -1267,13 +1267,16 @@ export const WIDGETS: WidgetDef[] = [
     id: 'clock', rank: 7, name: 'Wall clock', category: 'visual', icon: Clock3, w: 190, h: 110,
     blurb: 'Time and date, big enough to read across the office — with the Hebrew date and the '
       + 'next holiday when you switch them on.',
-    render: (el) => (
+    render: (el) => {
+      // Pinned to ISRAEL unless the pencil says "this screen's own time" — a
+      // wall panel sitting on the wrong country was showing the wrong hour.
+      const tz = d(el).tz === 'device' ? '' : 'Asia/Jerusalem';
       // The wall's "Clock and date" folded in here: its two extras became
       // switches on the one clock instead of a second clock.
-      (d(el).hebrew || d(el).holiday)
-        ? <WallClock hebrew={!!d(el).hebrew} holiday={!!d(el).holiday} />
-        : <ClockWidget />
-    ),
+      return (d(el).hebrew || d(el).holiday)
+        ? <WallClock hebrew={!!d(el).hebrew} holiday={!!d(el).holiday} tz={tz} />
+        : <ClockWidget tz={tz} />;
+    },
   },
   {
     id: 'banner', rank: 2, name: 'Banner', category: 'visual', icon: Megaphone, w: 340, h: 62,
@@ -2142,19 +2145,22 @@ function TeamTyped({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   );
 }
 
-function ClockWidget() {
+function ClockWidget({ tz = 'Asia/Jerusalem' }: { tz?: string }) {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 20_000);
     return () => clearInterval(t);
   }, []);
+  // Pinned to a zone (Israel by default) — a panel that thinks it is in the
+  // wrong country still shows office time. See tzDate in tvWidgets.
+  const shown = tzDate(now, tz);
   return (
     <div className="w-full h-full flex flex-col items-center justify-center">
       <div className="font-black tabular-nums leading-none" style={{ fontSize: 34 }}>
-        {now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+        {shown.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
       </div>
       <div className="text-[10.5px] text-gray-500 mt-1">
-        {now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })}
+        {shown.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })}
       </div>
     </div>
   );

@@ -505,39 +505,57 @@ export function MonthHeat({ c }: { c: WidgetCtx }) {
 }
 
 /**
+ * The wall's own time, in a chosen TIMEZONE. A TV panel is the machine most
+ * likely to be sitting on the wrong country (a fresh browser often thinks it
+ * is in UTC), and a widget can only show what the device gives it — so the
+ * clock is pinned to a zone (Israel by default) and reads right whatever the
+ * panel believes. A device whose CLOCK is minutes off still needs its own
+ * clock set: no page can overrule that.
+ */
+export function tzDate(now: Date, tz: string): Date {
+  if (!tz) return now;
+  try { return new Date(now.toLocaleString('en-US', { timeZone: tz })); } catch { return now; }
+}
+
+/**
  * The clock with both calendars. The merged Wall clock draws this whenever
  * either extra is switched on; the flags hide the lines that were not asked
  * for, so "Hebrew date without the holiday" is a real choice.
  */
-export function WallClock({ hebrew = true, holiday = true }: { hebrew?: boolean; holiday?: boolean }) {
+export function WallClock({ hebrew = true, holiday = true, tz = 'Asia/Jerusalem' }: {
+  hebrew?: boolean; holiday?: boolean; tz?: string;
+}) {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 10_000);
     return () => clearInterval(t);
   }, []);
+  const shown = tzDate(now, tz);
 
-  // The next thing worth knowing about, up to a month out.
+  // The next thing worth knowing about, up to a month out — counted from the
+  // ZONE's own day, or the holiday line flips a day early/late near midnight.
   const next = useMemo(() => {
     if (!holiday) return null;
     for (let i = 0; i < 40; i++) {
-      const d2 = new Date(now); d2.setDate(d2.getDate() + i);
+      const d2 = new Date(shown); d2.setDate(d2.getDate() + i);
       const hits = holidaysOn(d2, { jewish: true, israeli: true });
       if (hits.length) return { name: hits[0].name, days: i };
     }
     return null;
-  }, [now, holiday]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [now, holiday, tz]);
 
   return (
     // Centred when it fits, scrollable when it does not — squeezed short, the
     // holiday line was falling off the bottom with nothing to reach it by.
     <div className="w-full h-full flex flex-col justify-center px-3.5 py-3 overflow-auto widget-scroll">
       <div className="font-black leading-none tabular-nums text-slate-800 flex-shrink-0" style={{ fontSize: 52 }}>
-        {now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+        {shown.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
       </div>
       <div className="text-[15px] text-slate-500 mt-1.5">
-        {now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
+        {shown.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
       </div>
-      {hebrew && <div className="text-[14px] text-slate-400">{hebrewLabel(now)}</div>}
+      {hebrew && <div className="text-[14px] text-slate-400">{hebrewLabel(shown)}</div>}
       {next && (
         <div className="text-[13px] mt-1.5" style={{ color: '#7c3aed' }}>
           {next.days === 0 ? next.name : `${next.name} in ${next.days} day${next.days === 1 ? '' : 's'}`}

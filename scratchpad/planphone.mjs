@@ -131,9 +131,17 @@ if (await markup.count()) {
   // leaves ink. Arm the pen, drag a finger, and read the committed-ink canvas's
   // pixels — the palm rule and touch-action both sit in this path, so if either
   // regresses this goes blank.
+  // The pen opens ARMED, and since the tray round a tap on the armed ink tile
+  // opens the PEN DRAWER — whose backdrop would swallow the drawing touch. So
+  // the tap stays (it proves the tile is tappable) and the drawer, if it
+  // opened, is closed by a tap on its backdrop before drawing.
   const pen = page.locator('button[title]').filter({ hasText: /^Pen$/ });
   if (await pen.count()) await pen.first().tap();
   await page.waitForTimeout(400);
+  if (await page.locator('[data-pen-tray]').count()) {
+    await page.touchscreen.tap(5, 5);
+    await page.waitForTimeout(400);
+  }
   const canvases = page.locator('canvas');
   const nCanv = await canvases.count();
   const cbox = await canvases.nth(nCanv - 1).boundingBox();   // live layer is topmost

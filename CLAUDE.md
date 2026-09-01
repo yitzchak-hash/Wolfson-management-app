@@ -6713,3 +6713,112 @@ first stroke instead, drawn as a ZIGZAG: calligraphy's width is direction,
 so a straight line holds one width and `max > min*1.5` fails for the wrong
 reason. Regressions green: planaddr, planaddr2, plantabs, drivesave-probe,
 planphone-probe, pinvoice-probe, pinauto-probe.
+
+---
+
+# v2 — neat shapes, the drawer finished, and the zoom set free
+
+## Neat shapes (`src/components/plans/shapeSnap.ts` + the onUp hook)
+The Samsung Notes "auto fix shapes" idea, local and pure. While the
+`[data-shape-snap]` toggle on the studio's top bar is ON (default; per
+machine, `plan_shape_snap`), a freehand ink stroke is offered on pen-lift to
+`recognizeShape(pts, aspect)`: a line (angle-snapped to 45°s within 6°), a
+box (squared when near-square, a true rotated rectangle when tilted), a
+circle/ellipse, a triangle (base levelled), a five-point star, a heart ($1-
+style template match). Confident matches replace the stroke — line/box/
+circle as the app's own `line`/`rect`/`ellipse` marks (so Move, the eraser
+and the PDF stamp treat them as shapes), the rest as clean polylines in the
+pen that drew them; a highlighter only ever snaps to a straight band.
+Nothing confident stays EXACTLY as drawn — every threshold errs to "leave
+it alone". Rules paid for offline (`scratchpad/shapesnap.mjs`, 15 checks):
+- The stroke arrives in sheet fractions, which distort angles on any
+  non-square page — everything works in a uniform 1000-unit space scaled by
+  the sheet's aspect and converts back at the end.
+- A wide oval's two tight ends legitimately read as "corners" — the ellipse
+  branch allows up to two and lets the fit error gate.
+- A heart shows four "corners" too — the quad/triangle branches demand
+  straight-ish edges (`edgeBulge`), or a heart becomes a rectangle.
+- The star's walk can start on a spike OR in a valley — test that the
+  radius ZIGZAGS (sign flips), never that even positions are the long ones.
+
+## One Shapes tile
+Line, arrow, box and circle collapse to one rail tile (the ink tile's
+idiom): it wears the shape in the hand (`shapeTool`), a press arms it, a
+press while armed opens the frosted `[data-shape-tray]` flyout (picking
+closes it — there is no scribble show to watch). The bubble keeps its own
+tile, by the owner's word. `pick()` keeps `shapeTool` in step so the l/a/r/o
+hotkeys move the tile.
+
+## The drawer, finished (PenTray round 2)
+- **Realistic pens**: TRAY_PENS draws each pen WHOLE in a 34×104 box — the
+  Crayola-style crayon (paper wrapper, serpentine label lines, oval label),
+  the Sharpie-style marker (colour-coded end), the wooden brush (bristles,
+  crimped ferrule), the gold fountain nib, the yellow pencil ending in its
+  pink eraser. The shared white barrel is gone; the ink colour appears where
+  the real pen would show it. `dk`/`lt` shade helpers.
+- **The slider fill follows the thumb** — the tray's size slider never set
+  `--fill` (the documented `.ink-slider` contract), so the blue bar froze at
+  50%. And the tray's range WIDENS to include the current width, in the same
+  half-point steps as the top bar, with the number printed beside it — a
+  width set on either control shows identically on both.
+- **See-through, the Samsung way**: `[data-tray-alpha]` (`.alpha-slider` in
+  index.css) — the track is a ramp from `${color}00` to the ink over a
+  checkerboard, sharing the `opacity` state with the top bar's See-through.
+- **The rainbow chip** (`[data-tray-custom]`) opens the full InkPicker from
+  the tray. InkPicker grew a `lift` prop (inline zIndex 172/173) — its usual
+  z sits UNDER the tray's backdrop, which left it visible but unpressable.
+
+## The zoom set free — OWNER REVERSAL (2026-09-01)
+His words: "if I click minus, it should show the plan getting smaller with
+the [stage] getting around it", and the ×1.08 touch tap was "the plus zoom
+thing we need to fix". Supersedes the fit-floor ruling AND the gentle-tap
+ruling:
+- `zoomFloor()` = a quarter of the fit (min 0.02). Minus is ALIVE at the
+  fit and shrinks the sheet into the stage; it greys only at the real
+  floor, titled "As small as it goes".
+- A touch tap moves ×1.25 — the desktop pace; the pinch is the fine move.
+- `tvzoom-probe` / `markupfixes` re-encoded to the new contract.
+
+## The pinch is a TRANSFORM while the fingers are down
+The absolute-anchor pinch still re-laid-out three canvases and wrote integer
+scrolls per touchmove — the owner's "still a tiny bit jumpy". Now the sheet
+wrapper (`sheetWrapRef`) carries `translate(midpoint travel) scale(k)` about
+the grabbed sheet point — one compositor-only style write per move, no
+layout, no React — and the REAL scale + scroll commit once on the last
+finger leaving (or, for a pure two-finger pan, the travel goes straight into
+the scroll). The raster re-sharpens right after, as for any zoom.
+`planpinch-probe`: max drift 0px.
+
+## TikTok: volume, and full screen that fits the wall
+- `[data-tiktok-volume]` slider beside the sound button — HONEST about the
+  platform: TikTok's player protocol takes only mute/unMute from a page
+  (verified against its embed-player spec; there is NO volume message), so
+  0 silences, above 0 turns sound on, the number rides `data.volume`, and
+  the slider follows the player's own `onVolumeChange` reports. Loudness is
+  the screen's own volume; the title says so.
+- In element fullscreen the floating pill and the exit × carry
+  `zoom: clamp(min(vw,vh)/420, 1.6, 2.8)` — 13px icons were specks on a TV.
+- round30's "no remount on sound" check was re-encoded: a READY player takes
+  the choice over postMessage, but a never-ready player (every player in
+  this internet-less container) gets the remount lever BY DESIGN.
+
+## The wall clock keeps ISRAEL time
+`tzDate(now, tz)` in tvWidgets.tsx; WallClock and ClockWidget take `tz`,
+defaulting to `Asia/Jerusalem` — a TV panel sitting on the wrong country
+(the owner's "why the clock not set properly") showed that country's hour.
+The pencil offers "This screen's own time" (`data.tz === 'device'`). A clock
+minutes off is the DEVICE's clock and no page can overrule it — the pencil
+hint says so. The Hebrew date and the next-holiday countdown shift with the
+zone, so the day never flips early near midnight.
+
+## Probe notes
+`round36-probe` (28) · `round36b-probe` (10, with a CDP New-York timezone
+override proving the clock) · shapesnap (offline, 15). Traps paid for:
+- The drawer pane BEHIND the studio carries a pill with the same button
+  titles, and the studio's own header has NO % readout — measure the
+  studio's zoom off its sheet canvas's width, and find its buttons by
+  walking UP from that canvas.
+- `planphone.mjs`'s "tap Pen to arm it" idiom went stale the day the armed
+  ink tile started opening the DRAWER — the backdrop swallowed the drawing
+  touch and "finger drawing left no ink". The probe now closes the tray it
+  itself opened. The product was never broken.

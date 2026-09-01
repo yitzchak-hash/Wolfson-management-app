@@ -70,19 +70,18 @@ await page.waitForTimeout(3200);
 
 const tk = page.locator('[data-node-id="CE-tk"]');
 
-// ── 1 · TikTok: the frame survives the sound button (no more restart) ───────
+// ── 1 · TikTok: the sound button reaches the player ─────────────────────────
+// RE-ENCODED after the "sound drives the player" round: a READY player takes
+// the choice over postMessage with no remount, but a player that never said
+// ready — which is every player in this internet-less container — gets the
+// remount lever BY DESIGN: the fresh frame's address carries the new mute
+// choice, and the press is the user gesture the browser wants.
 check(await tk.locator('[data-tiktok-fullscreen]').count() === 1, 'the TikTok widget has a full-screen button');
-await page.evaluate(() => {
-  const f = document.querySelector('[data-node-id="CE-tk"] iframe');
-  if (f) f.__mark = 'alive';
-});
 await tk.locator('button[title="Turn the sound on"]').click();
 await page.waitForTimeout(600);
-const soundKept = await page.evaluate(() => {
-  const f = document.querySelector('[data-node-id="CE-tk"] iframe');
-  return f ? f.__mark === 'alive' : 'no-frame';
-});
-check(soundKept === true, 'turning the sound on does NOT remount the player frame', String(soundKept));
+const soundSrc = await page.evaluate(() =>
+  document.querySelector('[data-node-id="CE-tk"] iframe')?.src ?? '');
+check(/muted=0/.test(soundSrc), 'a never-ready player gets the remount lever, asking for sound', soundSrc.slice(0, 90));
 
 // ── 2 · the big manager popup ───────────────────────────────────────────────
 await tk.locator('[data-tiktok-manage]').click();

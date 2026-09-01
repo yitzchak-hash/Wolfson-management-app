@@ -30,6 +30,64 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-11-15',
+    title: 'Real pens, neat shapes, and a zoom that obeys',
+    items: [
+      {
+        title: 'The pens look like the real thing',
+        body: 'Open the drawer and each pen is drawn as itself: a Crayola-'
+          + 'style crayon in its paper wrapper, a Sharpie-style marker with '
+          + 'its colour-coded end, a wooden brush with real bristles, a gold '
+          + 'fountain nib, a yellow pencil with its pink eraser.',
+        demo: 'tap',
+      },
+      {
+        title: 'Neat shapes — draw a square, get a square',
+        body: 'With the new Neat-shapes switch on the top bar, a drawn box '
+          + 'straightens itself, a circle rounds itself, and lines, '
+          + 'triangles, stars and hearts all snap clean — in the same pen '
+          + 'and colour you drew them with. Switch it off and every stroke '
+          + 'stays exactly as your hand made it. Line, arrow, box and '
+          + 'circle also folded into one Shapes button with its own little '
+          + 'flyout.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'The drawer got its missing controls',
+        body: 'The size slider\'s blue bar follows the handle now and shows '
+          + 'the same number as the Width up top; a see-through slider '
+          + 'fades from nothing to your ink over a checkerboard, the '
+          + 'Samsung way; and a rainbow chip opens the full colour picker '
+          + 'right from the drawer.',
+        demo: 'tap',
+      },
+      {
+        title: 'Zoom out past the edge, pinch like glass',
+        body: 'Minus now shrinks the plan into the page around it instead '
+          + 'of stopping at the fit, a finger tap on plus moves a real '
+          + 'step, and the pinch is silk — the sheet rides your fingers '
+          + 'exactly and sharpens the moment you let go.',
+        demo: 'zoom',
+      },
+      {
+        title: 'TikTok sound and full-screen buttons',
+        body: 'A volume slider sits beside the sound button (TikTok only '
+          + 'lets a page switch sound on or off — the screen\'s own volume '
+          + 'sets the loudness), and in full screen the controls and the '
+          + 'exit button grow to match the screen.',
+        demo: 'tap',
+      },
+      {
+        title: 'The wall clock keeps Israel time',
+        body: 'A TV that thinks it is in another country was showing the '
+          + 'wrong hour. The clock is now pinned to Israel time whatever '
+          + 'the panel believes — switchable to the device\'s own time in '
+          + 'its settings.',
+        demo: 'sparkle',
+      },
+    ],
+  },
+  {
     date: '2026-11-08',
     title: 'A full pen drawer, and the plan reader sharpens up',
     items: [

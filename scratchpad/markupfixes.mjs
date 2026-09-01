@@ -69,13 +69,31 @@ const pct = p => p.evaluate(() => {
   const open = await pct(page);
   check(open != null && open > 5, 'the viewer opened fitted', `${open}%`);
 
-  // Pressing zoom-out over and over must stop where the whole sheet fits.
-  for (let i = 0; i < 9; i++) { await page.click('[title="Zoom out"]'); await page.waitForTimeout(70); }
+  // OWNER REVERSAL (2026-09-01): zooming out no longer stops at the fit — the
+  // sheet shrinks into the stage, and only the real floor (a quarter of the
+  // fit) greys the −, honestly.
+  for (let i = 0; i < 12; i++) {
+    await page.evaluate(() => {
+      const b = [...document.querySelectorAll('button')]
+        .find(x => x.title === 'Zoom out' || x.title === 'As small as it goes');
+      if (b && !b.disabled) b.click();
+    });
+    await page.waitForTimeout(70);
+  }
   const floored = await pct(page);
-  check(floored != null && floored >= open - 1,
-    'zooming out STOPS once the whole plan is visible', `${open}% → ${floored}%`);
+  check(floored != null && floored < open - 10,
+    'zooming out goes BELOW the fit now', `${open}% → ${floored}%`);
+  const minusState = await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')]
+      .find(x => x.title === 'Zoom out' || x.title === 'As small as it goes');
+    return b ? { dis: b.disabled, title: b.title } : null;
+  });
+  check(!!minusState && minusState.dis && minusState.title === 'As small as it goes',
+    'and the − greys honestly at the real floor', JSON.stringify(minusState));
 
-  // Zoom in a few steps, then the fit button brings the fit back.
+  // Back to the fit, then in past it, then the fit button brings it back.
+  await page.click('[data-plan-fit]');
+  await page.waitForTimeout(600);
   for (let i = 0; i < 4; i++) { await page.click('[title="Zoom in"]'); await page.waitForTimeout(70); }
   const zoomed = await pct(page);
   check(zoomed != null && zoomed > open + 20, 'zooming in still works past the fit', `${zoomed}%`);
@@ -141,9 +159,11 @@ const pct = p => p.evaluate(() => {
   await page.waitForTimeout(300);
   const after = await pct(page);
   const grew = after - before;
-  const gentle = Math.round(before * 1.08) - before;
-  check(before != null && grew > 0 && Math.abs(grew - gentle) <= 1 && grew < 15,
-    'one tap moves ~8%, not a flat 15-point leap', `${before}% → ${after}% (+${grew})`);
+  // OWNER SUPERSESSION (2026-09-01): the gentle ~8% tap was his "the plus
+  // zoom thing we need to fix" — a tap now moves a real ×1.25 step.
+  const step = Math.round(before * 1.25) - before;
+  check(before != null && grew > 0 && Math.abs(grew - step) <= 1,
+    'one tap moves a real ×1.25 step', `${before}% → ${after}% (+${grew})`);
   await ctx.close();
 }
 

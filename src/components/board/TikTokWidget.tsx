@@ -356,6 +356,20 @@ export function TikTokWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   /** The live mute choice, for the once-registered message listener. */
   const mutedRef = useRef(true);
   mutedRef.current = muted;
+  /**
+   * The loudness slider's number, remembered on the node. HONESTY NOTE: the
+   * player's protocol takes only mute/unMute from a page — there is no
+   * volume message (verified against TikTok's embed-player spec) — so 0 is
+   * silence, anything above turns the sound on, and the actual loudness is
+   * the screen's own volume. The number is kept and re-shown, and when the
+   * player reports its own volume (onVolumeChange) the slider follows it.
+   */
+  const [vol, setVol] = useState<number>(() => {
+    const v = Number(data.volume);
+    return Number.isFinite(v) && v >= 0 && v <= 100 ? v : 100;
+  });
+  const volRef = useRef(vol);
+  volRef.current = vol;
   const [draft, setDraft] = useState('');
   const [manage, setManage] = useState(false);
   const [meta, setMeta] = useState<Record<string, Meta>>(() => (data.meta as Record<string, Meta>) ?? {});
@@ -429,6 +443,14 @@ export function TikTokWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
         if (v === 1) setVidPlaying(true);
         if (v === 0 || v === 2) setVidPlaying(false);
         if (v === 0 && playingAuto.current) setAt(i => (i + 1) % Math.max(1, order.length));
+      }
+      if (m.type === 'onVolumeChange') {
+        // The player reports 0..100 (some builds 0..1) — the slider follows.
+        const raw = Number(m.value);
+        if (Number.isFinite(raw) && raw >= 0) {
+          const v = Math.round(raw <= 1 ? raw * 100 : raw);
+          if (v >= 0 && v <= 100) setVol(v);
+        }
       }
     };
     window.addEventListener('message', onMsg);
@@ -516,6 +538,15 @@ export function TikTokWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [fs, setFs] = useState(false);
   const [fsChrome, setFsChrome] = useState(false);
+  /**
+   * Full screen fills a WALL — the pill's 13px icons were unpressable specks
+   * there. The whole pill (and the exit ×) is zoomed by the screen's own
+   * size: ~2.5× on a TV, ~1.6× on a phone. `zoom` scales the layout, so the
+   * buttons inside keep their proportions.
+   */
+  const fsZoom = fs
+    ? Math.min(2.8, Math.max(1.6, Math.min(window.innerWidth, window.innerHeight) / 420))
+    : 1;
   const chromeTimer = useRef<number | null>(null);
   useEffect(() => {
     const onChange = () => {
@@ -634,6 +665,7 @@ export function TikTokWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
       className={fs
         ? 'absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-white rounded-full px-3 py-1.5 shadow-2xl z-10'
         : 'flex items-center gap-1 flex-shrink-0'}
+      style={fs ? { zoom: fsZoom } : undefined}
     >
       <button data-no-drag data-el-action title="Previous"
         onClick={() => setAt(i => (i - 1 + order.length) % order.length)}
@@ -672,6 +704,32 @@ export function TikTokWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
         style={{ color: muted ? '#94a3b8' : '#ec4899' }}>
         {muted ? <VolumeX size={13} /> : <Volume2 size={13} />}
       </button>
+      {/* The loudness slider the office asked for — as honest as the platform
+          allows: TikTok's player takes only sound-on / sound-off from a page
+          (its protocol has no volume message), so 0 silences, anything above
+          turns the sound on, and the screen's own volume is the loudness.
+          The number is remembered, and when the player reports its own
+          volume the slider follows it. */}
+      <input data-no-drag data-el-action data-tiktok-volume
+        type="range" min={0} max={100} step={5}
+        value={muted ? 0 : vol}
+        title="Sound — 0 is off. TikTok only takes on/off from a page; set loudness with the screen's own volume."
+        onPointerDown={e => e.stopPropagation()}
+        onChange={e => {
+          const v = +e.target.value;
+          setVol(v || volRef.current || 100);
+          const wantMute = v === 0;
+          if (wantMute !== muted) {
+            setMuted(wantMute);
+            post(wantMute ? 'mute' : 'unMute');
+            if (!ready) setPlayToken(t => t + 1);
+          }
+        }}
+        onPointerUp={() => {
+          if (!c.readOnly) c.update({ data: { ...data, volume: volRef.current } });
+        }}
+        className="flex-shrink-0"
+        style={{ width: 56, accentColor: '#ec4899' }} />
       <button data-no-drag data-el-action title={playing ? 'Stop moving on' : 'Move on by itself'}
         onClick={() => setPlaying(p => !p)}
         className="p-1 rounded hover:bg-gray-100"
@@ -779,7 +837,8 @@ export function TikTokWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
               onPointerDown={e => e.stopPropagation()}
               onClick={toggleFs} title="Exit full screen"
               className="absolute top-3 right-3 z-10 w-9 h-9 rounded-full bg-black/50 text-white/80
-                         hover:bg-black/70 hover:text-white flex items-center justify-center">
+                         hover:bg-black/70 hover:text-white flex items-center justify-center"
+              style={{ zoom: fsZoom }}>
               <Minimize2 size={16} />
             </button>
           )}
