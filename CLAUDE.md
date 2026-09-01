@@ -6428,12 +6428,17 @@ corner glyph is gone from green tiles (the counter sits where it sat); the
 whole tile is still the button. `tapin2.mjs` re-encoded: backgroundImage,
 never backgroundColor — both states are gradients now.
 
-## Multi-selection strips are TINY (owner: 2026-09-01), and the second office number
-A node in a MULTI-selection (`inGroup`, the resize-handle flag) wears only
-tiny lock · focus · TV (w-5, icons 10) above it — a dozen selected nodes
-each drawing the full strip was a wall of repeated buttons across the
-screen, and settings/remove speak for one node anyway (the selection menu
-is where a group acts). Single selection keeps the full strip untouched.
-`scratchpad/slimstrip-probe.mjs` (3 checks). And `OWN_NUMBERS` gained
-'037208000' — the Tel Aviv office line printed on plans beside Beit
-Shemesh's, per the owner.
+## ONE strip for a multi-selection (owner: 2026-09-01, refined same day)
+A node in a MULTI-selection (`inGroup`, the resize-handle flag) wears NO
+strip of its own. Instead ONE `data-sel-strip` — focus · lock · TV, sized
+÷zoom like all frame chrome — rides the top-right of the selection's
+combined box (the same overlay that draws the dashed box and the single
+resize grip) and acts on the WHOLE selection: focus pans the union (jobs
+widen it) to centre through the clamp, lock/TV write every selected node
+AND selected job in one tracked step (any-unlocked → lock all; any-shown →
+hide all). Single selection keeps the full per-node strip untouched.
+`scratchpad/slimstrip-probe.mjs` (7 checks). Its traps: the lasso can catch
+the board's own seeded bins, and a hover on an UNSELECTED node legitimately
+reveals its strip — scope counts to the seeded ids and park the mouse.
+And `OWN_NUMBERS` gained '037208000' — the Tel Aviv office line printed on
+plans beside Beit Shemesh's, per the owner.

@@ -5,7 +5,7 @@ import {
   Ghost, ThumbsUp, ThumbsDown, ClipboardPaste, LayoutGrid, Columns3, Archive, CheckCircle2, PlayCircle,
   Image as ImageIcon, ImageOff, History, MoveUpRight, Unlink, FileText, Search, FolderPlus, Printer,
   Settings2 as Settings, BringToFront, SendToBack, ChevronUp, ChevronDown, Eye,
-  Eraser, GripVertical, Lock, Unlock, Group, Ungroup, Info as InfoGlyph, CalendarDays,
+  Eraser, GripVertical, Lock, Unlock, Group, Ungroup, Info as InfoGlyph, CalendarDays, Crosshair,
 } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useStore, isTombstoned } from '../data/store';
@@ -6617,6 +6617,93 @@ export function GeneralJobsPage() {
           const x1 = Math.max(...boxes.map(bx => bx.x + bx.w));
           const y1 = Math.max(...boxes.map(bx => bx.y + bx.h));
           const grip = 30 / zoom;
+          /**
+           * ONE strip for the whole selection (the owner's refinement of the
+           * 2026-09-01 ask): lock, focus and TV ride the combined box and act
+           * on EVERYTHING selected — jobs included when the lasso caught
+           * tiles too — instead of a tiny strip repeating on every node.
+           * Constant screen size (÷zoom), like the grip: chrome is a marker.
+           */
+          const selJobs = jobs.filter(j => selectedJobIds.has(j.id));
+          const anyUnlocked = members.some(m => !m.locked) || selJobs.some(j => !j.boardLocked);
+          const anyShown = members.some(m => m.showOnTv !== false) || selJobs.some(j => j.showOnTv !== false);
+          const btn = 24 / zoom;
+          const strip = (
+            <div data-sel-strip className="absolute pointer-events-auto flex"
+              style={{ left: x1 - 3 * btn - 2 * (4 / zoom), top: y0 - btn - 8 / zoom, gap: 4 / zoom }}>
+              {[
+                {
+                  key: 'focus', title: 'Centre the selection on the screen',
+                  icon: <Crosshair size={13 / zoom} />, color: '#64748b', bg: 'rgba(255,255,255,.95)',
+                  act: () => {
+                    const vp = viewportRef.current;
+                    if (!vp) return;
+                    // Jobs widen the union for the flight — the box DRAWN
+                    // stays the nodes', but "show me all of it" means all.
+                    let fx0 = x0, fy0 = y0, fx1 = x1, fy1 = y1;
+                    for (const j of selJobs) {
+                      const p = jobPos(j, jobs.indexOf(j));
+                      const sz = tileSize(j);
+                      fx0 = Math.min(fx0, p.x); fy0 = Math.min(fy0, p.y);
+                      fx1 = Math.max(fx1, p.x + sz.w); fy1 = Math.max(fy1, p.y + sz.h);
+                    }
+                    setFlying(true);
+                    setPan(clampPanRef.current({
+                      x: vp.clientWidth / 2 - ((fx0 + fx1) / 2) * zoom,
+                      y: vp.clientHeight / 2 - ((fy0 + fy1) / 2) * zoom,
+                    }));
+                    window.setTimeout(() => setFlying(false), 450);
+                  },
+                },
+                {
+                  key: 'lock',
+                  title: anyUnlocked ? 'Lock all of these in place' : 'Unlock all of these',
+                  icon: anyUnlocked ? <Unlock size={13 / zoom} /> : <Lock size={13 / zoom} />,
+                  color: anyUnlocked ? '#94a3b8' : '#b45309',
+                  bg: anyUnlocked ? 'rgba(255,255,255,.95)' : '#fef3c7',
+                  act: () => track({
+                    weight: 'arrange',
+                    label: lockedLabel(anyUnlocked, members.length + selJobs.length),
+                  }, () => {
+                    members.forEach(m => updateCanvasElement(m.id, { locked: anyUnlocked ? true : undefined }));
+                    if (currentUser) selJobs.forEach(j =>
+                      updateApartment(j.id, { boardLocked: anyUnlocked ? true : undefined }, currentUser));
+                  }),
+                },
+                {
+                  key: 'tv',
+                  title: anyShown ? 'Hide all of these from the TV' : 'Show all of these on the TV',
+                  icon: <TvIcon size={13 / zoom} hidden={!anyShown} />,
+                  color: anyShown ? '#94a3b8' : '#dc2626',
+                  bg: 'rgba(255,255,255,.95)',
+                  act: () => track({
+                    weight: 'arrange',
+                    label: anyShown
+                      ? `Hid ${members.length + selJobs.length} from the TV`
+                      : `Showing ${members.length + selJobs.length} on the TV`,
+                  }, () => {
+                    members.forEach(m => updateCanvasElement(m.id, { showOnTv: anyShown ? false : undefined }));
+                    if (currentUser) selJobs.forEach(j =>
+                      updateApartment(j.id, { showOnTv: anyShown ? false : undefined }, currentUser));
+                  }),
+                },
+              ].map(b => (
+                <button key={b.key} data-el-action
+                  title={b.title}
+                  onPointerDown={e => e.stopPropagation()}
+                  onClick={e => { e.stopPropagation(); b.act(); }}
+                  className="flex items-center justify-center"
+                  style={{
+                    width: btn, height: btn, borderRadius: 6 / zoom,
+                    backgroundColor: b.bg, color: b.color,
+                    border: `${1 / zoom}px solid #e5e7eb`,
+                    boxShadow: `0 ${1 / zoom}px ${4 / zoom}px rgba(15,23,42,.18)`,
+                  }}>
+                  {b.icon}
+                </button>
+              ))}
+            </div>
+          );
           return (
             <div className="absolute pointer-events-none"
               style={{
@@ -6629,6 +6716,7 @@ export function GeneralJobsPage() {
                 borderRadius: 6 / zoom,
                 backgroundColor: 'rgba(74,168,216,.06)',
               }} />
+              {strip}
               <div
                 data-el-action data-resize data-group-resize
                 title="Drag to resize all of them — hold Shift to keep the shape"

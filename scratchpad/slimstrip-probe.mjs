@@ -1,5 +1,6 @@
-// Probe: nodes in a multi-selection wear only TINY lock/focus/TV; a single
-// selection keeps the full strip.
+// Probe: a multi-selection shows NO per-node strips — ONE lock/focus/TV strip
+// rides the combined box and acts on the whole selection. A single selection
+// keeps the full per-node strip.
 import { chromium } from 'playwright';
 let fails = 0;
 const check = (ok, l, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${l}${extra ? ' — ' + extra : ''}`); if (!ok) fails++; };
@@ -24,32 +25,50 @@ const page = await ctx.newPage();
 await page.goto('http://localhost:5173/jobs');
 await page.waitForTimeout(3000);
 
-const stripInfo = id => page.evaluate(([nid]) => {
-  const n = document.querySelector(`[data-node-id="${nid}"]`);
-  const strip = n && [...n.children].find(c => c.querySelector && c.querySelector('button[title*="Centre"]'));
-  if (!strip) return null;
-  const btns = [...strip.querySelectorAll('button')];
-  return { count: btns.length, w: Math.round(btns[0].getBoundingClientRect().width) };
-}, [id]);
+// Scoped to the three seeded notes — the lasso can also catch the board's
+// own seeded bins, and hovering any UNSELECTED node legitimately reveals
+// its strip.
+const perNodeStrips = () => page.evaluate(() =>
+  ['CE-s0', 'CE-s1', 'CE-s2'].filter(id =>
+    document.querySelector(`[data-node-id="${id}"] button[title*="Centre this"]`)).length);
 
-// Single selection: full strip (focus/lock/tv/settings/remove + mic on a note).
+// Single selection: the full per-node strip.
 const one = await page.locator('[data-node-id="CE-s0"]').boundingBox();
 await page.mouse.click(one.x + one.width / 2, one.y + one.height / 2);
 await page.waitForTimeout(400);
-const single = await stripInfo('CE-s0');
-check(!!single && single.count >= 5, `a single selection keeps the full strip (${single?.count} buttons)`);
+check(await perNodeStrips() >= 1, 'a single selection keeps its own full strip');
+check(await page.locator('[data-sel-strip]').count() === 0, 'and no selection strip is drawn');
 
-// Lasso all three (ctrl+drag across them).
+// Lasso all three.
 await page.keyboard.down('Control');
 await page.mouse.move(200, 260);
 await page.mouse.down();
-for (let i = 1; i <= 8; i++) { await page.mouse.move(200 + i * 110, 260 + i * 40); await page.waitForTimeout(16); }
+for (let i = 1; i <= 8; i++) { await page.mouse.move(200 + i * 85, 260 + i * 32); await page.waitForTimeout(16); }
 await page.mouse.up();
 await page.keyboard.up('Control');
+// Park the mouse off every node — a hover on an unselected one shows ITS strip.
+await page.mouse.move(60, 840);
 await page.waitForTimeout(500);
-const multi = await Promise.all(['CE-s0', 'CE-s1', 'CE-s2'].map(stripInfo));
-check(multi.every(m => m && m.count === 3), `every multi-selected node slims to 3 buttons (${multi.map(m => m?.count)})`);
-check(multi.every(m => m && m.w <= 22), `and they are tiny (${multi.map(m => m?.w)}px)`);
+
+check(await perNodeStrips() === 0, 'multi-selected nodes wear NO strips of their own');
+const selStrip = page.locator('[data-sel-strip]');
+check(await selStrip.count() === 1, 'ONE strip rides the combined box');
+check(await selStrip.locator('button').count() === 3, 'with exactly lock · focus · TV');
+
+// Its lock button locks the WHOLE selection in one press.
+await selStrip.locator('button[title*="Lock all"]').click();
+await page.waitForTimeout(700);
+const locked = await page.evaluate(() =>
+  JSON.parse(localStorage.getItem('general_app_data')).canvasElements
+    .filter(e => /^CE-s\d$/.test(e.id) && e.locked).length);
+check(locked === 3, `one press locked all three (${locked})`);
+// And its TV button hides them all.
+await selStrip.locator('button[title*="Hide all"]').click();
+await page.waitForTimeout(700);
+const hidden = await page.evaluate(() =>
+  JSON.parse(localStorage.getItem('general_app_data')).canvasElements
+    .filter(e => /^CE-s\d$/.test(e.id) && e.showOnTv === false).length);
+check(hidden === 3, `one press hid all three from the TV (${hidden})`);
 
 console.log(fails ? `\n${fails} FAILURES` : '\nALL PASS');
 await browser.close();
