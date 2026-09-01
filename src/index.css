@@ -721,3 +721,34 @@ main > * { min-width: 0; }
 @media (prefers-reduced-motion: reduce) {
   .arr-anim i { animation: none; left: var(--tx); top: var(--ty); }
 }
+
+/* ── The plan studio: version connector + pen swap ──────────────────────── */
+
+/* The green line from the open version's rail button to the plan — drawn
+   like a wire being run, replayed whenever the version changes (the SVG is
+   keyed by version). pathLength=100 on the path makes the dash arithmetic
+   independent of the real geometry. */
+.vlink-path {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: vlinkDraw .55s ease-out forwards;
+}
+@keyframes vlinkDraw { to { stroke-dashoffset: 0; } }
+.vlink-dot {
+  opacity: 0;
+  animation: vlinkDot .18s ease-out .4s forwards;
+}
+@keyframes vlinkDot { to { opacity: 1; } }
+
+/* The rail's ink tile: swapping pens rises in, the Samsung Notes manner. */
+.pen-swap { animation: penSwap .28s cubic-bezier(.34,1.56,.64,1); }
+@keyframes penSwap {
+  from { transform: translateY(9px); opacity: .25; }
+  to   { transform: translateY(0);   opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vlink-path { animation: none; stroke-dashoffset: 0; }
+  .vlink-dot  { animation: none; opacity: 1; }
+  .pen-swap   { animation: none; }
+}

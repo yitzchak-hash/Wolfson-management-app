@@ -425,20 +425,30 @@ export async function stamp(bytes, strokes, label, author) {
   return pdf.save({ useObjectStreams: false });
 }
 
-/** Find or create the folder the annotated plans are filed into. */
+/**
+ * Find or create the folder the annotated plans are filed into.
+ *
+ * `name` may be a PATH ("Annotated Plans/Pins") — each segment is found or
+ * created inside the one before, so the punch-list PDFs live in their own
+ * Pins folder INSIDE Annotated Plans, per the owner.
+ */
 async function folderFor(drive, parentId, name) {
-  const q = `'${parentId}' in parents and name = '${name.replace(/'/g, "\\'")}' ` +
-    `and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
-  const found = await drive.files.list({
-    q, fields: 'files(id,name)', pageSize: 1,
-    supportsAllDrives: true, includeItemsFromAllDrives: true,
-  });
-  if (found.data.files?.length) return found.data.files[0].id;
-  const made = await drive.files.create({
-    requestBody: { name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] },
-    fields: 'id', supportsAllDrives: true,
-  });
-  return made.data.id;
+  let at = parentId;
+  for (const seg of String(name).split('/').map(s => s.trim()).filter(Boolean)) {
+    const q = `'${at}' in parents and name = '${seg.replace(/'/g, "\\'")}' ` +
+      `and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+    const found = await drive.files.list({
+      q, fields: 'files(id,name)', pageSize: 1,
+      supportsAllDrives: true, includeItemsFromAllDrives: true,
+    });
+    if (found.data.files?.length) { at = found.data.files[0].id; continue; }
+    const made = await drive.files.create({
+      requestBody: { name: seg, mimeType: 'application/vnd.google-apps.folder', parents: [at] },
+      fields: 'id', supportsAllDrives: true,
+    });
+    at = made.data.id;
+  }
+  return at;
 }
 
 export default async function handler(req, res) {
@@ -454,7 +464,7 @@ export default async function handler(req, res) {
 
   const {
     planFileId, parentFolderId, strokes, version, jobName, folderName, author,
-    updateFileId,
+    updateFileId, subVersion, nameTag,
   } = req.body || {};
   if (!planFileId || !parentFolderId) {
     return res.status(400).json({ error: 'Missing planFileId or parentFolderId' });
@@ -473,8 +483,18 @@ export default async function handler(req, res) {
     );
 
     const v = Number(version) > 0 ? Number(version) : 1;
+    /**
+     * The sub-count of in-place updates: "annotated version 1.3" says at a
+     * glance how many times v1's one file has been brought up to date —
+     * the owner's ask. Absent, the name stays the plain integer.
+     */
+    const sub = Number.isFinite(Number(subVersion)) && subVersion != null ? Number(subVersion) : null;
+    const vLabel = sub == null ? `${v}` : `${v}.${sub}`;
+    /** "punch list" for the background pins file; the sketches keep "Markup". */
+    const tag = typeof nameTag === 'string' && nameTag.trim() ? nameTag.trim() : null;
     const who = String(author || '').trim();
-    const out = await stamp(Buffer.from(original.data), strokes, `Markup — v${v}`, who);
+    const out = await stamp(Buffer.from(original.data), strokes,
+      tag ? `${tag[0].toUpperCase()}${tag.slice(1)}` : `Markup — v${vLabel}`, who);
 
     /**
      * The name says which version, when, and by whom.
@@ -487,7 +507,7 @@ export default async function handler(req, res) {
     const when = stampTime();
     const parts = [
       jobName ? `${jobName} — ${base}` : base,
-      `annotated version ${v}`,
+      tag ?? `annotated version ${vLabel}`,
       when,
     ];
     if (who) parts.push(who);

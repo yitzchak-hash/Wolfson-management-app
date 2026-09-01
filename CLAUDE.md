@@ -6547,3 +6547,82 @@ made the very next press re-stamp and claim a number instead of answering
 — asking `claimVersion()` there would CLAIM the next version as a side
 effect of printing a sentence. Pins-only saves never seal (no record).
 `drivesave-probe` re-encoded: 22 checks, the whole ladder v1→v4.
+
+---
+
+# v2 — the punch list files itself (pins round two, the studio's manners)
+
+## Background pin filing (`src/data/pinPush.ts`)
+A minute after the last pin change — from the PREVIEW, no studio, no buttons
+(the owner's ask, with his own interval) — the apartment's pins are stamped
+into a "punch list" PDF in **Annotated Plans/Pins**: `folderFor` on the
+server walks slash-separated paths now, and `nameTag` replaces the
+"annotated version N" part of the filename. ONE file per apartment, updated
+in place; its id rides `Apartment.pinsDriveFileId` (CANVAS_ONLY — never
+bumps "last edited") so tomorrow's filing from another machine updates the
+same file. Module-level on purpose: the timer survives the overlay
+unmounting, and two overlays cannot double-file. Rules paid for: the sig at
+FIRST SIGHT is baseline (loading pins files nothing); pins are re-read from
+the store when the timer fires (one resolved mid-wait must file resolved);
+a filing failure leaves the signatures alone so the next change retries.
+`pin_push_idle_ms` in localStorage shortens the minute for harnesses.
+`PlanPinOverlay` arms it (new props `planFileId`/`plansFolderId`, wired from
+the drawer and the portal) and flashes `data-pins-filed-chip` — the tiny
+wordless Drive-mark-plus-check, gone in 3s. The studio's pins-only Save goes
+through `filePinsNow` — the SAME implementation — and answers
+filed / already-up-to-date / empty / failed in words.
+
+## Sub-versions: v1.0 → v1.1 in the file name and on the rail
+`subVersion` on the stamp payload (server names "annotated version 1.3"),
+on the annotation record, in the tab stash, and on the rail's version tabs.
+0 on a version's first filing, +1 per in-place update — the owner's "so we
+kinda know how many versions we have on each v1, v2, v3".
+
+## The studio: connector, honest dot, pen tray
+- **`linkedVersion` + the green connector** (`data-version-link`): an SVG
+  polyline from the OPEN version's rail tab to the plan's left edge at 20%
+  height, drawn with a dash animation (keyed by version, reduced-motion
+  safe), re-measured on a slow 1s tick because the rail scrolls and the
+  sheet zooms. Follows drawing (keepLocally), sealing, clicking a version,
+  and New (null = no line).
+- **`loadVersion` no longer sets dirty** — looking at a version is looking.
+  `dirty: true` there meant the autosave minted a fresh record AND pushed a
+  fresh Drive file for every version merely clicked through (found by this
+  round's probe). The new sketch begins when a real mark sets dirty itself.
+- **The honest dot**: on studio open, one `listPlansViaBackend` against the
+  plans folder; a version whose `driveFileId` is not in the listing greys
+  (`deadFiles`), title "its Drive file was deleted". The CURRENT sketch's
+  record is exempt — a file stamped seconds ago can lag Drive's listing.
+- **The pen tray** (`PenTray`, module level): pen/pencil/marker/highlighter
+  are ONE rail tile (`data-ink-tile`) wearing the pen in the hand; pressing
+  it while armed opens the tray (`data-pen-tray`) — four CSS-drawn pens,
+  the active one LIFTED with a spring, a band of the live ink colour on
+  each barrel; picking another lifts it while the tray STAYS OPEN so the
+  change is seen (the Samsung Notes manner); backdrop or Escape (capture,
+  stopImmediatePropagation — the ladder) closes. `pick()` keeps `inkTool`
+  in step so the p/n/m/h hotkeys move the tile too. Eraser keeps its tile.
+
+## The picker loads politely, originals first
+The opening view and `chooseFolder` list the folder's OWN files
+(`listFolderPlansViaBackend`) — markups appear under the Annotated Plans row
+in the folder dropdown (whose rows are marked `annotated`, belt-and-braces
+against a plansPdfLink write), not mixed into the first screen (the owner's
+ruling, superseding the merged opening view). Skeleton rows
+(`data-folder-skeleton`/`data-plan-skeleton`) and a "finding subfolders…"
+line replace the jumps.
+
+Probes: `pinauto-probe` (11 — the idle filing, folder path, nameTag, chip,
+apartment-remembered file id, resolve→update; its trap: the pin bubble is
+still open after Save, so clicking the pin again CLOSES it) ·
+`markup2-probe` (18 — tray, connector, click-through-mints-nothing, honest
+dot; its trap: the honest-dot check needs a plans FOLDER in the stub or
+`plansFolderId` is null and the check never runs, and the Mark up button's
+text is "Mark upv1" once a version exists — match by prefix) ·
+`plansubfolders-probe` grew originals-first + skeletons · `drivesave-probe`
+grew the v1.0/v3.1 name checks.
+
+Also from this round's probes: `plantabs.mjs` 5b re-encoded to originals-
+first (the saved markup is asserted UNDER Annotated Plans in the dropdown),
+and it closes the picker by its own X — an Escape there races the studio's
+per-render-re-registered key handler in the harness and can take the studio
+with it.

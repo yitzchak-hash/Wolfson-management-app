@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { MapPin, Check, X, Printer, Plus, Trash2, RotateCcw, Paperclip, Loader2, FileText } from 'lucide-react';
 import { useStore } from '../../data/store';
@@ -9,6 +9,8 @@ import {
   isUploadBackendConfigured, extractFolderId, findOrCreateFolderViaBackend,
   uploadFileViaBackend, shareFileToDrive,
 } from '../../data/driveApi';
+import { notePins, onPinsFiled } from '../../data/pinPush';
+import { DriveIcon } from '../ui/BrandIcons';
 
 /**
  * Punch-list pins drawn OVER the engineering plan.
@@ -27,7 +29,7 @@ import {
  */
 export function PlanPinOverlay({
   apartmentId, apartmentLabel, readOnly = false, authorName = '', controlsInto = null,
-  driveFolderLink, workerMode = false,
+  driveFolderLink, workerMode = false, planFileId, plansFolderId,
 }: {
   apartmentId: string;
   apartmentLabel: string;
@@ -51,6 +53,13 @@ export function PlanPinOverlay({
    * worker's own strings (ContractorUiStrings), not the office presets.
    */
   workerMode?: boolean;
+  /**
+   * The plan shown under the pins plus where its markups file — given both,
+   * the punch list quietly files itself in Drive a minute after the last pin
+   * change (src/data/pinPush.ts). Absent, pins stay data-only, as before.
+   */
+  planFileId?: string | null;
+  plansFolderId?: string | null;
 }) {
   const { planPins, addPlanPin, updatePlanPin, deletePlanPin, contractorUiStrings: cs } = useStore();
   const [placing, setPlacing] = useState(false);
@@ -120,6 +129,32 @@ export function PlanPinOverlay({
   );
 
   const openPins = pins.filter(p => !p.resolvedAt);
+
+  /**
+   * The background punch-list filer: every pins change (re)arms its one-minute
+   * clock; a successful filing flashes the tiny Drive chip below. All the
+   * rules — one file per apartment, update in place, loading is not a change —
+   * live in pinPush.ts, module-level, so closing the drawer cannot swallow a
+   * filing already owed.
+   */
+  const [filedFlash, setFiledFlash] = useState(false);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => {
+    const off = onPinsFiled(apartmentId, () => {
+      setFiledFlash(true);
+      clearTimeout(flashTimer.current);
+      flashTimer.current = setTimeout(() => setFiledFlash(false), 3200);
+    });
+    return () => { off(); clearTimeout(flashTimer.current); };
+  }, [apartmentId]);
+  useEffect(() => {
+    const parent = plansFolderId ?? (driveFolderLink ? extractFolderId(driveFolderLink) : null);
+    if (!planFileId || !parent) return;
+    notePins({
+      apartmentId, planFileId, parentFolderId: parent,
+      jobName: apartmentLabel, author: authorName,
+    }, pins);
+  }, [pins, apartmentId, planFileId, plansFolderId, driveFolderLink, apartmentLabel, authorName]);
 
   function place(e: React.MouseEvent<HTMLDivElement>) {
     if (!placing) return;
@@ -238,9 +273,21 @@ export function PlanPinOverlay({
         className="absolute inset-0"
         style={{ pointerEvents: placing ? 'auto' : 'none', cursor: placing ? 'crosshair' : undefined }}
       >
+        {/* The tiny, wordless "your pins reached Drive" flash — the owner's
+            "very subtle saved-to-Drive icon type of thing". Gone in 3s. */}
+        {filedFlash && (
+          <div data-pins-filed-chip
+            className="absolute bottom-2 left-2 z-20 flex items-center gap-1 px-1.5 py-1 rounded-full
+                       shadow-sm border border-gray-200 pointer-events-none"
+            style={{ backgroundColor: 'rgba(255,255,255,.92)' }}>
+            <DriveIcon size={10} />
+            <Check size={9} className="text-emerald-600" />
+          </div>
+        )}
         {pins.map((p, i) => (
           <button
             key={p.id}
+            data-plan-pin={p.id}
             onClick={e => {
               e.stopPropagation();
               setOpen(open === p.id ? null : p.id);

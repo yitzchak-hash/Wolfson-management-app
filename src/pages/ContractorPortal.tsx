@@ -2268,6 +2268,7 @@ export function ContractorPortal() {
                             authorName={contractor?.name ?? ''}
                             driveFolderLink={apt.driveLink}
                             workerMode
+                            planFileId={plansPdfFileId}
                           />
                         </div>
                       )}

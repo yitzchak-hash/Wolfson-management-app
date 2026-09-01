@@ -659,6 +659,14 @@ export interface Apartment {
   stageMarks?: Record<string, 'done' | 'pending'>;
   driveLink?: string; // Google Drive folder URL for this apartment's files
   plansPdfLink?: string; // Google Drive link to the Engineering Plans PDF
+  /**
+   * The ONE punch-list PDF the background pin filer keeps in Drive
+   * (Annotated Plans/Pins) — remembered so every later filing updates it in
+   * place instead of creating another. Bookkeeping, not content: it lives in
+   * updateApartment's CANVAS_ONLY set so writing it never bumps
+   * contentUpdatedAt.
+   */
+  pinsDriveFileId?: string;
   zohoLink?: string;   // General Jobs: Zoho CRM / work order link
   address?: string;    // General Jobs: job site address
   /**
@@ -924,6 +932,11 @@ export interface PlanAnnotation {
   /** The stamped PDF in Drive, once it has been filed. */
   driveFileId?: string;
   driveUrl?: string;
+  /**
+   * How many times the version's one Drive file has been brought up to date
+   * — shown as v1.3 on the rail and in the stamped file's name.
+   */
+  subVersion?: number;
   /** Which version this one was continued from, when it was. */
   basedOn?: number;
   note?: string;

@@ -107,6 +107,7 @@ await page.waitForTimeout(1500);
 check(stampBodies.length === 1, 'the first Save sent one stamp request');
 const b1 = stampBodies[0] ?? {};
 check(!b1.updateFileId && b1.version === 1, 'the first filing creates version 1 (no updateFileId)');
+check(b1.subVersion === 0, 'and it is version 1.0 — the sub-count starts at zero');
 check((b1.strokes ?? []).some(s => s.tool === 'ellipse') && (b1.strokes ?? []).some(s => s.tool === 'text' && s.text === '1'),
   'the punch-list pin rides in the stamp payload');
 let text = await page.evaluate(() => document.body.innerText);
@@ -156,6 +157,12 @@ await page.waitForTimeout(11000);
 check(stampBodies.length === 4, 'the second pause pushed again');
 check(stampBodies[3]?.updateFileId === 'STAMPED3' && stampBodies[3]?.version === 3,
   'and it UPDATES version 3\'s one file — no pile of copies');
+check(stampBodies[2]?.subVersion === 0 && stampBodies[3]?.subVersion === 1,
+  'the update bumped the name to version 3.1');
+// The rail's little tabs carry the sub-count too.
+const railLabels = await page.evaluate(() =>
+  [...document.querySelectorAll('[data-version-btn]')].map(b => b.textContent?.split('\n')[0].trim().split(/\s/)[0]));
+check(railLabels.some(l => /^v3\.1/.test(l ?? '')), `the rail shows v3.1 (${railLabels.join(', ')})`);
 
 // Save after the autosave already sent: the press SEALS v3 without another
 // upload — the bytes are up there, the lock is the news.

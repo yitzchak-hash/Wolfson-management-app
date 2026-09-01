@@ -1107,7 +1107,7 @@ export const useStore = create<AppState>((set, get) => ({
 
     // Board position is not "content" — tidying the board must not make every
     // tile read "edited just now".
-    const CANVAS_ONLY = new Set(['canvasX', 'canvasY', 'tileColor', 'boardBin', 'binnedAt', 'boardLocked', 'boardGroup', 'tileW', 'tileH', 'viewPos', 'ghosts', 'stageOrder', 'showOnTv']);
+    const CANVAS_ONLY = new Set(['canvasX', 'canvasY', 'tileColor', 'boardBin', 'binnedAt', 'boardLocked', 'boardGroup', 'tileW', 'tileH', 'viewPos', 'ghosts', 'stageOrder', 'showOnTv', 'pinsDriveFileId']);
     const touchedContent = Object.keys(changes).some(k => !CANVAS_ONLY.has(k));
     if (touchedContent) updated.contentUpdatedAt = now;
 

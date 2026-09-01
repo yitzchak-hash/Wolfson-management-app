@@ -14,7 +14,8 @@ import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { useStore } from '../../data/store';
 import { useOrientation } from '../../data/useOrientation';
 import { AnnStroke, AnnTool, PlanAnnotation } from '../../types';
-import { stampPlanToDrive, extractFolderId, isUploadBackendConfigured } from '../../data/driveApi';
+import { stampPlanToDrive, extractFolderId, isUploadBackendConfigured, listPlansViaBackend } from '../../data/driveApi';
+import { filePinsNow } from '../../data/pinPush';
 import { fetchPlanCached, prefetchPlans, acquirePlanCache, releasePlanCache } from '../../data/planCache';
 import { printEsc } from '../../data/printing';
 import {
@@ -199,6 +200,103 @@ export interface PlanChoice {
  * `workRef` — a mutable ref the editor writes every render, which costs no
  * re-renders and is always current when the wrapper stashes a tab away.
  */
+/** The four ink tools that share the one rail tile. */
+const INK_TOOL_IDS = ['pen', 'pencil', 'marker', 'highlighter'];
+
+/**
+ * The pen tray — four drawn pens standing in a row, the one in the hand
+ * LIFTED, the Samsung Notes manner. Picking another pen lifts it (spring
+ * transition) while the old one settles; the tray stays open so the change
+ * is SEEN, and closes on the backdrop or Escape. Each pen wears a band of
+ * the current ink colour.
+ */
+const TRAY_PENS: { id: string; label: string; barrel: string; tip: string; tipClip: string }[] = [
+  { id: 'pen', label: 'Pen',
+    barrel: 'linear-gradient(180deg,#2c4f78,#1e3a5f)',
+    tip: 'linear-gradient(180deg,#c9a94a,#8a7433)',
+    tipClip: 'polygon(0 0, 100% 0, 56% 100%, 44% 100%)' },
+  { id: 'pencil', label: 'Pencil',
+    barrel: 'repeating-linear-gradient(90deg,#f5b64a 0 5px,#e8a53b 5px 10px)',
+    tip: 'linear-gradient(180deg,#e8d5ae 0 55%,#4b5563 55%)',
+    tipClip: 'polygon(0 0, 100% 0, 54% 100%, 46% 100%)' },
+  { id: 'marker', label: 'Marker',
+    barrel: 'linear-gradient(180deg,#475569,#334155)',
+    tip: 'linear-gradient(180deg,#94a3b8,#64748b)',
+    tipClip: 'polygon(12% 0, 88% 0, 70% 100%, 30% 100%)' },
+  { id: 'highlighter', label: 'Highlight',
+    barrel: 'linear-gradient(180deg,rgba(253,224,71,.9),rgba(250,204,21,.9))',
+    tip: 'rgba(253,224,71,.95)',
+    tipClip: 'polygon(18% 0, 82% 0, 92% 100%, 42% 100%)' },
+];
+
+function PenTray({ at, up, current, color, ts, onPick, onClose }: {
+  at: { x: number; y: number }; up: boolean; current: string; color: string; ts: number;
+  onPick: (id: string) => void; onClose: () => void;
+}) {
+  // The tray owns Escape — capture + stopImmediatePropagation, or one press
+  // would also put the tool down and start closing the studio (the ladder).
+  useEffect(() => {
+    function key(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      onClose();
+    }
+    window.addEventListener('keydown', key, true);
+    return () => window.removeEventListener('keydown', key, true);
+  }, [onClose]);
+
+  const penW = Math.round(26 * ts);
+  const penH = Math.round(84 * ts);
+  const slotW = Math.round(56 * ts);
+  const W = TRAY_PENS.length * (slotW + 8) + 24;
+  const H = penH + 52 * ts;
+  const left = Math.max(8, Math.min(window.innerWidth - W - 8, up ? at.x - W / 2 : at.x));
+  const top = up
+    ? Math.max(8, at.y - H)
+    : Math.max(8, Math.min(window.innerHeight - H - 8, at.y - H / 2));
+
+  return createPortal(
+    <>
+      <div className="fixed inset-0 z-[168]" onClick={onClose} />
+      <div data-pen-tray
+        className="fixed z-[169] rounded-2xl shadow-2xl flex items-end gap-2 px-3 pb-2"
+        style={{ left, top, paddingTop: Math.round(20 * ts),
+                 backgroundColor: NAVY, border: '1px solid rgba(255,255,255,.14)' }}>
+        {TRAY_PENS.map(p => {
+          const active = p.id === current;
+          return (
+            <button key={p.id} data-pen={p.id} onClick={() => onPick(p.id)}
+              className="flex flex-col items-center gap-1.5"
+              style={{ width: slotW }}>
+              <span style={{
+                width: penW, height: penH, display: 'block', position: 'relative',
+                transform: active ? `translateY(${-Math.round(13 * ts)}px)` : 'translateY(0)',
+                transition: 'transform .28s cubic-bezier(.34,1.56,.64,1)',
+                filter: active ? 'drop-shadow(0 7px 9px rgba(0,0,0,.5))' : 'none',
+              }}>
+                <span style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: '22%',
+                  borderRadius: 6, background: p.barrel }} />
+                {/* a band of the ink colour actually in the pen */}
+                <span style={{ position: 'absolute', left: 0, right: 0, top: '56%', height: '9%',
+                  backgroundColor: color }} />
+                <span style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '23%',
+                  clipPath: p.tipClip, background: p.tip }} />
+              </span>
+              <span className="font-bold leading-none"
+                style={{ fontSize: Math.max(9, 9 * ts),
+                         color: active ? '#fff' : 'rgba(255,255,255,.6)' }}>
+                {p.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </>,
+    document.body,
+  );
+}
+
 export interface TabWork {
   strokes: AnnStroke[];
   redo: AnnStroke[];
@@ -209,6 +307,8 @@ export interface TabWork {
   scale: number | null;
   versionId: string | null;
   sketchVersion: number | null;
+  /** How many in-place Drive updates this sketch's file has had — the ".3". */
+  subVersion?: number | null;
 }
 
 function PlanEditor({
@@ -661,6 +761,93 @@ function PlanEditor({
     [planAnnotations, apartmentId, planFileId],
   );
   const nextVersion = (versions[0]?.version ?? 0) + 1;
+  /**
+   * Which version's ink is ON THE SHEET right now — the green connector line
+   * points from its rail button to the plan, so "what am I looking at" is
+   * answered visually (the owner's two-connected-nodes ask). Null = a blank
+   * sheet with no version begun.
+   */
+  const [linkedVersion, setLinkedVersion] = useState<number | null>(initialWork?.sketchVersion ?? null);
+  /**
+   * Versions whose Drive file turned out to be GONE — deleted by hand in
+   * Drive. Their dot greys, because a green dot over a deleted file is a lie
+   * (the owner deleted v1 and the dot stayed green).
+   */
+  const [deadFiles, setDeadFiles] = useState<Set<string>>(new Set());
+  const versionsRef = useRef(versions);
+  versionsRef.current = versions;
+  /**
+   * One honest look at what Drive really holds, when the studio opens: the
+   * Annotated Plans listing is fetched once and any version whose file is not
+   * in it goes grey. The CURRENT sketch's record is left alone — a file
+   * stamped seconds ago can lag out of Drive's own listing, and marking it
+   * dead would call a fresh save deleted.
+   */
+  useEffect(() => {
+    if (!isUploadBackendConfigured() || !plansFolderId) return;
+    let gone = false;
+    (async () => {
+      try {
+        const { plans: inDrive } = await listPlansViaBackend(plansFolderId);
+        if (gone) return;
+        const have = new Set(inDrive.map(p => p.id));
+        const dead = new Set<string>();
+        for (const v of versionsRef.current) {
+          if (v.driveFileId && v.id !== versionIdRef.current && !have.has(v.driveFileId)) {
+            dead.add(v.driveFileId);
+          }
+        }
+        setDeadFiles(prev =>
+          prev.size === dead.size && [...dead].every(d => prev.has(d)) ? prev : dead);
+      } catch { /* unreachable Drive proves nothing — the dots stand */ }
+    })();
+    return () => { gone = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plansFolderId]);
+
+  /**
+   * The connector line: the OPEN version's rail button to the plan's left
+   * edge, a fifth of the way down — two nodes joined, so which version the
+   * sheet is showing is a picture rather than a highlight you have to notice.
+   * Re-drawn (with its little grow animation, keyed on the version) whenever
+   * the version changes; re-measured on a slow tick because the rail scrolls
+   * and the sheet zooms, and one pair of rects a second is free.
+   */
+  const [vlink, setVlink] = useState<{ d: string; x2: number; y2: number } | null>(null);
+
+  /**
+   * The four ink tools live behind ONE rail tile (the owner's consolidation).
+   * `inkTool` is the pen currently in the hand; pressing the tile when it is
+   * already armed opens the PEN TRAY — four drawn pens, the chosen one lifted,
+   * the Samsung Notes manner. Hotkeys (p/n/m/h) still pick directly and move
+   * the tile with them.
+   */
+  const [inkTool, setInkTool] = useState<string>('pen');
+  const [penTray, setPenTray] = useState<{ x: number; y: number; up: boolean } | null>(null);
+  useEffect(() => {
+    if (compact || linkedVersion == null) { setVlink(null); return; }
+    const measure = () => {
+      const root = rootRef.current;
+      const btn = root?.querySelector('[data-version-active]');
+      const sheet = pdfRef.current;
+      if (!root || !btn || !sheet) { setVlink(null); return; }
+      const rr = root.getBoundingClientRect();
+      const br = btn.getBoundingClientRect();
+      const sr = sheet.getBoundingClientRect();
+      if (br.height < 4 || sr.width < 40) { setVlink(null); return; }
+      const x1 = br.right - rr.left - 4;
+      const y1 = br.top - rr.top + 8;                      // from the dot
+      const x2 = Math.max(x1 + 24, sr.left - rr.left);     // to the plan's edge
+      const y2 = sr.top - rr.top + sr.height * 0.2;        // 20% down the sheet
+      const midX = x1 + Math.max(12, (x2 - x1) * 0.4);
+      const d = `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`;
+      setVlink(prev => (prev && prev.d === d ? prev : { d, x2, y2 }));
+    };
+    measure();
+    const iv = setInterval(measure, 1000);
+    window.addEventListener('resize', measure);
+    return () => { clearInterval(iv); window.removeEventListener('resize', measure); };
+  }, [linkedVersion, compact, scale, page]);
 
   // ---- load the PDF ------------------------------------------------------
   useEffect(() => {
@@ -2037,6 +2224,12 @@ function PlanEditor({
    * version without claiming a new number by asking claimVersion().
    */
   const lastFiledRef = useRef<number | null>(null);
+  /**
+   * How many times this sketch's Drive file has been brought up to date —
+   * the ".3" of "annotated version 1.3", so the office can see at a glance
+   * how many pushes each version took. 0 on the first filing, +1 per update.
+   */
+  const subRef = useRef<number | null>(initialWork?.subVersion ?? null);
   const pinSig = useCallback(() =>
     myPinsRef.current.map(p => `${p.id}${p.resolvedAt ? 'r' : ''}`).join(','), []);
   /** The sketch's Drive file — this session's stamp first, a restored tab's record second. */
@@ -2106,6 +2299,7 @@ function PlanEditor({
       // must not freeze the pre-fit default as the tab's remembered zoom.
       scale: fitting ? null : scale,
       versionId: versionIdRef.current, sketchVersion: sketchVersion.current,
+      subVersion: subRef.current,
     };
   }
   // The cloud on this tab, kept live while drawing.
@@ -2123,6 +2317,7 @@ function PlanEditor({
     sketchVersion.current = null;
     stampedFileRef.current = null;
     pinSigRef.current = null;
+    subRef.current = null;
   }, []);
 
   /**
@@ -2146,6 +2341,7 @@ function PlanEditor({
       createdBy: who || authorName,
       basedOn,
     });
+    setLinkedVersion(claimVersion());   // the sheet now carries this version
     setSaveState('local');
   }, [locked, strokes, planFileId, claimVersion, apartmentId, planName, doc, who, authorName, basedOn, savePlanAnnotation]);
 
@@ -2155,21 +2351,25 @@ function PlanEditor({
     pushingRef.current = true;
     setSaveState('sending');
     try {
+      const upd = sketchDriveFile();
+      const sub = upd ? (subRef.current ?? 0) + 1 : 0;
       const out = await stampPlanToDrive({
         planFileId,
         parentFolderId: plansFolderId || parentFolderId!,
         strokes: [...strokesForDrive(), ...await pinsForDrive()],
         version: claimVersion(),
+        subVersion: sub,
         jobName: apartmentLabel,
         author: who || authorName,
-        updateFileId: sketchDriveFile(),
+        updateFileId: upd,
       });
       stampedFileRef.current = out.fileId;
       pinSigRef.current = pinSig();
       lastFiledRef.current = claimVersion();
+      subRef.current = sub;
       if (versionIdRef.current) {
         updatePlanAnnotation(versionIdRef.current, {
-          driveFileId: out.fileId, driveUrl: out.webViewLink,
+          driveFileId: out.fileId, driveUrl: out.webViewLink, subVersion: sub,
         });
       }
       onSavedToDrive?.({ id: out.fileId, name: out.name, kind: 'annotated' });
@@ -2321,6 +2521,7 @@ function PlanEditor({
 
   function pick(id: string) {
     setTool(id);
+    if (INK_TOOL_IDS.includes(id)) setInkTool(id);   // the tray's pen follows every pick
     const p = toolById(id);
     if (p.width) setWidth(p.width);
     setOpacity(p.opacity);
@@ -2337,8 +2538,13 @@ function PlanEditor({
     setStrokes(v.strokes ?? []);
     setRedo([]);
     setBasedOn(continueIt ? v.version : undefined);
-    setDirty(continueIt);
+    // NOT dirty: looking at a version is looking. `dirty: true` here made the
+    // autosave mint a fresh record — and push a fresh Drive file — for every
+    // version somebody merely CLICKED THROUGH; the new sketch begins when a
+    // real mark is made, which sets dirty by itself.
+    setDirty(false);
     setPage(0);
+    setLinkedVersion(v.version);   // the connector line follows the click
     onToast?.(continueIt
       ? `Carrying on from version ${v.version} — saving makes version ${nextVersion}`
       : `Showing version ${v.version}`);
@@ -2351,6 +2557,7 @@ function PlanEditor({
     if (strokes.length && !window.confirm('Start a fresh sketch? What is on the plan now stays in the version list.')) return;
     startNewSketch();
     setStrokes([]); setRedo([]); setBasedOn(undefined); setDirty(false);
+    setLinkedVersion(null);   // a blank sheet is connected to nothing
   }
 
   /** Wipe just the sheet you are looking at, on a multi-page set. */
@@ -2363,6 +2570,29 @@ function PlanEditor({
   async function save() {
     const havePins = myPinsRef.current.length > 0;
     if (!strokes.length && !havePins) { onToast?.('Nothing to save yet.', 'error'); return; }
+    /**
+     * Pins with no ink: that is the PUNCH LIST's business — the same one file
+     * in Annotated Plans → Pins the background filer keeps, through the same
+     * implementation, so the two paths can never drift apart.
+     */
+    if (!strokes.length) {
+      if (!backendReady || !parentFolderId) {
+        onToast?.('The pins are saved with the job on every device. Filing a PDF copy needs the job\'s Drive folder and upload key.', 'error');
+        return;
+      }
+      setSaving(true);
+      const res = await filePinsNow({
+        apartmentId, planFileId, parentFolderId: plansFolderId || parentFolderId,
+        jobName: apartmentLabel, author: who || authorName,
+      });
+      setSaving(false);
+      onToast?.(res === 'filed' ? 'Punch list filed in Drive under “Annotated Plans → Pins”.'
+        : res === 'current' ? 'The punch list in Drive is already up to date.'
+        : res === 'empty' ? 'No pins on this plan yet.'
+        : 'Drive would not take the punch list — it will retry after the next pin change.',
+        res === 'failed' ? 'error' : undefined);
+      return;
+    }
     /**
      * Pressing Save on a sketch that is already filed used to re-upload the
      * same bytes and say nothing — which read as the button doing nothing at
@@ -2377,10 +2607,14 @@ function PlanEditor({
     // mark starts the one after (the owner's lock model). Only a press on an
     // already-sealed sketch is a true no-op, and it says so.
     if (saveState === 'sent' && pinSig() === pinSigRef.current) {
-      if (strokes.length && sketchVersion.current != null) {
+      if (sketchVersion.current != null) {
         const sealed = sketchVersion.current;
         lastFiledRef.current = sealed;
         startNewSketch();
+        // startNewSketch clears the pin signature — restore it, or the very
+        // next press re-stamps (and claims a version) instead of answering
+        // "already locked". The same trap the upload path already pays.
+        pinSigRef.current = pinSig();
         setBasedOn(sealed);
         onToast?.(`Version ${sealed} locked — it is already in Drive, and your next mark starts version ${sealed + 1}.`);
       } else {
@@ -2402,7 +2636,8 @@ function PlanEditor({
     }
     // Whether this sketch already has a file in Drive decides the wording:
     // "filed" the first time, "updated" after — the same version, same file.
-    const updating = !!sketchDriveFile();
+    const upd = sketchDriveFile();
+    const sub = upd ? (subRef.current ?? 0) + 1 : 0;
     setSaving(true);
     try {
       const out = await stampPlanToDrive({
@@ -2416,37 +2651,33 @@ function PlanEditor({
           ...await pinsForDrive(),                        // the punch list travels too
         ],
         version: claimVersion(),
+        subVersion: sub,
         jobName: apartmentLabel,
         author: who || authorName,
-        updateFileId: sketchDriveFile(),
+        updateFileId: upd,
       });
       stampedFileRef.current = out.fileId;
       pinSigRef.current = pinSig();
-      // A pins-only stamp keeps no version record — the version list is a list
-      // of SKETCHES, and an empty one would read as a fault.
-      const sealed = strokes.length ? claimVersion() : null;
-      if (strokes.length) storeVersion(out.fileId, out.webViewLink);
+      subRef.current = sub;
+      const sealed = claimVersion();
+      storeVersion(out.fileId, out.webViewLink);
       clearTimeout(idleTimer.current);
       setDriveIn(0);
       setSaveState('sent');
       onSavedToDrive?.({ id: out.fileId, name: out.name, kind: 'annotated' });
-      if (sealed != null) {
-        // Save LOCKS the version (the owner's model): the record and its Drive
-        // file are sealed as they stand, and the very next mark begins the
-        // following version in a fresh file — no button needed to start it.
-        lastFiledRef.current = sealed;
-        startNewSketch();
-        // startNewSketch clears the pin signature with the rest — put it back,
-        // or a second Save press straight after the seal would re-stamp (and
-        // claim a version) instead of answering "already locked".
-        pinSigRef.current = pinSig();
-        setBasedOn(sealed);
-      }
-      onToast?.(sealed == null
-        ? `Punch-list pins filed in Drive under “Annotated Plans”.`
-        : `Version ${sealed} ${updating ? 'updated in Drive' : 'filed in Drive'} and locked — your next mark starts version ${sealed + 1}.`);
+      // Save LOCKS the version (the owner's model): the record and its Drive
+      // file are sealed as they stand, and the very next mark begins the
+      // following version in a fresh file — no button needed to start it.
+      lastFiledRef.current = sealed;
+      startNewSketch();
+      // startNewSketch clears the pin signature with the rest — put it back,
+      // or a second Save press straight after the seal would re-stamp (and
+      // claim a version) instead of answering "already locked".
+      pinSigRef.current = pinSig();
+      setBasedOn(sealed);
+      onToast?.(`Version ${sealed} ${upd ? 'updated in Drive' : 'filed in Drive'} and locked — your next mark starts version ${sealed + 1}.`);
     } catch (err) {
-      if (strokes.length) storeVersion();
+      storeVersion();
       onToast?.(`Saved here, but Drive refused it: ${err instanceof Error ? err.message : String(err)}`, 'error');
     } finally {
       setSaving(false);
@@ -2470,6 +2701,7 @@ function PlanEditor({
       createdBy: who || authorName,
       basedOn,
       driveFileId, driveUrl,
+      subVersion: subRef.current ?? undefined,
     });
     setDirty(false);
     setBasedOn(undefined);
@@ -2719,6 +2951,42 @@ function PlanEditor({
   const railBody = (
     <>
       {TOOLS.map(t => {
+        /**
+         * Pen, pencil, marker and highlighter are ONE tile (the owner's
+         * consolidation): it wears whichever pen is in the hand, a press arms
+         * it, and a press while armed opens the pen tray. The three absorbed
+         * tools render nothing of their own.
+         */
+        if (t.id === 'pencil' || t.id === 'marker' || t.id === 'highlighter') return null;
+        if (t.id === 'pen') {
+          const cur = toolById(inkTool);
+          const InkIcon = ICONS[inkTool] ?? Pen;
+          const armed = tool === inkTool;
+          return (
+            <button key="ink" data-ink-tile
+              onClick={e => {
+                if (armed) {
+                  const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  setPenTray(railRow
+                    ? { x: r.left + r.width / 2, y: r.top - 8, up: true }
+                    : { x: r.right + 10, y: r.top + r.height / 2, up: false });
+                } else pick(inkTool);
+              }}
+              title={`${cur.label} — press again to open the pen tray (pen, pencil, marker, highlighter)`}
+              className="rounded-xl flex flex-col items-center transition-colors"
+              style={{
+                ...railBtn,
+                backgroundColor: armed ? ACCENT : 'transparent',
+                color: armed ? '#fff' : 'rgba(255,255,255,.62)',
+              }}>
+              {/* Keyed so swapping pens plays the little rise, the Samsung manner. */}
+              <span key={inkTool} className="pen-swap flex flex-col items-center" style={{ gap: 2 }}>
+                <InkIcon size={ui.icon} />
+                <span className="font-semibold leading-none" style={{ fontSize: ui.label }}>{cur.label}</span>
+              </span>
+            </button>
+          );
+        }
         const Icon = ICONS[t.id] ?? Pen;
         const on = tool === t.id;
         return (
@@ -2782,14 +3050,17 @@ function PlanEditor({
       </button>
 
       {versions.map(v => {
-        const showing = v.strokes?.length === strokes.length && v.version === nextVersion - 1;
+        const showing = linkedVersion === v.version;
+        const gone = !!(v.driveFileId && deadFiles.has(v.driveFileId));
         return (
           <button
             key={v.id}
+            data-version-btn={v.version}
+            data-version-active={showing ? '1' : undefined}
             onClick={() => loadVersion(v, !readOnly)}
-            title={`Version ${v.version} — ${v.createdBy || 'the office'}, `
-              + `${new Date(v.createdAt).toLocaleString()}`
-              + `${v.driveUrl ? ' · in Drive' : ' · not in Drive yet'}`}
+            title={`Version ${v.version}${typeof v.subVersion === 'number' ? `.${v.subVersion}` : ''} — `
+              + `${v.createdBy || 'the office'}, ${new Date(v.createdAt).toLocaleString()}`
+              + `${gone ? ' · its Drive file was deleted' : v.driveUrl ? ' · in Drive' : ' · not in Drive yet'}`}
             className="rounded-xl flex flex-col items-center gap-0.5 transition-colors relative"
             style={{
               width: ui.btn, paddingTop: ui.padY, paddingBottom: ui.padY, flexShrink: 0,
@@ -2797,13 +3068,17 @@ function PlanEditor({
               color: 'rgba(255,255,255,.72)',
             }}
           >
-            <span className="font-black leading-none" style={{ fontSize: ui.text }}>v{v.version}</span>
+            {/* v1.3 — the ".3" counts the in-place Drive updates. */}
+            <span className="font-black leading-none" style={{ fontSize: ui.text * 0.92 }}>
+              v{v.version}{typeof v.subVersion === 'number' ? `.${v.subVersion}` : ''}
+            </span>
             <span className="text-[7.5px] leading-none opacity-70">
               {new Date(v.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
             </span>
-            {/* A dot for "this one reached Drive". */}
-            <span className="absolute top-1 right-1.5 w-1.5 h-1.5 rounded-full"
-              style={{ backgroundColor: v.driveUrl ? '#4ade80' : 'rgba(255,255,255,.28)' }} />
+            {/* Green = its file is really in Drive; grey = never filed, or the
+                file was deleted there (checked against the live folder). */}
+            <span data-version-dot className="absolute top-1 right-1.5 w-1.5 h-1.5 rounded-full"
+              style={{ backgroundColor: v.driveUrl && !gone ? '#4ade80' : 'rgba(255,255,255,.28)' }} />
           </button>
         );
       })}
@@ -2819,6 +3094,20 @@ function PlanEditor({
       // otherwise only comes from the drawer behind it.
       style={{ backgroundColor: embedded ? '#ffffff' : NAVY_DEEP }}
     >
+      {/* The pen tray, over everything, sealed to itself. */}
+      {penTray && !locked && (
+        <PenTray at={penTray} up={penTray.up} current={inkTool} color={color} ts={ts}
+          onPick={id => pick(id)} onClose={() => setPenTray(null)} />
+      )}
+      {/* The version-to-plan connector — replayed (keyed) on every switch. */}
+      {vlink && (
+        <svg data-version-link key={linkedVersion ?? 'none'}
+          className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 60 }}>
+          <path d={vlink.d} pathLength={100} className="vlink-path" fill="none"
+            stroke="#4ade80" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx={vlink.x2} cy={vlink.y2} r={3.5} fill="#4ade80" className="vlink-dot" />
+        </svg>
+      )}
       {/* Header.
           The row is scaled as a whole with `zoom` rather than by re-sizing a
           dozen buttons one at a time: `zoom` grows the LAYOUT, so the hit boxes

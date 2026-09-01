@@ -1167,6 +1167,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
             authorName={currentUser?.name ?? ''}
             controlsInto={planBarSlot}
             driveFolderLink={apartment!.driveLink}
+            planFileId={shownPlanId ?? detectedPdfId}
+            plansFolderId={planSet.plansFolderId}
           />
         </div>
       </div>

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Search, Folder, FileText, Image as ImageIcon, Loader2, X, ExternalLink, CornerDownRight } from 'lucide-react';
 import {
   DriveFolder, PlanEntry, listFoldersViaBackend, listMarkableViaBackend,
-  listPlansViaBackend, listPlanSubfoldersViaBackend,
+  listFolderPlansViaBackend, listPlanSubfoldersViaBackend,
 } from '../../data/driveApi';
 import { usePlanDownload } from '../../data/planCache';
 
@@ -70,8 +70,16 @@ export function PlanPicker({
   const [folder, setFolder] = useState<{ id: string; name: string } | null>(
     plansFolderId ? { id: plansFolderId, name: plansFolderName } : null,
   );
-  const [files, setFiles] = useState<PlanEntry[]>(plans);
+  /**
+   * The opening view shows ONLY the main plans folder's own files (the
+   * owner's ask) — the markups live under the Annotated Plans row in the
+   * folder list, one press away, not mixed into the first screen.
+   */
+  const [files, setFiles] = useState<PlanEntry[]>(plans.filter(p => p.kind !== 'annotated'));
   const [busy, setBusy] = useState(false);
+  /** The folder dropdown's own two waits, so nothing ever just JUMPS in. */
+  const [foldersBusy, setFoldersBusy] = useState(false);
+  const [subsBusy, setSubsBusy] = useState(false);
   const [q, setQ] = useState('');
   /** Files found in OTHER folders while searching, so a file can be found anywhere. */
   const [wider, setWider] = useState<{ file: PlanEntry; folder: DriveFolder }[]>([]);
@@ -109,15 +117,12 @@ export function PlanPicker({
       if (!id || dead) { setBusy(false); return; }
       setFolder(cur => cur ?? { id: id!, name });
       /**
-       * ALWAYS re-list live, even when the caller handed a list over. The
-       * handed list is what the drawer fetched when it OPENED — a version
-       * saved since then is already sitting in Annotated Plans and was not
-       * on it, which was "why can't I see the annotated plans once I save?".
-       * The handed list keeps the picker instant; the live one replaces it
-       * the moment it lands. `listPlansViaBackend`, not listMarkable: the
-       * folder's own files PLUS its Annotated Plans child, kinds and all.
+       * ALWAYS re-list live, even when the caller handed a list over — the
+       * handed list is what the drawer fetched when it OPENED. The folder's
+       * OWN files only (the owner's ruling): the markups show under the
+       * Annotated Plans folder in the dropdown, not mixed into this view.
        */
-      const { plans: fresh } = await listPlansViaBackend(id);
+      const fresh = await listFolderPlansViaBackend(id);
       if (dead) return;
       // UNION, fresh first: the live listing brings what was saved since the
       // handed list was fetched, and the handed list keeps a version stamped
@@ -169,10 +174,13 @@ export function PlanPicker({
     (async () => {
       let rows: FolderRow[] = foldersRef.current;
       if (!rows.length) {
+        setFoldersBusy(true);
         rows = await listFoldersViaBackend(driveLink);
         if (dead) return;
+        setFoldersBusy(false);
         setFolders(rows);
       }
+      setSubsBusy(true);
       const tree = [...rows];
       const tops: FolderRow[] = [...rows];
       // The plans folder may sit outside the job folder's own children (a
@@ -195,6 +203,7 @@ export function PlanPicker({
         });
         setFolders([...tree]);
       }
+      if (!dead) setSubsBusy(false);
     })();
     return () => { dead = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -204,10 +213,13 @@ export function PlanPicker({
     setFolder(f);
     setOpenList(false);
     setBusy(true);
-    // The merged listing here too, so choosing Engineered Plans by hand shows
-    // its Annotated Plans child's markups exactly like the opening view.
-    const { plans: rows } = await listPlansViaBackend(f.id);
-    setFiles(rows);
+    setFiles([]);   // skeletons, never the old folder's rows jumping out
+    // The folder's OWN files. A markups folder's rows are marked `annotated`
+    // so the chip shows and — belt and braces with the host's own folder
+    // check — picking one can never write plansPdfLink.
+    const rows = await listFolderPlansViaBackend(f.id);
+    const annot = /annotated/i.test(f.name);
+    setFiles(annot ? rows.map(p => ({ ...p, kind: 'annotated' as const })) : rows);
     setBusy(false);
   }
 
@@ -325,7 +337,15 @@ export function PlanPicker({
               <div className="px-2 pb-1 text-[9.5px] font-extrabold tracking-wide text-gray-400">
                 FOLDERS
               </div>
-              {shownFolders.length === 0 && (
+              {/* A wait LOOKS like a wait — rows landing into silence read as
+                  the list jumping (the owner's report). */}
+              {foldersBusy && [0, 1, 2].map(i => (
+                <div key={i} data-folder-skeleton className="flex items-center gap-2 px-2.5 py-2 animate-pulse">
+                  <span className="w-3.5 h-3.5 rounded bg-slate-200" />
+                  <span className="h-3 rounded bg-slate-200" style={{ width: `${52 - i * 9}%` }} />
+                </div>
+              ))}
+              {!foldersBusy && shownFolders.length === 0 && (
                 <p className="px-2 py-2 text-[11.5px] text-gray-400">No folders found.</p>
               )}
               {shownFolders.map(f => (
@@ -338,9 +358,22 @@ export function PlanPicker({
                   <span className="truncate text-[12.5px] text-slate-700">{f.name}</span>
                 </button>
               ))}
+              {subsBusy && !foldersBusy && (
+                <div data-subs-busy className="flex items-center gap-2 px-2.5 py-1.5 text-[10.5px] text-slate-400">
+                  <Loader2 size={11} className="animate-spin" /> finding subfolders…
+                </div>
+              )}
             </div>
           )}
 
+          {/* The file list waits out loud too — never stale rows, never a
+              blank that fills in with a jump. */}
+          {busy && shown.length === 0 && [0, 1, 2].map(i => (
+            <div key={i} data-plan-skeleton className="flex items-center gap-2 px-2.5 py-2.5 animate-pulse">
+              <span className="w-3.5 h-3.5 rounded bg-slate-200" />
+              <span className="h-3 rounded bg-slate-200" style={{ width: `${64 - i * 12}%` }} />
+            </div>
+          ))}
           {shown.length === 0 && !busy && (
             <p className="px-2 py-3 text-[11.5px] text-gray-400">
               Nothing to mark up in this folder.

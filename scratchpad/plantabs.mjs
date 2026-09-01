@@ -46,6 +46,12 @@ await ctx.route('**/api/drive-files', async route => {
       { id: 'PDF1', name: 'Ground floor.pdf', mimeType: 'application/pdf' },
       { id: 'PDF2', name: 'Electrical riser.pdf', mimeType: 'application/pdf' },
       { id: 'PDF3', name: 'Roof ductwork.pdf', mimeType: 'application/pdf' },
+      { id: 'F-annot', name: 'Annotated Plans', mimeType: FOLDER_MIME },
+    ] } });
+  }
+  if (body.folderId === 'F-annot') {
+    return route.fulfill({ json: { files: [
+      { id: 'ANN-1', name: 'annotated version 1.0 — probe.pdf', mimeType: 'application/pdf' },
     ] } });
   }
   return route.fulfill({ json: { files: [] } });
@@ -269,12 +275,25 @@ await page.waitForTimeout(1500);
 check(stamped === 1, 'Save files it through the real Annotated Plans pipeline', `${stamped} stamp calls`);
 check(await page.locator('[data-tab-ask]').count() === 0, 'and the ask closes with the tab');
 
-// ── 5b · the version saved a moment ago is IN the chooser ──────────────────
+// ── 5b · the saved markup lives under Annotated Plans in the chooser ───────
+// (Re-encoded to the originals-first ruling: the opening view shows only the
+// plans folder's own files; the markups are one press away in the dropdown.)
 await page.locator('[data-plan-tab-new]').click();
 await page.waitForTimeout(800);
+check(await page.locator('[data-plan-picker] [data-plan-row="ANN-1"]').count() === 0,
+  'the opening view keeps the markups out of the way');
+await page.locator('[data-plan-picker] [data-folder-button]').click();
+await page.waitForTimeout(2500);
+await page.locator('[data-folder-row="F-annot"]').click();
+await page.waitForTimeout(1500);
 check(await page.locator('[data-plan-picker] [data-plan-row="ANN-1"]').count() === 1,
-  'the markup saved a moment ago is listed in the chooser');
-await page.keyboard.press('Escape');
+  'the markup saved a moment ago is under Annotated Plans');
+// Close by the picker's OWN X — an Escape here races the studio's
+// per-render-re-registered key handler and can take the studio with it.
+await page.evaluate(() => {
+  const picker = document.querySelector('[data-plan-picker]');
+  [...(picker?.querySelectorAll('button') ?? [])].find(b => b.querySelector('svg.lucide-x'))?.click();
+});
 await page.waitForTimeout(400);
 
 // ── 6 · too many tabs: the picked one scrolls into view ────────────────────

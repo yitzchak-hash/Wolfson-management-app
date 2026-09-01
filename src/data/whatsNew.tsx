@@ -30,6 +30,56 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-11-01',
+    title: 'The punch list files itself, and the studio tidies up',
+    items: [
+      {
+        title: 'Pins go to Drive on their own',
+        body: 'Add or change pins on a plan — from the preview, no studio '
+          + 'needed — and a minute after you stop, a "punch list" PDF files '
+          + 'itself into Annotated Plans → Pins: one file per apartment, '
+          + 'brought up to date each time, with a tiny Drive flash on the '
+          + 'plan when it lands. No buttons, no questions.',
+        demo: 'pin',
+      },
+      {
+        title: 'v1.0, v1.1, v1.2 — the name counts the updates',
+        body: 'Every time a version\'s one Drive file is brought up to date, '
+          + 'its name ticks up — "annotated version 1.3" says at a glance '
+          + 'how many pushes it took. The version tabs in the studio show '
+          + 'the same number.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'A line from the version to the plan',
+        body: 'The version you are looking at draws a green line from its '
+          + 'tab to the sheet — save or switch versions and the line '
+          + 'travels, so what is open is never a guess. And a version\'s '
+          + 'green Drive dot now greys honestly when its file was deleted '
+          + 'in Drive. Clicking through old versions no longer creates '
+          + 'anything — looking is looking.',
+        demo: 'zoom',
+      },
+      {
+        title: 'One pen, a real pen tray',
+        body: 'Pen, pencil, marker and highlighter are one tile on the '
+          + 'rail. Press the pen you are holding and the tray opens — four '
+          + 'drawn pens, the one in your hand lifted; pick another and it '
+          + 'rises in its place, the Samsung Notes way. The eraser keeps '
+          + 'its own button.',
+        demo: 'tap',
+      },
+      {
+        title: 'The plan chooser loads politely',
+        body: 'Opening it shows the plans folder\'s own files first — '
+          + 'markups live under Annotated Plans in the folder list, one '
+          + 'press away. Folders, subfolders and files now show loading '
+          + 'rows while they arrive instead of jumping in.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2026-10-25',
     title: 'The markup knows exactly what Drive has',
     items: [

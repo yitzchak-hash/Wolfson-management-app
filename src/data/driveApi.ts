@@ -738,6 +738,13 @@ export async function stampPlanToDrive(input: {
    * a session's autosaves keep Annotated Plans at one file per version.
    */
   updateFileId?: string | null;
+  /**
+   * How many times this version's file has been brought up to date — the
+   * name then reads "annotated version 1.3" so the count shows at a glance.
+   */
+  subVersion?: number | null;
+  /** Replaces "annotated version N" in the file name ("punch list"). */
+  nameTag?: string;
 }): Promise<StampedPlan> {
   const resp = await fetch('/api/plan-annotate', {
     method: 'POST',
