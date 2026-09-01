@@ -62,6 +62,14 @@ Every page carries, in order:
    in a few plain sentences a non-expert follows.
 4. **The question batch** — the heart (rules below).
 
+**Anything visual is BUILT, not described** (owner rule, 2026-09-01: "if
+something is visual, make the UI in the HTML with the real UI code — build
+it"). When a sitting decides how a screen, control, or layout will look or
+behave, the page carries the thing itself — real HTML/CSS/SVG in the
+product's own design language, reusing the product's real UI code where it
+exists (the captured-controls precedent), interactive where that is cheap.
+Words about a screen are not a screen.
+
 Publish the page where the user can open it (an artifact link when available;
 otherwise a saved HTML file, told plainly where). Keep all sittings' pages
 together in one planning folder so the series survives.
