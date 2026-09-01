@@ -6404,3 +6404,26 @@ reload, the one-tap full-screen restore). Its trap is the standing one:
 seed only when the key is absent, or the TV navigation's init script wipes
 the files the board page just saved. tvcrash (built bundle) stays green
 with the tray on the wall.
+
+## Widgets land visible, on the front, and picked (owner: 2026-09-01)
+`placeWidgetNow` (all three branches — widget, group, title) stamps the new
+node with `frontZ()` (max content-band z on the active board + 1, boxes
+excluded — their band is clamped below content anyway), and the new widget
+arrives SELECTED (`setSelectedElIds`) so the ring finds the eye and culling
+can never drop it. `viewCentreSpot`'s clash-nudge, when it walks out of the
+visible rect (~670px of drift on a crowded view), now falls back to the
+plain CENTRE instead of clamping to the window's edge — the edge parked the
+newcomer under the overview's corner chrome. Overlap is fine; invisible is
+not. Harness: `scratchpad/round35-probe.mjs` (6 checks — z above a z:50
+node, elementFromPoint at its centre, arrives-selected via the Delete
+sweep). Its traps: a store card IS the button (no separate Add), and the
+Delete sweep's whatIsLost ask is a NATIVE confirm — auto-dismissed by
+Playwright unless accepted.
+
+## The tap-in board is a traffic light (owner: 2026-09-01)
+GREEN in / RED out, superseding the navy/grey dress: `TapInBoard` tiles are
+green gradient with a ticking `data-tap-counter` pill (h:mm since clock-in,
+riding the existing 30s tick) when in, red gradient when out. The LogOut
+corner glyph is gone from green tiles (the counter sits where it sat); the
+whole tile is still the button. `tapin2.mjs` re-encoded: backgroundImage,
+never backgroundColor — both states are gradients now.

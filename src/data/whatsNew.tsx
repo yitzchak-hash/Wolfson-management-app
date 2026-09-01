@@ -44,6 +44,21 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'drag',
       },
       {
+        title: 'New widgets land in front of you',
+        body: 'Adding a widget from the store now always puts it in the '
+          + 'middle of what you are looking at, on top of everything, and '
+          + 'already selected — no more pressing Add and hunting the board '
+          + 'for where it went.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'The tap-in board is a traffic light',
+        body: 'Clocked in is GREEN with a running counter showing how long '
+          + 'they have been on the clock; clocked out is red. One glance '
+          + 'down the corridor says who is here.',
+        demo: 'tap',
+      },
+      {
         title: 'Refresh without leaving full screen',
         body: 'The TV\'s refresh button now refreshes the data in place — '
           + 'full screen stays. It only really reloads when a new version '

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Fingerprint, LogIn, LogOut } from 'lucide-react';
+import { Fingerprint, LogIn } from 'lucide-react';
 import { CanvasElement, personColor } from '../../types';
 import { Frame, d, useTick, WidgetCtx } from '../../data/widgets';
 import { useStore } from '../../data/store';
@@ -132,6 +132,14 @@ export function TapInBoard({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
                 ? `in since ${hhmm(since)}`
                 : `in since ${niceDay(dayOf(since))} ${hhmm(since)}`)
               : '';
+            /**
+             * The running COUNTER (the owner's ask): how long they have been
+             * on the clock, as h:mm, kept current by the board's own 30s
+             * tick. The arrival time stays beside it — "how long" and
+             * "since when" answer different questions from the corridor.
+             */
+            const mins = since ? Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 60000)) : 0;
+            const counter = `${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, '0')}`;
             return (
               // The WHOLE tile is the button — name, time, icon and every
               // pixel of colour around them press as one thing. Dressed in
@@ -150,14 +158,17 @@ export function TapInBoard({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
                   // A tile that is on is FILLED, not merely outlined. From five
                   // metres down a corridor an outline is invisible and the
                   // board stops answering the question it exists for.
+                  // GREEN in, RED out — the owner's ruling (2026-09-01),
+                  // superseding the navy-in / grey-out dress: the board reads
+                  // as a traffic light, which is what a corridor glance wants.
                   background: inNow
-                    ? 'linear-gradient(135deg, #1e3a5f 0%, #2c5a8f 100%)'
-                    : '#f6f9fc',
-                  color: inNow ? '#fff' : '#1e3a5f',
-                  border: inNow ? '1px solid #16304f' : '1px solid #dbe4ee',
+                    ? 'linear-gradient(135deg, #15803d 0%, #22c55e 100%)'
+                    : 'linear-gradient(135deg, #fef2f2 0%, #fecaca 100%)',
+                  color: inNow ? '#fff' : '#7f1d1d',
+                  border: inNow ? '1px solid #166534' : '1px solid #fca5a5',
                   boxShadow: inNow
-                    ? '0 3px 12px rgba(30,58,95,.35), inset 0 1px 0 rgba(255,255,255,.12)'
-                    : '0 1px 2px rgba(15,23,42,.05)',
+                    ? '0 3px 12px rgba(22,101,52,.35), inset 0 1px 0 rgba(255,255,255,.15)'
+                    : '0 1px 2px rgba(153,27,27,.08)',
                   padding: `${Math.round(6 * f)}px ${Math.round(9 * f)}px`,
                 }}
               >
@@ -165,25 +176,42 @@ export function TapInBoard({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
                   <span className="rounded-full flex-shrink-0"
                     style={{
                       width: Math.round(7 * f), height: Math.round(7 * f),
-                      backgroundColor: inNow ? '#4aa8d8' : col,
-                      boxShadow: inNow ? '0 0 0 2px rgba(255,255,255,.25)' : 'none',
+                      backgroundColor: inNow ? '#bbf7d0' : col,
+                      boxShadow: inNow ? '0 0 0 2px rgba(255,255,255,.3)' : 'none',
                     }} />
                   <span className="block font-black leading-tight truncate"
                     style={{ fontSize: Math.round(12.5 * f) }}>{e.name}</span>
+                  {/* The counter — how long they have been in, ticking. */}
+                  {inNow && (
+                    <span data-tap-counter
+                      className="ms-auto flex-shrink-0 rounded-full font-black tabular-nums"
+                      style={{
+                        fontSize: Math.max(9, 10 * f),
+                        padding: `${Math.round(1 * f)}px ${Math.round(5 * f)}px`,
+                        backgroundColor: 'rgba(255,255,255,.22)', color: '#f0fdf4',
+                      }}>
+                      {counter}
+                    </span>
+                  )}
                 </span>
                 <span className="block leading-tight truncate font-semibold"
                   style={{
-                    color: inNow ? '#a8d4ee' : '#8aa0b8',
+                    color: inNow ? '#bbf7d0' : '#b91c1c',
                     fontSize: Math.max(8.5, 8.5 * f),
                     paddingInlineStart: Math.round(7 * f) + 6,
                   }}>
                   {inNow ? sinceLabel : (e.role || 'tap to clock in')}
                 </span>
-                <span className="absolute"
-                  style={{ top: Math.round(5 * f), right: Math.round(5 * f),
-                           color: inNow ? '#4aa8d8' : '#b6c6d6' }}>
-                  {inNow ? <LogOut size={Math.round(11 * f)} /> : <LogIn size={Math.round(11 * f)} />}
-                </span>
+                {/* The corner glyph survives only on OUT tiles — on a green
+                    tile the ticking counter sits where it sat, and two things
+                    in one corner overlapped. The whole tile is the button
+                    either way; the hover title says which way it will punch. */}
+                {!inNow && (
+                  <span className="absolute"
+                    style={{ top: Math.round(5 * f), right: Math.round(5 * f), color: '#ef4444' }}>
+                    <LogIn size={Math.round(11 * f)} />
+                  </span>
+                )}
                 {saying && (
                   <span className="absolute inset-0 flex items-center justify-center px-1 text-center
                                    font-bold leading-tight"

@@ -1334,7 +1334,39 @@ export function GeneralJobsPage() {
       if (!clash) break;
       x += 28; y += 24;
     }
-    return { x, y };
+    /**
+     * VISIBLE beats tidy. On a crowded view the clash-nudge above can walk
+     * the spot right out of the window (24 steps is ~670px), and a widget
+     * placed where you cannot see it reads as the Add button doing nothing —
+     * the owner's rule: adding must always show up. A nudge that left the
+     * view falls back to the plain CENTRE rather than being clamped to the
+     * window's edge: the edge parks it under the board's own corner chrome
+     * (the overview bottom-right, the rail), and overlapping something at
+     * the centre is fine — the newcomer arrives on top and selected.
+     */
+    const r = vp.getBoundingClientRect();
+    const hb = headerBarRef.current?.getBoundingClientRect();
+    const tl = toWorld(r.left + 8, (hb ? Math.min(hb.bottom + 8, r.bottom) : r.top + 8));
+    const br = toWorld(r.right - 8, r.bottom - 8);
+    if (x < tl.x || y < tl.y || x + w > br.x || y + h > br.y) {
+      x = Math.max(Math.max(0, tl.x), Math.min(Math.round(c.x - w / 2), br.x - w));
+      y = Math.max(Math.max(0, tl.y), Math.min(Math.round(c.y - h / 2), br.y - h));
+    }
+    return { x: Math.round(x), y: Math.round(y) };
+  }
+
+  /**
+   * The z that puts a NEW node in front of everything already on this board —
+   * the other half of "adding must always show up": landing centre-screen
+   * under a node somebody once brought to front still reads as nothing
+   * happening. Boxes are excluded — their band is clamped below content, and
+   * counting one would inflate every newcomer for no reason.
+   */
+  function frontZ(): number {
+    const zs = canvasElements
+      .filter(e => (e.board ?? '') === activeBoardView && e.type !== 'box')
+      .map(e => e.z ?? (e.type === 'bin' ? 4 : 5));
+    return (zs.length ? Math.max(...zs) : 5) + 1;
   }
 
   function placeWidget(def: WidgetDef) {
@@ -1356,7 +1388,7 @@ export function GeneralJobsPage() {
       const id = 'CE-bin-' + Math.random().toString(36).slice(2, 8);
       addCanvasElement({
         addedAt: new Date().toISOString(),
-        id, type: 'bin',
+        id, type: 'bin', z: frontZ(),
         x: Math.round(at.x), y: Math.round(at.y), w: def.w, h: def.h,
         text: 'New group', color: '#7c3aed',
       });
@@ -1367,7 +1399,7 @@ export function GeneralJobsPage() {
       const id = 'CE-' + Math.random().toString(36).slice(2, 9);
       addCanvasElement({
         addedAt: new Date().toISOString(),
-        id, type: 'title', x: Math.round(at.x), y: Math.round(at.y),
+        id, type: 'title', z: frontZ(), x: Math.round(at.x), y: Math.round(at.y),
         w: def.w, h: def.h, text: '', color: '#0f172a',
         fontSize: 30, fontWeight: 800, align: 'left',
       });
@@ -1402,9 +1434,10 @@ export function GeneralJobsPage() {
     const alreadyMain = planner && canvasElements.some(e =>
       e.type === 'widget' && e.widget === def.id && (e.data as Record<string, unknown> | undefined)?.role !== 'projection');
 
+    const newId = 'CE-' + Math.random().toString(36).slice(2, 9);
     addCanvasElement({
       addedAt: new Date().toISOString(),
-      id: 'CE-' + Math.random().toString(36).slice(2, 9),
+      id: newId,
       ...(isArt
         ? { type: 'clipart' as const, art: def.id.slice(4) as ArtKind }
         : { type: 'widget' as const, widget: def.id }),
@@ -1413,6 +1446,9 @@ export function GeneralJobsPage() {
       x: Math.round(at.x),
       y: Math.round(at.y),
       w: def.w, h: def.h,
+      // ON TOP of everything already here — a newcomer under an old
+      // brought-to-front node reads as the Add button doing nothing.
+      z: frontZ(),
       text: '',
       color: isArt ? '#dc2626' : '#ffffff',
       data: {
@@ -1422,6 +1458,10 @@ export function GeneralJobsPage() {
         ...(alreadyMain ? { role: 'projection' } : {}),
       },
     });
+    // The new widget arrives PICKED — the selection ring is what the eye
+    // finds first, and a selected node is never culled out from under you.
+    setSelectedJobIds(new Set());
+    setSelectedElIds(new Set([newId]));
     // The store STAYS OPEN. Furnishing a board meant reopening it for every
     // single piece.
     setToast(alreadyMain

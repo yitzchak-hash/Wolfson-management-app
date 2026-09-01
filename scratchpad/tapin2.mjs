@@ -45,12 +45,16 @@ const punches = () => page.evaluate(() =>
 
 // ── 1 · one tap punches the clock, the tile fills with colour ───────────────
 const avi = page.locator('[data-node-id="CE-tap"] button[title*="Avi"]');
-const bgBefore = await avi.evaluate(n => getComputedStyle(n).backgroundColor);
+// RED out, GREEN in — the owner's 2026-09-01 traffic-light dress. Gradients,
+// so read backgroundImage, never backgroundColor (always transparent here).
+const bgBefore = await avi.evaluate(n => getComputedStyle(n).backgroundImage);
+check(/254, 202, 202|fecaca/i.test(bgBefore), 'a clocked-out tile is red', bgBefore.slice(0, 60));
 await avi.click();
 await page.waitForTimeout(900);
 check((await punches()).join() === 'E-1:in', 'tapping a name clocks them in', (await punches()).join());
-const bgAfter = await avi.evaluate(n => getComputedStyle(n).backgroundColor);
-check(bgBefore !== bgAfter, 'and the tile fills with their colour', `${bgBefore} → ${bgAfter}`);
+const bgAfter = await avi.evaluate(n => getComputedStyle(n).backgroundImage);
+check(/34, 197, 94|22c55e/i.test(bgAfter), 'and the tile turns green', bgAfter.slice(0, 60));
+check(await avi.locator('[data-tap-counter]').count() === 1, 'with a running counter on it');
 check((await avi.textContent() || '').includes('in since'), 'with the arrival time under the name');
 
 // ── 2 · rows share the widget's height evenly ───────────────────────────────
