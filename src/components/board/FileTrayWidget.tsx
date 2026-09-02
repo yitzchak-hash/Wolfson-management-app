@@ -236,7 +236,14 @@ export function FileTrayWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
               </span>
               {canPreview(f) && (
                 <button data-no-drag data-el-action data-tray-preview
-                  onClick={() => setPreview(f)} title="Preview"
+                  // A PLAN opens straight into the markup studio (the owner's
+                  // ask): looking at a drawing and marking it up are one act,
+                  // and the studio's first save asks where the copy belongs.
+                  // Images — and a data-URL PDF, which the studio cannot
+                  // fetch by id — keep the plain preview; so does the wall.
+                  onClick={() => (isPdf(f) && f.fileId && !c.readOnly && !sample)
+                    ? setMarkup(f) : setPreview(f)}
+                  title={isPdf(f) && f.fileId && !c.readOnly && !sample ? 'Open in markup' : 'Preview'}
                   className="p-1 rounded-md text-gray-400 hover:text-[#1e3a5f] hover:bg-gray-100 flex-shrink-0">
                   <Eye size={13} />
                 </button>
@@ -290,6 +297,10 @@ export function FileTrayWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
               apartmentLabel={markup.name}
               authorName={me}
               plansFolderId={data.folderId}
+              /* A tray plan has no job of its own — the studio's first save
+                 asks WHERE the marked-up copy belongs (the tray's folder, or
+                 a job's plans folder) and files there from then on. */
+              chooseSaveFolder
               onClose={() => setMarkup(null)}
             />
           </div>

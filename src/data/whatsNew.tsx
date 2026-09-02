@@ -30,6 +30,29 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-11-29',
+    title: 'The File Tray opens plans in markup',
+    items: [
+      {
+        title: 'Press the eye, get the pen',
+        body: 'A plan dropped in the File Tray now opens straight into the '
+          + 'full markup studio when you press its eye — no read-only stop '
+          + 'in between. Draw on it the moment it opens.',
+        demo: 'tap',
+      },
+      {
+        title: 'Saving asks where it belongs',
+        body: 'The first save asks one question: file the marked-up copy '
+          + 'beside the original in the tray\'s Drive folder, or into a '
+          + 'job\'s own plans folder — with a search over your jobs. Once '
+          + 'answered, every save and autosave keeps going to that home. '
+          + 'Nothing is pushed to Drive before you answer; your marks are '
+          + 'kept safely in the app from the first stroke either way.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2026-11-22',
     title: 'Zoom from the keyboard, and a pinch with no seam',
     items: [

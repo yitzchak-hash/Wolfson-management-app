@@ -13,8 +13,8 @@ import * as pdfjs from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { useStore } from '../../data/store';
 import { useOrientation } from '../../data/useOrientation';
-import { AnnStroke, AnnTool, PlanAnnotation } from '../../types';
-import { stampPlanToDrive, extractFolderId, isUploadBackendConfigured, listPlansViaBackend } from '../../data/driveApi';
+import { AnnStroke, AnnTool, PlanAnnotation, aptLabel } from '../../types';
+import { stampPlanToDrive, extractFolderId, isUploadBackendConfigured, listPlansViaBackend, findPlanSetViaBackend } from '../../data/driveApi';
 import { filePinsNow } from '../../data/pinPush';
 import { fetchPlanCached, prefetchPlans, acquirePlanCache, releasePlanCache } from '../../data/planCache';
 import { printEsc } from '../../data/printing';
@@ -665,6 +665,112 @@ function ShapeTray({ at, up, current, onPick, onClose, ts }: {
   );
 }
 
+/**
+ * "Where should this marked-up plan be saved?" — the File Tray's question.
+ *
+ * A plan opened from the tray has no job of its own, so the FIRST save asks:
+ * keep it beside the original in the tray's Drive folder, or file it into a
+ * job's plans folder. Picking a job resolves its Engineered Plans folder on
+ * the spot (the markup of a plan is a plan — that is where the office looks),
+ * falling back to the job folder itself when there is none. Portalled and
+ * SEALED (the portal-in-a-node trap), Escape closes it, capture phase.
+ */
+function SaveWhereDialog({ trayFolderId, jobs, onPick, onClose }: {
+  trayFolderId?: string;
+  jobs: { id: string; label: string; driveLink: string }[];
+  onPick: (dest: { folderId: string; label: string }) => void;
+  onClose: () => void;
+}) {
+  const [q, setQ] = useState('');
+  const [resolving, setResolving] = useState('');
+  useEffect(() => {
+    function key(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      onClose();
+    }
+    window.addEventListener('keydown', key, true);
+    return () => window.removeEventListener('keydown', key, true);
+  }, [onClose]);
+
+  const needle = q.trim().toLowerCase();
+  const shown = (needle ? jobs.filter(j => j.label.toLowerCase().includes(needle)) : jobs).slice(0, 40);
+
+  async function pickJob(j: { id: string; label: string; driveLink: string }) {
+    setResolving(j.id);
+    try {
+      const set = await findPlanSetViaBackend(j.driveLink);
+      const folderId = set.plansFolderId ?? extractFolderId(j.driveLink);
+      if (folderId) onPick({ folderId, label: j.label });
+    } catch {
+      const folderId = extractFolderId(j.driveLink);
+      if (folderId) onPick({ folderId, label: j.label });
+    } finally {
+      setResolving('');
+    }
+  }
+
+  return createPortal(
+    <>
+      <div className="fixed inset-0 z-[172]" style={{ backgroundColor: 'rgba(9,14,22,.5)' }} onClick={onClose} />
+      <div data-save-where
+        className="fixed z-[173] rounded-2xl overflow-hidden shadow-2xl flex flex-col"
+        style={{ left: '50%', top: '50%', transform: 'translate(-50%,-50%)',
+                 width: 'min(380px, 94vw)', maxHeight: 'min(540px, 88vh)', backgroundColor: '#fff' }}
+        onPointerDown={e => e.stopPropagation()}
+        onPointerUp={e => e.stopPropagation()}
+        onMouseDown={e => e.stopPropagation()}>
+        <div className="px-5 pt-4 pb-3" style={{ backgroundColor: NAVY }}>
+          <div className="text-[14px] font-extrabold text-white">Where should this be saved?</div>
+          <p className="text-[11.5px] mt-0.5" style={{ color: 'rgba(255,255,255,.65)' }}>
+            The marked-up plan is filed in Drive — pick its home.
+          </p>
+        </div>
+        <div className="p-3 flex flex-col gap-2 min-h-0">
+          {trayFolderId && (
+            <button data-save-tray
+              onClick={() => onPick({ folderId: trayFolderId, label: 'the File Tray folder' })}
+              className="w-full text-start rounded-xl border px-3 py-2.5 hover:bg-gray-50"
+              style={{ borderColor: '#c7d4e0' }}>
+              <span className="block text-[12.5px] font-bold text-gray-800">The File Tray folder</span>
+              <span className="block text-[10.5px] text-gray-400">Beside the original, in Drive</span>
+            </button>
+          )}
+          <input data-save-search
+            value={q} onChange={e => setQ(e.target.value)}
+            placeholder="…or search for a job"
+            className="w-full rounded-lg border px-3 py-2 text-[12px] outline-none focus:border-[#4aa8d8]"
+            style={{ borderColor: '#c7d4e0' }} />
+          <div className="flex-1 min-h-0 overflow-y-auto widget-scroll space-y-1">
+            {shown.length === 0 ? (
+              <p className="text-[11px] text-gray-400 text-center py-3">
+                {jobs.length ? 'No job matches that.' : 'No jobs with a Drive folder in this workspace.'}
+              </p>
+            ) : shown.map(j => (
+              <button key={j.id} data-save-job={j.id}
+                onClick={() => void pickJob(j)}
+                disabled={!!resolving}
+                className="w-full text-start rounded-lg px-3 py-2 hover:bg-gray-50 flex items-center gap-2 disabled:opacity-60"
+                style={{ border: '1px solid #eef1f5' }}>
+                <span className="flex-1 min-w-0 text-[12px] font-semibold text-gray-700 truncate">{j.label}</span>
+                {resolving === j.id
+                  ? <Loader2 size={12} className="animate-spin flex-shrink-0 text-gray-400" />
+                  : <span className="text-[9.5px] text-gray-400 flex-shrink-0">its plans folder</span>}
+              </button>
+            ))}
+          </div>
+          <button onClick={onClose}
+            className="w-full py-2 rounded-xl text-[12px] font-semibold text-gray-500 hover:bg-gray-100">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </>,
+    document.body,
+  );
+}
+
 export interface TabWork {
   strokes: AnnStroke[];
   redo: AnnStroke[];
@@ -683,7 +789,7 @@ function PlanEditor({
   planFileId, planName, apartmentId, apartmentLabel, driveFolderUrl, plansFolderId,
   authorName, readOnly = false, askWho = false, people = [], plans = [], embedded = false,
   barExtrasRef, barInto, barInto2,
-  touchScale = 1,
+  touchScale = 1, chooseSaveFolder = false,
   tabStrip, initialWork, workRef, onOpenPlanNewTab, onUnsavedChange,
   onClose, onToast, onPickPlan, onStartMarkup, onSavedToDrive,
 }: {
@@ -700,6 +806,13 @@ function PlanEditor({
   plansFolderId?: string;
   authorName: string;
   readOnly?: boolean;
+  /**
+   * The plan has no job of its own (the File Tray opens sketches like this),
+   * so the FIRST save asks WHERE to file it — the tray's folder or a job's
+   * plans folder — and every Drive push waits for that answer. Local keeps
+   * are untouched: the marks are safe in the app from the first stroke.
+   */
+  chooseSaveFolder?: boolean;
   /**
    * Sit inside the page instead of covering it.
    *
@@ -818,6 +931,24 @@ function PlanEditor({
   const savePlanAnnotation = useStore(s => s.savePlanAnnotation);
   const updatePlanAnnotation = useStore(s => s.updatePlanAnnotation);
   const deletePlanAnnotation = useStore(s => s.deletePlanAnnotation);
+  const allApartments = useStore(s => s.apartments);
+
+  /**
+   * The ask-where flow (chooseSaveFolder — the File Tray's studio). The
+   * chosen destination lives in a REF beside its state: the save that fires
+   * the moment the dialog answers must see the choice before React has
+   * flushed it — the standing read-through-refs rule for the save callbacks.
+   */
+  const [askWhere, setAskWhere] = useState(false);
+  const [saveDest, setSaveDest] = useState<{ folderId: string; label: string } | null>(null);
+  const saveDestRef = useRef<{ folderId: string; label: string } | null>(null);
+  const saveJobs = useMemo(() =>
+    chooseSaveFolder
+      ? allApartments
+          .filter(a => a.driveLink && !a.isUnnamed)
+          .map(a => ({ id: a.id, label: aptLabel(a), driveLink: a.driveLink! }))
+      : [],
+    [chooseSaveFolder, allApartments]);
 
   const [doc, setDoc] = useState<PdfDoc | null>(null);
   const [loadErr, setLoadErr] = useState('');
@@ -2801,7 +2932,12 @@ function PlanEditor({
 
   const pushToDrive = useCallback(async () => {
     if (pushingRef.current || locked || !strokes.length) return;
-    if (!backendReady || !(plansFolderId || parentFolderId)) return;   // nowhere to put it
+    // A tray sketch pushes NOWHERE until "where should this be saved?" has
+    // been answered — the local keeps still run, so nothing is at risk.
+    const destParent = chooseSaveFolder
+      ? saveDestRef.current?.folderId ?? null
+      : plansFolderId || parentFolderId;
+    if (!backendReady || !destParent) return;   // nowhere to put it (yet)
     pushingRef.current = true;
     setSaveState('sending');
     try {
@@ -2809,7 +2945,7 @@ function PlanEditor({
       const sub = upd ? (subRef.current ?? 0) + 1 : 0;
       const out = await stampPlanToDrive({
         planFileId,
-        parentFolderId: plansFolderId || parentFolderId!,
+        parentFolderId: destParent,
         strokes: [...strokesForDrive(), ...await pinsForDrive()],
         version: claimVersion(),
         subVersion: sub,
@@ -2833,19 +2969,22 @@ function PlanEditor({
     } finally {
       pushingRef.current = false;
     }
-  }, [locked, strokes.length, backendReady, plansFolderId, parentFolderId, planFileId,
-      strokesForDrive, pinsForDrive, sketchDriveFile, pinSig, claimVersion, apartmentLabel,
-      who, authorName, updatePlanAnnotation, onSavedToDrive]);
+  }, [locked, strokes.length, backendReady, chooseSaveFolder, plansFolderId, parentFolderId,
+      planFileId, strokesForDrive, pinsForDrive, sketchDriveFile, pinSig, claimVersion,
+      apartmentLabel, who, authorName, updatePlanAnnotation, onSavedToDrive]);
 
   // Every change: keep it here now, and set the clock running for Drive.
+  // A tray sketch with no chosen destination keeps LOCALLY only — arming the
+  // countdown would promise a push that pushToDrive rightly refuses.
   useEffect(() => {
     if (!dirty || locked || !strokes.length) return;
     keepLocally();
+    if (chooseSaveFolder && !saveDest) return;
     clearTimeout(idleTimer.current);
     setDriveIn(Math.round(DRIVE_IDLE_MS / 1000));
     idleTimer.current = window.setTimeout(() => { void pushToDrive(); }, DRIVE_IDLE_MS);
     return () => clearTimeout(idleTimer.current);
-  }, [strokes, dirty, locked, keepLocally, pushToDrive]);
+  }, [strokes, dirty, locked, keepLocally, pushToDrive, chooseSaveFolder, saveDest]);
 
   /**
    * The seconds still to go before Drive gets it.
@@ -3043,6 +3182,16 @@ function PlanEditor({
     const havePins = myPinsRef.current.length > 0;
     if (!strokes.length && !havePins) { onToast?.('Nothing to save yet.', 'error'); return; }
     /**
+     * The File Tray's studio: the first save ASKS WHERE the marked-up plan
+     * belongs — the tray's own folder or a job's plans folder — and the save
+     * re-fires the moment the dialog answers. Every later save (and the idle
+     * autosave) files into the same chosen home.
+     */
+    if (chooseSaveFolder && !saveDestRef.current && strokes.length) {
+      setAskWhere(true);
+      return;
+    }
+    /**
      * Pins with no ink: that is the PUNCH LIST's business — the same one file
      * in Annotated Plans → Pins the background filer keeps, through the same
      * implementation, so the two paths can never drift apart.
@@ -3097,11 +3246,14 @@ function PlanEditor({
       }
       return;
     }
-    if (!backendReady || !parentFolderId) {
+    const destParent = chooseSaveFolder
+      ? saveDestRef.current?.folderId ?? null
+      : plansFolderId || parentFolderId;
+    if (!backendReady || !destParent) {
       // Still worth keeping: the markup lives in the app and can be printed,
       // it just cannot be filed in Drive without the folder and the upload key.
       if (strokes.length) storeVersion();
-      onToast?.(parentFolderId
+      onToast?.(destParent
         ? 'Saved here. Drive filing is off until the upload key is set.'
         : 'Saved here. Set the job\'s Drive folder to file a PDF copy too.', 'error');
       return;
@@ -3116,8 +3268,9 @@ function PlanEditor({
         planFileId,
         // Inside the Engineered Plans folder when we know it — the markup of a
         // plan is a plan, and that is where the office goes looking. The job's
-        // main folder is only the fallback.
-        parentFolderId: plansFolderId || parentFolderId,
+        // main folder is only the fallback. A tray sketch goes wherever the
+        // ask-where dialog chose.
+        parentFolderId: destParent,
         strokes: [
           ...strokes.map(({ id: _id, ...rest }) => rest), // ids are ours, not the PDF's
           ...await pinsForDrive(),                        // the punch list travels too
@@ -3613,6 +3766,19 @@ function PlanEditor({
       {shapeTray && !locked && (
         <ShapeTray at={shapeTray} up={shapeTray.up} current={shapeTool} ts={ts}
           onPick={id => pick(id)} onClose={() => setShapeTray(null)} />
+      )}
+      {/* The File Tray's "where should this be saved?" — the answered save
+          re-fires straight away, reading the choice through its ref. */}
+      {askWhere && !locked && (
+        <SaveWhereDialog trayFolderId={plansFolderId} jobs={saveJobs}
+          onClose={() => setAskWhere(false)}
+          onPick={dest => {
+            saveDestRef.current = dest;
+            setSaveDest(dest);
+            setAskWhere(false);
+            onToast?.(`Filing into ${dest.label} — this sketch keeps saving there.`);
+            void save();
+          }} />
       )}
       {/* The version-to-plan connector — replayed (keyed) on every switch. */}
       {vlink && (

@@ -6854,3 +6854,35 @@ Probe: `round37-probe.mjs` (10 — pane keys, fit key, studio keys, the
 stand-down, Ctrl+− interception, dead button gone). Regressions green:
 markup2, round36, planviewer, planzoom, tvzoom, plantabs, drivesave,
 planlayers.
+
+---
+
+# v2 — the File Tray opens plans in markup, and the save asks where
+
+- **The tray's eye on a PDF opens the FULL STUDIO** (FileTrayWidget): a plan
+  with a Drive `fileId` goes straight to `<PlanAnnotator chooseSaveFolder>`;
+  images, data-URL PDFs (nothing to fetch by id) and the read-only wall keep
+  the plain TrayPreview.
+- **`chooseSaveFolder` on PlanEditor** — the tray's studio has no job of its
+  own, so the FIRST save opens `SaveWhereDialog` (module level, portalled
+  z-172/173, seals pointer events, Escape capture): the tray's own folder,
+  or a job picked from the workspace's apartments-with-driveLink (search by
+  `aptLabel`). Picking a job resolves its Engineered Plans folder ON THE
+  SPOT via `findPlanSetViaBackend`, falling back to the job folder. The
+  choice lands in a REF beside its state (`saveDestRef`) because the save
+  re-fires the moment the dialog answers — the standing read-through-refs
+  rule for the save callbacks.
+- **No Drive push before the answer**: `pushToDrive` and `save()` derive one
+  `destParent` (`chooseSaveFolder ? saveDestRef : plansFolderId ||
+  parentFolderId`), and the idle effect keeps LOCALLY but arms no countdown
+  while the question is unanswered — a countdown chip would promise a push
+  the gate rightly refuses. After the answer, every save and autosave files
+  to the chosen home. The wrapper's close-ask still files into the tray
+  folder as the safety default — the local record keeps everything
+  regardless.
+- Probe: `traymarkup-probe.mjs` (11 — eye→studio, 11s past the idle with
+  zero stamps, the dialog's two answers + search, EP1 as the stamped parent,
+  the autosave following). Its lesson: a COLD dev server compiles pdf.js on
+  the first studio open — wait for the sheet canvas, never a fixed beat.
+  `plantabs`' cached-sheet timing checks flake on a cold server for the same
+  reason; re-run warm before blaming a diff.
