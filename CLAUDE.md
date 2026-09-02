@@ -6822,3 +6822,35 @@ override proving the clock) · shapesnap (offline, 15). Traps paid for:
   ink tile started opening the DRAWER — the backdrop swallowed the drawing
   touch and "finger drawing left no ink". The probe now closes the tray it
   itself opened. The product was never broken.
+
+---
+
+# v2 — the plan zooms from the keyboard, and the pinch loses its seam
+
+- **= / + / − / 0 zoom the plan** — plain AND with Ctrl/⌘ (intercepted, the
+  Ctrl+P precedent: the browser must not zoom the whole app while a plan is
+  open). Through the shared `zoomStep` door; 0 fits. Guarded by the
+  handler's standing inField/textDraft gate. **The root carries
+  `data-plan-surface="pane"|"studio"`**, and an embedded pane STANDS DOWN
+  while a studio is mounted — both mount the window keydown handler, and
+  without the guard one key moved two surfaces.
+- **The pinch release seam**: two residual jump sources at finger-lift —
+  the whole-percent snap (0.5% of a 4000px sheet is 20 real pixels) and the
+  transform being cleared a paint before the layout commit. The commit is
+  EXACT now (1e-4), and the gesture transform stays ON until the
+  `[nat, scale]` effect — which became a **useLayoutEffect** — clears it
+  pre-paint, after the canvas resize and before the anchor rects are
+  measured (clear it after measuring and the correction scrolls to a
+  transformed rect). A pure two-finger pan clears + scrolls synchronously
+  in the touchend task. `planpinch-probe` grew the seam checks: post-lift
+  drift 0.0px, transform cleared.
+- **The "Saved versions" button was DEAD** — it toggled `showVersions`,
+  which nothing read: a leftover from the removed right-hand versions
+  panel. Deleted, with its state; the v1.0/v2.0 tabs on the rail are the
+  versions. (The owner asking "what does this button do" about a button
+  that does nothing is the report to act on.)
+
+Probe: `round37-probe.mjs` (10 — pane keys, fit key, studio keys, the
+stand-down, Ctrl+− interception, dead button gone). Regressions green:
+markup2, round36, planviewer, planzoom, tvzoom, plantabs, drivesave,
+planlayers.

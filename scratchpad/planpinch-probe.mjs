@@ -104,6 +104,24 @@ const finalW = await page.evaluate(() => {
 check(finalW > sheet.w * 2.2, `pinch out grew the sheet ~2.5x (${Math.round(sheet.w)} → ${Math.round(finalW)})`);
 check(maxDrift < 30, `anchored point stays under the fingers (max drift ${Math.round(maxDrift)}px)`);
 
+// THE RELEASE SEAM: lifting the fingers must not move the picture. The commit
+// is exact (no whole-percent snap) and the gesture transform comes off in the
+// same pre-paint breath as the new layout — so the sheet point that sat under
+// the fingers' last midpoint is still there after the release.
+const postDrift = await page.evaluate(([fx, fy, mx2, my2]) => {
+  const cs = [...document.querySelectorAll('canvas')];
+  const c = cs.find(x => x.getBoundingClientRect().width > 150);
+  if (!c) return 9999;
+  const r = c.getBoundingClientRect();
+  return Math.hypot(r.x + r.width * fx - mx2, r.y + r.height * fy - my2);
+}, [frac.fx, frac.fy, cx + 60, cy]);
+check(postDrift < 3, `releasing the fingers does not jump (post-lift drift ${postDrift.toFixed(1)}px)`);
+check(await page.evaluate(() => {
+  const cs = [...document.querySelectorAll('canvas')];
+  const c = cs.find(x => x.getBoundingClientRect().width > 150);
+  return c ? (c.parentElement.style.transform || '') === '' : false;
+}), 'the gesture transform is fully cleared after release');
+
 console.log(fails ? `\n${fails} FAILURES` : '\nALL PASS');
 await b.close();
 process.exit(fails ? 1 : 0);

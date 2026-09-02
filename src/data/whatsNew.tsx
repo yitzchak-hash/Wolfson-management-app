@@ -30,6 +30,35 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-11-22',
+    title: 'Zoom from the keyboard, and a pinch with no seam',
+    items: [
+      {
+        title: 'The = and − keys zoom the plan',
+        body: 'With a plan open, = or + zooms in, − zooms out and 0 fits the '
+          + 'whole sheet — with or without Ctrl, so the browser can no '
+          + 'longer steal the shortcut and zoom the whole app instead. '
+          + 'Works in the job window\'s plan pane and in the markup studio.',
+        demo: 'zoom',
+      },
+      {
+        title: 'Letting go of a pinch is seamless now',
+        body: 'The last little jump when you lifted your fingers is gone — '
+          + 'the zoom now lands at exactly the size your fingers left it, '
+          + 'in the same instant, with no blink.',
+        demo: 'tap',
+      },
+      {
+        title: 'A button that did nothing is gone',
+        body: 'The "Saved versions" button on the studio bar was left over '
+          + 'from an old panel and no longer did anything — your saved '
+          + 'versions are the v1, v2 tabs on the toolbar, where they '
+          + 'always were.',
+        demo: 'sparkle',
+      },
+    ],
+  },
+  {
     date: '2026-11-15',
     title: 'Real pens, neat shapes, and a zoom that obeys',
     items: [

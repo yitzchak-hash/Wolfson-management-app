@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X, Undo2, Redo2, Trash2, HardDrive, AlertTriangle, SquareDashedMousePointer,
@@ -874,7 +874,6 @@ function PlanEditor({
 
   const [saving, setSaving] = useState(false);
   const [textDraft, setTextDraft] = useState<{ nx: number; ny: number; value: string; forId?: string } | null>(null);
-  const [showVersions, setShowVersions] = useState(true);
 
   /** Where the pointer is, so the nib can be drawn at its real size under it. */
   const [nibAt, setNibAt] = useState<{ x: number; y: number } | null>(null);
@@ -1392,7 +1391,7 @@ function PlanEditor({
    * The scroll correction that keeps the point under the pointer still lives
    * with the size change, because it has to read the new scrollWidth.
    */
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!nat) return;
     const cssW = Math.round(nat.w * scale);
     const cssH = Math.round(nat.h * scale);
@@ -1401,6 +1400,17 @@ function PlanEditor({
       c.style.width = `${cssW}px`;
       c.style.height = `${cssH}px`;
     }
+    /**
+     * A pinch that just ended leaves its gesture transform on the sheet
+     * until THIS moment — a layout effect, so the transform comes off, the
+     * new size goes on and the anchor scroll below all land before the
+     * browser paints once. Cleared any earlier (in touchend), the screen
+     * showed one frame of the old scale first: the blink at finger-lift.
+     * It must come off BEFORE the rects below are measured, or the anchor
+     * correction reads a transformed rect and scrolls to the wrong spot.
+     */
+    const wrap = sheetWrapRef.current;
+    if (wrap && wrap.style.transform) { wrap.style.transform = ''; wrap.style.transformOrigin = ''; }
     const anchor = zoomAnchor.current;
     if (anchor && stageRef.current && pdfRef.current) {
       const el = stageRef.current;
@@ -1614,19 +1624,31 @@ function PlanEditor({
     }
     function end(e: TouchEvent) {
       if (e.touches.length >= 2 || !base) return;
-      const w = sheetWrapRef.current;
-      if (w) { w.style.transform = ''; w.style.transformOrigin = ''; }
       const er = el!.getBoundingClientRect();
       const cx = lastMid.x - er.left, cy = lastMid.y - er.top;
-      const snapped = Math.round(lastWant * 100) / 100;
-      if (snapped !== scaleRef.current) {
-        // Commit once: the layout effect resizes the canvases and puts the
-        // grabbed sheet point back under where the fingers ended.
+      /**
+       * Committed EXACTLY, not to a whole per-cent. Rounding to 1% moved a
+       * 4000px sheet up to 20px the instant the fingers lifted — the last of
+       * "still jumping a bit". Four decimals keeps floats tidy while staying
+       * far below a pixel.
+       */
+      const exact = Math.round(lastWant * 1e4) / 1e4;
+      if (exact !== scaleRef.current) {
+        /**
+         * The gesture's transform is deliberately LEFT ON here. Clearing it
+         * now paints one frame at the old scale before the resize lands —
+         * the visible blink at finger-lift. The layout effect that commits
+         * the new size clears it in the same pre-paint breath, so the
+         * gesture's last frame and the committed layout are one picture.
+         */
         zoomAnchor.current = { fx: base.fx, fy: base.fy, cx, cy };
-        setScale(snapped);
+        setScale(exact);
       } else {
-        // A pure two-finger PAN — no scale change to consume the anchor, so
-        // carry the travel into the scroll directly.
+        // A pure two-finger PAN — no scale change, so the transform comes
+        // off and the travel goes into the scroll in the same task: no
+        // paint can slip between two synchronous writes.
+        const w = sheetWrapRef.current;
+        if (w) { w.style.transform = ''; w.style.transformOrigin = ''; }
         applyAnchor(base.fx, base.fy, cx, cy);
         zoomAnchor.current = null;
       }
@@ -2906,6 +2928,23 @@ function PlanEditor({
         e.preventDefault();
         setDlMode('print'); setDlMarkup(true); setDlStep('what');
       }
+      /**
+       * = / + zooms in, - / _ zooms out, 0 fits the page — with or without
+       * Ctrl/⌘, so the hand that reaches for the browser's own zoom keys
+       * zooms THE PLAN instead of the whole app (the Ctrl+P precedent).
+       * Through the shared zoomStep door, so a key press and a button press
+       * can never behave differently. A drawer PANE stands down while the
+       * full studio is open over it — both mount this handler, and without
+       * the guard one key moved two surfaces.
+       */
+      if (['=', '+', '-', '_', '0'].includes(e.key)) {
+        if (embedded && document.querySelector('[data-plan-surface="studio"]')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.key === '0') setFitting(true);
+        else zoomStep(e.key === '-' || e.key === '_' ? -1 : 1, 0.2, 6);
+        return;
+      }
       // Escape backs out one step at a time. Closing the whole studio because a
       // panel happened to be open loses the sketch's context for no reason.
       //
@@ -3556,6 +3595,7 @@ function PlanEditor({
   return (
     <div
       ref={rootRef}
+      data-plan-surface={embedded ? 'pane' : 'studio'}
       className={embedded ? 'absolute inset-0 flex flex-col' : 'fixed inset-0 z-[150] flex flex-col'}
       // A white ground matters in FULL SCREEN too: the fullscreen element is
       // painted over black by the browser, and the embedded pane's white
@@ -3792,12 +3832,9 @@ function PlanEditor({
           </button>
         )}
 
-        {!compact && !twoRow && (
-          <button onClick={() => setShowVersions(v => !v)} title="Saved versions"
-            className={`p-1.5 rounded-lg ${showVersions ? 'bg-white/15 text-white' : 'text-white/70 hover:bg-white/10'}`}>
-            <FileDown size={15} />
-          </button>
-        )}
+        {/* The "Saved versions" toggle that stood here was DEAD — it flipped a
+            state nothing read, a leftover from the removed right-hand versions
+            panel. The versions live as the v1.0 / v2.0 tabs on the rail. */}
         {/* Looking at it should be one step away from marking it up — closing
             and reopening through a different button is friction for nothing. */}
         {readOnly && !askWho && onStartMarkup && !twoRow && (
