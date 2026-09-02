@@ -141,6 +141,44 @@ the consolidated markup code back into the Wolfson management app at the end.
     files or versions is one click, and nothing is ever overwritten
     (pick 33). Sealed as drawn on the seal page.
 
+## Phase 2 — "the way we add stuff" (addendum, picks 41 onward)
+
+Opened by the owner on 2026-09-01 after the seal ("lets plan more in detail.
+the way we add stuff"). Same method, same page; each sitting carries a
+WORKING mini-sketcher (owner rule: anything visual is built), so the picks
+below were answered by hand on a live demo, not from a description. They
+refine picks 17–22; where they sharpen a sealed pick they say so.
+
+### Sitting 8 — the hand (locked 2026-09-02)
+41. **The catalog is an always-open shelf down one side** while you work
+    (refines 17). ~120px of width; you learn where each block sits.
+42. **Letting go snaps the block to the nearest wall, turned to face the
+    room**; dropped in the middle of a room it stays exactly where it was
+    put — nothing is forced.
+43. **Turning is a round handle above the block, snapping every 15°**;
+    Shift frees the angle; works with a finger on the iPad.
+44. **Callout labels draw themselves with every block and are dragged to
+    move** (the text comes from the block itself — pick 22 — so it can never
+    disagree with what is placed). Owner refinement, in his words: *"but also
+    an option to move the text and some more control"* → a selected label
+    gets a small toolbar (flip side · edit text · hide); how much further
+    that control goes is pick 49.
+45. **Unit letters are automatic per model, in placement order, and
+    renumberable** (a right-click / the card renumbers). Owner refinement:
+    *"we need a way to do 2 or 3 systems so A1,2,3,4 and then B1,2,3,4"* →
+    a SYSTEM row (A · B · + system); the lit system letters the next unit;
+    a unit's card moves it between systems and the rest renumber. How a
+    system is defined is pick 48.
+46. **Stamping is tap, tap, tap until Escape** (refines 18): the block stays
+    on the cursor and every tap leaves one.
+
+Sitting 9 (open at the time of writing) puts the REAL catalog on the REAL
+apartment — 21 of the 326 decoded blocks at true cm on the plan traced from
+the owner's plot — and asks 47–51: shelf order (by type ⭐), how a system is
+defined (system row ⭐), label control scope (move/flip/edit/hide ⭐), the
+sheet's INDOOR UNIT cards built live (⭐ yes), and grille lengths (stretch
+snapping to the catalog's lengths, Shift frees ⭐; C would supersede 19).
+
 ## The action order
 
 Dependency first; each step has a permanent ID.
@@ -183,9 +221,12 @@ scans, so B6/B7 content can lag without blocking it).
    OCGs). The format is recorded in `SHEET-FORMAT.md` + `sheet-frame.html`
    beside this file; the PDF itself stays out of the repo (real client
    name/phone/address).
-2. The master block catalog DWG (+DXF +SHX fonts) — from the architects
-   (pick 20); settles the grill behaviors (19) and seeds the block-rules
-   page (24).
+2. ~~The master block catalog DWG (+DXF +SHX fonts)~~ — **RECEIVED
+   2026-09-02** (the owner's "Blocks" Drive folder: `blocks.dwg`, its DXF,
+   and a `standard.zip` of SHX fonts). 326 block definitions, INSUNITS=cm.
+   Findings and the renderer are in `prototypes/BLOCKS.md` +
+   `prototypes/render2.py`; the raw DWG/DXF/fonts stay out of the repo.
+   Grill behaviour (19) is being settled in Phase 2 (pick 51).
 3. The running-meter calculation — the owner will have the architect explain
    it; the formula slots into pick 24 without changing anything else.
 4. The Claude API key for the AI cleaning/classification brain (approved:
