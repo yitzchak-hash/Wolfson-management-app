@@ -1,0 +1,566 @@
+<title>The Worker's Phone</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Caveat:wght@600;700&display=swap">
+<style>/*__APP_CSS__*/</style>
+<style>
+  /* The drafting table: everything that is NOT the app is paper-grey chrome
+     and china-marker red, so the thing being approved and the thing doing the
+     explaining can never be confused (the planbar-sketch rule). */
+  html, body { background: #e8ebf0 !important; margin: 0; overscroll-behavior: auto !important; color-scheme: light; }
+  body { font-family: Inter, system-ui, sans-serif; color: #1f2937; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 28px 20px 90px; }
+  h1 { font-size: 26px; font-weight: 900; color: #1e3a5f; margin: 0 0 4px; letter-spacing: -.01em; }
+  .sub { font-size: 14px; color: #4b5563; max-width: 70ch; margin: 0 0 6px; }
+  .mark { font-family: Caveat, cursive; color: #c0392b; }
+  .scene { background: #f6f7f9; border: 1px solid #d8dde5; border-radius: 18px; padding: 22px; margin-top: 26px; }
+  .scene h2 { font-size: 16px; font-weight: 800; color: #1e3a5f; margin: 0 0 4px; }
+  .scene p.lead { font-size: 13.5px; color: #4b5563; margin: 0 0 16px; max-width: 72ch; }
+  .row { display: flex; gap: 26px; align-items: flex-start; flex-wrap: wrap; }
+  .notes { flex: 1 1 300px; min-width: 280px; }
+  .notes ol { margin: 0; padding: 0; list-style: none; }
+  .notes li { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; color: #374151; margin: 0 0 11px; line-height: 1.45; }
+  .notes li .k { flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; background: #c0392b; color: #fff;
+                 font: 800 12px Inter; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+  .notes .say { font-family: Caveat, cursive; color: #c0392b; font-size: 21px; line-height: 1.15; margin: 0 0 12px; }
+  .rules { background: #fff; border: 1px solid #d8dde5; border-radius: 14px; padding: 18px 20px; margin-top: 26px; }
+  .rules h2 { font-size: 15px; font-weight: 800; color: #1e3a5f; margin: 0 0 10px; }
+  .rules li { font-size: 13.5px; color: #374151; margin: 7px 0; max-width: 78ch; line-height: 1.45; }
+  .rules b { color: #1e3a5f; }
+  .inset { background: #fff; border: 1px solid #d8dde5; border-radius: 14px; padding: 14px; margin-top: 14px; }
+  .inset .cap { font-family: Caveat, cursive; color: #c0392b; font-size: 18px; margin: 0 0 8px; }
+
+  /* ── the phone: a Galaxy S24+, 412 × 915, drawn at 80% ── */
+  .phone { width: 412px; height: 915px; background: #0b1220; border-radius: 40px; padding: 12px; flex-shrink: 0;
+           box-shadow: 0 30px 60px -22px rgba(15,23,42,.55); position: relative; zoom: .8; }
+  .phone.short { height: 700px; }
+  .screen { width: 100%; height: 100%; background: #f1f5f9; border-radius: 30px; overflow: hidden;
+            display: flex; flex-direction: column; position: relative; font-family: Inter, system-ui, sans-serif; }
+  .n { position: absolute; width: 24px; height: 24px; border-radius: 50%; background: #c0392b; color: #fff;
+       font: 800 12.5px Inter; display: flex; align-items: center; justify-content: center;
+       box-shadow: 0 0 0 3px #fff, 0 4px 10px rgba(0,0,0,.25); z-index: 8; }
+
+  /* the new header */
+  .hdr { background: #1e3a5f; height: 66px; display: flex; align-items: center; padding: 0 14px; position: relative; flex-shrink: 0; }
+  .hdr .who { color: #fff; font-size: 12.5px; font-weight: 700; line-height: 1.2; }
+  .hdr .who small { display: block; color: #9fb3c8; font-weight: 500; font-size: 10.5px; }
+  .hdr .logo { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); height: 30px; }
+  .hdr .acts { margin-inline-start: auto; display: flex; gap: 8px; }
+  .ib { width: 34px; height: 34px; border-radius: 10px; border: 1px solid rgba(255,255,255,.25); display: flex;
+        align-items: center; justify-content: center; color: rgba(255,255,255,.85); position: relative; }
+  .ib .dot { position: absolute; top: 5px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: #ef4444; }
+  .tabs3 { background: #fff; display: flex; border-bottom: 1px solid #e5e7eb; flex-shrink: 0; }
+  .tab3 { flex: 1; text-align: center; padding: 12px 0 10px; font-size: 13px; font-weight: 600; color: #6b7280;
+          display: flex; align-items: center; justify-content: center; gap: 5px; border-bottom: 2px solid transparent; }
+  .tab3.on { color: #1e3a5f; border-bottom-color: #1e3a5f; }
+  .pill { padding: 7px 13px; border-radius: 999px; font-size: 12.5px; font-weight: 700; background: #fff; color: #64748b; border: 1px solid #e2e8f0; white-space: nowrap; }
+  .pill.on { background: #1e3a5f; color: #fff; border-color: #1e3a5f; }
+  .card { background: #fff; border-radius: 16px; border: 1px solid #f1f5f9; box-shadow: 0 1px 2px rgba(0,0,0,.05); padding: 14px; }
+  .ws { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+  .badge { font-size: 11px; padding: 2px 6px; border-radius: 6px; border: 1px solid; font-weight: 700; }
+
+  /* calendar */
+  .seg { display: flex; gap: 8px; padding: 12px 14px 8px; }
+  .seg > div { flex: 1; text-align: center; padding: 11px; border-radius: 999px; font-weight: 800; font-size: 14px; background: #fff; color: #1e3a5f; border: 1px solid #e2e8f0; }
+  .seg > div.on { background: #1e3a5f; color: #fff; border-color: #1e3a5f; }
+  .cal { flex: 1; margin: 0 12px 12px; background: #fff; border-radius: 16px; border: 1px solid #e5e7eb; display: flex; flex-direction: column; overflow: hidden; }
+  .cal .mh { display: flex; align-items: center; justify-content: space-between; padding: 12px 12px 8px; font-weight: 800; font-size: 14px; color: #1f2937; }
+  .cal .dow { display: grid; grid-template-columns: repeat(7, 1fr); font-size: 10px; font-weight: 800; color: #94a3b8; text-align: center; padding: 0 6px 4px; }
+  .cal .grid { flex: 1; display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: 1fr; border-top: 1px solid #eef2f6; }
+  .cal .d { border-right: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9; padding: 5px 4px; font-size: 11px; color: #334155; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .cal .d.dim { color: #cbd5e1; }
+  .cal .d .num { font-weight: 700; }
+  .cal .d.today .num { background: #1e3a5f; color: #fff; width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
+  .cal .ev { font-size: 9px; font-weight: 700; color: #1e3a5f; background: #e3f2fb; border-left: 3px solid #4aa8d8; border-radius: 4px; padding: 2px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.3; }
+
+  /* map chooser */
+  .choose { flex: 1; padding: 22px 16px; display: flex; flex-direction: column; gap: 14px; }
+  .choose h3 { font-size: 22px; font-weight: 900; color: #1e3a5f; margin: 8px 0 2px; }
+  .choose p { font-size: 13px; color: #64748b; margin: 0 0 6px; }
+  .sq { flex: 1; border-radius: 22px; background: #fff; border: 1.5px solid #e2e8f0; padding: 20px; position: relative; overflow: hidden;
+        display: flex; flex-direction: column; justify-content: flex-end; box-shadow: 0 8px 24px -16px rgba(15,23,42,.35); }
+  .sq .rail { position: absolute; left: 0; top: 0; bottom: 0; width: 8px; }
+  .sq .nm { font-size: 22px; font-weight: 900; color: #1e3a5f; }
+  .sq .meta { font-size: 12.5px; color: #64748b; margin-top: 3px; }
+  .sq .mine { position: absolute; top: 16px; right: 16px; background: #fde68a; color: #92400e; font-weight: 800; font-size: 12px; padding: 4px 10px; border-radius: 999px; }
+  .sq .bld { position: absolute; right: 18px; bottom: 60px; opacity: .12; }
+
+  /* the map */
+  .mapbar { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #fff; border-bottom: 1px solid #e5e7eb; flex-shrink: 0; }
+  .dd { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 12px; background: #eef4fa; color: #1e3a5f; font-weight: 800; font-size: 13.5px; min-width: 0; }
+  .dd span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .segb { margin-inline-start: auto; display: flex; background: #eef2f6; border-radius: 12px; padding: 3px; flex-shrink: 0; }
+  .segb div { padding: 6px 13px; border-radius: 9px; font-size: 13px; font-weight: 800; color: #475569; }
+  .segb div.on { background: #1e3a5f; color: #fff; box-shadow: 0 2px 6px rgba(30,58,95,.35); }
+  .mapbody { flex: 1; overflow: hidden; padding: 12px 10px 0; position: relative; }
+  .bldg { position: relative; padding: 46px 16px 30px; }
+  .bldg svg.outline { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .floors { position: relative; display: flex; flex-direction: column; gap: 6px; }
+  .floor { display: grid; grid-template-columns: 1fr 1fr 22px 1fr 1fr; gap: 6px; align-items: stretch; }
+  .floor.two { grid-template-columns: 2fr 22px 2fr; }
+  .cell { background: #f5f7fa; border: 1px solid #e2e8f0; border-radius: 8px; min-height: 58px; padding: 5px 4px; text-align: center; display: flex; flex-direction: column; justify-content: center; }
+  .cell .no { font-size: 13px; font-weight: 800; color: #94a3b8; }
+  .cell .fam { font-size: 8.5px; color: #94a3b8; line-height: 1.2; }
+  .cell .st { font-size: 7.5px; color: #b6bfca; margin-top: 2px; }
+  .cell.mine { background: #fff8e1; border-color: #f59e0b; box-shadow: 0 0 0 2px #fde68a; }
+  .cell.mine .no { color: #1e3a5f; } .cell.mine .fam, .cell.mine .st { color: #6b7280; }
+  .cell.blank { background: transparent; border-style: dashed; }
+  .stair { display: flex; align-items: center; justify-content: center; }
+  .stair i { width: 3px; height: 100%; background: repeating-linear-gradient(#f59e0b 0 6px, transparent 6px 10px); border-radius: 2px; }
+  .stair b { position: absolute; font-size: 8.5px; color: #64748b; background: #fff; padding: 0 2px; border-radius: 3px; }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; background: #fff; border-radius: 22px 22px 0 0; box-shadow: 0 -12px 40px rgba(15,23,42,.25); padding: 12px 14px 22px; z-index: 6; }
+  .sheet .grab { width: 40px; height: 4px; background: #e2e8f0; border-radius: 2px; margin: 0 auto 10px; }
+  .sheet .t { font-size: 11px; font-weight: 800; color: #94a3b8; letter-spacing: .06em; margin: 0 0 8px; }
+  .prj { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 14px; border: 1px solid #e2e8f0; margin-bottom: 8px; font-weight: 800; color: #1e3a5f; font-size: 14px; }
+  .prj.on { background: #eef4fa; border-color: #4aa8d8; }
+  .prj .r { width: 10px; height: 26px; border-radius: 3px; }
+  .prj small { margin-inline-start: auto; color: #94a3b8; font-weight: 600; font-size: 11px; }
+
+  /* task sheet + messages */
+  .tsh { background: #fff; padding: 12px 16px 10px; border-bottom: 1px solid #eef2f6; flex-shrink: 0; }
+  .tsh .apt { font-size: 18px; font-weight: 900; color: #1e3a5f; }
+  .tsh .desc { font-size: 13px; color: #334155; margin-top: 4px; }
+  .msgs { padding: 14px 16px; }
+  .msgs h4 { font-size: 11px; font-weight: 800; letter-spacing: .08em; color: #64748b; display: flex; align-items: center; gap: 6px; margin: 0 0 8px; }
+  .thread { background: #f2f5f8; border: 1px solid #e3e9f0; border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 9px; }
+  .bub { max-width: 82%; padding: 8px 10px 5px; border-radius: 14px; font-size: 13.5px; line-height: 1.4; color: #1f2c3d; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+  .bub.off { align-self: flex-start; background: #fff; border: 1px solid #e6ecf3; border-top-left-radius: 5px; }
+  .bub.me { align-self: flex-end; background: #e3f2fb; border: 1px solid #c9e6f8; border-top-right-radius: 5px; }
+  .bub .who { font-size: 11.5px; font-weight: 800; color: #4aa8d8; }
+  .bub .tm { text-align: right; font-size: 10px; color: #93a2b1; margin-top: 2px; }
+  .comp { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+  .comp .clip { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #64748b; background: #fff; border: 1px solid #e2e8f0; flex-shrink: 0; }
+  .comp .in { flex: 1; min-width: 0; height: 42px; background: #fff; border: 1px solid #dbe3ec; border-radius: 22px; display: flex; align-items: center; padding: 0 6px 0 14px; color: #94a3b8; font-size: 13.5px; }
+  .comp .in .mic { margin-inline-start: auto; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #1e3a5f; }
+  .comp .big { width: 44px; height: 44px; border-radius: 50%; background: #1e3a5f; color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 6px 14px -6px rgba(30,58,95,.7); }
+  .comp .big.send { background: #4aa8d8; }
+
+  /* stages list */
+  .stlist { padding: 8px 16px 16px; }
+  .strow { display: flex; align-items: center; gap: 12px; padding: 13px 14px; background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; margin-bottom: 8px; font-size: 15px; font-weight: 700; color: #1f2937; }
+  .strow .sw { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+  .strow.gone { text-decoration: line-through; color: #b91c1c; border-style: dashed; opacity: .75; }
+
+  /* office side panels */
+  .office { background: #fff; border: 1px solid #d8dde5; border-radius: 14px; padding: 14px 16px; font-size: 12.5px; }
+  .office h5 { margin: 0 0 8px; font-size: 12px; font-weight: 800; color: #1e3a5f; }
+  .chk { display: flex; align-items: center; gap: 8px; margin: 5px 0; color: #374151; }
+  .chk i { width: 15px; height: 15px; border-radius: 4px; border: 1.5px solid #94a3b8; display: inline-flex; align-items: center; justify-content: center; font-style: normal; font-size: 11px; color: #fff; }
+  .chk i.on { background: #1e3a5f; border-color: #1e3a5f; }
+
+  /* the site-wide task flow */
+  .flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin-top: 14px; }
+  .step { background: #fff; border: 1px solid #d8dde5; border-radius: 14px; padding: 14px; position: relative; }
+  .step .sn { position: absolute; top: -11px; left: 12px; background: #c0392b; color: #fff; font: 800 11px Inter; padding: 3px 9px; border-radius: 999px; }
+  .step h5 { margin: 6px 0 8px; font-size: 12.5px; font-weight: 800; color: #1e3a5f; }
+  .step p { margin: 6px 0 0; font-size: 12px; color: #4b5563; line-height: 1.45; }
+  .pcard { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px 10px; font-size: 11.5px; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+  .pcard b { display: block; font-size: 12px; color: #1e3a5f; }
+  .pcard .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+  .tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 800; }
+  .model { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; color: #1f2937; line-height: 1.55; white-space: pre; overflow-x: auto; }
+  .model .c { color: #6b7280; }
+  .q { display: flex; gap: 10px; align-items: flex-start; margin: 10px 0; font-size: 13.5px; color: #374151; }
+  .q .star { color: #c0392b; font-family: Caveat, cursive; font-size: 20px; line-height: 1; flex-shrink: 0; }
+  @media (prefers-reduced-motion: no-preference) { .pulse { animation: pl 1.6s ease-in-out infinite; } }
+  @keyframes pl { 0%,100% { box-shadow: 0 0 0 2px #fde68a; } 50% { box-shadow: 0 0 0 6px rgba(253,230,138,.35); } }
+</style>
+
+<div class="wrap">
+  <h1>The Worker's Phone</h1>
+  <p class="sub">What I would build from your five screenshots and the notes on them, drawn with the app's own colours and
+    parts before a line of it is written. Numbered red dots on each phone match the notes beside it. At the end: the plan
+    for tasks that belong to a site rather than to one apartment, and the questions only you can answer.</p>
+  <p class="mark" style="font-size:20px;margin:0">Nothing here is built yet — this page is the ask for approval.</p>
+
+  <!-- ─────────────────────────── 1 · header + My Tasks ─────────────────────────── -->
+  <div class="scene">
+    <h2>1 · The top of every screen, and My Tasks</h2>
+    <p class="lead">The logo takes the middle and grows; everything that acts sits on the right; the print button and the
+      workspace chips leave the phone.</p>
+    <div class="row">
+      <div class="phone">
+        <div class="screen">
+          <div class="hdr">
+            <div class="who">Igor<small>3 tasks · 0 done</small></div>
+            <img class="logo" src="__LOGO__" alt="TzviAir">
+            <div class="acts">
+              <div class="ib"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span class="dot"></span></div>
+              <div class="ib"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></div>
+            </div>
+            <span class="n" style="left:178px;top:4px">1</span>
+            <span class="n" style="right:6px;top:4px">2</span>
+          </div>
+          <div class="tabs3" style="position:relative">
+            <div class="tab3 on">☰ My Tasks</div><div class="tab3">▦ Calendar</div><div class="tab3">◎ Building Map</div>
+            <span class="n" style="left:8px;top:-14px">3</span>
+          </div>
+          <div style="display:flex;gap:6px;padding:10px 12px;overflow:hidden;position:relative">
+            <div class="pill">All</div><div class="pill">Yesterday</div><div class="pill on">Today</div><div class="pill">Tomorrow</div><div class="pill">This Week</div>
+            <span class="n" style="left:188px;top:-4px">4</span>
+          </div>
+          <div style="padding:2px 12px;display:flex;flex-direction:column;gap:10px;position:relative">
+            <div class="card">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+                <span style="font-weight:800;color:#1e3a5f;font-size:16px">Apt 47</span>
+                <span class="ws" style="background:rgba(184,134,11,.12);color:#8a6508"><i style="width:7px;height:7px;border-radius:50%;background:#b8860b"></i>Wolfson · A1</span>
+                <span style="font-size:11px;padding:2px 8px;border-radius:999px;background:#e0f2fe;color:#0369a1;font-weight:600">Piping</span>
+              </div>
+              <div style="font-size:13.5px;color:#4b5563">Take out old wall unit and install new one</div>
+              <div style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:11.5px;color:#94a3b8">📅 Thu 3 Sep <span class="badge" style="color:#0369a1;border-color:#bae6fd;background:#f0f9ff">Today</span></div>
+            </div>
+            <div class="card">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+                <span style="font-weight:800;color:#1e3a5f;font-size:16px">Raber, Itzik</span>
+                <span class="ws" style="background:rgba(124,58,237,.12);color:#5b21b6"><i style="width:7px;height:7px;border-radius:50%;background:#7c3aed"></i>Job Board</span>
+              </div>
+              <div style="font-size:13.5px;color:#4b5563">Service call — check the condenser on the roof</div>
+              <div style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:11.5px;color:#94a3b8">📅 Thu 3 Sep <span class="badge" style="color:#0369a1;border-color:#bae6fd;background:#f0f9ff">Today</span></div>
+            </div>
+            <div class="card" style="border:1.5px dashed #b8860b;background:#fffdf5">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+                <span style="font-weight:800;color:#1e3a5f;font-size:16px">Any apartment</span>
+                <span class="ws" style="background:rgba(184,134,11,.12);color:#8a6508"><i style="width:7px;height:7px;border-radius:50%;background:#b8860b"></i>Wolfson Residence</span>
+              </div>
+              <div style="font-size:13.5px;color:#4b5563">AC service — wherever the tenants report a fault</div>
+              <div style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:11.5px;color:#94a3b8">📅 Tue 1 – Thu 3 Sep · <b style="color:#8a6508">4 visits so far</b></div>
+            </div>
+            <span class="n" style="right:4px;top:-2px">5</span>
+            <span class="n" style="left:4px;top:214px">6</span>
+          </div>
+        </div>
+      </div>
+      <div class="notes">
+        <p class="say">"logo in the middle, a bit bigger; bell, settings on the right; print goes; language goes into settings"</p>
+        <ol>
+          <li><span class="k">1</span><span>The logo is centred and drawn at 30px tall, up from 22 — a real mark, not a badge. The worker's name and count move to the left so the middle is only the logo.</span></li>
+          <li><span class="k">2</span><span>Right side: the bell, then the gear. <b>Print is gone from the phone.</b> The gear's panel holds text size <em>and</em> the language row (EN · עב · RU) — the header's own language button goes with the print button.</span></li>
+          <li><span class="k">3</span><span><b>The workspace chip row is gone.</b> It was a filter over the tasks list that stayed on screen for every tab, which is what made the map feel wrong. Instead:</span></li>
+          <li><span class="k">4</span><span><b>Today is selected when the list opens.</b> The once-per-visit widening (show All when today is empty and other days have work) stays.</span></li>
+          <li><span class="k">5</span><span>Each card carries a small chip saying which workspace it belongs to, in that workspace's colour — so the list can show <em>every</em> workspace's tasks together and the chips are no longer needed as a switch.</span></li>
+          <li><span class="k">6</span><span>A site-wide task (part 7 below) shows as a dashed gold card: "Any apartment" instead of a number, and a running count of the apartments he has actually visited under it.</span></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────────────────── 2 · calendar ─────────────────────────── -->
+  <div class="scene">
+    <h2>2 · Calendar opens on the month, and fills the phone</h2>
+    <p class="lead">Monthly first, Weekly one tap away; the grid stretches to the bottom so a day can show what is in it.</p>
+    <div class="row">
+      <div class="phone">
+        <div class="screen">
+          <div class="hdr">
+            <div class="who">Igor<small>3 tasks · 0 done</small></div>
+            <img class="logo" src="__LOGO__" alt="TzviAir">
+            <div class="acts"><div class="ib"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span class="dot"></span></div><div class="ib">⚙</div></div>
+          </div>
+          <div class="tabs3"><div class="tab3">☰ My Tasks</div><div class="tab3 on">▦ Calendar</div><div class="tab3">◎ Building Map</div></div>
+          <div class="seg" style="position:relative"><div>Weekly</div><div class="on">Monthly</div><span class="n" style="right:8px;top:2px">1</span></div>
+          <div class="cal" style="position:relative">
+            <div class="mh"><span style="color:#94a3b8">‹</span><span>September 2026</span><span style="display:flex;gap:6px;align-items:center"><span class="pill" style="padding:3px 9px;font-size:11px">Today</span><span style="color:#94a3b8">›</span></span></div>
+            <div class="dow"><span>SUN</span><span>MON</span><span>TUE</span><span>WED</span><span>THU</span><span>FRI</span><span>SAT</span></div>
+            <div class="grid">
+              <div class="d dim"><span class="num">30</span></div><div class="d dim"><span class="num">31</span></div>
+              <div class="d"><span class="num">1</span><span class="ev">Raber, Itzik</span><span class="ev">Any apt · Wolfson</span></div>
+              <div class="d"><span class="num">2</span><span class="ev">Any apt · Wolfson</span></div>
+              <div class="d today"><span class="num">3</span><span class="ev">Apt 47 · Piping</span><span class="ev">Any apt · Wolfson</span></div>
+              <div class="d"><span class="num">4</span></div><div class="d"><span class="num">5</span></div>
+              <div class="d"><span class="num">6</span></div><div class="d"><span class="num">7</span><span class="ev">Apt 52 · Drainage</span></div><div class="d"><span class="num">8</span><span class="ev">Apt 52 · Drainage</span></div><div class="d"><span class="num">9</span></div><div class="d"><span class="num">10</span></div><div class="d"><span class="num">11</span></div><div class="d"><span class="num">12</span></div>
+              <div class="d"><span class="num">13</span></div><div class="d"><span class="num">14</span></div><div class="d"><span class="num">15</span><span class="ev">B2-14 · Netiv</span></div><div class="d"><span class="num">16</span></div><div class="d"><span class="num">17</span></div><div class="d"><span class="num">18</span></div><div class="d"><span class="num">19</span></div>
+              <div class="d"><span class="num">20</span></div><div class="d"><span class="num">21</span></div><div class="d"><span class="num">22</span></div><div class="d"><span class="num">23</span></div><div class="d"><span class="num">24</span></div><div class="d"><span class="num">25</span></div><div class="d"><span class="num">26</span></div>
+              <div class="d"><span class="num">27</span></div><div class="d"><span class="num">28</span></div><div class="d"><span class="num">29</span></div><div class="d"><span class="num">30</span></div><div class="d dim"><span class="num">1</span></div><div class="d dim"><span class="num">2</span></div><div class="d dim"><span class="num">3</span></div>
+            </div>
+            <span class="n" style="left:8px;bottom:120px">2</span>
+          </div>
+        </div>
+      </div>
+      <div class="notes">
+        <p class="say">"default should be monthly, and extended towards the bottom so you can actually see the tasks in each day"</p>
+        <ol>
+          <li><span class="k">1</span><span><b>Monthly is the default.</b> Weekly keeps everything it has (the day list, the week arrows) — it is just the second choice now.</span></li>
+          <li><span class="k">2</span><span>The month grid takes all the room down to the bottom of the phone: every week row is an equal share of the height, so a day cell is about 95px tall on this phone and shows two named tasks in full, a third as "+1". Today keeps its navy circle. A tap on a day with more than it can show opens that day's list.</span></li>
+          <li><span class="k">✓</span><span>Days of a multi-day task, and every visit day of a site-wide task, each get their own chip — the same rule the office calendars already follow.</span></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────────────────── 3 · which map ─────────────────────────── -->
+  <div class="scene">
+    <h2>3 · Building Map asks which project first</h2>
+    <p class="lead">Big squares, the whole screen, only when there is a choice to make. Which projects a worker may open is a setting on the worker.</p>
+    <div class="row">
+      <div class="phone">
+        <div class="screen">
+          <div class="hdr">
+            <div class="who">Igor<small>3 tasks · 0 done</small></div>
+            <img class="logo" src="__LOGO__" alt="TzviAir">
+            <div class="acts"><div class="ib">🔔</div><div class="ib">⚙</div></div>
+          </div>
+          <div class="tabs3"><div class="tab3">☰ My Tasks</div><div class="tab3">▦ Calendar</div><div class="tab3 on">◎ Building Map</div></div>
+          <div class="choose">
+            <h3>Which building map?</h3>
+            <p>Pick the project you are standing in.</p>
+            <div class="sq" style="position:relative"><div class="rail" style="background:#b8860b"></div>
+              <svg class="bld" width="120" height="150" viewBox="0 0 120 150" fill="#1e3a5f"><rect x="10" y="30" width="100" height="120"/><rect x="40" y="10" width="40" height="20"/></svg>
+              <span class="mine">2 tasks here</span>
+              <div class="nm">Wolfson Residence</div><div class="meta">3 buildings · A1 A2 A3 · 168 apartments</div>
+              <span class="n" style="left:10px;top:10px">1</span></div>
+            <div class="sq" style="position:relative"><div class="rail" style="background:#0d9488"></div>
+              <svg class="bld" width="120" height="150" viewBox="0 0 120 150" fill="#1e3a5f"><rect x="10" y="30" width="100" height="120"/><rect x="40" y="10" width="40" height="20"/></svg>
+              <div class="nm">Netiv Neve Shamir</div><div class="meta">2 buildings · B1 B2 · 72 apartments</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="notes">
+        <p class="say">"big selections taking up the entire screen — which project. One project? just take him in."</p>
+        <ol>
+          <li><span class="k">1</span><span>Two squares, each the project's colour on its rail, the buildings and unit count under the name, and a gold badge when he has tasks there. Tapping one opens that map. <b>A worker allowed only one project never sees this screen</b> — the tab goes straight to his map.</span></li>
+          <li><span class="k">✓</span><span>The map remembers the last project he picked, so the next tap on Building Map opens where he left off; the project name at the top of the map (part 4) is how he changes his mind.</span></li>
+        </ol>
+        <div class="office">
+          <h5>Settings → Workers, on each worker</h5>
+          <div style="font-weight:700;color:#374151;margin-bottom:4px">Building maps he may open</div>
+          <div class="chk"><i class="on">✓</i> Wolfson Residence</div>
+          <div class="chk"><i class="on">✓</i> Netiv Neve Shamir</div>
+          <div class="chk"><i></i> (a new workspace made with the builder appears here)</div>
+          <p class="mark" style="margin:8px 0 0;font-size:17px">a new switch beside "see the building diagrams" — the diagrams permission opens the door, this says which rooms</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────────────────── 4 · the map ─────────────────────────── -->
+  <div class="scene">
+    <h2>4 · The map itself: one quiet bar, a building around the diagram</h2>
+    <p class="lead">The chips, the day filters, the hint line, the "0 yours" and every scrollbar are gone. What is left is the project's name you can press, the buildings, and the building.</p>
+    <div class="row">
+      <div class="phone">
+        <div class="screen">
+          <div class="hdr">
+            <div class="who">Igor<small>3 tasks · 0 done</small></div>
+            <img class="logo" src="__LOGO__" alt="TzviAir">
+            <div class="acts"><div class="ib">🔔</div><div class="ib">⚙</div></div>
+          </div>
+          <div class="tabs3"><div class="tab3">☰ My Tasks</div><div class="tab3">▦ Calendar</div><div class="tab3 on">◎ Building Map</div></div>
+          <div class="mapbar" style="position:relative">
+            <div class="dd"><i style="width:9px;height:18px;border-radius:2px;background:#b8860b;flex-shrink:0"></i><span>Wolfson Residence</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></div>
+            <div class="segb"><div class="on">A1</div><div>A2</div><div>A3</div></div>
+            <span class="n" style="left:4px;top:4px">1</span>
+            <span class="n" style="right:4px;top:4px">2</span>
+          </div>
+          <div class="mapbody">
+            <div class="bldg">
+              <svg class="outline" viewBox="0 0 388 700" preserveAspectRatio="none" fill="none">
+                <path d="M14 46 H148 V20 H240 V46 H374 V700 H14 Z" fill="#fff" stroke="#1e3a5f" stroke-opacity=".28" stroke-width="2.5" stroke-linejoin="round"/>
+                <path d="M172 700 V664 H216 V700" stroke="#1e3a5f" stroke-opacity=".28" stroke-width="2.5" fill="#f1f5f9"/>
+                <path d="M30 46 H132 M256 46 H358" stroke="#1e3a5f" stroke-opacity=".18" stroke-width="1.5" stroke-dasharray="4 5"/>
+              </svg>
+              <div class="floors">
+                <div class="floor two"><div class="cell"><div class="no">55</div><div class="fam">Cohen, David</div><div class="st">Ready To Start</div></div><div class="stair"><i></i><b>16</b></div><div class="cell"><div class="no">56</div><div class="fam">Wolfson, Tzvi</div><div class="st">Ready To Start</div></div></div>
+                <div class="floor two"><div class="cell"><div class="no">53</div><div class="fam">Rottenstreich, Yosef</div><div class="st">Ready To Start</div></div><div class="stair"><i></i><b>15</b></div><div class="cell"><div class="no">54</div><div class="fam">Wolfson, Ramana</div><div class="st">Ready To Start</div></div></div>
+                <div class="floor"><div class="cell blank"><div class="no">49</div><div class="st">— Not Started —</div></div><div class="cell"><div class="no">50</div><div class="fam">Topper, Avraham</div><div class="st">Ready To Start</div></div><div class="stair"><i></i><b>14</b></div><div class="cell"><div class="no">51</div><div class="fam">Topper, Avraham</div><div class="st">Ready To Start</div></div><div class="cell"><div class="no">52</div><div class="fam">Topper, Aaron</div><div class="st">Ready To Start</div></div></div>
+                <div class="floor"><div class="cell"><div class="no">45</div><div class="fam">Weinstein, Steven</div><div class="st">Ready To Start</div></div><div class="cell"><div class="no">46</div><div class="fam">Vizgan, Chaim</div><div class="st">Ready To Start</div></div><div class="stair"><i></i><b>13</b></div><div class="cell mine pulse"><div class="no">47</div><div class="fam">Aharonov, Moshe</div><div class="st">Piping · today</div></div><div class="cell"><div class="no">48</div><div class="fam">Nahon, Yitzchak</div><div class="st">Ready To Start</div></div></div>
+                <div class="floor"><div class="cell"><div class="no">41</div><div class="fam">Patachov, David</div><div class="st">Ready To Start</div></div><div class="cell"><div class="no">42</div><div class="fam">Adler, David</div><div class="st">Ready To Start</div></div><div class="stair"><i></i><b>12</b></div><div class="cell"><div class="no">43</div><div class="fam">Gross, Noah</div><div class="st">Ready To Start</div></div><div class="cell"><div class="no">44</div><div class="fam">Shaulova, Diana</div><div class="st">Ready To Start</div></div></div>
+                <div class="floor"><div class="cell"><div class="no">37</div><div class="fam">Kozlin, Shlomo & Tzira</div><div class="st">Ready To Start</div></div><div class="cell"><div class="no">38/39</div><div class="fam">Feder, Avraham</div><div class="st">Ready To Start</div></div><div class="stair"><i></i><b>11</b></div><div class="cell"><div class="no">38/39</div><div class="fam">Feder, Avraham</div><div class="st">Ready To Start</div></div><div class="cell"><div class="no">40</div><div class="fam">Roditch, Alan & Susan</div><div class="st">Ready To Start</div></div></div>
+                <div class="floor"><div class="cell"><div class="no">33</div><div class="fam">Kopalick, Shira</div><div class="st">Ready To Start</div></div><div class="cell"><div class="no">34</div><div class="fam">Kolberner, Moshe</div><div class="st">Ready To Start</div></div><div class="stair"><i></i><b>10</b></div><div class="cell"><div class="no">35</div><div class="fam">Pearlman, Jennifer</div><div class="st">Ready To Start</div></div><div class="cell blank"><div class="no">36</div><div class="st">— Not Started —</div></div></div>
+              </div>
+              <span class="n" style="left:-2px;top:6px">3</span>
+              <span class="n" style="right:-2px;top:250px">4</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="notes">
+        <p class="say">"this slider thing is horrible… that line is so ugly… a dropdown or some UI that's thought out much better"</p>
+        <ol>
+          <li><span class="k">1</span><span><b>The project is a named button</b>, in its colour, at the left of one bar. Pressing it slides up the sheet drawn below — the two projects with a tick on the current one. No chip row, no divider line, nothing that scrolls sideways.</span></li>
+          <li><span class="k">2</span><span><b>The buildings are a segmented control</b> at the right of the same bar: A1 · A2 · A3, one lit. Tap to switch. (Netiv shows B1 · B2.) No "All" on the phone — one building is one screen wide, and the desktop keeps its side-by-side view.</span></li>
+          <li><span class="k">3</span><span><b>Gone:</b> All / Yesterday / Today / Tomorrow / This Week, "Highlighted apartments are your assignments", "0 yours". If he has a task in an apartment it is lit, whatever day it is for. The lit cell says <em>what</em> and <em>when</em> in its bottom line ("Piping · today"). Every scrollbar is hidden — the page scrolls under the thumb like any phone page.</span></li>
+          <li><span class="k">4</span><span><b>The building outline:</b> the same silhouette around every diagram — a parapet, a small roof box over the stairwell, walls down both sides, a doorway at the ground. Two and a half pixels of navy at a quarter strength, so it frames the grid without competing with it. The floor numbers stay on the stairwell strip.</span></li>
+        </ol>
+        <div class="inset" style="max-width:330px">
+          <p class="cap">when you press the project's name</p>
+          <div class="sheet" style="position:static;box-shadow:none;border:1px solid #e2e8f0;border-radius:18px;padding:12px">
+            <div class="grab"></div><div class="t">BUILDING MAP OF</div>
+            <div class="prj on"><span class="r" style="background:#b8860b"></span>Wolfson Residence<small>2 tasks</small><span style="color:#4aa8d8">✓</span></div>
+            <div class="prj"><span class="r" style="background:#0d9488"></span>Netiv Neve Shamir<small>1 task</small></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────────────────── 5 · task messages ─────────────────────────── -->
+  <div class="scene">
+    <h2>5 · Task messages, the WhatsApp way</h2>
+    <p class="lead">One grey panel holds the conversation and the box you type into. Two microphones, because they do two different things.</p>
+    <div class="row">
+      <div class="phone short">
+        <div class="screen">
+          <div class="tsh" style="position:relative">
+            <div style="display:flex;align-items:center;justify-content:space-between"><div class="apt">Apt 47 · Aharonov, Moshe</div><span style="color:#94a3b8">✕</span></div>
+            <div class="desc">Take out old wall unit and install new one</div>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:6px;font-size:11.5px;color:#94a3b8">📅 Thu 3 Sep <span class="badge" style="color:#0369a1;border-color:#bae6fd;background:#f0f9ff">Today</span></div>
+          </div>
+          <div class="msgs" style="position:relative">
+            <h4><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> TASK MESSAGES</h4>
+            <span class="n" style="left:2px;top:-6px">1</span>
+            <div class="thread" style="position:relative">
+              <div class="bub off"><div class="who">Esther</div>Please finish by Friday, the tenants move in Sunday.<div class="tm">09:14</div></div>
+              <div class="bub me">Готово, установил блок в спальне <span style="font-size:10px;color:#4aa8d8;font-weight:700">🌐 Show original</span><div class="tm">10:02</div></div>
+              <div class="bub off"><div class="who">Esther</div>Great — send a photo of the drain when you can.<div class="tm">10:05</div></div>
+              <div class="comp">
+                <div class="clip"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></div>
+                <div class="in">Your message… <span class="mic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg></span></div>
+                <div class="big"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg></div>
+              </div>
+              <span class="n" style="right:-8px;bottom:120px">2</span>
+              <span class="n" style="left:-8px;bottom:8px">3</span>
+              <span class="n" style="left:220px;bottom:-12px">4</span>
+              <span class="n" style="right:-8px;bottom:-10px">5</span>
+            </div>
+          </div>
+          <div style="margin:0 16px;background:#dff3e6;color:#177a4b;border-radius:14px;padding:12px;text-align:center;font-weight:800;font-size:14px">Close job</div>
+        </div>
+      </div>
+      <div class="notes">
+        <p class="say">"call it task messages… the gray should cover the add-note too… your message, send at the end, a tiny mic inline to transcribe, the big mic like WhatsApp"</p>
+        <ol>
+          <li><span class="k">1</span><span>The heading reads <b>TASK MESSAGES</b> with the chat glyph, on both the phone and the office's apartment window (one drawing, as always).</span></li>
+          <li><span class="k">2</span><span><b>The grey panel wraps the composer too</b> — the messages and the box you answer them from are one thing. Translated lines keep their small "Show original".</span></li>
+          <li><span class="k">3</span><span>The paperclip is a round button at the start of the row, inline — photos, files, the same picker as today.</span></li>
+          <li><span class="k">4</span><span>The box says <b>"Your message"</b> and has a <b>small mic inside it that transcribes</b>: press, speak, the words appear in the box for you to fix and send. It uses the phone's own speech recognition, in whatever language the worker's portal is set to (Russian, Hebrew, English) — the same door the search tile's mic already uses.</span></li>
+          <li><span class="k">5</span><span>The <b>big navy mic</b> at the end records a voice memo and sends it as one, WhatsApp's way: hold to record, release to send, slide away to cancel. <b>The moment there is text in the box it turns into the send arrow</b> — one button, never two.</span></li>
+        </ol>
+        <div class="inset" style="max-width:330px">
+          <p class="cap">with words in the box</p>
+          <div class="comp" style="margin:0"><div class="clip">📎</div><div class="in" style="color:#1f2c3d">Drain photo on its way<span class="mic">🎤</span></div><div class="big send"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────────────────── 6 · what did you do ─────────────────────────── -->
+  <div class="scene">
+    <h2>6 · "What did you do?" only lists things he could have done</h2>
+    <p class="lead">"Ready to start" is a place a job waits, not work anybody did. Each worker gets the list of stages he is allowed to report.</p>
+    <div class="row">
+      <div class="phone short">
+        <div class="screen">
+          <div class="tsh"><div style="display:flex;align-items:center;justify-content:space-between"><div class="apt">Apt 47 · Aharonov, Moshe</div><span style="color:#94a3b8">✕</span></div><div class="desc" style="color:#94a3b8">Wolfson Residence · A1 · floor 13</div></div>
+          <div style="padding:16px 16px 6px;font-size:18px;font-weight:900;color:#1e3a5f;position:relative">What did you do?<span class="n" style="right:6px;top:14px">1</span></div>
+          <div class="stlist">
+            <div class="strow gone"><span class="sw" style="background:#94a3b8"></span>Ready to start</div>
+            <div class="strow"><span class="sw" style="background:#3b82f6"></span>Piping</div>
+            <div class="strow"><span class="sw" style="background:#0ea5e9"></span>Drainage</div>
+            <div class="strow"><span class="sw" style="background:#8b5cf6"></span>Concealed units</div>
+            <div class="strow"><span class="sw" style="background:#f59e0b"></span>Thermostats &amp; Haffala</div>
+            <div class="strow"><span class="sw" style="background:#10b981"></span>Registers &amp; access panels</div>
+            <div class="strow" style="border-style:dashed;color:#94a3b8;background:transparent"><span class="sw" style="background:#e2e8f0"></span>Job completed <small style="margin-inline-start:auto;font-weight:600">(the office closes this one)</small></div>
+          </div>
+        </div>
+      </div>
+      <div class="notes">
+        <p class="say">"ready to start can't be an answer to what did you do — per contractor, what stages can they decide they did"</p>
+        <ol>
+          <li><span class="k">1</span><span>The list is the workspace's stages <b>filtered to the ones ticked for this worker</b>. Ready to start is never offered (drawn struck out here only to say so). The default for a new worker: every stage except the first and the last.</span></li>
+        </ol>
+        <div class="office">
+          <h5>Settings → Workers, on each worker — "Stages he can report"</h5>
+          <div class="chk"><i></i> Ready to start <span class="mark" style="font-size:15px;margin-inline-start:6px">never offered</span></div>
+          <div class="chk"><i class="on">✓</i> Piping</div>
+          <div class="chk"><i class="on">✓</i> Drainage</div>
+          <div class="chk"><i class="on">✓</i> Concealed units</div>
+          <div class="chk"><i class="on">✓</i> Thermostats &amp; Haffala</div>
+          <div class="chk"><i class="on">✓</i> Registers &amp; access panels</div>
+          <div class="chk"><i></i> Job completed</div>
+          <p class="mark" style="margin:8px 0 0;font-size:17px">per workspace — a drywall man reports Geves, the AC crew reports the AC stages</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="rules">
+    <h2>How a stage report behaves — the rules I would write</h2>
+    <ul>
+      <li><b>The apartment was at Piping; he reports Registers &amp; access panels and says it is finished.</b> The apartment moves to that stage. Everything ordered before it (Piping, Drainage, Concealed units, Thermostats) is crossed off the way the stage list already crosses off earlier stages when a job moves on — nothing is written onto them, so the office's picker still shows which ones were <em>reported</em> (a green tick with a name and a date) and which are merely <em>behind</em> (a plain cross-off).</li>
+      <li><b>The photos go to the stage he reported, and only there.</b> They hang off the stage-report task the answer creates, and that task is for one stage. Nothing is copied to the stages he skipped past. If the office wants pictures of the piping, the piping is a separate report.</li>
+      <li><b>"Not yet" on a stage marks it half done</b> (the orange clock), files his note under an open report task, and — new — <b>moves the apartment to that stage</b> if it is further along than where it stood. Your example: piping, not finished, sent to the office → the apartment reads Piping with the clock on it, and the office's bell lists it.</li>
+      <li><b>A report on a stage the apartment is already past</b> is accepted as a record ("he also did some piping today") and does not move the apartment backwards.</li>
+    </ul>
+  </div>
+
+  <!-- ─────────────────────────── 7 · site-wide tasks ─────────────────────────── -->
+  <div class="scene">
+    <h2>7 · A task for a site, not for one apartment</h2>
+    <p class="lead">The AC contractor is sent to Wolfson for three days; which apartments he ends up in is decided on site. Today a task must name an apartment, so this cannot be written down at all. Here is how it would work end to end.</p>
+    <div class="flow">
+      <div class="step"><span class="sn">1 · the office</span>
+        <h5>Add a task, pick "Anywhere in Wolfson"</h5>
+        <p>The apartment picker in every task form (drawer, Tasks page, the notebook's drop dialog, quick-assign) gains one row at the top: <b>Anywhere in this workspace</b>, and under it one row per building (<b>Anywhere in A1</b>…). Everything else on the form is unchanged — who, the days, the description, attachments.</p>
+        <div class="pcard" style="margin-top:8px"><b>Igor · Tue 1 – Thu 3 Sep</b><span class="dot" style="background:#b8860b"></span>Anywhere in Wolfson Residence<br>AC service — wherever the tenants report a fault</div>
+      </div>
+      <div class="step"><span class="sn">2 · the notebook</span>
+        <h5>A card on his row, three days wide</h5>
+        <p>The weekly notebook already takes free-words cards; this is a card with a <b>building glyph instead of a job</b>, the workspace's colour dot, and "any apartment" under the name. It drags between days and people exactly like a job card. It never appears on the Job Board — it is not a job.</p>
+        <div class="pcard" style="margin-top:8px;border-style:dashed;border-color:#b8860b;background:#fffdf5"><b>🏢 Wolfson · any apartment</b><span class="dot" style="background:#b8860b"></span>AC service · day 2 of 3</div>
+      </div>
+      <div class="step"><span class="sn">3 · on site</span>
+        <h5>He taps the apartment he is in, "I did work here"</h5>
+        <p>The building map shows nothing lit for a site-wide task (there is nothing to light). When he reports work in any apartment while such a task is running for him in that workspace, the flow asks one more thing first: <b>"Is this part of: AC service (Tue–Thu)?"</b> — Yes / No, it's separate.</p>
+        <div class="pcard" style="margin-top:8px"><b>Apt 41 · Patachov, David</b>Part of <span class="tag" style="background:#fde68a;color:#92400e">AC service</span> · Piping · finished · 3 photos</div>
+      </div>
+      <div class="step"><span class="sn">4 · back at the office</span>
+        <h5>The task collects its visits</h5>
+        <p>The site-wide task's card, in the drawer-less Tasks page and on the notebook, shows <b>Visited: 41, 46, 52, 55</b> with the stage and photos of each. Each visit is also an ordinary stage report on that apartment, so the diagram, the bell and the stage history see it as they see any report. Closing the task needs no photos of its own — its visits carry them.</p>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:18px">
+      <div style="flex:1 1 380px;min-width:300px">
+        <div class="model"><span class="c">// ContractorAssignment — two new fields, one relaxed one</span>
+apartmentId: string | null;          <span class="c">// null = site-wide</span>
+scope?: { projectId: string; buildingId?: string };
+visits?: {                            <span class="c">// filled by "I did work here"</span>
+  apartmentId: string; at: string;
+  stageId: string; reportTaskId: string;
+}[];
+
+<span class="c">// Contractor — the two new per-worker settings</span>
+mapProjects?: string[];               <span class="c">// which building maps he may open</span>
+reportStages?: Record&lt;projectId, string[]&gt;;  <span class="c">// stages he may report</span></div>
+      </div>
+      <div class="notes" style="flex:1 1 320px">
+        <p class="say">what has to be true for this not to break anything</p>
+        <ol>
+          <li><span class="k">a</span><span><b>Counting.</b> Every total goes through <em>liveAssignments</em>, which today drops a task whose apartment does not count. A site-wide task has no apartment, so the rule grows one clause: no apartment and a scope → counted under its workspace. Dashboards, reports and the wall follow by themselves.</span></li>
+          <li><span class="k">b</span><span><b>The notebook.</b> A planner entry gets an optional <em>scope</em> beside <em>jobId</em>; the card drawing, the drop dialogs and the purge sweep (which removes entries whose job is gone) learn that a scoped entry has no job to lose.</span></li>
+          <li><span class="k">c</span><span><b>The portal.</b> The list card, the calendar chips, the bell and the task sheet all render from <em>apartmentId</em>; each gets the "Any apartment · Wolfson" branch. The task sheet has no plan and no pins for a site-wide task — it has the visit list instead.</span></li>
+          <li><span class="k">d</span><span><b>Search and reports.</b> The Tasks subject in the report builder gets a "Where" field that reads the apartment or the scope, so a report can list the visits.</span></li>
+          <li><span class="k">e</span><span><b>Backups.</b> All of this rides inside <em>contractorAssignments</em> and <em>contractors</em>, which are already persisted, exported, imported and synced — no new store key, the audit stays green.</span></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <div class="rules">
+    <h2>What I would build, in this order</h2>
+    <ul>
+      <li><b>1. The header and tabs</b> — logo centred and bigger, print gone, language into the gear, workspace chips gone, the workspace tag on each task card, every workspace's tasks in one list, Today as the opening filter.</li>
+      <li><b>2. The calendar</b> — Monthly first, the grid filling the phone.</li>
+      <li><b>3. The map</b> — the chooser squares with the per-worker "maps he may open" setting, the one-bar map with the name button and the building segments, the outline, the filters and hints removed, scrollbars hidden.</li>
+      <li><b>4. Task messages</b> — the heading, the panel around the composer, the two mics and the send arrow, dictation in the worker's language.</li>
+      <li><b>5. Stage reports</b> — "Stages he can report" per worker, Ready to start never offered, the behaviour rules above.</li>
+      <li><b>6. Site-wide tasks</b> — the model, the picker row, the notebook card, the "is this part of…" ask, the visits list. The biggest piece; last so the phone is already right while it lands.</li>
+    </ul>
+  </div>
+
+  <div class="rules">
+    <h2>Three things only you can decide</h2>
+    <div class="q"><span class="star">★</span><span><b>Site-wide task, closing it.</b> I would let the office close it with no pictures of its own, because each visit already carries photos through its stage report. <em>Or</em> require at least one visit before it can close?</span></div>
+    <div class="q"><span class="star">★</span><span><b>"Is this part of…?"</b> I would ask it every time he reports work in that workspace while a site-wide task of his is running, with Yes preselected. <em>Or</em> file every report into the running task without asking?</span></div>
+    <div class="q"><span class="star">★</span><span><b>The desktop portal</b> (a worker on a laptop). I would keep the same one-bar map there, with A1 · A2 · A3 plus an All segment, since a wide screen can show three buildings. <em>Or</em> one building at a time everywhere?</span></div>
+    <p class="mark" style="font-size:19px;margin:12px 0 0">Say "build it" (with any changes) and this page becomes the spec — starred answers are what I would do if you say nothing.</p>
+  </div>
+</div>
