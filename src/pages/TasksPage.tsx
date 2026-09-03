@@ -5,7 +5,7 @@ import { RecordedMemo } from '../data/voiceMemo';
 import { contractorLoad } from '../data/contractorLoad';
 import {
   Plus, Trash2, Save, Edit2, X, CheckCircle2, Clock, Paperclip, ExternalLink, Layers, Filter,
-  List, CalendarDays, Printer,
+  List, CalendarDays, Printer, Building2,
 } from 'lucide-react';
 import { BulkAddTaskModal } from '../components/apartment/BulkAddTaskModal';
 import { TaskCalendar, CalendarEvent } from '../components/tasks/TaskCalendar';
@@ -31,6 +31,7 @@ export function TasksPage() {
   const {
     contractors, contractorAssignments, apartments, stages, buildings,
     addContractorAssignment, updateContractorAssignment, deleteContractorAssignment,
+    addAssignmentToProject,
     updateApartment, currentUser, mainUiStrings: s, currentProjectId, projects,
     pendingFocus, setPendingFocus,
   } = useStore();
@@ -73,6 +74,15 @@ export function TasksPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [showBulkAdd, setShowBulkAdd] = useState(false);
   const [addForm, setAddForm] = useState({ contractorId: '', aptId: '', task: '', dueDate: '', stageId: '', priority: '' });
+  /**
+   * A GENERAL JOB (owner, 2026-09-03): "General job" ticked swaps the
+   * apartment picker for a workspace (and, in the open workspace, an
+   * optional building) — a task for a site, not for one unit; which
+   * apartments the worker ends up in is decided on site.
+   */
+  const [addGeneral, setAddGeneral] = useState(false);
+  const [addGeneralWs, setAddGeneralWs] = useState(currentProjectId);
+  const [addGeneralBld, setAddGeneralBld] = useState('');
   /** Every day the new task will cover — the shared multi-day block. */
   const [addDays, setAddDays] = useState<string[]>([]);
   const [addDaysEpoch, setAddDaysEpoch] = useState(0);
@@ -278,7 +288,33 @@ export function TasksPage() {
   }
 
   function handleAdd() {
-    if (!addForm.contractorId || !addForm.aptId || !addForm.task.trim()) return;
+    if (!addForm.contractorId || !addForm.task.trim()) return;
+    if (addGeneral) {
+      if (!addGeneralWs) return;
+      addAssignmentToProject(addGeneralWs, {
+        contractorId: addForm.contractorId,
+        apartmentId: '',
+        buildingId: addGeneralBld || '',
+        general: { projectId: addGeneralWs, ...(addGeneralBld ? { buildingId: addGeneralBld } : {}) },
+        taskDescription: addForm.task.trim(),
+        ...daysFields(addForm.dueDate, addDays),
+        stageId: null,
+        completedAt: null,
+        createdBy: currentUser?.id ?? '',
+        createdByName: currentUser?.name ?? 'Office',
+        attachments: addAttachments.length > 0 ? addAttachments : undefined,
+        priority: (addForm.priority as TaskPriority) || undefined,
+      });
+      setAddForm({ contractorId: '', aptId: '', task: '', dueDate: '', stageId: '', priority: '' });
+      setAddGeneral(false); setAddGeneralBld('');
+      setAddDays([]);
+      setAddDaysEpoch(e => e + 1);
+      setAddAttachments([]);
+      setShowAdd(false);
+      onToast(s.taskAdded);
+      return;
+    }
+    if (!addForm.aptId) return;
     const apt = apartments.find(a => a.id === addForm.aptId);
     if (!apt) return;
     addContractorAssignment({
@@ -504,6 +540,7 @@ export function TasksPage() {
           </div>
 
           <button
+            data-add-task
             onClick={() => setShowAdd(v => !v)}
             className="flex items-center gap-1 px-2.5 py-1.5 md:px-3 md:py-2 bg-[#1e3a5f] text-white rounded-lg text-[12px] md:text-sm font-medium hover:bg-[#162d4a] transition-colors flex-shrink-0"
           >
@@ -586,6 +623,7 @@ export function TasksPage() {
             </div>
             <div className="grid grid-cols-2 gap-3 mb-3">
               <select
+                data-add-contractor
                 value={addForm.contractorId}
                 onChange={e => setAddForm(f => ({ ...f, contractorId: e.target.value }))}
                 className="col-span-2 border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white"
@@ -604,6 +642,28 @@ export function TasksPage() {
                   </optgroup>
                 ))}
               </select>
+              <label data-general-job className="col-span-2 flex items-center gap-2 text-sm text-gray-700 select-none">
+                <input type="checkbox" checked={addGeneral} onChange={e => setAddGeneral(e.target.checked)}
+                  className="w-4 h-4 accent-[#1e3a5f]" />
+                <span className="font-semibold">{s.generalJob}</span>
+                <span className="text-xs text-gray-400">— {s.isRtl ? 'עבודה באתר, לא בדירה אחת' : 'work on a site, not in one unit'}</span>
+              </label>
+              {addGeneral ? (
+                <>
+                  <select data-general-ws value={addGeneralWs}
+                    onChange={e => { setAddGeneralWs(e.target.value); setAddGeneralBld(''); }}
+                    className="col-span-2 border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white">
+                    {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                  {addGeneralWs === currentProjectId && buildings.length > 0 && (
+                    <select data-general-bld value={addGeneralBld} onChange={e => setAddGeneralBld(e.target.value)}
+                      className="col-span-2 border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white">
+                      <option value="">{s.isRtl ? 'כל הבניינים' : 'Any building'}</option>
+                      {buildings.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                    </select>
+                  )}
+                </>
+              ) : (
               <select
                 value={addForm.aptId}
                 onChange={e => {
@@ -631,6 +691,7 @@ export function TasksPage() {
                     </optgroup>
                   ))}
               </select>
+              )}
               <select
                 value={addForm.stageId}
                 onChange={e => setAddForm(f => ({ ...f, stageId: e.target.value }))}
@@ -665,6 +726,7 @@ export function TasksPage() {
               value={addForm.task}
               onChange={e => setAddForm(f => ({ ...f, task: e.target.value }))}
               rows={2}
+              data-add-task-text
               placeholder={s.taskDescriptionPlaceholder}
               className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white resize-none mb-3"
             />
@@ -741,8 +803,9 @@ export function TasksPage() {
                 }}
               />
               <button
+                data-add-task-submit
                 onClick={handleAdd}
-                disabled={!addForm.contractorId || !addForm.aptId || !addForm.task.trim()}
+                disabled={!addForm.contractorId || (!addGeneral && !addForm.aptId) || !addForm.task.trim()}
                 className="flex items-center gap-1.5 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium disabled:opacity-40"
               >
                 <Plus size={15} /> {s.addTask}
@@ -805,7 +868,14 @@ export function TasksPage() {
                           </span>
                         )}
                         <span className="font-medium text-gray-800 text-sm">
-                          {a.buildingId} · {s.aptPrefix} {aptLabel(apt)}
+                          {a.general
+                            ? <span data-general-where className="inline-flex items-center gap-1">
+                                <Building2 size={13} className="text-[#b8860b]" />
+                                {projects.find(p => p.id === a.general!.projectId)?.name ?? a.general.projectId}
+                                {a.general.buildingId ? ` · ${a.general.buildingId}` : ''}
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">{s.generalJob}</span>
+                              </span>
+                            : <>{a.buildingId} · {s.aptPrefix} {aptLabel(apt)}</>}
                         </span>
                         {stage && (
                           <span
@@ -825,6 +895,18 @@ export function TasksPage() {
                       <p className={`text-sm ${a.completedAt ? 'line-through text-gray-400' : 'text-gray-600'}`} data-task-text>
                         <Translated text={a.taskDescription} to={s.isRtl ? 'he' : 'en'} />
                       </p>
+                      {/* A general job collects the apartments actually visited
+                          under it — each one is also an ordinary stage report. */}
+                      {a.general && (a.visits?.length ?? 0) > 0 && (
+                        <p data-general-visits className="text-xs text-amber-700 mt-1">
+                          <span className="font-bold">{s.visitedLabel}:</span>{' '}
+                          {a.visits!.map(v => {
+                            const va = apartments.find(x => x.id === v.apartmentId);
+                            const st = stages.find(x => x.id === v.stageId);
+                            return `${va ? aptLabel(va) : v.apartmentId}${st ? ` (${getStageName(st, s.isRtl)})` : ''}`;
+                          }).join(' · ')}
+                        </p>
+                      )}
                       <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                         {a.dueDate && (
                           <span className="text-xs text-gray-400">{format(parseISO(a.dueDate), 'MMM d, yyyy')}</span>

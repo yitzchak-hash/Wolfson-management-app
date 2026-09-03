@@ -654,6 +654,10 @@ main > * { min-width: 0; }
    * says. It still scrolls — by wheel, by drag, by keyboard — this only stops
    * the bar being painted.
    */
+  /* The worker's building map: nothing in it draws a scrollbar — the page
+     scrolls under the thumb like any phone page, and a fade says "more". */
+  .bars-off, .bars-off * { scrollbar-width: none; -ms-overflow-style: none; }
+  .bars-off::-webkit-scrollbar, .bars-off *::-webkit-scrollbar { width: 0; height: 0; display: none; }
   .no-bar { scrollbar-width: none; -ms-overflow-style: none; }
   .no-bar::-webkit-scrollbar { width: 0; height: 0; display: none; }
 }

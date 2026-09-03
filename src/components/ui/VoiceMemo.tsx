@@ -4,6 +4,9 @@ import {
   useVoiceRecorder, clock, squash, PLAYBACK_SPEEDS, PlaybackSpeed, RecordedMemo,
 } from '../../data/voiceMemo';
 import { extractFileId, fetchPlanBytes, isUploadBackendConfigured } from '../../data/driveApi';
+import { useTranscript } from '../../data/transcribe';
+import { Translated } from './Translated';
+import type { Lang } from '../../data/translate';
 
 /**
  * The face of a voice memo — recorder and player.
@@ -21,7 +24,7 @@ import { extractFileId, fetchPlanBytes, isUploadBackendConfigured } from '../../
 // ── Recorder ────────────────────────────────────────────────────────────────
 
 export function VoiceRecorderButton({
-  onRecorded, disabled, busy, title = 'Record a voice memo', compact, label,
+  onRecorded, disabled, busy, title = 'Record a voice memo', compact, label, big,
 }: {
   onRecorded: (memo: RecordedMemo) => void | Promise<void>;
   disabled?: boolean;
@@ -38,6 +41,12 @@ export function VoiceRecorderButton({
    * what it is.
    */
   label?: string;
+  /**
+   * The BIG navy microphone at the end of a message box (the worker's phone,
+   * owner 2026-09-03) — the familiar one: press to record, the strip with
+   * the timer, the bin and Send takes the box's place while it runs.
+   */
+  big?: boolean;
 }) {
   const rec = useVoiceRecorder();
   const recording = rec.state !== 'idle';
@@ -47,6 +56,22 @@ export function VoiceRecorderButton({
     if (memo) await onRecorded(memo);
   }
 
+  if (!recording && big) {
+    return (
+      <button
+        type="button"
+        data-big-mic
+        onClick={() => { void rec.start(); }}
+        disabled={disabled || busy}
+        title={rec.error ?? title}
+        className="flex items-center justify-center w-11 h-11 rounded-full text-white flex-shrink-0
+                   disabled:opacity-40 active:scale-95 transition-transform"
+        style={{ backgroundColor: rec.error ? '#dc2626' : '#1e3a5f', boxShadow: '0 6px 14px -6px rgba(30,58,95,.7)' }}
+      >
+        {busy ? <Loader2 size={20} className="animate-spin" /> : <Mic size={20} />}
+      </button>
+    );
+  }
   if (!recording) {
     return (
       <button
@@ -121,6 +146,7 @@ function LiveTrace({ levels }: { levels: number[] }) {
 
 export function VoiceMemoPlayer({
   src, seconds, peaks, onDelete, className = '',
+  transcript, onTranscript, lang, saidLabel = 'Said',
 }: {
   src: string;
   /** Known length, so the bubble reads right before the audio has loaded. */
@@ -128,7 +154,19 @@ export function VoiceMemoPlayer({
   peaks?: number[];
   onDelete?: () => void;
   className?: string;
+  /**
+   * The memo's WORDS (owner, 2026-09-03: every recording comes with its
+   * transcription under it). Pass what the record already holds; when it
+   * holds nothing the player asks the server once and hands the answer to
+   * `onTranscript` so the host can keep it for every other device.
+   */
+  transcript?: string | null;
+  onTranscript?: (text: string) => void;
+  /** The READER's language — the words are translated into it, with Show original. */
+  lang?: Lang | null;
+  saidLabel?: string;
 }) {
+  const words = useTranscript(src, transcript, onTranscript);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [at, setAt] = useState(0);
@@ -208,7 +246,7 @@ export function VoiceMemoPlayer({
     setAt(el.currentTime);
   }
 
-  return (
+  const pill = (
     <div className={`flex items-center gap-2 rounded-full bg-gray-100 border border-gray-200 px-2 py-1 max-w-full ${className}`}>
       <audio
         ref={audioRef}
@@ -277,6 +315,16 @@ export function VoiceMemoPlayer({
           <Trash2 size={14} />
         </button>
       )}
+    </div>
+  );
+  if (!words) return pill;
+  return (
+    <div className="flex flex-col gap-1 max-w-full" data-memo-with-words>
+      {pill}
+      <div data-memo-transcript className="text-[12.5px] leading-snug px-1" style={{ color: '#1f2c3d' }}>
+        <span className="block text-[9.5px] font-extrabold tracking-wider uppercase" style={{ color: '#93a2b1' }}>{saidLabel}</span>
+        <Translated text={words} to={lang} />
+      </div>
     </div>
   );
 }

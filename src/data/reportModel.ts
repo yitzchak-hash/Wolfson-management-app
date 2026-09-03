@@ -136,7 +136,8 @@ const liveJobs = (d: ReportData): Apartment[] => d.apartments.filter(isCountable
  */
 function liveAssignments(d: ReportData): ContractorAssignment[] {
   const ok = new Set(liveJobs(d).map(j => j.id));
-  return d.assignments.filter(a => ok.has(a.apartmentId));
+  // A general job has no apartment and counts under its workspace.
+  return d.assignments.filter(a => ok.has(a.apartmentId) || !!a.general);
 }
 
 const jobOf = (d: ReportData, id: string) => d.apartments.find(a => a.id === id);

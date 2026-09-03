@@ -17,9 +17,17 @@ await page.waitForTimeout(2200);
 // now the worker opens his link on this browser
 await page.goto(`http://localhost:5173/c/${PORTAL_TOKEN}`);
 await page.waitForTimeout(5500); // the settle timer + switch
-const text = await page.evaluate(() => document.body.innerText.slice(0, 300));
-console.log(text);
-const ok = /6 tasks/.test(text);
-console.log(ok ? 'PASS auto-switched to the workspace with his work' : 'FAIL still empty');
+// The approved phone (2026-09-03) lists EVERY workspace's tasks together,
+// each card tagged with its workspace — so his Wolfson work shows from the
+// Job Board without any switch; the auto-switch still runs underneath for
+// the map and the sheet. Press All first: the seed's dates are relative but
+// the list opens on Today.
+await page.locator('button', { hasText: /^All$/ }).first().tap().catch(() => {});
+await page.waitForTimeout(500);
+const cards = await page.locator('[data-task-card]').count();
+const tagged = await page.locator('[data-task-ws-chip]', { hasText: /Wolfson/ }).count();
+console.log(`cards ${cards} · tagged Wolfson ${tagged}`);
+const ok = cards >= 6 && tagged >= 6;
+console.log(ok ? 'PASS his Wolfson work is on the list, tagged, from the Job Board' : 'FAIL still empty');
 await browser.close();
 process.exit(ok ? 0 : 1);

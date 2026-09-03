@@ -41,6 +41,7 @@ export function TaskCalendar({
   todayLabel = 'Today',
   printTitle = 'Calendar',
   rtl = false,
+  fill = false,
 }: {
   events: CalendarEvent[];
   weekdayLabels?: string[];
@@ -48,6 +49,13 @@ export function TaskCalendar({
   /** Names the printed sheet — "Tasks — Wolfson", "All workspaces", and so on. */
   printTitle?: string;
   rtl?: boolean;
+  /**
+   * FILL the host's height (the worker's phone, owner 2026-09-03): the week
+   * rows share the room equally down to the bottom, so a day cell is tall
+   * enough to show what is in it instead of a square the size of a stamp.
+   * Each cell shows up to two tasks in full and folds the rest into "+N".
+   */
+  fill?: boolean;
 }) {
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
 
@@ -123,8 +131,10 @@ export function TaskCalendar({
     );
   }
 
+  const weekRows = Math.ceil(days.length / 7);
   return (
-    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+    <div className={`bg-white border border-gray-200 rounded-xl overflow-hidden ${fill ? 'h-full flex flex-col min-h-0' : ''}`}
+      data-calendar-fill={fill ? '1' : undefined}>
       {/* Month navigation */}
       <div className="flex items-center justify-between gap-1 px-2 sm:px-4 py-2 sm:py-3 border-b border-gray-100">
         <button
@@ -168,17 +178,21 @@ export function TaskCalendar({
       </div>
 
       {/* Day grid */}
-      <div className="grid grid-cols-7">
+      <div className={`grid grid-cols-7 ${fill ? 'flex-1 min-h-0' : ''}`}
+        style={fill ? { gridTemplateRows: `repeat(${weekRows}, minmax(0, 1fr))` } : undefined}>
         {days.map((day, idx) => {
           const key = format(day, 'yyyy-MM-dd');
-          const dayEvents = eventsByDay.get(key) ?? [];
+          const allDayEvents = eventsByDay.get(key) ?? [];
+          // Filling the phone: two named tasks, the rest folded into a count.
+          const dayEvents = fill ? allDayEvents.slice(0, 2) : allDayEvents;
+          const folded = fill ? allDayEvents.length - dayEvents.length : 0;
           const inMonth = isSameMonth(day, month);
           const isToday = isSameDay(day, today);
           return (
             <div
               key={idx}
               className={`border-b border-r border-gray-50 p-0.5 sm:p-1.5 flex flex-col gap-0.5 sm:gap-1
-                overflow-hidden aspect-square sm:aspect-auto sm:min-h-[132px] ${
+                overflow-hidden ${fill ? 'min-h-0' : 'aspect-square sm:aspect-auto sm:min-h-[132px]'} ${
                 inMonth ? 'bg-white' : 'bg-gray-50/60'
               } ${idx % 7 === 6 ? 'border-r-0' : ''}`}
               /* On a phone a seventh of the width is ~52px, and the old fixed
@@ -248,6 +262,14 @@ export function TaskCalendar({
                     </button>
                   );
                 })}
+                {folded > 0 && (
+                  <button
+                    onClick={allDayEvents[dayEvents.length]?.onClick}
+                    className="text-[10px] font-bold text-[#1e3a5f] text-left px-1"
+                    data-calendar-more>
+                    +{folded}
+                  </button>
+                )}
               </div>
             </div>
           );

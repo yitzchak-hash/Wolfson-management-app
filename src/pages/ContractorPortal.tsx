@@ -1,7 +1,9 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useStore, loadAllProjectsTaskData, ensureProjectSnapshot } from '../data/store';
-import { ContractorAssignment, ContractorPhoto, Contractor, Apartment, Project, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, RUSSIAN_CONTRACTOR_UI_STRINGS, PortalLang, getStageName, aptLabel } from '../types';
+import { ContractorAssignment, ContractorPhoto, Contractor, Apartment, Project, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, RUSSIAN_CONTRACTOR_UI_STRINGS, PortalLang, getStageName, aptLabel, workAtLabel, projectColor } from '../types';
+import { useSpeechToText } from '../data/voiceSearch';
+import { transcribeMemo } from '../data/transcribe';
 import { daysOf, futureDaysOf } from '../data/taskDays';
 import { PlanPinOverlay } from '../components/apartment/PlanPinOverlay';
 import { printSheet, printEsc } from '../data/printing';
@@ -11,7 +13,7 @@ import {
   Camera, CheckCircle2, Clock, Building2, CalendarDays, FileText, Hammer,
   Plus, Send, AlertCircle, X, Play, File as FileIcon, MapPin,
   BookOpen, Download, Paperclip, MessageSquare, CloudUpload,
-  ChevronLeft, ChevronRight, Languages, History, PenLine, Printer,
+  ChevronLeft, ChevronRight, ChevronDown, History, PenLine, Mic,
   Settings as SettingsIcon, Bell,
 } from 'lucide-react';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
@@ -330,9 +332,10 @@ interface BellItem {
  * bell currently says; opening it marks it read) — the localStorage rule, in
  * try/catch like every per-machine convenience.
  */
-function PortalBell({ contractor, s, currentProjectId, allAssignments, allApartments, projects, snapshotTick, onPick }: {
+function PortalBell({ contractor, s, lang, currentProjectId, allAssignments, allApartments, projects, snapshotTick, onPick }: {
   contractor: Contractor;
   s: typeof DEFAULT_CONTRACTOR_UI_STRINGS;
+  lang: PortalLang;
   currentProjectId: string;
   allAssignments: ContractorAssignment[];
   allApartments: Apartment[];
@@ -360,7 +363,7 @@ function PortalBell({ contractor, s, currentProjectId, allAssignments, allApartm
       for (const a of asg) {
         if (a.contractorId !== contractor.id || a.completedAt) continue;
         const apt = apts.find(x => x.id === a.apartmentId);
-        const where = apt ? (aptLabel(apt) || apt.address || '') : a.buildingId;
+        const where = a.general ? workAtLabel(lang, wsName) : (apt ? (aptLabel(apt) || apt.address || '') : a.buildingId);
         const mk = (kind: BellItem['kind'], id: string) => out.push({
           id, kind, text: a.taskDescription || where, where,
           workspace: p.projectId === currentProjectId ? undefined : wsName,
@@ -376,7 +379,7 @@ function PortalBell({ contractor, s, currentProjectId, allAssignments, allApartm
     const order: Record<BellItem['kind'], number> = { overdue: 0, today: 1, tomorrow: 2, new: 3 };
     return out.sort((a, b) => order[a.kind] - order[b.kind]).slice(0, 30);
     // snapshotTick: a hydrated snapshot landing must recompute this.
-  }, [contractor.id, scope, currentProjectId, allAssignments, allApartments, projects, snapshotTick]);
+  }, [contractor.id, scope, currentProjectId, allAssignments, allApartments, projects, snapshotTick, lang]);
 
   const hash = items.map(i => i.id).join(',');
   const seenKey = `portal_bell_seen_${contractor.id}`;
@@ -546,6 +549,21 @@ export function ContractorPortal() {
   const [activeTab, setActiveTab] = useState<'tasks' | 'map' | 'calendar' | 'planner'>('tasks');
   /** Which building the map shows — a building id, 'all' for every one, '' for the first. */
   const [mapBuilding, setMapBuilding] = useState<string>('');
+  /**
+   * Which project's map he chose (owner, 2026-09-03: "which building map?"
+   * asked on big squares, only when there is a choice). Remembered per
+   * worker on this phone; the name button on the map changes it.
+   */
+  const [mapChosen, setMapChosen] = useState<string | null>(() => {
+    try { return localStorage.getItem(`portal_map_${token ?? ''}`); } catch { return null; }
+  });
+  const [mapPickerOpen, setMapPickerOpen] = useState(false);
+  /**
+   * A task tapped on the list that lives in ANOTHER workspace: the switch
+   * loads that workspace's collections, and this ref opens the task the
+   * moment it lands (the list shows every workspace's tasks together now).
+   */
+  const pendingOpenTask = useRef<string | null>(null);
   const [selfTask, setSelfTask] = useState(false);
   const [selfText, setSelfText] = useState('');
   const [selfApt, setSelfApt] = useState('');
@@ -563,7 +581,18 @@ export function ContractorPortal() {
   const selfFileRef = useRef<HTMLInputElement>(null);
   const [selectedAssignment, setSelectedAssignment] = useState<ContractorAssignment | null>(null);
   const [noteText, setNoteText] = useState('');
-  const [noteAttachments, setNoteAttachments] = useState<{ dataUrl: string; filename: string; mimeType: string; driveFileId?: string; driveUrl?: string }[]>([]);
+  /**
+   * Dictation into the message box — the browser's own speech recognition
+   * in the worker's language (the search tile's door). Words appear in the
+   * box for him to fix and send; the big mic at the end is a different
+   * thing (a recording, sent as one).
+   */
+  const dictate = useSpeechToText(
+    (langOverride ?? workerNow?.lang) === 'he' ? 'he-IL'
+      : (langOverride ?? workerNow?.lang) === 'ru' ? 'ru-RU' : 'en-US',
+    text => setNoteText(text),
+  );
+  const [noteAttachments, setNoteAttachments] = useState<{ dataUrl: string; filename: string; mimeType: string; driveFileId?: string; driveUrl?: string; transcript?: string }[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ name: string; pct: number } | null>(null);
   const [completing, setCompleting] = useState(false);
@@ -574,27 +603,11 @@ export function ContractorPortal() {
   const [uploadError, setUploadError] = useState('');
   const [mapFilter, setMapFilter] = useState<'yesterday' | 'today' | 'tomorrow' | 'week' | 'all'>('today');
   /**
-   * The Today filter must not HIDE his work. A worker whose next job is
-   * tomorrow opened onto the default Today pill and an empty list — which
-   * read as "it doesn't show the task for him" (the owner's exact report).
-   * Once per visit, when today holds nothing and open work exists on other
-   * days, the filter falls back to All; his own later pill press is never
-   * fought.
+   * Today is the opening filter and stays it (owner, 2026-09-03 — the
+   * once-per-visit widening to All is gone). An empty Today says so in words
+   * and offers every day in one press, so his work on other days is one tap
+   * away rather than hidden.
    */
-  const filterWidened = useRef(false);
-  useEffect(() => {
-    if (filterWidened.current || mapFilter !== 'today') return;
-    // By token, not the `contractor` binding — that is declared further down.
-    const meId = contractors.find(c => c.token === token && c.active)?.id;
-    const open = contractorAssignments.filter(a => a.contractorId === meId && !a.completedAt);
-    if (!open.length) return;
-    filterWidened.current = true;
-    const today = new Date();
-    const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    const anyToday = open.some(a => daysOf(a).includes(todayIso));
-    if (!anyToday) setMapFilter('all');
-    // contractorAssignments settling in is exactly the moment to decide.
-  }, [contractorAssignments, contractors, token, mapFilter]);
   const [showPlansPdf, setShowPlansPdf] = useState(false);
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
   /** The days a multi-day task still has ahead when the worker closes it. */
@@ -616,13 +629,15 @@ export function ContractorPortal() {
   const [planDlBusy, setPlanDlBusy] = useState(false);
   /** The map's "I did work here" flow — one small screen at a time. */
   const [workHere, setWorkHere] = useState<null | {
-    aptId: string; step: 'view' | 'stage' | 'finished' | 'note'; stageId?: string;
+    aptId: string; step: 'view' | 'part' | 'stage' | 'finished' | 'note'; stageId?: string;
+    /** The general job this report is filed under, once he has said so. */
+    partOf?: string | null;
   }>(null);
   const [leftNote, setLeftNote] = useState('');
   /** How many pictures a closing needs. photosOptional workers skip it. */
   const MIN_CLOSE_MEDIA = 3;
   /** Weekly is what a worker plans his van by; the month grid is one press away. */
-  const [calMode, setCalMode] = useState<'week' | 'month'>('week');
+  const [calMode, setCalMode] = useState<'week' | 'month'>('month');
   const [calWeekOff, setCalWeekOff] = useState(0);
   const phonePortal = usePhone();
   const [showHistory, setShowHistory] = useState(false);
@@ -708,9 +723,46 @@ export function ContractorPortal() {
   const contractorId = contractor.id;
   const assignments = contractorAssignments.filter(a => a.contractorId === contractorId);
   const catColor = CATEGORY_COLORS[contractor.category] ?? '#6b7280';
+  const wsNameOf = (pid: string) => projects.find(p => p.id === pid)?.name ?? pid;
+  const currentWsName = wsNameOf(currentProjectId);
+  /**
+   * His tasks in the OTHER workspaces — read from each one's stored snapshot,
+   * because only the open workspace is live (the workspace chip row is gone;
+   * the list shows everything together, each card wearing its workspace).
+   */
+  const otherTasks = useMemo(() => {
+    const out: { a: ContractorAssignment; apt?: Apartment; projectId: string; projectName: string }[] = [];
+    for (const p of loadAllProjectsTaskData()) {
+      if (p.projectId === currentProjectId) continue;
+      const name = projects.find(x => x.id === p.projectId)?.name ?? p.projectId;
+      for (const a of p.assignments) {
+        if (a.contractorId !== contractorId) continue;
+        out.push({ a, apt: p.apartments.find(x => x.id === a.apartmentId), projectId: p.projectId, projectName: name });
+      }
+    }
+    return out;
+  // snapshotTick: a hydrated snapshot landing must recompute this.
+  }, [contractorId, currentProjectId, projects, snapshotTick]);
+  /** "Apt 47" — or "Work at Wolfson" for a general job. */
+  const whereLabel = (a: ContractorAssignment, apt: Apartment | undefined, ws: string) =>
+    a.general ? workAtLabel(readLang, ws) : `${s.isRtl ? 'דירה' : 'Apt'} ${aptLabel(apt)}`;
+  /** Open a task — switching workspace first when it lives elsewhere. */
+  const openTask = (pid: string, a: ContractorAssignment) => {
+    setShowHistory(false);
+    if (pid === currentProjectId) { setSelectedAssignment(a); return; }
+    pendingOpenTask.current = a.id;
+    setCurrentProject(pid);
+    setMapBuilding('');
+  };
 
   const getApt = (id: string) => apartments.find(a => a.id === id);
   const getStage = (id: string | null) => stages.find(s => s.id === id);
+  useEffect(() => {
+    const id = pendingOpenTask.current;
+    if (!id) return;
+    const a = contractorAssignments.find(x => x.id === id);
+    if (a) { pendingOpenTask.current = null; setSelectedAssignment(a); }
+  }, [contractorAssignments]);
   const getMedia = (assignmentId: string) => contractorPhotos.filter(p => p.assignmentId === assignmentId);
   const getNotes = (assignmentId: string) => contractorNotes.filter(n => n.assignmentId === assignmentId);
 
@@ -806,6 +858,24 @@ export function ContractorPortal() {
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapFilter, assignments]);
+  type ListRow = { a: ContractorAssignment; apt?: Apartment; projectId: string; projectName: string; live: boolean };
+  const listRows: ListRow[] = useMemo(() => {
+    const passes = (a: ContractorAssignment) => {
+      if (mapFilter === 'all') return true;
+      if (a.completedAt || !a.dueDate) return false;
+      const offs = dayOffsets(a);
+      if (mapFilter === 'yesterday') return offs.includes(-1);
+      if (mapFilter === 'today') return offs.includes(0);
+      if (mapFilter === 'tomorrow') return offs.includes(1);
+      if (mapFilter === 'week') return offs.some(d => d >= 0 && d <= 7);
+      return true;
+    };
+    const live: ListRow[] = filteredAssignments.map(a => ({ a, apt: getApt(a.apartmentId), projectId: currentProjectId, projectName: currentWsName, live: true }));
+    const foreign: ListRow[] = otherTasks.filter(r => passes(r.a)).map(r => ({ ...r, live: false }));
+    return [...live, ...foreign];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredAssignments, otherTasks, mapFilter, currentProjectId, currentWsName, apartments]);
+  const openEverywhere = assignments.filter(a => !a.completedAt).length + otherTasks.filter(r => !r.a.completedAt).length;
 
   async function handleMediaUpload(e: React.ChangeEvent<HTMLInputElement>) {
     if (!selectedAssignment || !e.target.files?.length) return;
@@ -945,11 +1015,19 @@ export function ContractorPortal() {
           dataUrl: '', filename: file.name, mimeType: file.type,
           driveFileId: fileId, driveUrl: webViewLink,
         }]);
+        // The words, as soon as the server has them — stored on the note
+        // when it is sent, so the office reads them at once.
+        void transcribeMemo(webViewLink).then(t => {
+          if (t) setNoteAttachments(prev => prev.map(x => x.driveFileId === fileId ? { ...x, transcript: t } : x));
+        });
         return;
       } catch { /* fall through to local */ }
     }
     const dataUrl = await readAsDataUrl(file);
     setNoteAttachments(prev => [...prev, { dataUrl, filename: file.name, mimeType: file.type }]);
+    void transcribeMemo(dataUrl).then(t => {
+      if (t) setNoteAttachments(prev => prev.map(x => x.dataUrl === dataUrl ? { ...x, transcript: t } : x));
+    });
   }
 
   function handleSendNote() {
@@ -977,6 +1055,7 @@ export function ContractorPortal() {
           attachmentMimeType: att.mimeType,
           attachmentDriveFileId: att.driveFileId,
           attachmentDriveUrl: att.driveUrl,
+          transcript: att.transcript,
         });
       });
       if (text && noteAttachments.length > 1) {
@@ -1148,6 +1227,7 @@ export function ContractorPortal() {
         attachmentMimeType: first.mimeType,
         attachmentDriveFileId: first.driveFileId,
         attachmentDriveUrl: first.driveUrl,
+        transcript: first.transcript,
       } : {}),
     });
     setClosingComment('');
@@ -1206,18 +1286,28 @@ export function ContractorPortal() {
           day. It shrinks now: the group may give up width, the name lines
           truncate rather than push, and the category pill (which repeats what
           his work already tells him) steps aside on the narrowest screens. */}
-      <header className="flex items-center justify-between gap-2 px-3 md:px-4 py-3 shadow-md flex-shrink-0" style={{ backgroundColor: '#0f1f35' }}>
-        {/* Smaller on a phone. The logo is a wide mark that ate 150px of a
-            390px bar telling the worker whose app this is — which he knows —
-            while his own name two items along came out as "Moshe Aha…". */}
-        <img src="/tzviair-logo.png" alt="TzviAir" className="flex-shrink-0 h-6 md:h-8 w-auto" style={{ filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.9)) drop-shadow(0 1px 3px rgba(0,0,0,0.7))' }} />
-        <div className="flex items-center gap-1.5 md:gap-2.5 min-w-0">
-          {/* His updates — scope set per worker by the office; 'off' draws
-              nothing at all. */}
+      <header data-portal-header
+        className="grid items-center gap-2 px-3 py-2.5 shadow-md flex-shrink-0"
+        style={{ backgroundColor: '#0f1f35', gridTemplateColumns: '1fr auto 1fr' }}>
+        {/* The worker on the left, small. */}
+        <div className="min-w-0">
+          <div className="text-white text-[13px] font-bold truncate">{contractor!.name}</div>
+          <div className="text-gray-400 text-[11px] truncate">
+            {openEverywhere} {openEverywhere !== 1 ? s.taskPlural : s.taskSingular} · {assignments.filter(a => a.completedAt).length + otherTasks.filter(r => r.a.completedAt).length} {s.doneLabel}
+          </div>
+        </div>
+        {/* The logo in the MIDDLE, a real mark (owner, 2026-09-03). */}
+        <img src="/tzviair-logo.png" alt="TzviAir" data-portal-logo
+          className="h-8 w-auto justify-self-center"
+          style={{ filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.9)) drop-shadow(0 1px 3px rgba(0,0,0,0.7))' }} />
+        {/* Everything that acts, on the right: the bell, then the gear.
+            Print left the phone; the language lives inside the gear now. */}
+        <div className="flex items-center justify-end gap-2 min-w-0">
           {workerNow && (workerNow.notifyScope ?? 'all') !== 'off' && (
             <PortalBell
               contractor={workerNow}
               s={s}
+              lang={readLang}
               currentProjectId={currentProjectId}
               allAssignments={contractorAssignments}
               allApartments={apartments}
@@ -1237,199 +1327,62 @@ export function ContractorPortal() {
               }}
             />
           )}
-          {/* A work list for the van. Contractors are the people most likely to
-              want the day on paper — no signal in a stairwell, no battery
-              anxiety on a site. */}
-          <button
-            onClick={() => {
-              /**
-               * The day on paper, drawn as CARDS rather than a table.
-               *
-               * The paper goes in the van: what matters at arm's length is the
-               * job name big, the stage as a colour, the address, and whether
-               * it is late — the same reading order the portal itself uses.
-               * Grouped: overdue first, then today, then the rest, done last.
-               */
-              const e = printEsc;
-              const today = new Date().toISOString().slice(0, 10);
-              const groups: { label: string; tone: string; rows: typeof assignments }[] = [
-                { label: s.isRtl ? 'באיחור' : 'Overdue', tone: '#dc2626',
-                  rows: assignments.filter(a => !a.completedAt && a.dueDate && a.dueDate < today) },
-                { label: s.filterToday, tone: '#f97316',
-                  rows: assignments.filter(a => !a.completedAt && a.dueDate === today) },
-                { label: s.isRtl ? 'בהמשך' : 'Coming up', tone: '#1e3a5f',
-                  rows: assignments.filter(a => !a.completedAt && (!a.dueDate || a.dueDate > today)) },
-                { label: s.doneLabel, tone: '#16a34a',
-                  rows: assignments.filter(a => !!a.completedAt) },
-              ];
-              const card = (a: typeof assignments[0]) => {
-                const apt = apartments.find(x => x.id === a.apartmentId);
-                const st = stages.find(x => x.id === a.stageId);
-                const late = !a.completedAt && a.dueDate && a.dueDate < today;
-                return `<div class="card${a.completedAt ? ' done' : ''}"
-                    style="border-inline-start:6px solid ${e(st?.color ?? '#cbd5e1')}">
-                  <div class="row1">
-                    <span class="apt">${e(apt ? aptLabel(apt) : a.buildingId)}</span>
-                    ${a.dueDate ? `<span class="due${late ? ' late' : ''}">${
-                      e(format(parseISO(a.dueDate), 'd MMM'))}</span>` : ''}
-                    ${a.completedAt ? '<span class="tick">✓</span>' : ''}
-                  </div>
-                  ${apt?.address ? `<div class="addr">📍 ${e(apt.address)}</div>` : ''}
-                  <div class="task">${e(a.taskDescription || '—')}</div>
-                  ${st ? `<span class="stage" style="background:${e(st.color)}1f;color:${e(st.color)}">${
-                    e(getStageName(st, !!s.isRtl))}</span>` : ''}
-                </div>`;
-              };
-              const body = groups.filter(g => g.rows.length).map(g => `
-                <div class="grp">
-                  <div class="grpname" style="color:${g.tone}">
-                    ${e(g.label)} <span class="n">${g.rows.length}</span>
-                  </div>
-                  <div class="cards">${g.rows
-                    .sort((a, b) => (a.dueDate ?? 'z').localeCompare(b.dueDate ?? 'z'))
-                    .map(card).join('')}</div>
-                </div>`).join('');
-              printSheet(`${contractor!.name} — ${s.isRtl ? 'העבודה' : 'work'}`, body, {
-                rtl: !!s.isRtl,
-                subtitle: `${assignments.filter(a => !a.completedAt).length} ${s.isRtl ? 'פתוחות' : 'open'}`
-                  + ` · ${assignments.filter(a => a.completedAt).length} ${s.doneLabel}`,
-                css: `
-                  .grp { margin-bottom: 14px; }
-                  .grpname { font-size: 13px; font-weight: 800; letter-spacing: .04em;
-                             text-transform: uppercase; margin: 10px 0 6px; }
-                  .grpname .n { color: #94a3b8; font-weight: 700; }
-                  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-                  .card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 8px 10px;
-                          break-inside: avoid; }
-                  .card.done { opacity: .55; }
-                  .row1 { display: flex; align-items: baseline; gap: 8px; }
-                  .apt { font-size: 15px; font-weight: 800; }
-                  .due { margin-inline-start: auto; font-size: 11px; font-weight: 700;
-                         color: #475569; border: 1px solid #e2e8f0; border-radius: 999px;
-                         padding: 1px 8px; }
-                  .due.late { color: #dc2626; border-color: #fecaca; background: #fef2f2; }
-                  .tick { color: #16a34a; font-weight: 900; }
-                  .addr { font-size: 10.5px; color: #64748b; margin-top: 1px; }
-                  .task { font-size: 12px; margin-top: 4px; line-height: 1.35; }
-                  .stage { display: inline-block; margin-top: 5px; font-size: 9.5px;
-                           font-weight: 800; border-radius: 999px; padding: 2px 8px; }
-                `,
-              });
-            }}
-            className="flex items-center px-2.5 py-1.5 rounded-lg border border-white/25 text-white/80 hover:bg-white/10 active:bg-white/20 transition-colors"
-            title={s.printLabel}
-          >
-            <Printer size={14} />
-          </button>
-
-          {/*
-            The language toggle shows only while nobody has chosen a language
-            for this worker. Once the office (or the worker) has set one, the
-            question is answered and the button would only be a way to undo it
-            by accident — what remains is the small settings gear.
-          */}
-          {!workerNow?.lang && (
-            <button
-              // setLang, not setLangOverride: the choice is written back onto the
-              // worker so the office can see what language his portal is in, and
-              // change it for him when he rings up unable to read the screen.
-              onClick={() => setLang(s.isRtl ? 'en' : 'he')}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-white/25 text-white/80 hover:bg-white/10 active:bg-white/20 transition-colors text-xs font-bold tracking-wide"
-              title={s.isRtl ? 'Switch to English' : 'עבור לעברית'}
-            >
-              <Languages size={14} />
-              {s.isRtl ? 'EN' : 'עב'}
-            </button>
-          )}
-
-          {/* Text size, for the worker who needs the screen LOUD. */}
           <div className="relative">
             <button
+              data-portal-gear
               onClick={() => setScalePanel(v => !v)}
-              className="flex items-center px-2.5 py-1.5 rounded-lg border border-white/25 text-white/80 hover:bg-white/10 active:bg-white/20 transition-colors"
-              title={s.isRtl ? 'גודל טקסט' : 'Text size'}
+              className="flex items-center justify-center w-9 h-9 rounded-xl border border-white/25 text-white/85 hover:bg-white/10 active:bg-white/20 transition-colors"
+              title={s.isRtl ? 'הגדרות' : lang === 'ru' ? 'Настройки' : 'Settings'}
             >
-              <SettingsIcon size={14} />
+              <SettingsIcon size={16} />
             </button>
             {scalePanel && (
-              <div className="absolute top-full mt-1.5 z-[120] bg-white rounded-xl shadow-xl border border-gray-200 p-2 w-44"
-                style={s.isRtl ? { left: 0 } : { right: 0 }}>
-                <div className="text-[10px] font-bold text-gray-400 px-1.5 pb-1">
-                  {s.isRtl ? 'גודל הטקסט' : 'Text size'}
-                </div>
-                {([[1, s.isRtl ? 'רגיל' : 'Normal'],
-                   [1.15, s.isRtl ? 'גדול' : 'Large'],
-                   [1.3, s.isRtl ? 'גדול מאוד' : 'Extra large'],
-                   [1.5, s.isRtl ? 'ענק' : 'Huge']] as const).map(([v, label]) => (
-                  <button key={v}
-                    onClick={() => {
-                      if (workerNow) updateContractor(workerNow.id, { textScale: v === 1 ? undefined : v });
-                      setScalePanel(false);
-                    }}
-                    className={`w-full text-left px-2 py-1.5 rounded-lg text-gray-700 hover:bg-gray-50 flex items-center justify-between ${
-                      textScale === v ? 'bg-[#eef4fa] font-bold' : ''}`}
-                    style={{ fontSize: `${13 * v}px` }}>
-                    {label}
-                    {textScale === v && <span className="text-[#1e3a5f]">✓</span>}
-                  </button>
-                ))}
-                {/* The language, all three — the header's EN/עב toggle only
-                    stands while nobody has chosen, and Russian has no
-                    toggle at all. Written onto the worker, so the office
-                    sees it and messages are translated into it. */}
-                <div className="text-[10px] font-bold text-gray-400 px-1.5 pt-2 pb-1 border-t border-gray-100 mt-1">
-                  {s.isRtl ? 'שפה' : lang === 'ru' ? 'Язык' : 'Language'}
-                </div>
-                <div className="flex gap-1 px-1 pb-1" data-portal-langs>
-                  {([['en', 'EN'], ['he', 'עב'], ['ru', 'RU']] as const).map(([code, label]) => (
-                    <button key={code} data-portal-lang={code}
-                      onClick={() => { setLang(code); setScalePanel(false); }}
-                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold border ${
-                        lang === code
-                          ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]'
-                          : 'text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
+              <>
+                <div className="fixed inset-0 z-[119]" onClick={() => setScalePanel(false)} />
+                <div className="absolute top-full mt-1.5 z-[120] bg-white rounded-xl shadow-xl border border-gray-200 p-2 w-48"
+                  style={s.isRtl ? { left: 0 } : { right: 0 }}>
+                  <div className="text-[10px] font-bold text-gray-400 px-1.5 pb-1">
+                    {s.isRtl ? 'גודל הטקסט' : lang === 'ru' ? 'Размер текста' : 'Text size'}
+                  </div>
+                  {([[1, s.isRtl ? 'רגיל' : lang === 'ru' ? 'Обычный' : 'Normal'],
+                     [1.15, s.isRtl ? 'גדול' : lang === 'ru' ? 'Крупный' : 'Large'],
+                     [1.3, s.isRtl ? 'גדול מאוד' : lang === 'ru' ? 'Очень крупный' : 'Extra large'],
+                     [1.5, s.isRtl ? 'ענק' : lang === 'ru' ? 'Огромный' : 'Huge']] as const).map(([v, label]) => (
+                    <button key={v}
+                      onClick={() => {
+                        if (workerNow) updateContractor(workerNow.id, { textScale: v === 1 ? undefined : v });
+                        setScalePanel(false);
+                      }}
+                      className={`w-full text-left px-2 py-1.5 rounded-lg text-gray-700 hover:bg-gray-50 flex items-center justify-between ${
+                        textScale === v ? 'bg-[#eef4fa] font-bold' : ''}`}
+                      style={{ fontSize: `${13 * v}px` }}>
                       {label}
+                      {textScale === v && <span className="text-[#1e3a5f]">✓</span>}
                     </button>
                   ))}
+                  {/* The language, all three — written onto the worker, so
+                      the office sees it and messages are translated into it. */}
+                  <div className="text-[10px] font-bold text-gray-400 px-1.5 pt-2 pb-1 border-t border-gray-100 mt-1">
+                    {s.isRtl ? 'שפה' : lang === 'ru' ? 'Язык' : 'Language'}
+                  </div>
+                  <div className="flex gap-1 px-1 pb-1" data-portal-langs>
+                    {([['en', 'EN'], ['he', 'עב'], ['ru', 'RU']] as const).map(([code, label]) => (
+                      <button key={code} data-portal-lang={code}
+                        onClick={() => { setLang(code); setScalePanel(false); }}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold border ${
+                          lang === code
+                            ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]'
+                            : 'text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              </>
             )}
-          </div>
-          <span className="hidden sm:inline text-xs font-semibold px-2.5 py-1 rounded-full flex-shrink-0"
-            style={{ backgroundColor: catColor + '22', color: catColor, border: `1px solid ${catColor}44` }}>
-            {CATEGORY_LABELS[contractor.category]}
-          </span>
-          <div className={`min-w-0 ${s.isRtl ? 'text-left' : 'text-right'}`}>
-            <div className="text-white text-sm font-semibold truncate">{contractor!.name}</div>
-            <div className="text-gray-400 text-xs truncate">
-              {assignments.length} {assignments.length !== 1 ? s.taskPlural : s.taskSingular} · {assignments.filter(a => a.completedAt).length} {s.doneLabel}
-            </div>
           </div>
         </div>
       </header>
-
-      {/*
-        Which workspace. Only shown to somebody who has work in more than one —
-        a subcontractor on one site should never see a switcher at all.
-      */}
-      {perms.switchProject && myProjects.length > 1 && (
-        <div className="flex bg-slate-50 border-b border-gray-200 flex-shrink-0 overflow-x-auto">
-          {myProjects.map(p => (
-            <button key={p.id}
-              onClick={() => { setCurrentProject(p.id); setMapBuilding(''); }}
-              className="px-4 py-2 text-xs font-bold whitespace-nowrap border-b-2 transition-colors"
-              style={p.id === currentProjectId
-                ? { color: '#1e3a5f', borderColor: '#1e3a5f' }
-                : { color: '#94a3b8', borderColor: 'transparent' }}>
-              {p.name}
-              {p.open > 0 && (
-                <span className="ml-1.5 px-1.5 rounded-full text-[10px] tabular-nums"
-                  style={{ backgroundColor: '#fde68a', color: '#92400e' }}>{p.open}</span>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
 
       {/* Tab bar. A tab this worker's level does not allow is not drawn — a
           greyed-out tab is an invitation to ask why. */}
@@ -1668,38 +1621,52 @@ export function ContractorPortal() {
               <p className="text-gray-600 font-medium">{s.noAssignments}</p>
               <p className="text-gray-400 text-sm mt-1">{s.noAssignmentsHint}</p>
             </div>
-          ) : filteredAssignments.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
+          ) : listRows.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center" data-list-empty>
               <Clock size={32} className="text-gray-300 mb-3" />
-              <p className="text-gray-500 text-sm font-medium">No tasks for this period</p>
-              <button
-                onClick={() => setMapFilter('all')}
-                className="mt-3 text-xs text-[#1e3a5f] underline font-medium"
-              >
-                Show all tasks
-              </button>
+              <p className="text-gray-500 text-sm font-medium">
+                {mapFilter === 'today' ? (s.nothingToday || 'Nothing for today') : (s.noAssignments)}
+              </p>
+              {mapFilter !== 'all' && openEverywhere > 0 && (
+                <button
+                  data-show-all-days
+                  onClick={() => setMapFilter('all')}
+                  className="mt-3 px-4 py-2 rounded-full text-sm font-bold text-white"
+                  style={{ backgroundColor: '#1e3a5f' }}
+                >
+                  {s.showAllDays || 'Show every day'} · {openEverywhere}
+                </button>
+              )}
             </div>
           ) : (
             <div className="space-y-3 py-2">
-              {filteredAssignments.map(a => {
-                const apt = getApt(a.apartmentId);
-                const stage = getStage(a.stageId);
-                const media = getMedia(a.id);
-                const notes = getNotes(a.id);
+              {listRows.map(({ a, apt, projectId: rowPid, projectName: rowWs, live }) => {
+                const stage = live ? getStage(a.stageId) : undefined;
+                const media = live ? getMedia(a.id) : [];
+                const notes = live ? getNotes(a.id) : [];
                 const isOverdue = a.dueDate && !a.completedAt && isPast(parseISO(a.dueDate));
                 const isDone = !!a.completedAt;
                 const dueBadge = getDueBadge(effectiveDue(a), dueWords);
 
                 return (
-                  <button key={a.id} onClick={() => { setSelectedAssignment(a); setShowHistory(false); }}
-                    className="w-full text-left bg-white rounded-2xl shadow-sm border border-gray-100 p-4 transition-all active:scale-[0.99] hover:shadow-md">
+                  <button key={`${rowPid}:${a.id}`} data-task-card={a.id} data-task-ws={rowPid}
+                    onClick={() => openTask(rowPid, a)}
+                    className={`w-full text-left bg-white rounded-2xl shadow-sm border p-4 transition-all active:scale-[0.99] hover:shadow-md ${
+                      a.general ? 'border-dashed' : 'border-gray-100'}`}
+                    style={a.general ? { borderColor: '#b8860b', backgroundColor: '#fffdf5' } : undefined}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
                           <span className="font-bold text-[#1e3a5f] text-base">
-                            Apt {aptLabel(apt)}
+                            {whereLabel(a, apt, rowWs)}
                           </span>
-                          <span className="text-xs text-gray-400 font-medium">{a.buildingId}</span>
+                          {/* WHICH workspace — each card says, in that
+                              workspace's colour, since the list holds them all. */}
+                          <span data-task-ws-chip className="inline-flex items-center gap-1 text-[10.5px] font-bold px-2 py-0.5 rounded-full"
+                            style={{ backgroundColor: `${projectColor(projects, rowPid)}1f`, color: projectColor(projects, rowPid) }}>
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: projectColor(projects, rowPid) }} />
+                            {rowWs}{!a.general && a.buildingId && a.buildingId !== 'G' ? ` · ${a.buildingId}` : ''}
+                          </span>
                           {stage && (
                             <span className="text-xs px-2 py-0.5 rounded-full font-medium"
                               style={{ backgroundColor: stage.color + '22', color: stage.color }}>
@@ -1722,6 +1689,11 @@ export function ContractorPortal() {
                           {dueBadge && !isDone && (
                             <span className={`text-xs px-1.5 py-0.5 rounded border font-semibold ${dueBadge.cls}`}>
                               {dueBadge.text}
+                            </span>
+                          )}
+                          {a.general && (a.visits?.length ?? 0) > 0 && (
+                            <span data-visits-count className="text-xs font-bold" style={{ color: '#8a6508' }}>
+                              {a.visits!.length} {s.visitsLabel?.toLowerCase() || 'visited'}
                             </span>
                           )}
                           {media.length > 0 && (
@@ -1750,24 +1722,28 @@ export function ContractorPortal() {
 
       {/* Calendar tab */}
       {activeTab === 'calendar' && (() => {
-        const calEvents: CalendarEvent[] = assignments
-          .filter(a => !!a.dueDate)
+        const calRows = [
+          ...assignments.map(a => ({ a, apt: getApt(a.apartmentId), projectId: currentProjectId, projectName: currentWsName })),
+          ...otherTasks,
+        ];
+        const calEvents: CalendarEvent[] = calRows
+          .filter(r => !!r.a.dueDate)
           // Every day of a multi-day task, so the worker's calendar says
-          // exactly which days he is expected at the job.
-          .flatMap(a => {
-            const apt = getApt(a.apartmentId);
-            const st = stages.find(x => x.id === a.stageId);
+          // exactly which days he is expected at the job. Every workspace's
+          // tasks — the calendar is his week, wherever the work is.
+          .flatMap(({ a, apt, projectId: pid, projectName: ws }) => {
+            const st = pid === currentProjectId ? stages.find(x => x.id === a.stageId) : undefined;
             return daysOf(a).map(day => ({
-              id: `${a.id}:${day}`,
+              id: `${pid}:${a.id}:${day}`,
               date: day,
               title: a.taskDescription,
-              subtitle: apt ? aptLabel(apt) : a.buildingId,
+              subtitle: a.general ? workAtLabel(readLang, ws) : (apt ? aptLabel(apt) : a.buildingId),
               // The stage's colour inside the day; the trade colour only for
               // a task with no stage.
-              color: st?.color ?? catColor,
+              color: st?.color ?? projectColor(projects, pid),
               node: st ? { stageName: st.name, stageColor: st.color } : undefined,
               completed: !!a.completedAt,
-              onClick: () => setSelectedAssignment(a),
+              onClick: () => openTask(pid, a),
             }));
           });
         const wdLabels = s.isRtl
@@ -1789,7 +1765,11 @@ export function ContractorPortal() {
         const weekDays = Array.from({ length: 7 }, (_, i) => addDaysFns(weekStart, i));
         const todayKey = format(new Date(), 'yyyy-MM-dd');
         return (
-          <div className="flex-1 overflow-auto px-3 py-3">
+          <div className="flex-1 min-h-0 flex flex-col overflow-auto px-3 py-3" data-cal-tab
+            /* The page itself has no ceiling (min-h-screen), so "fill the
+               phone" is pinned to the viewport here: the grid ends where the
+               screen does, and only a month with more than fits scrolls. */
+            style={{ height: 'calc(100dvh - 118px)' }}>
             {/* The two bubbles, big, on top. */}
             <div className="flex items-center gap-2 mb-3">
               {([
@@ -1807,11 +1787,16 @@ export function ContractorPortal() {
               ))}
             </div>
             {calMode === 'month' ? (
-              <TaskCalendar
-                events={calEvents}
-                weekdayLabels={wdLabels}
-                todayLabel={s.filterToday}
-              />
+              /* Fills the phone down to the bottom (owner, 2026-09-03) so a
+                 day shows what is in it — the flex-1 host is the room. */
+              <div className="flex-1 min-h-0" style={{ minHeight: 420 }}>
+                <TaskCalendar
+                  events={calEvents}
+                  weekdayLabels={wdLabels}
+                  todayLabel={s.filterToday}
+                  fill
+                />
+              </div>
             ) : (
               <div data-cal-week>
                 <div className="flex items-center gap-2 mb-2">
@@ -1879,166 +1864,188 @@ export function ContractorPortal() {
       {/* Building Map tab */}
       {activeTab === 'map' && perms.seeDiagrams && (() => {
         /**
-         * One building at a time, chosen by name.
+         * The map, redrawn to the approved page (owner, 2026-09-03).
          *
-         * All five at once meant scrolling past four buildings to reach the
-         * one you are standing in, and the label of whichever you were looking
-         * at slid away as you went. Picking one keeps the diagram short enough
-         * that its own pinned header does the rest.
+         * WHICH project first: every workspace with buildings that this
+         * worker may open (`mapProjects`, absent = all). More than one and
+         * nothing chosen yet → big squares, the whole screen. One → straight
+         * in. The choice is remembered per worker on this phone, and the
+         * project's name on the map's bar changes it.
+         *
+         * Then ONE bar — the project's name in its colour (press: a sheet of
+         * projects), and the buildings as a segmented control — and the
+         * diagram inside a building outline whose bottom fades out so the
+         * eye knows the floors continue. No day filters, no hint sentence,
+         * no "0 yours", no scrollbar: if he has a task in an apartment it is
+         * lit, whatever day it is for.
          */
+        const allowedMaps = projects.filter(p => p.id !== 'general'
+          && (!workerNow?.mapProjects || workerNow.mapProjects.includes(p.id)));
+        const choice = allowedMaps.find(p => p.id === mapChosen) ?? null;
+        const chooser = !choice && allowedMaps.length !== 1;
+        const pick = (pid: string) => {
+          setMapChosen(pid);
+          try { localStorage.setItem(`portal_map_${token ?? ''}`, pid); } catch { /* private mode */ }
+          if (pid !== currentProjectId) { setCurrentProject(pid); setMapBuilding(''); }
+          setMapPickerOpen(false);
+        };
         const here = buildings
           .filter(b => apartments.some(a => a.buildingId === b.id))
           .map(b => b.id);
         const shown = mapBuilding === 'all' ? 'all'
           : here.includes(mapBuilding) ? mapBuilding : (here[0] ?? '');
-        // Somebody without "see every unit" gets only the units they have work
-        // in, so the diagram is their own job rather than the whole site.
         const visible = perms.seeAllApartments
           ? apartments
           : apartments.filter(a => assignedAptIds.has(a.id));
-
-        /**
-         * The map's own filter row: projects first, a divider, then the days.
-         *
-         * Two filters that work AT THE SAME TIME — which site you are looking
-         * at, and which day's work is lit up on it. OWNER RULING (2026-09-03):
-         * the project bubbles come with the "see the building diagrams"
-         * permission itself — they used to need "switch between workspaces"
-         * too, and a worker whose work lives on the Job Board landed on a
-         * workspace with no buildings and saw nothing at all. Every workspace
-         * that HAS buildings is offered, whether or not he has work there;
-         * showing another project's diagram goes through the same
-         * setCurrentProject the wall uses, because each project's records
-         * live in their own collections.
-         */
-        const diagramProjects = projects.filter(p => p.id !== 'general');
         const projectName = projects.find(p => p.id === currentProjectId)?.name ?? currentProjectId;
-        const projectRow = diagramProjects.length > 0 && (
-          <>
-            {diagramProjects.map(p => (
-              <button key={p.id} data-map-project-pick={p.id}
-                onClick={() => {
-                  if (p.id !== currentProjectId) { setCurrentProject(p.id); setMapBuilding(''); }
-                }}
-                className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
-                style={p.id === currentProjectId
-                  ? { backgroundColor: '#1e3a5f', color: '#fff' }
-                  : { backgroundColor: '#fff', color: '#475569', border: '1px solid #e2e8f0' }}>
-                {p.name}
-              </button>
-            ))}
-            {/* The line between WHERE and WHEN. */}
-            <span className="flex-shrink-0 w-px h-6 bg-gray-300 mx-1" aria-hidden="true" />
-          </>
-        );
+        const wsColor = projectColor(projects, currentProjectId);
+        const wsColorOf = (pid: string) => projectColor(projects, pid);
+        const openHere = (pid: string) => (pid === currentProjectId ? assignments : otherTasks.filter(r => r.projectId === pid).map(r => r.a))
+          .filter(a => !a.completedAt).length;
+
+        if (chooser) {
+          return (
+            <div className="flex-1 overflow-auto bg-gray-100 px-4 pt-5 pb-6 flex flex-col gap-3.5" data-map-chooser>
+              <div>
+                <h2 className="text-[22px] font-black text-[#1e3a5f] leading-tight">{s.whichMap || 'Which building map?'}</h2>
+                <p className="text-[13px] text-gray-500 mt-0.5">{s.pickProjectHint || 'Pick the project you are standing in.'}</p>
+              </div>
+              {allowedMaps.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-10">{s.noApartmentsAssigned}</p>
+              ) : allowedMaps.map(p => {
+                const n = openHere(p.id);
+                return (
+                  <button key={p.id} data-map-square={p.id}
+                    onClick={() => pick(p.id)}
+                    className="relative flex-1 min-h-[150px] rounded-3xl bg-white border text-left rtl:text-right p-5 flex flex-col justify-end overflow-hidden active:scale-[0.99] transition-transform"
+                    style={{ borderColor: '#e2e8f0', boxShadow: '0 8px 24px -16px rgba(15,23,42,.35)' }}>
+                    <span className="absolute inset-y-0 start-0 w-2" style={{ backgroundColor: wsColorOf(p.id) }} />
+                    <svg className="absolute end-4 bottom-14 opacity-[.08]" width="120" height="150" viewBox="0 0 120 150" fill="#1e3a5f" aria-hidden="true">
+                      <rect x="10" y="30" width="100" height="120" /><rect x="40" y="10" width="40" height="20" />
+                    </svg>
+                    {n > 0 && (
+                      <span className="absolute top-4 end-4 text-[12px] font-extrabold px-2.5 py-1 rounded-full"
+                        style={{ backgroundColor: '#fde68a', color: '#92400e' }}>
+                        {n} {n !== 1 ? s.taskPlural : s.taskSingular}
+                      </span>
+                    )}
+                    <span className="text-[22px] font-black text-[#1e3a5f] leading-tight">{p.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          );
+        }
+
+        // One allowed map and nothing chosen yet: go straight in.
+        if (!choice && allowedMaps.length === 1 && mapChosen !== allowedMaps[0].id) {
+          setTimeout(() => pick(allowedMaps[0].id), 0);
+        }
+        const switching = choice && choice.id !== currentProjectId;
 
         return (
-          <div className="flex-1 overflow-auto bg-gray-100 pb-4">
-            {here.length === 0 ? (
-              <>
-                {/* No buildings HERE (the Job Board, or a workspace with no
-                    units yet) — the project bubbles still stand, so the
-                    diagrams are one tap away instead of nowhere. */}
-                {projectRow && (
-                  <div className="sticky top-0 z-20 bg-gray-100/95 backdrop-blur px-3 py-2
-                                  flex items-center gap-1.5 overflow-x-auto border-b border-gray-200">
-                    {projectRow}
-                  </div>
+          <div className="flex-1 min-h-0 flex flex-col bg-gray-100" data-portal-map>
+            {/* ONE bar: the project's name (press for the sheet) and the buildings. */}
+            <div className="flex items-center gap-2.5 px-3 py-2.5 bg-white border-b border-gray-200 flex-shrink-0" data-map-bar>
+              <button data-map-project-btn
+                onClick={() => setMapPickerOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-extrabold text-[13.5px] min-w-0 active:scale-[0.98]"
+                style={{ backgroundColor: '#eef4fa', color: '#1e3a5f' }}>
+                <span className="w-2 h-[18px] rounded-sm flex-shrink-0" style={{ backgroundColor: wsColor }} />
+                <span className="truncate">{projectName}</span>
+                <ChevronDown size={14} className="flex-shrink-0" />
+              </button>
+              <div className="ms-auto flex rounded-xl p-[3px] flex-shrink-0" style={{ backgroundColor: '#eef2f6' }} data-map-buildings>
+                {!phonePortal && here.length > 1 && (
+                  <button data-map-building="all" onClick={() => setMapBuilding('all')}
+                    className="px-3 py-1.5 rounded-[9px] text-[13px] font-extrabold transition-all"
+                    style={shown === 'all' ? { backgroundColor: '#1e3a5f', color: '#fff' } : { color: '#475569' }}>
+                    {s.filterAll}
+                  </button>
                 )}
-                <div className="flex flex-col items-center justify-center py-20 text-center px-6">
-                  <MapPin size={32} className="text-gray-300 mb-3" />
-                  <p className="text-gray-500 text-sm">
-                    {projectRow
-                      ? (s.isRtl ? 'בחרו פרויקט למעלה כדי לראות את הבניינים שלו'
-                        : lang === 'ru' ? 'Выберите проект выше, чтобы увидеть его здания'
-                        : 'Pick a project above to see its buildings')
-                      : s.noApartmentsAssigned}
-                  </p>
-                </div>
-              </>
-            ) : (
+                {here.map(b => (
+                  <button key={b} data-map-building={b} onClick={() => setMapBuilding(b)}
+                    className="px-3 py-1.5 rounded-[9px] text-[13px] font-extrabold transition-all"
+                    style={shown === b
+                      ? { backgroundColor: '#1e3a5f', color: '#fff', boxShadow: '0 2px 6px rgba(30,58,95,.35)' }
+                      : { color: '#475569' }}>
+                    {b}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* The project sheet — the two (or more) maps, the current ticked. */}
+            {mapPickerOpen && (
               <>
-                {/* WHICH project this diagram is — said out loud, per the
-                    owner: a worker allowed on two sites must never have to
-                    guess whose building he is looking at. The building's own
-                    name follows in the pill row below. */}
-                <div className="px-4 pt-2.5 pb-0.5 flex items-baseline gap-1.5" data-map-project>
-                  <span className="text-[14px] font-black text-[#1e3a5f]">{projectName}</span>
-                  <span className="text-[11px] text-gray-400">
-                    {shown === 'all'
-                      ? (s.isRtl ? 'כל הבניינים' : lang === 'ru' ? 'Все здания' : 'All buildings')
-                      : <>{s.isRtl ? 'בניין' : lang === 'ru' ? 'Здание' : 'Building'} {shown}</>}
-                  </span>
-                </div>
-                <div className="sticky top-0 z-20 bg-gray-100/95 backdrop-blur px-3 py-2
-                                flex items-center gap-1.5 overflow-x-auto border-b border-gray-200">
-                  {projectRow}
-                  {filterOptions.map(({ key, label, color }) => (
-                    <button key={key} onClick={() => setMapFilter(key)}
-                      className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
-                      style={mapFilter === key
-                        ? { backgroundColor: color, color: '#fff' }
-                        : { backgroundColor: '#fff', color: '#64748b', border: '1px solid #e2e8f0' }}>
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <div className="px-3 py-2 flex gap-1.5 overflow-x-auto" data-map-buildings>
-                  {/* "All" draws every building of the project side by side —
-                      the desktop's own view; one building at a time stays
-                      the default because a phone is one building wide. */}
-                  {here.length > 1 && (
-                    <button data-map-building="all" onClick={() => setMapBuilding('all')}
-                      className="flex-shrink-0 px-3.5 py-1.5 rounded-full text-sm font-bold transition-all"
-                      style={shown === 'all'
-                        ? { backgroundColor: '#1e3a5f', color: '#fff' }
-                        : { backgroundColor: '#fff', color: '#475569', border: '1px solid #e2e8f0' }}>
-                      {s.filterAll}
-                    </button>
-                  )}
-                  {here.map(b => {
-                    const mine = apartments.filter(a => a.buildingId === b && assignedAptIds.has(a.id)).length;
-                    const on = b === shown;
+                <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setMapPickerOpen(false)} />
+                <div data-map-project-sheet
+                  className="fixed bottom-0 left-0 right-0 z-50 rounded-t-3xl bg-white shadow-2xl px-4 pt-3 pb-6">
+                  <div className="w-10 h-1.5 rounded-full bg-gray-200 mx-auto mb-3" />
+                  <div className="text-[11px] font-extrabold tracking-wider text-gray-400 mb-2">
+                    {(s.buildingMap || 'Building map').toUpperCase()}
+                  </div>
+                  {allowedMaps.map(p => {
+                    const on = p.id === currentProjectId;
+                    const n = openHere(p.id);
                     return (
-                      <button key={b} data-map-building={b} onClick={() => setMapBuilding(b)}
-                        className="flex-shrink-0 px-3.5 py-1.5 rounded-full text-sm font-bold transition-all"
+                      <button key={p.id} data-map-project-pick={p.id}
+                        onClick={() => pick(p.id)}
+                        className="w-full flex items-center gap-3 px-3 py-3 rounded-2xl border mb-2 text-left rtl:text-right font-extrabold text-[15px]"
                         style={on
-                          ? { backgroundColor: '#1e3a5f', color: '#fff' }
-                          : { backgroundColor: '#fff', color: '#475569', border: '1px solid #e2e8f0' }}>
-                        {b}
-                        {mine > 0 && (
-                          <span className="ml-1.5 px-1.5 rounded-full text-[10px] tabular-nums"
-                            style={on
-                              ? { backgroundColor: 'rgba(255,255,255,.2)' }
-                              : { backgroundColor: '#fde68a', color: '#92400e' }}>{mine}</span>
-                        )}
+                          ? { backgroundColor: '#eef4fa', borderColor: '#4aa8d8', color: '#1e3a5f' }
+                          : { borderColor: '#e2e8f0', color: '#1e3a5f' }}>
+                        <span className="w-2.5 h-7 rounded-sm" style={{ backgroundColor: wsColorOf(p.id) }} />
+                        <span className="flex-1">{p.name}</span>
+                        {n > 0 && <span className="text-[11px] font-semibold text-gray-400">{n} {n !== 1 ? s.taskPlural : s.taskSingular}</span>}
+                        {on && <span style={{ color: '#4aa8d8' }}>✓</span>}
                       </button>
                     );
                   })}
-                  <span className="flex-1" />
-                  <span className="text-xs text-gray-400 self-center flex-shrink-0 pr-1">
-                    {filteredAptIds.size} {s.isRtl ? 'דירות' : 'yours'}
-                  </span>
                 </div>
-                <p className="px-4 pt-2 pb-1 text-xs text-gray-400">{s.mapHint}</p>
-                <BuildingDiagram
-                  apartments={visible}
-                  stages={stages}
-                  activeStageIds={[]}
-                  classFilter="all"
-                  searchQuery=""
-                  selectedBuilding={shown as never}
-                  onApartmentClick={handleDiagramClick}
-                  showShinuiBadge={false}
-                  highlightedApartmentIds={filteredAptIds}
-                  aptSubLabels={aptSubLabels}
-                  /* On a phone, the ADMIN'S phone diagram — taller rows,
-                     bigger type, wrapped stage names — the same drawing the
-                     office holds, per the owner. Desktop keeps compact. */
-                  compact={!phonePortal}
-                  phone={phonePortal}
-                />
               </>
+            )}
+
+            {switching ? (
+              <div className="flex-1 flex items-center justify-center text-sm text-gray-400">…</div>
+            ) : here.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center py-20 text-center px-6">
+                <MapPin size={32} className="text-gray-300 mb-3" />
+                <p className="text-gray-500 text-sm">{s.noApartmentsAssigned}</p>
+              </div>
+            ) : (
+              /* The scroller: no bars anywhere inside it, and a fade pinned to
+                 its bottom edge so the last floors dissolve into the page. */
+              <div className="flex-1 min-h-0 overflow-auto bars-off relative" data-map-scroller>
+                <div className="relative px-2.5 pt-7 pb-8" data-building-outline>
+                  {/* The building: a parapet, a roof box over the stairwell,
+                      walls down both sides, a doorway at the ground — the
+                      same silhouette around every diagram. Navy at a quarter
+                      strength, so it frames the grid without competing. */}
+                  <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                    <path d="M2 5 H40 V1 H60 V5 H98 V100 H2 Z" fill="#fff" stroke="#1e3a5f" strokeOpacity=".28" strokeWidth="2" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+                    <path d="M45 100 V95 H55 V100" fill="#f3f4f6" stroke="#1e3a5f" strokeOpacity=".28" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+                  </svg>
+                  <div className="relative">
+                    <BuildingDiagram
+                      apartments={visible}
+                      stages={stages}
+                      activeStageIds={[]}
+                      classFilter="all"
+                      searchQuery=""
+                      selectedBuilding={shown as never}
+                      onApartmentClick={handleDiagramClick}
+                      showShinuiBadge={false}
+                      highlightedApartmentIds={assignedAptIds}
+                      aptSubLabels={aptSubLabels}
+                      compact={!phonePortal}
+                      phone={phonePortal}
+                    />
+                  </div>
+                </div>
+                <div className="sticky bottom-0 h-20 pointer-events-none -mt-20" data-map-fade
+                  style={{ background: 'linear-gradient(to bottom, rgba(243,244,246,0), #f3f4f6 85%)' }} />
+              </div>
             )}
           </div>
         );
@@ -2095,6 +2102,95 @@ export function ContractorPortal() {
         const isOverdue = a.dueDate && !a.completedAt && isPast(parseISO(a.dueDate));
         const dueBadge = getDueBadge(effectiveDue(a), dueWords);
         const plansPdfFileId = apt?.plansPdfLink ? extractFileId(apt.plansPdfLink) : null;
+        const composerNode = (
+          <div data-composer-block>
+{noteAttachments.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {noteAttachments.map((att, idx) => (
+                        att.mimeType.startsWith('audio/') ? (
+                          // Check it before you send it — the whole point of a
+                          // preview is hearing what you just recorded.
+                          <div key={idx} className="flex items-center gap-1">
+                            <VoiceMemoPlayer src={att.driveUrl || att.dataUrl || ''} className="max-w-[220px]" />
+                            <button
+                              onClick={() => setNoteAttachments(prev => prev.filter((_, i) => i !== idx))}
+                              className="w-6 h-6 flex items-center justify-center rounded-full text-gray-400 hover:text-red-500"
+                            ><X size={12} /></button>
+                          </div>
+                        ) : att.mimeType.startsWith('image/') && att.dataUrl ? (
+                          <div key={idx} className="relative inline-block">
+                            <img
+                              src={att.dataUrl}
+                              alt={att.filename}
+                              className="max-h-28 rounded-xl object-cover border border-gray-200"
+                            />
+                            <button
+                              onClick={() => setNoteAttachments(prev => prev.filter((_, i) => i !== idx))}
+                              className="absolute top-1 right-1 w-5 h-5 flex items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70"
+                            ><X size={11} /></button>
+                          </div>
+                        ) : (
+                          <div key={idx} className="flex items-center gap-2 px-2 py-1.5 bg-blue-50 rounded-lg border border-blue-100 text-xs text-blue-700">
+                            <Paperclip size={11} />
+                            <span className="flex-1 truncate max-w-[140px]">{att.filename}</span>
+                            <button onClick={() => setNoteAttachments(prev => prev.filter((_, i) => i !== idx))} className="text-blue-400 hover:text-blue-600"><X size={12} /></button>
+                          </div>
+                        )
+                      ))}
+                    </div>
+                  )}
+
+                  {/* The composer — WhatsApp's way (owner, 2026-09-03): the
+                      paperclip at the start, the box saying "Your message"
+                      with the DICTATION mic inside it at the left (words land
+                      in the box, in his language), and the big navy mic at
+                      the end that records a memo — which becomes the Send
+                      arrow the moment there is something to send. */}
+                  <div className="flex gap-2 items-center mt-2" data-composer>
+                    <button
+                      data-composer-clip
+                      onClick={() => noteAttachRef.current?.click()}
+                      className="w-9 h-9 flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 hover:text-[#1e3a5f] flex-shrink-0"
+                      title="Attach file"
+                    >
+                      <Paperclip size={15} />
+                    </button>
+                    <div className="flex-1 min-w-0 flex items-center gap-1 bg-white border rounded-full ps-1.5 pe-3.5"
+                      style={{ borderColor: dictate.listening ? '#4aa8d8' : '#dbe3ec', minHeight: 42 }}>
+                      {dictate.supported && (
+                        <button
+                          type="button"
+                          data-composer-dictate
+                          onClick={dictate.toggle}
+                          title={s.isRtl ? 'הקלדה קולית' : lang === 'ru' ? 'Голосовой ввод' : 'Dictate'}
+                          className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                            dictate.listening ? 'text-white animate-pulse' : 'text-[#1e3a5f]'}`}
+                          style={{ backgroundColor: dictate.listening ? '#dc2626' : '#eef4fa' }}
+                        >
+                          <Mic size={15} />
+                        </button>
+                      )}
+                      <input
+                        data-composer-input
+                        value={noteText}
+                        onChange={e => setNoteText(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSendNote()}
+                        placeholder={s.yourMessage || (s.isRtl ? 'ההודעה שלך' : 'Your message')}
+                        className="flex-1 min-w-0 bg-transparent py-2 text-sm focus:outline-none"
+                      />
+                    </div>
+                    {(noteText.trim() || noteAttachments.length > 0) ? (
+                      <button data-composer-send onClick={handleSendNote}
+                        className="w-11 h-11 flex items-center justify-center rounded-full text-white transition-all active:scale-95 flex-shrink-0"
+                        style={{ backgroundColor: '#4aa8d8', boxShadow: '0 6px 14px -6px rgba(74,168,216,.7)' }}>
+                        <Send size={18} />
+                      </button>
+                    ) : (
+                      <VoiceRecorderButton big onRecorded={handleNoteVoiceMemo} title={s.addNote} />
+                    )}
+                  </div>
+          </div>
+        );
 
         return (
           <>
@@ -2110,10 +2206,10 @@ export function ContractorPortal() {
                   <div>
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <Building2 size={16} className="text-[#4aa8d8]" />
-                      <span className="font-bold text-[#1e3a5f] text-lg">
-                        Apt {aptLabel(apt)}
+                      <span className="font-bold text-[#1e3a5f] text-lg" data-sheet-where>
+                        {whereLabel(a, apt, currentWsName)}
                       </span>
-                      <span className="text-gray-400 text-sm">{a.buildingId}</span>
+                      {!a.general && <span className="text-gray-400 text-sm">{a.buildingId}</span>}
                     </div>
                     {stage && (
                       <div className="flex items-center gap-2">
@@ -2176,6 +2272,11 @@ export function ContractorPortal() {
                   <p className="text-gray-800 text-sm leading-relaxed" data-task-text>
                     <Translated text={a.taskDescription} to={readLang} />
                   </p>
+                  {a.general && (a.visits?.length ?? 0) > 0 && (
+                    <p className="text-xs mt-1.5 font-semibold" style={{ color: '#8a6508' }} data-sheet-visits>
+                      {s.visitsLabel || 'Visited'}: {a.visits!.map(v => aptLabel(getApt(v.apartmentId))).join(', ')}
+                    </p>
+                  )}
                   {/* No box (decision 6): a red dot and the word — the same
                       treatment for every priority so they stay consistent. */}
                   {a.priority && a.priority !== 'normal' && (
@@ -2358,7 +2459,7 @@ export function ContractorPortal() {
                     and on the closing screen). */}
                 <div>
                   <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                    <MessageSquare size={12} /> {s.thisTaskLabel || (s.isRtl ? 'המשימה הזאת' : 'This task')}
+                    <MessageSquare size={12} /> {s.taskMessagesLabel || (s.isRtl ? 'הודעות המשימה' : 'Task messages')}
                   </h3>
                   <TaskThread
                     assignment={a}
@@ -2371,7 +2472,9 @@ export function ContractorPortal() {
                       tapToOpen: s.tapToOpenLabel || (s.isRtl ? 'הקישו לפתיחה' : 'tap to open'),
                       jobClosed: s.jobClosedLabel || (s.isRtl ? 'העבודה נסגרה' : 'Job closed'),
                       download: s.download,
+                      said: s.saidLabel || 'Said',
                     }}
+                    footer={composerNode}
                   />
 
                   {/* The hidden pickers stay mounted at sheet level — the
@@ -2383,68 +2486,6 @@ export function ContractorPortal() {
                   <input ref={noteAttachRef} type="file"
                     accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip"
                     multiple className="hidden" onChange={handleNoteAttachmentPick} />
-
-                  {noteAttachments.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {noteAttachments.map((att, idx) => (
-                        att.mimeType.startsWith('audio/') ? (
-                          // Check it before you send it — the whole point of a
-                          // preview is hearing what you just recorded.
-                          <div key={idx} className="flex items-center gap-1">
-                            <VoiceMemoPlayer src={att.driveUrl || att.dataUrl || ''} className="max-w-[220px]" />
-                            <button
-                              onClick={() => setNoteAttachments(prev => prev.filter((_, i) => i !== idx))}
-                              className="w-6 h-6 flex items-center justify-center rounded-full text-gray-400 hover:text-red-500"
-                            ><X size={12} /></button>
-                          </div>
-                        ) : att.mimeType.startsWith('image/') && att.dataUrl ? (
-                          <div key={idx} className="relative inline-block">
-                            <img
-                              src={att.dataUrl}
-                              alt={att.filename}
-                              className="max-h-28 rounded-xl object-cover border border-gray-200"
-                            />
-                            <button
-                              onClick={() => setNoteAttachments(prev => prev.filter((_, i) => i !== idx))}
-                              className="absolute top-1 right-1 w-5 h-5 flex items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70"
-                            ><X size={11} /></button>
-                          </div>
-                        ) : (
-                          <div key={idx} className="flex items-center gap-2 px-2 py-1.5 bg-blue-50 rounded-lg border border-blue-100 text-xs text-blue-700">
-                            <Paperclip size={11} />
-                            <span className="flex-1 truncate max-w-[140px]">{att.filename}</span>
-                            <button onClick={() => setNoteAttachments(prev => prev.filter((_, i) => i !== idx))} className="text-blue-400 hover:text-blue-600"><X size={12} /></button>
-                          </div>
-                        )
-                      ))}
-                    </div>
-                  )}
-                  {/* The composer — both sides keep writing, before the close
-                      and after it (decision 10 keeps the conversation open). */}
-                  <div className="flex gap-2 items-end mt-3">
-                    <button
-                      onClick={() => noteAttachRef.current?.click()}
-                      className="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 text-gray-400 hover:text-[#1e3a5f] hover:border-[#1e3a5f] transition-all flex-shrink-0"
-                      title="Attach file"
-                    >
-                      <Paperclip size={15} />
-                    </button>
-                    {/* Talking is faster than typing on a site, in gloves, in
-                        whichever language the worker actually thinks in. */}
-                    <VoiceRecorderButton onRecorded={handleNoteVoiceMemo} title={s.addNote} />
-                    <input
-                      value={noteText}
-                      onChange={e => setNoteText(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSendNote()}
-                      placeholder={s.addNote}
-                      className="flex-1 min-w-0 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
-                    />
-                    <button onClick={handleSendNote} disabled={!noteText.trim() && noteAttachments.length === 0}
-                      className="w-10 h-10 flex items-center justify-center rounded-xl text-white disabled:opacity-40 transition-all active:scale-95 flex-shrink-0"
-                      style={{ backgroundColor: '#1e3a5f' }}>
-                      <Send size={16} />
-                    </button>
-                  </div>
                 </div>
               </div>
 
@@ -2688,10 +2729,31 @@ export function ContractorPortal() {
       {workHere && (() => {
         const apt = apartments.find(a => a.id === workHere.aptId);
         if (!apt) return null;
-        const wsStages = stages
+        const allWsStages = stages
           .filter(st => (currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId) && st.active)
           .sort((a, b) => a.order - b.order);
+        /**
+         * Only the stages HE may report (owner, 2026-09-03): the office's list
+         * per worker, else every stage but the first and the last — "Ready
+         * to start" is a place a job waits, not work anybody did.
+         */
+        const allowedReport = workerNow?.reportStages?.[currentProjectId]
+          ?? allWsStages.slice(1, Math.max(1, allWsStages.length - 1)).map(st => st.id);
+        const wsStages = allWsStages.filter(st => allowedReport.includes(st.id));
         const pickedStage = wsStages.find(st => st.id === workHere.stageId);
+        /** His open general jobs here — the "is this part of…?" question. */
+        const generalJobs = assignments.filter(x => x.general && !x.completedAt);
+        const stageOrder = (id: string | null | undefined) => allWsStages.find(st => st.id === id)?.order ?? -1;
+        /** File the report under the general job he named. */
+        const recordVisit = (rid: string, st: typeof allWsStages[0]) => {
+          const gid = workHere.partOf;
+          if (!gid) return;
+          const g = useStore.getState().contractorAssignments.find(x => x.id === gid);
+          if (!g) return;
+          updateContractorAssignment(gid, {
+            visits: [...(g.visits ?? []), { apartmentId: apt.id, at: new Date().toISOString(), stageId: st.id, reportTaskId: rid }],
+          });
+        };
         const aptTasks = assignments.filter(a => a.apartmentId === apt.id);
         const curStage = getStage(apt.currentStageId);
         const todayIso = new Date().toISOString().slice(0, 10);
@@ -2718,6 +2780,7 @@ export function ContractorPortal() {
             ...reportBase(pickedStage,
               `${getStageName(pickedStage, !!s.isRtl)} — ${s.isRtl ? 'דיווח שלב' : 'stage report'}`),
           } as never);
+          recordVisit(rid, pickedStage);
           const rec = useStore.getState().contractorAssignments.find(a => a.id === rid);
           closeSheet();
           if (rec) { arriveClosingRef.current = true; setSelectedAssignment(rec); }
@@ -2739,8 +2802,15 @@ export function ContractorPortal() {
             authorId: contractorId,
             authorName: contractor?.name ?? '',
           });
+          recordVisit(rid, pickedStage);
+          /* "Not yet" marks the stage half done AND moves the apartment to it
+             when it is further along than where it stood (owner's rule) —
+             never backwards. */
           updateApartment(apt.id,
-            { stageMarks: { ...(apt.stageMarks ?? {}), [pickedStage.id]: 'pending' } },
+            {
+              stageMarks: { ...(apt.stageMarks ?? {}), [pickedStage.id]: 'pending' },
+              ...(stageOrder(pickedStage.id) > stageOrder(apt.currentStageId) ? { currentStageId: pickedStage.id } : {}),
+            },
             {
               id: contractorId, name: contractor?.name ?? 'Worker', code: '',
               role: 'viewer', active: true, createdAt: new Date().toISOString(),
@@ -2790,13 +2860,38 @@ export function ContractorPortal() {
                       </div>
                     )}
                     <button data-work-here
-                      onClick={() => setWorkHere({ ...workHere, step: 'stage' })}
+                      onClick={() => setWorkHere({ ...workHere, step: generalJobs.length ? 'part' : 'stage' })}
                       className="w-full py-4 rounded-xl text-base font-bold text-white flex items-center justify-center gap-2 active:scale-[0.98]"
                       style={{ background: 'linear-gradient(135deg, #1e3a5f, #2c4f78)' }}>
                       <Hammer size={19} />
                       {s.workHereBtn || (s.isRtl ? 'עבדתי כאן' : 'I did work here')}
                     </button>
                   </>
+                )}
+                {workHere.step === 'part' && (
+                  <div data-work-part className="space-y-2">
+                    <p className="text-center font-extrabold text-gray-800" style={{ fontSize: 17 }}>
+                      {s.isPartOfLabel || 'Is this part of:'}
+                    </p>
+                    {generalJobs.map((g, i) => (
+                      <button key={g.id} data-work-part-yes={g.id}
+                        onClick={() => setWorkHere({ ...workHere, step: 'stage', partOf: g.id })}
+                        className="w-full text-left rtl:text-right rounded-xl px-3.5 py-3 border"
+                        style={i === 0
+                          ? { backgroundColor: '#fffdf5', borderColor: '#b8860b' }
+                          : { borderColor: '#e5e7eb' }}>
+                        <span className="block text-sm font-bold text-gray-800">{g.taskDescription}</span>
+                        <span className="block text-[11px] font-semibold" style={{ color: '#8a6508' }}>
+                          {s.partYes || 'Yes, part of it'}
+                        </span>
+                      </button>
+                    ))}
+                    <button data-work-part-no
+                      onClick={() => setWorkHere({ ...workHere, step: 'stage', partOf: null })}
+                      className="w-full py-3 rounded-xl font-bold text-sm text-gray-600 border border-gray-200">
+                      {s.partNo || 'No, separate work'}
+                    </button>
+                  </div>
                 )}
                 {workHere.step === 'stage' && (
                   <>

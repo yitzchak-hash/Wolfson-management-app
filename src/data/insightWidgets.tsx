@@ -45,7 +45,8 @@ const liveJobs = (c: WidgetCtx) => c.jobs.filter(isCountableApartment);
  */
 function liveAssignments(c: WidgetCtx): ContractorAssignment[] {
   const ok = new Set(liveJobs(c).map(j => j.id));
-  return c.assignments.filter(a => ok.has(a.apartmentId));
+  // A general job has no apartment and counts under its workspace.
+  return c.assignments.filter(a => ok.has(a.apartmentId) || !!a.general);
 }
 
 /** An empty list should say what it means, not sit blank looking broken. */

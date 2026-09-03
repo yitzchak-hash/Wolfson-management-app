@@ -372,8 +372,12 @@ export function PlanPinOverlay({
                   src={p.audioUrl}
                   seconds={p.audioSeconds}
                   className="mt-1.5"
+                  transcript={p.audioTranscript}
+                  onTranscript={t => { if (!p.audioTranscript) updatePlanPin(p.id, { audioTranscript: t }); }}
+                  lang={cs.isRtl ? 'he' : 'en'}
+                  saidLabel={cs.isRtl ? 'נאמר' : 'Said'}
                   onDelete={readOnly ? undefined
-                    : () => updatePlanPin(p.id, { audioUrl: undefined, audioSeconds: undefined })}
+                    : () => updatePlanPin(p.id, { audioUrl: undefined, audioSeconds: undefined, audioTranscript: undefined })}
                 />
               )}
 

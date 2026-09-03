@@ -786,6 +786,11 @@ function CopyButton({ text }: { text: string }) {
 function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
   const { contractors, addContractor, updateContractor, deleteContractor, mainUiStrings: s } = useStore();
   const workerLevels = useStore(st => st.workerLevels);
+  const projects = useStore(st => st.projects);
+  const stages = useStore(st => st.stages);
+  const currentProjectId = useStore(st => st.currentProjectId);
+  /** Which worker's "maps" / "stages" panel is open — one at a time. */
+  const [reachOpen, setReachOpen] = useState<{ id: string; what: 'maps' | 'stages' } | null>(null);
   const [openPerms, setOpenPerms] = useState<string | null>(null);
   /**
    * A new worker starts on a level, and WHICH level is remembered.
@@ -964,6 +969,79 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
                         {on ? 'building diagrams' : 'own units only'}
                       </button>
                     </Tooltip>
+                  );
+                })()}
+                {/* WHICH building maps he may open, and WHICH stages he may
+                    report "I did work here" on (owner, 2026-09-03). Both live
+                    on the worker; absent = every map with buildings, every
+                    stage but the first and the last. */}
+                {(() => {
+                  const buildingProjects = projects.filter(p => p.id !== 'general');
+                  const mapsOn = c.mapProjects ?? buildingProjects.map(p => p.id);
+                  const wsStages = stages
+                    .filter(st => (currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId) && st.active)
+                    .sort((a, b) => a.order - b.order);
+                  const defaultReport = wsStages.slice(1, Math.max(1, wsStages.length - 1)).map(st => st.id);
+                  const reportOn = c.reportStages?.[currentProjectId] ?? defaultReport;
+                  const wsName = projects.find(p => p.id === currentProjectId)?.name ?? currentProjectId;
+                  const open = reachOpen?.id === c.id ? reachOpen.what : null;
+                  const toggleMap = (pid: string) => {
+                    const next = mapsOn.includes(pid) ? mapsOn.filter(x => x !== pid) : [...mapsOn, pid];
+                    const all = buildingProjects.every(p => next.includes(p.id));
+                    updateContractor(c.id, { mapProjects: all ? undefined : next });
+                  };
+                  const toggleStage = (sid: string) => {
+                    const next = reportOn.includes(sid) ? reportOn.filter(x => x !== sid) : [...reportOn, sid];
+                    const same = next.length === defaultReport.length && defaultReport.every(x => next.includes(x));
+                    const rs = { ...(c.reportStages ?? {}) };
+                    if (same) delete rs[currentProjectId]; else rs[currentProjectId] = next;
+                    updateContractor(c.id, { reportStages: Object.keys(rs).length ? rs : undefined });
+                  };
+                  return (
+                    <span className="relative inline-flex gap-1">
+                      <Tooltip text="Which building maps this worker may open in his portal">
+                        <button data-worker-maps
+                          onClick={() => setReachOpen(open === 'maps' ? null : { id: c.id, what: 'maps' })}
+                          className={`text-[11px] font-semibold px-2 py-1 rounded-lg border ${
+                            c.mapProjects ? 'border-sky-200 bg-sky-50 text-sky-700' : 'border-gray-200 text-gray-500'}`}>
+                          maps: {c.mapProjects ? mapsOn.map(id => projects.find(p => p.id === id)?.name ?? id).join(', ') || 'none' : 'all'}
+                        </button>
+                      </Tooltip>
+                      <Tooltip text={`The stages he can answer "What did you do?" with, in ${wsName}`}>
+                        <button data-worker-stages
+                          onClick={() => setReachOpen(open === 'stages' ? null : { id: c.id, what: 'stages' })}
+                          className={`text-[11px] font-semibold px-2 py-1 rounded-lg border ${
+                            c.reportStages?.[currentProjectId] ? 'border-sky-200 bg-sky-50 text-sky-700' : 'border-gray-200 text-gray-500'}`}>
+                          reports: {reportOn.length} of {wsStages.length} stages
+                        </button>
+                      </Tooltip>
+                      {open && (
+                        <div data-worker-reach className="absolute top-full mt-1 start-0 z-30 bg-white rounded-xl shadow-xl border border-gray-200 p-2 w-64">
+                          <div className="text-[10px] font-bold text-gray-400 px-1.5 pb-1">
+                            {open === 'maps' ? 'Building maps he may open' : `Stages he can report · ${wsName}`}
+                          </div>
+                          {open === 'maps'
+                            ? buildingProjects.map(p => (
+                              <label key={p.id} className="flex items-center gap-2 px-1.5 py-1 text-xs text-gray-700">
+                                <input type="checkbox" checked={mapsOn.includes(p.id)} onChange={() => toggleMap(p.id)} className="accent-[#1e3a5f]" />
+                                {p.name}
+                              </label>
+                            ))
+                            : wsStages.map(st => (
+                              <label key={st.id} className="flex items-center gap-2 px-1.5 py-1 text-xs text-gray-700">
+                                <input type="checkbox" checked={reportOn.includes(st.id)} onChange={() => toggleStage(st.id)} className="accent-[#1e3a5f]" />
+                                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: st.color }} />
+                                {getStageName(st, !!s.isRtl)}
+                              </label>
+                            ))}
+                          {open === 'stages' && (
+                            <p className="text-[10px] text-gray-400 px-1.5 pt-1">
+                              Per workspace — switch workspace to set another's stages.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </span>
                   );
                 })()}
                 {/* What his portal BELL shows. Some workers are not techy and

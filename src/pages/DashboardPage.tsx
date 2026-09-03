@@ -77,7 +77,8 @@ export function DashboardPage() {
    */
   const liveAssignments = useMemo(() => {
     const live = new Set(apartments.filter(isCountableApartment).map(a => a.id));
-    return contractorAssignments.filter(a => live.has(a.apartmentId));
+    // A general job has no apartment and counts under its workspace.
+    return contractorAssignments.filter(a => live.has(a.apartmentId) || !!a.general);
   }, [apartments, contractorAssignments]);
 
 

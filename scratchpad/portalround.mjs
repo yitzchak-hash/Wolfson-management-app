@@ -72,13 +72,19 @@ await page.waitForTimeout(600);
 check(await page.locator('[data-cal-mode="week"]').count() === 1
   && await page.locator('[data-cal-mode="month"]').count() === 1,
   'two big bubbles: Weekly and Monthly');
-check(await page.locator('[data-cal-week]').count() === 1, 'Weekly is the one it opens on');
+// OWNER REVERSAL (2026-09-03): MONTHLY opens first, filling the phone;
+// Weekly is the second bubble.
+check(await page.locator('[data-cal-week]').count() === 0 && await page.locator('[data-calendar-fill]').count() === 1,
+  'Monthly is the one it opens on, filling the phone');
+await page.locator('[data-cal-mode="week"]').click();
+await page.waitForTimeout(400);
+check(await page.locator('[data-cal-week]').count() === 1, 'Weekly is one press away');
 const weekText = await page.locator('[data-cal-week]').innerText();
 check(weekText.includes('Hang the unit'), 'the task sits on its day in the week list');
 await page.locator('[data-cal-mode="month"]').click();
 await page.waitForTimeout(400);
 check(await page.locator('[data-cal-week]').count() === 0,
-  'Monthly switches to the month grid');
+  'Monthly switches back to the month grid');
 
 // ── 3 · the Close job flow ──────────────────────────────────────────────────
 await page.locator('button:has-text("My Tasks")').first().click();

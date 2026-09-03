@@ -7000,3 +7000,111 @@ the FAX line the reader refuses, so a hit proves the box reads what it
 covers). portalround, portalswitch, drawerround green. The SDK install
 PRUNED playwright and @pdf-lib/fontkit (the `--no-save` trap in reverse:
 `npm install <pkg>` prunes ad-hoc packages) — reinstall both `--no-save`.
+
+---
+
+# v2 — The Worker's Phone, built (the approved page, 2026-09-03)
+
+The spec is the "The Worker's Phone" artifact (`scratchpad/phone-plan.template.html`),
+approved with corrections and then "build it". Every part landed in one round:
+
+## The portal (`ContractorPortal.tsx`)
+- **Header**: a 3-column grid — the worker's name and count left, the logo
+  CENTRED at 32px (`data-portal-logo`), bell + gear right (`data-portal-gear`).
+  Print is gone from the phone; the gear's panel holds text size AND the
+  language row. The EN/עב header toggle is gone with it.
+- **The workspace chip row is GONE.** The list shows EVERY workspace's tasks:
+  the open one live, the rest from `loadAllProjectsTaskData()` snapshots
+  (`otherTasks`, re-read on `snapshotTick`); each card wears a workspace chip
+  in the workspace colour (`data-task-ws-chip`). `openTask(pid, a)` opens a
+  foreign task by switching workspace and parking the id in `pendingOpenTask`,
+  which an effect on `contractorAssignments` redeems the moment it lands.
+  `whereLabel()` is the one place a card/sheet says where a task is — "Apt 47"
+  or `workAtLabel(readLang, ws)` for a general job.
+- **Today is the opening filter and stays it** — the once-per-visit widening is
+  gone; an empty Today says so (`data-list-empty`) and offers
+  `data-show-all-days` with the count of open work everywhere.
+- **Calendar**: `calMode` opens on `'month'`; the tab is pinned to the viewport
+  (`calc(100dvh − 118px)`) and `TaskCalendar` takes `fill` — week rows share
+  the height, two tasks in full per day, the rest folded into `+N`
+  (`data-calendar-more`). Every workspace's tasks are plotted.
+- **The map**: `mapChosen` (per worker on this phone, `portal_map_<token>`)
+  → the CHOOSER (`data-map-chooser`, `data-map-square=<pid>`) when more than
+  one allowed map (`Contractor.mapProjects`, absent = every workspace with
+  buildings) and nothing chosen; ONE allowed map goes straight in. Then one
+  bar (`data-map-bar`): the project's name button (`data-map-project-btn`,
+  opens `data-map-project-sheet` with `data-map-project-pick=<pid>`) and the
+  buildings as a segmented control (`data-map-building=<id>`; `all` only
+  when `!phonePortal`). Day filters, the hint line, "0 yours" are gone; every
+  assigned apartment is lit whatever its day; the scroller is `bars-off`
+  (index.css — scrollbars off for a whole subtree) with the diagram inside a
+  building-outline SVG (`data-building-outline`) and a sticky bottom fade
+  (`data-map-fade`).
+- **Task messages**: the heading is `taskMessagesLabel`; `TaskThread` takes
+  `footer` and draws it INSIDE its grey panel (`data-thread-composer`) — the
+  attachment previews and the composer (`data-composer`): paperclip
+  (`data-composer-clip`), the box "Your message" with the DICTATION mic at
+  its left (`data-composer-dictate`, `useSpeechToText` in the worker's
+  language), and at the end either `VoiceRecorderButton big` (`data-big-mic`,
+  navy 44px) or Send (`data-composer-send`) once there is text or an
+  attachment. The office drawer got the same heading and footer.
+- **"I did work here"**: the stage list is filtered to
+  `Contractor.reportStages[projectId]` (absent = every active stage but the
+  first and the last); with an open GENERAL job of his in this workspace the
+  big button goes to a `part` step first (`data-work-part`,
+  `data-work-part-yes=<taskId>`, `data-work-part-no`); both Yes and Not-yet
+  file a visit on the general job (`recordVisit`); "Not yet" also moves the
+  apartment FORWARD to the reported stage when it is further along.
+- **Transcription at send**: `handleNoteVoiceMemo` calls `transcribeMemo` on
+  the uploaded memo (Drive view link → file id; local → data URL) and the
+  words ride the attachment into the note's `transcript`.
+
+## Transcription (`src/data/transcribe.ts` + the `transcribe` branch in `api/geocode.js`)
+Every voice memo comes with its words. The server branch (key-guarded like
+the translator; 501 without `OPENAI_API_KEY`; `TRANSCRIBE_MODEL` defaults to
+`gpt-4o-transcribe`) takes a Drive file id (read back with the service
+account, the drive-fetch idiom, capped 12 MB) or base64 bytes for a local
+memo, posts multipart to OpenAI, and caches per file id. The client caches
+per device (`transcript_cache`), stands down for the visit on 501/401, and
+`useTranscript(src, stored, onKnown)` is synchronous on a hit.
+`VoiceMemoPlayer` takes `transcript` / `onTranscript` / `lang` / `saidLabel`
+and draws the words under the pill (`data-memo-transcript`) through
+`Translated`, so a Russian memo reads in English at the office. Hosts that
+own a record keep the words: `ContractorNote.transcript`
+(`updateContractorNote`, TaskThread) and `PlanPin.audioTranscript`
+(PlanPinOverlay). Every other player transcribes lazily into the device cache.
+
+## General jobs
+`ContractorAssignment.general?: { projectId, buildingId? }` with
+`apartmentId: ''`, plus `visits?: GeneralVisit[]`. `workAtLabel(lang, ws)` in
+types. The Tasks page form has `data-general-job` (a checkbox; ticked, the
+apartment picker becomes `data-general-ws` + an optional `data-general-bld`
+for the open workspace); `addAssignmentToProject(pid, fields)` writes a job
+for ANOTHER workspace into that workspace's Firestore collection and local
+snapshot (bumping `snapshotTick`), and the open one through the ordinary
+action. Counting: every `liveAssignments` (widgets, insight, report model,
+Dashboard, Analytics) keeps `|| a.general`. The notebook's derived chip is
+named by the workspace alone ("Wolfson") and opens nothing (no unit);
+the Tasks page row says General job · workspace and lists the visits.
+
+## Per-worker settings (Settings → Workers)
+`data-worker-maps` / `data-worker-stages` open a small checkbox panel
+(`data-worker-reach`) writing `mapProjects` (undefined when all are ticked)
+and `reportStages[currentProjectId]` (undefined when equal to the default) —
+the override rule: back to the default REMOVES the override.
+
+## The stage-report rule in the store
+Closing a stage report marks the stage done AND moves `currentStageId`
+forward when the report's stage is ordered after the current one — never
+backwards (a report on a passed stage is a record).
+
+Probe: `scratchpad/round39-probe.mjs` (31 checks, three contexts).
+Re-encoded to the new contract: `portalround` (Monthly first),
+`portalswitch` (the merged, tagged list), `round38-probe` (chooser squares,
+`data-portal-gear`). `drawerround`, `multiday` and the four audits green.
+Its traps: a page-level `select` locator picks the FILTER's select before
+the form's — every form control carries a data hook now
+(`data-add-task`, `data-add-contractor`, `data-add-task-text`,
+`data-add-task-submit`); and the portal's `min-h-screen` root has no
+ceiling, so "fill the phone" had to be pinned to the viewport in the tab
+itself.

@@ -160,26 +160,28 @@ const stubRest = async ctx => {
     await page.locator('button:has-text("Карта здания")').first().click();
   });
   await page.waitForTimeout(800);
-  check(await page.locator('[data-map-project-pick="wolfson"]').count() === 1
-    && await page.locator('[data-map-project-pick="netiv"]').count() === 1,
+  // The approved phone (2026-09-03): from the Job Board the map opens on
+  // big project SQUARES — the chooser — with no switch-workspace permission.
+  check(await page.locator('[data-map-square="wolfson"]').count() === 1
+    && await page.locator('[data-map-square="netiv"]').count() === 1,
     'the building projects are offered on the Job Board, with no switch-workspace permission');
-  check((await page.locator('text=Выберите проект').count()) >= 1, 'and the empty map says to pick one');
-  await page.locator('[data-map-project-pick="wolfson"]').click();
+  check((await page.locator('text=Какая карта здания').count()) >= 1, 'and the chooser asks in Russian');
+  await page.locator('[data-map-square="wolfson"]').click();
   await page.waitForTimeout(2500);
   check(await page.locator('[data-map-building="A1"]').count() === 1 && await page.locator('[data-map-building="A2"]').count() === 1,
-    'picking Wolfson shows its buildings as pills');
-  check(await page.locator('[data-map-building="all"]').count() === 1, 'plus an All pill');
-  const label = await page.locator('[data-map-project]').innerText();
-  check(label.includes('Wolfson') && label.includes('A1'), 'the header names the project and the building', label.replace(/\n/g, ' '));
+    'picking Wolfson shows its buildings as segments');
+  check((await page.locator('[data-map-project-btn]').innerText()).includes('Wolfson'), 'the bar names the project');
   await page.locator('[data-map-building="A2"]').click();
   await page.waitForTimeout(400);
-  check((await page.locator('[data-map-project]').innerText()).includes('A2'), 'a building pill switches the building');
-  await page.locator('[data-map-building="all"]').click();
+  check(await page.locator('[data-map-building="A2"]').evaluate(el => getComputedStyle(el).color === 'rgb(255, 255, 255)'), 'a building segment switches the building');
+  await page.locator('[data-map-project-btn]').click();
+  await page.waitForTimeout(300);
+  check(await page.locator('[data-map-project-pick="netiv"]').count() === 1, 'the name opens the project sheet');
+  await page.locator('[data-map-project-pick="wolfson"]').click();
   await page.waitForTimeout(400);
-  check((await page.locator('[data-map-project]').innerText()).includes('Все здания'), 'All shows every building');
 
   // The gear: pick Hebrew, and the choice lands on the worker record.
-  await page.locator('button[title="Text size"], button[title="גודל טקסט"]').first().click().catch(() => {});
+  await page.locator('[data-portal-gear]').click();
   await page.waitForTimeout(300);
   check(await page.locator('[data-portal-lang="ru"]').count() === 1, 'the gear offers all three languages');
   await page.locator('[data-portal-lang="he"]').click();

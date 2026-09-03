@@ -8,6 +8,7 @@ import { fetchPlanBytes, driveThumbUrl } from '../../data/driveApi';
 import { saveBytes } from '../../data/planExport';
 import { Translated } from '../ui/Translated';
 import type { Lang } from '../../data/translate';
+import { useStore } from '../../data/store';
 
 /**
  * The task as a CONVERSATION — one drawing, used in the worker's portal and
@@ -37,6 +38,8 @@ export interface ThreadWords {
   jobClosed: string;
   /** "Download" — the lightbox's button. */
   download: string;
+  /** "Said" — over a memo's transcription. */
+  said?: string;
 }
 
 const ACCENT = '#4aa8d8';
@@ -112,7 +115,7 @@ function photoSrc(p: ContractorPhoto, px = 400): string | null {
   return p.storageUrl || (p.driveFileId ? driveThumbUrl(p.driveFileId, px) : null) || (p.dataUrl || null);
 }
 
-export function TaskThread({ assignment, notes, photos, viewer, readOnly = false, words, maxBubble, translateTo }: {
+export function TaskThread({ assignment, notes, photos, viewer, readOnly = false, words, maxBubble, translateTo, footer }: {
   assignment: ContractorAssignment;
   /**
    * The READER's language — every message written in another one is shown
@@ -120,6 +123,11 @@ export function TaskThread({ assignment, notes, photos, viewer, readOnly = false
    * translated.
    */
   translateTo?: Lang | null;
+  /**
+   * The composer, drawn INSIDE the grey panel under the messages (owner,
+   * 2026-09-03: the messages and the box you answer them from are one thing).
+   */
+  footer?: React.ReactNode;
   /** This assignment's notes, any order. */
   notes: ContractorNote[];
   /** This assignment's photos, any order. */
@@ -132,6 +140,7 @@ export function TaskThread({ assignment, notes, photos, viewer, readOnly = false
   maxBubble?: number;
 }) {
   const [lightbox, setLightbox] = useState<ContractorPhoto | null>(null);
+  const updateContractorNote = useStore(st => st.updateContractorNote);
   void viewer; void readOnly; // the thread is the same drawing for everyone,
   // and nothing in it can be edited or deleted from either side.
 
@@ -218,7 +227,15 @@ export function TaskThread({ assignment, notes, photos, viewer, readOnly = false
         if (n.attachmentMimeType?.startsWith('audio/')) {
           body.push(
             <div key="att" className="mb-1.5">
-              <VoiceMemoPlayer src={n.attachmentDriveUrl || n.attachmentDataUrl || ''} />
+              {/* A memo comes with its words — transcribed once, kept on the
+                  note, read in the reader's language. */}
+              <VoiceMemoPlayer
+                src={n.attachmentDriveUrl || n.attachmentDataUrl || ''}
+                transcript={n.transcript}
+                onTranscript={t => { if (!n.transcript) updateContractorNote(n.id, { transcript: t }); }}
+                lang={translateTo}
+                saidLabel={words.said ?? 'Said'}
+              />
             </div>,
           );
         } else if (n.attachmentMimeType?.startsWith('image/') && (n.attachmentDriveFileId || n.attachmentDataUrl)) {
@@ -287,9 +304,10 @@ export function TaskThread({ assignment, notes, photos, viewer, readOnly = false
       {before.map(bubble)}
       {marker}
       {after.map(bubble)}
-      {items.length === 0 && !closedAt && (
+      {items.length === 0 && !closedAt && !footer && (
         <div className="text-center py-2" style={{ fontSize: 12, color: '#93a2b1' }}>—</div>
       )}
+      {footer && <div data-thread-composer className="pt-1">{footer}</div>}
 
       {/* The lightbox — portalled to the body: the drawer's panel carries a
           transform, and a fixed child inside a transformed ancestor is

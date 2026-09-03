@@ -855,6 +855,8 @@ export interface PlanPin {
    */
   audioUrl?: string;
   audioSeconds?: number;
+  /** The memo's words, transcribed once and kept (the ContractorNote rule). */
+  audioTranscript?: string;
   /** Files attached to the pin — same URL-not-bytes rule as the memo. */
   files?: PinFile[];
 }
@@ -1017,6 +1019,18 @@ export interface Contractor {
    */
   lang?: PortalLang;
   /**
+   * Which building maps he may open (workspace ids). Absent = every workspace
+   * that has buildings. The "see the building diagrams" permission opens the
+   * door; this says which rooms (owner, 2026-09-03).
+   */
+  mapProjects?: string[];
+  /**
+   * The stages he may answer "What did you do?" with, per workspace. Absent =
+   * every active stage except the first and the last ("Ready to start" is a
+   * place a job waits, not work anybody did; "Job completed" is the office's).
+   */
+  reportStages?: Record<string, string[]>;
+  /**
    * How big the portal's text is for THIS worker, as a multiplier (1 = normal).
    * Synced like `lang`, and for the same reason: "I can't read the screen" is
    * fixed by the office over the phone, not by a site visit.
@@ -1148,6 +1162,36 @@ export interface ContractorAssignment {
    * 'pending' stage — the note of what is left hangs under it.
    */
   stageReport?: boolean;
+  /**
+   * A GENERAL JOB (owner, 2026-09-03): a task for a workspace — "Work at
+   * Wolfson" — rather than for one apartment; which apartments the worker
+   * ends up in is decided on site. `apartmentId` is '' on such a task and
+   * this names where the work is. Rides inside `contractorAssignments`, so
+   * persist / export / import / sync need no new key.
+   */
+  general?: { projectId: string; buildingId?: string };
+  /**
+   * The apartments actually visited under a general job — filled by the
+   * worker's "I did work here" when he says the report is part of this job.
+   * Each visit is ALSO an ordinary stage report on that apartment; this is
+   * the general job's own record of them.
+   */
+  visits?: GeneralVisit[];
+}
+
+/** One apartment visited under a general job. */
+export interface GeneralVisit {
+  apartmentId: string;
+  at: string;
+  stageId: string | null;
+  reportTaskId: string;
+}
+
+/** "Work at Wolfson", in the reader's language. */
+export function workAtLabel(lang: PortalLang | 'en' | 'he' | 'ru' | undefined, workspace: string): string {
+  if (lang === 'he') return `עבודה בבניינים של ${workspace}`;
+  if (lang === 'ru') return `Работа в ${workspace}`;
+  return `Work at ${workspace}`;
 }
 
 export interface ContractorNote {
@@ -1174,6 +1218,12 @@ export interface ContractorNote {
    * trio needs no new entry.
    */
   photoIds?: string[];
+  /**
+   * What the attached voice memo SAID — transcribed once (on the server,
+   * from the recording) and stored here so every device reads it without
+   * transcribing again; shown under the player, translated like any message.
+   */
+  transcript?: string;
 }
 
 export interface DataSummary {
@@ -1368,6 +1418,19 @@ export interface ContractorUiStrings {
   addPicturesRule?: string;
   thisTaskLabel?: string;
   tapToOpenLabel?: string;
+  /** The worker's-phone round (2026-09-03) — optional, same rule. */
+  taskMessagesLabel?: string;
+  yourMessage?: string;
+  whichMap?: string;
+  pickProjectHint?: string;
+  isPartOfLabel?: string;
+  partYes?: string;
+  partNo?: string;
+  visitsLabel?: string;
+  nothingToday?: string;
+  showAllDays?: string;
+  generalJobLabel?: string;
+  saidLabel?: string;
 }
 
 export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
@@ -1452,6 +1515,18 @@ export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   addPicturesRule: 'Add at least {n} pictures to close the job',
   thisTaskLabel: 'This task',
   tapToOpenLabel: 'tap to open',
+  taskMessagesLabel: 'Task messages',
+  yourMessage: 'Your message',
+  whichMap: 'Which building map?',
+  pickProjectHint: 'Pick the project you are standing in.',
+  isPartOfLabel: 'Is this part of:',
+  partYes: 'Yes, part of it',
+  partNo: 'No, separate work',
+  visitsLabel: 'Visited',
+  nothingToday: 'Nothing for today',
+  showAllDays: 'Show every day',
+  generalJobLabel: 'General job',
+  saidLabel: 'Said',
 };
 
 export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
@@ -1536,6 +1611,18 @@ export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   addPicturesRule: 'הוסיפו לפחות {n} תמונות כדי לסגור את העבודה',
   thisTaskLabel: 'המשימה הזאת',
   tapToOpenLabel: 'הקישו לפתיחה',
+  taskMessagesLabel: 'הודעות המשימה',
+  yourMessage: 'ההודעה שלך',
+  whichMap: 'איזו מפת בניין?',
+  pickProjectHint: 'בחרו את הפרויקט שאתם נמצאים בו.',
+  isPartOfLabel: 'זה חלק מ:',
+  partYes: 'כן, חלק מזה',
+  partNo: 'לא, עבודה נפרדת',
+  visitsLabel: 'ביקרו ב',
+  nothingToday: 'אין כלום להיום',
+  showAllDays: 'הצג את כל הימים',
+  generalJobLabel: 'עבודה כללית',
+  saidLabel: 'נאמר',
 };
 
 /**
@@ -1625,6 +1712,18 @@ export const RUSSIAN_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   addPicturesRule: 'Добавьте минимум {n} фото, чтобы закрыть работу',
   thisTaskLabel: 'Эта задача',
   tapToOpenLabel: 'нажмите, чтобы открыть',
+  taskMessagesLabel: 'Сообщения по задаче',
+  yourMessage: 'Ваше сообщение',
+  whichMap: 'Какая карта здания?',
+  pickProjectHint: 'Выберите проект, на котором вы находитесь.',
+  isPartOfLabel: 'Это часть:',
+  partYes: 'Да, часть этого',
+  partNo: 'Нет, отдельная работа',
+  visitsLabel: 'Посещено',
+  nothingToday: 'На сегодня ничего нет',
+  showAllDays: 'Показать все дни',
+  generalJobLabel: 'Общая работа',
+  saidLabel: 'Сказано',
 };
 
 // ─── Main Admin UI Strings ────────────────────────────────────────────────────
@@ -1730,6 +1829,12 @@ export interface MainUiStrings {
   threadTapToOpen: string;
   threadJobClosed: string;
   threadWriteToWorker: string;
+  /** "Task messages" — the heading over the thread (the worker's-phone round). */
+  threadTitle: string;
+  /** "General job" — the checkbox that makes a task belong to a workspace, not a unit. */
+  generalJob: string;
+  generalJobWhere: string;
+  visitedLabel: string;
   // Stage marks (done / pending bookkeeping in the stage picker)
   stagePendingLabel: string;
   stageMarkHint: string;
@@ -2320,6 +2425,10 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   threadTapToOpen: 'tap to open',
   threadJobClosed: 'Job closed',
   threadWriteToWorker: 'Write to the worker…',
+  threadTitle: 'Task messages',
+  generalJob: 'General job',
+  generalJobWhere: 'Which workspace',
+  visitedLabel: 'Visited',
   stagePendingLabel: 'half done',
   stageMarkHint: 'Tap a box to cross a stage off · right-click marks it half done',
   stagePendingListTitle: 'Half-done stages',
@@ -2906,6 +3015,10 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   stageBarLabel: 'שלבים · הקישו לסינון',
   threadTapToOpen: 'הקישו לפתיחה',
   threadJobClosed: 'העבודה נסגרה',
+  threadTitle: 'הודעות המשימה',
+  generalJob: 'עבודה כללית',
+  generalJobWhere: 'איזה פרויקט',
+  visitedLabel: 'ביקרו ב',
   threadWriteToWorker: 'כתבו לעובד…',
   stagePendingLabel: 'חצי גמור',
   stageMarkHint: 'לחיצה על התיבה מסמנת שלב כגמור · קליק ימני מסמן חצי גמור',

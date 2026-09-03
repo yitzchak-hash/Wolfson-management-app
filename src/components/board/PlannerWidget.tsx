@@ -926,6 +926,12 @@ export function PlannerWidget({
       if (!a.dueDate || !a.contractorId) return;
       if (!rows.has(a.contractorId) || linked.has(a.id)) return;
       const apt = apts.find(x => x.id === a.apartmentId);
+      // A GENERAL JOB has no apartment: its card is named by the WORKSPACE
+      // alone — "Wolfson", nothing about apartments (the owner's ruling).
+      const generalName = a.general
+        ? (projects.find(p => p.id === a.general!.projectId)?.name ?? a.general.projectId)
+          + (a.general.buildingId ? ` · ${a.general.buildingId}` : '')
+        : null;
       // A task that takes days shows itself on EVERY one of them — it carries
       // all its days now, and one chip on the last day was the old world.
       for (const day of daysOf(a).map(d => String(d).slice(0, 10))) {
@@ -934,7 +940,7 @@ export function PlannerWidget({
         list.push({
           id: a.id,
           desc: (a.taskDescription ?? '').trim(),
-          label: apt ? (aptLabel(apt) || apt.address?.trim() || 'Job') : 'Job',
+          label: generalName ?? (apt ? (aptLabel(apt) || apt.address?.trim() || 'Job') : 'Job'),
           jobId: a.apartmentId,
           projectId: pid, workspace: ws,
           done: !!a.completedAt,
@@ -1543,6 +1549,7 @@ export function PlannerWidget({
                               key={t.id}
                               data-no-drag data-el-action
                               onClick={() => {
+                                if (!t.jobId) return; // a general job — no unit to open
                                 if (t.projectId && t.projectId !== currentProjectId) {
                                   if (openUnit) { openUnit(t.projectId, t.jobId); return; }
                                   setCurrentProject(t.projectId);

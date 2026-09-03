@@ -539,6 +539,16 @@ interface AppState {
   updateContractorAssignment: (id: string, changes: Partial<ContractorAssignment>) => void;
   deleteContractorAssignment: (id: string) => void;
   addContractorNote: (n: Omit<ContractorNote, 'id' | 'createdAt'>) => void;
+  /** A field or two onto a note — the memo's transcript, once it is known. */
+  updateContractorNote: (id: string, changes: Partial<ContractorNote>) => void;
+  /**
+   * A task written into ANOTHER workspace's collection — a general job for
+   * Wolfson created while standing on the Job Board. The open workspace goes
+   * through addContractorAssignment as usual; any other is written to that
+   * workspace's Firestore collection and its local snapshot, so the worker's
+   * phone and the notebook (which read every snapshot) see it at once.
+   */
+  addAssignmentToProject: (projectId: string, fields: Omit<ContractorAssignment, 'id' | 'createdAt'>) => string;
   addContractorPhoto: (p: Omit<ContractorPhoto, 'id' | 'uploadedAt'>) => string;
   updateContractorPhoto: (id: string, changes: Partial<ContractorPhoto>) => void;
   deleteContractorPhoto: (id: string) => void;
@@ -2061,15 +2071,28 @@ export const useStore = create<AppState>((set, get) => ({
         && !before.completedAt && updated.completedAt
         && updated.stageReport && updated.stageId) {
       const apt = get().apartments.find(ap => ap.id === updated.apartmentId);
-      if (apt && apt.stageMarks?.[updated.stageId] !== 'done') {
+      if (apt) {
         const who = get().currentUser
           ?? {
             id: updated.contractorId,
             name: get().contractors.find(c => c.id === updated.contractorId)?.name ?? 'Worker',
             code: '', role: 'viewer', active: true, createdAt: updated.createdAt,
           } as User;
-        get().updateApartment(updated.apartmentId,
-          { stageMarks: { ...(apt.stageMarks ?? {}), [updated.stageId]: 'done' } }, who);
+        const changesToApt: Partial<Apartment> = {};
+        if (apt.stageMarks?.[updated.stageId] !== 'done') {
+          changesToApt.stageMarks = { ...(apt.stageMarks ?? {}), [updated.stageId]: 'done' };
+        }
+        /**
+         * The finished stage is where the apartment IS now (owner's rule,
+         * 2026-09-03): a report on a stage ordered AFTER the current one moves
+         * the apartment forward to it — the earlier stages cross off as
+         * "behind" the way the picker already derives them. A report on a
+         * stage the apartment is already past is a record and never moves
+         * it backwards.
+         */
+        const order = (id: string | null) => get().stages.find(st => st.id === id)?.order ?? -1;
+        if (order(updated.stageId) > order(apt.currentStageId)) changesToApt.currentStageId = updated.stageId;
+        if (Object.keys(changesToApt).length) get().updateApartment(updated.apartmentId, changesToApt, who);
       }
     }
     // Log completion / undo-completion
@@ -2151,6 +2174,31 @@ export const useStore = create<AppState>((set, get) => ({
     set(state => ({ contractorNotes: [...state.contractorNotes, n] }));
     persist(get);
     fsSet(projectCollection(get().currentProjectId, 'contractorNotes'), n.id, { ...n, attachmentDataUrl: undefined });
+  },
+
+  updateContractorNote: (id, changes) => {
+    set(state => ({
+      contractorNotes: state.contractorNotes.map(n => n.id === id ? { ...n, ...changes } : n),
+    }));
+    persist(get);
+    const updated = get().contractorNotes.find(n => n.id === id);
+    if (updated) fsSet(projectCollection(get().currentProjectId, 'contractorNotes'), id, { ...updated, attachmentDataUrl: undefined });
+  },
+
+  addAssignmentToProject: (projectId, fields) => {
+    if (projectId === get().currentProjectId) {
+      const id = generateId();
+      get().addContractorAssignment({ ...fields, id } as never);
+      return id;
+    }
+    const a: ContractorAssignment = { id: generateId(), createdAt: new Date().toISOString(), ...fields } as ContractorAssignment;
+    const key = `${projectId}_app_data`;
+    const snap = loadFromStorage<Record<string, unknown>>(key, {});
+    const list = Array.isArray(snap.contractorAssignments) ? snap.contractorAssignments as ContractorAssignment[] : [];
+    saveToStorage(key, { ...snap, contractorAssignments: [...list, a] });
+    fsSet(projectCollection(projectId, 'contractorAssignments'), a.id, a);
+    set(st => ({ snapshotTick: st.snapshotTick + 1 }));
+    return a.id;
   },
 
   addContractorPhoto: (fields) => {

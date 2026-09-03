@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
-import { Mic, X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer, Phone as PhoneIcon, Loader2 } from 'lucide-react';
+import { Mic, X, Save, Building2, MessageSquare, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer, Phone as PhoneIcon, Loader2 } from 'lucide-react';
 import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel, ContractorAssignment } from '../../types';
 import { TaskThread } from '../tasks/TaskThread';
 import { Translated } from '../ui/Translated';
@@ -2336,6 +2336,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                             thread is ever edited or deleted. */}
                         {!isEditing && (
                           <div className="px-3 pb-3 pt-1 border-t border-gray-100">
+                            {/* "Task messages" — named, per the owner; the
+                                composer sits INSIDE the grey panel with the
+                                messages (the worker's phone draws the same). */}
+                            <div className="flex items-center gap-1.5 text-[10.5px] font-extrabold tracking-wider text-gray-500 uppercase mt-1.5 mb-1.5">
+                              <MessageSquare size={11} /> {ui.threadTitle}
+                            </div>
                             <TaskThread
                               assignment={a}
                               notes={contractorNotes.filter(n => n.assignmentId === a.id)}
@@ -2348,9 +2354,10 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                 tapToOpen: ui.threadTapToOpen,
                                 jobClosed: ui.threadJobClosed,
                                 download: ui.downloadLabel,
+                                said: ui.isRtl ? 'נאמר' : 'Said',
                               }}
-                            />
-                            <div className="flex gap-2 items-end mt-2">
+                              footer={
+                            <div className="flex gap-2 items-end mt-1">
                               <input
                                 value={officeNoteDrafts[a.id] ?? ''}
                                 onChange={e => setOfficeNoteDrafts(d => ({ ...d, [a.id]: e.target.value }))}
@@ -2369,6 +2376,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                 <Send size={15} />
                               </button>
                             </div>
+                              }
+                            />
                           </div>
                         )}
                       </div>
