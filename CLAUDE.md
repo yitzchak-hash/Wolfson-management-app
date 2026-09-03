@@ -92,6 +92,13 @@ after shipping: a red "Error" there with a green local build is this.
 - `VITE_DRIVE_API_KEY` must equal the backend's `API_KEY`; it lives in the public bundle (deters casual abuse, not a true secret — real protection is the Contributor-only service account)
 - **SECURITY**: The service account JSON key must NEVER be committed to the repository. It lives in Vercel env vars only.
 
+## The feature checklist is a file
+`docs/CRM-CHECKLIST.md` is the standing list of what the app must support —
+one line per feature, ☑ shipped / ☐ decided / ✎ needs the owner's word, with
+the date it was decided or shipped. **Add a line in the same commit as the
+decision or the code**; a feature decided in a chat and not written there is
+a feature that will be lost.
+
 ## Skills live in the repo, local Claude state does not
 `.claude/skills/<name>/SKILL.md` is tracked and travels with the project — a
 skill is shared working method, the same as anything else in here. Everything
