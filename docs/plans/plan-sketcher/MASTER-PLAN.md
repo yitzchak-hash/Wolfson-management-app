@@ -254,6 +254,45 @@ two with a shared edge). Harness `check11.mjs`, 34 checks — its one real
 find: a press on the amber chip was captured by the stage as a pan and the
 fix button never fired (the HTML-overlay guard now includes `.warnchip`).
 
+### Sitting 11 — the gvs by hand (locked 2026-09-03)
+58. **The DROP chips sit NEXT TO the selected gvs box**, not only on the
+    toolbar — in his words: *"Next to the selection, once you select [the
+    gvs]. So it should show next to it like a drop chip … But it should also
+    allow if I double-click on the [gvs] to go into the settings and to do
+    a custom number, a custom color."* → select a box: the legend's four
+    drops float beside it, one press recolours; double-click: the window
+    takes ANY drop number and ANY colour. He restated the two tools as
+    settled: *"There should be the rectangular or drawing, and then it
+    should fit to whatever I draw. It should snap to stuff."*
+59. **Corners snap to walls, wall corners AND other gvs boxes** (his B) —
+    two boxes meet edge to edge exactly; the risk of grabbing the wrong
+    magnet is accepted.
+60. **The numbers show on the box, always** — drop · m² · running metres.
+61. **A unit in a too-shallow box: amber note + one-press "make it −35"**
+    (pick 26's manner — the professional decides).
+62. **Two boxes that touch or overlap: same drop → they MERGE into one
+    shape** (one perimeter, one m²); different drops stay two shapes with a
+    shared edge.
+
+Sitting 12 (published 2026-09-03) builds 58–62 into the demo first — the
+four legend chips float at a selected box's corner (`.gvchips`), its window
+takes any drop number and any colour (`g.col`), `snapCorner` also offers the
+edges of existing boxes, and `mergeGvs` unions two RECTILINEAR boxes of the
+same drop and colour that overlap or share a stretch of edge (`unionPolys`:
+grid cells inside either, boundary edges that do not cancel, the largest loop;
+a corner touch alone never joins) — then opens pick 27, options per floor: an
+OPTIONS row of tabs, **+ option** copies the option you are on (units, pipes,
+gvs, systems — `optStore`), the star marks the chosen one, double-click
+renames, **Compare** ghosts the other option in grey underneath (`#ghost`),
+Clear empties only the option you are on and the INDOOR UNIT cards follow the
+tab. It asks 63–67: what a new option starts as (⭐ a copy), what it holds
+(⭐ everything drawn on the floor), how the difference is seen (⭐ Compare
+ghost), options at export (⭐ export asks which, each its own sheet), marking
+the chosen one (⭐ name + one star). Harness `check12.mjs`, 35 checks. Its
+lessons were all geometry: the room's bottom wall on this plan runs only x
+1406–1539 (open to the west), and a press inside a box can land on the amber
+chip, which rightly owns it — drag from the other corner.
+
 ## The action order
 
 Dependency first; each step has a permanent ID.
