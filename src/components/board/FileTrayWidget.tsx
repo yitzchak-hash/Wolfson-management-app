@@ -236,14 +236,11 @@ export function FileTrayWidget({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
               </span>
               {canPreview(f) && (
                 <button data-no-drag data-el-action data-tray-preview
-                  // A PLAN opens straight into the markup studio (the owner's
-                  // ask): looking at a drawing and marking it up are one act,
-                  // and the studio's first save asks where the copy belongs.
-                  // Images — and a data-URL PDF, which the studio cannot
-                  // fetch by id — keep the plain preview; so does the wall.
-                  onClick={() => (isPdf(f) && f.fileId && !c.readOnly && !sample)
-                    ? setMarkup(f) : setPreview(f)}
-                  title={isPdf(f) && f.fileId && !c.readOnly && !sample ? 'Open in markup' : 'Preview'}
+                  // The eye is the PREVIEW, exactly as before (owner
+                  // correction 2026-09-03 — an earlier build jumped straight
+                  // into the studio here). The preview's own Mark up button,
+                  // top right, is the one door into markup.
+                  onClick={() => setPreview(f)} title="Preview"
                   className="p-1 rounded-md text-gray-400 hover:text-[#1e3a5f] hover:bg-gray-100 flex-shrink-0">
                   <Eye size={13} />
                 </button>

@@ -31,13 +31,13 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     date: '2026-11-29',
-    title: 'The File Tray opens plans in markup',
+    title: 'The File Tray marks up its plans',
     items: [
       {
-        title: 'Press the eye, get the pen',
-        body: 'A plan dropped in the File Tray now opens straight into the '
-          + 'full markup studio when you press its eye — no read-only stop '
-          + 'in between. Draw on it the moment it opens.',
+        title: 'Mark up, right on the preview',
+        body: 'Press the eye on a plan in the File Tray and the preview '
+          + 'opens as always — with a Mark up button at its top right. One '
+          + 'press and the full markup studio is on the same sheet.',
         demo: 'tap',
       },
       {

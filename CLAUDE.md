@@ -6857,12 +6857,13 @@ planlayers.
 
 ---
 
-# v2 — the File Tray opens plans in markup, and the save asks where
+# v2 — the File Tray marks up its plans, and the save asks where
 
-- **The tray's eye on a PDF opens the FULL STUDIO** (FileTrayWidget): a plan
-  with a Drive `fileId` goes straight to `<PlanAnnotator chooseSaveFolder>`;
-  images, data-URL PDFs (nothing to fetch by id) and the read-only wall keep
-  the plain TrayPreview.
+- **The eye stays the PREVIEW** (owner correction, 2026-09-03 — an earlier
+  build in this same round jumped the eye straight into the studio and he
+  reversed it): the preview's own **Mark up button, top right of its bar**,
+  is the one door into the full studio, which opens with
+  `<PlanAnnotator chooseSaveFolder>`.
 - **`chooseSaveFolder` on PlanEditor** — the tray's studio has no job of its
   own, so the FIRST save opens `SaveWhereDialog` (module level, portalled
   z-172/173, seals pointer events, Escape capture): the tray's own folder,
@@ -6880,9 +6881,10 @@ planlayers.
   to the chosen home. The wrapper's close-ask still files into the tray
   folder as the safety default — the local record keeps everything
   regardless.
-- Probe: `traymarkup-probe.mjs` (11 — eye→studio, 11s past the idle with
-  zero stamps, the dialog's two answers + search, EP1 as the stamped parent,
-  the autosave following). Its lesson: a COLD dev server compiles pdf.js on
+- Probe: `traymarkup-probe.mjs` (13 — eye→preview with Mark up top right,
+  Mark up→studio, 11s past the idle with zero stamps, the dialog's two
+  answers + search, EP1 as the stamped parent, the autosave following). Its
+  lesson: a COLD dev server compiles pdf.js on
   the first studio open — wait for the sheet canvas, never a fixed beat.
   `plantabs`' cached-sheet timing checks flake on a cold server for the same
   reason; re-run warm before blaming a diff.

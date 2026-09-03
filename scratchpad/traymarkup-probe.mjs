@@ -78,9 +78,23 @@ const page = await ctx.newPage();
 await page.goto('http://localhost:5174/jobs');
 await page.waitForTimeout(3200);
 
-// ── the eye opens the STUDIO, not the read-only preview ───────────────────
+// ── the eye opens the PREVIEW (owner correction), Mark up sits top right ──
 check(await page.locator('[data-tray-file]').count() === 1, 'the tray shows the plan');
 await page.locator('[data-tray-preview]').click();
+await page.waitForTimeout(2500);
+check(await page.locator('[data-tray-overlay]').count() === 1
+  && await page.locator('[data-plan-surface="studio"]').count() === 0,
+  'the eye opens the PREVIEW screen, exactly as before');
+const barPos = await page.evaluate(() => {
+  const b = document.querySelector('[data-tray-markup]');
+  if (!b) return null;
+  const r = b.getBoundingClientRect();
+  return { right: r.right > window.innerWidth * 0.6, top: r.top < 80 };
+});
+check(!!barPos && barPos.right && barPos.top, 'and Mark up stands at the TOP RIGHT of it', JSON.stringify(barPos));
+
+// pressing it swaps to the full studio
+await page.locator('[data-tray-markup]').click();
 // A cold dev server compiles pdf.js on this first open — wait for the sheet,
 // not a fixed beat.
 await page.waitForFunction(() =>
@@ -89,7 +103,7 @@ await page.waitForFunction(() =>
 await page.waitForTimeout(800);
 check(await page.locator('[data-plan-surface="studio"]').count() === 1
   && await page.locator('[data-tray-overlay]').count() === 0,
-  'the eye on a PDF opens the MARKUP STUDIO directly');
+  'Mark up opens the full studio');
 
 // ── draw, then prove nothing reaches Drive before the question ────────────
 async function draw(y0) {
