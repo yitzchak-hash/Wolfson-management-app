@@ -172,12 +172,43 @@ refine picks 17–22; where they sharpen a sealed pick they say so.
 46. **Stamping is tap, tap, tap until Escape** (refines 18): the block stays
     on the cursor and every tap leaves one.
 
-Sitting 9 (open at the time of writing) puts the REAL catalog on the REAL
-apartment — 21 of the 326 decoded blocks at true cm on the plan traced from
-the owner's plot — and asks 47–51: shelf order (by type ⭐), how a system is
-defined (system row ⭐), label control scope (move/flip/edit/hide ⭐), the
-sheet's INDOOR UNIT cards built live (⭐ yes), and grille lengths (stretch
-snapping to the catalog's lengths, Shift frees ⭐; C would supersede 19).
+### Sitting 9 — the real blocks on the real plan (locked 2026-09-03)
+The page carried 21 of the 326 decoded catalog blocks at true cm on the
+apartment traced from the owner's plot. His answers, several in his own
+words rather than a letter:
+47. **The shelf is by type AND by brand, with search** — *"a and b, with
+    search, with the availability of changing the settings from the future
+    tzviair workspace admin app"*: shelves by what it is, a brand view, a
+    search box; the shelf's order/categories are edited in the admin
+    workspace app, not in the sketcher.
+48. **A unit's system and number live in its own settings window** —
+    *"double click on a unit after placing it and then it opens up its
+    window of settings … change the unit capacity from their models and
+    some more control … select what number system it is."* Whether the
+    SYSTEM row survives as a placement shortcut is re-asked as pick 53.
+49. **A label: drag to move · flip · hide · resize by its corner; NO text
+    editing on the sheet** — *"edit should happen from inside … the admin
+    workspace app"* (the words come from the block's catalog entry). Corner
+    resize on touch is a Device Gallery job.
+50. **The sheet's INDOOR UNIT cards build themselves** — one card per model,
+    letters collected, in the sheet's own style (A).
+51. **Grille stretch snaps to the catalog's lengths; Shift frees it** (A;
+    refines 19).
+52. **Double-click / double-tap ANYTHING on the plan opens its settings**
+    (locked from his words: *"all these things that you got on the plan, if
+    you double click them, either on touch with your finger or with the pen
+    or with the mouse, it opens up the setting thing for that item"*).
+
+His pipe description, given inside pick 48's box, opened Sitting 10
+(pipes and ducts by hand; refines 28): draw a rough line with the pen from
+a unit to where it goes; it snaps to the other unit; the drawn path is
+KEPT and only lightly straightened; corners become quarter circles; a run
+beside an existing pipe steps aside so both lines show; the same gesture
+draws ducts (the DXF carries duct pieces). Sitting 10 asks 53–57: keep the
+SYSTEM row as a shortcut (⭐ both), how much straightening (⭐ lightly),
+what a pipe knows (⭐ kind + both ends + length in m), ducts drawn as a line
+with the DXF's pieces laid along it (⭐), and the pen's kinds (⭐ refrigerant
+pair · drain · duct · electrical feed).
 
 ## The action order
 
