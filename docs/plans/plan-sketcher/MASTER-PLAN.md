@@ -464,6 +464,24 @@ scans, so B6/B7 content can lag without blocking it).
 
 ## Standing rules carried from the planning
 
+- **OWNER RULING (2026-09-03), the build's ground rule, in his words:** *"use
+  the exact code for the markup and then add all this on top of that, as
+  well as the home screen and everything, in the Plan Sketcher repo. That's
+  why you have access to both repos: so you can read off the Wolfson repo,
+  and write code on the Plan Sketcher repo. You're not changing the Wolfson
+  repo until the sketcher is done, and then we'll copy the Sketcher's new
+  code back onto the Wolfson repo."* So: `yitzchak-hash/wolfson-management-app`
+  is READ-ONLY for this project — the markup studio's files are copied out
+  EXACTLY (`src/components/plans/*`, `src/data/pencil.ts`, `penInput.ts`,
+  `planCache.ts`, `planExport.ts`, `planAspect.ts`, `planAddress.ts`,
+  `printing.ts`, `markupScale.ts`, the `.ink-*` CSS, `pdfCompat.ts`,
+  `api/plan-annotate.js`, `api/drive-fetch.js` and what they import), and
+  every Phase 2 feature, the home screen and the rest are written in
+  `yitzchak-hash/tzviair-plan-sketcher` on top of that copy. The Wolfson
+  repo changes only at the end, when the sketcher's new code is copied back
+  (pick 6, B10). This plan file moves into the sketcher repo with B1; the
+  Wolfson planning branch then freezes as history.
+
 - The management app's markup studio is never modified by this project
   (pick 7); the Sketcher starts from a COPY (pick 6).
 - Real client data (names, phones, Drive ids, the CRM export) never enters
