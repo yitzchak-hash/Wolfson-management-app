@@ -232,6 +232,28 @@ pair · drain · duct · electrical feed).
 57. **The pen's kinds: refrigerant pair · drain · duct · electrical feed**,
     each its own look from the sheet's legend, each counted separately.
 
+Sitting 11 (published 2026-09-03) answers pick 56's snapping complaint
+first — units now carry CONNECTION DOTS (one pipe dot, outlet dots for
+flexible ducts sized from the outlet: a hidden unit's outlets are 20 cm, the
+mini-central's 30 cm) and the pen's ends snap to those dots, a flex duct
+taking its width from the outlet it leaves — and then draws the gvs by hand
+on the real apartment: a Gvs tool (drag a rectangle) and a Trace tool (tap
+the corners, tap the first again to close), each corner snapping to the
+nearest wall line within ~25 cm; a DROP row of the sheet's legend colours
+(−10 green · −30 yellow · −35 olive · −40 pink); the box writes its own
+drop · m² · running metres on itself (running metres = the plain perimeter
+until the architect's formula lands, follow-up #3); a unit whose minimum
+drop is deeper than its box raises an amber note with a one-press "make it
+−35" (pick 26 — advice, never a block); double-click a box for its settings.
+It asks 58–62: how the drop is chosen (⭐ a lit DROP chip, corrected in the
+box's window — the SYSTEM-row idiom of 53), what corners snap to (⭐ walls
+and wall corners, both tools), where the numbers show (⭐ on the box,
+always), a unit in a too-shallow box (⭐ amber note + one-press fix), and two
+boxes that touch (⭐ same drop merges into one shape, different drops stay
+two with a shared edge). Harness `check11.mjs`, 34 checks — its one real
+find: a press on the amber chip was captured by the stage as a pan and the
+fix button never fired (the HTML-overlay guard now includes `.warnchip`).
+
 ## The action order
 
 Dependency first; each step has a permanent ID.
