@@ -1011,8 +1011,11 @@ export interface Contractor {
    */
   levelId?: string;
   perms?: Partial<Record<WorkerPermission, boolean>>;
-  /** The language THEY chose in the portal, if they changed it. */
-  lang?: 'en' | 'he';
+  /**
+   * The language THEY chose in the portal, if they changed it. Also the
+   * language everything written by others is translated INTO for them.
+   */
+  lang?: PortalLang;
   /**
    * How big the portal's text is for THIS worker, as a multiplier (1 = normal).
    * Synced like `lang`, and for the same reason: "I can't read the screen" is
@@ -1263,6 +1266,9 @@ export interface BackupLogEntry {
   triggeredBy: 'manual' | 'scheduled';
   createdAt: string;
 }
+
+/** The languages a worker's portal can be set to. */
+export type PortalLang = 'en' | 'he' | 'ru';
 
 export interface ContractorUiStrings {
   isRtl: boolean;
@@ -1530,6 +1536,95 @@ export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   addPicturesRule: 'הוסיפו לפחות {n} תמונות כדי לסגור את העבודה',
   thisTaskLabel: 'המשימה הזאת',
   tapToOpenLabel: 'הקישו לפתיחה',
+};
+
+/**
+ * Russian — the third portal language (owner, 2026-09-03: some workers only
+ * read and write Russian). A PRESET like the English and Hebrew ones, picked
+ * by `Contractor.lang === 'ru'`, never user-edited; left-to-right.
+ */
+export const RUSSIAN_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
+  isRtl: false,
+  linkNotFound: 'Ссылка не найдена',
+  linkInvalid: 'Эта ссылка недействительна или отключена. Обратитесь к руководителю проекта.',
+  myTasks: 'Мои задачи',
+  buildingMap: 'Карта здания',
+  noAssignments: 'Задач пока нет',
+  noAssignmentsHint: 'Руководитель проекта назначит задачи здесь.',
+  filterAll: 'Все',
+  filterOverdue: 'Просрочено',
+  filterToday: 'Сегодня',
+  filterTomorrow: 'Завтра',
+  daysLabel: 'дн.',
+  filterYesterday: 'Вчера',
+  filterThisWeek: 'На этой неделе',
+  mapHint: 'Выделенные квартиры — ваши задачи. Нажмите, чтобы открыть.',
+  sectionTask: 'Задача',
+  fromOffice: 'Из офиса',
+  engineeringPlans: 'Инженерные планы',
+  completed: 'Выполнено',
+  undo: 'Отменить',
+  filesAndPhotos: 'Файлы и фото',
+  uploading: 'Загрузка…',
+  addFile: 'Добавить файл',
+  tapToAddMedia: 'Нажмите, чтобы добавить фото, видео или файлы',
+  requiredBeforeComplete: 'Обязательно перед завершением',
+  sectionNotes: 'Заметки',
+  yourNotes: 'Ваши заметки',
+  addNote: 'Добавить заметку…',
+  addMediaBeforeComplete: 'Добавьте хотя бы одно фото или файл, чтобы завершить задачу.',
+  markCompletePrompt: 'Отметить задачу как выполненную?',
+  markCompleteHint: 'Офис получит уведомление. Это можно отменить.',
+  cancel: 'Отмена',
+  confirmComplete: 'Подтвердить',
+  markingComplete: 'Завершаем…',
+  markAsComplete: 'Отметить как выполненную',
+  noApartmentsAssigned: 'Квартиры пока не назначены.',
+  tapToExpand: 'Нажмите, чтобы развернуть',
+  viewOnDrive: 'Открыть в Drive',
+  hide: 'Скрыть',
+  view: 'Показать',
+  markedUpPlan: 'План с пометками офиса',
+  download: 'Скачать',
+  taskSingular: 'задача',
+  taskPlural: 'задач',
+  doneLabel: 'готово',
+  duePrefix: 'Срок',
+  printLabel: 'Распечатать мои задачи',
+  apartmentColumn: 'Квартира',
+  stageColumn: 'Этап',
+  finishEarlyStill: 'Эта работа ещё стоит в вашем календаре на:',
+  finishEarlyQuestion: 'Вы полностью закончили или нужно будет вернуться?',
+  finishEarlyYes: 'Я всё закончил — уберите эти дни',
+  finishEarlyNo: 'Нет — я вернусь',
+  closeJobBtn: 'Закрыть работу',
+  addThreePictures: 'Добавьте минимум 3 фото, чтобы закрыть работу',
+  weeklyLabel: 'Неделя',
+  monthlyLabel: 'Месяц',
+  pinAddBtn: 'Метка',
+  pinClickPlan: 'Нажмите на план',
+  pinNotePlaceholder: 'Что здесь нужно сделать?',
+  notifTitle: 'Обновления',
+  notifEmpty: 'Ничего нового — вы в курсе всего',
+  notifNew: 'Новая работа для вас',
+  calendarTab: 'Календарь',
+  workHereBtn: 'Я работал здесь',
+  whatDidYouDo: 'Что вы сделали?',
+  didYouFinish: 'Вы закончили этот этап?',
+  finishedYes: 'Да — готово',
+  finishedNo: 'Ещё нет',
+  whatsLeft: 'Что осталось сделать?',
+  sendToOffice: 'Отправить в офис',
+  halfDoneSaved: 'Отправлено — офис увидит это как наполовину готовое.',
+  jobClosedLabel: 'Работа закрыта',
+  closingTitle: 'Закрытие работы',
+  sendAndClose: 'Отправить и закрыть работу',
+  closingCommentLabel: 'Комментарий',
+  closingCommentHint: 'Всё, что офису нужно знать',
+  typeWhatYouDid: 'Напишите, что вы сделали…',
+  addPicturesRule: 'Добавьте минимум {n} фото, чтобы закрыть работу',
+  thisTaskLabel: 'Эта задача',
+  tapToOpenLabel: 'нажмите, чтобы открыть',
 };
 
 // ─── Main Admin UI Strings ────────────────────────────────────────────────────

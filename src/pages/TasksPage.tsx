@@ -16,6 +16,7 @@ import { printTable, printDot, printPill } from '../data/printing';
 import { Tooltip } from '../components/ui/Tooltip';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import { daysOf, dayNumberOf } from '../data/taskDays';
+import { Translated } from '../components/ui/Translated';
 import {
   isUploadBackendConfigured, extractFolderId,
   findOrCreateFolderViaBackend, uploadFileViaResumableSession,
@@ -821,8 +822,8 @@ export function TasksPage() {
                           </span>
                         )}
                       </div>
-                      <p className={`text-sm ${a.completedAt ? 'line-through text-gray-400' : 'text-gray-600'}`}>
-                        {a.taskDescription}
+                      <p className={`text-sm ${a.completedAt ? 'line-through text-gray-400' : 'text-gray-600'}`} data-task-text>
+                        <Translated text={a.taskDescription} to={s.isRtl ? 'he' : 'en'} />
                       </p>
                       <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                         {a.dueDate && (

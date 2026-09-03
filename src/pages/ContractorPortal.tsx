@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useStore, loadAllProjectsTaskData, ensureProjectSnapshot } from '../data/store';
-import { ContractorAssignment, ContractorPhoto, Contractor, Apartment, Project, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, getStageName, aptLabel } from '../types';
+import { ContractorAssignment, ContractorPhoto, Contractor, Apartment, Project, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, RUSSIAN_CONTRACTOR_UI_STRINGS, PortalLang, getStageName, aptLabel } from '../types';
 import { daysOf, futureDaysOf } from '../data/taskDays';
 import { PlanPinOverlay } from '../components/apartment/PlanPinOverlay';
 import { printSheet, printEsc } from '../data/printing';
@@ -29,6 +29,7 @@ import {
 } from '../data/driveApi';
 import { saveBytes, safeFileName } from '../data/planExport';
 import { TaskThread } from '../components/tasks/TaskThread';
+import { Translated, TrText } from '../components/ui/Translated';
 
 const CATEGORY_LABELS: Record<string, string> = {
   drywall: 'Drywall', ac: 'AC', general: 'General',
@@ -504,12 +505,20 @@ export function ContractorPortal() {
    * happens when somebody rings up unable to read the screen. A pick made here
    * is written back; a pick made in the office arrives through the listener.
    */
-  const [langOverride, setLangOverride] = useState<'en' | 'he' | null>(null);
+  const [langOverride, setLangOverride] = useState<PortalLang | null>(null);
   const [scalePanel, setScalePanel] = useState(false);
   const lang = langOverride ?? workerNow?.lang ?? null;
   const s = lang === 'en' ? DEFAULT_CONTRACTOR_UI_STRINGS
            : lang === 'he' ? HEBREW_CONTRACTOR_UI_STRINGS
+           : lang === 'ru' ? RUSSIAN_CONTRACTOR_UI_STRINGS
            : contractorUiStrings;
+  /**
+   * The language everything OTHER PEOPLE wrote is translated into for this
+   * worker: his own choice when he has one, else whatever the office's
+   * default portal strings read in. A Russian-speaking worker reads the
+   * office's Hebrew in Russian; the office reads his Russian in its own.
+   */
+  const readLang: PortalLang = lang ?? (contractorUiStrings.isRtl ? 'he' : 'en');
   /** The four countdown words, in whatever language this worker reads. */
   const dueWords = {
     overdue: s.filterOverdue, today: s.filterToday,
@@ -529,15 +538,14 @@ export function ContractorPortal() {
     return () => { document.documentElement.style.fontSize = ''; };
   }, [textScale]);
 
-  const setLang = (next: 'en' | 'he') => {
+  const setLang = (next: PortalLang) => {
     setLangOverride(next);
     if (workerNow) updateContractor(workerNow.id, { lang: next });
   };
 
   const [activeTab, setActiveTab] = useState<'tasks' | 'map' | 'calendar' | 'planner'>('tasks');
+  /** Which building the map shows — a building id, 'all' for every one, '' for the first. */
   const [mapBuilding, setMapBuilding] = useState<string>('');
-  /** Which project the building map is showing — 'all' lists every diagram. */
-  const [mapProject, setMapProject] = useState<string>('all');
   const [selfTask, setSelfTask] = useState(false);
   const [selfText, setSelfText] = useState('');
   const [selfApt, setSelfApt] = useState('');
@@ -1365,6 +1373,25 @@ export function ContractorPortal() {
                     {textScale === v && <span className="text-[#1e3a5f]">✓</span>}
                   </button>
                 ))}
+                {/* The language, all three — the header's EN/עב toggle only
+                    stands while nobody has chosen, and Russian has no
+                    toggle at all. Written onto the worker, so the office
+                    sees it and messages are translated into it. */}
+                <div className="text-[10px] font-bold text-gray-400 px-1.5 pt-2 pb-1 border-t border-gray-100 mt-1">
+                  {s.isRtl ? 'שפה' : lang === 'ru' ? 'Язык' : 'Language'}
+                </div>
+                <div className="flex gap-1 px-1 pb-1" data-portal-langs>
+                  {([['en', 'EN'], ['he', 'עב'], ['ru', 'RU']] as const).map(([code, label]) => (
+                    <button key={code} data-portal-lang={code}
+                      onClick={() => { setLang(code); setScalePanel(false); }}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold border ${
+                        lang === code
+                          ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]'
+                          : 'text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -1680,7 +1707,7 @@ export function ContractorPortal() {
                             </span>
                           )}
                         </div>
-                        <p className="text-sm text-gray-600 truncate">{a.taskDescription}</p>
+                        <p className="text-sm text-gray-600 truncate"><TrText text={a.taskDescription} to={readLang} /></p>
                         <div className="flex items-center gap-2 mt-2 flex-wrap">
                           {a.dueDate && (
                             <span className={`flex items-center gap-1 text-xs ${isOverdue ? 'text-red-500' : 'text-gray-400'}`}>
@@ -1862,7 +1889,8 @@ export function ContractorPortal() {
         const here = buildings
           .filter(b => apartments.some(a => a.buildingId === b.id))
           .map(b => b.id);
-        const shown = here.includes(mapBuilding) ? mapBuilding : (here[0] ?? '');
+        const shown = mapBuilding === 'all' ? 'all'
+          : here.includes(mapBuilding) ? mapBuilding : (here[0] ?? '');
         // Somebody without "see every unit" gets only the units they have work
         // in, so the diagram is their own job rather than the whole site.
         const visible = perms.seeAllApartments
@@ -1873,22 +1901,61 @@ export function ContractorPortal() {
          * The map's own filter row: projects first, a divider, then the days.
          *
          * Two filters that work AT THE SAME TIME — which site you are looking
-         * at, and which day's work is lit up on it. Only a worker allowed to
-         * switch workspaces sees the project bubbles at all; showing another
-         * project's diagram goes through the same setCurrentProject the wall
-         * uses, because each project's records live in their own collections.
+         * at, and which day's work is lit up on it. OWNER RULING (2026-09-03):
+         * the project bubbles come with the "see the building diagrams"
+         * permission itself — they used to need "switch between workspaces"
+         * too, and a worker whose work lives on the Job Board landed on a
+         * workspace with no buildings and saw nothing at all. Every workspace
+         * that HAS buildings is offered, whether or not he has work there;
+         * showing another project's diagram goes through the same
+         * setCurrentProject the wall uses, because each project's records
+         * live in their own collections.
          */
-        const diagramProjects = perms.switchProject
-          ? myProjects.filter(p => p.id !== 'general')
-          : [];
+        const diagramProjects = projects.filter(p => p.id !== 'general');
+        const projectName = projects.find(p => p.id === currentProjectId)?.name ?? currentProjectId;
+        const projectRow = diagramProjects.length > 0 && (
+          <>
+            {diagramProjects.map(p => (
+              <button key={p.id} data-map-project-pick={p.id}
+                onClick={() => {
+                  if (p.id !== currentProjectId) { setCurrentProject(p.id); setMapBuilding(''); }
+                }}
+                className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
+                style={p.id === currentProjectId
+                  ? { backgroundColor: '#1e3a5f', color: '#fff' }
+                  : { backgroundColor: '#fff', color: '#475569', border: '1px solid #e2e8f0' }}>
+                {p.name}
+              </button>
+            ))}
+            {/* The line between WHERE and WHEN. */}
+            <span className="flex-shrink-0 w-px h-6 bg-gray-300 mx-1" aria-hidden="true" />
+          </>
+        );
 
         return (
           <div className="flex-1 overflow-auto bg-gray-100 pb-4">
             {here.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-center px-6">
-                <MapPin size={32} className="text-gray-300 mb-3" />
-                <p className="text-gray-500 text-sm">{s.noApartmentsAssigned}</p>
-              </div>
+              <>
+                {/* No buildings HERE (the Job Board, or a workspace with no
+                    units yet) — the project bubbles still stand, so the
+                    diagrams are one tap away instead of nowhere. */}
+                {projectRow && (
+                  <div className="sticky top-0 z-20 bg-gray-100/95 backdrop-blur px-3 py-2
+                                  flex items-center gap-1.5 overflow-x-auto border-b border-gray-200">
+                    {projectRow}
+                  </div>
+                )}
+                <div className="flex flex-col items-center justify-center py-20 text-center px-6">
+                  <MapPin size={32} className="text-gray-300 mb-3" />
+                  <p className="text-gray-500 text-sm">
+                    {projectRow
+                      ? (s.isRtl ? 'בחרו פרויקט למעלה כדי לראות את הבניינים שלו'
+                        : lang === 'ru' ? 'Выберите проект выше, чтобы увидеть его здания'
+                        : 'Pick a project above to see its buildings')
+                      : s.noApartmentsAssigned}
+                  </p>
+                </div>
+              </>
             ) : (
               <>
                 {/* WHICH project this diagram is — said out loud, per the
@@ -1896,41 +1963,16 @@ export function ContractorPortal() {
                     guess whose building he is looking at. The building's own
                     name follows in the pill row below. */}
                 <div className="px-4 pt-2.5 pb-0.5 flex items-baseline gap-1.5" data-map-project>
-                  <span className="text-[14px] font-black text-[#1e3a5f]">
-                    {projects.find(p => p.id === currentProjectId)?.name ?? currentProjectId}
-                  </span>
+                  <span className="text-[14px] font-black text-[#1e3a5f]">{projectName}</span>
                   <span className="text-[11px] text-gray-400">
-                    {s.isRtl ? 'בניין' : 'Building'} {shown}
+                    {shown === 'all'
+                      ? (s.isRtl ? 'כל הבניינים' : lang === 'ru' ? 'Все здания' : 'All buildings')
+                      : <>{s.isRtl ? 'בניין' : lang === 'ru' ? 'Здание' : 'Building'} {shown}</>}
                   </span>
                 </div>
                 <div className="sticky top-0 z-20 bg-gray-100/95 backdrop-blur px-3 py-2
                                 flex items-center gap-1.5 overflow-x-auto border-b border-gray-200">
-                  {diagramProjects.length > 1 && (
-                    <>
-                      <button onClick={() => setMapProject('all')}
-                        className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
-                        style={mapProject === 'all'
-                          ? { backgroundColor: '#1e3a5f', color: '#fff' }
-                          : { backgroundColor: '#fff', color: '#475569', border: '1px solid #e2e8f0' }}>
-                        {s.isRtl ? 'כל הפרויקטים' : 'All projects'}
-                      </button>
-                      {diagramProjects.map(p => (
-                        <button key={p.id}
-                          onClick={() => {
-                            setMapProject(p.id);
-                            if (p.id !== currentProjectId) { setCurrentProject(p.id); setMapBuilding(''); }
-                          }}
-                          className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
-                          style={mapProject === p.id
-                            ? { backgroundColor: '#1e3a5f', color: '#fff' }
-                            : { backgroundColor: '#fff', color: '#475569', border: '1px solid #e2e8f0' }}>
-                          {p.name}
-                        </button>
-                      ))}
-                      {/* The line between WHERE and WHEN. */}
-                      <span className="flex-shrink-0 w-px h-6 bg-gray-300 mx-1" aria-hidden="true" />
-                    </>
-                  )}
+                  {projectRow}
                   {filterOptions.map(({ key, label, color }) => (
                     <button key={key} onClick={() => setMapFilter(key)}
                       className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
@@ -1941,12 +1983,24 @@ export function ContractorPortal() {
                     </button>
                   ))}
                 </div>
-                <div className="px-3 py-2 flex gap-1.5 overflow-x-auto">
+                <div className="px-3 py-2 flex gap-1.5 overflow-x-auto" data-map-buildings>
+                  {/* "All" draws every building of the project side by side —
+                      the desktop's own view; one building at a time stays
+                      the default because a phone is one building wide. */}
+                  {here.length > 1 && (
+                    <button data-map-building="all" onClick={() => setMapBuilding('all')}
+                      className="flex-shrink-0 px-3.5 py-1.5 rounded-full text-sm font-bold transition-all"
+                      style={shown === 'all'
+                        ? { backgroundColor: '#1e3a5f', color: '#fff' }
+                        : { backgroundColor: '#fff', color: '#475569', border: '1px solid #e2e8f0' }}>
+                      {s.filterAll}
+                    </button>
+                  )}
                   {here.map(b => {
                     const mine = apartments.filter(a => a.buildingId === b && assignedAptIds.has(a.id)).length;
                     const on = b === shown;
                     return (
-                      <button key={b} onClick={() => setMapBuilding(b)}
+                      <button key={b} data-map-building={b} onClick={() => setMapBuilding(b)}
                         className="flex-shrink-0 px-3.5 py-1.5 rounded-full text-sm font-bold transition-all"
                         style={on
                           ? { backgroundColor: '#1e3a5f', color: '#fff' }
@@ -2119,7 +2173,9 @@ export function ContractorPortal() {
                 {/* Task description */}
                 <div>
                   <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{s.sectionTask}</h3>
-                  <p className="text-gray-800 text-sm leading-relaxed">{a.taskDescription}</p>
+                  <p className="text-gray-800 text-sm leading-relaxed" data-task-text>
+                    <Translated text={a.taskDescription} to={readLang} />
+                  </p>
                   {/* No box (decision 6): a red dot and the word — the same
                       treatment for every priority so they stay consistent. */}
                   {a.priority && a.priority !== 'normal' && (
@@ -2309,6 +2365,7 @@ export function ContractorPortal() {
                     notes={selNotes}
                     photos={selMedia}
                     viewer="contractor"
+                    translateTo={readLang}
                     words={{
                       rtl: !!s.isRtl,
                       tapToOpen: s.tapToOpenLabel || (s.isRtl ? 'הקישו לפתיחה' : 'tap to open'),
@@ -2726,7 +2783,7 @@ export function ContractorPortal() {
                             onClick={() => { closeSheet(); setSelectedAssignment(t); }}
                             className="w-full text-left rtl:text-right border border-gray-200 rounded-xl px-3 py-2.5">
                             <span className={`text-sm font-semibold ${t.completedAt ? 'line-through text-gray-400' : 'text-gray-800'}`}>
-                              {t.taskDescription}
+                              <TrText text={t.taskDescription} to={readLang} />
                             </span>
                           </button>
                         ))}

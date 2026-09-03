@@ -6,6 +6,8 @@ import { ContractorAssignment, ContractorNote, ContractorPhoto } from '../../typ
 import { VoiceMemoPlayer } from '../ui/VoiceMemo';
 import { fetchPlanBytes, driveThumbUrl } from '../../data/driveApi';
 import { saveBytes } from '../../data/planExport';
+import { Translated } from '../ui/Translated';
+import type { Lang } from '../../data/translate';
 
 /**
  * The task as a CONVERSATION — one drawing, used in the worker's portal and
@@ -110,8 +112,14 @@ function photoSrc(p: ContractorPhoto, px = 400): string | null {
   return p.storageUrl || (p.driveFileId ? driveThumbUrl(p.driveFileId, px) : null) || (p.dataUrl || null);
 }
 
-export function TaskThread({ assignment, notes, photos, viewer, readOnly = false, words, maxBubble }: {
+export function TaskThread({ assignment, notes, photos, viewer, readOnly = false, words, maxBubble, translateTo }: {
   assignment: ContractorAssignment;
+  /**
+   * The READER's language — every message written in another one is shown
+   * translated, with its original one press away. Absent = nothing is
+   * translated.
+   */
+  translateTo?: Lang | null;
   /** This assignment's notes, any order. */
   notes: ContractorNote[];
   /** This assignment's photos, any order. */
@@ -233,7 +241,11 @@ export function TaskThread({ assignment, notes, photos, viewer, readOnly = false
           );
         }
       }
-      if (n.text?.trim()) body.push(<div key="t" style={{ color: '#1f2c3d' }}>{n.text}</div>);
+      if (n.text?.trim()) body.push(
+        <div key="t" style={{ color: '#1f2c3d' }} data-thread-text>
+          <Translated text={n.text} to={translateTo} />
+        </div>,
+      );
     }
     const key = item.kind === 'photo' ? `ph-${item.photo.id}` : `nt-${item.note.id}`;
     return (

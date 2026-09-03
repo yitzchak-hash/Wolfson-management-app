@@ -30,6 +30,44 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-12-13',
+    title: 'Everyone reads in their own language',
+    items: [
+      {
+        title: 'Messages and tasks translate themselves',
+        body: 'A worker who writes in Russian is read in Hebrew or English '
+          + 'at the office, and the office\'s words reach him in Russian — '
+          + 'in the task thread, on task descriptions, on the worker\'s '
+          + 'list. Every translated line carries a small "Show original" '
+          + 'link, so the exact words are always one press away. Nothing '
+          + 'already in your language is touched. (Needs the translation '
+          + 'key set on the server; without it, originals show.)',
+        demo: 'sparkle',
+      },
+      {
+        title: 'Russian in the worker\'s app',
+        body: 'The worker\'s portal now comes in Russian too. Pick it in '
+          + 'Settings → Workers next to his name, or he picks it himself '
+          + 'from the gear in his portal — the same choice from either end.',
+        demo: 'tap',
+      },
+      {
+        title: 'The building map picks its project',
+        body: 'A worker allowed to see the building diagrams gets the '
+          + 'project bubbles on his map — Wolfson, Netiv — whatever '
+          + 'workspace he is standing in, even the Job Board. Then All, or '
+          + 'one building at a time.',
+        demo: 'list',
+      },
+      {
+        title: 'The phone number has the box picker too',
+        body: 'The "Not right? Pick it on the plan" box works on the phone '
+          + 'row exactly as on the address row.',
+        demo: 'pin',
+      },
+    ],
+  },
+  {
     date: '2026-12-06',
     title: 'Point at the address yourself',
     items: [

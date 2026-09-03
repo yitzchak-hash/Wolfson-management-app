@@ -113,6 +113,32 @@ const img = page.locator('img[alt*="part of the plan"]').first();
 const nat = await img.evaluate(el => ({ w: el.naturalWidth, h: el.naturalHeight }));
 check(nat.w > 300 && nat.h > 30, 'phone eye opens a readable cutout', JSON.stringify(nat));
 
+// ── The draw-a-box picker on the PHONE row (the owner's ask) ────────────────
+// The box is aimed at the FAX line — a number the reader deliberately refuses
+// — so a hit proves the box reads what it covers, not the reader's own pick.
+check(await page.locator('[data-addr-pick]').count() === 1, 'the phone cutout offers "pick it on the plan"');
+await page.locator('[data-addr-pick]').click();
+await page.waitForSelector('[data-addr-pick-stage] img', { timeout: 30_000 });
+await page.waitForTimeout(600);
+const stage = await page.locator('[data-addr-pick-stage]').boundingBox();
+// The fax line sits at PDF baseline (532, 80) on an 842×595 sheet: x 63%–85%,
+// y from the top ≈ (595−80−9)/595 = 85.0% … (595−80+1)/595 = 86.7%. The lines
+// above and below are 12pt away, so the box must stay INSIDE that band — a
+// taller box legitimately reads three lines, which is the picker being right.
+await page.mouse.move(stage.x + stage.width * 0.625, stage.y + stage.height * 0.853);
+await page.mouse.down();
+await page.mouse.move(stage.x + stage.width * 0.86, stage.y + stage.height * 0.865, { steps: 6 });
+await page.mouse.up();
+await page.waitForTimeout(600);
+const boxRead = await page.locator('[data-addr-pick-read]').textContent();
+check((boxRead ?? '').includes('03-6161616') && !(boxRead ?? '').includes('052-123'),
+  'the box on the phone row reads the line it covers (the fax, which the reader refused)', boxRead ?? '(none)');
+await page.locator('[data-addr-pick-use]').click();
+await page.waitForTimeout(700);
+const d2 = await page.evaluate(() => JSON.parse(localStorage.getItem('general_app_data')));
+check((d2.apartments[0].phone ?? '').includes('03-6161616'),
+  'and Use writes the picked text into the phone field', d2.apartments[0].phone ?? '(none)');
+
 console.log(fails ? `\n${fails} FAILURES` : '\nALL PASS');
 await b.close();
 process.exit(fails ? 1 : 0);

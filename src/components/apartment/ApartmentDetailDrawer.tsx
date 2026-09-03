@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'rea
 import { Mic, X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer, Phone as PhoneIcon, Loader2 } from 'lucide-react';
 import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel, ContractorAssignment } from '../../types';
 import { TaskThread } from '../tasks/TaskThread';
+import { Translated } from '../ui/Translated';
 import { Send } from 'lucide-react';
 import { useStore } from '../../data/store';
 import { TaskDaysPicker, daysFields } from '../tasks/TaskDaysPicker';
@@ -2127,8 +2128,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                             </div>
                             {!isEditing && (
                               <>
-                                <p className={`text-xs leading-snug ${a.completedAt ? 'line-through text-gray-400' : 'text-gray-700'}`}>
-                                  {a.taskDescription}
+                                <p className={`text-xs leading-snug ${a.completedAt ? 'line-through text-gray-400' : 'text-gray-700'}`} data-task-text>
+                                  <Translated text={a.taskDescription} to={ui.isRtl ? 'he' : 'en'} />
                                 </p>
                                 <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                                   {/* A multi-day task shows its RANGE — "Sep 1–2 · 2
@@ -2341,6 +2342,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                               photos={contractorPhotos.filter(p => p.assignmentId === a.id)}
                               viewer="office"
                               maxBubble={640}
+                              translateTo={ui.isRtl ? 'he' : 'en'}
                               words={{
                                 rtl: !!ui.isRtl,
                                 tapToOpen: ui.threadTapToOpen,

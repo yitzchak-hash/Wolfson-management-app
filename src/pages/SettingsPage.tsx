@@ -13,7 +13,7 @@ import { TV_ALLOWED } from '../data/tvWidgets';
 import { TimeClockTab } from '../components/settings/TimeClockTab';
 import { TV_DASH_BOARD } from '../types';
 import { portalLink, bareDomain, looksLikePreviewHost } from '../data/portalLink';
-import type { BoardAccess } from '../types';
+import type { BoardAccess, PortalLang } from '../types';
 import { personColor, projectColor, BoardView, Stage, User, Contractor, ContractorCategory, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BackupFrequency, DriveExportFrequency, getStageName, Apartment, isCountableApartment, BoardSetting, CanvasElement } from '../types';
 import { loadTvScreens, forgetTvScreen, screenIsLive, shapeNameOf, TvScreenPresence } from '../data/tvScreens';
 import { Tooltip } from '../components/ui/Tooltip';
@@ -911,13 +911,15 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
                 <select
                   value={c.lang ?? ''}
                   onChange={e => updateContractor(c.id,
-                    { lang: (e.target.value || undefined) as 'en' | 'he' | undefined })}
-                  title="The language his portal opens in"
+                    { lang: (e.target.value || undefined) as PortalLang | undefined })}
+                  title="The language his portal opens in — and the language messages are translated into for him"
+                  data-worker-lang
                   className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white outline-none
                              focus:border-[#4aa8d8]">
                   <option value="">Whatever the office is set to</option>
                   <option value="en">English</option>
                   <option value="he">עברית</option>
+                  <option value="ru">Русский</option>
                 </select>
                 <Tooltip text={c.photosOptional
                   ? 'This worker may finish a task without photos'

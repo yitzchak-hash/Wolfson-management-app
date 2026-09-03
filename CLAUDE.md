@@ -6923,3 +6923,73 @@ Probe: `planaddr.mjs` grew section 1b (box over "Project: Cohen residence"
 COVERS; no neighbour lines bleed in; Use writes it; the row's plus restores
 the reader's find so the downstream Waze check still holds). planaddr2 and
 planphone-probe green.
+
+---
+
+# v2 — everyone reads in their own language (Russian, translation, the map's projects)
+
+## Russian is a third portal preset
+`PortalLang = 'en' | 'he' | 'ru'` (types/index.ts); `Contractor.lang` takes it.
+`RUSSIAN_CONTRACTOR_UI_STRINGS` is a full preset beside the English and Hebrew
+ones (left-to-right), picked by `lang === 'ru'` in the portal's `s` mapping —
+never user-edited, the same guarantee as the other two. Set from either end:
+Settings → Workers (`[data-worker-lang]`, now with Русский) or the portal's
+gear, which grew a Language row (`[data-portal-lang=en|he|ru]`) because the
+header's EN/עב toggle only stands while nobody has chosen and Russian has no
+toggle at all. The ~70 `s.isRtl ? 'x' : 'y'` inline pairs in the portal fall
+to English for a Russian reader; the map tab's own words got a `lang === 'ru'`
+third arm where they were touched.
+
+## Translation (`src/data/translate.ts` + `src/components/ui/Translated.tsx`)
+What OTHER people wrote is shown in the READER's language with a Show-original
+link — the task thread (both hosts), task descriptions (portal list/sheet/work
+sheet, the drawer's Tasks tab, the Tasks page). The reader's language is the
+worker's `Contractor.lang` (else the office preset's direction) in the portal
+(`readLang`) and `isRtl ? 'he' : 'en'` in the office. Rules:
+- **Detection is by script, locally** (`detectLang`: Hebrew → he, Cyrillic →
+  ru, Latin → en, no letters → nothing). Text already in the reader's
+  language is never sent; a number or an emoji is never sent.
+- **The server does the translating** — `POST /api/geocode` with a
+  `translate` body, FOLDED into that file because of the 12-function limit.
+  The geocode branch stays unauthenticated as documented; the translate
+  branch is **key-guarded** (`x-api-key` = `API_KEY`) because every call
+  spends the owner's Anthropic credit. `ANTHROPIC_API_KEY` in Vercel turns it
+  on; `TRANSLATE_MODEL` overrides the model (default `claude-opus-5`);
+  thinking is disabled — a translation is not a reasoning task. Official
+  `@anthropic-ai/sdk`, now a dependency. Answers are asked for as JSON and
+  parsed defensively (code fences stripped); the server caches per
+  (target, text).
+- **Batched and cached**: one round trip per thread (80ms coalescing, 25 per
+  call), every answer kept in memory and in `translate_cache` (localStorage,
+  capped 1500) — a message is translated once per device, ever. A 501 (no
+  key) or 401 stands the whole thing down for the visit (`serverOff`) and
+  originals show with no toggle: a missing key must never read as a broken
+  thread.
+- `Translated` renders the translation with `[data-translate-toggle]` in the
+  reader's own words (`TRANSLATE_WORDS`, a preset table); `TrText` is the
+  translation alone for a truncated list row. `useTranslated` is synchronous
+  on a cache hit so a re-opened thread never flashes its originals.
+- NOT wired: pin notes (they render as an editable textarea for both sides),
+  stage notes and general notes (office-authored, the worker never sees them).
+
+## The map's project bubbles come with the diagrams permission
+`diagramProjects` in the portal's map tab was gated on `switchProject`, so a
+worker whose work lives on the Job Board landed on a workspace with no
+buildings and saw "no apartments" — the owner's report. Now every workspace
+with buildings is offered (`[data-map-project-pick=<id>]`) whenever
+`seeDiagrams`, even from the Job Board (the empty state keeps the bubble row
+and says to pick one), the active bubble is the current workspace (the dead
+`mapProject` state is gone), and the building row gained an **All** pill
+(`[data-map-building=all]`, only with more than one building) beside the
+per-building pills.
+
+Probes: `scratchpad/round38-probe.mjs` (31 checks, four contexts: the office
+reading Russian in English with the toggle both ways and ONE round trip then
+the cache; the Russian portal reading English in Russian with his own Russian
+untouched; the map's bubbles from the Job Board → Wolfson → A1/A2/All; the
+gear writing `lang` onto the worker; the 501 stand-down asking once; the
+Settings option). `planphone-probe` grew the phone-row box picker (aimed at
+the FAX line the reader refuses, so a hit proves the box reads what it
+covers). portalround, portalswitch, drawerround green. The SDK install
+PRUNED playwright and @pdf-lib/fontkit (the `--no-save` trap in reverse:
+`npm install <pkg>` prunes ad-hoc packages) — reinstall both `--no-save`.

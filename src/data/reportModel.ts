@@ -325,7 +325,7 @@ const WORKERS: ReportSubject = {
     { key: 'active', label: 'Still working', type: 'bool', group: 'The worker',
       get: (c: Contractor) => (c.active ? 'Yes' : 'No') },
     { key: 'lang', label: 'Their language', type: 'text', group: 'The worker',
-      get: (c: Contractor) => (c.lang === 'he' ? 'Hebrew' : 'English') },
+      get: (c: Contractor) => (c.lang === 'he' ? 'Hebrew' : c.lang === 'ru' ? 'Russian' : 'English') },
     {
       key: 'open', sum: true, label: 'Open tasks', type: 'number', group: 'Their work',
       get: (c: Contractor, d) => liveAssignments(d).filter(a => a.contractorId === c.id && !a.completedAt).length,
