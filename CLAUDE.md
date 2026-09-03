@@ -6888,3 +6888,38 @@ planlayers.
   the first studio open — wait for the sheet canvas, never a fixed beat.
   `plantabs`' cached-sheet timing checks flake on a cold server for the same
   reason; re-run warm before blaming a diff.
+
+---
+
+# v2 — the address you point at yourself
+
+## The draw-a-box override (`RegionPicker` in PlanAddressSuggest.tsx)
+The automatic read is a guess over an arbitrary title block, and when it
+guesses wrong the fix is a HUMAN POINTING — not a smarter guess. The cutout
+popup's footer gained "Not right? Pick it on the plan" (`data-addr-pick`):
+the WHOLE first page opens (`data-addr-picker`), the user DRAWS a box over
+the exact spot (`data-addr-pick-stage`/`-box`), the text under the box is
+read the moment the pointer lifts (`data-addr-pick-read`) and Use
+(`data-addr-pick-use`) writes it to the field. A press INSIDE the drawn box
+MOVES it; anywhere else redraws; a stray tap is not a box. Works for the
+address row AND the phone row; touch-ready (`touchAction: none`, pointer
+capture). The pointer-up reads the box through a REF (`boxRef`) — updaters
+stay pure, the standing rule.
+
+## `openRegionReader(fileId)` in planAddress.ts
+The mechanism, beside the automatic read: loads the doc, renders page 1
+WHOLE (area-capped ~4.2MP — a refused canvas is a blank picker), and
+answers `read(box-in-image-fractions)` synchronously against the SAME line
+model — `buildLines()` is now extracted and shared, so the picker and the
+automatic read can never disagree about what sits where. Box fractions map
+to PDF space through `viewport.convertToPdfPoint` (y flips there); lines
+overlapping the box in y contribute only their parts overlapping in x, each
+read through `pickReading(variantsOf(...))` — the Hebrew order machinery —
+top of the sheet first. `close()` frees the doc; the picker closes it on
+unmount.
+
+Probe: `planaddr.mjs` grew section 1b (box over "Project: Cohen residence"
+— a line the automatic read never chose, proving the box reads what it
+COVERS; no neighbour lines bleed in; Use writes it; the row's plus restores
+the reader's find so the downstream Waze check still holds). planaddr2 and
+planphone-probe green.

@@ -30,6 +30,22 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-12-06',
+    title: 'Point at the address yourself',
+    items: [
+      {
+        title: 'Wrong guess? Draw a box on the right spot',
+        body: 'When "On the plan" reads the wrong thing, open its eye and '
+          + 'press "Not right? Pick it on the plan": the whole sheet opens, '
+          + 'you drag a box over the exact place the address (or phone '
+          + 'number) really is, and it reads the text under the box the '
+          + 'moment you let go — drag inside the box to move it, drag '
+          + 'anywhere else to redraw, and Use writes it into the field.',
+        demo: 'pin',
+      },
+    ],
+  },
+  {
     date: '2026-11-29',
     title: 'The File Tray marks up its plans',
     items: [

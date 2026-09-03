@@ -199,6 +199,129 @@ function plausibleAddress(s: string): boolean {
   return s.split(/\s+/).filter(w => w.replace(/[^֐-׿]/g, '').length >= 2).length >= 2;
 }
 
+/**
+ * Rebuild LINES from positioned glyph runs: group by baseline y (within most
+ * of a line height), then keep the runs with their x positions so both
+ * joining orders stay available. Shared by the automatic read and the
+ * pick-it-yourself box — one line model, or the two would disagree about
+ * what sits where.
+ */
+function buildLines(items: { str: string; transform: number[]; width: number; height: number }[]): Line[] {
+  const runs = items.map(it => ({
+    str: it.str.trim(),
+    x: it.transform[4],
+    y: it.transform[5],
+    w: it.width,
+    h: Math.abs(it.height || Math.hypot(it.transform[2], it.transform[3])) || 8,
+  }));
+  runs.sort((a, b) => b.y - a.y || a.x - b.x);
+  const lines: Line[] = [];
+  for (const r of runs) {
+    const line = lines.find(l => Math.abs(l.y1 - r.y) < Math.max(3, r.h * 0.7));
+    if (line) {
+      line.x1 = Math.min(line.x1, r.x); line.x2 = Math.max(line.x2, r.x + r.w);
+      line.y2 = Math.max(line.y2, r.y + r.h);
+      line.parts.push({ x: r.x, str: r.str, w: r.w });
+    } else {
+      lines.push({
+        text: '', hebrew: false, x1: r.x, y1: r.y, x2: r.x + r.w, y2: r.y + r.h,
+        parts: [{ x: r.x, str: r.str, w: r.w }],
+      });
+    }
+  }
+  for (const l of lines) {
+    l.hebrew = l.parts.some(p => HEB.test(p.str));
+    // The default reading — right-to-left for a Hebrew line, as before.
+    l.parts.sort((a, b) => (l.hebrew ? b.x - a.x : a.x - b.x));
+    l.text = l.parts.map(p => p.str).join(' ').replace(/\s+/g, ' ').trim();
+  }
+  return lines;
+}
+
+/**
+ * The pick-it-yourself session: the whole first page rendered once, and a
+ * `read` that answers "what does the text under THIS box say?" through the
+ * same line model and Hebrew-order machinery as the automatic read. Exists
+ * because the automatic read is a guess over an arbitrary title block, and
+ * when it guesses wrong the fix is a human pointing at the right spot — not
+ * a smarter guess.
+ */
+export interface RegionReader {
+  /** PNG data URL of the whole first page. */
+  image: string;
+  /** That image's pixel size. */
+  w: number; h: number;
+  /** The text inside a box, corners as FRACTIONS of the image (x across, y down). */
+  read(r: { x0: number; y0: number; x1: number; y1: number }): string;
+  /** Free the pdf.js document. */
+  close(): void;
+}
+
+export async function openRegionReader(fileId: string): Promise<RegionReader | null> {
+  let bytes: ArrayBuffer;
+  try {
+    bytes = await fetchPlanBytes(fileId);
+  } catch {
+    return null;
+  }
+  await import('../components/plans/pdfCompat');
+  const pdfjs = await import('pdfjs-dist');
+  const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
+  pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+  const doc = await pdfjs.getDocument({ data: bytes }).promise;
+  try {
+    const page = await doc.getPage(1);
+    const content = await page.getTextContent();
+    const items = (content.items as {
+      str: string; transform: number[]; width: number; height: number;
+    }[]).filter(it => it.str && it.str.trim());
+    if (items.length < 5) { void doc.destroy().catch(() => {}); return null; }
+    const lines = buildLines(items).sort((a, b) => b.y1 - a.y1);   // top of the sheet first
+
+    // The whole sheet, as large as a canvas will take (area-capped — a
+    // refused canvas is a blank picker, the standing cutout rule).
+    const base = page.getViewport({ scale: 1 });
+    const MAX_AREA = 4_200_000;
+    const scale = Math.min(2.5, Math.sqrt(MAX_AREA / Math.max(1, base.width * base.height)));
+    const vp = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(vp.width));
+    canvas.height = Math.max(1, Math.round(vp.height));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) { void doc.destroy().catch(() => {}); return null; }
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport: vp } as never).promise;
+    const image = canvas.toDataURL('image/png');
+    const w = canvas.width, h = canvas.height;
+
+    return {
+      image, w, h,
+      read(r) {
+        // Image fractions -> PDF user space, through the render viewport (y
+        // flips there; convertToPdfPoint owns that arithmetic).
+        const a = vp.convertToPdfPoint(r.x0 * w, r.y0 * h);
+        const b = vp.convertToPdfPoint(r.x1 * w, r.y1 * h);
+        const rx1 = Math.min(a[0], b[0]), rx2 = Math.max(a[0], b[0]);
+        const ry1 = Math.min(a[1], b[1]), ry2 = Math.max(a[1], b[1]);
+        const picked: string[] = [];
+        for (const l of lines) {
+          if (l.y2 < ry1 || l.y1 > ry2) continue;
+          const parts = l.parts.filter(pt => pt.x < rx2 && pt.x + (pt.w ?? 24) > rx1);
+          if (!parts.length) continue;
+          const read = pickReading(variantsOf({ ...l, parts }));
+          if (read) picked.push(read);
+        }
+        return picked.join(' ').replace(/\s+/g, ' ').trim();
+      },
+      close() { void doc.destroy().catch(() => {}); },
+    };
+  } catch {
+    void doc.destroy().catch(() => {});
+    return null;
+  }
+}
+
 const cache = new Map<string, PlanAddressResult>();
 const inFlight = new Map<string, Promise<PlanAddressResult>>();
 
@@ -239,40 +362,7 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
     // A scan has no text layer — a handful of stray marks is the same thing.
     if (items.length < 5) return { problem: 'no-text' };
 
-    /**
-     * Rebuild LINES from positioned glyph runs: group by baseline y (within
-     * most of a line height), then keep the runs with their x positions so
-     * both joining orders stay available. The cutout is still what the
-     * secretary trusts; the text is the convenience.
-     */
-    const runs = items.map(it => ({
-      str: it.str.trim(),
-      x: it.transform[4],
-      y: it.transform[5],
-      w: it.width,
-      h: Math.abs(it.height || Math.hypot(it.transform[2], it.transform[3])) || 8,
-    }));
-    runs.sort((a, b) => b.y - a.y || a.x - b.x);
-    const lines: Line[] = [];
-    for (const r of runs) {
-      const line = lines.find(l => Math.abs(l.y1 - r.y) < Math.max(3, r.h * 0.7));
-      if (line) {
-        line.x1 = Math.min(line.x1, r.x); line.x2 = Math.max(line.x2, r.x + r.w);
-        line.y2 = Math.max(line.y2, r.y + r.h);
-        line.parts.push({ x: r.x, str: r.str, w: r.w });
-      } else {
-        lines.push({
-          text: '', hebrew: false, x1: r.x, y1: r.y, x2: r.x + r.w, y2: r.y + r.h,
-          parts: [{ x: r.x, str: r.str, w: r.w }],
-        });
-      }
-    }
-    for (const l of lines) {
-      l.hebrew = l.parts.some(p => HEB.test(p.str));
-      // The default reading — right-to-left for a Hebrew line, as before.
-      l.parts.sort((a, b) => (l.hebrew ? b.x - a.x : a.x - b.x));
-      l.text = l.parts.map(p => p.str).join(' ').replace(/\s+/g, ' ').trim();
-    }
+    const lines = buildLines(items);
 
     const view = page.getViewport({ scale: 1 });
     const pageH = view.viewBox[3] - view.viewBox[1];

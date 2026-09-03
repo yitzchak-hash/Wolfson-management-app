@@ -131,6 +131,38 @@ aaron = d.apartments.find(a => a.id === 'G-aaron');
 check(aaron.address === '14 Sokolov St, Holon',
   'Use writes the address onto the job', aaron.address);
 
+// ── 1b · the reader guessed wrong? DRAW A BOX over the right spot ───────────
+// The picker must read what the BOX covers — proven by aiming it at a line
+// the automatic read never chose ("Project: Cohen residence", top-left of
+// the sheet at known coordinates).
+await page.locator('[data-plan-address-eye]').first().click();
+await page.waitForTimeout(400);
+await page.locator('[data-addr-pick]').click();
+await page.waitForSelector('[data-addr-pick-stage] img', { timeout: 30_000 });
+await page.waitForTimeout(600);
+const stage = await page.locator('[data-addr-pick-stage]').boundingBox();
+await page.mouse.move(stage.x + stage.width * 0.03, stage.y + stage.height * 0.065);
+await page.mouse.down();
+await page.mouse.move(stage.x + stage.width * 0.26, stage.y + stage.height * 0.105, { steps: 6 });
+await page.mouse.up();
+await page.waitForTimeout(600);
+const picked = await page.locator('[data-addr-pick-read]').textContent();
+check((picked ?? '').includes('Project: Cohen residence')
+  && !(picked ?? '').includes('TzviAir') && !(picked ?? '').includes('Scale'),
+  'the box reads exactly what it covers — no neighbours, not the guess', picked ?? '(none)');
+await page.locator('[data-addr-pick-use]').click();
+await page.waitForTimeout(700);
+d = await store();
+aaron = d.apartments.find(a => a.id === 'G-aaron');
+check(aaron.address === 'Project: Cohen residence', 'and Use writes the picked text', aaron.address);
+// Put the real address back through the row's plus (the suggestion row still
+// carries the reader's find) — the Waze section downstream expects Sokolov.
+await page.locator('[data-plan-address-use]').first().click();
+await page.waitForTimeout(700);
+d = await store();
+aaron = d.apartments.find(a => a.id === 'G-aaron');
+check(aaron.address === '14 Sokolov St, Holon', 'the row\'s plus restores the reader\'s find', aaron.address);
+
 // ── 2 · a folder Drive refuses to list says so, not "no plans" ──────────────
 await page.keyboard.press('Escape');
 await page.waitForTimeout(600);
