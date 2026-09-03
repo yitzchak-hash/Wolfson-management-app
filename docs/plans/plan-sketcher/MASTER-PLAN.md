@@ -2,8 +2,10 @@
 
 Sealed 2026-09-01 through the slow-plan method: 7 sittings, 40 locked picks,
 answered by the owner on the interactive plan page ("The Plan Sketcher
-Blueprint" artifact). **Where any older note disagrees with this file, this
-file wins; older records are kept as history, never rewritten.**
+Blueprint" artifact). **Phase 2 ("the way we add stuff") sealed 2026-09-03:
+sittings 8–13, picks 41–72 — the addendum below.** Where any older note
+disagrees with this file, this file wins; older records are kept as history,
+never rewritten.
 
 ## What it is (the owner's own frame)
 
@@ -330,6 +332,42 @@ carried the same data attribute as its buttons, so the bubble created a
 SECOND option on every press (select `button[data-newopt]`, not the bare
 attribute).
 
+### Sitting 13 — the export check (locked 2026-09-03)
+68. **Export asks the same three things every time and remembers NOTHING**
+    (his B — not the starred remembered-defaults): every export starts from
+    the same defaults; the only memory is the job record itself.
+69. **Files go to the job's Drive folder › Engineered Plans › a "Sketcher"
+    subfolder**, so the job app's plan chips and the worker portal see a
+    sketched plan beside the architects' plans with nothing new to wire.
+70. **File names: Family – Floor – Option – vN**, the version counted the
+    way the markup studio counts its "annotated version N" — **plus the
+    option to type a specific name** in its place: *"give option to type
+    also to call and name something specific"*.
+71. **The Excel: one row per option per item** — units (model, letter,
+    capacity), pipe metres per kind, duct metres per width, gvs m² and
+    running metres per drop — plus a totals sheet across options.
+72. **The title block is filled from the job record when the sketch starts
+    from the CRM/job app; otherwise the AI READS it off the client's own
+    plan during the clean-up scan; if there is none, it stays empty for the
+    hand.** In his words: *"It depends if the sketching is happening from
+    the CRM where all the information is in … or … it's a random plan,
+    someone's on the phone with me, I want to just put his file into a Drive
+    and then just start sketching right away, so there's no data. So what I
+    want to happen is I want to have the AI read the data when it starts
+    scanning to make the plan frame … whether I upload a DWG, image or PDF …
+    it should read on the client's plan the name. And if there is no name …
+    it should be empty and let me add it by hand."* → this lands in B4/B5:
+    the clean-up pass reads the client plan's title block (name, address,
+    floor) into the job fields the sheet and the file names use.
+
+## PHASE 2 SEALED — 2026-09-03
+Six sittings (8–13), thirty-two picks (41–72), every one answered by the
+owner on the plan page and quoted above where he wrote words. The plan page
+itself is a **throwaway planning artifact** (standing rule below); what
+carries into the build is the picks' semantics and the behaviours the demos
+proved. The build order stands as written; the refinements per step are
+folded into it below.
+
 ## The action order
 
 Dependency first; each step has a permanent ID.
@@ -351,13 +389,36 @@ Dependency first; each step has a permanent ID.
 - **B6 · The DWG door** — the office-PC converter helper (ODA), the driver
   seed (9).
 - **B7 · The catalog** — shelves, drag/stamp, locks + padlock, PNG door,
-  block cards, the block-rules page (17–22, 24). Content waits on the
-  master DWG (20).
+  block cards, the block-rules page (17–22, 24). Content: the 326 decoded
+  blocks (follow-up 2, received). *Phase 2 refinements*: the always-open
+  shelf by type AND brand with search (41, 47); let-go snaps to the nearest
+  wall facing the room (42); the round 15° turn handle, Shift frees (43);
+  labels that draw themselves and drag/flip/hide/corner-resize (44, 49);
+  automatic unit letters per model with systems A · B …, renumberable (45,
+  53); stamping until Escape (46); the unit's settings window (48, 52);
+  INDOOR UNIT cards that build themselves (50); grille stretch snapping to
+  catalog lengths (51); connection dots on every unit (56).
 - **B8 · The gvs stage** — two draw modes, live numbers, soft warnings,
-  options per floor, straightened pipes (23–28).
+  options per floor, straightened pipes (23–28). *Phase 2 refinements*: the
+  pen straightens lightly with quarter-circle corners and steps aside beside
+  an existing run (54); a pipe knows kind, both ends and length, defaults
+  from the admin app (55, 57); flexible ducts draw from the outlet dots with
+  the outlet's size, metal ducts one piece at a time (56 — pieces pending,
+  follow-up 5); gvs: DROP chips beside the selected box + custom number and
+  colour (58), corners snap to walls, wall corners and other boxes (59),
+  numbers always on the box (60), amber note + one-press fix (61), same drop
+  touching → one shape (62); options: new option asks copy-or-blank (63),
+  holds everything drawn (64), Compare ghost (65), no chosen mark — the CRM
+  marks it (67).
 - **B9 · Output** — the architects' sheet format from the owner's PDF (29,
   30), export dialog (31), versioning via the copied system (33), units +
-  BOQ CSV/Excel (30), one-or-separate PDFs (16).
+  BOQ CSV/Excel (30), one-or-separate PDFs (16). *Phase 2 refinements*:
+  export asks which options, each its own sheet (66), the same three asks
+  every time with no memory (68), files into Engineered Plans › Sketcher
+  (69), named Family – Floor – Option – vN or a typed name (70), the Excel's
+  one-row-per-option-per-item + totals sheet (71), the title block from the
+  job record or read off the client's plan, else left for the hand (72 —
+  the reading itself is B4/B5's scan).
 - **B10 · Polish & give-back** — Device Gallery + all-devices pass (35,
   39); consolidated markup code returned to the management app (6).
 
