@@ -210,6 +210,28 @@ what a pipe knows (⭐ kind + both ends + length in m), ducts drawn as a line
 with the DXF's pieces laid along it (⭐), and the pen's kinds (⭐ refrigerant
 pair · drain · duct · electrical feed).
 
+### Sitting 10 — pipes and ducts by hand (locked 2026-09-03)
+53. **Keep both**: the SYSTEM row sets what you place next, the unit's
+    settings window corrects any one unit (the window wins for that unit).
+54. **The pen straightens LIGHTLY** — a stretch within ~25° of an axis
+    becomes the axis; a deliberate diagonal stays as drawn (refines 28).
+55. **A drawn pipe knows its kind, its two ends and its length in metres**
+    — *"also should be set automatically usually in the admin"*: the pipe's
+    defaults (kind, size, look) come from rules set in the admin workspace
+    app, not typed per pipe. Length feeds the bill of quantities (30).
+56. **Two kinds of duct**, in his words: **FLEXIBLE ducts draw like a
+    pipe**, starting from the unit's OUTLET ("a piece that goes on the unit
+    that makes the exit for the duct"), and their size is matched
+    automatically from that outlet's size to the grille they reach; the
+    unit shows **little dots** (its connection points) that the pen snaps
+    to and that can be dragged from — *"right now it's not snapping well
+    at all"*. **METAL ducts are placed one piece at a time from the tray.**
+    Open follow-up #5: the decoded catalog holds NO duct-piece blocks (its
+    types are unit kinds, diffuser sizes and accessories) — the owner will
+    point at where the duct pieces live.
+57. **The pen's kinds: refrigerant pair · drain · duct · electrical feed**,
+    each its own look from the sheet's legend, each counted separately.
+
 ## The action order
 
 Dependency first; each step has a permanent ID.
@@ -262,6 +284,8 @@ scans, so B6/B7 content can lag without blocking it).
    it; the formula slots into pick 24 without changing anything else.
 4. The Claude API key for the AI cleaning/classification brain (approved:
    Claude), set as a server-side env var — never in the public bundle.
+5. The metal duct pieces (straights, elbows, reducers) for pick 56 — not
+   among the 326 catalog blocks; the owner will say where they are.
 
 ## What was proven before sealing (in the planning container, on real files)
 
