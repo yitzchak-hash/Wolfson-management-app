@@ -374,3 +374,16 @@ scans, so B6/B7 content can lag without blocking it).
   2026-09-01, in the slow-plan skill).
 - The plan page (the Blueprint artifact) is the visual record of every
   sitting; this file is the sealed text of record.
+- **OWNER RULING (2026-09-03): the Blueprint's sketcher is a PLANNING
+  ARTIFACT, thrown away afterwards — never a reference for how the app
+  looks.** In his words: *"it won't [be] used so much as a reference to how
+  the final app will look … it's just a planning artifact that will go to the
+  garbage after. And only after extracting the markup app already there, it
+  should treat it as UI updates and basically mixing the two based on the
+  original markup app's design and style and UI style."* So the build order
+  is: copy the markup studio out (pick 6) FIRST — its rail, its two bars, its
+  navy/accent, InkPicker, the touch and palm rules — and then land every
+  sketcher feature (shelf, placing, gvs, pen, options, sheet) on that studio
+  as UI updates in ITS design language. What carries over from the demo is
+  BEHAVIOUR and ARITHMETIC only (the snapping rules, the straightening, the
+  numbers, the picks' semantics); none of its chrome, colours or layout does.
