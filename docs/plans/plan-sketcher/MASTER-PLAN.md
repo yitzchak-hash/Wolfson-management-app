@@ -293,6 +293,43 @@ lessons were all geometry: the room's bottom wall on this plan runs only x
 1406–1539 (open to the west), and a press inside a box can land on the amber
 chip, which rightly owns it — drag from the other corner.
 
+### Sitting 12 — options per floor (locked 2026-09-03)
+63. **A new option ASKS: a copy of this one, or blank** (his C — not the
+    starred "always a copy").
+64. **An option holds everything drawn on the floor** — its own units,
+    pipes, ducts, gvs and labels.
+65. **Compare: the other option ghosted in grey underneath.**
+66. **Export asks which options; each becomes its own sheet** (named; one
+    PDF or separate per pick 16).
+67. **The CRM marks the chosen option — the sketcher never does** (his C):
+    no star on the tabs; options carry names only, and which one is real is
+    the CRM's business when pick 32's link arrives.
+
+Sitting 13 (published 2026-09-03, the last of Phase 2) builds 63 and 67 in
+(+ option asks copy-or-blank in a small window; the star is gone) and adds
+**Export…**: one window asking which options (66), separate PDFs or one PDF
+with a sheet per option (16), and the Excel yes or no (30); "Make the sheets"
+then DRAWS each chosen option as a sheet — the plan reused via `<use
+href="#plan">`, the option's units with letter chips, pipes, ducts and gvs
+(`optionMarkup`, the same renderer as the Compare ghost), a title block (job ·
+floor · option · date · vN · sheet i of n · drawn by TzviAir), the drop legend,
+a totals column and the INDOOR UNIT cards along the bottom — plus the
+spreadsheet rows as they would be written (`csvRows`: one row per option per
+item — units with model/capacity/letters, pipe metres per kind, duct metres
+per width, gvs m² and running m per drop). `optionTotals` is the ONE
+arithmetic behind the sheet's column and the rows. File names follow
+`Family – Floor – Option – vN.pdf` (one PDF: `… – options – vN.pdf`), the
+Excel `… – units & BOQ.xlsx`. The choices are remembered for the next press
+(the ask still happens). It asks 68–72: what Export asks and remembers (⭐ one
+small window, remembered per job), where files go (⭐ Engineered Plans ›
+Sketcher), file names (⭐ the vN rule shared with the markup studio), what the
+Excel holds (⭐ the rows above + a totals sheet), what fills the title block
+(⭐ job record + floor + option + date + version + "drawn by TzviAir").
+Harness `check13.mjs`, 29 checks — its real find: the new-option window
+carried the same data attribute as its buttons, so the bubble created a
+SECOND option on every press (select `button[data-newopt]`, not the bare
+attribute).
+
 ## The action order
 
 Dependency first; each step has a permanent ID.
