@@ -1,0 +1,483 @@
+<title>Problems, Tipus and Notes</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Caveat:wght@600;700&display=swap">
+<style>/*__APP_CSS__*/</style>
+<style>
+  html, body { background: #e8ebf0 !important; margin: 0; overscroll-behavior: auto !important; color-scheme: light; }
+  body { font-family: Inter, system-ui, sans-serif; color: #1f2937; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 28px 20px 90px; }
+  h1 { font-size: 26px; font-weight: 900; color: #1e3a5f; margin: 0 0 4px; letter-spacing: -.01em; }
+  .sub { font-size: 14px; color: #4b5563; max-width: 70ch; margin: 0 0 6px; }
+  .mark { font-family: Caveat, cursive; color: #c0392b; }
+  .scene { background: #f6f7f9; border: 1px solid #d8dde5; border-radius: 18px; padding: 22px; margin-top: 26px; }
+  .scene h2 { font-size: 16px; font-weight: 800; color: #1e3a5f; margin: 0 0 4px; }
+  .scene p.lead { font-size: 13.5px; color: #4b5563; margin: 0 0 16px; max-width: 72ch; }
+  .row { display: flex; gap: 26px; align-items: flex-start; flex-wrap: wrap; }
+  .notes { flex: 1 1 300px; min-width: 280px; }
+  .notes ol { margin: 0; padding: 0; list-style: none; }
+  .notes li { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; color: #374151; margin: 0 0 11px; line-height: 1.45; }
+  .notes li .k { flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; background: #c0392b; color: #fff; font: 800 12px Inter; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+  .notes .say { font-family: Caveat, cursive; color: #c0392b; font-size: 21px; line-height: 1.15; margin: 0 0 12px; }
+  .rules { background: #fff; border: 1px solid #d8dde5; border-radius: 14px; padding: 18px 20px; margin-top: 26px; }
+  .rules h2 { font-size: 15px; font-weight: 800; color: #1e3a5f; margin: 0 0 10px; }
+  .rules li { font-size: 13.5px; color: #374151; margin: 7px 0; max-width: 78ch; line-height: 1.45; }
+  .rules b { color: #1e3a5f; }
+  .inset { background: #fff; border: 1px solid #d8dde5; border-radius: 14px; padding: 14px; margin-top: 14px; }
+  .inset .cap { font-family: Caveat, cursive; color: #c0392b; font-size: 18px; margin: 0 0 8px; }
+  .win > .top { border-radius: 15px 15px 0 0; }
+  .win > :last-child { border-radius: 0 0 15px 15px; }
+  .n { position: absolute; width: 24px; height: 24px; border-radius: 50%; background: #c0392b; color: #fff; font: 800 12.5px Inter; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 3px #fff, 0 4px 10px rgba(0,0,0,.25); z-index: 8; }
+  .q { display: flex; gap: 10px; align-items: flex-start; margin: 10px 0; font-size: 13.5px; color: #374151; }
+  .q .star { color: #c0392b; font-family: Caveat, cursive; font-size: 20px; line-height: 1; flex-shrink: 0; }
+  .model { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; color: #1f2937; line-height: 1.55; white-space: pre; overflow-x: auto; }
+  .model .c { color: #6b7280; }
+
+  /* ── the office's apartment window (a slice of it) ── */
+  .win { width: 520px; max-width: 100%; background: #fff; border: 1px solid #d8dde5; border-radius: 16px; overflow: visible; box-shadow: 0 18px 40px -24px rgba(15,23,42,.4); position: relative; flex-shrink: 0; }
+  .win .top { background: #1e3a5f; color: #fff; padding: 12px 16px; display: flex; align-items: center; gap: 10px; }
+  .win .top b { font-size: 17px; font-weight: 900; }
+  .win .top .tip { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,.14); }
+  .win .body { padding: 14px 16px; }
+  .lbl { font-size: 10px; font-weight: 800; letter-spacing: .08em; color: #64748b; text-transform: uppercase; margin: 0 0 6px; }
+  .fld { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .fld > div { flex: 1 1 110px; min-width: 110px; }
+  .box { border: 1px solid #dbe3ec; border-radius: 10px; padding: 8px 10px; font-size: 13px; color: #1f2937; background: #fff; }
+  .box.sel { display: flex; align-items: center; justify-content: space-between; }
+  /* the stage picker */
+  .stages { border: 1px solid #e2e8f0; border-radius: 12px; overflow: visible; }
+  .stages > .st:first-child { border-radius: 11px 11px 0 0; }
+  .stages > .st:last-child { border-radius: 0 0 11px 11px; }
+  .st { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 1px solid #f1f5f9; font-size: 13.5px; font-weight: 600; color: #1f2937; }
+  .st:last-child { border-bottom: 0; }
+  .st .cb { width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid #cbd5e1; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #fff; flex-shrink: 0; }
+  .st .cb.on { background: #16a34a; border-color: #16a34a; }
+  .st.done { color: #94a3b8; text-decoration: line-through; }
+  .st.cur { background: #eef4fa; }
+  .st .sw { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
+  .st.problem { background: #fef2f2; color: #b91c1c; font-weight: 800; }
+  .problem-btn { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 10px 0 0; padding: 11px; border-radius: 12px; background: #dc2626; color: #fff; font-weight: 800; font-size: 14px; box-shadow: 0 8px 18px -10px rgba(220,38,38,.7); }
+  .band { display: flex; align-items: center; gap: 10px; padding: 10px 14px; font-size: 13px; font-weight: 700; }
+  .band.red { background: #dc2626; color: #fff; }
+  .band.rose { background: #f43f5e; color: #fff; }
+  .band.green { background: #dcfce7; color: #15803d; border-bottom: 1px solid #bbf7d0; }
+  .band .ex { width: 26px; height: 26px; border-radius: 50%; background: #fff; color: #dc2626; font-weight: 900; font-size: 18px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .band .act { margin-inline-start: auto; flex-shrink: 0; white-space: nowrap; background: #fff; color: #b91c1c; font-size: 12px; font-weight: 800; padding: 5px 10px; border-radius: 8px; }
+  .thumbs { display: flex; gap: 6px; }
+  .thumbs i { width: 44px; height: 36px; border-radius: 6px; background: linear-gradient(135deg, #cbd5e1, #94a3b8); display: block; }
+
+  /* the WhatsApp-style box (the ONE input everywhere) */
+  .comp { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+  .comp .clip { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #64748b; background: #fff; border: 1px solid #e2e8f0; flex-shrink: 0; }
+  .comp .in { flex: 1; min-width: 0; height: 42px; background: #fff; border: 1px solid #dbe3ec; border-radius: 22px; display: flex; align-items: center; gap: 4px; padding: 0 14px 0 6px; color: #94a3b8; font-size: 13.5px; }
+  .comp .in .mic { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #1e3a5f; background: #eef4fa; flex-shrink: 0; }
+  .comp .big { width: 44px; height: 44px; border-radius: 50%; background: #1e3a5f; color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 6px 14px -6px rgba(30,58,95,.7); }
+  .memo { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid #e6ecf3; border-radius: 12px; padding: 6px 8px; }
+  .memo .pl { width: 26px; height: 26px; border-radius: 50%; background: #1e3a5f; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 10px; flex-shrink: 0; }
+  .memo .wave { flex: 1; height: 18px; background: repeating-linear-gradient(90deg, #4aa8d8 0 2px, transparent 2px 5px); opacity: .55; border-radius: 3px; }
+  .memo .len { font-size: 10px; color: #93a2b1; }
+  .tr { font-size: 12.5px; color: #1f2c3d; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #dbe3ec; }
+  .tr .lbl2 { font-size: 9.5px; font-weight: 800; letter-spacing: .08em; color: #93a2b1; display: block; margin-bottom: 2px; }
+  .bullets { margin: 0 0 8px; padding: 0; list-style: none; }
+  .bullets li { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: #1f2937; padding: 5px 0; border-bottom: 1px dashed #eef2f6; }
+  .bullets li::before { content: '•'; color: #4aa8d8; font-weight: 900; }
+  .bullets .who { margin-inline-start: auto; font-size: 10px; color: #b0bccb; white-space: nowrap; }
+
+  /* the diagram cells */
+  .cellrow { display: grid; grid-template-columns: repeat(4, 96px); gap: 8px; }
+  .cell { background: #f5f7fa; border: 1px solid #e2e8f0; border-radius: 8px; min-height: 66px; padding: 6px 4px; text-align: center; display: flex; flex-direction: column; justify-content: center; position: relative; }
+  .cell .no { font-size: 14px; font-weight: 800; color: #1e3a5f; }
+  .cell .no small { font-weight: 700; color: #64748b; font-size: 11px; }
+  .cell .fam { font-size: 9px; color: #64748b; }
+  .cell .st2 { font-size: 8px; color: #94a3b8; margin-top: 2px; }
+  .cell.red { background: #dc2626; border-color: #b91c1c; }
+  .cell.red .no, .cell.red .fam, .cell.red .st2 { color: #fff; }
+  .cell.rose { background: #fda4af; border-color: #fb7185; }
+  .cell.rose .no { color: #881337; } .cell.rose .fam, .cell.rose .st2 { color: #9f1239; }
+  .cell .bang { position: absolute; top: -10px; right: -10px; width: 26px; height: 26px; border-radius: 50%; background: #fff; color: #dc2626; font-weight: 900; font-size: 17px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,.25); border: 2px solid #dc2626; }
+  .cell.rose .bang { color: #e11d48; border-color: #e11d48; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: #4b5563; margin-top: 10px; }
+  .legend i { display: inline-block; width: 14px; height: 14px; border-radius: 4px; vertical-align: -2px; margin-right: 5px; }
+
+  /* the phone */
+  .phone { width: 412px; height: 760px; background: #0b1220; border-radius: 40px; padding: 12px; flex-shrink: 0; box-shadow: 0 30px 60px -22px rgba(15,23,42,.55); position: relative; zoom: .8; }
+  .screen { width: 100%; height: 100%; background: #f1f5f9; border-radius: 30px; overflow: hidden; display: flex; flex-direction: column; position: relative; }
+  .hdr { background: #1e3a5f; height: 60px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .hdr img { height: 28px; }
+  .urgent { background: #dc2626; color: #fff; padding: 10px 14px; font-size: 13px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
+  .card { background: #fff; border-radius: 16px; border: 1px solid #f1f5f9; box-shadow: 0 1px 2px rgba(0,0,0,.05); padding: 14px; margin: 0 12px 10px; }
+  .card.red { border: 2px solid #dc2626; background: #fff5f5; }
+  .card.rose { border: 2px solid #fb7185; background: #fff1f2; }
+  .tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 800; }
+  .flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-top: 14px; }
+  .step { background: #fff; border: 1px solid #d8dde5; border-radius: 14px; padding: 14px; position: relative; }
+  .step .sn { position: absolute; top: -11px; left: 12px; background: #c0392b; color: #fff; font: 800 11px Inter; padding: 3px 9px; border-radius: 999px; }
+  .step h5 { margin: 6px 0 8px; font-size: 12.5px; font-weight: 800; color: #1e3a5f; }
+  .step p { margin: 6px 0 0; font-size: 12px; color: #4b5563; line-height: 1.45; }
+  .chip { display: inline-block; font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 999px; }
+  .settings { background: #fff; border: 1px solid #d8dde5; border-radius: 14px; padding: 14px 16px; font-size: 12.5px; }
+  .settings h5 { margin: 0 0 8px; font-size: 12px; font-weight: 800; color: #1e3a5f; }
+  .tipus-list { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tipus-list span { padding: 4px 10px; border-radius: 999px; background: #eef4fa; color: #1e3a5f; font-weight: 800; font-size: 12px; border: 1px solid #c7d4e0; }
+  .rpt { background: #fff; border: 1px solid #d8dde5; border-radius: 12px; overflow: hidden; font-size: 12px; }
+  .rpt table { width: 100%; border-collapse: collapse; }
+  .rpt th { text-align: left; font-size: 10.5px; letter-spacing: .06em; color: #64748b; padding: 8px 10px; border-bottom: 1px solid #e5e7eb; background: #f8fafc; }
+  .rpt td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+</style>
+
+<div class="wrap">
+  <h1>Problems, Tipus and Notes</h1>
+  <p class="sub">The next round, drawn before it is built: a problem on an apartment and everything it touches, the tipus
+    field, the one voice-and-text box on every input, and the notes that read like notes. Numbered red dots match the
+    notes beside each picture; starred questions at the end are the ones only you can answer.</p>
+  <p class="mark" style="font-size:20px;margin:0">Nothing here is built. Say "build it" and this page is the spec.</p>
+
+  <!-- ═══════════ 1 · REPORT A PROBLEM ═══════════ -->
+  <div class="scene">
+    <h2>1 · Report a problem — from the stage picker</h2>
+    <p class="lead">A problem is not a stage, so it does not live in the stage list; it lives under it, red, and the real stage keeps its place while the problem is open.</p>
+    <div class="row">
+      <div class="win">
+        <div class="top"><b>47 — A2</b><span style="opacity:.7">Aharonov, Moshe</span><span class="tip">A1 · floor 13</span></div>
+        <div class="body">
+          <div class="lbl">Stage</div>
+          <div class="stages" style="position:relative">
+            <div class="st done"><span class="cb on">✓</span><span class="sw" style="background:#94a3b8"></span>Ready to start</div>
+            <div class="st done"><span class="cb on">✓</span><span class="sw" style="background:#3b82f6"></span>Piping</div>
+            <div class="st cur"><span class="cb"></span><span class="sw" style="background:#0ea5e9"></span>Drainage <span style="margin-inline-start:auto;font-size:10px;color:#64748b;font-weight:600">current</span></div>
+            <div class="st"><span class="cb"></span><span class="sw" style="background:#8b5cf6"></span>Concealed units</div>
+            <div class="st"><span class="cb"></span><span class="sw" style="background:#10b981"></span>Registers &amp; access panels</div>
+          </div>
+          <div class="problem-btn">⚠ Report a problem</div>
+          <span class="n" style="right:-8px;bottom:-8px">1</span>
+        </div>
+      </div>
+      <div class="notes">
+        <p class="say">"a button to report a problem… red is the color of a problem… in the stage"</p>
+        <ol>
+          <li><span class="k">1</span><span>The stage picker keeps everything it has (the tick to cross a stage off, right-click for half done) and grows a <b>red "Report a problem" button under the list</b>. Pressing it opens the problem form below. It is red and only red — nothing else in the picker uses that colour, so it is never mistaken for a stage.</span></li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:22px">
+      <div class="win">
+        <div class="top" style="background:#dc2626"><span style="font-size:20px">⚠</span><b>Problem — 47 · Aharonov</b></div>
+        <div class="body">
+          <div class="fld">
+            <div><div class="lbl">Who fixes it</div><div class="box sel">Igor (AC) <span style="color:#94a3b8">▾</span></div></div>
+            <div><div class="lbl">Deadline</div><div class="box sel">Fri 5 Sep <span style="color:#94a3b8">📅</span></div></div>
+          </div>
+          <div class="lbl">What is wrong</div>
+          <div style="background:#f2f5f8;border:1px solid #e3e9f0;border-radius:14px;padding:10px;position:relative">
+            <div class="memo"><span class="pl">▶</span><span class="wave"></span><span class="len">0:21</span></div>
+            <div class="tr"><span class="lbl2">SAID</span>The drain in the second bedroom is leaking onto the ceiling below — the tenant says it started yesterday.</div>
+            <div class="comp" style="margin-top:8px">
+              <div class="clip">📎</div>
+              <div class="in"><span class="mic">🎤</span>Your message…</div>
+              <div class="big">🎙</div>
+            </div>
+            <span class="n" style="right:-8px;top:-8px">2</span>
+          </div>
+          <div class="lbl" style="margin-top:12px">Pictures of the problem</div>
+          <div class="thumbs"><i></i><i></i><span style="width:44px;height:36px;border:1.5px dashed #94a3b8;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#64748b;font-weight:800">+</span></div>
+          <div style="margin-top:14px;padding:10px 12px;border:1px solid #fde68a;background:#fffbeb;border-radius:12px;font-size:13px;color:#92400e;display:flex;align-items:center;gap:10px;flex-wrap:wrap;position:relative">
+            <b>Must the worker send pictures when it is fixed?</b>
+            <span class="chip" style="background:#1e3a5f;color:#fff">Yes, at least 3</span>
+            <span class="chip" style="background:#fff;color:#64748b;border:1px solid #e2e8f0">No</span>
+            <span class="n" style="right:-8px;top:-8px">3</span>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+            <span class="chip" style="background:#fff;color:#64748b;border:1px solid #e2e8f0;padding:8px 14px">Cancel</span>
+            <span class="chip" style="background:#dc2626;color:#fff;padding:8px 14px">Save the problem</span>
+          </div>
+        </div>
+      </div>
+      <div class="notes">
+        <p class="say">"assign the problem to a worker, write notes… mic and paperclip in the field… the big WhatsApp mic that transcribes… pictures… yes or no for mandatory pictures"</p>
+        <ol>
+          <li><span class="k">2</span><span><b>The notes ARE the message box</b> — the same one the worker's phone has now: paperclip, "Your message" with the dictation mic at its left, the big mic at the end. A recording lands as a player with its words under it; the worker reads those words in his language. Every note written here becomes the first messages of the problem's thread, so the office and the worker talk in one place from the start.</span></li>
+          <li><span class="k">3</span><span>One question before saving: <b>must he send pictures to close it?</b> Yes (the standing three) or No. It is stored on the problem, so the worker's Close button follows it exactly the way it follows the worker's own photos-optional switch today.</span></li>
+          <li><span class="k">✓</span><span><b>A deadline, not a day.</b> The problem has no day on the calendar; it has a date it must be fixed by. Saving also records where the apartment stood — its current stage — so it can go back there when the problem is solved.</span></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ 2 · WHAT THE OFFICE SEES ═══════════ -->
+  <div class="scene">
+    <h2>2 · The apartment wears the problem</h2>
+    <p class="lead">Red and loud while it is open, a softer red while it waits for approval, back to its stage the moment it is approved. Three states, one glance.</p>
+    <div class="row">
+      <div style="flex:1 1 420px">
+        <div class="cellrow" style="position:relative">
+          <div class="cell"><div class="no">45 <small>— B1</small></div><div class="fam">Weinstein, Steven</div><div class="st2">Piping</div></div>
+          <div class="cell red"><div class="no">46 <small>— A2</small></div><div class="fam">Vizgan, Chaim</div><div class="st2">PROBLEM · was Drainage</div><span class="bang">!</span></div>
+          <div class="cell rose"><div class="no">47 <small>— A2</small></div><div class="fam">Aharonov, Moshe</div><div class="st2">Waiting for approval</div><span class="bang">!</span></div>
+          <div class="cell"><div class="no">48</div><div class="fam">Nahon, Yitzchak</div><div class="st2">Drainage</div></div>
+          <span class="n" style="left:-10px;top:-10px">1</span>
+        </div>
+        <div class="legend">
+          <span><i style="background:#dc2626"></i>Problem open</span>
+          <span><i style="background:#fda4af"></i>Waiting for approval</span>
+          <span><i style="background:#f5f7fa;border:1px solid #e2e8f0"></i>Back on its stage once approved</span>
+        </div>
+        <div class="win" style="margin-top:18px;width:100%">
+          <div class="top"><b>47 — A2</b><span style="opacity:.7">Aharonov, Moshe</span></div>
+          <div class="band rose"><span class="ex">!</span><span>Waiting for approval · Drain leak in bedroom 2 · Igor · closed today 14:10</span><span class="act">Approve ✓</span></div>
+          <div class="body" style="padding-top:10px">
+            <div class="lbl">Pictures he sent</div>
+            <div class="thumbs"><i></i><i></i><i></i></div>
+            <span class="n" style="right:-8px;top:-8px">2</span>
+          </div>
+        </div>
+        <div class="win" style="margin-top:14px;width:100%">
+          <div class="top"><b>47 — A2</b><span style="opacity:.7">Aharonov, Moshe</span><span class="tip">Drainage</span></div>
+          <div class="band green"><span>✓ Problem solved · Drain leak in bedroom 2 · approved by Tzvi, 4 Sep</span><span class="act" style="background:#fff;color:#15803d">3 pictures</span></div>
+          <span class="n" style="right:-8px;top:-8px">3</span>
+        </div>
+      </div>
+      <div class="notes">
+        <p class="say">"the apartment turns red with a big exclamation point… the stage should show Problem… then pinkish, waiting for approval… then approved, problem solved, see the pictures, back to the stage"</p>
+        <ol>
+          <li><span class="k">1</span><span><b>On the diagram and the tile:</b> a red cell with a big white "!" on its corner and the stage line reading <b>PROBLEM · was Drainage</b>. When the worker closes it: a rose cell, "Waiting for approval". The real stage is never overwritten — it is drawn behind the problem and comes straight back. The same colours on the Job Board tile, the wallboard, the report cells and the Building Progress widget, because they all read one rule.</span></li>
+          <li><span class="k">2</span><span><b>In the apartment window</b> the problem is a band right under the title — above the details, where you cannot miss it — with the worker, the deadline (red when passed), the pictures he sent and the <b>Approve</b> button. Approving is the office's act: the worker cannot do it.</span></li>
+          <li><span class="k">3</span><span>Approved, the band turns green: <b>Problem solved</b>, who approved it and when, and the pictures one press away. The apartment returns to the stage it was on. The band stays as the record for thirty days, then folds into the History tab.</span></li>
+          <li><span class="k">✓</span><span><b>Bulk update</b> (part 4) can raise a problem on many apartments at once, and the header's pending bell lists open problems with a red glyph beside the half-done clocks.</span></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ 3 · THE WORKER'S PHONE ═══════════ -->
+  <div class="scene">
+    <h2>3 · The worker's phone: red until it is fixed, urgent past the deadline</h2>
+    <p class="lead">A problem has no day, so it shows every day; past its deadline it moves to the top and shouts.</p>
+    <div class="row">
+      <div class="phone">
+        <div class="screen">
+          <div class="hdr"><img src="__LOGO__" alt="TzviAir"></div>
+          <div class="urgent">⚠ 1 problem past its deadline<span style="margin-inline-start:auto;font-size:11px;opacity:.85">tap ↓</span></div>
+          <div style="display:flex;gap:6px;padding:10px 12px;overflow:hidden"><span class="chip" style="background:#fff;color:#64748b;border:1px solid #e2e8f0">All</span><span class="chip" style="background:#1e3a5f;color:#fff">Today</span><span class="chip" style="background:#fff;color:#64748b;border:1px solid #e2e8f0">Tomorrow</span></div>
+          <div class="card red" style="position:relative">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px"><span class="tag" style="background:#dc2626;color:#fff">⚠ PROBLEM</span><span style="font-weight:800;color:#1e3a5f;font-size:16px">Apt 46 — A2</span><span class="tag" style="background:rgba(184,134,11,.12);color:#8a6508">Wolfson · A1</span></div>
+            <div style="font-size:13.5px;color:#4b5563">Drain leaking in bedroom 2 onto the ceiling below</div>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:11.5px"><span style="color:#dc2626;font-weight:800">Deadline Wed 3 Sep · 2 days late</span></div>
+            <span class="n" style="right:-6px;top:-6px">1</span>
+          </div>
+          <div class="card red">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px"><span class="tag" style="background:#dc2626;color:#fff">⚠ PROBLEM</span><span style="font-weight:800;color:#1e3a5f;font-size:16px">Apt 52 — A2</span></div>
+            <div style="font-size:13.5px;color:#4b5563">Thermostat dead in the living room</div>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:11.5px;color:#94a3b8">Deadline Fri 5 Sep</div>
+          </div>
+          <div class="card rose" style="position:relative">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px"><span class="tag" style="background:#fb7185;color:#fff">WAITING FOR APPROVAL</span><span style="font-weight:800;color:#1e3a5f;font-size:16px">Apt 47 — A2</span></div>
+            <div style="font-size:13.5px;color:#4b5563">Drain leak in bedroom 2</div>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:11.5px;color:#9f1239">Closed by you, 14:10 · the office is checking</div>
+            <span class="n" style="right:-6px;top:-6px">2</span>
+          </div>
+          <div class="card">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px"><span style="font-weight:800;color:#1e3a5f;font-size:16px">Apt 47 — A2</span><span class="tag" style="background:#e0f2fe;color:#0369a1">Piping</span></div>
+            <div style="font-size:13.5px;color:#4b5563">Take out old wall unit and install new one</div>
+          </div>
+        </div>
+      </div>
+      <div class="notes">
+        <p class="say">"there should be a deadline, and until he's done it shows up every day… past the deadline it should remind him very urgently"</p>
+        <ol>
+          <li><span class="k">1</span><span><b>A problem card is red, first in the list, on every day's filter</b> — Today, Tomorrow, This week all show it, because it has no day. The deadline is printed on it, and once it is passed the card says how late it is and a <b>red banner pins to the top of the list</b> with the count; the bell gets the same item. Nothing pops up over his work; the list itself shouts.</span></li>
+          <li><span class="k">2</span><span>Opening it is the ordinary task sheet with the problem's thread (the office's notes and memos, transcribed and translated) and <b>Close problem</b>: pictures if the office asked for them, then it goes to <b>Waiting for approval</b> — rose, still on his list, no longer counted against him. When the office approves, the card leaves; if the office sends it back, it turns red again with the office's note on top.</span></li>
+          <li><span class="k">✓</span><span>"I did work here" on a red apartment offers the problem first: "Is this the fix for: Drain leak?" — the same ask the general job has.</span></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ 4 · BULK + REPORT ═══════════ -->
+  <div class="scene">
+    <h2>4 · Many at once, and the problem report</h2>
+    <p class="lead">Bulk update raises the same problem on several apartments and lets you word each one; Reports gets a Problems subject that prints with pictures.</p>
+    <div class="flow">
+      <div class="step"><span class="sn">bulk · 1</span>
+        <h5>Pick the apartments, press "Report a problem"</h5>
+        <p>The bulk bar on the diagram gains the red button beside Stage and Type. One form: worker, deadline, the message box, pictures-required — exactly the single form.</p>
+      </div>
+      <div class="step"><span class="sn">bulk · 2</span>
+        <h5>Then one line per apartment</h5>
+        <p>A list of the picked units, each with the note pre-filled from the form and editable — "same for all" is the default, and any line can say something different ("46: also the bathroom"). Save writes one problem per apartment, each with its own thread.</p>
+      </div>
+      <div class="step"><span class="sn">report</span>
+        <h5>Problems in the report builder</h5>
+        <p>A new subject, <b>Problems</b>: apartment, tipus, worker, what, raised, deadline, status, closed, approved by, days late. Grouped by worker or by status it is the morning's list. Print and the .xlsx carry the pictures when you tick <b>with pictures</b> — thumbnails in the row, the way the plan download prints its pins.</p>
+      </div>
+    </div>
+    <div class="rpt" style="margin-top:14px;max-width:760px">
+      <table>
+        <tr><th>APT</th><th>TIPUS</th><th>WORKER</th><th>PROBLEM</th><th>DEADLINE</th><th>STATUS</th><th>PICTURES</th></tr>
+        <tr><td><b>46</b></td><td>A2</td><td>Igor</td><td>Drain leaking in bedroom 2</td><td style="color:#dc2626;font-weight:700">3 Sep · 2 days late</td><td><span class="chip" style="background:#dc2626;color:#fff">open</span></td><td><div class="thumbs"><i></i><i></i></div></td></tr>
+        <tr><td><b>47</b></td><td>A2</td><td>Igor</td><td>Drain leak in bedroom 2</td><td>5 Sep</td><td><span class="chip" style="background:#fda4af;color:#881337">waiting</span></td><td><div class="thumbs"><i></i><i></i><i></i></div></td></tr>
+        <tr><td><b>52</b></td><td>A2</td><td>Igor</td><td>Thermostat dead, living room</td><td>5 Sep</td><td><span class="chip" style="background:#dcfce7;color:#15803d">solved</span></td><td><div class="thumbs"><i></i><i></i><i></i></div></td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════ 5 · TIPUS ═══════════ -->
+  <div class="scene">
+    <h2>5 · Tipus — the apartment's type</h2>
+    <p class="lead">A short name from a list the project keeps (A1, A2, B1, C3…), optional, printed right after the number everywhere the number appears.</p>
+    <div class="row">
+      <div style="flex:1 1 380px;display:flex;flex-direction:column;gap:14px">
+        <div class="win" style="width:100%">
+          <div class="top"><b>47 — A2</b><span style="opacity:.7">Aharonov, Moshe</span><span class="tip">A1 · floor 13</span></div>
+          <div class="body">
+            <div class="fld" style="position:relative">
+              <div><div class="lbl">Apartment</div><div class="box">47</div></div>
+              <div><div class="lbl">Tipus</div><div class="box sel" style="border-color:#4aa8d8">A2 <span style="color:#94a3b8">▾</span></div></div>
+              <div style="flex:2 1 160px"><div class="lbl">Family</div><div class="box">Aharonov, Moshe</div></div>
+              <div><div class="lbl">Type</div><div class="box">Standard</div></div>
+              <span class="n" style="left:118px;top:-10px">1</span>
+            </div>
+          </div>
+        </div>
+        <div class="settings">
+          <h5>Project settings → Tipusim</h5>
+          <div class="tipus-list"><span>A1</span><span>A2</span><span>B1</span><span>B2</span><span>C3</span><span>C4</span><span style="background:#fff;color:#4aa8d8;border-style:dashed">+ add</span></div>
+          <p class="mark" style="margin:8px 0 0;font-size:17px">per workspace — Wolfson's list and Netiv's list are different lists</p>
+        </div>
+        <div class="settings">
+          <h5>Bulk update</h5>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><span class="chip" style="background:#eef4fa;color:#1e3a5f;border:1px solid #c7d4e0">Stage ▾</span><span class="chip" style="background:#eef4fa;color:#1e3a5f;border:1px solid #c7d4e0">Type ▾</span><span class="chip" style="background:#1e3a5f;color:#fff">Tipus: A2 ▾</span><span class="chip" style="background:#dc2626;color:#fff">⚠ Report a problem</span><span style="font-size:11px;color:#64748b">· 6 apartments picked</span></div>
+        </div>
+      </div>
+      <div class="notes">
+        <p class="say">"between the apartment number and the family name we have to see type — tipus — a dropdown from the project settings… next to the number a dash and the tipus"</p>
+        <ol>
+          <li><span class="k">1</span><span><b>Tipus sits between the number and the family name</b>, a dropdown fed by the project's own list, and may be left empty. The word is "Tipus" in English too, as you asked, and טיפוס in Hebrew.</span></li>
+          <li><span class="k">✓</span><span><b>"47 — A2" everywhere the number is printed</b>: the window title, the diagram cell, the tile, the task cards, the worker's phone, reports and the search. An apartment with no tipus prints as plain "47". The family name follows as before — the label rule in the code grows one segment.</span></li>
+          <li><span class="k">✓</span><span>Bulk update sets a tipus on the picked apartments in one press; the report builder gets Tipus as a field on every subject that reaches a job, and a Tipus group on the diagram's filters.</span></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ 6 · VOICE EVERYWHERE ═══════════ -->
+  <div class="scene">
+    <h2>6 · One box for every input — voice, words, files</h2>
+    <p class="lead">The message box the worker's phone got today becomes the way every note and every task is written, and every recording anywhere shows its words underneath.</p>
+    <div class="row">
+      <div class="notes" style="flex:1 1 420px">
+        <p class="say">"everywhere we send voice recordings it should show the recording and under it the transcription in the language of the screen… tasks and all the other input fields should work the same way as the WhatsApp notes"</p>
+        <ol>
+          <li><span class="k">1</span><span><b>The box</b> — paperclip · "Your message" with the dictation mic at its left · big mic / Send — replaces the plain text field and the separate microphone in: the apartment's general notes and stage notes, the office's task description (drawer quick-add, the Tasks page, bulk add, the notebook's drop card, quick-assign), the problem form, the punch-list pin note, the board's sticky notes and boxes, the closing comment. One component; the mic set, the languages and the transcript all come with it.</span></li>
+          <li><span class="k">2</span><span><b>Every recording shows its words under the player</b>, in the language of the screen it is on — the office reads Russian memos in English, Igor reads Hebrew ones in Russian — with Show original. Recordings made before today get their words the first time somebody opens them. This is the transcription already built; this round carries it to the players that do not have it yet: stage notes, office files, task attachments, board notes.</span></li>
+          <li><span class="k">3</span><span>A recording sent as a task description IS the description: the words become the task's text (editable), the memo stays attached under it.</span></li>
+        </ol>
+      </div>
+      <div class="win" style="width:420px">
+        <div class="top"><b>New task · 47 — A2</b></div>
+        <div class="body">
+          <div class="lbl">What has to be done</div>
+          <div style="background:#f2f5f8;border:1px solid #e3e9f0;border-radius:14px;padding:10px">
+            <div class="memo"><span class="pl">▶</span><span class="wave"></span><span class="len">0:09</span></div>
+            <div class="tr"><span class="lbl2">SAID · becomes the task</span>Replace the thermostat in the living room and check the wiring behind it.</div>
+            <div class="comp" style="margin-top:8px"><div class="clip">📎</div><div class="in"><span class="mic">🎤</span>Your message…</div><div class="big">🎙</div></div>
+          </div>
+          <div class="fld" style="margin-top:12px"><div><div class="lbl">Who</div><div class="box sel">Igor ▾</div></div><div><div class="lbl">Start</div><div class="box">Thu 4 Sep</div></div><div><div class="lbl">Days</div><div class="box">1</div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ 7 · NOTES ═══════════ -->
+  <div class="scene">
+    <h2>7 · Apartment notes that read like notes</h2>
+    <p class="lead">Done stages crossed off, the current stage open, the box at the bottom, what was written above it as bullets — and the sign-off small.</p>
+    <div class="row">
+      <div class="win">
+        <div class="top"><b>47 — A2</b><span style="opacity:.7">Notes</span></div>
+        <div class="body">
+          <div class="stages" style="position:relative">
+            <div class="st done"><span class="cb on">✓</span>Ready to start <span style="margin-inline-start:auto;font-size:10px;color:#b0bccb;text-decoration:none">2 notes</span></div>
+            <div class="st done"><span class="cb on">✓</span>Piping <span style="margin-inline-start:auto;font-size:10px;color:#b0bccb;text-decoration:none">4 notes</span></div>
+            <div class="st cur" style="display:block;padding:12px">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><span class="sw" style="background:#0ea5e9;width:11px;height:11px;border-radius:50%"></span><b>Drainage</b><span style="margin-inline-start:auto;font-size:10px;color:#64748b;font-weight:600">current</span></div>
+              <ul class="bullets">
+                <li><span>Riser access is behind the kitchen cabinet — Shimon has the key.</span><span class="who">Esther · 2 Sep</span></li>
+                <li><span>Tenant asks for the drain to run before the tiler comes Sunday.</span><span class="who">Esther · 3 Sep</span></li>
+                <li><span style="display:flex;flex-direction:column;gap:4px;flex:1"><span class="memo" style="max-width:220px"><span class="pl">▶</span><span class="wave"></span><span class="len">0:12</span></span><span style="font-size:12px;color:#1f2c3d">Готово, установил блок <span style="color:#4aa8d8;font-size:10px;font-weight:700">🌐 Show translation</span></span></span><span class="who">Igor · 3 Sep</span></li>
+              </ul>
+              <div class="lbl" style="margin-top:6px">Add notes for Drainage</div>
+              <div class="comp" style="margin-top:4px"><div class="clip">📎</div><div class="in"><span class="mic">🎤</span>Your message…</div><div class="big">🎙</div></div>
+              <span class="n" style="right:-22px;top:-4px">1</span>
+              <span class="n" style="right:-22px;bottom:-4px">2</span>
+            </div>
+            <div class="st" style="color:#94a3b8"><span class="cb"></span>Concealed units</div>
+            <div class="st" style="color:#94a3b8"><span class="cb"></span>Registers &amp; access panels</div>
+          </div>
+        </div>
+      </div>
+      <div class="notes">
+        <p class="say">"stages that were done crossed off, the current one open… add notes for this stage… bullet points on top, the field at the bottom… the worker and date very subtle"</p>
+        <ol>
+          <li><span class="k">1</span><span>The Notes tab is the stage list itself: <b>done stages crossed off and folded</b> (a count on the right; tap to unfold), the <b>current stage open</b>, later stages grey. Every note ever written to a stage is a <b>bullet</b> in order, with its author and date small and grey at the end of the line — the sign-off you asked to be subtle. A memo is a bullet too, with its words under it and Show original.</span></li>
+          <li><span class="k">2</span><span><b>"Add notes for Drainage"</b> and the box at the BOTTOM of the open stage. Send, and the note appears above as a new bullet — nothing stays inside the field. Notes on a folded stage are still added by unfolding it. The general notes box keeps its place at the top of the Details tab and gets the same box.</span></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ MODEL + RULES ═══════════ -->
+  <div class="rules">
+    <h2>What holds it together</h2>
+    <div class="row">
+      <div style="flex:1 1 400px;min-width:300px">
+        <div class="model"><span class="c">// A problem is a TASK wearing a red coat — it rides the task record,</span>
+<span class="c">// so the thread, the photos, the worker's phone, the notebook, the</span>
+<span class="c">// counts and the backups all come for free. No new store key.</span>
+ContractorAssignment.problem?: {
+  photosRequired: boolean;
+  status: 'open' | 'waiting' | 'solved' | 'returned';
+  stageBefore: string | null;   <span class="c">// where the apartment stood</span>
+  closedAt?: string; approvedAt?: string; approvedBy?: string;
+  returnNote?: string;
+};
+<span class="c">// deadline = the task's dueDate; no `days` — a problem has no day</span>
+
+Apartment.tipus?: string;      <span class="c">// "A2"; absent = none</span>
+BoardSetting.tipusim?: string[]; <span class="c">// the project's list, in boardSettings</span>
+
+<span class="c">// The one rule every drawing reads:</span>
+problemState(apt, tasks) → 'open' | 'waiting' | null
+aptLabel(apt) → "47 — A2 — Aharonov"  <span class="c">// the number, the tipus, the name</span></div>
+      </div>
+      <div class="notes" style="flex:1 1 320px">
+        <ol>
+          <li><span class="k">a</span><span><b>The stage is never overwritten.</b> A problem stores `stageBefore` and every drawing asks `problemState()` first: open → red + "!", waiting → rose, otherwise the stage as always. Approval clears the state and the apartment is simply on its stage again — nothing to restore, because nothing was moved.</span></li>
+          <li><span class="k">b</span><span><b>The worker's Close on a problem sets `waiting`, never `completedAt`</b>; only the office's Approve completes the task (and the return path sets `returned` + reopens). So a problem never counts as finished until Tzvi says so, and the standing photo rule reads `problem.photosRequired` before the worker's own switch.</span></li>
+          <li><span class="k">c</span><span><b>A problem shows on every day</b> because the portal's day filters treat a task with `problem` as matching any day up to its deadline, and as overdue after it — the same `dayOffsets` gate, one extra branch.</span></li>
+          <li><span class="k">d</span><span><b>Tipus rides `apartments`</b>; the list rides `boardSettings` — both already persisted, exported, imported and synced; the backup audit stays green. `aptLabel` grows one segment, so every screen that prints a number prints the tipus.</span></li>
+          <li><span class="k">e</span><span><b>The message box is one component</b> (the composer lifted out of the portal). Stage notes and general notes keep their storage; only the way they are written and drawn changes, so nothing old is lost or migrated.</span></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <div class="rules">
+    <h2>What I would build, in this order</h2>
+    <ul>
+      <li><b>1. The message box as a component</b>, and the transcript on every remaining player — everything after leans on it.</li>
+      <li><b>2. Tipus</b> — the field, the list in project settings, the label everywhere, bulk update, reports.</li>
+      <li><b>3. Problems</b> — the model and the rule, the red button and form, the three states on every drawing, the band and Approve in the window, the pending bell.</li>
+      <li><b>4. The worker's side</b> — red cards on every day, the deadline banner, Close → waiting, "Is this the fix for…?".</li>
+      <li><b>5. Bulk problems and the Problems report</b> with pictures.</li>
+      <li><b>6. The notes tab</b> — crossed-off stages, the open stage, bullets above the box.</li>
+    </ul>
+  </div>
+
+  <div class="rules">
+    <h2>Things only you can decide</h2>
+    <div class="q"><span class="star">★</span><span><b>Who may approve a problem?</b> I would make it admin users only (you and whoever you make admin) — every office user sees the band, only admins see the Approve button. <em>Or</em> a per-user switch "may approve problems"?</span></div>
+    <div class="q"><span class="star">★</span><span><b>Sending it back.</b> If the fix is not good enough, I would give Approve a neighbour, "Send back", that takes a note and turns the card red again on his phone with your note on top. <em>Or</em> approve-only, and a new problem for anything left?</span></div>
+    <div class="q"><span class="star">★</span><span><b>The deadline's default.</b> I would pre-fill three working days from today (Friday and Saturday skipped), editable. <em>Or</em> leave it blank and make it required?</span></div>
+    <div class="q"><span class="star">★</span><span><b>Tipus in the diagram cell.</b> I would print "47 — A2" in the cell on the desktop and keep the phone cell to "47" with A2 under it in small type (the phone cell is 77px wide). <em>Or</em> the same "47 — A2" on both?</span></div>
+    <p class="mark" style="font-size:19px;margin:12px 0 0">Say "build it" (with any changes) and this page becomes the spec — the starred answers are what I would do if you say nothing.</p>
+  </div>
+</div>
