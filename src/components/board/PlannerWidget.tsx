@@ -136,8 +136,22 @@ export interface PlannerData {
   scale?: number;
 }
 
-const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const SHORT_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+/**
+ * Day names per reading language (owner, 2026-09-06: "Russian mode doesn't
+ * turn everything to Russian" — the notebook on his phone still said Sun/Mon).
+ * `lang` is the worker's own choice on the portal; the office keeps English.
+ */
+const DAY_NAMES_BY: Record<string, string[]> = {
+  en: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+  he: ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'],
+  ru: ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'],
+};
+const SHORT_DAYS_BY: Record<string, string[]> = {
+  en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+  he: ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'],
+  ru: ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'],
+};
+const LOCALE_TAG: Record<string, string> = { en: 'en-US', he: 'he-IL', ru: 'ru-RU' };
 
 export const cellKey = (person: string, day: string) => `${person}|${day}`;
 export const newEntryId = () => `R-${Math.random().toString(36).slice(2, 8)}`;
@@ -299,9 +313,11 @@ export interface PendingDrop {
 
 export function PlannerWidget({
   el, data, jobs, contractors, users, assignments, stages, readOnly, projection,
-  update, openJob, openUnit, onDropAsk, onRemoveTask, onShowAll, onLeaveNotebook,
+  update, openJob, openUnit, onDropAsk, onRemoveTask, onShowAll, onLeaveNotebook, lang = 'en',
 }: {
   el: CanvasElement;
+  /** The reader's language for day and month names — 'en' | 'he' | 'ru'. */
+  lang?: string;
   data: PlannerData;
   jobs: Apartment[];
   contractors: Contractor[];
@@ -333,6 +349,9 @@ export function PlannerWidget({
   /** This job has no squares left anywhere — put it back on the board. */
   onLeaveNotebook?: (jobId: string) => void;
 }) {
+  const LT = LOCALE_TAG[lang] ?? 'en-US';
+  const DAY_NAMES = DAY_NAMES_BY[lang] ?? DAY_NAMES_BY.en;
+  const SHORT_DAYS = SHORT_DAYS_BY[lang] ?? SHORT_DAYS_BY.en;
   /** Nothing may be written: either it is inert, or it is a projection. */
   /**
    * A PROJECTION is not read-only.
@@ -600,14 +619,14 @@ export function PlannerWidget({
     const [person, day] = key.split('|');
     const who = personOf(person, contractors, users).name;
     const when = new Date(`${day}T00:00:00`);
-    return `${who} · ${isNaN(when.getTime()) ? day : when.toLocaleDateString(undefined,
+    return `${who} · ${isNaN(when.getTime()) ? day : when.toLocaleDateString(LT,
       { weekday: 'short', day: 'numeric', month: 'short' })}`;
   };
   /** The day alone, spelled out: "Friday 28 August" — no name in it. */
   const dayName = (key: string) => {
     const when = new Date(`${key.split('|')[1]}T00:00:00`);
     return isNaN(when.getTime()) ? key.split('|')[1]
-      : when.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+      : when.toLocaleDateString(LT, { weekday: 'long', day: 'numeric', month: 'long' });
   };
   /** What a card says: the job's name, or the words written on it. */
   const cardName = (e: PlannerEntry) =>
@@ -972,7 +991,7 @@ export function PlannerWidget({
   const rowVisible = (pid: string, days: Date[]) =>
     days.some(d => personState(pid, iso(d)) !== 'gone');
 
-  const title = data.title || 'Weekly notebook';
+  const title = data.title || (lang === 'he' ? 'מחברת שבועית' : lang === 'ru' ? 'Недельный блокнот' : 'Weekly notebook');
 
   /**
    * The month named at the top is the month you are LOOKING at.
@@ -1052,7 +1071,7 @@ export function PlannerWidget({
   }, []);
 
   const label = new Date(`${shownMonth}-01T00:00:00`)
-    .toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    .toLocaleDateString(LT, { month: 'long', year: 'numeric' });
 
   return (
     <div className="w-full h-full flex flex-col overflow-hidden">
@@ -1139,7 +1158,7 @@ export function PlannerWidget({
                       month rule is the landmark the eye scans for. */}
                   <span className="font-black tracking-wide text-slate-500"
                     style={{ fontSize: Math.max(z(10), textSize + z(2)) }}>
-                    {wkStart.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }).toUpperCase()}
+                    {wkStart.toLocaleDateString(LT, { month: 'long', year: 'numeric' }).toUpperCase()}
                   </span>
                   <span className="h-px flex-1" style={{ backgroundColor: '#cbd5e1' }} />
                 </div>
@@ -1164,7 +1183,7 @@ export function PlannerWidget({
                        * Measured with the sheet's own nameEms, rounded
                        * down, with the scroll arrows' room taken out first.
                        */
-                      const mon = wkStart.toLocaleDateString(undefined, { month: 'short' }).toUpperCase();
+                      const mon = wkStart.toLocaleDateString(LT, { month: 'short' }).toUpperCase();
                       const label = `${mon} ${wkStart.getDate()}`;
                       const arrowsW = 2 * Math.max(11, Math.round(z(12))) + z(10);
                       const avail = Math.max(z(24), nameColW - arrowsW);
@@ -1276,7 +1295,7 @@ export function PlannerWidget({
                         style={{ fontSize: dateSize, color: isToday ? '#0369a1' : '#334155' }}>
                         {dt.getDate()}
                         <span className="font-normal" style={{ fontSize: Math.max(z(7), dateSize - z(4)), color: '#94a3b8' }}>
-                          {' '}{dt.toLocaleDateString(undefined, { month: 'short' })}
+                          {' '}{dt.toLocaleDateString(LT, { month: 'short' })}
                         </span>
                       </div>
                       <div className="font-bold truncate"
@@ -1405,6 +1424,7 @@ export function PlannerWidget({
                         >
                           {entries.map(en => (
                             <PlannerCard
+                              lang={lang}
                               key={en.id}
                               entry={en}
                               job={resolve(en).job}
@@ -1645,7 +1665,7 @@ export function PlannerWidget({
           toWhere={dropAsk.target
             ? `${personOf(dropAsk.target.person, contractors, users).name} · ${
               new Date(`${dropAsk.target.day}T00:00:00`)
-                .toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })}`
+                .toLocaleDateString(LT, { weekday: 'long', day: 'numeric', month: 'short' })}`
             : undefined}
           onCancel={() => setDropAsk(null)}
           onDone={resolveDrop}
@@ -1756,9 +1776,11 @@ const SLOT_H = 58;
  */
 function PlannerCard({
   entry, job, workspace, stages, assignments, color, size, scale = 1, bold, readOnly, openOnly,
-  day, strip, onOpen, onText, onRemove, onDragOff, onDragTo,
+  day, strip, onOpen, onText, onRemove, onDragOff, onDragTo, lang = 'en',
 }: {
   entry: PlannerEntry;
+  /** The reader's language for the card's own words (day pill, done). */
+  lang?: string;
   job?: Apartment;
   /** The day this card sits on — what the "day 2 of 3" pill is counted from. */
   day?: string;
@@ -1968,7 +1990,7 @@ function PlannerCard({
               {workspace && <span style={{ color: '#7c3aed' }}>{workspace} · </span>}
               {job
                 ? (aptLabel(job) || job.address?.trim() || 'Job')
-                : entry.projectId ? 'Open that workspace to see this' : '(job removed)'}
+                : entry.projectId ? (lang === 'he' ? 'פתחו את סביבת העבודה ההיא' : lang === 'ru' ? 'Откройте то рабочее пространство' : 'Open that workspace to see this') : (lang === 'he' ? '(העבודה הוסרה)' : lang === 'ru' ? '(работа удалена)' : '(job removed)')}
             </span>
           </span>
           {taskLine && (
@@ -2042,7 +2064,7 @@ function PlannerCard({
                 // Not "removed" — this machine simply has not opened that
                 // workspace yet, so its snapshot is not here to read.
                 ? 'Open that workspace to see this'
-                : '(job removed)'}
+                : (lang === 'he' ? '(העבודה הוסרה)' : lang === 'ru' ? '(работа удалена)' : '(job removed)')}
           </span>
         </div>
         {(workspace || stage || entry.text) && (
@@ -2065,12 +2087,13 @@ function PlannerCard({
             {pill && (
               <span data-day-pill className="px-1.5 rounded-full font-bold tabular-nums"
                 style={{ fontSize: Math.max(z(7), size - z(3)), backgroundColor: '#e0e7ff', color: '#3730a3' }}>
-                day {pill.k} of {pill.n}
+                {lang === 'he' ? `יום ${pill.k} מתוך ${pill.n}` : lang === 'ru' ? `день ${pill.k} из ${pill.n}` : `day ${pill.k} of ${pill.n}`}
               </span>
             )}
             {closed && (
               <span className="font-semibold" style={{ fontSize: Math.max(z(7), size - z(3)), color: '#64748b' }}>
-                {early ? 'finished early' : 'done'}
+                {early ? (lang === 'he' ? 'הסתיים מוקדם' : lang === 'ru' ? 'закончено раньше' : 'finished early')
+                  : (lang === 'he' ? 'בוצע' : lang === 'ru' ? 'готово' : 'done')}
               </span>
             )}
           </span>

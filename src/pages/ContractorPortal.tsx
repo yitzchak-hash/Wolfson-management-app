@@ -6,7 +6,8 @@ import { transcribeMemo } from '../data/transcribe';
 import { daysOf, futureDaysOf } from '../data/taskDays';
 import { PlanPinOverlay } from '../components/apartment/PlanPinOverlay';
 import { printSheet, printEsc } from '../data/printing';
-import { format, isPast, parseISO, isToday, differenceInCalendarDays, startOfDay, startOfWeek, addDays as addDaysFns } from 'date-fns';
+import { format as fmtRaw, isPast, parseISO, isToday, differenceInCalendarDays, startOfDay, startOfWeek, addDays as addDaysFns } from 'date-fns';
+import { he as heLocale, ru as ruLocale } from 'date-fns/locale';
 import { usePhone } from '../data/usePhone';
 import {
   Camera, CheckCircle2, Clock, Building2, CalendarDays, FileText, Hammer,
@@ -34,9 +35,28 @@ import { saveBytes, safeFileName } from '../data/planExport';
 import { TaskThread } from '../components/tasks/TaskThread';
 import { Translated, TrText } from '../components/ui/Translated';
 
-const CATEGORY_LABELS: Record<string, string> = {
-  drywall: 'Drywall', ac: 'AC', general: 'General',
+const CATEGORY_LABELS: Record<string, Record<string, string>> = {
+  en: { drywall: 'Drywall', ac: 'AC', general: 'General' },
+  he: { drywall: 'גבס', ac: 'מיזוג', general: 'כללי' },
+  ru: { drywall: 'Гипсокартон', ac: 'Кондиционеры', general: 'Общее' },
 };
+/**
+ * The reader's language for anything not in the editable strings (owner,
+ * 2026-09-06: "Russian mode doesn't turn everything to Russian"). Every
+ * inline word in this file goes through `w(en, he, ru)`, and every date
+ * through `fmt`, which hands date-fns the matching locale — a Russian
+ * worker reads "пятница 12 сентября", not "Friday 12 September".
+ */
+const localeOf = (lang: PortalLang) => (lang === 'he' ? heLocale : lang === 'ru' ? ruLocale : undefined);
+// Hebrew and Russian say the day BEFORE the month ("6 сент. 2026"), so the
+// English month-first patterns are turned around for them.
+const DAY_FIRST: Record<string, string> = {
+  'MMM d': 'd MMM', 'MMMM d': 'd MMMM', 'MMM d, yyyy': 'd MMM yyyy', 'MMMM d, yyyy': 'd MMMM yyyy',
+  'MMM d · HH:mm': 'd MMM · HH:mm', 'MMM d, yyyy · HH:mm': 'd MMM yyyy · HH:mm',
+};
+const dateFmt = (lang: PortalLang) => (d: Date | number, pattern: string) =>
+  fmtRaw(d, lang === 'en' ? pattern : (DAY_FIRST[pattern] ?? pattern), { locale: localeOf(lang) });
+const wordsOf = (lang: PortalLang) => (en: string, he: string, ru: string) => (lang === 'he' ? he : lang === 'ru' ? ru : en);
 const CATEGORY_COLORS: Record<string, string> = {
   drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981',
 };
@@ -390,12 +410,13 @@ function PortalBell({ contractor, s, lang, currentProjectId, allAssignments, all
   });
   const unseen = items.length > 0 && seen !== hash;
 
+  const w = wordsOf(lang);
   const KIND: Record<BellItem['kind'], { word: string; color: string }> = {
     problem: { word: s.problemLabel || 'Problem', color: '#dc2626' },
     overdue: { word: s.filterOverdue, color: '#dc2626' },
     today: { word: s.filterToday, color: '#f97316' },
     tomorrow: { word: s.filterTomorrow, color: '#0ea5e9' },
-    new: { word: s.notifNew || (s.isRtl ? 'עבודה חדשה בשבילך' : 'New job for you'), color: '#16a34a' },
+    new: { word: s.notifNew || w('New job for you', 'עבודה חדשה בשבילך', 'Новая работа для вас'), color: '#16a34a' },
   };
 
   return (
@@ -431,7 +452,7 @@ function PortalBell({ contractor, s, lang, currentProjectId, allAssignments, all
             <div className="max-h-[60vh] overflow-y-auto">
               {items.length === 0 ? (
                 <p className="text-[13px] text-gray-400 text-center py-8 px-4">
-                  {s.notifEmpty || (s.isRtl ? 'אין חדש — אתם מעודכנים' : 'Nothing new — you are all caught up')}
+                  {s.notifEmpty || w('Nothing new — you are all caught up', 'אין חדש — אתם מעודכנים', 'Ничего нового — вы в курсе')}
                 </p>
               ) : items.map(it => (
                 <button key={it.id}
@@ -525,10 +546,13 @@ export function ContractorPortal() {
    * office's Hebrew in Russian; the office reads his Russian in its own.
    */
   const readLang: PortalLang = lang ?? (contractorUiStrings.isRtl ? 'he' : 'en');
+  const w = wordsOf(readLang);
+  const format = dateFmt(readLang);
+  const calLocale = localeOf(readLang);
   /** The four countdown words, in whatever language this worker reads. */
   const dueWords = {
     overdue: s.filterOverdue, today: s.filterToday,
-    tomorrow: s.filterTomorrow, days: s.daysLabel ?? (s.isRtl ? 'ימים' : 'days'),
+    tomorrow: s.filterTomorrow, days: s.daysLabel ?? w('days', 'ימים', 'дн.'),
   };
   /**
    * Text size, applied at the ROOT.
@@ -739,7 +763,7 @@ export function ContractorPortal() {
   }, [contractorId, currentProjectId, projects, snapshotTick]);
   /** "Apt 47" — or "Work at Wolfson" for a general job. */
   const whereLabel = (a: ContractorAssignment, apt: Apartment | undefined, ws: string) =>
-    a.general ? workAtLabel(readLang, ws) : `${s.isRtl ? 'דירה' : 'Apt'} ${aptLabel(apt)}`;
+    a.general ? workAtLabel(readLang, ws) : `${w('Apt', 'דירה', 'Кв.')} ${aptLabel(apt)}`;
   /** Open a task — switching workspace first when it lives elsewhere. */
   const openTask = (pid: string, a: ContractorAssignment) => {
     setShowHistory(false);
@@ -904,7 +928,7 @@ export function ContractorPortal() {
           try {
             const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId!, 'Photos');
             ensureDriveShared(photosFolderId);
-            const stageName = getStage(selectedAssignment.stageId)?.name ?? 'General';
+            const stageName = getStage(selectedAssignment.stageId)?.name ?? w('General', 'כללי', 'Общее');
             const stageFolderId = await findOrCreateFolderViaBackend(photosFolderId, stageName);
             const { fileId, webViewLink } = await uploadFileViaResumableSession(
               stageFolderId, file, pct => setUploadProgress({ name: file.name, pct }),
@@ -1372,7 +1396,7 @@ export function ContractorPortal() {
               data-portal-gear
               onClick={() => setScalePanel(v => !v)}
               className="flex items-center justify-center w-9 h-9 rounded-xl border border-white/25 text-white/85 hover:bg-white/10 active:bg-white/20 transition-colors"
-              title={s.isRtl ? 'הגדרות' : lang === 'ru' ? 'Настройки' : 'Settings'}
+              title={w('Settings', 'הגדרות', 'Настройки')}
             >
               <SettingsIcon size={16} />
             </button>
@@ -1382,12 +1406,12 @@ export function ContractorPortal() {
                 <div className="absolute top-full mt-1.5 z-[120] bg-white rounded-xl shadow-xl border border-gray-200 p-2 w-48"
                   style={s.isRtl ? { left: 0 } : { right: 0 }}>
                   <div className="text-[10px] font-bold text-gray-400 px-1.5 pb-1">
-                    {s.isRtl ? 'גודל הטקסט' : lang === 'ru' ? 'Размер текста' : 'Text size'}
+                    {w('Text size', 'גודל הטקסט', 'Размер текста')}
                   </div>
-                  {([[1, s.isRtl ? 'רגיל' : lang === 'ru' ? 'Обычный' : 'Normal'],
-                     [1.15, s.isRtl ? 'גדול' : lang === 'ru' ? 'Крупный' : 'Large'],
-                     [1.3, s.isRtl ? 'גדול מאוד' : lang === 'ru' ? 'Очень крупный' : 'Extra large'],
-                     [1.5, s.isRtl ? 'ענק' : lang === 'ru' ? 'Огромный' : 'Huge']] as const).map(([v, label]) => (
+                  {([[1, w('Normal', 'רגיל', 'Обычный')],
+                     [1.15, w('Large', 'גדול', 'Крупный')],
+                     [1.3, w('Extra large', 'גדול מאוד', 'Очень крупный')],
+                     [1.5, w('Huge', 'ענק', 'Огромный')]] as const).map(([v, label]) => (
                     <button key={v}
                       onClick={() => {
                         if (workerNow) updateContractor(workerNow.id, { textScale: v === 1 ? undefined : v });
@@ -1403,7 +1427,7 @@ export function ContractorPortal() {
                   {/* The language, all three — written onto the worker, so
                       the office sees it and messages are translated into it. */}
                   <div className="text-[10px] font-bold text-gray-400 px-1.5 pt-2 pb-1 border-t border-gray-100 mt-1">
-                    {s.isRtl ? 'שפה' : lang === 'ru' ? 'Язык' : 'Language'}
+                    {w('Language', 'שפה', 'Язык')}
                   </div>
                   <div className="flex gap-1 px-1 pb-1" data-portal-langs>
                     {([['en', 'EN'], ['he', 'עב'], ['ru', 'RU']] as const).map(([code, label]) => (
@@ -1454,7 +1478,7 @@ export function ContractorPortal() {
             className={`flex-1 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
               activeTab === 'planner' ? 'text-[#1e3a5f] border-b-2 border-[#1e3a5f]' : 'text-gray-500'
             }`}>
-            <CalendarDays size={15} /> {s.isRtl ? 'לוח' : 'Planner'}
+            <CalendarDays size={15} /> {w('Planner', 'לוח', 'Расписание')}
           </button>
         )}
       </div>
@@ -1511,8 +1535,8 @@ export function ContractorPortal() {
                              text-gray-500 hover:text-[#1e3a5f] hover:border-[#4aa8d8] transition-colors"
                   style={{ borderColor: '#d1d5db' }}>
                   + {perms.assignOthers
-                    ? (s.isRtl ? 'משימה חדשה' : 'A new task')
-                    : (s.isRtl ? 'משימה לעצמי' : 'A job for myself')}
+                    ? (w('A new task', 'משימה חדשה', 'Новая задача'))
+                    : (w('A job for myself', 'משימה לעצמי', 'Задача для себя'))}
                 </button>
               ) : (
                 <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
@@ -1520,7 +1544,7 @@ export function ContractorPortal() {
                     autoFocus
                     value={selfText}
                     onChange={e => setSelfText(e.target.value)}
-                    placeholder={s.isRtl ? 'מה צריך לעשות?' : 'What needs doing?'}
+                    placeholder={w('What needs doing?', 'מה צריך לעשות?', 'Что нужно сделать?')}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#4aa8d8]"
                   />
 
@@ -1535,7 +1559,7 @@ export function ContractorPortal() {
                     >
                       {contractors.filter(c => c.active).map(c => (
                         <option key={c.id} value={c.id}>
-                          {c.id === contractorId ? (s.isRtl ? 'בשבילי — ' : 'For me — ') : ''}{c.name}
+                          {c.id === contractorId ? (w('For me — ', 'בשבילי — ', 'Для меня — ')) : ''}{c.name}
                         </option>
                       ))}
                     </select>
@@ -1546,7 +1570,7 @@ export function ContractorPortal() {
                     onChange={e => setSelfApt(e.target.value)}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#4aa8d8]"
                   >
-                    <option value="">{s.isRtl ? 'איפה?' : 'Where?'}</option>
+                    <option value="">{w('Where?', 'איפה?', 'Где?')}</option>
                     {/* Their own units first — that is where the work almost
                         always is — then everything else if they can see it.
                         Somebody allowed to HAND OUT work gets the full list
@@ -1568,28 +1592,28 @@ export function ContractorPortal() {
                   <div className="grid grid-cols-2 gap-2">
                     <label className="block">
                       <span className="block text-[10px] font-bold text-gray-400 mb-0.5">
-                        {s.isRtl ? 'לְמָתַי' : 'Due'}
+                        {w('Due', 'לְמָתַי', 'Срок')}
                       </span>
                       <input type="date" value={selfDue} onChange={e => setSelfDue(e.target.value)}
                         className="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm outline-none focus:border-[#4aa8d8]" />
                     </label>
                     <label className="block">
                       <span className="block text-[10px] font-bold text-gray-400 mb-0.5">
-                        {s.isRtl ? 'דחיפות' : 'Priority'}
+                        {w('Priority', 'דחיפות', 'Приоритет')}
                       </span>
                       <select value={selfPriority}
                         onChange={e => setSelfPriority(e.target.value as 'urgent' | 'normal' | 'low')}
                         className="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm outline-none focus:border-[#4aa8d8]">
-                        <option value="urgent">{s.isRtl ? 'דחוף' : 'Urgent'}</option>
-                        <option value="normal">{s.isRtl ? 'רגיל' : 'Normal'}</option>
-                        <option value="low">{s.isRtl ? 'נמוך' : 'Low'}</option>
+                        <option value="urgent">{w('Urgent', 'דחוף', 'Срочно')}</option>
+                        <option value="normal">{w('Normal', 'רגיל', 'Обычный')}</option>
+                        <option value="low">{w('Low', 'נמוך', 'Низкий')}</option>
                       </select>
                     </label>
                   </div>
 
                   <select value={selfStage} onChange={e => setSelfStage(e.target.value)}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#4aa8d8]">
-                    <option value="">{s.isRtl ? 'שלב (לא חובה)' : 'Stage (optional)'}</option>
+                    <option value="">{w('Stage (optional)', 'שלב (לא חובה)', 'Этап (необязательно)')}</option>
                     {stages.filter(st => st.active).sort((a, b) => a.order - b.order).map(st => (
                       <option key={st.id} value={st.id}>{s.isRtl && st.nameHe ? st.nameHe : st.name}</option>
                     ))}
@@ -1599,7 +1623,7 @@ export function ContractorPortal() {
                     <button type="button" onClick={() => selfFileRef.current?.click()}
                       className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200
                                  text-xs font-semibold text-gray-500 min-h-[32px]">
-                      📎 {s.isRtl ? 'צרף קבצים' : 'Attach'}
+                      📎 {w('Attach', 'צרף קבצים', 'Прикрепить')}
                       {selfFiles.length > 0 && <span className="text-[#1e3a5f] font-bold">{selfFiles.length}</span>}
                     </button>
                     {selfFiles.map(f => (
@@ -1655,11 +1679,11 @@ export function ContractorPortal() {
                       }}
                       className="flex-1 py-2 rounded-lg text-sm font-bold text-white disabled:opacity-40"
                       style={{ backgroundColor: '#1e3a5f' }}>
-                      {s.isRtl ? 'הוספה' : 'Add it'}
+                      {w('Add it', 'הוספה', 'Добавить')}
                     </button>
                     <button onClick={() => { setSelfTask(false); setSelfText(''); setSelfApt(''); setSelfFiles([]); }}
                       className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-500 border border-gray-200">
-                      {s.isRtl ? 'ביטול' : 'Cancel'}
+                      {w('Cancel', 'ביטול', 'Отмена')}
                     </button>
                   </div>
                 </div>
@@ -1826,8 +1850,9 @@ export function ContractorPortal() {
               onClick: () => openTask(pid, a),
             }));
           });
-        const wdLabels = s.isRtl
+        const wdLabels = readLang === 'he'
           ? ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳']
+          : readLang === 'ru' ? ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
           : undefined;
         /**
          * WEEKLY first (the owner's ask — the month grid kept being mistaken
@@ -1853,8 +1878,8 @@ export function ContractorPortal() {
             {/* The two bubbles, big, on top. */}
             <div className="flex items-center gap-2 mb-3">
               {([
-                ['week', s.weeklyLabel || (s.isRtl ? 'שבועי' : 'Weekly')],
-                ['month', s.monthlyLabel || (s.isRtl ? 'חודשי' : 'Monthly')],
+                ['week', s.weeklyLabel || (w('Weekly', 'שבועי', 'Неделя'))],
+                ['month', s.monthlyLabel || (w('Monthly', 'חודשי', 'Месяц'))],
               ] as const).map(([mode, label]) => (
                 <button key={mode} data-cal-mode={mode}
                   onClick={() => setCalMode(mode)}
@@ -1873,6 +1898,7 @@ export function ContractorPortal() {
                 <TaskCalendar
                   events={calEvents}
                   weekdayLabels={wdLabels}
+                  locale={calLocale}
                   todayLabel={s.filterToday}
                   fill
                 />
@@ -2139,7 +2165,7 @@ export function ContractorPortal() {
           <div className="flex-1 overflow-auto bg-gray-100 p-3">
             {!sheet ? (
               <p className="text-sm text-gray-400 text-center py-16">
-                {s.isRtl ? 'אין לוח משמרות עדיין.' : 'Nobody has made a planner yet.'}
+                {w('Nobody has made a planner yet.', 'אין לוח משמרות עדיין.', 'Расписание ещё не составлено.')}
               </p>
             ) : (
               <div className="bg-white rounded-2xl border border-gray-200 overflow-x-auto"
@@ -2163,6 +2189,7 @@ export function ContractorPortal() {
                   openJob={() => {}}
                   openUnit={() => {}}
                   readOnly
+                  lang={readLang}
                 />
                 </div>
               </div>
@@ -2237,7 +2264,7 @@ export function ContractorPortal() {
                     onAttach={handleNoteFiles}
                     onMemo={handleNoteVoiceMemo}
                     lang={readLang}
-                    placeholder={s.yourMessage || (s.isRtl ? 'ההודעה שלך' : 'Your message')}
+                    placeholder={s.yourMessage || (w('Your message', 'ההודעה שלך', 'Ваше сообщение'))}
                   />
           </div>
         );
@@ -2333,7 +2360,7 @@ export function ContractorPortal() {
                     <span className={`inline-flex items-center gap-1 mt-1.5 text-xs font-medium ${
                       a.priority === 'urgent' ? 'text-red-600' : 'text-green-600'
                     }`}>
-                      {a.priority === 'urgent' ? '🔴' : '🟢'} {a.priority === 'urgent' ? 'Urgent' : 'Low priority'}
+                      {a.priority === 'urgent' ? '🔴' : '🟢'} {a.priority === 'urgent' ? w('Urgent', 'דחוף', 'Срочно') : w('Low priority', 'עדיפות נמוכה', 'Низкий приоритет')}
                     </span>
                   )}
                 </div>
@@ -2509,7 +2536,7 @@ export function ContractorPortal() {
                     and on the closing screen). */}
                 <div>
                   <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                    <MessageSquare size={12} /> {s.taskMessagesLabel || (s.isRtl ? 'הודעות המשימה' : 'Task messages')}
+                    <MessageSquare size={12} /> {s.taskMessagesLabel || (w('Task messages', 'הודעות המשימה', 'Сообщения по задаче'))}
                   </h3>
                   <TaskThread
                     assignment={a}
@@ -2519,8 +2546,8 @@ export function ContractorPortal() {
                     translateTo={readLang}
                     words={{
                       rtl: !!s.isRtl,
-                      tapToOpen: s.tapToOpenLabel || (s.isRtl ? 'הקישו לפתיחה' : 'tap to open'),
-                      jobClosed: s.jobClosedLabel || (s.isRtl ? 'העבודה נסגרה' : 'Job closed'),
+                      tapToOpen: s.tapToOpenLabel || (w('tap to open', 'הקישו לפתיחה', 'нажмите, чтобы открыть')),
+                      jobClosed: s.jobClosedLabel || (w('Job closed', 'העבודה נסגרה', 'Работа закрыта')),
                       download: s.download,
                       said: s.saidLabel || 'Said',
                     }}
@@ -2549,7 +2576,7 @@ export function ContractorPortal() {
                     className="w-full py-3.5 rounded-xl text-base font-bold flex items-center justify-center gap-2"
                     style={{ backgroundColor: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0' }}>
                     <CheckCircle2 size={18} />
-                    {s.jobClosedLabel || (s.isRtl ? 'העבודה נסגרה' : 'Job closed')}
+                    {s.jobClosedLabel || (w('Job closed', 'העבודה נסגרה', 'Работа закрыта'))}
                     {' · '}
                     {format(new Date(a.completedAt), isToday(new Date(a.completedAt)) ? 'HH:mm' : 'MMM d · HH:mm')}
                   </div>
@@ -2574,8 +2601,8 @@ export function ContractorPortal() {
                   >
                     <CheckCircle2 size={18} />
                     {a.problem && isLiveProblem(a)
-                      ? (s.closeProblemBtn || (s.isRtl ? 'סגירת הבעיה' : 'Close problem'))
-                      : (s.closeJobBtn || (s.isRtl ? 'סגירת עבודה' : 'Close job'))}
+                      ? (s.closeProblemBtn || (w('Close problem', 'סגירת הבעיה', 'Закрыть проблему')))
+                      : (s.closeJobBtn || (w('Close job', 'סגירת עבודה', 'Закрыть работу')))}
                   </button>
                   )
                 )}
@@ -2603,7 +2630,7 @@ export function ContractorPortal() {
                   </button>
                   <div className="min-w-0">
                     <div className="font-extrabold leading-tight" style={{ fontSize: 17 }}>
-                      {s.closingTitle || (s.isRtl ? 'סגירת העבודה' : 'Closing the job')}
+                      {s.closingTitle || (w('Closing the job', 'סגירת העבודה', 'Закрытие работы'))}
                     </div>
                     <div className="truncate opacity-70" style={{ fontSize: 12.5 }}>
                       {apt ? aptLabel(apt) : a.buildingId}
@@ -2643,7 +2670,7 @@ export function ContractorPortal() {
                         onClick={() => setFinishAsk(null)}
                         className="w-full py-3.5 rounded-xl font-bold text-slate-600 text-base"
                         style={{ backgroundColor: '#eef2f7' }}>
-                        {s.finishEarlyNo || (s.isRtl ? 'לא — אני אחזור' : "No — I'm coming back")}
+                        {s.finishEarlyNo || (w("No — I'm coming back", 'לא — אני אחזור', 'Нет — я вернусь'))}
                       </button>
                     </div>
                   ) : (
@@ -2705,10 +2732,10 @@ export function ContractorPortal() {
                           INSIDE it, bottom corner, the General-notes idiom. */}
                       <div>
                         <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-0.5">
-                          {s.closingCommentLabel || (s.isRtl ? 'הערה' : 'A comment')}
+                          {s.closingCommentLabel || (w('A comment', 'הערה', 'Комментарий'))}
                         </div>
                         <div className="text-gray-400 mb-2" style={{ fontSize: 13 }}>
-                          {s.closingCommentHint || (s.isRtl ? 'כל מה שהמשרד צריך לדעת' : 'Anything the office should know')}
+                          {s.closingCommentHint || (w('Anything the office should know', 'כל מה שהמשרד צריך לדעת', 'Всё, что нужно знать офису'))}
                         </div>
                         <MessageBox
                           hook="closing-comment"
@@ -2718,7 +2745,7 @@ export function ContractorPortal() {
                           onAttach={handleNoteFiles}
                           onMemo={handleNoteVoiceMemo}
                           lang={readLang}
-                          placeholder={s.typeWhatYouDid || (s.isRtl ? 'כתבו מה עשיתם…' : 'Type what you did…')}
+                          placeholder={s.typeWhatYouDid || (w('Type what you did…', 'כתבו מה עשיתם…', 'Напишите, что вы сделали…'))}
                           fontSize={15}
                         />
                         {noteAttachments.length > 0 && (
@@ -2764,7 +2791,7 @@ export function ContractorPortal() {
                       }}>
                       <CheckCircle2 size={18} />
                       {completing ? s.markingComplete
-                        : (s.sendAndClose || (s.isRtl ? 'שליחה וסגירת העבודה' : 'Send and close the job'))}
+                        : (s.sendAndClose || (w('Send and close the job', 'שליחה וסגירת העבודה', 'Отправить и закрыть работу')))}
                     </button>
                   </div>
                 )}
@@ -2836,7 +2863,7 @@ export function ContractorPortal() {
           addContractorAssignment({
             id: rid,
             ...reportBase(pickedStage,
-              `${getStageName(pickedStage, !!s.isRtl)} — ${s.isRtl ? 'דיווח שלב' : 'stage report'}`),
+              `${getStageName(pickedStage, !!s.isRtl)} — ${w('stage report', 'דיווח שלב', 'отчёт по этапу')}`),
           } as never);
           recordVisit(rid, pickedStage);
           const rec = useStore.getState().contractorAssignments.find(a => a.id === rid);
@@ -2849,7 +2876,7 @@ export function ContractorPortal() {
           addContractorAssignment({
             id: rid,
             ...reportBase(pickedStage,
-              `${s.isRtl ? 'להשלים' : 'Finish'} ${getStageName(pickedStage, !!s.isRtl)}`),
+              `${w('Finish', 'להשלים', 'Завершить')} ${getStageName(pickedStage, !!s.isRtl)}`),
           } as never);
           addContractorNote({
             assignmentId: rid,
@@ -2933,7 +2960,7 @@ export function ContractorPortal() {
                       className="w-full py-4 rounded-xl text-base font-bold text-white flex items-center justify-center gap-2 active:scale-[0.98]"
                       style={{ background: 'linear-gradient(135deg, #1e3a5f, #2c4f78)' }}>
                       <Hammer size={19} />
-                      {s.workHereBtn || (s.isRtl ? 'עבדתי כאן' : 'I did work here')}
+                      {s.workHereBtn || (w('I did work here', 'עבדתי כאן', 'Я здесь работал'))}
                     </button>
                   </>
                 )}
@@ -2965,7 +2992,7 @@ export function ContractorPortal() {
                 {workHere.step === 'stage' && (
                   <>
                     <p className="text-center font-extrabold text-gray-800" style={{ fontSize: 17 }}>
-                      {s.whatDidYouDo || (s.isRtl ? 'מה עשית?' : 'What did you do?')}
+                      {s.whatDidYouDo || (w('What did you do?', 'מה עשית?', 'Что вы сделали?'))}
                     </p>
                     <div className="space-y-2" data-work-stages>
                       {wsStages.map(st => (
@@ -2979,14 +3006,14 @@ export function ContractorPortal() {
                     </div>
                     <button onClick={() => setWorkHere({ ...workHere, step: 'view' })}
                       className="w-full text-center text-xs font-semibold text-gray-400">
-                      {s.isRtl ? 'חזרה' : 'Back'}
+                      {w('Back', 'חזרה', 'Назад')}
                     </button>
                   </>
                 )}
                 {workHere.step === 'finished' && pickedStage && (
                   <div data-work-finished className="space-y-3">
                     <p className="text-center font-extrabold text-gray-800" style={{ fontSize: 17, lineHeight: 1.35 }}>
-                      {s.didYouFinish || (s.isRtl ? 'סיימת את השלב הזה?' : 'Did you finish this stage?')}
+                      {s.didYouFinish || (w('Did you finish this stage?', 'סיימת את השלב הזה?', 'Вы закончили этот этап?'))}
                     </p>
                     <p className="text-center font-bold flex items-center justify-center gap-2" style={{ color: '#0369a1', fontSize: 15 }}>
                       <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: pickedStage.color }} />
@@ -2995,23 +3022,23 @@ export function ContractorPortal() {
                     <button data-finished-yes onClick={finishedYes}
                       className="w-full py-3.5 rounded-xl font-bold text-white text-base"
                       style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}>
-                      {s.finishedYes || (s.isRtl ? 'כן — זה גמור' : 'Yes — it is finished')}
+                      {s.finishedYes || (w('Yes — it is finished', 'כן — זה גמור', 'Да — готово'))}
                     </button>
                     <button data-finished-no onClick={() => setWorkHere({ ...workHere, step: 'note' })}
                       className="w-full py-3.5 rounded-xl font-bold text-base"
                       style={{ backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fdba74' }}>
-                      {s.finishedNo || (s.isRtl ? 'עוד לא' : 'Not yet')}
+                      {s.finishedNo || (w('Not yet', 'עוד לא', 'Ещё нет'))}
                     </button>
                     <button onClick={() => setWorkHere({ ...workHere, step: 'stage' })}
                       className="w-full text-center text-xs font-semibold text-gray-400">
-                      {s.isRtl ? 'חזרה' : 'Back'}
+                      {w('Back', 'חזרה', 'Назад')}
                     </button>
                   </div>
                 )}
                 {workHere.step === 'note' && pickedStage && (
                   <div data-work-note className="space-y-3">
                     <p className="text-center font-extrabold text-gray-800" style={{ fontSize: 17 }}>
-                      {s.whatsLeft || (s.isRtl ? 'מה נשאר לעשות?' : 'What is left to do?')}
+                      {s.whatsLeft || (w('What is left to do?', 'מה נשאר לעשות?', 'Что осталось сделать?'))}
                     </p>
                     <textarea
                       value={leftNote}
@@ -3019,13 +3046,13 @@ export function ContractorPortal() {
                       rows={3}
                       autoFocus
                       className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
-                      placeholder={s.whatsLeft || (s.isRtl ? 'מה נשאר לעשות?' : 'What is left to do?')}
+                      placeholder={s.whatsLeft || (w('What is left to do?', 'מה נשאר לעשות?', 'Что осталось сделать?'))}
                     />
                     <button data-work-send onClick={sendNotFinished} disabled={!leftNote.trim()}
                       className="w-full py-3.5 rounded-xl font-bold text-white text-base flex items-center justify-center gap-2 disabled:opacity-40"
                       style={{ backgroundColor: '#1e3a5f' }}>
                       <Send size={16} />
-                      {s.sendToOffice || (s.isRtl ? 'שליחה למשרד' : 'Send to the office')}
+                      {s.sendToOffice || (w('Send to the office', 'שליחה למשרד', 'Отправить в офис'))}
                     </button>
                     <p className="text-center text-[11px] text-gray-400">
                       {s.halfDoneSaved || (s.isRtl
@@ -3034,7 +3061,7 @@ export function ContractorPortal() {
                     </p>
                     <button onClick={() => setWorkHere({ ...workHere, step: 'finished' })}
                       className="w-full text-center text-xs font-semibold text-gray-400">
-                      {s.isRtl ? 'חזרה' : 'Back'}
+                      {w('Back', 'חזרה', 'Назад')}
                     </button>
                   </div>
                 )}
@@ -3063,10 +3090,10 @@ export function ContractorPortal() {
             </div>
             <div className="text-5xl mb-1">🎉</div>
             <h3 className="text-lg font-extrabold text-gray-900 mb-0.5">
-              {s.isRtl ? 'כל הכבוד!' : 'Nice work!'}
+              {w('Nice work!', 'כל הכבוד!', 'Отличная работа!')}
             </h3>
             <p className="text-xs text-gray-500 mb-3">
-              {s.isRtl ? 'העתיקו את ההודעה ושלחו למשרד' : 'Copy this message and send it back to the office'}
+              {w('Copy this message and send it back to the office', 'העתיקו את ההודעה ושלחו למשרד', 'Скопируйте это сообщение и отправьте в офис')}
             </p>
             <div className="text-left rounded-xl border border-gray-200 bg-gray-50 p-3 mb-3 max-h-44 overflow-y-auto"
               dir={s.isRtl ? 'rtl' : 'ltr'}>
@@ -3090,11 +3117,11 @@ export function ContractorPortal() {
                 style={{ background: celebrateCopied
                   ? 'linear-gradient(135deg, #22c55e, #16a34a)'
                   : 'linear-gradient(135deg, #1e3a5f, #2d4a6f)' }}>
-                {celebrateCopied ? (s.isRtl ? 'הועתק ✓' : 'Copied ✓') : (s.isRtl ? 'העתקת ההודעה' : 'Copy the message')}
+                {celebrateCopied ? (w('Copied ✓', 'הועתק ✓', 'Скопировано ✓')) : (w('Copy the message', 'העתקת ההודעה', 'Скопировать сообщение'))}
               </button>
               <button onClick={() => { setCelebrate(null); setCelebrateCopied(false); }}
                 className="px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-500 border border-gray-200">
-                {s.isRtl ? 'סגירה' : 'Close'}
+                {w('Close', 'סגירה', 'Закрыть')}
               </button>
             </div>
           </div>

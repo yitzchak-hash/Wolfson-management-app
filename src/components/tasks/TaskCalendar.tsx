@@ -4,6 +4,7 @@ import {
   startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   addMonths, subMonths, eachDayOfInterval, format, isSameMonth, isSameDay, parseISO,
 } from 'date-fns';
+import type { Locale } from 'date-fns';
 import { DriveIcon, ZohoIcon, PlanIcon } from '../ui/BrandIcons';
 import { printSheet, printEsc } from '../../data/printing';
 
@@ -44,8 +45,11 @@ export function TaskCalendar({
   printTitle = 'Calendar',
   rtl = false,
   fill = false,
+  locale,
 }: {
   events: CalendarEvent[];
+  /** date-fns locale for the month title — the worker's phone reads its own language. */
+  locale?: Locale;
   weekdayLabels?: string[];
   todayLabel?: string;
   /** Names the printed sheet — "Tasks — Wolfson", "All workspaces", and so on. */
@@ -108,7 +112,7 @@ export function TaskCalendar({
       ev.date && isSameMonth(parseISO(ev.date.slice(0, 10)), month)).length;
 
     printSheet(
-      `${printTitle} — ${format(month, 'MMMM yyyy')}`,
+      `${printTitle} — ${format(month, 'LLLL yyyy', { locale })}`,
       `<table class="calgrid">
         <thead><tr>${weekdayLabels.map(d => `<th>${e(d)}</th>`).join('')}</tr></thead>
         <tbody>${rows.join('')}</tbody>
@@ -147,7 +151,7 @@ export function TaskCalendar({
         </button>
         <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
           <h3 className="text-[13px] sm:text-sm font-bold text-gray-800 whitespace-nowrap truncate">
-            {format(month, 'MMMM yyyy')}</h3>
+            {format(month, 'LLLL yyyy', { locale })}</h3>
           <button
             onClick={() => setMonth(startOfMonth(new Date()))}
             className="text-xs px-2 py-1 rounded-lg border border-gray-200 text-gray-500 hover:border-[#1e3a5f] hover:text-[#1e3a5f] transition-colors"

@@ -7250,3 +7250,16 @@ all five places (registry, WIDGET_FIELDS, WIDGET_PREVIEW `{days:30}`, SHELF
 "Finding and following", TV_ALLOWED) and at the top of RECENT. Harness:
 `scratchpad/activejobs-probe.mjs` (9 checks).
 
+## Russian all the way through (the portal)
+The three presets were complete (102 keys each), and the portal still read
+half English to a Russian worker: ~45 inline `s.isRtl ? he : en` pairs with
+no key, every `format()` date in English month and weekday names, the
+notebook's `DAY_NAMES`/`SHORT_DAYS`, the calendar's weekday row and month
+title. Now: `wordsOf(lang)` → `w(en, he, ru)` for every inline word in
+`ContractorPortal.tsx`, `dateFmt(lang)` shadows `format` inside the
+component with the date-fns `he`/`ru` locale, `TaskCalendar` takes
+`locale`, and `PlannerWidget` takes `lang` (day-name tables per language +
+`toLocaleDateString(LT, …)`). The office keeps English on its own planner —
+only the portal passes `lang`. A new portal string is `w(en, he, ru)` or a
+preset key with all three; a bare pair is the bug.
+

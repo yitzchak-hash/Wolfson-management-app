@@ -51,6 +51,13 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'tap',
       },
       {
+        title: 'Russian all the way through',
+        body: 'A worker who reads Russian now gets Russian everywhere on his '
+          + 'phone: the day and month names, the notebook, the calendar, the '
+          + 'task form, the closing screen, the bell — not just the main labels.',
+        demo: 'tap',
+      },
+      {
         title: 'Active jobs widget',
         body: 'A new card in the widget store: every job something happened on '
           + 'in the last 30 days — a task made or closed, a message, a photo, a '
