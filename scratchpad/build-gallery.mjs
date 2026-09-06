@@ -6,6 +6,7 @@
 // script; the pins are carried forward — never dropped — with `done` and a
 // note of what was done.
 import fs from 'node:fs';
+import { chromium } from 'playwright';
 
 const OUT = '/tmp/claude-0/-home-user-Wolfson-management-app/b8d14d64-4aa3-5544-895c-576d1b3eced3/scratchpad/device-gallery.html';
 const style = fs.readFileSync('scratchpad/gallery-style.css', 'utf8');
@@ -43,11 +44,45 @@ const SCREENS = [
 ];
 
 const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
-const img = (tag, name) => {
-  for (const ext of ['jpg', 'png']) {
-    const p = `scratchpad/gal-${tag}-${name}.${ext}`;
-    if (fs.existsSync(p)) return `data:image/${ext === 'jpg' ? 'jpeg' : 'png'};base64,${fs.readFileSync(p).toString('base64')}`;
+
+// The page must stay under the artifact's 16 MB cap, base64 included (×1.37).
+// The captures are kept at their full quality on disk for the owner to zoom
+// into; the PAGE gets each picture re-encoded through Chromium's canvas, the
+// quality stepped down until the lot fits. Deterministic and tool-free — the
+// container has no ImageMagick and no PIL.
+const RAW_BUDGET = 11.2e6;
+const files = [];
+for (const [tag] of PROFILES) for (const [name] of SCREENS) {
+  const p = `scratchpad/gal-${tag}-${name}.jpg`;
+  if (fs.existsSync(p)) files.push([`${tag}/${name}`, p]);
+}
+const raw = new Map();
+let total = files.reduce((n, [, p]) => n + fs.statSync(p).size, 0);
+if (total > RAW_BUDGET) {
+  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const page = await browser.newPage();
+  for (const q of [0.78, 0.7, 0.62, 0.55, 0.48]) {
+    total = 0;
+    for (const [key, p] of files) {
+      const b64 = fs.readFileSync(p).toString('base64');
+      const out = await page.evaluate(async ([src, q]) => {
+        const im = new Image(); im.src = src; await im.decode();
+        const c = document.createElement('canvas'); c.width = im.width; c.height = im.height;
+        c.getContext('2d').drawImage(im, 0, 0);
+        return c.toDataURL('image/jpeg', q);
+      }, [`data:image/jpeg;base64,${b64}`, q]);
+      raw.set(key, out); total += out.length * 0.75;
+    }
+    console.log(`re-encoded at q=${q}: ${(total / 1e6).toFixed(1)} MB raw`);
+    if (total <= RAW_BUDGET) break;
   }
+  await browser.close();
+}
+const img = (tag, name) => {
+  const key = `${tag}/${name}`;
+  if (raw.has(key)) return raw.get(key);
+  const p = `scratchpad/gal-${tag}-${name}.jpg`;
+  if (fs.existsSync(p)) return `data:image/jpeg;base64,${fs.readFileSync(p).toString('base64')}`;
   return null;
 };
 
