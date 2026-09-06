@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
+import { problemStates } from '../data/problems';
 import {
   Plus, Briefcase, MapPin, ExternalLink, Trash2, ClipboardList, FolderOpen,
   Copy, Scissors, Maximize, Minimize, StickyNote, Square, Palette, Pencil, X, AlertTriangle,
@@ -2045,6 +2046,7 @@ export function GeneralJobsPage() {
 
   const stages = allStages.filter(st => st.projectId === 'general');
   const stageMap = new Map(stages.map(st => [st.id, st]));
+  const problemMap = useMemo(() => problemStates(contractorAssignments), [contractorAssignments]);
   // Jobs in a bin (Done / Ready / Archive / Trash) live in their own window,
   // not on the main board. Nothing is deleted — they are only moved.
   /**
@@ -7083,6 +7085,7 @@ export function GeneralJobsPage() {
                   job={job} index={gi} ghostIndex={gi}
                   x={p.x} y={p.y} w={tileSize(job).w} h={tileSize(job).h}
                   stage={job.currentStageId ? stageMap.get(job.currentStageId) ?? null : null}
+                  problem={problemMap.get(job.id) ?? null}
                   pendingTasks={pendingByJob.get(job.id) ?? 0}
                   isSelected={false}
                   isDragging={!!ghostDrag && ghostDrag.jobId === job.id && ghostDrag.index === gi && ghostDrag.moved}
@@ -7107,6 +7110,7 @@ export function GeneralJobsPage() {
                   w={jobResize?.id === job.id ? jobResize.startW + jobResize.dw : tileSize(job).w}
                   h={jobResize?.id === job.id ? jobResize.startH + jobResize.dh : tileSize(job).h}
                   stage={job.currentStageId ? stageMap.get(job.currentStageId) ?? null : null}
+                  problem={problemMap.get(job.id) ?? null}
                   pendingTasks={pendingByJob.get(job.id) ?? 0}
                   isSelected={selectedJobIds.has(job.id)}
                   isDragging={drag?.kind === 'job' && drag.ids.includes(job.id) && drag.moved}

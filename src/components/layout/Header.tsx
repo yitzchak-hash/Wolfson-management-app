@@ -7,6 +7,7 @@ import { useStore } from '../../data/store';
 import { usePhone } from '../../data/usePhone';
 import { Project, aptLabel, getStageName } from '../../types';
 import { pendingStages } from '../../data/stageMarks';
+import { isLiveProblem, problemStateOf, PROBLEM_FILL } from '../../data/problems';
 import { Tooltip } from '../ui/Tooltip';
 import { ActivityTicker } from '../ui/ActivityTicker';
 import { WhatsNewButton } from '../ui/WhatsNew';
@@ -76,6 +77,16 @@ function PendingStagesBell({ light }: { light: boolean }) {
   const stages = allStages.filter(st =>
     currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId);
   const rows = useMemo(() => pendingStages(apartments, stages), [apartments, stages]);
+  /**
+   * Open problems — red rows beside the half-done clocks (owner, 2026-09-06).
+   * An open one first, then the ones waiting for approval; each opens its
+   * apartment exactly as a pending stage does.
+   */
+  const problemRows = useMemo(() => assignments
+    .filter(isLiveProblem)
+    .map(a => ({ a, apartment: apartments.find(x => x.id === a.apartmentId), state: problemStateOf(a)! }))
+    .filter((r): r is { a: typeof r.a; apartment: NonNullable<typeof r.apartment>; state: 'open' | 'waiting' } => !!r.apartment)
+    .sort((x, y) => (x.state === 'open' ? 0 : 1) - (y.state === 'open' ? 0 : 1)), [assignments, apartments]);
 
   useEffect(() => {
     if (!open) return;
@@ -88,7 +99,8 @@ function PendingStagesBell({ light }: { light: boolean }) {
     return () => window.removeEventListener('pointerdown', down);
   }, [open]);
 
-  if (rows.length === 0) return null;
+  if (rows.length === 0 && problemRows.length === 0) return null;
+  const anyOpen = problemRows.some(r => r.state === 'open');
 
   const MENU_W = 300;
   const openMenu = () => {
@@ -119,17 +131,20 @@ function PendingStagesBell({ light }: { light: boolean }) {
         ref={btnRef}
         data-pending-bell
         onClick={() => (open ? setOpen(false) : openMenu())}
-        title={ui.stagePendingListTitle}
+        title={problemRows.length ? `${ui.problemsListTitle} · ${ui.stagePendingListTitle}` : ui.stagePendingListTitle}
         className="relative p-2 rounded-lg transition-colors flex-shrink-0"
-        style={{ color: '#f97316' }}
+        style={{ color: anyOpen ? PROBLEM_FILL.open : '#f97316' }}
       >
-        <Clock size={18} className="pending-glow" />
+        {problemRows.length
+          ? <span data-bell-problem-glyph className="w-[18px] h-[18px] rounded-full flex items-center justify-center text-white font-black text-[12px] pending-glow"
+              style={{ backgroundColor: anyOpen ? PROBLEM_FILL.open : PROBLEM_FILL.waiting }}>!</span>
+          : <Clock size={18} className="pending-glow" />}
         <span
           className="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-0.5 rounded-full text-[9px] font-black
                      flex items-center justify-center text-white tabular-nums"
-          style={{ backgroundColor: '#f97316' }}
+          style={{ backgroundColor: anyOpen ? PROBLEM_FILL.open : '#f97316' }}
         >
-          {rows.length}
+          {rows.length + problemRows.length}
         </span>
       </button>
       {open && pos && createPortal(
@@ -145,6 +160,32 @@ function PendingStagesBell({ light }: { light: boolean }) {
             <span className="text-xs font-bold text-gray-700">{ui.stagePendingListTitle}</span>
           </div>
           <div className="flex-1 overflow-y-auto py-1">
+            {problemRows.map(({ a, apartment, state }) => (
+              <button
+                key={`p|${a.id}`}
+                data-problem-row={a.id}
+                onClick={() => {
+                  setOpen(false);
+                  if (currentProjectId === 'general') {
+                    setPendingFocus({ kind: 'apartment', id: apartment.id });
+                    navigate('/jobs');
+                  } else {
+                    setPendingOpenAptId(apartment.id);
+                    navigate('/project');
+                  }
+                }}
+                className="w-full text-left rtl:text-right px-3 py-2 hover:bg-red-50 transition-colors"
+              >
+                <span className="flex items-center gap-1.5">
+                  <span className="w-4 h-4 rounded-full flex items-center justify-center text-white font-black text-[10px] flex-shrink-0"
+                    style={{ backgroundColor: PROBLEM_FILL[state] }}>!</span>
+                  <span className="text-xs font-bold text-gray-800 truncate">{aptLabel(apartment)}</span>
+                </span>
+                <span className="block text-[11px] font-semibold truncate mt-0.5" style={{ color: state === 'open' ? '#b91c1c' : '#be123c' }}>
+                  {state === 'open' ? ui.problemLabel : ui.problemWaiting} · {a.taskDescription}
+                </span>
+              </button>
+            ))}
             {rows.map(({ apartment, stage }) => {
               const note = noteFor(apartment.id, stage.id);
               return (

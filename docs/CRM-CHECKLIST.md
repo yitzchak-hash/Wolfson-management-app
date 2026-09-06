@@ -44,11 +44,23 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ General job closes like any task, with or without visits (starred answer taken, 2026-09-03)
 - ☑ "Is this part of…?" asks every time a general job is running, Yes first (starred answer taken, 2026-09-03)
 
-## Decided 2026-09-03, plan page pending (build only on "build it")
-- ☐ A PROBLEM on an apartment: "Report a problem" in the stage picker → assign a worker, notes with the dictation mic + paperclip + big memo mic (transcribed), pictures, "photos required to close?" — the apartment turns red with a big exclamation, its stage reads Problem while the real stage is kept underneath; bulk update can raise problems on many units; a deadline instead of a day, shown every day until closed and urgent past it; worker closes → "waiting for approval" (softer red); the office approves → "Problem solved" with its pictures, the apartment returns to its stage; a problem report in Reports, with pictures
-- ☐ Tipus (טיפוס) — an apartment TYPE from a per-project list (A1, A2, B1, C3…), optional, shown as "47 — A2" beside the number and before the family name; set in the drawer and in bulk update
-- ☐ Voice memos everywhere show the recording AND the words under it, in the screen's language — every note, task and input field takes the WhatsApp-style box
-- ☐ Apartment notes: done stages crossed off, the current stage open, "Add notes for this stage", saved notes as bullet points above the box (the box at the bottom); the worker/date sign-off small and quiet
+## Problems on an apartment (built 2026-09-06)
+- ☑ "Report a problem" under the stage list → worker, deadline (3 working days default), the message box with memo + pictures, "pictures required to close?" (2026-09-06)
+- ☑ The apartment turns RED with a big "!" on the diagram, the board tile, the TV and Building Progress; the stage line reads "PROBLEM · was X"; the real stage is never touched (2026-09-06)
+- ☑ Worker: problem cards red and first on every day's filter, deadline printed, "N days late", red banner past the deadline, bell item; Close problem → Waiting for approval (rose); the office's Send-back note on the card (2026-09-06)
+- ☑ Office: the band under the window title — Approve (admin users only) / Send back with a note; approved → green "Problem solved" with the pictures, kept 30 days; the header bell lists open + waiting problems (2026-09-06)
+- ☑ "I did work here" on a red apartment offers "Is this the fix for…?" first (2026-09-06)
+- ☑ Bulk update: Report a problem on every picked apartment, one editable line each (2026-09-06)
+- ☑ Reports: a Problems subject (apartment, tipus, worker, what, raised, deadline, status, closed, approved by, days late, pictures); "with pictures" prints thumbnails, Excel carries the links (2026-09-06)
+
+## Tipus (built 2026-09-06)
+- ☑ Per-workspace list in project settings; dropdown between number and family name; "47 — A2" everywhere the number prints (desktop cell; small line under the number on the phone cell); bulk update sets it; a Tipus filter on the diagram; a Tipus field in reports (2026-09-06)
+
+## The message box and the notes tab (built 2026-09-06)
+- ☑ One message box — paperclip · dictation mic at the left · big memo mic / Send — on: general notes, stage notes, task descriptions (quick-add, Tasks page add + edit, bulk add, notebook drop card), the pin note, the problem form, the closing comment, both task-thread composers (2026-09-06)
+- ☑ Every recording shows its words under the player, in the screen's language, with Show original — task attachments, office files, board notes, pending memos included (2026-09-06)
+- ☑ Notes tab: passed stages crossed off and folded with a count, the current open, later grey; bullets with a small grey sign-off; a worker's memo is a bullet with its words; "Add notes for X" + the box at the bottom; Send puts the note above (2026-09-06)
+- ◐ Board sticky notes and boxes keep their inline editor; their memo player shows the words (2026-09-06)
 
 ## Messages, voice and language
 - ☑ Voice memo on every note (thread, stage notes, office notes, task attachments, board notes, pins)

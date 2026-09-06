@@ -8,10 +8,11 @@ import { format } from 'date-fns';
 import { saveAs } from 'file-saver';
 import { printTable } from '../data/printing';
 import { downloadXlsx } from '../data/xlsx';
-import { isCountableApartment } from '../types';
+import { isCountableApartment, ContractorAssignment } from '../types';
+import { driveThumbUrl } from '../data/driveApi';
 import {
   SUBJECTS, SubjectId, ReportDef, ReportField, Rule, Op, OPS_FOR,
-  runReport, subjectOf, newReport, ReportData, Cell,
+  runReport, subjectOf, newReport, ReportData, Cell, problemPhotos,
 } from '../data/reportModel';
 
 /**
@@ -35,7 +36,7 @@ const NAVY = '#1e3a5f';
 export function ReportsPage() {
   const {
     apartments: allApartments, stages: allStages, buildings, stageNotes,
-    contractorAssignments, contractors, activityLogs,
+    contractorAssignments, contractors, activityLogs, contractorPhotos,
     mainUiStrings: s, currentProjectId, projects, currentUser,
     savedReports, saveReport, deleteReport,
   } = useStore();
@@ -62,9 +63,15 @@ export function ReportsPage() {
 
   const data: ReportData = useMemo(() => ({
     apartments, assignments: contractorAssignments, contractors, stages, buildings,
-    stageNotes, activity: activityLogs, isRtl: !!s.isRtl, today: asOf,
+    stageNotes, activity: activityLogs, photos: contractorPhotos, isRtl: !!s.isRtl, today: asOf,
   }), [apartments, contractorAssignments, contractors, stages, buildings,
-    stageNotes, activityLogs, s.isRtl, asOf, refreshedAt]);
+    stageNotes, activityLogs, contractorPhotos, s.isRtl, asOf, refreshedAt]);
+  /**
+   * PROBLEMS print with the pictures the worker sent when this is on (owner,
+   * 2026-09-06): thumbnails in the row on paper, the picture links in Excel
+   * (a hand-written .xlsx carries text, not images — the links open them).
+   */
+  const [withPictures, setWithPictures] = useState(false);
 
   const mine = savedReports[currentProjectId] ?? [];
 
@@ -125,23 +132,39 @@ export function ReportsPage() {
     // A real workbook rather than a CSV: one sheet keeps the header bold, the
     // columns sized, and Hebrew intact — Excel's CSV import guesser mangles
     // all three.
+    const pics = def.subject === 'problems' && withPictures;
+    const picLinks = (r: { raw: ContractorAssignment }) =>
+      problemPhotos(data, r.raw).map(ph => ph.storageUrl || ph.driveUrl || '').filter(Boolean).join('\n');
     downloadXlsx(`${slug(def.name)}-${format(new Date(), 'yyyy-MM-dd')}.xlsx`, [{
       name: subject.label.slice(0, 28),
       header: true,
-      rows: [headers, ...result.rows.map(r => r.cells.map(c => c ?? ''))],
-      widths: headers.map(h => Math.min(40, Math.max(12, h.length + 4))),
+      rows: [
+        pics ? [...headers, 'Pictures'] : headers,
+        ...result.rows.map(r => pics ? [...r.cells.map(c => c ?? ''), picLinks(r)] : r.cells.map(c => c ?? '')),
+      ],
+      widths: (pics ? [...headers, 'Pictures'] : headers).map(h => Math.min(40, Math.max(12, h.length + 4))),
     }]);
   }
 
   function printReport() {
+    const pics = def.subject === 'problems' && withPictures;
+    const thumbs = (r: { raw: ContractorAssignment }) => problemPhotos(data, r.raw).slice(0, 6)
+      .map(ph => ph.storageUrl || (ph.driveFileId ? driveThumbUrl(ph.driveFileId, 200) : ph.dataUrl))
+      .filter(Boolean)
+      .map(src => `<img src="${src.replace(/"/g, '&quot;')}" style="width:54px;height:54px;object-fit:cover;border-radius:6px;margin:1px">`)
+      .join('');
     printTable(
       `${def.name} — ${projectName}`,
-      result.rows.map(r => r.cells),
-      headers.map((h, i) => ({ header: h, value: (cells: Cell[]) => cellText(cells[i]) })),
+      result.rows,
+      [
+        ...headers.map((h, i) => ({ header: h, value: (r: { cells: Cell[] }) => cellText(r.cells[i]) })),
+        ...(pics ? [{ header: 'Pictures', value: thumbs, html: true, width: '180px' }] : []),
+      ],
       {
-        landscape: result.columns.length > 5,
+        landscape: result.columns.length > 5 || pics,
         rtl: !!s.isRtl,
         subtitle: describe(def, result.rows.length, result.total, subject.nounPlural, asOf),
+        css: pics ? 'img{page-break-inside:avoid}' : undefined,
       },
     );
   }
@@ -162,6 +185,12 @@ export function ReportsPage() {
 
         <Btn onClick={() => { setRefreshedAt(new Date()); setAsOf(new Date().toISOString().slice(0, 10)); }}
           icon={RefreshCw} label="Refresh" title="Re-read everything and move the report to today" />
+        {def.subject === 'problems' && (
+          <label data-report-pictures className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 px-2 py-1.5 rounded-lg border border-gray-200 bg-white cursor-pointer">
+            <input type="checkbox" checked={withPictures} onChange={e => setWithPictures(e.target.checked)} />
+            with pictures
+          </label>
+        )}
         <Btn onClick={printReport} icon={Printer} label={s.print} />
         <Btn onClick={exportCSV} icon={Download} label="CSV" />
         <Btn onClick={exportExcel} icon={FileSpreadsheet} label="Excel" />

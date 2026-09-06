@@ -7108,3 +7108,78 @@ the form's — every form control carries a data hook now
 `data-add-task-submit`); and the portal's `min-h-screen` root has no
 ceiling, so "fill the phone" had to be pinned to the viewport in the tab
 itself.
+
+---
+
+# v2 — Problems, Tipus and notes that read like notes (built 2026-09-06, the approved page)
+
+The spec is the "Problems, Tipus and Notes" artifact (`scratchpad/problems-plan.template.html`);
+the starred answers stood: admins approve, Send back exists, three working days, "47 — A2" on the
+desktop cell and A2 under the number on the phone cell.
+
+## One message box (`src/components/ui/MessageBox.tsx`)
+The worker's composer lifted out: paperclip · the box with the DICTATION mic at its left · the big
+navy mic that becomes Send. Two manners decided by `onSend`: SEND mode (a thread, a stage's notes —
+Enter/arrow sends, the host clears) and FIELD mode (a task description, the general notes, a pin's
+note — commits through onChange/onBlur, the mic is always there, and `onTranscript` hands a
+recording's words back so an EMPTY field takes them as its text: a memo sent as a task description IS
+the description). `memoFile(memo)` is the audio File every attachment path already carries. On:
+general notes, stage notes, quick-add, Tasks page add + edit, bulk add, the notebook drop card, the pin
+note, the problem form, the portal composer and closing comment, the office thread composer (which
+now takes files and memos, `officeNoteAtts`). `TaskAttachment.transcript` / `StageNoteAttachment.transcript`
+ride the records. Board sticky notes keep their inline editor (their player shows the words).
+**Harness note**: the media input is no longer the only `accept*="video"` file input — the box's own
+inputs carry it too; select the portal's by `[accept*="video"][accept*=".zip"]`.
+
+## Tipus
+`Apartment.tipus` (rides `apartments`) · `BoardSetting.tipusim` (rides `boardSettings`) — no new
+store key, the backup audit is unchanged. `aptLabel` is "47 — A2 — Aharonov": the tipus rides only
+with a number. Drawer: `[data-tipus-select]` between the number and the family, a `[data-tipus-chip]`
+in the title. Diagram: `displayLabel` "47 — A2" on the desktop, a `[data-tipus-line]` under the number
+on the phone/merged cell; `tipusFilter` threads through both column components (the standing
+two-component trap); the bulk bar's `bulkStageSet` flag exists because a tipus-only bulk update must
+NOT reset every stage to Not started — Apply writes only what was touched. Project settings →
+`TipusSettings` (`[data-tipusim-card]`, building workspaces only). Reports: a `tipus` job field.
+
+## Problems (`src/data/problems.ts` — the ONE rule every drawing reads)
+A problem is a TASK wearing `ContractorAssignment.problem` (`photosRequired`, `status: open |
+waiting | solved | returned`, `stageBefore`, `closedAt/approvedAt/approvedBy/returnNote`); `dueDate`
+is the deadline, no `days`. `problemState(aptId, tasks)` → open (red + "!") / waiting (rose) / null;
+`problemStates(tasks)` is the per-diagram map; `isLiveProblem`, `problemDaysLate(a, today)`,
+`defaultDeadline(today)` (Fri/Sat skipped), `bandWorthy` (30 days after approval), `canApproveProblem`
+(admin). The stage is NEVER overwritten: approval clears the state and the apartment is simply on its
+stage again. Drawn by: `AptCell` (`problem` prop → `PROBLEM_FILL`, white ink, `[data-problem-bang]`,
+stage line "PROBLEM · was X" / "Waiting for approval"), `JobTile` (`problem` prop), `ProgressCell`
+(`snap.assignments`), the TV diagram, the portal map, the stage picker's field, and the header bell
+(`[data-problem-row]`, red glyph). Hosts pass `problemStates` into `BuildingDiagram`.
+- **The office**: `StagePicker.onReportProblem` → `[data-report-problem]` (red, under the list) →
+  `ProblemForm` (portalled z-130/140 — the drawer rule): worker, deadline, MessageBox, pictures,
+  the yes/no. One task per apartment; every attachment becomes the first office message of that
+  task's thread. Bulk: `[data-bulk-problem]` on the diagram's bulk bar, `[data-problem-line=<id>]` per
+  apartment ("same for all" is the placeholder). `ProblemBand` under the window title:
+  `[data-problem-band][data-problem-status]`, Approve (`completedAt` + solved, admins only) and Send
+  back (`returned` + `returnNote` + an office note in the thread).
+- **The worker**: a live problem passes EVERY day filter (it has no day) and sorts first (open, then
+  waiting); `[data-problem-card=open|waiting]`, `[data-problem-deadline]` with "N days late",
+  `[data-problem-banner]` pinned over the list, the bell kind `problem`. `photosNeeded` reads
+  `problem.photosRequired` BEFORE the worker's own switch. Close problem → `status: 'waiting'` +
+  `closedAt`, NEVER `completedAt` (`[data-problem-waiting-footer]` replaces the button). "I did work
+  here" on a red apartment offers `[data-fix-for=<taskId>]` first → the closing screen.
+- **Reports**: the `problems` subject (`problemStatusText`, `problemPhotos`; `ReportData.photos`);
+  `[data-report-pictures]` prints thumbnails in a Pictures column and puts the picture LINKS in the
+  .xlsx (the hand-written workbook carries text, not images — said so on the page).
+
+## The notes tab (`StageNotesSection` rewritten)
+`StageNote.entries: StageNoteEntry[]` beside the legacy `noteText` (kept as the flat join, so search
+and reports read every bullet); `appendStageNoteEntry` in the store converts a pre-bullets note into
+its first entry on the first append — nothing migrated, nothing lost. Passed stages fold with a strike
+and a count (`[data-notes-state=done]`), the current opens (`current`), later ones sit grey; a
+worker's messages on the stage's tasks are bullets too (translated, `Translated`); `[data-notes-signoff]`
+is the small grey "Esther · 2 Sep"; the MessageBox (`stage-note-box`) sits at the bottom in SEND mode.
+The old per-stage Save / version panel / history are gone from the tab (versions are still written by
+`upsertStageNote`, which nothing in the tab calls any more).
+
+Harness: `scratchpad/round40-probe.mjs` (52 checks, two contexts, on the keyed 5174 server with
+`/api/geocode` stubbed). Its own lesson is the standing one: a `page.evaluate` patch of localStorage
+followed by `reload()` is overwritten by the app's flush-on-unload — the waiting problem is SEEDED
+in the init script, never patched in.

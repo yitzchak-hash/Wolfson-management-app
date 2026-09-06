@@ -4,7 +4,8 @@ import { MapPin, Check, X, Printer, Plus, Trash2, RotateCcw, Paperclip, Loader2,
 import { useStore } from '../../data/store';
 import { PinFile } from '../../types';
 import { storeVoiceMemo, RecordedMemo, LOCAL_MEMO_LIMIT } from '../../data/voiceMemo';
-import { VoiceRecorderButton, VoiceMemoPlayer } from '../ui/VoiceMemo';
+import { VoiceMemoPlayer } from '../ui/VoiceMemo';
+import { MessageBox } from '../ui/MessageBox';
 import {
   isUploadBackendConfigured, extractFolderId, findOrCreateFolderViaBackend,
   uploadFileViaBackend, shareFileToDrive,
@@ -354,14 +355,18 @@ export function PlanPinOverlay({
               {readOnly ? (
                 <p className="text-[12px] text-gray-700 whitespace-pre-wrap">{p.text || 'No note'}</p>
               ) : (
-                <textarea
+                <MessageBox
+                  hook="pin-note-box"
+                  rows={3}
                   autoFocus
                   value={draft}
-                  onChange={e => setDraft(e.target.value)}
+                  onChange={setDraft}
                   onBlur={() => updatePlanPin(p.id, { text: draft })}
-                  rows={3}
                   placeholder={L.placeholder}
-                  className="w-full text-[12px] border border-gray-200 rounded-lg p-2 outline-none focus:ring-2 focus:ring-[#1e3a5f]/25 resize-none"
+                  lang={cs.isRtl ? 'he' : 'en'}
+                  busy={busy !== ''}
+                  onAttach={files => { const f = files[0]; if (f) void attachFile(p.id, f, p.files ?? []); }}
+                  onMemo={memo => saveMemo(p.id, memo)}
                 />
               )}
 
@@ -466,33 +471,6 @@ export function PlanPinOverlay({
                     </button>
                   )}
                   <div className="flex-1" />
-                  {/* Bottom-right, per the owner: a little paperclip and a
-                      slightly BIGGER microphone beside it — attach a file, or
-                      just say what to do here and where. */}
-                  <input
-                    ref={fileRef} type="file" className="hidden" data-pin-file-input
-                    onChange={e => {
-                      const f = e.target.files?.[0];
-                      e.target.value = '';
-                      if (f) void attachFile(p.id, f, p.files ?? []);
-                    }} />
-                  <button
-                    onClick={() => fileRef.current?.click()}
-                    disabled={busy !== ''}
-                    title="Attach a file"
-                    data-pin-attach
-                    className="flex items-center justify-center w-7 h-7 rounded-full text-gray-500 hover:text-[#1e3a5f] hover:bg-gray-100 disabled:opacity-40"
-                  >
-                    {busy === 'file' ? <Loader2 size={13} className="animate-spin" /> : <Paperclip size={13} />}
-                  </button>
-                  <span data-pin-mic className="flex-shrink-0">
-                    <VoiceRecorderButton
-                      compact
-                      busy={busy === 'audio'}
-                      title="Record what to do here"
-                      onRecorded={memo => saveMemo(p.id, memo)}
-                    />
-                  </span>
                   {/* A worker may only tear up a pin they placed themselves. */}
                   {(!workerMode || p.createdBy === authorName) && (
                     <button

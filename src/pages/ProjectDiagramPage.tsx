@@ -5,10 +5,12 @@ import { redeemReturn } from '../data/unitTravel';
 import { Tooltip } from '../components/ui/Tooltip';
 import { useStore } from '../data/store';
 import { Apartment, BuildingId, isCountableApartment } from '../types';
+import { problemStates } from '../data/problems';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
 import { StageLegend } from '../components/diagram/StageLegend';
 import { StageBar } from '../components/diagram/StageBar';
 import { ApartmentDetailDrawer } from '../components/apartment/ApartmentDetailDrawer';
+import { ProblemForm } from '../components/apartment/ProblemForm';
 import { QuickAddTaskPanel } from '../components/apartment/QuickAddTaskPanel';
 import { Toast } from '../components/ui/Toast';
 
@@ -49,8 +51,13 @@ function useNarrow(): boolean {
   return narrow;
 }
 
+const EMPTY_LIST: string[] = [];
+
 export function ProjectDiagramPage() {
   const { apartments, stages, buildings, currentUser, bulkUpdateApartments, updateApartment, contractorAssignments, contractors, mainUiStrings: s, pendingOpenAptId, setPendingOpenAptId, pendingFocus, setPendingFocus, currentProjectId, projects, setCurrentProject } = useStore();
+  const tipusim = useStore(st => st.boardSettings[st.currentProjectId]?.tipusim ?? EMPTY_LIST);
+  const [tipusFilter, setTipusFilter] = useState('');
+  const problemMap = useMemo(() => problemStates(contractorAssignments), [contractorAssignments]);
   const navigate = useNavigate();
 
   const isPhone = usePhone();
@@ -105,6 +112,7 @@ export function ProjectDiagramPage() {
       setActiveStageIds([f.id]);
       setSelectedBuilding('all');
       setClassFilter('all');
+      setTipusFilter('');
       setSearchQuery('');
       return;
     }
@@ -139,6 +147,7 @@ export function ProjectDiagramPage() {
       // be one of the ones currently hidden.
       setActiveStageIds([]);
       setClassFilter('all');
+      setTipusFilter('');
       setSearchQuery('');
       setRevealId(apt.id);
       return;
@@ -166,6 +175,11 @@ export function ProjectDiagramPage() {
   const [bulkMode, setBulkMode] = useState(false);
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
   const [bulkStageId, setBulkStageId] = useState('');
+  /** The stage dropdown was TOUCHED — only then does Apply write a stage (a tipus-only update must not reset stages to Not started). */
+  const [bulkStageSet, setBulkStageSet] = useState(false);
+  const [bulkTipus, setBulkTipus] = useState('');
+  const [bulkTipusOpen, setBulkTipusOpen] = useState(false);
+  const [bulkProblemOpen, setBulkProblemOpen] = useState(false);
   const [bulkDropdownOpen, setBulkDropdownOpen] = useState(false);
 
   // Only this workspace's stages — a shared list showed General's stages here.
@@ -222,7 +236,7 @@ export function ProjectDiagramPage() {
     selectedBuilding === 'all' ? (buildings[0]?.id ?? 'all') : selectedBuilding;
   const effectiveBuilding = isNarrow ? phoneBuilding : selectedBuilding;
   // Chips beyond the stage legend that the phone Filters button should count.
-  const phoneFilterCount = activeStageIds.length + (classFilter !== 'all' ? 1 : 0);
+  const phoneFilterCount = activeStageIds.length + (classFilter !== 'all' ? 1 : 0) + (tipusFilter ? 1 : 0);
 
   function toggleStage(id: string) {
     setActiveStageIds(prev =>
@@ -231,18 +245,22 @@ export function ProjectDiagramPage() {
   }
 
   function clearFilters() {
+    setTipusFilter('');
     setActiveStageIds([]);
     setClassFilter('all');
     setSearchQuery('');
     setSelectedBuilding('all');
   }
 
-  const hasFilters = activeStageIds.length > 0 || classFilter !== 'all' || searchQuery || selectedBuilding !== 'all';
+  const hasFilters = activeStageIds.length > 0 || classFilter !== 'all' || !!tipusFilter || searchQuery || selectedBuilding !== 'all';
 
   function exitBulkMode() {
     setBulkMode(false);
     setBulkSelected(new Set());
     setBulkStageId('');
+    setBulkStageSet(false);
+    setBulkTipus('');
+    setBulkTipusOpen(false);
     setBulkDropdownOpen(false);
   }
 
@@ -279,9 +297,15 @@ export function ProjectDiagramPage() {
   function handleBulkApply() {
     if (!currentUser || bulkSelected.size === 0) return;
     const ids = Array.from(bulkSelected);
-    bulkUpdateApartments(ids, { currentStageId: bulkStageId || null }, currentUser);
-    const stageName = sortedStages.find(s => s.id === bulkStageId)?.name ?? 'Not Started';
-    showToast(`${ids.length} apartment${ids.length !== 1 ? 's' : ''} updated → ${stageName}`);
+    const changes: Partial<Apartment> = {};
+    if (bulkStageSet) changes.currentStageId = bulkStageId || null;
+    if (bulkTipus) changes.tipus = bulkTipus === '__none' ? undefined : bulkTipus;
+    if (!Object.keys(changes).length) return;
+    bulkUpdateApartments(ids, changes, currentUser);
+    const parts: string[] = [];
+    if (bulkStageSet) parts.push(sortedStages.find(s => s.id === bulkStageId)?.name ?? 'Not Started');
+    if (bulkTipus) parts.push(`${s.tipusLabel}: ${bulkTipus === '__none' ? s.tipusNone : bulkTipus}`);
+    showToast(`${ids.length} apartment${ids.length !== 1 ? 's' : ''} updated → ${parts.join(' · ')}`);
     exitBulkMode();
   }
 
@@ -474,6 +498,22 @@ export function ProjectDiagramPage() {
               ))}
             </div>
 
+            {/* Tipus filter — only when the workspace keeps a list. */}
+            {tipusim.length > 0 && (
+              <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1" data-tipus-filter>
+                {['', ...tipusim].map(t => (
+                  <button
+                    key={t || '__all'}
+                    onClick={() => setTipusFilter(t)}
+                    className={`px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                      tipusFilter === t ? 'bg-[#1e3a5f] text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                  >
+                    {t || s.tipusLabel}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* Search */}
             <div className="relative">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -585,6 +625,8 @@ export function ProjectDiagramPage() {
             stages={stages}
             activeStageIds={activeStageIds}
             classFilter={classFilter}
+            tipusFilter={tipusFilter}
+            problemStates={problemMap}
             searchQuery={searchQuery}
             selectedBuilding={effectiveBuilding}
             phone={isPhone}
@@ -653,6 +695,8 @@ export function ProjectDiagramPage() {
                     <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: sortedStages.find(s => s.id === bulkStageId)?.color }} />
                     {sortedStages.find(s => s.id === bulkStageId)?.name}
                   </span>
+                ) : bulkStageSet ? (
+                  <span>{s.notStartedOption}</span>
                 ) : (
                   <span className="text-white/70">{s.selectStagePlaceholder}</span>
                 )}
@@ -661,7 +705,7 @@ export function ProjectDiagramPage() {
               {bulkDropdownOpen && (
                 <div className="absolute bottom-full mb-1 left-0 bg-white rounded-xl shadow-xl border border-gray-200 py-1 min-w-48 z-50">
                   <button
-                    onClick={() => { setBulkStageId(''); setBulkDropdownOpen(false); }}
+                    onClick={() => { setBulkStageId(''); setBulkStageSet(true); setBulkDropdownOpen(false); }}
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-500 hover:bg-gray-50"
                   >
                     {s.notStartedOption}
@@ -669,7 +713,7 @@ export function ProjectDiagramPage() {
                   {sortedStages.map(s => (
                     <button
                       key={s.id}
-                      onClick={() => { setBulkStageId(s.id); setBulkDropdownOpen(false); }}
+                      onClick={() => { setBulkStageId(s.id); setBulkStageSet(true); setBulkDropdownOpen(false); }}
                       className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-800 hover:bg-gray-50"
                     >
                       <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color }} />
@@ -680,9 +724,46 @@ export function ProjectDiagramPage() {
               )}
             </div>
 
+            {/* Tipus — set on every picked apartment in one press (owner, 2026-09-06). */}
+            {tipusim.length > 0 && (
+              <div className="relative">
+                <button
+                  data-bulk-tipus
+                  onClick={() => setBulkTipusOpen(v => !v)}
+                  className="flex items-center gap-2 px-3 py-2 bg-white/15 rounded-lg text-sm font-medium hover:bg-white/25 transition-all"
+                >
+                  {bulkTipus ? <span>{s.tipusLabel}: {bulkTipus === '__none' ? s.tipusNone : bulkTipus}</span>
+                    : <span className="text-white/70">{s.tipusLabel}</span>}
+                  <ChevronDown size={14} className="ml-auto" />
+                </button>
+                {bulkTipusOpen && (
+                  <div className="absolute bottom-full mb-1 left-0 bg-white rounded-xl shadow-xl border border-gray-200 py-1 min-w-40 z-50">
+                    <button onClick={() => { setBulkTipus('__none'); setBulkTipusOpen(false); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-500 hover:bg-gray-50">{s.tipusNone}</button>
+                    {tipusim.map(t => (
+                      <button key={t} data-bulk-tipus-pick={t} onClick={() => { setBulkTipus(t); setBulkTipusOpen(false); }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-800 hover:bg-gray-50 font-bold">{t}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Report a problem on every picked apartment — the single form, then one line per unit. */}
             <button
-              onClick={handleBulkApply}
+              data-bulk-problem
+              onClick={() => setBulkProblemOpen(true)}
               disabled={bulkSelected.size === 0}
+              className="px-3 py-2 rounded-lg text-sm font-bold disabled:opacity-40 flex items-center gap-1.5 text-white"
+              style={{ backgroundColor: '#dc2626' }}
+            >
+              ⚠ {s.reportProblem}
+            </button>
+
+            <button
+              data-bulk-apply
+              onClick={handleBulkApply}
+              disabled={bulkSelected.size === 0 || (!bulkStageSet && !bulkTipus)}
               className="px-4 py-2 bg-[#4aa8d8] rounded-lg text-sm font-semibold disabled:opacity-40 hover:bg-[#3897c7] transition-colors"
             >
               {s.applyTo} {bulkSelected.size > 0 ? bulkSelected.size : '…'}
@@ -694,6 +775,14 @@ export function ProjectDiagramPage() {
           </div>
         )}
 
+        {bulkProblemOpen && currentUser && (
+          <ProblemForm
+            apartments={apartments.filter(a => bulkSelected.has(a.id))}
+            currentUser={currentUser}
+            onClose={() => setBulkProblemOpen(false)}
+            onSaved={n => { showToast(`${s.problemLabel} × ${n}`); exitBulkMode(); }}
+          />
+        )}
         {toast && (
           <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />
         )}
@@ -743,6 +832,18 @@ export function ProjectDiagramPage() {
                 </button>
               ))}
             </div>
+
+            {tipusim.length > 0 && (
+              <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1 flex-wrap">
+                {['', ...tipusim].map(t => (
+                  <button key={t || '__all'} onClick={() => setTipusFilter(t)}
+                    className={`flex-1 py-2 px-2 rounded-lg text-sm font-medium transition-all ${
+                      tipusFilter === t ? 'bg-[#1e3a5f] text-white shadow-sm' : 'text-gray-600'}`}>
+                    {t || s.tipusLabel}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Stage legend — same component, same behaviour as the desktop bar */}
             <StageLegend

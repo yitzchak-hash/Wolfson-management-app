@@ -30,6 +30,62 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-12-20',
+    title: 'Problems, Tipus and notes that read like notes',
+    items: [
+      {
+        title: 'Report a problem',
+        body: 'Under the stage list in every apartment window there is a red '
+          + 'button: Report a problem. Pick who fixes it, a deadline (three '
+          + 'working days by default), say what is wrong in words or a voice '
+          + 'memo, add pictures, and answer whether he must send pictures to '
+          + 'close it. The apartment turns RED with a big "!" everywhere — the '
+          + 'diagram, the board tile, the TV, Building Progress — and its stage '
+          + 'reads PROBLEM · was Piping. The real stage is never touched. Bulk '
+          + 'update raises the same problem on many apartments, one line each.',
+        demo: 'tap',
+      },
+      {
+        title: 'The worker sees it red, every day, until it is fixed',
+        body: 'A problem has no day, so it is on his list on every day\'s '
+          + 'filter, first, with the deadline printed on it; past the deadline '
+          + 'a red banner pins to the top with the count. He closes it with '
+          + 'Close problem — pictures if you asked for them — and it turns '
+          + 'rose: Waiting for approval. Only the office approves: a green '
+          + 'Approve on the band under the apartment\'s title (admins), or Send '
+          + 'back with a note, and it is red again on his phone.',
+        demo: 'list',
+      },
+      {
+        title: 'Tipus — the apartment\'s type',
+        body: 'Project settings keep a list (A1, A2, B1, C3…). A dropdown sits '
+          + 'between the apartment number and the family name, and the number '
+          + 'prints as "47 — A2" everywhere it appears. Set it in bulk from the '
+          + 'diagram, filter the diagram by it, report on it.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'One message box everywhere',
+        body: 'The WhatsApp-style box from the worker\'s phone — paperclip, '
+          + 'dictation mic at the left, the big memo mic that becomes Send — is '
+          + 'now how every note and every task is written: general notes, '
+          + 'stage notes, task descriptions, the notebook\'s drop card, the '
+          + 'pin note, the problem form. Every recording shows its words '
+          + 'underneath, in the language of the screen.',
+        demo: 'tap',
+      },
+      {
+        title: 'Notes that read like notes',
+        body: 'The Notes tab is the stage list: passed stages crossed off and '
+          + 'folded with a count, the current one open, every note a bullet '
+          + 'signed small and grey at the end of the line — a worker\'s memo '
+          + 'too, with its words. "Add notes for Piping" and the box sit at the '
+          + 'bottom; Send puts the note above and leaves the box empty.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2026-12-13',
     title: 'Everyone reads in their own language',
     items: [

@@ -9,6 +9,8 @@ import { TaskDaysPicker, daysFields } from '../tasks/TaskDaysPicker';
 import { daysOf } from '../../data/taskDays';
 import { usePhone, useMedia } from '../../data/usePhone';
 import { VoiceRecorderButton, VoiceMemoPlayer } from '../ui/VoiceMemo';
+import { MessageBox, memoFile } from '../ui/MessageBox';
+import { transcribeMemo } from '../../data/transcribe';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import { StageNotesSection } from './StageNotesSection';
 import { ActivitySection } from './ActivitySection';
@@ -21,6 +23,9 @@ import { LinkField } from '../ui/LinkField';
 import { printSheet, printEsc } from '../../data/printing';
 import { PlanAddressSuggest } from './PlanAddressSuggest';
 import { StagePicker } from './StagePicker';
+import { ProblemForm } from './ProblemForm';
+import { ProblemBand } from './ProblemBand';
+import { problemState } from '../../data/problems';
 import { PlanPinOverlay } from './PlanPinOverlay';
 import { cachedPlanAspect, measurePlanAspect } from '../../data/planAspect';
 // Lazy, deliberately. The markup studio carries pdf.js — about a megabyte of
@@ -44,9 +49,10 @@ interface LightboxItem {
   mimeType: string;
   thumbSrc: string;
   downloadHref: string;
+  transcript?: string;
 }
 
-function LightboxOverlay({ items, initialIndex, onClose, imageUnavailable, openDownload, downloadLabel }: { items: LightboxItem[]; initialIndex: number; onClose: () => void; imageUnavailable: string; openDownload: string; downloadLabel: string }) {
+function LightboxOverlay({ items, initialIndex, onClose, imageUnavailable, openDownload, downloadLabel, lang = 'en' }: { items: LightboxItem[]; initialIndex: number; onClose: () => void; imageUnavailable: string; openDownload: string; downloadLabel: string; lang?: 'en' | 'he' }) {
   const [idx, setIdx] = React.useState(initialIndex);
   const [touchStart, setTouchStart] = React.useState<number | null>(null);
   const item = items[idx];
@@ -98,7 +104,8 @@ function LightboxOverlay({ items, initialIndex, onClose, imageUnavailable, openD
           // A memo has nothing to show, so the viewer gives it the transport
           // rather than a black frame with a filename under it.
           <div className="flex items-center justify-center w-full h-full p-6">
-            <VoiceMemoPlayer src={item.downloadHref || item.thumbSrc || ''} className="max-w-[420px] w-full" />
+            <VoiceMemoPlayer src={item.downloadHref || item.thumbSrc || ''} className="max-w-[420px] w-full"
+              transcript={item.transcript} lang={lang} saidLabel={lang === 'he' ? 'נאמר' : 'Said'} />
           </div>
         ) : isImg ? (
           item.thumbSrc
@@ -158,6 +165,17 @@ function DriveImg({ src, alt, className }: { src: string; alt: string; className
   return <img src={src} alt={alt} className={className} onError={() => setFailed(true)} />;
 }
 
+const EMPTY_TIPUSIM: string[] = [];
+interface OfficeThreadAtt { dataUrl: string; filename: string; mimeType: string; driveFileId?: string; driveUrl?: string; transcript?: string }
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = e => resolve(e.target?.result as string);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
 export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast, onRequestAddTask }: Props) {
   const { stages, activityLogs, apartments, updateApartment, mergeApartments, unmergeApartments,
     autoBackup, backupSnapshots, restoreFromSnapshot, mainUiStrings: ui,
@@ -167,6 +185,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     contractorPhotos, updateContractorPhoto, planAnnotations, stageNotes, planPins,
     contractorNotes, addContractorNote } = useStore();
   const isGeneralProject = currentProjectId === 'general';
+  const tipusim = useStore(st => st.boardSettings[st.currentProjectId]?.tipusim ?? EMPTY_TIPUSIM);
   const backendConfigured = isUploadBackendConfigured();
 
   /**
@@ -256,7 +275,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [drivePhotos, setDrivePhotos] = useState<DrivePhotoItem[]>([]);
   const [loadingPhotos, setLoadingPhotos] = useState(false);
   const [photosLoaded, setPhotosLoaded] = useState(false);
-  const [lightbox, setLightbox] = useState<{ items: { fileId: string; filename: string; mimeType: string; thumbSrc: string; downloadHref: string }[]; index: number } | null>(null);
+  const [lightbox, setLightbox] = useState<{ items: LightboxItem[]; index: number } | null>(null);
   const [officeUploadPct, setOfficeUploadPct] = useState<number | null>(null);
   const [showUnmergeModal, setShowUnmergeModal] = useState(false);
   /** Drive folder health, checked once when the Photos tab is opened. */
@@ -408,22 +427,72 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    * worker holds on his phone. Both sides keep writing after the close.
    */
   const [officeNoteDrafts, setOfficeNoteDrafts] = useState<Record<string, string>>({});
+  /**
+   * Files and memos waiting on the office's message box, per task — the
+   * thread's composer is the same MessageBox the worker holds, so the office
+   * sends pictures and recordings the same way he does.
+   */
+  const [officeNoteAtts, setOfficeNoteAtts] = useState<Record<string, OfficeThreadAtt[]>>({});
+  async function officeThreadAttach(a: ContractorAssignment, file: File, transcript?: boolean) {
+    if (!apartment) return;
+    const mainFolderId = apartment.driveLink ? extractFolderId(apartment.driveLink) : null;
+    const isImg = file.type.startsWith('image/');
+    let att: OfficeThreadAtt | null = null;
+    if (backendConfigured && mainFolderId) {
+      try {
+        const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');
+        ensureDriveShared(photosFolderId);
+        const notesFolderId = await findOrCreateFolderViaBackend(photosFolderId, 'Contractor Notes');
+        const { fileId, webViewLink } = await uploadFileViaResumableSession(notesFolderId, file);
+        await shareFileToDrive(fileId);
+        att = { dataUrl: isImg ? await fileToDataUrl(file) : '', filename: file.name, mimeType: file.type, driveFileId: fileId, driveUrl: webViewLink };
+      } catch { /* fall through to local */ }
+    }
+    if (!att) att = { dataUrl: await fileToDataUrl(file), filename: file.name, mimeType: file.type };
+    const done = att;
+    setOfficeNoteAtts(prev => ({ ...prev, [a.id]: [...(prev[a.id] ?? []), done] }));
+    if (transcript) {
+      void transcribeMemo(done.driveUrl || done.dataUrl).then(t => {
+        if (!t) return;
+        setOfficeNoteAtts(prev => ({
+          ...prev,
+          [a.id]: (prev[a.id] ?? []).map(x => x === done || (x.driveFileId && x.driveFileId === done.driveFileId) ? { ...x, transcript: t } : x),
+        }));
+      });
+    }
+  }
   function sendOfficeNote(a: ContractorAssignment) {
     const text = (officeNoteDrafts[a.id] ?? '').trim();
-    if (!text || !currentUser || !apartment) return;
-    addContractorNote({
+    const atts = officeNoteAtts[a.id] ?? [];
+    if ((!text && atts.length === 0) || !currentUser || !apartment) return;
+    const base = {
       assignmentId: a.id,
       apartmentId: apartment.id,
       contractorId: a.contractorId,
-      text,
-      authorType: 'office',
+      authorType: 'office' as const,
       authorId: currentUser.id,
       authorName: currentUser.name,
-    });
+    };
+    if (atts.length === 0) {
+      addContractorNote({ ...base, text });
+    } else {
+      atts.forEach((att, i) => addContractorNote({
+        ...base,
+        text: i === 0 ? (text || att.filename) : att.filename,
+        attachmentDataUrl: att.driveFileId ? '' : att.dataUrl,
+        attachmentFilename: att.filename,
+        attachmentMimeType: att.mimeType,
+        attachmentDriveFileId: att.driveFileId,
+        attachmentDriveUrl: att.driveUrl,
+        transcript: att.transcript,
+      }));
+    }
     setOfficeNoteDrafts(d => ({ ...d, [a.id]: '' }));
+    setOfficeNoteAtts(d => ({ ...d, [a.id]: [] }));
   }
   const [drawerEditProgress, setDrawerEditProgress] = useState<number | null>(null);
   const [keepHistoryModal, setKeepHistoryModal] = useState(false);
+  const [problemFormOpen, setProblemFormOpen] = useState(false);
 
   useEffect(() => {
     if (apartment) {
@@ -1376,6 +1445,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               : <>
                   <span className="text-[#4aa8d8] font-semibold text-sm flex-shrink-0">{apartment.buildingId}</span>
                   {apartment.floor > 0 && <span className="text-white/50 text-xs flex-shrink-0">· {ui.floorPrefix} {apartment.floor}</span>}
+                  {apartment.tipus && <span data-tipus-chip className="text-white/85 text-xs font-bold flex-shrink-0 px-1.5 rounded bg-white/15">{apartment.apartmentNumber} — {apartment.tipus}</span>}
                 </>
             }
             {mergedPartner && (
@@ -1471,6 +1541,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           style={{ flex: planSideOn ? `0 0 ${fieldsW}px` : '1 1 100%' }}>
 
         {/* Tabs */}
+        {/* The problem band — right under the title, above the details, where it cannot be missed. */}
+        {!isGeneralProject && <ProblemBand apartment={apartment} currentUser={currentUser} />}
         <div className="flex border-b border-gray-200 flex-shrink-0 overflow-x-auto">
           {/* Below 800px the window gets a Plan tab. Above it the plan lives
               in a side pane beside the fields; a narrow screen has no side,
@@ -1553,6 +1625,24 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 </div>
                 )}
 
+                {/* Tipus — the apartment's type, between the number and the family name. */}
+                {!isGeneralProject && (tipusim.length > 0 || apartment.tipus) && (
+                <div className="flex-shrink-0">
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1">{ui.tipusLabel}</label>
+                  <select
+                    data-tipus-select
+                    value={apartment.tipus ?? ''}
+                    onChange={e => updateApartment(apartment.id, { tipus: e.target.value || undefined }, currentUser)}
+                    className="border border-gray-200 rounded-lg px-2 py-2 text-sm font-bold bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+                  >
+                    <option value="">{ui.tipusNone}</option>
+                    {[...tipusim, ...(apartment.tipus && !tipusim.includes(apartment.tipus) ? [apartment.tipus] : [])].map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+                )}
+
                 {/* Family name / Job name */}
                 <div className="flex-1 min-w-[150px]">
                   <label className="block text-[10px] font-medium text-gray-500 mb-1">{isGeneralProject ? ui.jobNameLabel : ui.familyName}</label>
@@ -1607,6 +1697,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     onPickStage={handleStageChange}
                     onMarks={next => updateApartment(apartment.id, { stageMarks: next }, currentUser)}
                     ui={ui}
+                                      onReportProblem={isGeneralProject ? undefined : () => setProblemFormOpen(true)}
+                    problem={problemState(apartment.id, contractorAssignments)}
                   />
                 </div>
               </div>
@@ -1705,38 +1797,22 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 {/* The paperclip and the microphone live INSIDE the notes box,
                     bottom-right — attached to the thing they attach to. While a
                     recording runs, the recorder bar stretches across the box. */}
-                <div className="relative">
-                  <textarea
-                    value={generalNotes}
-                    onChange={e => setGeneralNotes(e.target.value)}
-                    onBlur={autoSave}
-                    rows={4}
-                    placeholder={ui.generalNotesPlaceholder}
-                    className="w-full border border-gray-200 rounded-lg px-3 pt-2 pb-10 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 resize-none"
-                  />
-                  <div className="absolute bottom-2 inset-x-2 flex items-center justify-end gap-1">
-                    <Tooltip text={ui.attachFiles}>
-                      <button
-                        type="button"
-                        onClick={() => officeFileRef.current?.click()}
-                        className="flex items-center justify-center w-8 h-8 rounded-full text-gray-400
-                                   hover:text-[#1e3a5f] hover:bg-gray-100 transition-colors flex-shrink-0"
-                      >
-                        <Paperclip size={15} />
-                      </button>
-                    </Tooltip>
-                    <VoiceRecorderButton
-                      title={ui.attachFiles}
-                      busy={officeUploadPct !== null}
-                      onRecorded={async memo => {
-                        const ext = memo.blob.type.includes('mp4') ? 'm4a' : 'webm';
-                        await attachOfficeFile(new File(
-                          [memo.blob], `voice-memo-${Date.now()}.${ext}`,
-                          { type: memo.blob.type || 'audio/webm' }));
-                      }}
-                    />
-                  </div>
-                </div>
+                <MessageBox
+                  hook="general-notes-box"
+                  rows={4}
+                  value={generalNotes}
+                  onChange={setGeneralNotes}
+                  onBlur={autoSave}
+                  onAttach={async files => {
+                    for (const file of files) await attachOfficeFile(file);
+                    onToast(`${files.length} ${files.length === 1 ? ui.fileAttachedToast : ui.filesAttachedToast}`);
+                  }}
+                  onMemo={memo => attachOfficeFile(memoFile(memo))}
+                  busy={officeUploadPct !== null}
+                  lang={ui.isRtl ? 'he' : 'en'}
+                  placeholder={ui.generalNotesPlaceholder}
+                  accept="image/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx"
+                />
                 {/* General notes history panel */}
                 {generalNotesHistoryOpen && apartment && (() => {
                   const versions = getGeneralNoteVersions(apartment.id);
@@ -1818,6 +1894,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                               key={f.id}
                               src={f.driveUrl || f.dataUrl || ''}
                               onDelete={() => deleteOfficeNoteFile(f.id)}
+                              lang={ui.isRtl ? 'he' : 'en'}
+                              saidLabel={ui.isRtl ? 'נאמר' : 'Said'}
                               className="max-w-[280px]"
                             />
                           );
@@ -2357,25 +2435,34 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                 said: ui.isRtl ? 'נאמר' : 'Said',
                               }}
                               footer={
-                            <div className="flex gap-2 items-end mt-1">
-                              <input
-                                value={officeNoteDrafts[a.id] ?? ''}
-                                onChange={e => setOfficeNoteDrafts(d => ({ ...d, [a.id]: e.target.value }))}
-                                onKeyDown={e => { if (e.key === 'Enter') sendOfficeNote(a); }}
-                                placeholder={ui.threadWriteToWorker}
-                                data-enter-own
-                                className="flex-1 min-w-0 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
-                              />
-                              <button
-                                onClick={() => sendOfficeNote(a)}
-                                disabled={!(officeNoteDrafts[a.id] ?? '').trim()}
-                                className="w-9 h-9 flex items-center justify-center rounded-xl text-white disabled:opacity-40 flex-shrink-0"
-                                style={{ backgroundColor: '#1e3a5f' }}
-                                title={ui.threadWriteToWorker}
-                              >
-                                <Send size={15} />
-                              </button>
-                            </div>
+                            <MessageBox
+                              className="mt-1"
+                              hook="office-composer"
+                              value={officeNoteDrafts[a.id] ?? ''}
+                              onChange={v => setOfficeNoteDrafts(d => ({ ...d, [a.id]: v }))}
+                              onSend={() => sendOfficeNote(a)}
+                              hasPending={(officeNoteAtts[a.id] ?? []).length > 0}
+                              onAttach={files => { files.forEach(f => void officeThreadAttach(a, f)); }}
+                              onMemo={memo => officeThreadAttach(a, memoFile(memo), true)}
+                              lang={ui.isRtl ? 'he' : 'en'}
+                              placeholder={ui.threadWriteToWorker}
+                            >
+                              {(officeNoteAtts[a.id] ?? []).length > 0 && (
+                                <div className="flex flex-wrap gap-2 mb-2">
+                                  {(officeNoteAtts[a.id] ?? []).map((att, idx) => (
+                                    <div key={idx} className="flex items-center gap-1">
+                                      {att.mimeType.startsWith('audio/')
+                                        ? <VoiceMemoPlayer src={att.driveUrl || att.dataUrl} className="max-w-[240px]" transcript={att.transcript} lang={ui.isRtl ? 'he' : 'en'} saidLabel={ui.isRtl ? 'נאמר' : 'Said'} />
+                                        : att.mimeType.startsWith('image/') && att.dataUrl
+                                          ? <img src={att.dataUrl} alt={att.filename} className="h-14 rounded-lg border border-gray-200 object-cover" />
+                                          : <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 rounded-lg border border-blue-100 text-xs text-blue-700"><Paperclip size={11} />{att.filename}</span>}
+                                      <button onClick={() => setOfficeNoteAtts(prev => ({ ...prev, [a.id]: (prev[a.id] ?? []).filter((_, i) => i !== idx) }))}
+                                        className="w-6 h-6 flex items-center justify-center rounded-full text-gray-400 hover:text-red-500"><X size={12} /></button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </MessageBox>
                               }
                             />
                           </div>
@@ -2649,6 +2736,14 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       )}
 
       {/* Lightbox */}
+      {problemFormOpen && apartment && (
+        <ProblemForm
+          apartments={[apartment]}
+          currentUser={currentUser}
+          onClose={() => setProblemFormOpen(false)}
+          onSaved={() => onToast(`${ui.problemLabel}: ${aptLabel(apartment)}`)}
+        />
+      )}
       {lightbox && (
         <LightboxOverlay
           items={lightbox.items}
@@ -2657,6 +2752,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           imageUnavailable={ui.imageUnavailable}
           openDownload={ui.openDownload}
           downloadLabel={ui.downloadLabel}
+          lang={ui.isRtl ? 'he' : 'en'}
         />
       )}
     </>

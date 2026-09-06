@@ -62,6 +62,8 @@ export function isBuiltInBin(el: { binKind?: BinKind }): boolean {
 export interface BoardSetting {
   /** What is on the toolbar and in what order. */
   toolbar?: ToolbarSetup;
+  /** The workspace's list of apartment types — see Apartment.tipus. */
+  tipusim?: string[];
   themeId?: string;
   snapToGrid?: boolean;
   /**
@@ -456,14 +458,17 @@ export function isCountableApartment(
  *   { apartmentNumber: '37', displayName: '37'    } → "37"
  */
 export function aptLabel(
-  apt: { apartmentNumber?: string; displayName?: string } | null | undefined,
+  apt: { apartmentNumber?: string; displayName?: string; tipus?: string } | null | undefined,
 ): string {
   if (!apt) return '?';
   const num = apt.apartmentNumber?.trim() ?? '';
+  const tipus = apt.tipus?.trim() ?? '';
   const name = apt.displayName?.trim() ?? '';
-  if (!name || name === num) return num || '?';
-  if (!num) return name;
-  return `${num} — ${name}`;
+  // The number, then the tipus, then the name — the tipus rides only with a number.
+  const head = num && tipus ? `${num} — ${tipus}` : num;
+  if (!name || name === num) return head || '?';
+  if (!head) return name;
+  return `${head} — ${name}`;
 }
 
 /** "3h ago" / "yesterday" / "6 Aug" — short, because tile space is scarce.
@@ -510,6 +515,8 @@ export interface StageNoteAttachment {
   dataUrl?: string;
   driveFileId?: string;
   driveUrl?: string;
+  /** A memo's words, kept on the record so every device reads them at once. */
+  transcript?: string;
 }
 
 export interface StageNoteVersion {
@@ -522,11 +529,29 @@ export interface StageNoteVersion {
   savedByName: string;
 }
 
+/**
+ * ONE BULLET on a stage's notes (owner, 2026-09-06: "bullet points on top,
+ * the field at the bottom, the worker and date very subtle"). A stage note
+ * used to be a single text edited in place; it is a list of entries now,
+ * each signed. The legacy `noteText` is kept — as the flat text search and
+ * reports read, and as the first bullet on a note written before today.
+ */
+export interface StageNoteEntry {
+  id: string;
+  text: string;
+  at: string;
+  by: string;
+  byName: string;
+  attachments?: StageNoteAttachment[];
+}
+
 export interface StageNote {
   id: string;
   apartmentId: string;
   stageId: string;
   noteText: string;
+  /** The bullets, oldest first. Absent on a note from before the bullets. */
+  entries?: StageNoteEntry[];
   updatedAt: string;
   updatedBy: string;
   updatedByName: string;
@@ -544,6 +569,13 @@ export interface Apartment {
   id: string;
   buildingId: BuildingId;
   apartmentNumber: string;
+  /**
+   * TIPUS (טיפוס) — the apartment's TYPE from the project's own list ("A2",
+   * "C3"…), owner's ask 2026-09-06. Optional; printed right after the number
+   * everywhere the number appears ("47 — A2"). The list lives in
+   * `BoardSetting.tipusim`, per workspace.
+   */
+  tipus?: string;
   displayName: string;
   floor: number;
   colPosition: number;  // 1-4 within the 4-col building grid
@@ -1121,6 +1153,8 @@ export interface TaskAttachment {
   dataUrl: string;       // base64 preview (empty when driveFileId is set)
   driveFileId?: string;  // Google Drive file ID after upload
   driveUrl?: string;     // Google Drive web view link
+  /** A memo's words (owner, 2026-09-06: every recording shows its transcription). */
+  transcript?: string;
 }
 
 export type TaskPriority = 'urgent' | 'normal' | 'low';
@@ -1177,6 +1211,32 @@ export interface ContractorAssignment {
    * the general job's own record of them.
    */
   visits?: GeneralVisit[];
+  /**
+   * A PROBLEM (owner, 2026-09-06): this task is a problem wearing a red coat.
+   * It rides the task record — so the thread, the photos, the worker's phone,
+   * the notebook, the counts and the backups all come for free. `dueDate` is
+   * its DEADLINE; a problem has no `days` (it shows on every day until it is
+   * closed). The apartment's stage is never overwritten: `stageBefore` says
+   * where it stood, and every drawing asks `problemState()` first.
+   */
+  problem?: ProblemInfo;
+}
+
+export interface ProblemInfo {
+  /** Must the worker send pictures (the standing three) to close it? */
+  photosRequired: boolean;
+  /**
+   * open → the worker is on it (red) · waiting → he closed it, the office
+   * has not approved (rose) · solved → approved, the task is completed ·
+   * returned → the office sent it back with a note (red again).
+   */
+  status: 'open' | 'waiting' | 'solved' | 'returned';
+  stageBefore: string | null;
+  closedAt?: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  returnNote?: string;
+  returnedAt?: string;
 }
 
 /** One apartment visited under a general job. */
@@ -1398,6 +1458,16 @@ export interface ContractorUiStrings {
   notifTitle?: string;
   notifEmpty?: string;
   notifNew?: string;
+  /** Problems (owner, 2026-09-06) — optional, same rule. */
+  problemLabel?: string;
+  problemWaitingLabel?: string;
+  closeProblemBtn?: string;
+  problemDeadlineLabel?: string;
+  problemLateLabel?: string;
+  problemBanner?: string;
+  problemReturnedLabel?: string;
+  isThisFixFor?: string;
+  problemWaitingHint?: string;
   /** The "I did work here" stage-report flow on the building map — optional, same rule. */
   workHereBtn?: string;
   whatDidYouDo?: string;
@@ -1498,6 +1568,15 @@ export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   notifEmpty: 'Nothing new — you are all caught up',
   notifNew: 'New job for you',
   calendarTab: 'Calendar',
+  problemLabel: 'Problem',
+  problemWaitingLabel: 'Waiting for approval',
+  closeProblemBtn: 'Close problem',
+  problemDeadlineLabel: 'Deadline',
+  problemLateLabel: '{n} days late',
+  problemBanner: '{n} past the deadline',
+  problemReturnedLabel: 'The office sent it back',
+  isThisFixFor: 'Is this the fix for:',
+  problemWaitingHint: 'the office is checking',
   workHereBtn: 'I did work here',
   whatDidYouDo: 'What did you do?',
   didYouFinish: 'Did you finish this stage?',
@@ -1594,6 +1673,15 @@ export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   notifEmpty: 'אין חדש — אתם מעודכנים',
   notifNew: 'עבודה חדשה בשבילך',
   calendarTab: 'לוח שנה',
+  problemLabel: 'בעיה',
+  problemWaitingLabel: 'ממתין לאישור',
+  closeProblemBtn: 'סגירת הבעיה',
+  problemDeadlineLabel: 'דדליין',
+  problemLateLabel: 'באיחור של {n} ימים',
+  problemBanner: '{n} אחרי הדדליין',
+  problemReturnedLabel: 'המשרד החזיר את זה',
+  isThisFixFor: 'האם זה התיקון של:',
+  problemWaitingHint: 'המשרד בודק',
   workHereBtn: 'עבדתי כאן',
   whatDidYouDo: 'מה עשית?',
   didYouFinish: 'סיימת את השלב הזה?',
@@ -1695,6 +1783,15 @@ export const RUSSIAN_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   notifEmpty: 'Ничего нового — вы в курсе всего',
   notifNew: 'Новая работа для вас',
   calendarTab: 'Календарь',
+  problemLabel: 'Проблема',
+  problemWaitingLabel: 'Ожидает подтверждения',
+  closeProblemBtn: 'Закрыть проблему',
+  problemDeadlineLabel: 'Срок',
+  problemLateLabel: 'Опоздание {n} дн.',
+  problemBanner: '{n} после срока',
+  problemReturnedLabel: 'Офис вернул',
+  isThisFixFor: 'Это исправление для:',
+  problemWaitingHint: 'офис проверяет',
   workHereBtn: 'Я работал здесь',
   whatDidYouDo: 'Что вы сделали?',
   didYouFinish: 'Вы закончили этот этап?',
@@ -1835,6 +1932,41 @@ export interface MainUiStrings {
   generalJob: string;
   generalJobWhere: string;
   visitedLabel: string;
+  // The notes tab (owner, 2026-09-06)
+  addNotesFor: string;
+  notesCount: string;
+  noteCount: string;
+  stageCurrent: string;
+  // Problems (owner, 2026-09-06)
+  reportProblem: string;
+  problemLabel: string;
+  problemWas: string;
+  problemWaiting: string;
+  problemSolved: string;
+  problemReturned: string;
+  problemApprove: string;
+  problemSendBack: string;
+  problemSendBackNote: string;
+  problemWho: string;
+  problemDeadline: string;
+  problemWhatWrong: string;
+  problemPictures: string;
+  problemPhotosAsk: string;
+  problemPhotosYes: string;
+  problemPhotosNo: string;
+  problemSave: string;
+  problemLate: string;
+  problemPicturesSent: string;
+  problemApprovedBy: string;
+  problemClosedBy: string;
+  problemPerApartment: string;
+  problemSameForAll: string;
+  problemsListTitle: string;
+  // Tipus — the apartment's type from the project's list
+  tipusLabel: string;
+  tipusimTitle: string;
+  tipusimHint: string;
+  tipusNone: string;
   // Stage marks (done / pending bookkeeping in the stage picker)
   stagePendingLabel: string;
   stageMarkHint: string;
@@ -2429,6 +2561,38 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   generalJob: 'General job',
   generalJobWhere: 'Which workspace',
   visitedLabel: 'Visited',
+  addNotesFor: 'Add notes for',
+  notesCount: 'notes',
+  noteCount: 'note',
+  stageCurrent: 'current',
+  reportProblem: 'Report a problem',
+  problemLabel: 'Problem',
+  problemWas: 'was',
+  problemWaiting: 'Waiting for approval',
+  problemSolved: 'Problem solved',
+  problemReturned: 'Sent back',
+  problemApprove: 'Approve',
+  problemSendBack: 'Send back',
+  problemSendBackNote: 'What is still wrong?',
+  problemWho: 'Who fixes it',
+  problemDeadline: 'Deadline',
+  problemWhatWrong: 'What is wrong',
+  problemPictures: 'Pictures of the problem',
+  problemPhotosAsk: 'Must the worker send pictures when it is fixed?',
+  problemPhotosYes: 'Yes, at least 3',
+  problemPhotosNo: 'No',
+  problemSave: 'Save the problem',
+  problemLate: '{n} days late',
+  problemPicturesSent: 'Pictures he sent',
+  problemApprovedBy: 'approved by',
+  problemClosedBy: 'closed by',
+  problemPerApartment: 'One line per apartment — change any that differs',
+  problemSameForAll: 'same for all',
+  problemsListTitle: 'Open problems',
+  tipusLabel: 'Tipus',
+  tipusimTitle: 'Tipusim — apartment types',
+  tipusimHint: 'The list the Tipus dropdown offers in every apartment window here (A1, A2, B1…). A workspace keeps its own list.',
+  tipusNone: '— none —',
   stagePendingLabel: 'half done',
   stageMarkHint: 'Tap a box to cross a stage off · right-click marks it half done',
   stagePendingListTitle: 'Half-done stages',
@@ -3020,6 +3184,38 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   generalJobWhere: 'איזה פרויקט',
   visitedLabel: 'ביקרו ב',
   threadWriteToWorker: 'כתבו לעובד…',
+  addNotesFor: 'הוספת הערות ל',
+  notesCount: 'הערות',
+  noteCount: 'הערה',
+  stageCurrent: 'נוכחי',
+  reportProblem: 'דיווח על בעיה',
+  problemLabel: 'בעיה',
+  problemWas: 'היה',
+  problemWaiting: 'ממתין לאישור',
+  problemSolved: 'הבעיה נפתרה',
+  problemReturned: 'הוחזר',
+  problemApprove: 'אישור',
+  problemSendBack: 'להחזיר',
+  problemSendBackNote: 'מה עדיין לא בסדר?',
+  problemWho: 'מי מתקן',
+  problemDeadline: 'דדליין',
+  problemWhatWrong: 'מה הבעיה',
+  problemPictures: 'תמונות של הבעיה',
+  problemPhotosAsk: 'האם העובד חייב לשלוח תמונות כשזה מתוקן?',
+  problemPhotosYes: 'כן, לפחות 3',
+  problemPhotosNo: 'לא',
+  problemSave: 'שמירת הבעיה',
+  problemLate: 'באיחור של {n} ימים',
+  problemPicturesSent: 'תמונות ששלח',
+  problemApprovedBy: 'אושר על ידי',
+  problemClosedBy: 'נסגר על ידי',
+  problemPerApartment: 'שורה לכל דירה — אפשר לשנות כל אחת',
+  problemSameForAll: 'אותו דבר לכולן',
+  problemsListTitle: 'בעיות פתוחות',
+  tipusLabel: 'טיפוס',
+  tipusimTitle: 'טיפוסים — סוגי דירות',
+  tipusimHint: 'הרשימה שהתפריט "טיפוס" מציע בכל חלון דירה כאן (A1, A2, B1…). לכל סביבת עבודה רשימה משלה.',
+  tipusNone: '— ללא —',
   stagePendingLabel: 'חצי גמור',
   stageMarkHint: 'לחיצה על התיבה מסמנת שלב כגמור · קליק ימני מסמן חצי גמור',
   stagePendingListTitle: 'שלבים חצי גמורים',

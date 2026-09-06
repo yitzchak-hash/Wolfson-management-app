@@ -104,6 +104,8 @@ await page.goto(`${APP}/c/tok-jo`);
 await page.waitForTimeout(2500);
 await page.locator('button:has-text("Building Map")').first().click();
 await page.waitForTimeout(900);
+// The map opens on the project chooser when more than one workspace has buildings (the worker's-phone round).
+if (await page.locator('[data-map-square="wolfson"]').count()) { await page.locator('[data-map-square="wolfson"]').click(); await page.waitForTimeout(1200); }
 await page.locator('[data-apt-id="A1-7"]').first().click();
 await page.waitForTimeout(700);
 check(await page.locator('[data-work-sheet]').count() === 1
@@ -112,8 +114,9 @@ check(await page.locator('[data-work-sheet]').count() === 1
 check(await page.locator('[data-work-here]').count() === 1, 'with the big I-did-work-here button');
 await page.locator('[data-work-here]').click();
 await page.waitForTimeout(400);
-check(await page.locator('[data-work-stages] button').count() === 4,
-  'What did you do? — the workspace stages, one per row');
+// The worker's-phone round: the first and the last stage are never offered (reportStages default).
+check(await page.locator('[data-work-stages] button').count() === 2,
+  'What did you do? — the stages he may report, one per row');
 await page.locator('[data-work-stages] button:has-text("Piping")').click();
 await page.waitForTimeout(400);
 check(await page.locator('[data-finished-yes]').count() === 1
@@ -137,20 +140,20 @@ await page.locator('[data-apt-id="A1-7"]').first().click();
 await page.waitForTimeout(700);
 await page.locator('[data-work-here]').click();
 await page.waitForTimeout(400);
-await page.locator('[data-work-stages] button:has-text("Ready to start")').click();
+await page.locator('[data-work-stages] button:has-text("Concealed units")').click();
 await page.waitForTimeout(400);
 await page.locator('[data-finished-yes]').click();
 await page.waitForTimeout(900);
 check(await page.locator('[data-closing-panel]').count() === 1,
   'finished hands over to the standing closing screen (3 pictures)');
-await page.locator('input[type="file"][accept*="video"]').setInputFiles(files(3));
+await page.locator('input[type="file"][accept*="video"][accept*=".zip"]').setInputFiles(files(3));
 await page.waitForTimeout(2500);
 await page.locator('[data-close-now]').click();
 await page.waitForTimeout(1200);
 d = await store(page);
 marks = d.apartments.find(a => a.id === 'A1-7').stageMarks ?? {};
-check(marks.S1 === 'done', 'closing the report marks the stage DONE on the apartment', JSON.stringify(marks));
-const doneReport = d.contractorAssignments.find(a => a.stageReport && a.stageId === 'S1');
+check(marks.S3 === 'done', 'closing the report marks the stage DONE on the apartment', JSON.stringify(marks));
+const doneReport = d.contractorAssignments.find(a => a.stageReport && a.stageId === 'S3' && a.completedAt);
 check(!!doneReport?.completedAt, 'and the report task itself is closed');
 await page.close();
 
@@ -159,8 +162,9 @@ page = await ctx.newPage();
 page.on('pageerror', e => { console.log('PAGE ERROR', e.message); fails++; });
 await page.goto(`${APP}/project`);
 await page.waitForTimeout(2800);
-check((await page.locator('[data-pending-bell]').innerText()).trim() === '2',
-  'the office bell now counts both half-done stages');
+// Concealed units was closed in section 4, so one half-done stage (Piping) remains.
+check((await page.locator('[data-pending-bell]').innerText()).trim() === '1',
+  'the office bell now counts the remaining half-done stage');
 await page.locator('[data-pending-bell]').click();
 await page.waitForTimeout(400);
 const menu2 = await page.locator('[data-pending-menu]').innerText();

@@ -4,8 +4,8 @@ import {
   Apartment, User, ContractorCategory, TaskAttachment, ContractorAssignment, getStageName,
 } from '../../types';
 import { useStore } from '../../data/store';
-import { VoiceRecorderButton, VoiceMemoPlayer } from '../ui/VoiceMemo';
-import { RecordedMemo } from '../../data/voiceMemo';
+import { VoiceMemoPlayer } from '../ui/VoiceMemo';
+import { MessageBox, memoFile } from '../ui/MessageBox';
 import { contractorLoad, loadTooltip, loadColor } from '../../data/contractorLoad';
 import { taskShareText, copyTaskShare } from '../../data/taskShare';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
@@ -500,64 +500,47 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                     );
                   })()}
 
-                  <textarea
-                    value={task}
-                    onChange={e => setTask(e.target.value)}
+                  <MessageBox
+                    hook="quick-add-box"
                     rows={2}
+                    value={task}
+                    onChange={setTask}
+                    lang={s.isRtl ? 'he' : 'en'}
                     placeholder={s.taskDescriptionPlaceholder}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 resize-none"
+                    accept="image/*,audio/*,application/pdf,.doc,.docx"
+                    onAttach={files => {
+                      files.forEach(file => {
+                        const reader = new FileReader();
+                        reader.onload = ev => {
+                          setAttachments(prev => [...prev, {
+                            id: Math.random().toString(36).substr(2, 9),
+                            filename: file.name,
+                            mimeType: file.type,
+                            dataUrl: ev.target?.result as string,
+                          }]);
+                          setAttachmentFiles(prev => [...prev, file]);
+                        };
+                        reader.readAsDataURL(file);
+                      });
+                    }}
+                    onMemo={(memo, dataUrl) => {
+                      // A memo rides the same TaskAttachment shape as any file.
+                      setAttachments(prev => [...prev, {
+                        id: Math.random().toString(36).substr(2, 9),
+                        filename: memoFile(memo).name,
+                        mimeType: memo.blob.type || 'audio/webm',
+                        dataUrl,
+                      }]);
+                    }}
+                    onTranscript={(text, dataUrl) => {
+                      // The words ride the attachment, and an empty description takes them as its text.
+                      setAttachments(prev => prev.map(a => a.dataUrl === dataUrl ? { ...a, transcript: text } : a));
+                      setTask(t => t.trim() ? t : text);
+                    }}
                   />
 
-                  {/* Attachments row */}
+                  {/* Attachments */}
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => attachRef.current?.click()}
-                      className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-[#1e3a5f] transition-colors px-2 py-1 rounded-lg border border-dashed border-gray-300 hover:border-[#1e3a5f]/40"
-                    >
-                      <Paperclip size={12} /> {s.attachBtn}
-                    </button>
-                    {/* A memo rides the same TaskAttachment shape as any file —
-                        it is audio, and the task already knows how to carry a
-                        file. Nothing new to persist, export or import. */}
-                    <VoiceRecorderButton
-                      label="Voice"
-                      onRecorded={(memo: RecordedMemo) => {
-                        const ext = memo.blob.type.includes('mp4') ? 'm4a' : 'webm';
-                        const reader = new FileReader();
-                        reader.onload = ev => setAttachments(prev => [...prev, {
-                          id: Math.random().toString(36).substr(2, 9),
-                          filename: `voice-memo-${Date.now()}.${ext}`,
-                          mimeType: memo.blob.type || 'audio/webm',
-                          dataUrl: ev.target?.result as string,
-                        }]);
-                        reader.readAsDataURL(memo.blob);
-                      }}
-                    />
-                    <input
-                      ref={attachRef}
-                      type="file"
-                      multiple
-                      accept="image/*,application/pdf,.doc,.docx"
-                      className="hidden"
-                      onChange={e => {
-                        const files = Array.from(e.target.files ?? []);
-                        files.forEach(file => {
-                          const reader = new FileReader();
-                          reader.onload = ev => {
-                            setAttachments(prev => [...prev, {
-                              id: Math.random().toString(36).substr(2, 9),
-                              filename: file.name,
-                              mimeType: file.type,
-                              dataUrl: ev.target?.result as string,
-                            }]);
-                            setAttachmentFiles(prev => [...prev, file]);
-                          };
-                          reader.readAsDataURL(file);
-                        });
-                        if (attachRef.current) attachRef.current.value = '';
-                      }}
-                    />
                     {attachments.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mt-2">
                         {attachments.map(att => {
@@ -569,6 +552,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                               // transport here rather than a 120px file chip,
                               // and the same way OUT as every file: a delete.
                               <VoiceMemoPlayer key={att.id} src={att.dataUrl || ''} className="max-w-[250px]"
+                                transcript={att.transcript} lang={s.isRtl ? 'he' : 'en'} saidLabel={s.isRtl ? 'נאמר' : 'Said'}
                                 onDelete={() => setAttachments(prev => prev.filter(a => a.id !== att.id))} />
                             ) : (
                             <div

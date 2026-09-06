@@ -36,6 +36,8 @@ function planDownloadUrl(link: string): string {
 }
 import { CountdownNode, StopwatchNode, ClipArtNode, VoiceMemoNode, StrokeNode, NODE_DEFAULT_SIZE } from './BoardNodes';
 import { VoiceMemoPlayer } from '../ui/VoiceMemo';
+import { useStore } from '../../data/store';
+import { PROBLEM_FILL } from '../../data/problems';
 import { renderWidget, WidgetCtx, WIDGET_BY_ID } from '../../data/widgets';
 
 /**
@@ -157,6 +159,8 @@ export interface JobTileProps {
   lastEdited: string;
   labels: { job: string; folder: string; plans: string };
   H: BoardHandlers;
+  /** A live PROBLEM on the job: red border + '!' while open, rose while waiting (problems.ts). */
+  problem?: 'open' | 'waiting' | null;
   /**
    * A ghost is the SAME job drawn a second time, so it is the same tile.
    *
@@ -174,7 +178,7 @@ export interface JobTileProps {
 
 export const JobTile = React.memo(function JobTile({
   job, index, x, y, w, h, stage, pendingTasks, isSelected, isDragging,
-  justChanged, searchLit, fallbackBorder, lastEdited, labels, H, ghostIndex, translucent, faded, fresh,
+  justChanged, searchLit, fallbackBorder, lastEdited, labels, H, ghostIndex, translucent, faded, fresh, problem,
 }: JobTileProps) {
   const isGhost = ghostIndex !== undefined;
   return (
@@ -206,7 +210,7 @@ export const JobTile = React.memo(function JobTile({
           backgroundSize: 'cover',
           backgroundPosition: 'center',
         } : {}),
-        border: `4px solid ${isSelected ? '#4aa8d8' : (stage?.color ?? fallbackBorder)}`,
+        border: `4px solid ${isSelected ? '#4aa8d8' : problem ? PROBLEM_FILL[problem] : (stage?.color ?? fallbackBorder)}`,
         outline: isSelected && !isDragging ? '2px solid rgba(74,168,216,0.4)' : undefined,
         outlineOffset: '1px',
         zIndex: isDragging ? 20 : isSelected ? 10 : 5,
@@ -314,7 +318,19 @@ export const JobTile = React.memo(function JobTile({
             one you press, so this one goes. */}
       </div>
 
-      {stage && (
+      {problem && (
+        <span data-problem-bang
+          className="absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-white font-black text-[15px] leading-none"
+          style={{ backgroundColor: PROBLEM_FILL[problem], boxShadow: '0 0 0 2px #fff, 0 3px 8px rgba(0,0,0,.3)' }}>
+          !
+        </span>
+      )}
+      {problem ? (
+        <span className="inline-block font-extrabold px-2 py-0.5 rounded-full mb-1.5 whitespace-nowrap overflow-hidden text-ellipsis max-w-full align-bottom text-[9.5px] text-white"
+          style={{ backgroundColor: PROBLEM_FILL[problem] }}>
+          {problem === 'open' ? `PROBLEM${stage ? ` · was ${stage.name}` : ''}` : 'Waiting for approval'}
+        </span>
+      ) : stage && (
         /* The stage name AUTO-FITS one line (the owner's ask): the font is
            computed from the badge's real room — never wrapped, and only
            ellipsized below the 6.5px floor. Measured, rounded DOWN, with a
@@ -550,6 +566,8 @@ export const BoardNode = React.memo(function BoardNode({
   el, x, y, w, h, isSelected, isDragging, isEditing, editText, binHot, binCount, inGroup,
   recording, savingAudio, ctx, editRef, H, onRecord, onStopRecord, onUploadAudio, faded,
 }: BoardNodeProps) {
+  // The reader's language for a memo's words — a store read, not a prop: it changes about never.
+  const readerLang = useStore(st => (st.mainUiStrings.isRtl ? 'he' : 'en'));
   // Any bin node, built-in or one you made.
   const isBin = el.type === 'bin';
   /**
@@ -882,6 +900,8 @@ export const BoardNode = React.memo(function BoardNode({
           <VoiceMemoPlayer
             src={el.audioUrl}
             seconds={el.audioSeconds}
+            lang={readerLang}
+            saidLabel={readerLang === 'he' ? 'נאמר' : 'Said'}
             onDelete={() => H.elPatch(el.id, { audioUrl: undefined, audioSeconds: undefined })}
           />
         </div>

@@ -2,7 +2,6 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useStore, loadAllProjectsTaskData, ensureProjectSnapshot } from '../data/store';
 import { ContractorAssignment, ContractorPhoto, Contractor, Apartment, Project, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, RUSSIAN_CONTRACTOR_UI_STRINGS, PortalLang, getStageName, aptLabel, workAtLabel, projectColor } from '../types';
-import { useSpeechToText } from '../data/voiceSearch';
 import { transcribeMemo } from '../data/transcribe';
 import { daysOf, futureDaysOf } from '../data/taskDays';
 import { PlanPinOverlay } from '../components/apartment/PlanPinOverlay';
@@ -21,6 +20,8 @@ import { permsOf } from '../data/workerLevels';
 import { PlannerWidget } from '../components/board/PlannerWidget';
 import { TaskCalendar, CalendarEvent } from '../components/tasks/TaskCalendar';
 import { VoiceRecorderButton, VoiceMemoPlayer } from '../components/ui/VoiceMemo';
+import { MessageBox } from '../components/ui/MessageBox';
+import { problemStates, isLiveProblem, problemDaysLate, problemStateOf } from '../data/problems';
 import { WazeIcon, wazeUrl } from '../components/ui/BrandIcons';
 import { RecordedMemo } from '../data/voiceMemo';
 import {
@@ -311,7 +312,7 @@ function MediaItem({ photo, onDelete, onOpen }: { photo: ContractorPhoto; onDele
 
 interface BellItem {
   id: string;
-  kind: 'overdue' | 'today' | 'tomorrow' | 'new';
+  kind: 'problem' | 'overdue' | 'today' | 'tomorrow' | 'new';
   text: string;
   where: string;
   /** Named only when the task lives in ANOTHER workspace. */
@@ -370,13 +371,14 @@ function PortalBell({ contractor, s, lang, currentProjectId, allAssignments, all
           projectId: p.projectId, taskId: a.id,
         });
         const ds = daysOf(a);
-        if (ds.includes(today)) mk('today', `t|${a.id}|${today}`);
+        if (a.problem && a.problem.status !== 'solved' && a.problem.status !== 'waiting') mk('problem', `p|${a.id}`);
+        else if (ds.includes(today)) mk('today', `t|${a.id}|${today}`);
         else if (scope !== 'today' && ds.includes(tomorrow)) mk('tomorrow', `m|${a.id}|${tomorrow}`);
         else if (scope === 'all' && a.dueDate && a.dueDate < today) mk('overdue', `o|${a.id}`);
         else if (scope === 'all' && a.createdAt && Date.parse(a.createdAt) > weekAgo) mk('new', `n|${a.id}`);
       }
     }
-    const order: Record<BellItem['kind'], number> = { overdue: 0, today: 1, tomorrow: 2, new: 3 };
+    const order: Record<BellItem['kind'], number> = { problem: -1, overdue: 0, today: 1, tomorrow: 2, new: 3 };
     return out.sort((a, b) => order[a.kind] - order[b.kind]).slice(0, 30);
     // snapshotTick: a hydrated snapshot landing must recompute this.
   }, [contractor.id, scope, currentProjectId, allAssignments, allApartments, projects, snapshotTick, lang]);
@@ -389,6 +391,7 @@ function PortalBell({ contractor, s, lang, currentProjectId, allAssignments, all
   const unseen = items.length > 0 && seen !== hash;
 
   const KIND: Record<BellItem['kind'], { word: string; color: string }> = {
+    problem: { word: s.problemLabel || 'Problem', color: '#dc2626' },
     overdue: { word: s.filterOverdue, color: '#dc2626' },
     today: { word: s.filterToday, color: '#f97316' },
     tomorrow: { word: s.filterTomorrow, color: '#0ea5e9' },
@@ -581,17 +584,6 @@ export function ContractorPortal() {
   const selfFileRef = useRef<HTMLInputElement>(null);
   const [selectedAssignment, setSelectedAssignment] = useState<ContractorAssignment | null>(null);
   const [noteText, setNoteText] = useState('');
-  /**
-   * Dictation into the message box — the browser's own speech recognition
-   * in the worker's language (the search tile's door). Words appear in the
-   * box for him to fix and send; the big mic at the end is a different
-   * thing (a recording, sent as one).
-   */
-  const dictate = useSpeechToText(
-    (langOverride ?? workerNow?.lang) === 'he' ? 'he-IL'
-      : (langOverride ?? workerNow?.lang) === 'ru' ? 'ru-RU' : 'en-US',
-    text => setNoteText(text),
-  );
   const [noteAttachments, setNoteAttachments] = useState<{ dataUrl: string; filename: string; mimeType: string; driveFileId?: string; driveUrl?: string; transcript?: string }[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ name: string; pct: number } | null>(null);
@@ -722,6 +714,8 @@ export function ContractorPortal() {
 
   const contractorId = contractor.id;
   const assignments = contractorAssignments.filter(a => a.contractorId === contractorId);
+  /** Every apartment's live problem — the map paints them red whoever the problem is assigned to. */
+  const problemMap = useMemo(() => problemStates(contractorAssignments), [contractorAssignments]);
   const catColor = CATEGORY_COLORS[contractor.category] ?? '#6b7280';
   const wsNameOf = (pid: string) => projects.find(p => p.id === pid)?.name ?? pid;
   const currentWsName = wsNameOf(currentProjectId);
@@ -834,6 +828,8 @@ export function ContractorPortal() {
     const matching = new Set<string>();
     assignments.forEach(a => {
       if (a.completedAt || !a.dueDate) return;
+      // A problem has no day: it is on every day's filter until it is closed.
+      if (isLiveProblem(a)) { matching.add(a.apartmentId); return; }
       const offs = dayOffsets(a);
       if (mapFilter === 'yesterday' && offs.includes(-1)) matching.add(a.apartmentId);
       else if (mapFilter === 'today' && offs.includes(0)) matching.add(a.apartmentId);
@@ -849,6 +845,7 @@ export function ContractorPortal() {
     return assignments.filter(a => {
       if (a.completedAt) return false;
       if (!a.dueDate) return false;
+      if (isLiveProblem(a)) return true;
       const offs = dayOffsets(a);
       if (mapFilter === 'yesterday') return offs.includes(-1);
       if (mapFilter === 'today') return offs.includes(0);
@@ -863,6 +860,7 @@ export function ContractorPortal() {
     const passes = (a: ContractorAssignment) => {
       if (mapFilter === 'all') return true;
       if (a.completedAt || !a.dueDate) return false;
+      if (isLiveProblem(a)) return true;
       const offs = dayOffsets(a);
       if (mapFilter === 'yesterday') return offs.includes(-1);
       if (mapFilter === 'today') return offs.includes(0);
@@ -872,7 +870,16 @@ export function ContractorPortal() {
     };
     const live: ListRow[] = filteredAssignments.map(a => ({ a, apt: getApt(a.apartmentId), projectId: currentProjectId, projectName: currentWsName, live: true }));
     const foreign: ListRow[] = otherTasks.filter(r => passes(r.a)).map(r => ({ ...r, live: false }));
-    return [...live, ...foreign];
+    /**
+     * PROBLEMS FIRST (owner, 2026-09-06): an open problem, then one waiting
+     * for approval, then everything else in the order it came. A stable
+     * sort, so the rest of the list keeps its manner.
+     */
+    const rank = (a: ContractorAssignment) => {
+      const st = problemStateOf(a);
+      return st === 'open' ? 0 : st === 'waiting' ? 1 : 2;
+    };
+    return [...live, ...foreign].sort((x, y) => rank(x.a) - rank(y.a));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredAssignments, otherTasks, mapFilter, currentProjectId, currentWsName, apartments]);
   const openEverywhere = assignments.filter(a => !a.completedAt).length + otherTasks.filter(r => !r.a.completedAt).length;
@@ -961,8 +968,7 @@ export function ContractorPortal() {
     }
   }
 
-  async function handleNoteAttachmentPick(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
+  async function handleNoteFiles(files: File[]) {
     if (!files.length) return;
     if (noteAttachRef.current) noteAttachRef.current.value = '';
 
@@ -1239,6 +1245,33 @@ export function ContractorPortal() {
    *  job closes in one motion. */
   function handleSendAndClose() {
     if (!selectedAssignment || !canComplete) return;
+    /**
+     * A PROBLEM is closed by the worker into WAITING — rose, still on his
+     * list, no longer counted against him — and only the office's Approve
+     * completes the task. Never `completedAt` from here (owner, 2026-09-06).
+     */
+    if (selProblem) {
+      postClosingNote();
+      const apt = getApt(selectedAssignment.apartmentId);
+      const closedAt = new Date().toISOString();
+      updateContractorAssignment(selectedAssignment.id, {
+        problem: { ...selProblem, status: 'waiting', closedAt },
+      });
+      addActivityLog({
+        apartmentId: selectedAssignment.apartmentId,
+        apartmentNumber: apt?.apartmentNumber ?? '',
+        buildingId: selectedAssignment.buildingId,
+        userId: contractorId,
+        userName: contractor!.name,
+        actionType: 'contractor_note',
+        fieldChanged: 'problem_closed',
+        previousValue: '',
+        newValue: closedAt,
+        stageId: selectedAssignment.stageId ?? '',
+      });
+      setClosing(false);
+      return;
+    }
     const future = futureDaysOf(selectedAssignment.days, format(new Date(), 'yyyy-MM-dd'));
     if (future.length) { setFinishAsk(future); return; }
     postClosingNote();
@@ -1263,8 +1296,14 @@ export function ContractorPortal() {
   const selOfficeNotes = selNotes.filter(n => n.authorType === 'office');
   const selContractorNotes = selNotes.filter(n => n.authorType === 'contractor');
   // Three pictures close a job, unless the office relaxed it for this worker.
-  const canComplete = (selMedia.length >= MIN_CLOSE_MEDIA || !!contractor?.photosOptional)
-    && !selectedAssignment?.completedAt;
+  /**
+   * Pictures: a PROBLEM carries its own answer (the office said yes or no
+   * when it raised it), and that beats the worker's photos-optional switch.
+   */
+  const selProblem = selectedAssignment?.problem && isLiveProblem(selectedAssignment) ? selectedAssignment.problem : null;
+  const photosNeeded = selProblem ? selProblem.photosRequired : !contractor?.photosOptional;
+  const canComplete = (selMedia.length >= MIN_CLOSE_MEDIA || !photosNeeded)
+    && !selectedAssignment?.completedAt && selProblem?.status !== 'waiting';
 
   type FilterKey = 'yesterday' | 'today' | 'tomorrow' | 'week' | 'all';
   // ALL leads, per the owner — the everything view is the anchor the eye
@@ -1421,6 +1460,19 @@ export function ContractorPortal() {
 
       {/* The day bar — above the task list. The map carries its own combined
           row (projects · divider · days) so both filters read as one place. */}
+      {activeTab === 'tasks' && (() => {
+        const todayIso = format(new Date(), 'yyyy-MM-dd');
+        const late = [...assignments, ...otherTasks.map(r => r.a)].filter(a => problemDaysLate(a, todayIso) > 0).length;
+        return late > 0 ? (
+          <button data-problem-banner
+            onClick={() => { setMapFilter('all'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+            className="w-full flex items-center justify-between gap-2 px-4 py-2 text-white font-extrabold text-[13px] flex-shrink-0"
+            style={{ backgroundColor: '#dc2626' }}>
+            <span className="flex items-center gap-2"><AlertCircle size={15} /> {(s.problemBanner || '{n} past the deadline').replace('{n}', String(late))}</span>
+            <span className="text-[11px] font-bold opacity-85">↓</span>
+          </button>
+        ) : null;
+      })()}
       {activeTab === 'tasks' && (
       <div className="bg-white border-b border-gray-100 px-3 py-2.5 flex gap-2 overflow-x-auto flex-shrink-0 edge-fade">
         {filterOptions.map(({ key, label, color }) => (
@@ -1648,15 +1700,26 @@ export function ContractorPortal() {
                 const isDone = !!a.completedAt;
                 const dueBadge = getDueBadge(effectiveDue(a), dueWords);
 
+                const prob = problemStateOf(a);
+                const lateDays = problemDaysLate(a, format(new Date(), 'yyyy-MM-dd'));
                 return (
                   <button key={`${rowPid}:${a.id}`} data-task-card={a.id} data-task-ws={rowPid}
+                    data-problem-card={prob ?? undefined}
                     onClick={() => openTask(rowPid, a)}
                     className={`w-full text-left bg-white rounded-2xl shadow-sm border p-4 transition-all active:scale-[0.99] hover:shadow-md ${
                       a.general ? 'border-dashed' : 'border-gray-100'}`}
-                    style={a.general ? { borderColor: '#b8860b', backgroundColor: '#fffdf5' } : undefined}>
+                    style={prob === 'open' ? { borderColor: '#dc2626', backgroundColor: '#fff5f5', borderWidth: 2 }
+                      : prob === 'waiting' ? { borderColor: '#fda4af', backgroundColor: '#fff1f2', borderWidth: 2 }
+                      : a.general ? { borderColor: '#b8860b', backgroundColor: '#fffdf5' } : undefined}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          {prob && (
+                            <span data-problem-chip className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wide px-2 py-0.5 rounded-full text-white"
+                              style={{ backgroundColor: prob === 'open' ? '#dc2626' : '#f43f5e' }}>
+                              {prob === 'open' ? <><AlertCircle size={10} /> {s.problemLabel || 'Problem'}</> : (s.problemWaitingLabel || 'Waiting for approval')}
+                            </span>
+                          )}
                           <span className="font-bold text-[#1e3a5f] text-base">
                             {whereLabel(a, apt, rowWs)}
                           </span>
@@ -1675,8 +1738,24 @@ export function ContractorPortal() {
                           )}
                         </div>
                         <p className="text-sm text-gray-600 truncate"><TrText text={a.taskDescription} to={readLang} /></p>
+                        {prob === 'open' && a.problem?.status === 'returned' && a.problem.returnNote && (
+                          <p data-problem-returned className="text-xs mt-1 px-2 py-1 rounded-lg font-semibold" style={{ backgroundColor: '#fee2e2', color: '#991b1b' }}>
+                            {s.problemReturnedLabel || 'The office sent it back'}: <TrText text={a.problem.returnNote} to={readLang} />
+                          </p>
+                        )}
+                        {prob === 'open' && a.dueDate && (
+                          <p data-problem-deadline className="text-xs mt-1.5 font-bold" style={{ color: lateDays > 0 ? '#dc2626' : '#6b7280' }}>
+                            {s.problemDeadlineLabel || 'Deadline'} {format(parseISO(a.dueDate), 'EEE d MMM')}
+                            {lateDays > 0 ? ` · ${(s.problemLateLabel || '{n} days late').replace('{n}', String(lateDays))}` : ''}
+                          </p>
+                        )}
+                        {prob === 'waiting' && (
+                          <p data-problem-waiting className="text-xs mt-1.5 font-semibold" style={{ color: '#be123c' }}>
+                            {s.problemWaitingLabel || 'Waiting for approval'}{a.problem?.closedAt ? ` · ${format(parseISO(a.problem.closedAt), 'HH:mm')}` : ''} · {s.problemWaitingHint || 'the office is checking'}
+                          </p>
+                        )}
                         <div className="flex items-center gap-2 mt-2 flex-wrap">
-                          {a.dueDate && (
+                          {!prob && a.dueDate && (
                             <span className={`flex items-center gap-1 text-xs ${isOverdue ? 'text-red-500' : 'text-gray-400'}`}>
                               <CalendarDays size={11} />
                               {/* EVERY day the task covers — a task that takes
@@ -2032,6 +2111,7 @@ export function ContractorPortal() {
                       stages={stages}
                       activeStageIds={[]}
                       classFilter="all"
+                      problemStates={problemMap}
                       searchQuery=""
                       selectedBuilding={shown as never}
                       onApartmentClick={handleDiagramClick}
@@ -2111,7 +2191,8 @@ export function ContractorPortal() {
                           // Check it before you send it — the whole point of a
                           // preview is hearing what you just recorded.
                           <div key={idx} className="flex items-center gap-1">
-                            <VoiceMemoPlayer src={att.driveUrl || att.dataUrl || ''} className="max-w-[220px]" />
+                            <VoiceMemoPlayer src={att.driveUrl || att.dataUrl || ''} className="max-w-[220px]"
+                              transcript={att.transcript} lang={readLang} saidLabel={s.saidLabel || 'Said'} />
                             <button
                               onClick={() => setNoteAttachments(prev => prev.filter((_, i) => i !== idx))}
                               className="w-6 h-6 flex items-center justify-center rounded-full text-gray-400 hover:text-red-500"
@@ -2146,49 +2227,17 @@ export function ContractorPortal() {
                       in the box, in his language), and the big navy mic at
                       the end that records a memo — which becomes the Send
                       arrow the moment there is something to send. */}
-                  <div className="flex gap-2 items-center mt-2" data-composer>
-                    <button
-                      data-composer-clip
-                      onClick={() => noteAttachRef.current?.click()}
-                      className="w-9 h-9 flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 hover:text-[#1e3a5f] flex-shrink-0"
-                      title="Attach file"
-                    >
-                      <Paperclip size={15} />
-                    </button>
-                    <div className="flex-1 min-w-0 flex items-center gap-1 bg-white border rounded-full ps-1.5 pe-3.5"
-                      style={{ borderColor: dictate.listening ? '#4aa8d8' : '#dbe3ec', minHeight: 42 }}>
-                      {dictate.supported && (
-                        <button
-                          type="button"
-                          data-composer-dictate
-                          onClick={dictate.toggle}
-                          title={s.isRtl ? 'הקלדה קולית' : lang === 'ru' ? 'Голосовой ввод' : 'Dictate'}
-                          className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                            dictate.listening ? 'text-white animate-pulse' : 'text-[#1e3a5f]'}`}
-                          style={{ backgroundColor: dictate.listening ? '#dc2626' : '#eef4fa' }}
-                        >
-                          <Mic size={15} />
-                        </button>
-                      )}
-                      <input
-                        data-composer-input
-                        value={noteText}
-                        onChange={e => setNoteText(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSendNote()}
-                        placeholder={s.yourMessage || (s.isRtl ? 'ההודעה שלך' : 'Your message')}
-                        className="flex-1 min-w-0 bg-transparent py-2 text-sm focus:outline-none"
-                      />
-                    </div>
-                    {(noteText.trim() || noteAttachments.length > 0) ? (
-                      <button data-composer-send onClick={handleSendNote}
-                        className="w-11 h-11 flex items-center justify-center rounded-full text-white transition-all active:scale-95 flex-shrink-0"
-                        style={{ backgroundColor: '#4aa8d8', boxShadow: '0 6px 14px -6px rgba(74,168,216,.7)' }}>
-                        <Send size={18} />
-                      </button>
-                    ) : (
-                      <VoiceRecorderButton big onRecorded={handleNoteVoiceMemo} title={s.addNote} />
-                    )}
-                  </div>
+                  <MessageBox
+                    className="mt-2"
+                    value={noteText}
+                    onChange={setNoteText}
+                    onSend={handleSendNote}
+                    hasPending={noteAttachments.length > 0}
+                    onAttach={handleNoteFiles}
+                    onMemo={handleNoteVoiceMemo}
+                    lang={readLang}
+                    placeholder={s.yourMessage || (s.isRtl ? 'ההודעה שלך' : 'Your message')}
+                  />
           </div>
         );
 
@@ -2485,7 +2534,7 @@ export function ContractorPortal() {
                     multiple className="hidden" onChange={handleMediaUpload} />
                   <input ref={noteAttachRef} type="file"
                     accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip"
-                    multiple className="hidden" onChange={handleNoteAttachmentPick} />
+                    multiple className="hidden" onChange={e => { const files = [...(e.target.files ?? [])]; e.target.value = ''; void handleNoteFiles(files); }} />
                 </div>
               </div>
 
@@ -2504,17 +2553,30 @@ export function ContractorPortal() {
                     {format(new Date(a.completedAt), isToday(new Date(a.completedAt)) ? 'HH:mm' : 'MMM d · HH:mm')}
                   </div>
                 ) : (
+                  a.problem && isLiveProblem(a) && a.problem.status === 'waiting' ? (
+                  <div data-problem-waiting-footer
+                    className="w-full py-3.5 rounded-xl text-base font-bold flex items-center justify-center gap-2"
+                    style={{ backgroundColor: '#fff1f2', color: '#be123c', border: '1px solid #fda4af' }}>
+                    <Clock size={18} />
+                    {s.problemWaitingLabel || 'Waiting for approval'} · {s.problemWaitingHint || 'the office is checking'}
+                  </div>
+                  ) : (
                   /* One button. Pressing it opens the closing screen —
                      it never sits greyed-out wondering why. */
                   <button
                     data-close-job
                     onClick={() => setClosing(true)}
                     className="w-full py-3.5 rounded-xl text-base font-bold tracking-wide transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-white"
-                    style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}
+                    style={{ background: a.problem && isLiveProblem(a)
+                      ? 'linear-gradient(135deg, #dc2626, #b91c1c)'
+                      : 'linear-gradient(135deg, #22c55e, #16a34a)' }}
                   >
                     <CheckCircle2 size={18} />
-                    {s.closeJobBtn || (s.isRtl ? 'סגירת עבודה' : 'Close job')}
+                    {a.problem && isLiveProblem(a)
+                      ? (s.closeProblemBtn || (s.isRtl ? 'סגירת הבעיה' : 'Close problem'))
+                      : (s.closeJobBtn || (s.isRtl ? 'סגירת עבודה' : 'Close job'))}
                   </button>
+                  )
                 )}
               </div>
             </div>
@@ -2588,7 +2650,7 @@ export function ContractorPortal() {
                       {/* 1 · the pictures — the rule names MIN_CLOSE_MEDIA, so
                           changing the constant changes the sentence. */}
                       <div>
-                        {!contractor?.photosOptional && (
+                        {photosNeeded && (
                           <p className="text-center font-extrabold text-gray-800 mb-3"
                             style={{ fontSize: 16, lineHeight: 1.35 }}>
                             {(s.addPicturesRule || (s.isRtl
@@ -2606,7 +2668,7 @@ export function ContractorPortal() {
                             <Camera size={17} />
                             {uploading ? s.uploading : s.tapToAddMedia}
                           </button>
-                          {!contractor?.photosOptional && (
+                          {photosNeeded && (
                             <span data-close-count
                               className="flex-shrink-0 px-3 py-2 rounded-xl text-sm font-black tabular-nums"
                               style={selMedia.length >= MIN_CLOSE_MEDIA
@@ -2647,29 +2709,24 @@ export function ContractorPortal() {
                         <div className="text-gray-400 mb-2" style={{ fontSize: 13 }}>
                           {s.closingCommentHint || (s.isRtl ? 'כל מה שהמשרד צריך לדעת' : 'Anything the office should know')}
                         </div>
-                        <div className="relative border border-gray-200 rounded-xl bg-white">
-                          <textarea
-                            value={closingComment}
-                            onChange={e => setClosingComment(e.target.value)}
-                            placeholder={s.typeWhatYouDid || (s.isRtl ? 'כתבו מה עשיתם…' : 'Type what you did…')}
-                            className="w-full min-h-[104px] border-0 outline-none rounded-xl px-3 pt-2.5 pb-10 text-[15px] resize-y bg-transparent"
-                          />
-                          <div className="absolute bottom-2 flex items-center gap-1.5" style={{ insetInlineEnd: 9 }}>
-                            <button
-                              onClick={() => noteAttachRef.current?.click()}
-                              className="p-1.5 rounded-lg text-gray-400 hover:text-[#1e3a5f]"
-                              title="Attach file">
-                              <Paperclip size={16} />
-                            </button>
-                            <VoiceRecorderButton onRecorded={handleNoteVoiceMemo} title={s.addNote} />
-                          </div>
-                        </div>
+                        <MessageBox
+                          hook="closing-comment"
+                          rows={3}
+                          value={closingComment}
+                          onChange={setClosingComment}
+                          onAttach={handleNoteFiles}
+                          onMemo={handleNoteVoiceMemo}
+                          lang={readLang}
+                          placeholder={s.typeWhatYouDid || (s.isRtl ? 'כתבו מה עשיתם…' : 'Type what you did…')}
+                          fontSize={15}
+                        />
                         {noteAttachments.length > 0 && (
                           <div className="mt-2 flex flex-wrap gap-2">
                             {noteAttachments.map((att, idx) => (
                               att.mimeType.startsWith('audio/') ? (
                                 <div key={idx} className="flex items-center gap-1">
-                                  <VoiceMemoPlayer src={att.driveUrl || att.dataUrl || ''} className="max-w-[220px]" />
+                                  <VoiceMemoPlayer src={att.driveUrl || att.dataUrl || ''} className="max-w-[220px]"
+                                    transcript={att.transcript} lang={readLang} saidLabel={s.saidLabel || 'Said'} />
                                   <button
                                     onClick={() => setNoteAttachments(prev => prev.filter((_, i) => i !== idx))}
                                     className="w-6 h-6 flex items-center justify-center rounded-full text-gray-400 hover:text-red-500"
@@ -2846,6 +2903,17 @@ export function ContractorPortal() {
               <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
                 {workHere.step === 'view' && (
                   <>
+                    {aptTasks.filter(t => t.contractorId === contractorId && isLiveProblem(t) && t.problem!.status !== 'waiting').map(t => (
+                      <button key={`fix|${t.id}`} data-fix-for={t.id}
+                        onClick={() => { closeSheet(); arriveClosingRef.current = true; setSelectedAssignment(t); }}
+                        className="w-full text-left rtl:text-right rounded-xl px-3.5 py-3 border-2 active:scale-[0.99]"
+                        style={{ borderColor: '#dc2626', backgroundColor: '#fff5f5' }}>
+                        <span className="block text-[11px] font-black uppercase tracking-wide" style={{ color: '#dc2626' }}>
+                          {s.isThisFixFor || 'Is this the fix for:'}
+                        </span>
+                        <span className="block text-sm font-bold text-gray-800"><TrText text={t.taskDescription} to={readLang} /></span>
+                      </button>
+                    ))}
                     {aptTasks.length > 0 && (
                       <div className="space-y-2">
                         {aptTasks.map(t => (

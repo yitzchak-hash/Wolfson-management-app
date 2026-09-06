@@ -391,6 +391,10 @@ export function SettingsPage({ scope = 'project' }: { scope?: SettingsScope }) {
       {activeTab === 'stages' && (
         <StageSettings stages={sortedStages} updateStage={updateStage} addStage={addStage} deleteStage={deleteStage} onToast={showToast} currentProjectId={currentProjectId} />
       )}
+      {/* Apartment types — a building thing; the Job Board has no apartments. */}
+      {activeTab === 'stages' && scope === 'project' && currentProjectId !== 'general' && (
+        <TipusSettings onToast={showToast} />
+      )}
       {/* The CRM import belongs to the Job Board alone — a deals export maps
           to board tiles and groups, not to apartments in a tower. */}
       {activeTab === 'stages' && scope === 'project' && currentProjectId === 'general' && (
@@ -466,6 +470,59 @@ function ColorPickerWithPresets({ value, onChange }: ColorPickerProps) {
 }
 
 // ─── Stage settings ───────────────────────────────────────────────────────────
+/**
+ * TIPUSIM — the workspace's list of apartment TYPES (owner, 2026-09-06).
+ *
+ * "A1, A2, B1, C3…" — a short name per apartment, offered as a dropdown
+ * between the number and the family name in every apartment window here and
+ * set in bulk from the diagram. Per workspace: Wolfson's list and Netiv's
+ * list are different lists. It rides `boardSettings`, which is already
+ * persisted, exported, imported and synced — no new state key.
+ */
+function TipusSettings({ onToast }: { onToast: (msg: string) => void }) {
+  const s = useStore(state => state.mainUiStrings);
+  const tipusim = useStore(st => st.boardSettings[st.currentProjectId]?.tipusim ?? EMPTY_TIPUSIM);
+  const setBoardSetting = useStore(st => st.setBoardSetting);
+  const [draft, setDraft] = useState('');
+  const write = (next: string[]) => setBoardSetting('tipusim', next.length ? next : undefined);
+  const add = () => {
+    const v = draft.trim();
+    if (!v) return;
+    if (tipusim.includes(v)) { setDraft(''); return; }
+    write([...tipusim, v]);
+    setDraft('');
+    onToast(`${s.tipusLabel}: ${v}`);
+  };
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-3 md:p-5 mb-4 md:mb-5" data-tipusim-card>
+      <h2 className="font-semibold text-gray-800 mb-1">{s.tipusimTitle}</h2>
+      <p className="text-xs text-gray-500 mb-3">{s.tipusimHint}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        {tipusim.map(t => (
+          <span key={t} data-tipus-chip={t}
+            className="inline-flex items-center gap-1 pl-2.5 pr-1 py-1 rounded-lg border border-gray-200 bg-gray-50 text-sm font-bold text-[#1e3a5f]">
+            {t}
+            <button onClick={() => write(tipusim.filter(x => x !== t))} title={s.delete}
+              className="w-5 h-5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center">×</button>
+          </span>
+        ))}
+        <input
+          data-tipus-new
+          data-enter-own
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') add(); }}
+          placeholder="A2"
+          className="w-20 border border-gray-200 rounded-lg px-2 py-1.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
+        />
+        <button data-tipus-add onClick={add} disabled={!draft.trim()}
+          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-[#1e3a5f] text-white disabled:opacity-40">+ {s.add}</button>
+      </div>
+    </div>
+  );
+}
+const EMPTY_TIPUSIM: string[] = [];
+
 function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, currentProjectId }: {
   stages: Stage[]; updateStage: (id: string, c: Partial<Stage>) => void;
   addStage: (s: Stage) => void; deleteStage: (id: string) => void; onToast: (msg: string) => void;

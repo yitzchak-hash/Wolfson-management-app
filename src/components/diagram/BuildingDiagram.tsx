@@ -2,12 +2,17 @@ import React, { useMemo, useState } from 'react';
 import { Link2, Lock, LockOpen } from 'lucide-react';
 import { Apartment, BuildingId, Stage } from '../../types';
 import { useStore } from '../../data/store';
+import { PROBLEM_FILL } from '../../data/problems';
 
 interface BuildingDiagramProps {
   apartments: Apartment[];
   stages: Stage[];
   activeStageIds: string[];
   classFilter: 'all' | 'standard' | 'shinui';
+  /** Only apartments of this tipus stay lit; '' = every tipus. */
+  tipusFilter?: string;
+  /** aptId → live problem state — red with a '!' while open, rose while waiting (problems.ts). */
+  problemStates?: Map<string, 'open' | 'waiting'>;
   searchQuery: string;
   selectedBuilding: BuildingId | 'all';
   onApartmentClick: (apt: Apartment) => void;
@@ -237,13 +242,15 @@ interface AptCellProps {
   /** True when this cell is hovered OR its merged partner is. */
   isHoverGroup?: boolean;
   onHover?: (id: string | null) => void;
+  /** The apartment wears a PROBLEM: red + '!' while open, rose while waiting. */
+  problem?: 'open' | 'waiting';
 }
 
 function AptCell({
   apt, stage, isHighlighted, isDimmed, showShinuiBadge, onClick,
   isDuplex, rowFloorType, isMerged, mergedLabel, isBulkSelected, isContractorHighlighted,
   aptSubLabel, taskInfo, nextStageName, onAddTask, allTasksDone, compact, phone, cellTextW, onNameUnnamed,
-  mergeLink, extraStyle, isHoverGroup, onHover,
+  mergeLink, extraStyle, isHoverGroup, onHover, problem,
 }: AptCellProps) {
   const ui = useStore(state => state.mainUiStrings);
   const hasStage = !!stage;
@@ -258,12 +265,17 @@ function AptCell({
     rowFloorType === 'lobby'    ? '#bbf7d0' :
     '#e2e8f0';
   // Dimmed cells use a gray palette to make the filter visually obvious
-  const bgColor = isDimmed ? '#e5e7eb' : (hasStage ? stage!.color : floorBg);
+  /**
+   * A PROBLEM paints over the stage (owner, 2026-09-06) — the stage itself is
+   * untouched and comes straight back when the office approves. Red with a
+   * white "!" while open, rose while waiting for approval.
+   */
+  const bgColor = isDimmed ? '#e5e7eb' : problem ? PROBLEM_FILL[problem] : (hasStage ? stage!.color : floorBg);
   // Stage-coloured cells get a darker outline of their own colour so adjacent
   // apartments at the same stage don't blur into one block.
-  const borderColor = isDimmed ? '#d1d5db' : (isMerged ? '#3b82f6' : hasStage ? darken(stage!.color) : floorBorder);
+  const borderColor = isDimmed ? '#d1d5db' : problem ? (problem === 'open' ? '#991b1b' : '#be123c') : (isMerged ? '#3b82f6' : hasStage ? darken(stage!.color) : floorBorder);
   const borderWidth = isMerged && !isDimmed ? '2px' : '1.5px';
-  const textColor = isDimmed ? '#9ca3af' : (hasStage ? getTextColor(stage!.color) : '#374151');
+  const textColor = isDimmed ? '#9ca3af' : problem ? '#ffffff' : (hasStage ? getTextColor(stage!.color) : '#374151');
 
   // The apartment number is always the primary label — a family name never replaces
   // it, it renders on its own line underneath.
@@ -271,7 +283,14 @@ function AptCell({
   const rawName = apt?.displayName?.trim() ?? '';
   // Only a *real* name counts — displayName defaults to the apartment number.
   const nameLabel = rawName && rawName !== apt?.apartmentNumber?.trim() ? rawName : '';
-  const displayLabel = numberLabel || nameLabel;
+  /**
+   * The TIPUS rides with the number (owner, 2026-09-06): "47 — A2" on the
+   * desktop cell; the phone cell is 77px wide, so there it is a small line
+   * under the number instead (the starred answer he let stand).
+   */
+  const tipus = apt?.tipus?.trim() ?? '';
+  const displayLabel = (numberLabel && tipus && !phone && !mergedLabel ? `${numberLabel} — ${tipus}` : numberLabel) || nameLabel;
+  const tipusLine = tipus && numberLabel && (phone || !!mergedLabel) ? tipus : '';
 
   const scale = isHighlighted && !isDimmed ? 'scale-[1.04] z-10' : '';
 
@@ -315,6 +334,14 @@ function AptCell({
         ? `${rowFloorType === 'basement' ? ui.basement : ui.aptShort} ${displayLabel}${nameLabel && numberLabel ? ` — ${nameLabel}` : ''}`
         : ''}
     >
+      {problem && !isDimmed && (
+        <span data-problem-bang
+          className="absolute rounded-full bg-white flex items-center justify-center font-black leading-none"
+          style={{ top: 1, right: 1, width: compact || phone ? 11 : 14, height: compact || phone ? 11 : 14,
+            fontSize: compact || phone ? 8 : 10, color: PROBLEM_FILL[problem], boxShadow: '0 1px 2px rgba(0,0,0,.3)' }}>
+          !
+        </span>
+      )}
       {displayLabel ? (
         <>
           <span
@@ -327,6 +354,12 @@ function AptCell({
           >
             {displayLabel}
           </span>
+          {tipusLine && (
+            <span data-tipus-line className="w-full text-center block leading-none flex-shrink-0 font-bold"
+              style={{ fontSize: compact ? '7.5px' : '8.5px', opacity: isDimmed ? 0.55 : 0.85 }}>
+              {tipusLine}
+            </span>
+          )}
           {/* Family name — always shown *in addition to* the apartment number */}
           {nameLabel && numberLabel && (
             <span
@@ -372,7 +405,10 @@ function AptCell({
 
       {/* Stage name with inline completion indicator */}
       {!compact && displayLabel && (() => {
-        const stageText = hasStage ? stage!.name : ui.notStartedOption;
+        const stageText = problem === 'open'
+          ? `${ui.problemLabel.toUpperCase()}${hasStage ? ` · ${ui.problemWas} ${stage!.name}` : ''}`
+          : problem === 'waiting' ? ui.problemWaiting
+          : hasStage ? stage!.name : ui.notStartedOption;
         // On a phone the stage name SHRINKS until it fits on one line rather
         // than wrapping to three. A four-across row is ~86px wide and
         // "Registers & Access Panels" needs 106px at 8.5px, so before this it
@@ -390,7 +426,8 @@ function AptCell({
             style={{
               fontSize: fit ? `${fit.size}px` : '9px',
               opacity: isDimmed ? 0.5 : (hasStage ? 0.9 : 0.45),
-              fontStyle: hasStage ? 'normal' : 'italic',
+              fontStyle: hasStage || problem ? 'normal' : 'italic',
+              fontWeight: problem ? 800 : undefined,
               ...(fit?.wrap ? { overflowWrap: 'break-word' as const } : null),
             }}
           >
@@ -583,7 +620,7 @@ function Stairwell({ compact, floorLabel }: { compact?: boolean; floorLabel?: st
 
 function FourCellRow({
   aptNums, getApt, getStage, isHighlighted, isDimmed, isMerged, getMergedLabel, getMergeLink,
-  hoverGroup, onHoverApt,
+  hoverGroup, onHoverApt, problemStates,
   isContractorHighlighted, isBulkSelected, getAptSubLabel, getTaskInfo, getNextStageName, getOnAddTask, getAllTasksDone,
   getOnNameUnnamed,
   showShinuiBadge, onApartmentClick, rowFloorType, compact, phone, cellTextW, floorLabel,
@@ -598,6 +635,7 @@ function FourCellRow({
   getMergeLink?: (a: Apartment | undefined, neighbour: Apartment | undefined) => 'connector' | null;
   hoverGroup?: Set<string> | null;
   onHoverApt?: (id: string | null) => void;
+  problemStates?: Map<string, 'open' | 'waiting'>;
   isContractorHighlighted: (a: Apartment | undefined) => boolean;
   isBulkSelected: (a: Apartment | undefined) => boolean;
   getAptSubLabel: (a: Apartment | undefined) => string | undefined;
@@ -626,6 +664,7 @@ function FourCellRow({
           return (
             <AptCell
               key={ci}
+              problem={apt ? problemStates?.get(apt.id) : undefined}
               mergeLink={ci === 0 ? getMergeLink?.(apt, getApt(aptNums[1])) ?? null : null}
               isHoverGroup={!!apt && !!hoverGroup?.has(apt.id)}
               onHover={onHoverApt}
@@ -662,6 +701,7 @@ function FourCellRow({
           return (
             <AptCell
               key={ci}
+              problem={apt ? problemStates?.get(apt.id) : undefined}
               mergeLink={ci === 2 ? getMergeLink?.(apt, getApt(aptNums[3])) ?? null : null}
               isHoverGroup={!!apt && !!hoverGroup?.has(apt.id)}
               onHover={onHoverApt}
@@ -737,7 +777,7 @@ function BuildingNameBar({ buildingId, compact }: { buildingId: string; compact?
 }
 
 function BuildingColumn({
-  buildingId, apartments, mergedLabels, stages, activeStageIds, classFilter, searchQuery,
+  buildingId, apartments, mergedLabels, stages, activeStageIds, classFilter, tipusFilter, problemStates, searchQuery,
   onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, aptSubLabels,
   aptTaskData, nextStageLabels, onAddTask, aptCompletedData, compact, phone, onNameUnnamed,
   hoverGroup, onHoverApt, fixedColW,
@@ -748,6 +788,10 @@ function BuildingColumn({
   stages: Stage[];
   activeStageIds: string[];
   classFilter: 'all' | 'standard' | 'shinui';
+  /** Only apartments of this tipus stay lit; '' = every tipus. */
+  tipusFilter?: string;
+  /** aptId → live problem state — red with a '!' while open, rose while waiting (problems.ts). */
+  problemStates?: Map<string, 'open' | 'waiting'>;
   searchQuery: string;
   onApartmentClick: (apt: Apartment) => void;
   showShinuiBadge: boolean;
@@ -805,6 +849,7 @@ function BuildingColumn({
     if (!apt) return false;
     if (highlightedApartmentIds) return !highlightedApartmentIds.has(apt.id);
     if (classFilter !== 'all' && apt.classification !== classFilter) return true;
+    if (tipusFilter && (apt.tipus ?? '') !== tipusFilter) return true;
     if (searchQuery) return !(apt.displayName || apt.apartmentNumber).toLowerCase().includes(searchQuery.toLowerCase());
     if (activeStageIds.length === 0) return false;
     if (!apt.currentStageId) return !activeStageIds.includes('__none__');
@@ -944,6 +989,7 @@ function BuildingColumn({
                     getMergeLink={getMergeLink}
                     hoverGroup={hoverGroup}
                     onHoverApt={onHoverApt}
+                    problemStates={problemStates}
                     isContractorHighlighted={isContractorHighlighted}
                     isBulkSelected={isBulkSelected}
                     getAptSubLabel={getAptSubLabel}
@@ -977,6 +1023,7 @@ function BuildingColumn({
                             />
                           )}
                           <AptCell
+              problem={apt ? problemStates?.get(apt.id) : undefined}
                             apt={apt}
                             stage={getStage(apt)}
                             isHighlighted={isHighlighted(apt)}
@@ -1015,7 +1062,7 @@ function BuildingColumn({
 
 // Generic building column for non-Wolfson projects (uses floor/colPosition from apartment data)
 function NetivBuildingColumn({
-  buildingId, apartments, mergedLabels, stages, activeStageIds, classFilter, searchQuery,
+  buildingId, apartments, mergedLabels, stages, activeStageIds, classFilter, tipusFilter, problemStates, searchQuery,
   onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, aptSubLabels,
   aptTaskData, nextStageLabels, onAddTask, aptCompletedData, compact, phone, onNameUnnamed,
   hoverGroup, onHoverApt, fixedColW,
@@ -1026,6 +1073,10 @@ function NetivBuildingColumn({
   stages: Stage[];
   activeStageIds: string[];
   classFilter: 'all' | 'standard' | 'shinui';
+  /** Only apartments of this tipus stay lit; '' = every tipus. */
+  tipusFilter?: string;
+  /** aptId → live problem state — red with a '!' while open, rose while waiting (problems.ts). */
+  problemStates?: Map<string, 'open' | 'waiting'>;
   searchQuery: string;
   onApartmentClick: (apt: Apartment) => void;
   showShinuiBadge: boolean;
@@ -1091,6 +1142,7 @@ function NetivBuildingColumn({
     if (!apt) return false;
     if (highlightedApartmentIds) return !highlightedApartmentIds.has(apt.id);
     if (classFilter !== 'all' && apt.classification !== classFilter) return true;
+    if (tipusFilter && (apt.tipus ?? '') !== tipusFilter) return true;
     if (searchQuery) return !(apt.displayName || apt.apartmentNumber).toLowerCase().includes(searchQuery.toLowerCase());
     if (activeStageIds.length === 0) return false;
     if (!apt.currentStageId) return !activeStageIds.includes('__none__');
@@ -1173,6 +1225,7 @@ function NetivBuildingColumn({
         floor < -0.5 ? 'basement' : floor === 0 ? 'ground' : floor === -1 ? 'lobby' : undefined;
       return (
         <AptCell key={col}
+              problem={apt ? problemStates?.get(apt.id) : undefined}
           mergeLink={getMergeLinkFn(apt)}
           isHoverGroup={!!apt && !!hoverGroup?.has(apt.id)}
           onHover={onHoverApt}
@@ -1278,7 +1331,7 @@ function NetivBuildingColumn({
 }
 
 export function BuildingDiagram({
-  apartments, stages, activeStageIds, classFilter, searchQuery, selectedBuilding,
+  apartments, stages, activeStageIds, classFilter, tipusFilter, problemStates, searchQuery, selectedBuilding,
   onApartmentClick, showShinuiBadge, bulkSelected, highlightedApartmentIds, aptSubLabels,
   aptTaskData, nextStageLabels, onAddTask, aptCompletedData, compact, phone, onNameUnnamed,
   fixedColW,
@@ -1351,6 +1404,8 @@ export function BuildingDiagram({
           stages,
           activeStageIds,
           classFilter,
+          tipusFilter,
+          problemStates,
           searchQuery,
           onApartmentClick,
           showShinuiBadge,

@@ -87,11 +87,11 @@ check(!!mine, 'tapping the plan dropped a pin');
 check(mine?.createdBy === 'Motti', `the pin is attributed to the worker (${mine?.createdBy})`);
 
 // The bubble opened on the new pin: paperclip + a BIGGER mic, bottom right.
-check(await page.locator('[data-pin-attach]').count() === 1, 'the bubble carries the paperclip');
-check(await page.locator('[data-pin-mic] button').count() === 1, 'and the microphone beside it');
+check(await page.locator('[data-pin-note-box] [data-composer-clip]').count() === 1, 'the bubble carries the paperclip');
+check(await page.locator('[data-pin-note-box] [data-big-mic]').count() === 1, 'and the microphone beside it');
 const sizes = await page.evaluate(() => {
-  const clip = document.querySelector('[data-pin-attach]')?.getBoundingClientRect();
-  const mic = document.querySelector('[data-pin-mic] button')?.getBoundingClientRect();
+  const clip = document.querySelector('[data-pin-note-box] [data-composer-clip]')?.getBoundingClientRect();
+  const mic = document.querySelector('[data-pin-note-box] [data-big-mic]')?.getBoundingClientRect();
   return clip && mic ? { clip: clip.width, mic: mic.width } : null;
 });
 check(!!sizes && sizes.mic > sizes.clip && sizes.mic - sizes.clip < 12,
@@ -103,7 +103,7 @@ check(await page.evaluate(() =>
 'the worker may delete their own pin');
 
 // Attach a small file through the paperclip's input.
-await page.locator('[data-pin-file-input]').setInputFiles({
+await page.locator('[data-pin-note-box] input[type="file"]').setInputFiles({
   name: 'note.txt', mimeType: 'text/plain', buffer: Buffer.from('check the duct size here'),
 });
 await page.waitForTimeout(900);

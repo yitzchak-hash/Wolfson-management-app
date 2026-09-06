@@ -9,7 +9,8 @@ import {
 } from '../../data/driveApi';
 import { DayStretch, workingRun, stretchDays, nextWorkingDay, parseDay } from '../../data/taskDays';
 import { RecordedMemo } from '../../data/voiceMemo';
-import { VoiceRecorderButton, VoiceMemoPlayer } from '../ui/VoiceMemo';
+import { VoiceMemoPlayer } from '../ui/VoiceMemo';
+import { MessageBox, memoFile } from '../ui/MessageBox';
 
 /**
  * The two questions the planner has to ask.
@@ -183,34 +184,17 @@ export function PlannerTaskDialog({
             thing. The paperclip and the voice memo live in its corner, the
             drawer's General-notes idiom. */}
         <Field label="What has to be done">
-          <div className="relative">
-            <textarea value={task} onChange={e => setTask(e.target.value)} autoFocus rows={3}
-              placeholder={`What has to happen at ${job.displayName || 'this job'} — and anything the crew needs to know`}
-              className={`${box} resize-none`} style={{ paddingBottom: 34 }} />
-            <span className="absolute flex items-center gap-1" style={{ insetInlineEnd: 8, bottom: 12 }}>
-              <button
-                onClick={() => fileRef.current?.click()}
-                title="Attach a file"
-                className="flex items-center justify-center w-7 h-7 rounded-lg border border-gray-200
-                           text-gray-500 hover:border-[#1e3a5f] hover:text-[#1e3a5f] bg-white"
-              >
-                <Paperclip size={13} />
-              </button>
-              <VoiceRecorderButton
-                compact
-                title="Record a voice memo"
-                onRecorded={(memo: RecordedMemo) => {
-                  // A memo is an ordinary audio FILE on the same attachment
-                  // path — nothing new to persist or upload.
-                  const ext = memo.blob.type.includes('mp4') ? 'm4a' : 'webm';
-                  setFiles(prev => [...prev, new File(
-                    [memo.blob], `voice-memo-${Date.now()}.${ext}`,
-                    { type: memo.blob.type || 'audio/webm' },
-                  )]);
-                }}
-              />
-            </span>
-          </div>
+          <MessageBox
+            hook="planner-task-box"
+            rows={3}
+            autoFocus
+            value={task}
+            onChange={setTask}
+            placeholder={`What has to happen at ${job.displayName || 'this job'} — and anything the crew needs to know`}
+            onAttach={picked => setFiles(prev => [...prev, ...picked])}
+            onMemo={memo => { setFiles(prev => [...prev, memoFile(memo)]); }}
+            onTranscript={text => setTask(t => t.trim() ? t : text)}
+          />
         </Field>
         <input ref={fileRef} type="file" multiple className="hidden"
           onChange={e => setFiles([...files, ...Array.from(e.target.files ?? [])])} />

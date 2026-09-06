@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { problemStates } from '../data/problems';
 import { useSearchParams } from 'react-router-dom';
 import { useStore, loadAllProjectsTaskData, ensureProjectSnapshot } from '../data/store';
 import { Apartment, CanvasElement, isCountableApartment, binKeyOf, binLabelOf, getStageName, TV_DASH_BOARD } from '../types';
@@ -1484,6 +1485,7 @@ export function TvPresentationPage() {
                       stages={stages}
                       activeStageIds={stageFilter}
                       classFilter="all"
+                      problemStates={problemStates(contractorAssignments)}
                       searchQuery=""
                       selectedBuilding="all"
                       onApartmentClick={j => setOpenJobId(j.id)}

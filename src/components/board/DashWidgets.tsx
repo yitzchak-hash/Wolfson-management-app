@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { problemStates, PROBLEM_FILL } from '../../data/problems';
 import { useNavigate } from 'react-router-dom';
 import {
   Apartment, CanvasElement, Stage, ContractorAssignment, isCountableApartment, getStageName,
@@ -140,6 +141,7 @@ export function ProjectMini({ projectId: chosen, buildingId, onOpen, onOpenUnit,
 }) {
   const projects = useStore(st => st.projects);
   const liveApartments = useStore(st => st.apartments);
+  const liveAssignments = useStore(st => st.contractorAssignments);
   const liveStages = useStore(st => st.stages);
   const currentProjectId = useStore(st => st.currentProjectId);
   const isRtl = useStore(st => st.mainUiStrings.isRtl);
@@ -156,10 +158,13 @@ export function ProjectMini({ projectId: chosen, buildingId, onOpen, onOpenUnit,
         apartments: liveApartments,
         stages: liveStages,
         buildings: [] as { id: string; name?: string }[],
+        assignments: liveAssignments,
       };
     }
     return loadProjectSnapshot(projectId);
-  }, [projectId, currentProjectId, liveApartments, liveStages, snapTick]);
+  }, [projectId, currentProjectId, liveApartments, liveStages, liveAssignments, snapTick]);
+  /** Problems paint over the stage here exactly as on the diagram — one rule. */
+  const problemMap = useMemo(() => problemStates(snap.assignments ?? []), [snap]);
 
   const project = projects.find(p => p.id === projectId);
   const tone = projectColor(projects, projectId);
@@ -310,7 +315,8 @@ export function ProjectMini({ projectId: chosen, buildingId, onOpen, onOpenUnit,
                 }}>
                 {apts.slice(0, 64).map(a => {
                   const st = stageOf(a.currentStageId);
-                  const fill = st?.color ?? '#e2e8f0';
+                  const prob = problemMap.get(a.id);
+                  const fill = prob ? PROBLEM_FILL[prob] : (st?.color ?? '#e2e8f0');
                   return (
                     /**
                      * A cell reads like the real diagram: the number, and the

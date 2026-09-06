@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useStore } from '../data/store';
-import { VoiceRecorderButton, VoiceMemoPlayer } from '../components/ui/VoiceMemo';
-import { RecordedMemo } from '../data/voiceMemo';
+import { VoiceMemoPlayer } from '../components/ui/VoiceMemo';
+import { MessageBox, memoFile } from '../components/ui/MessageBox';
 import { contractorLoad } from '../data/contractorLoad';
 import {
   Plus, Trash2, Save, Edit2, X, CheckCircle2, Clock, Paperclip, ExternalLink, Layers, Filter,
@@ -722,13 +722,25 @@ export function TasksPage() {
             <div className="mt-2">
               <TaskDaysPicker key={addDaysEpoch} start={addForm.dueDate} onDaysChange={setAddDays} />
             </div>
-            <textarea
-              value={addForm.task}
-              onChange={e => setAddForm(f => ({ ...f, task: e.target.value }))}
+            <MessageBox
+              hook="add-task-box"
+              className="mb-3"
               rows={2}
-              data-add-task-text
+              value={addForm.task}
+              onChange={v => setAddForm(f => ({ ...f, task: v }))}
+              lang={s.isRtl ? 'he' : 'en'}
               placeholder={s.taskDescriptionPlaceholder}
-              className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white resize-none mb-3"
+              onAttach={files => files.forEach(f => handleAddFileChosen(f))}
+              onMemo={(memo, dataUrl) => setAddAttachments(prev => [...prev, {
+                id: Math.random().toString(36).slice(2, 11),
+                filename: memoFile(memo).name,
+                mimeType: memo.blob.type || 'audio/webm',
+                dataUrl,
+              }])}
+              onTranscript={(text, dataUrl) => {
+                setAddAttachments(prev => prev.map(a => a.dataUrl === dataUrl ? { ...a, transcript: text } : a));
+                setAddForm(f => f.task.trim() ? f : { ...f, task: text });
+              }}
             />
 
             {/* Attachment previews */}
@@ -738,6 +750,7 @@ export function TasksPage() {
                   <div key={att.id} className="relative">
                     {att.mimeType.startsWith('audio/') ? (
                       <VoiceMemoPlayer src={att.driveUrl || att.dataUrl || ''} className="max-w-[250px]"
+                        transcript={att.transcript} lang={s.isRtl ? 'he' : 'en'} saidLabel={s.isRtl ? 'נאמר' : 'Said'}
                         onDelete={() => setAddAttachments(prev => prev.filter(a => a.id !== att.id))} />
                     ) : att.mimeType.startsWith('image/') ? (
                       <>
@@ -781,27 +794,6 @@ export function TasksPage() {
             )}
 
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => addFileInputRef.current?.click()}
-                className="flex items-center gap-1 px-3 py-2 border border-blue-200 text-blue-600 rounded-lg text-sm hover:bg-blue-100 transition-colors"
-                title="Attach file"
-              >
-                <Paperclip size={14} />
-              </button>
-              <VoiceRecorderButton
-                label="Voice"
-                onRecorded={(memo: RecordedMemo) => {
-                  const ext = memo.blob.type.includes('mp4') ? 'm4a' : 'webm';
-                  const reader = new FileReader();
-                  reader.onload = ev => setAddAttachments(prev => [...prev, {
-                    id: Math.random().toString(36).slice(2, 11),
-                    filename: `voice-memo-${Date.now()}.${ext}`,
-                    mimeType: memo.blob.type || 'audio/webm',
-                    dataUrl: ev.target?.result as string,
-                  }]);
-                  reader.readAsDataURL(memo.blob);
-                }}
-              />
               <button
                 data-add-task-submit
                 onClick={handleAdd}
@@ -985,12 +977,24 @@ export function TasksPage() {
 
                   {isEditing && (
                     <div className="border-t border-gray-100 p-4 bg-gray-50 space-y-3">
-                      <textarea
-                        value={editFields.taskDescription}
-                        onChange={e => setEditFields(f => ({ ...f, taskDescription: e.target.value }))}
+                      <MessageBox
+                        hook="edit-task-box"
                         rows={2}
+                        value={editFields.taskDescription}
+                        onChange={v => setEditFields(f => ({ ...f, taskDescription: v }))}
+                        lang={s.isRtl ? 'he' : 'en'}
                         placeholder={s.taskDescriptionPlaceholder}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 resize-none bg-white"
+                        onAttach={files => files.forEach(f => handleEditFileChosen(f))}
+                        onMemo={(memo, dataUrl) => setEditAttachments(prev => [...prev, {
+                          id: Math.random().toString(36).slice(2, 11),
+                          filename: memoFile(memo).name,
+                          mimeType: memo.blob.type || 'audio/webm',
+                          dataUrl,
+                        }])}
+                        onTranscript={(text, dataUrl) => {
+                          setEditAttachments(prev => prev.map(a => a.dataUrl === dataUrl ? { ...a, transcript: text } : a));
+                          setEditFields(f => f.taskDescription.trim() ? f : { ...f, taskDescription: text });
+                        }}
                       />
                       <div className="grid grid-cols-2 gap-3">
                         <select
@@ -1023,7 +1027,8 @@ export function TasksPage() {
                           {editAttachments.map(att => (
                             <div key={att.id} className="relative group">
                               {att.mimeType?.startsWith('audio/') ? (
-                                <VoiceMemoPlayer src={att.driveUrl || att.dataUrl || ''} className="max-w-[240px]" />
+                                <VoiceMemoPlayer src={att.driveUrl || att.dataUrl || ''} className="max-w-[240px]"
+                                  transcript={att.transcript} lang={s.isRtl ? 'he' : 'en'} saidLabel={s.isRtl ? 'נאמר' : 'Said'} />
                               ) : att.mimeType?.startsWith('image/') ? (
                                 att.driveFileId ? (
                                   <img
@@ -1060,27 +1065,6 @@ export function TasksPage() {
                         </div>
                       )}
                       <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => { editFileInputRef.current?.click(); }}
-                          className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-500 rounded-lg text-xs hover:bg-gray-50 transition-colors"
-                          title="Attach file"
-                        >
-                          <Paperclip size={13} />
-                        </button>
-                        <VoiceRecorderButton
-                          label="Voice"
-                          onRecorded={(memo: RecordedMemo) => {
-                            const ext = memo.blob.type.includes('mp4') ? 'm4a' : 'webm';
-                            const reader = new FileReader();
-                            reader.onload = ev => setEditAttachments(prev => [...prev, {
-                              id: Math.random().toString(36).slice(2, 11),
-                              filename: `voice-memo-${Date.now()}.${ext}`,
-                              mimeType: memo.blob.type || 'audio/webm',
-                              dataUrl: ev.target?.result as string,
-                            }]);
-                            reader.readAsDataURL(memo.blob);
-                          }}
-                        />
                         <button
                           onClick={() => saveEdit(a.id)}
                           className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-xs font-medium hover:bg-[#162d4a]"

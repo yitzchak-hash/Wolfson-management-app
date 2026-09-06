@@ -2,7 +2,7 @@ import {
   UndoState, UndoEntry, emptyUndo, remember, popUndo, popRedo,
 } from './undo';
 import { create } from 'zustand';
-import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BoardSetting, BoardSettingKey, BoardLayout, PlanPin, PlanAnnotation, BoardView, Employee, TimePunch, TimeClockSettings, WorkerLevel, FocusIntent } from '../types';
+import { Apartment, CanvasElement, ActivityLog, Project, Stage, StageNote, StageNoteEntry, StageNoteAttachment, StageNoteVersion, GeneralNoteVersion, User, Building, Contractor, ContractorAssignment, ContractorNote, ContractorPhoto, BackupSnapshot, DataSummary, OfficeNoteFile, BackupFrequency, DriveExportFrequency, BackupLogEntry, ContractorUiStrings, DEFAULT_CONTRACTOR_UI_STRINGS, MainUiStrings, DEFAULT_MAIN_UI_STRINGS, HEBREW_MAIN_UI_STRINGS, BoardSetting, BoardSettingKey, BoardLayout, PlanPin, PlanAnnotation, BoardView, Employee, TimePunch, TimeClockSettings, WorkerLevel, FocusIntent } from '../types';
 import { ReportDef } from './reportModel';
 
 // Always merge stored mainUiStrings ON TOP of the fresh preset so code-added keys
@@ -509,6 +509,13 @@ interface AppState {
 
   upsertStageNote: (apartmentId: string, stageId: string, noteText: string, user: User, attachment?: { filename?: string; mimeType?: string; dataUrl?: string; driveFileId?: string; driveUrl?: string } | null, attachments?: StageNoteAttachment[]) => void;
   getStageNote: (apartmentId: string, stageId: string) => StageNote | undefined;
+  /**
+   * One BULLET onto a stage's notes (the notes tab, owner 2026-09-06). A note
+   * written before the bullets keeps its text as the first bullet — nothing
+   * old is lost or migrated. `noteText` is kept as the flat join, so search
+   * and reports read every bullet as they always read the note.
+   */
+  appendStageNoteEntry: (apartmentId: string, stageId: string, entry: { text: string; attachments?: StageNoteAttachment[] }, user: User) => void;
   getStageNoteVersions: (noteId: string) => StageNoteVersion[];
   getGeneralNoteVersions: (aptId: string) => GeneralNoteVersion[];
 
@@ -1578,6 +1585,41 @@ export const useStore = create<AppState>((set, get) => ({
     persist(get);
   },
 
+  appendStageNoteEntry: (apartmentId, stageId, entry, user) => {
+    const now = new Date().toISOString();
+    const existing = get().stageNotes.find(n => n.apartmentId === apartmentId && n.stageId === stageId);
+    const legacy: StageNoteEntry[] = existing && !existing.entries && (existing.noteText.trim() || existing.attachments?.length)
+      ? [{ id: `${existing.id}-0`, text: existing.noteText, at: existing.updatedAt, by: existing.updatedBy, byName: existing.updatedByName, attachments: existing.attachments }]
+      : [];
+    const next: StageNoteEntry = { id: generateId(), text: entry.text, at: now, by: user.id, byName: user.name, attachments: entry.attachments?.length ? entry.attachments : undefined };
+    const entries = [...(existing?.entries ?? legacy), next];
+    const noteText = entries.map(e => e.text).filter(Boolean).join('\n');
+    const note: StageNote = existing
+      ? { ...existing, entries, noteText, updatedAt: now, updatedBy: user.id, updatedByName: user.name }
+      : { id: generateId(), apartmentId, stageId, noteText, entries, updatedAt: now, updatedBy: user.id, updatedByName: user.name };
+    set(state => ({
+      stageNotes: existing
+        ? state.stageNotes.map(n => (n.id === existing.id ? note : n))
+        : [...state.stageNotes, note],
+    }));
+    persist(get);
+    const noteForFs: StageNote = {
+      ...note,
+      attachmentDataUrl: undefined,
+      attachments: note.attachments?.map(a => ({ ...a, dataUrl: undefined })),
+      entries: note.entries?.map(e => ({ ...e, attachments: e.attachments?.map(a => ({ ...a, dataUrl: undefined })) })),
+    };
+    fsSet(projectCollection(get().currentProjectId, 'stageNotes'), note.id, noteForFs);
+    const apt = get().apartments.find(a => a.id === apartmentId);
+    if (apt) {
+      get().addActivityLog({
+        userId: user.id, userName: user.name, buildingId: apt.buildingId, apartmentId,
+        apartmentNumber: apt.displayName || apt.apartmentNumber || apartmentId,
+        actionType: 'note', fieldChanged: 'stageNote', previousValue: '', newValue: entry.text || (entry.attachments?.[0]?.filename ?? ''),
+        stageId,
+      });
+    }
+  },
   upsertStageNote: (apartmentId, stageId, noteText, user, attachment, attachments) => {
     const now = new Date().toISOString();
     const existing = get().stageNotes.find(n => n.apartmentId === apartmentId && n.stageId === stageId);

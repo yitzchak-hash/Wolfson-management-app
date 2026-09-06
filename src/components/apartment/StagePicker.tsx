@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, Clock, ChevronDown } from 'lucide-react';
+import { Check, Clock, ChevronDown, AlertTriangle } from 'lucide-react';
 import { Stage, MainUiStrings, getStageName } from '../../types';
 import { stageStateOf, cycleMark, StageState } from '../../data/stageMarks';
 
@@ -23,13 +23,20 @@ import { stageStateOf, cycleMark, StageState } from '../../data/stageMarks';
  * overflow scroller, and no z-index saves a child from its parent's
  * scissors — the drawer tooltips' disease, cured the same way.
  */
-export function StagePicker({ stages, currentStageId, stageMarks, onPickStage, onMarks, ui }: {
+export function StagePicker({ stages, currentStageId, stageMarks, onPickStage, onMarks, ui, onReportProblem, problem }: {
   stages: Stage[];
   currentStageId: string;
   stageMarks?: Record<string, 'done' | 'pending'>;
   onPickStage: (stageId: string) => void;
   onMarks: (next: Record<string, 'done' | 'pending'> | undefined) => void;
   ui: MainUiStrings;
+  /**
+   * "Report a problem" — a problem is not a stage, so it does not live in
+   * the list; it lives UNDER it, red and only red (owner, 2026-09-06).
+   */
+  onReportProblem?: () => void;
+  /** The apartment's live problem state — the field wears it over the stage. */
+  problem?: 'open' | 'waiting' | null;
 }) {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -101,11 +108,18 @@ export function StagePicker({ stages, currentStageId, stageMarks, onPickStage, o
         onClick={() => (open ? setOpen(false) : openPanel())}
         className="w-full border border-gray-200 rounded-lg px-2 py-2 text-xs text-left rtl:text-right
                    focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white flex items-center gap-1.5"
-        style={{ borderLeftColor: current?.color, borderLeftWidth: current ? '3px' : undefined }}
+        style={problem
+          ? { borderColor: problem === 'open' ? '#dc2626' : '#f43f5e', backgroundColor: problem === 'open' ? '#fef2f2' : '#fff1f2', borderLeftWidth: '3px' }
+          : { borderLeftColor: current?.color, borderLeftWidth: current ? '3px' : undefined }}
       >
-        {current && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: current.color }} />}
-        <span className="flex-1 min-w-0 truncate">
-          {current ? getStageName(current, !!ui.isRtl) : ui.notStartedOption}
+        {problem
+          ? <span data-stage-problem className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[10px] font-black flex-shrink-0"
+              style={{ backgroundColor: problem === 'open' ? '#dc2626' : '#f43f5e' }}>!</span>
+          : current && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: current.color }} />}
+        <span className="flex-1 min-w-0 truncate" style={problem ? { color: problem === 'open' ? '#b91c1c' : '#be123c', fontWeight: 700 } : undefined}>
+          {problem
+            ? `${problem === 'open' ? ui.problemLabel.toUpperCase() : ui.problemWaiting}${current ? ` · ${ui.problemWas} ${getStageName(current, !!ui.isRtl)}` : ''}`
+            : current ? getStageName(current, !!ui.isRtl) : ui.notStartedOption}
         </span>
         {pendingCount > 0 && (
           <span className="flex items-center gap-0.5 flex-shrink-0 text-[10px] font-bold" style={{ color: '#f97316' }}>
@@ -165,6 +179,16 @@ export function StagePicker({ stages, currentStageId, stageMarks, onPickStage, o
               );
             })}
           </div>
+          {onReportProblem && (
+            <button
+              data-report-problem
+              onClick={() => { setOpen(false); onReportProblem(); }}
+              className="mx-2 mb-1.5 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-extrabold text-white flex-shrink-0"
+              style={{ backgroundColor: '#dc2626' }}
+            >
+              <AlertTriangle size={13} /> {ui.reportProblem}
+            </button>
+          )}
           <div className="px-3 py-1.5 border-t border-gray-100 text-[10px] text-gray-400 flex-shrink-0">
             {ui.stageMarkHint}
           </div>

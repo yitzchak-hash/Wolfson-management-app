@@ -95,7 +95,7 @@ const stubs = async (ctx, calls) => {
   check(await page.locator('[data-general-ws]').count() === 1 && await page.locator('option[value="A1-47"]').count() === 0,
     'ticking it swaps the apartment picker for a workspace select');
   await page.locator('[data-add-contractor]').selectOption('C-ig');
-  await page.fill('[data-add-task-text]', 'AC service wherever the tenants report a fault');
+  await page.fill('[data-add-task-box] [data-composer-input]', 'AC service wherever the tenants report a fault');
   await page.locator('input[type="date"]').first().fill(today);
   await page.waitForTimeout(200);
   await page.locator('[data-add-task-submit]').click();

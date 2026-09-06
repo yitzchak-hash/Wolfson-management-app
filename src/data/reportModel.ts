@@ -1,5 +1,5 @@
 import {
-  Apartment, Building, Contractor, ContractorAssignment, Stage, StageNote, ActivityLog,
+  Apartment, Building, Contractor, ContractorAssignment, Stage, StageNote, ActivityLog, ContractorPhoto,
   aptLabel, isCountableApartment, getStageName,
 } from '../types';
 
@@ -39,6 +39,8 @@ export interface ReportData {
   buildings: Building[];
   stageNotes: StageNote[];
   activity: ActivityLog[];
+  /** The pictures workers sent — the Problems subject counts and prints them. */
+  photos?: ContractorPhoto[];
   isRtl: boolean;
   /**
    * Today, as yyyy-MM-dd. Passed in, never read from a clock in here — a report
@@ -70,7 +72,7 @@ export interface ReportField {
   sum?: boolean;
 }
 
-export type SubjectId = 'jobs' | 'tasks' | 'workers' | 'notes' | 'activity';
+export type SubjectId = 'jobs' | 'tasks' | 'workers' | 'notes' | 'activity' | 'problems';
 
 export interface ReportSubject {
   id: SubjectId;
@@ -181,6 +183,9 @@ function jobFields(prefix: string, group: string, pick: (row: any, d: ReportData
 
   return [
     f('name', 'Job', 'text', j => aptLabel(j) || j.displayName || ''),
+    f('tipus', 'Tipus', 'text', j => j.tipus ?? '',
+      d => [...new Set(d.apartments.map(a => a.tipus).filter((t): t is string => !!t))].sort()
+        .map(t => ({ value: t, label: t }))),
     f('building', 'Building', 'text', j => j.buildingId),
     f('floor', 'Floor', 'number', j => j.floor),
     f('stage', 'Stage', 'text', (j, d) => stageText(d, j.currentStageId),
@@ -312,6 +317,84 @@ const TASKS: ReportSubject = {
   ],
 };
 
+/**
+ * PROBLEMS (owner, 2026-09-06): one row per problem raised — the morning's
+ * list when grouped by worker or by status. Pictures ride the row as a count
+ * here; the page prints the thumbnails when asked ("with pictures").
+ */
+export const problemStatusText = (t: ContractorAssignment): string => {
+  const st = t.problem?.status ?? 'open';
+  if (t.completedAt || st === 'solved') return 'Solved';
+  return st === 'waiting' ? 'Waiting for approval' : st === 'returned' ? 'Sent back' : 'Open';
+};
+export const problemPhotos = (d: ReportData, t: ContractorAssignment): ContractorPhoto[] =>
+  (d.photos ?? []).filter(p => p.assignmentId === t.id && (p.fileType ?? 'image') === 'image');
+
+const PROBLEMS: ReportSubject = {
+  id: 'problems',
+  label: 'Problems',
+  noun: 'problem', nounPlural: 'problems',
+  blurb: 'One row per problem raised on an apartment: who fixes it, the deadline, where it stands, and the pictures sent back.',
+  rows: d => liveAssignments(d).filter(t => !!t.problem),
+  fields: [
+    {
+      key: 'what', label: 'Problem', type: 'text', group: 'The problem',
+      get: (t: ContractorAssignment) => t.taskDescription,
+    },
+    {
+      key: 'status', label: 'Status', type: 'text', group: 'The problem',
+      get: (t: ContractorAssignment) => problemStatusText(t),
+      choices: () => ['Open', 'Waiting for approval', 'Sent back', 'Solved'].map(v => ({ value: v, label: v })),
+    },
+    {
+      key: 'raised', label: 'Raised', type: 'date', group: 'The problem',
+      get: (t: ContractorAssignment) => dateOnly(t.createdAt),
+    },
+    {
+      key: 'raisedBy', label: 'Raised by', type: 'text', group: 'The problem',
+      get: (t: ContractorAssignment) => t.createdByName ?? '',
+    },
+    {
+      key: 'deadline', label: 'Deadline', type: 'date', group: 'The problem',
+      get: (t: ContractorAssignment) => t.dueDate ?? '',
+    },
+    {
+      key: 'daysLate', sum: true, label: 'Days late', type: 'number', group: 'The problem',
+      get: (t: ContractorAssignment, d) => {
+        if (!t.dueDate) return 0;
+        const end = t.problem?.closedAt ? dateOnly(t.problem.closedAt) : t.completedAt ? dateOnly(t.completedAt) : d.today;
+        return Math.max(0, daysBetween(t.dueDate, end));
+      },
+    },
+    {
+      key: 'closed', label: 'Closed by the worker', type: 'date', group: 'The problem',
+      get: (t: ContractorAssignment) => dateOnly(t.problem?.closedAt ?? null),
+    },
+    {
+      key: 'approved', label: 'Approved', type: 'date', group: 'The problem',
+      get: (t: ContractorAssignment) => dateOnly(t.problem?.approvedAt ?? null),
+    },
+    {
+      key: 'approvedBy', label: 'Approved by', type: 'text', group: 'The problem',
+      get: (t: ContractorAssignment) => t.problem?.approvedBy ?? '',
+    },
+    {
+      key: 'photosRequired', label: 'Pictures required', type: 'bool', group: 'The problem',
+      get: (t: ContractorAssignment) => (t.problem?.photosRequired ? 'Yes' : 'No'),
+    },
+    {
+      key: 'pictures', sum: true, label: 'Pictures sent', type: 'number', group: 'The problem',
+      get: (t: ContractorAssignment, d) => problemPhotos(d, t).length,
+    },
+    {
+      key: 'worker', label: 'Worker', type: 'text', group: 'The worker',
+      get: (t: ContractorAssignment, d) => workerOf(d, t.contractorId)?.name ?? '',
+      choices: d => d.contractors.filter(c => c.active).map(c => ({ value: c.name, label: c.name })),
+    },
+    ...jobFields('job.', 'The job', (t: ContractorAssignment, d) => jobOf(d, t.apartmentId)),
+  ],
+};
+
 const WORKERS: ReportSubject = {
   id: 'workers',
   label: 'Workers',
@@ -399,7 +482,7 @@ const ACTIVITY: ReportSubject = {
   ],
 };
 
-export const SUBJECTS: ReportSubject[] = [JOBS, TASKS, WORKERS, NOTES, ACTIVITY];
+export const SUBJECTS: ReportSubject[] = [JOBS, TASKS, PROBLEMS, WORKERS, NOTES, ACTIVITY];
 
 export const subjectOf = (id: SubjectId): ReportSubject =>
   SUBJECTS.find(s => s.id === id) ?? JOBS;

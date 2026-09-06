@@ -5,9 +5,9 @@ import {
 } from 'lucide-react';
 import { Apartment, ContractorCategory, TaskAttachment, TaskPriority } from '../../types';
 import { useStore } from '../../data/store';
-import { VoiceRecorderButton, VoiceMemoPlayer } from '../ui/VoiceMemo';
+import { VoiceMemoPlayer } from '../ui/VoiceMemo';
+import { MessageBox, memoFile } from '../ui/MessageBox';
 import { TaskDaysPicker, daysFields } from '../tasks/TaskDaysPicker';
-import { RecordedMemo } from '../../data/voiceMemo';
 import { contractorLoad } from '../../data/contractorLoad';
 import {
   isUploadBackendConfigured, extractFolderId,
@@ -120,8 +120,7 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
   }
 
   // ── Attachment file picker ────────────────────────────────────────────────
-  async function handleFilePick(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
+  async function handleFilePick(files: File[]) {
     for (const file of files) {
       const id = Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
       await new Promise<void>(resolve => {
@@ -417,44 +416,35 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
 
                     {/* Description */}
                     <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs font-medium text-gray-500">{s.taskDescRequired}</label>
-                        <button
-                          type="button"
-                          onClick={() => attachRef.current?.click()}
-                          className="flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium border border-dashed border-gray-300 text-gray-500 rounded-lg hover:border-[#1e3a5f]/40 hover:text-[#1e3a5f] transition-colors"
-                        >
-                          <Paperclip size={10} /> {s.attachBtn}
-                        </button>
-                        {/* The bulk path takes a memo too — one recording sent
-                            to every apartment in the batch. */}
-                        <VoiceRecorderButton
-                          label="Voice"
-                          onRecorded={(memo: RecordedMemo) => {
-                            const ext = memo.blob.type.includes('mp4') ? 'm4a' : 'webm';
-                            const reader = new FileReader();
-                            reader.onload = ev => setAttachments(prev => [...prev, {
-                              id: Math.random().toString(36).slice(2, 11),
-                              filename: `voice-memo-${Date.now()}.${ext}`,
-                              mimeType: memo.blob.type || 'audio/webm',
-                              dataUrl: ev.target?.result as string,
-                            }]);
-                            reader.readAsDataURL(memo.blob);
-                          }}
-                        />
-                      </div>
-                      <textarea
-                        value={task}
-                        onChange={e => setTask(e.target.value)}
+                      <label className="text-xs font-medium text-gray-500 block mb-1">{s.taskDescRequired}</label>
+                      <MessageBox
+                        hook="bulk-task-box"
                         rows={3}
+                        value={task}
+                        onChange={setTask}
+                        lang={s.isRtl ? 'he' : 'en'}
                         placeholder={s.describeWorkPlaceholder}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 resize-none"
+                        onAttach={files => handleFilePick(files)}
+                        onMemo={(memo, dataUrl) => {
+                          // The bulk path takes a memo too — one recording sent to every apartment in the batch.
+                          setAttachments(prev => [...prev, {
+                            id: Math.random().toString(36).slice(2, 11),
+                            filename: memoFile(memo).name,
+                            mimeType: memo.blob.type || 'audio/webm',
+                            dataUrl,
+                          }]);
+                        }}
+                        onTranscript={(text, dataUrl) => {
+                          setAttachments(prev => prev.map(a => a.dataUrl === dataUrl ? { ...a, transcript: text } : a));
+                          setTask(t => t.trim() ? t : text);
+                        }}
                       />
                       {attachments.length > 0 && (
                         <div className="mt-1.5 flex flex-wrap gap-1.5">
                           {attachments.map(att => (
                             att.mimeType.startsWith('audio/') ? (
                               <VoiceMemoPlayer key={att.id} src={att.dataUrl || ''} className="max-w-[250px]"
+                                transcript={att.transcript} lang={s.isRtl ? 'he' : 'en'} saidLabel={s.isRtl ? 'נאמר' : 'Said'}
                                 onDelete={() => removeAttachment(att.id)} />
                             ) : (
                             <div
@@ -497,7 +487,7 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                       multiple
                       accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx"
                       className="hidden"
-                      onChange={handleFilePick}
+                      onChange={e => { const files = [...(e.target.files ?? [])]; e.target.value = ''; void handleFilePick(files); }}
                     />
 
                     {/* Stage + Due date */}

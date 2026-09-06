@@ -109,7 +109,7 @@ check(await page.locator('[data-close-now]').isDisabled(),
 check((await page.locator('[data-close-count]').innerText()).trim() === '0/3',
   'the count reads 0/3');
 // The media input is the one that also takes video.
-await page.locator('input[type="file"][accept*="video"]').setInputFiles(files(3));
+await page.locator('input[type="file"][accept*="video"][accept*=".zip"]').setInputFiles(files(3));
 await page.waitForTimeout(2500);
 check((await page.locator('[data-close-count]').innerText()).trim() === '3/3',
   'three pictures in — the count follows', await page.locator('[data-close-count]').innerText());
