@@ -94,17 +94,19 @@ check(wantDays.every(w => editor.readout.includes(w)),
 // ── the stage names the worker who is actually on it ───────────────────────
 await page.locator('.drawer-panel button:has-text("Notes")').first().click();
 await page.waitForTimeout(1200);
+// The worker sits in a small dropdown bubble beside CURRENT (owner, 2026-09-06),
+// so the row's TEXT no longer carries the name — read the pill's chosen option.
 const stageRow = await page.evaluate(() => {
-  const rows = [...document.querySelectorAll('.drawer-panel .border.border-gray-200.rounded-lg')];
-  return rows.map(r => (r.textContent || '').replace(/\s+/g, ' ').slice(0, 70));
+  const pills = [...document.querySelectorAll('.drawer-panel [data-stage-worker]')];
+  return pills.map(p => p.selectedOptions?.[0]?.textContent?.trim() ?? '');
 });
 const worker = await page.evaluate(() => {
   const d = JSON.parse(localStorage.getItem('wolfson_app_data') || '{}');
   return (d.contractors || [])[0]?.name ?? '';
 });
 check(stageRow.some(r => r.includes(worker)),
-  `the stage the job is at names its worker (${worker}) instead of none`,
-  stageRow.find(r => r.includes(worker)) || stageRow.slice(0, 2).join(' | '));
+  `the stage the job is at names its worker (${worker}) in its bubble instead of none`,
+  stageRow.find(r => r.includes(worker)) || stageRow.slice(0, 3).join(' | '));
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASS');
 await browser.close();
