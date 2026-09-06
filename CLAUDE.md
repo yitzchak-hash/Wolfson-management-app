@@ -7236,3 +7236,17 @@ in the init script, never patched in.
   description and every other bubble is an office note in order. Hook:
   `data-problem-thread`. Gallery/probe rule: with text in the box the big mic
   is the Send arrow — press Enter first, then record.
+
+## The Active jobs widget (`active-jobs`, insightWidgets.tsx)
+The mirror of Gone quiet (owner, 2026-09-06): every job that anything
+HAPPENED on inside the window (default 30 days, `data.days` in the pencil,
+1–365) — a task made or closed, a message or memo, a photo from site, a
+stage moved, a note, the record edited — newest first, each row saying
+what its last activity was and how long ago. **Opening a job is not
+activity**: the `opened` history entries are looks, not work, and are
+skipped. Counts go through `liveJobs`/`liveAssignments` like every other
+insight widget; the count is a button into `ctx.showList`. Registered in
+all five places (registry, WIDGET_FIELDS, WIDGET_PREVIEW `{days:30}`, SHELF
+"Finding and following", TV_ALLOWED) and at the top of RECENT. Harness:
+`scratchpad/activejobs-probe.mjs` (9 checks).
+

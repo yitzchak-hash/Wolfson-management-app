@@ -1,11 +1,11 @@
 import React from 'react';
 import {
   CalendarOff, EyeOff, UserX, TrendingUp, MapPinned, FileWarning,
-  Layers3, CopyCheck, SkipForward,
+  Layers3, CopyCheck, SkipForward, Activity,
 } from 'lucide-react';
 import {
   Apartment, CanvasElement, ContractorAssignment,
-  isCountableApartment, personColor, getStageName,
+  isCountableApartment, personColor, getStageName, relativeTime,
 } from '../types';
 import { WidgetCtx, WidgetDef, Frame, d } from './widgets';
 import { MiniJob } from '../components/board/MiniJob';
@@ -246,6 +246,77 @@ function OpenSnags({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * 10 · Active jobs (owner, 2026-09-06: "jobs that had activity in the last
+ * 30 days").
+ *
+ * The mirror of Gone quiet: every job that anything HAPPENED on inside the
+ * window — a task made or closed, a message or a memo, a photo back from
+ * site, a stage moved, a note written, the record edited — newest first,
+ * each saying what its last activity was and how long ago. Merely OPENING a
+ * job is not activity: the "opened" history entries are looks, not work.
+ * The count opens the same list through the host, the standing rule.
+ */
+function ActiveJobs({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
+  const storeNotes = useStore(s => s.contractorNotes);
+  const notes = c.notes ?? storeNotes;
+  const days = Math.max(1, Math.min(365, Number(d(el).days) || 30));
+  const cut = new Date(Date.now() - days * dayMs).toISOString();
+
+  // The latest thing that happened on each job, and what it was.
+  const last = new Map<string, { at: string; what: string }>();
+  const mark = (jobId: string | undefined, at: string | undefined | null, what: string) => {
+    if (!jobId || !at || at < cut) return;
+    const cur = last.get(jobId);
+    if (!cur || at > cur.at) last.set(jobId, { at, what });
+  };
+  const jobs = liveJobs(c);
+  for (const j of jobs) mark(j.id, j.contentUpdatedAt, 'edited');
+  for (const a of liveAssignments(c)) {
+    mark(a.apartmentId, a.createdAt, 'new task');
+    mark(a.apartmentId, a.completedAt, a.problem ? 'problem closed' : 'task closed');
+  }
+  for (const n of notes) mark(n.apartmentId, n.createdAt, n.authorType === 'contractor' ? 'message from site' : 'message');
+  for (const p of c.photos) mark(p.apartmentId, p.uploadedAt, 'photo from site');
+  for (const l of c.logs) {
+    if (l.actionType === 'opened') continue;
+    mark(l.apartmentId, l.createdAt,
+      l.fieldChanged === 'currentStageId' ? 'stage moved'
+        : l.fieldChanged === 'generalNotes' ? 'note'
+        : l.fieldChanged === 'problem' ? 'problem raised'
+        : l.actionType === 'contractor_assigned' ? 'new task' : 'updated');
+  }
+  const list = jobs
+    .filter(j => last.has(j.id))
+    .sort((a, b) => last.get(b.id)!.at.localeCompare(last.get(a.id)!.at));
+  const title = `Active · last ${days} days`;
+
+  return (
+    <Frame title={title} icon={Activity} tone="#16a34a">
+      <div className="h-full flex flex-col min-h-0">
+        <div className="flex items-baseline gap-1.5 flex-shrink-0 mb-1">
+          {c.showList
+            ? <button type="button" data-no-drag data-el-action data-active-count
+                onClick={() => c.showList!(title, list.map(j => j.id))}
+                className="text-[22px] font-black leading-none text-slate-800 hover:text-[#1e3a5f]">{list.length}</button>
+            : <span className="text-[22px] font-black leading-none text-slate-800" data-active-count>{list.length}</span>}
+          <span className="text-[9.5px] text-gray-400">of {jobs.length} jobs had something happen</span>
+        </div>
+        <Scroll>
+          {list.length === 0 && <Empty>Nothing happened on any job in the last {days} days</Empty>}
+          {list.map(j => {
+            const e = last.get(j.id)!;
+            return (
+              <MiniJob key={j.id} job={j} stages={c.stages} assignments={c.assignments} onOpen={c.openJob} rtl={c.isRtl}
+                sub={`${e.what} · ${relativeTime(e.at)}`} />
+            );
+          })}
+        </Scroll>
+      </div>
+    </Frame>
+  );
+}
+
 export const INSIGHT_WIDGETS: WidgetDef[] = [
   // ── 2 · No date on it ─────────────────────────────────────────────────────
   {
@@ -297,6 +368,15 @@ export const INSIGHT_WIDGETS: WidgetDef[] = [
     blurb: 'Contractors sitting on an open task with no photo and no word back.',
     data: { days: 7 },
     render: (el, c) => <GoneQuiet el={el} c={c} />,
+  },
+
+  // ── 10 · Active jobs ──────────────────────────────────────────────────────
+  {
+    id: 'active-jobs', rank: 9, name: 'Active jobs', category: 'live',
+    icon: Activity, w: 240, h: 200,
+    blurb: 'Every job something happened on in the last 30 days — a task, a message, a photo, a stage — newest first.',
+    data: { days: 30 },
+    render: (el, c) => <ActiveJobs el={el} c={c} />,
   },
 
   // ── 4 · Nobody's booked ───────────────────────────────────────────────────

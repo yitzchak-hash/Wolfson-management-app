@@ -64,6 +64,7 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ The memo player draws a real waveform from the audio, a drag-to-scrub knob and the true length; the words and the sign-off sit inside the card (2026-09-06)
 - ☑ The message box grows with the words, the clip and the big mic sit on its bottom line, a grey "sending the recording…" bubble stands while a memo uploads (2026-09-06)
 - ☑ A memo or a picture in a thread never prints its filename as the message (2026-09-06)
+- ☑ Widget: Active jobs — every job with activity in the last N days (default 30), newest first, what and how long ago; count opens the list (2026-09-06)
 - ☑ Notes tab: the worker is a small bubble beside CURRENT; "Add notes for X" is the grey placeholder (2026-09-06)
 - ☑ Worker's month: Saturday is a slim grey column (2026-09-06)
 - ☑ General notes drawn the notes-tab way: bullets with a sign-off, memos and files as note cards in the same list, one Send-mode box at the bottom, hover trash per line; `generalNotes` stays the flat text for search/reports/print (2026-09-06)

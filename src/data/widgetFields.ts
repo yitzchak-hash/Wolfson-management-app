@@ -259,6 +259,13 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
       hint: 'Counted from the day the task was handed out.',
     },
   ],
+  'active-jobs': [
+    title(),
+    {
+      key: 'days', label: 'Had activity in the last… (days)', kind: 'number', min: 1, max: 365,
+      hint: 'A task made or closed, a message, a photo, a stage moved, a note. Opening a job does not count.',
+    },
+  ],
   'nobody-booked': [
     title(),
     {
@@ -1059,6 +1066,7 @@ export const WIDGET_PREVIEW: Record<string, Record<string, unknown>> = {
   // the shape of the answer rather than an empty "nothing outstanding" — which
   // on a shelf is indistinguishable from a widget that does not work.
   'gone-quiet': { days: 0 },
+  'active-jobs': { days: 30 },
   'backlog-trend': { weeks: 8 },
   'floor-by-floor': {},
   'no-date': {},

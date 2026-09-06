@@ -576,7 +576,7 @@ export function WallClock({ hebrew = true, holiday = true, tz = 'Asia/Jerusalem'
 export const TV_ALLOWED = new Set([
   ...TV_WIDGETS.map(w => w.id),
   // The survivors of the TV merges — the same content the wall always had.
-  'overdue-list', 'recent-jobs', 'activity-feed', 'recent-photos', 'calendar-mini',
+  'overdue-list', 'recent-jobs', 'active-jobs', 'activity-feed', 'recent-photos', 'calendar-mini',
   'stage-legend', 'due-today', 'team-today', 'count-by-stage', 'project-glance',
   'nobody-booked', 'no-plan',
   'w-title', 'banner', 'quote', 'divider', 'legend', 'photo',

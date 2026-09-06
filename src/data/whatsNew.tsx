@@ -51,6 +51,14 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'tap',
       },
       {
+        title: 'Active jobs widget',
+        body: 'A new card in the widget store: every job something happened on '
+          + 'in the last 30 days — a task made or closed, a message, a photo, a '
+          + 'stage moved, a note — newest first, each saying what and how long '
+          + 'ago. The number of days is in the pencil; the count opens the list.',
+        demo: 'list',
+      },
+      {
         title: 'One key for words and languages',
         body: 'Recordings are written down and messages are read in each person\'s '
           + 'language with a single OpenAI key on the server. An Anthropic key is '

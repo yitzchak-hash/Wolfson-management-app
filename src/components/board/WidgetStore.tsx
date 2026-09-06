@@ -39,7 +39,7 @@ const SIZE_KEY = 'widget_store_scale';
  * being news.
  */
 const RECENT: string[] = [
-  'notes-board',
+  'active-jobs', 'notes-board',
   'open-snags', 'no-date', 'gone-quiet', 'nobody-booked', 'backlog-trend',
   'no-plan', 'floor-by-floor', 'duplicates', 'skipped-stage',
   'map', 'weather', 'tap-in', 'shabbat', 'world-clocks',
@@ -96,6 +96,7 @@ const SHELF: Record<string, string> = {
   'search-tile': 'Finding and following',
   'file-tray': 'Your own lists and tools',
   'job-list': 'Finding and following', 'recent-jobs': 'Finding and following',
+  'active-jobs': 'Finding and following',
   'activity-feed': 'Finding and following',
   // Who is where, and the week's plan.
   rota: 'People and the week', 'week-planner': 'People and the week',
