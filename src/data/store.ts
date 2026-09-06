@@ -585,8 +585,18 @@ interface AppState {
   updateMainUiStrings: (s: MainUiStrings) => void;
 
   // Office note files
-  addOfficeNoteFile: (f: Omit<OfficeNoteFile, 'id' | 'uploadedAt'>) => void;
+  /** Returns the new record's id, so a memo's transcript can be written onto it when it arrives. */
+  addOfficeNoteFile: (f: Omit<OfficeNoteFile, 'id' | 'uploadedAt'>) => string;
+  updateOfficeNoteFile: (id: string, changes: Partial<OfficeNoteFile>) => void;
   deleteOfficeNoteFile: (id: string) => void;
+  /**
+   * A general note as a BULLET: appends an entry (converting the legacy
+   * `generalNotes` text into entry one on the first append) and rewrites
+   * `generalNotes` as the flat join, through updateApartment so the version
+   * history, the sync and the activity log all see it as before.
+   */
+  appendApartmentNote: (apartmentId: string, text: string, user: User) => void;
+  removeApartmentNote: (apartmentId: string, entryId: string, user: User) => void;
 
   // Backup / restore
   exportData: () => string;
@@ -1206,7 +1216,12 @@ export const useStore = create<AppState>((set, get) => ({
       if (JSON.stringify(prev) !== JSON.stringify(next)) {
         const stages = get().stages;
         const prevLabel = field === 'currentStageId' ? (stages.find(s => s.id === String(prev))?.name ?? 'Not started') : String(prev ?? '');
-        const nextLabel = field === 'currentStageId' ? (stages.find(s => s.id === String(next))?.name ?? 'Not started') : String(next ?? '');
+        let nextLabel = field === 'currentStageId' ? (stages.find(s => s.id === String(next))?.name ?? 'Not started') : String(next ?? '');
+        // General notes are bullets now: an append logs the LINE that was
+        // added, not the whole growing list over again.
+        if (field === 'generalNotes' && typeof next === 'string' && typeof prev === 'string' && prev && next.startsWith(prev)) {
+          nextLabel = next.slice(prev.length).replace(/^\n/, '');
+        }
         get().addActivityLog({
           userId: user.id,
           userName: user.name,
@@ -2555,6 +2570,37 @@ export const useStore = create<AppState>((set, get) => ({
     persist(get);
     // dataUrl stays local; only metadata goes to Firestore
     fsSet(projectCollection(get().currentProjectId, 'officeNoteFiles'), f.id, { ...f, dataUrl: '' });
+    return f.id;
+  },
+
+  updateOfficeNoteFile: (id, changes) => {
+    const existing = get().officeNoteFiles.find(f => f.id === id);
+    if (!existing) return;
+    const next = { ...existing, ...changes };
+    set(state => ({ officeNoteFiles: state.officeNoteFiles.map(f => (f.id === id ? next : f)) }));
+    persist(get);
+    fsSet(projectCollection(get().currentProjectId, 'officeNoteFiles'), id, { ...next, dataUrl: '' });
+  },
+
+  appendApartmentNote: (apartmentId, text, user) => {
+    const apt = get().apartments.find(a => a.id === apartmentId);
+    if (!apt || !text.trim()) return;
+    const now = new Date().toISOString();
+    const legacy: StageNoteEntry[] = !apt.noteEntries && apt.generalNotes.trim()
+      ? [{ id: `${apt.id}-note-0`, text: apt.generalNotes, at: apt.updatedAt ?? now, by: apt.updatedBy ?? '', byName: apt.updatedByName ?? 'Office' }]
+      : [];
+    const entries = [...(apt.noteEntries ?? legacy), { id: generateId(), text: text.trim(), at: now, by: user.id, byName: user.name }];
+    get().updateApartment(apartmentId, { noteEntries: entries, generalNotes: entries.map(e => e.text).join('\n') }, user);
+  },
+
+  removeApartmentNote: (apartmentId, entryId, user) => {
+    const apt = get().apartments.find(a => a.id === apartmentId);
+    if (!apt) return;
+    const legacy: StageNoteEntry[] = !apt.noteEntries && apt.generalNotes.trim()
+      ? [{ id: `${apt.id}-note-0`, text: apt.generalNotes, at: apt.updatedAt ?? '', by: apt.updatedBy ?? '', byName: apt.updatedByName ?? 'Office' }]
+      : [];
+    const entries = (apt.noteEntries ?? legacy).filter(e => e.id !== entryId);
+    get().updateApartment(apartmentId, { noteEntries: entries, generalNotes: entries.map(e => e.text).join('\n') }, user);
   },
 
   deleteOfficeNoteFile: (id) => {

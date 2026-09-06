@@ -30,6 +30,36 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-12-16',
+    title: 'General notes are notes, and a problem starts as a conversation',
+    items: [
+      {
+        title: 'General notes, the notes-tab way',
+        body: 'The big empty box is gone. General notes are bullets now — each line '
+          + 'with who wrote it and when, a recording or a file as a note card in the '
+          + 'same list — and one message box at the bottom: type, dictate or record, '
+          + 'press Send. A hover trash takes a line out. Search, reports and the '
+          + 'printed sheet read the same notes as before.',
+        demo: 'list',
+      },
+      {
+        title: 'What is wrong — as the worker will see it',
+        body: 'Reporting a problem now writes straight into the task\'s conversation: '
+          + 'every line you send, every recording and picture is a bubble in the same '
+          + 'grey panel the worker gets on his phone, with the same box under it. The '
+          + 'first line is the task; the rest are its first messages.',
+        demo: 'tap',
+      },
+      {
+        title: 'One key for words and languages',
+        body: 'Recordings are written down and messages are read in each person\'s '
+          + 'language with a single OpenAI key on the server. An Anthropic key is '
+          + 'optional — used for the translating when present.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2026-12-15',
     title: 'Problems, tipus, and notes that read like notes',
     items: [

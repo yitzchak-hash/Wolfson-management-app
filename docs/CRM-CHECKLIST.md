@@ -11,7 +11,7 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 
 ## The worker's phone (portal)
 - ☑ Three languages: English, Hebrew, Russian — set from the office or the worker's own gear (2026-09-03)
-- ☑ Messages and task text read in the worker's language, Show original one tap away (2026-09-03; needs `ANTHROPIC_API_KEY`)
+- ☑ Messages and task text read in the worker's language, Show original one tap away (2026-09-03; needs `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`)
 - ☑ Logo centred and larger; bell and gear on the right; print button gone; language inside the gear (2026-09-03)
 - ☑ Workspace chip row gone; every workspace's tasks in one list, each card tagged with its workspace (2026-09-03)
 - ☑ My Tasks opens on Today; an empty Today offers every day in one press (2026-09-03)
@@ -66,7 +66,9 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ A memo or a picture in a thread never prints its filename as the message (2026-09-06)
 - ☑ Notes tab: the worker is a small bubble beside CURRENT; "Add notes for X" is the grey placeholder (2026-09-06)
 - ☑ Worker's month: Saturday is a slim grey column (2026-09-06)
-- ☐ Transcription needs `OPENAI_API_KEY` in Vercel; reading a memo in the worker's own language needs `ANTHROPIC_API_KEY` too — until both are set, recordings play without words
+- ☑ General notes drawn the notes-tab way: bullets with a sign-off, memos and files as note cards in the same list, one Send-mode box at the bottom, hover trash per line; `generalNotes` stays the flat text for search/reports/print (2026-09-06)
+- ☑ The problem form's "what is wrong" IS the task thread — sent lines, memos and pictures as bubbles with the composer inside the panel; the first line is the task, the rest its first office messages (2026-09-06)
+- ☐ Transcription AND translation run on `OPENAI_API_KEY` alone in Vercel (owner's ask, 2026-09-06); `ANTHROPIC_API_KEY` is optional and used first for translating when present — until the OpenAI key is set, recordings play without words
 
 ## Messages, voice and language
 - ☑ Voice memo on every note (thread, stage notes, office notes, task attachments, board notes, pins)
@@ -82,7 +84,7 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 
 ## Keys and services (Vercel environment)
 - ☑ `GOOGLE_SERVICE_ACCOUNT_JSON`, `API_KEY` — Drive, sheets, plan filing
-- ☑ `ANTHROPIC_API_KEY` — translation (optional; originals show without it) — *to be added*
-- ☑ `OPENAI_API_KEY` — transcription (optional; recordings play without words) — *to be added in Vercel*
+- ☑ `OPENAI_API_KEY` — transcription AND translation (optional; recordings play without words and originals show without it) — *to be added in Vercel*
+- ☑ `ANTHROPIC_API_KEY` — optional; when present it does the translating instead (2026-09-06)
 - ☑ Firebase Firestore + Storage; optional Realtime Database URL for presence
 - Reminder: at most 12 files under `/api` (Vercel Hobby) — a new route folds into an existing file

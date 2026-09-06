@@ -584,7 +584,22 @@ export interface Apartment {
   currentStageId: string | null;
   classification: Classification;
   shinuiDetails: null; // kept for data compat, form removed from UI
+  /**
+   * The office's general notes as ONE TEXT — search, reports, the printed
+   * sheet and the dashboard's "with notes" count all read this string, and
+   * they keep reading it: it is the flat join of `noteEntries`.
+   */
   generalNotes: string;
+  /**
+   * The same notes as BULLETS (owner, 2026-09-06: "in the general notes I
+   * don't like the way that design looks at all" — the notes tab's manner
+   * instead: one line per note with who wrote it and when, memos and files
+   * as note cards, one composer at the bottom). Absent on every apartment
+   * written before this; the first append converts the legacy text into
+   * entry one, exactly as the stage notes did. Rides inside `apartments`,
+   * so persist / export / import / sync need no new key.
+   */
+  noteEntries?: StageNoteEntry[];
   isUnnamed: boolean;
   mergedWith?: string; // id of partner apartment when buyer physically connected two units
 
@@ -1353,6 +1368,8 @@ export interface OfficeNoteFile {
   uploadedByName: string;
   driveFileId?: string;
   driveUrl?: string;
+  /** A memo's words, once the server has them — kept on the record so every device reads them at once. */
+  transcript?: string;
 }
 
 export type BackupFrequency = 'activity' | 'daily' | 'weekly' | 'monthly';

@@ -7209,3 +7209,30 @@ in the init script, never patched in.
   `gallery-style.css` / `gallery-loader.js` / `gallery-pins.json` (pins are
   carried forward with `done` + `note`, never dropped). The portal's Calendar
   tab is permission-gated — seed `seeSchedule` or the shot is the task list.
+
+## The same day, second pass (the owner's gallery review)
+- **One key.** The translate branch in `api/geocode.js` runs on `OPENAI_API_KEY`
+  alone (a chat model, JSON answer, same cache) when no `ANTHROPIC_API_KEY` is
+  set; an Anthropic key still wins when present. The transcription model only
+  writes down what was said — OpenAI's own translation endpoint goes to
+  English only — so the reader's language is a second call, on the same key.
+- **General notes are BULLETS** (`Apartment.noteEntries`, riding `apartments`
+  — no new store key; `generalNotes` stays the flat join, so search, reports,
+  the printed sheet and the dashboard's "with notes" count read what they
+  always read). `appendApartmentNote` / `removeApartmentNote` convert the
+  legacy text into entry one on the first append (the stage-notes precedent)
+  and write through `updateApartment`, so the version history and the
+  activity log still fire — the log carries only the LINE that was appended,
+  not the growing join. Memos and files stay `officeNoteFiles`, drawn into the
+  same list by time; `OfficeNoteFile.transcript` keeps a memo's words and
+  `updateOfficeNoteFile` writes them. The drawer's `autoSave` no longer
+  carries `generalNotes` at all — the composer sends, it never edits a field.
+  Hooks: `data-general-bullets` / `data-general-bullet` / `data-note-remove`.
+- **The problem form's "what is wrong" IS a `TaskThread`** on synthetic
+  records (`draft` assignment, one `ContractorNote` per bubble) with the
+  MessageBox as its footer in SEND mode: Enter sends a line as an office
+  bubble; a memo or a picture lands as a bubble. On save the FIRST text
+  bubble (else the box's draft, else the first memo's words) is the task's
+  description and every other bubble is an office note in order. Hook:
+  `data-problem-thread`. Gallery/probe rule: with text in the box the big mic
+  is the Send arrow — press Enter first, then record.

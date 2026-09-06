@@ -107,6 +107,26 @@ const problemTask = (contractorId, aptId, bld, desc, extra = {}) => ({
   check((await page.locator('[data-tipus-chip]').innerText()).includes('47 — A2'), 'the title wears "47 — A2"');
   check(await page.locator('[data-general-notes-box] [data-composer-input]').count() === 1 && await page.locator('[data-general-notes-box] [data-big-mic]').count() === 1,
     'the general notes are the message box with the big mic');
+  // General notes are BULLETS now (owner, 2026-09-06): Send appends a line with
+  // who and when, the flat text follows, and a hover trash takes a line out.
+  await page.locator('[data-general-notes-box] [data-composer-input]').fill('Gate code 4321');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(500);
+  await page.locator('[data-general-notes-box] [data-composer-input]').fill('Dog in the yard — call first');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(600);
+  const gnBullets = await page.locator('[data-general-bullets] [data-general-bullet]').allInnerTexts();
+  check(gnBullets.length === 2 && gnBullets[0].includes('Gate code 4321') && /Esther|Avi|·/.test(gnBullets[0]),
+    'two sent lines stand as two bullets with a sign-off', gnBullets.join(' | '));
+  check(await page.locator('[data-general-notes-box] [data-composer-input]').inputValue() === '', 'the box clears after Send');
+  let gnApt = (await store(page)).apartments.find(a => a.id === 'A1-47');
+  check(gnApt?.noteEntries?.length === 2 && gnApt.generalNotes === 'Gate code 4321\nDog in the yard — call first',
+    'the record carries the entries AND the flat text (search and reports keep reading it)', gnApt?.generalNotes);
+  await page.locator('[data-general-bullet]').first().locator('[data-note-remove]').evaluate(b => b.click());
+  await page.waitForTimeout(500);
+  gnApt = (await store(page)).apartments.find(a => a.id === 'A1-47');
+  check(await page.locator('[data-general-bullet]').count() === 1 && gnApt?.generalNotes === 'Dog in the yard — call first',
+    'the trash on a bullet takes that line out of both', gnApt?.generalNotes);
 
   // report a problem from the stage picker
   await page.locator('[data-stage-picker]').click();
@@ -118,14 +138,24 @@ const problemTask = (contractorId, aptId, bld, desc, extra = {}) => ({
   const dl = await page.locator('[data-problem-deadline]').inputValue();
   const dlDate = new Date(dl);
   check(dl > today && dlDate.getDay() !== 5 && dlDate.getDay() !== 6, 'the deadline pre-fills a working day ahead (Friday and Saturday skipped)', dl);
-  check(await page.locator('[data-problem-box] [data-composer-input]').count() === 1, 'the "what is wrong" field is the message box');
+  check(await page.locator('[data-problem-thread] [data-thread] [data-problem-box] [data-composer-input]').count() === 1,
+    'the "what is wrong" is the task thread with the message box inside its panel');
   await page.locator('[data-problem-who]').selectOption('C-ig');
   await page.locator('[data-problem-box] [data-composer-input]').fill('Drain leak in bedroom 2');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(400);
+  const pbTexts = await page.locator('[data-problem-thread] [data-thread-text]').allInnerTexts();
+  check(pbTexts.length === 1 && pbTexts[0] === 'Drain leak in bedroom 2' && await page.locator('[data-problem-box] [data-composer-input]').inputValue() === '',
+    'Enter sends the line as a white office bubble and clears the box', pbTexts.join('|'));
+  await page.locator('[data-problem-box] [data-composer-input]').fill('Tenant is home after 4pm');
   await page.locator('[data-problem-photos="yes"]').click();
   await page.locator('[data-problem-save]').click();
   await page.waitForTimeout(900);
   let d = await store(page);
   const prob = d.contractorAssignments.find(a => a.problem && a.apartmentId === 'A1-47');
+  const probNotes = d.contractorNotes.filter(n => n.assignmentId === prob?.id);
+  check(prob?.taskDescription === 'Drain leak in bedroom 2' && probNotes.length === 1 && probNotes[0].text === 'Tenant is home after 4pm' && probNotes[0].authorType === 'office',
+    'the first bubble is the task, the line left in the box is its first office message', `${prob?.taskDescription} | ${probNotes.map(n => n.text).join(',')}`);
   check(!!prob && prob.problem.status === 'open' && prob.problem.stageBefore === 'st-pipe' && prob.problem.photosRequired && prob.dueDate === dl && prob.contractorId === 'C-ig',
     'a problem task is stored: open, remembers the stage, photos required, the deadline, the worker', JSON.stringify(prob?.problem));
   check(d.apartments.find(a => a.id === 'A1-47').currentStageId === 'st-pipe', 'the apartment\'s real stage is untouched');

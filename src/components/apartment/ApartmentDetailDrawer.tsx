@@ -179,7 +179,8 @@ function fileToDataUrl(file: File): Promise<string> {
 export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast, onRequestAddTask }: Props) {
   const { stages, activityLogs, apartments, updateApartment, mergeApartments, unmergeApartments,
     autoBackup, backupSnapshots, restoreFromSnapshot, mainUiStrings: ui,
-    officeNoteFiles, addOfficeNoteFile, deleteOfficeNoteFile, addActivityLog,
+    officeNoteFiles, addOfficeNoteFile, updateOfficeNoteFile, deleteOfficeNoteFile, addActivityLog,
+    appendApartmentNote, removeApartmentNote,
     contractorAssignments, contractors, updateContractorAssignment, deleteContractorAssignment,
     deleteApartment, getGeneralNoteVersions, currentProjectId,
     contractorPhotos, updateContractorPhoto, planAnnotations, stageNotes, planPins,
@@ -215,15 +216,14 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    * only ever ran on blur could be skipped by any close path that never
    * blurred, and typed notes silently vanished.
    */
-  const basicSnapshot = useRef<{ familyName: string; generalNotes: string; address: string; phone: string; zoho: string; drive: string } | null>(null);
+  const basicSnapshot = useRef<{ familyName: string; address: string; phone: string; zoho: string; drive: string } | null>(null);
   const [showSaved, setShowSaved] = useState(false);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function basicDirty(): boolean {
     const snap = basicSnapshot.current;
     if (!snap || !apartment) return false;
-    return snap.generalNotes !== generalNotes
-      || snap.familyName !== familyName
+    return snap.familyName !== familyName
       || snap.address !== addressLocal
       || snap.phone !== phoneLocal
       || snap.zoho !== zohoLinkLocal
@@ -254,7 +254,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [familyName, setFamilyName] = useState('');
   const [currentStageId, setCurrentStageId] = useState<string>('');
   const [classification, setClassification] = useState<'standard' | 'shinui'>('standard');
-  const [generalNotes, setGeneralNotes] = useState('');
+  /** The general-notes composer's draft — sent as a bullet, never the field itself. */
+  const [noteDraft, setNoteDraft] = useState('');
   const [generalNotesHistoryOpen, setGeneralNotesHistoryOpen] = useState(false);
   const [driveLink, setDriveLink] = useState('');
   const [plansPdfLink, setPlansPdfLink] = useState('');
@@ -498,7 +499,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     if (apartment) {
       basicSnapshot.current = {
         familyName: apartment.displayName || '',
-        generalNotes: apartment.generalNotes ?? '',
         address: apartment.address ?? '',
         phone: apartment.phone ?? '',
         zoho: apartment.zohoLink ?? '',
@@ -508,7 +508,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       setCurrentStageId(apartment.currentStageId ?? '');
       setPrevStageId(apartment.currentStageId ?? '');
       setClassification(apartment.classification);
-      setGeneralNotes(apartment.generalNotes);
+      setNoteDraft('');
       setDriveLink(apartment.driveLink ?? '');
       setPlansPdfLink(apartment.plansPdfLink ?? '');
       setZohoLinkLocal(apartment.zohoLink ?? '');
@@ -876,7 +876,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       displayName: familyName || apartment!.apartmentNumber,
       currentStageId: stageId || null,
       classification,
-      generalNotes,
       driveLink: driveLink.trim() || undefined,
       plansPdfLink: plansPdfLink.trim() || undefined,
       zohoLink: zohoLinkLocal.trim() || undefined,
@@ -921,7 +920,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       displayName: familyName || apartment!.apartmentNumber,
       currentStageId: currentStageId || null,
       classification,
-      generalNotes,
       driveLink: driveLink.trim() || undefined,
       plansPdfLink: plansPdfLink.trim() || undefined,
       zohoLink: zohoLinkLocal.trim() || undefined,
@@ -930,7 +928,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     }, currentUser);
     setPrevStageId(currentStageId);
     basicSnapshot.current = {
-      familyName, generalNotes, address: addressLocal, phone: phoneLocal,
+      familyName, address: addressLocal, phone: phoneLocal,
       zoho: zohoLinkLocal, drive: driveLink,
     };
     if (wasDirty) {
@@ -949,9 +947,26 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    * identical path — Drive when it is set up, base64 when it is not. Two copies
    * of an upload ladder is how one of them quietly stops matching the other.
    */
-  async function attachOfficeFile(file: File) {
+  /** The composer's Send: the draft becomes one bullet of the general notes. */
+  function sendGeneralNote() {
+    const text = noteDraft.trim();
+    if (!text || !apartment || !currentUser) return;
+    appendApartmentNote(apartment.id, text, currentUser);
+    setNoteDraft('');
+    setShowSaved(true);
+    if (savedTimer.current) clearTimeout(savedTimer.current);
+    savedTimer.current = setTimeout(() => setShowSaved(false), 2200);
+  }
+
+  /**
+   * A file or a memo onto the general notes — Drive when there is a backend,
+   * base64 otherwise. A memo (`transcript`) is sent for its words once it is
+   * stored, and the words land on the record so every device reads them.
+   */
+  async function attachOfficeFile(file: File, transcript?: boolean) {
     if (!apartment || !currentUser) return;
     const mainFolderId = apartment.driveLink ? extractFolderId(apartment.driveLink) : null;
+    let stored: { id: string; src: string } | null = null;
     if (backendConfigured && mainFolderId) {
       try {
         const photosFolderId = await findOrCreateFolderViaBackend(mainFolderId, 'Photos');
@@ -962,28 +977,35 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           notesFolderId, file, pct => setOfficeUploadPct(pct));
         setOfficeUploadPct(null);
         await shareFileToDrive(fileId);
-        addOfficeNoteFile({
+        const id = addOfficeNoteFile({
           apartmentId: apartment.id, dataUrl: '', filename: file.name, mimeType: file.type,
           uploadedBy: currentUser.id, uploadedByName: currentUser.name,
           driveFileId: fileId, driveUrl: webViewLink,
         });
-        return;
+        stored = { id, src: webViewLink };
       } catch {
         setOfficeUploadPct(null);
       }
     }
-    await new Promise<void>(resolve => {
-      const reader = new FileReader();
-      reader.onload = ev => {
-        addOfficeNoteFile({
-          apartmentId: apartment.id, dataUrl: ev.target?.result as string,
-          filename: file.name, mimeType: file.type,
-          uploadedBy: currentUser.id, uploadedByName: currentUser.name,
-        });
-        resolve();
-      };
-      reader.readAsDataURL(file);
-    });
+    if (!stored) {
+      stored = await new Promise<{ id: string; src: string }>(resolve => {
+        const reader = new FileReader();
+        reader.onload = ev => {
+          const dataUrl = ev.target?.result as string;
+          const id = addOfficeNoteFile({
+            apartmentId: apartment.id, dataUrl,
+            filename: file.name, mimeType: file.type,
+            uploadedBy: currentUser.id, uploadedByName: currentUser.name,
+          });
+          resolve({ id, src: dataUrl });
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+    if (transcript && stored) {
+      const { id, src } = stored;
+      void transcribeMemo(src).then(t => { if (t) updateOfficeNoteFile(id, { transcript: t }); });
+    }
   }
 
   async function autoFillFamilyNameFromFolder(folderId: string) {
@@ -1768,8 +1790,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                 </div>
               </div>
 
-              {/* General notes */}
-              <div>
+              {/* General notes — drawn the way the notes tab draws a stage
+                  (owner, 2026-09-06): every note is a bullet with who wrote it
+                  and when, a memo or a file is a note card in the same list,
+                  and ONE composer sits at the bottom in send mode. The old
+                  tall textarea with buttons dangling off it is gone. */}
+              <div data-general-notes>
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2">
                     <label className="block text-xs font-medium text-gray-600">{ui.generalNotes}</label>
@@ -1794,26 +1820,127 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     })()}
                   </div>
                 </div>
-                {/* The paperclip and the microphone live INSIDE the notes box,
-                    bottom-right — attached to the thing they attach to. While a
-                    recording runs, the recorder bar stretches across the box. */}
-                <MessageBox
-                  hook="general-notes-box"
-                  rows={4}
-                  value={generalNotes}
-                  onChange={setGeneralNotes}
-                  onBlur={autoSave}
-                  onAttach={async files => {
-                    for (const file of files) await attachOfficeFile(file);
-                    onToast(`${files.length} ${files.length === 1 ? ui.fileAttachedToast : ui.filesAttachedToast}`);
-                  }}
-                  onMemo={memo => attachOfficeFile(memoFile(memo))}
-                  busy={officeUploadPct !== null}
-                  lang={ui.isRtl ? 'he' : 'en'}
-                  placeholder={ui.generalNotesPlaceholder}
-                  accept="image/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx"
-                />
-                {/* General notes history panel */}
+                {apartment && (() => {
+                  type NoteRow =
+                    | { kind: 'text'; id: string; at: string; who: string; text: string }
+                    | { kind: 'file'; id: string; at: string; who: string; file: typeof officeNoteFiles[number] };
+                  const legacy = !apartment.noteEntries && apartment.generalNotes.trim()
+                    ? [{ id: `${apartment.id}-note-0`, text: apartment.generalNotes, at: apartment.updatedAt ?? '', byName: apartment.updatedByName ?? 'Office' }]
+                    : [];
+                  const entries = apartment.noteEntries ?? legacy;
+                  const aptFiles = officeNoteFiles.filter(f => f.apartmentId === apartment.id);
+                  const rows: NoteRow[] = [
+                    ...entries.map<NoteRow>(e => ({ kind: 'text', id: e.id, at: e.at, who: e.byName, text: e.text })),
+                    ...aptFiles.map<NoteRow>(f => ({ kind: 'file', id: f.id, at: f.uploadedAt, who: f.uploadedByName, file: f })),
+                  ].sort((x, y) => x.at.localeCompare(y.at));
+                  const when = (iso: string) => { try { return format(new Date(iso), 'd MMM'); } catch { return ''; } };
+                  const whenLong = (iso: string) => { try { return format(new Date(iso), 'd MMM · HH:mm'); } catch { return ''; } };
+                  const openLightbox = (f: typeof aptFiles[number]) => {
+                    const items = aptFiles.filter(of => !of.mimeType.startsWith('audio/')).map(of => ({
+                      fileId: of.driveFileId ?? '',
+                      filename: of.filename,
+                      mimeType: of.mimeType,
+                      thumbSrc: of.driveFileId ? driveThumbUrl(of.driveFileId, 800) : of.dataUrl,
+                      downloadHref: of.driveFileId ? `https://drive.google.com/uc?export=download&id=${of.driveFileId}` : of.dataUrl,
+                    }));
+                    setLightbox({ items, index: Math.max(0, items.findIndex(it => it.filename === f.filename && it.fileId === (f.driveFileId ?? ''))) });
+                  };
+                  return (
+                    <div className="border rounded-xl px-3 pt-3 pb-3 space-y-3 bg-white" style={{ borderColor: '#e5e7eb' }}>
+                      {rows.length > 0 && (
+                        <ul className="space-y-1.5" data-general-bullets>
+                          {rows.map(r => (
+                            <li key={r.id} data-general-bullet className="group/gn flex items-start gap-2 text-[13px] leading-snug text-gray-800">
+                              <span className="w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0" style={{ backgroundColor: '#1e3a5f' }} />
+                              <div className="min-w-0 flex-1">
+                                {r.kind === 'text' ? (
+                                  <>
+                                    <span className="me-2 whitespace-pre-wrap">{r.text}</span>
+                                    <span data-notes-signoff className="text-[10px] text-gray-400 whitespace-nowrap">{r.who} · {when(r.at)}</span>
+                                  </>
+                                ) : r.file.mimeType.startsWith('audio/') ? (
+                                  <div className="w-full max-w-[380px]">
+                                    <VoiceMemoPlayer
+                                      src={r.file.driveUrl || r.file.dataUrl || ''}
+                                      className="w-full"
+                                      transcript={r.file.transcript}
+                                      onTranscript={t => { if (!r.file.transcript) updateOfficeNoteFile(r.file.id, { transcript: t }); }}
+                                      onDelete={() => deleteOfficeNoteFile(r.file.id)}
+                                      lang={ui.isRtl ? 'he' : 'en'}
+                                      saidLabel={ui.isRtl ? 'נאמר' : 'Said'}
+                                      who={r.who}
+                                      at={whenLong(r.at)}
+                                    />
+                                  </div>
+                                ) : r.file.mimeType.startsWith('image/') ? (
+                                  <div className="flex items-end gap-2">
+                                    <button type="button" onClick={() => openLightbox(r.file)} className="block rounded-lg border border-gray-200 overflow-hidden" title={r.file.filename}>
+                                      <DriveImg
+                                        src={r.file.driveFileId ? driveThumbUrl(r.file.driveFileId, 400) : r.file.dataUrl}
+                                        alt={r.file.filename}
+                                        className="h-16 w-16 object-cover"
+                                      />
+                                    </button>
+                                    <span data-notes-signoff className="text-[10px] text-gray-400 whitespace-nowrap">{r.who} · {when(r.at)}</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <a
+                                      href={r.file.driveUrl ?? r.file.dataUrl ?? '#'}
+                                      target={r.file.driveUrl ? '_blank' : undefined}
+                                      rel={r.file.driveUrl ? 'noopener noreferrer' : undefined}
+                                      download={!r.file.driveUrl ? r.file.filename : undefined}
+                                      className="inline-flex items-center gap-1.5 px-2 py-1 bg-gray-100 rounded-lg text-xs text-gray-600 hover:bg-gray-200"
+                                    >
+                                      <Paperclip size={10} /><span className="truncate max-w-[200px]">{r.file.filename}</span><ExternalLink size={9} className="text-gray-400" />
+                                    </a>
+                                    <span data-notes-signoff className="text-[10px] text-gray-400 whitespace-nowrap">{r.who} · {when(r.at)}</span>
+                                  </div>
+                                )}
+                              </div>
+                              {/* A memo carries its own trash; every other bullet gets one on hover. */}
+                              {!(r.kind === 'file' && r.file.mimeType.startsWith('audio/')) && (
+                                <button
+                                  type="button"
+                                  data-note-remove
+                                  onClick={() => r.kind === 'text' ? removeApartmentNote(apartment.id, r.id, currentUser) : deleteOfficeNoteFile(r.id)}
+                                  className="w-5 h-5 flex items-center justify-center rounded-full text-gray-300 hover:text-red-500 opacity-0 group-hover/gn:opacity-100 flex-shrink-0"
+                                  title={r.kind === 'text' ? ui.delete : ui.removeFileTitle}
+                                >
+                                  <Trash2 size={11} />
+                                </button>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {officeUploadPct !== null && (
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                            <div className="h-full bg-[#4aa8d8] transition-all" style={{ width: `${officeUploadPct}%` }} />
+                          </div>
+                          <span className="text-[10px] text-gray-500 flex-shrink-0">{officeUploadPct}%</span>
+                        </div>
+                      )}
+                      <MessageBox
+                        hook="general-notes-box"
+                        value={noteDraft}
+                        onChange={setNoteDraft}
+                        onSend={sendGeneralNote}
+                        onAttach={async files => {
+                          for (const file of files) await attachOfficeFile(file);
+                          onToast(`${files.length} ${files.length === 1 ? ui.fileAttachedToast : ui.filesAttachedToast}`);
+                        }}
+                        onMemo={memo => attachOfficeFile(memoFile(memo), true)}
+                        busy={officeUploadPct !== null}
+                        lang={ui.isRtl ? 'he' : 'en'}
+                        placeholder={ui.generalNotesPlaceholder}
+                        accept="image/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx"
+                      />
+                    </div>
+                  );
+                })()}
+                {/* General notes history panel — restoring a version REPLACES the bullets with that text as one note. */}
                 {generalNotesHistoryOpen && apartment && (() => {
                   const versions = getGeneralNoteVersions(apartment.id);
                   return versions.length > 0 ? (
@@ -1833,7 +1960,16 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                             </div>
                             <button
                               type="button"
-                              onClick={() => { setGeneralNotes(v.noteText); setGeneralNotesHistoryOpen(false); }}
+                              onClick={() => {
+                                const now = new Date().toISOString();
+                                updateApartment(apartment.id, {
+                                  noteEntries: v.noteText.trim()
+                                    ? [{ id: `${apartment.id}-restored-${Date.now().toString(36)}`, text: v.noteText, at: now, by: currentUser.id, byName: currentUser.name }]
+                                    : [],
+                                  generalNotes: v.noteText,
+                                }, currentUser);
+                                setGeneralNotesHistoryOpen(false);
+                              }}
                               className="flex items-center gap-1 text-[10px] text-[#1e3a5f] hover:underline flex-shrink-0"
                               title={ui.restoreVersionTitle}
                             >
@@ -1870,86 +2006,6 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     if (taskEditFileRef.current) taskEditFileRef.current.value = '';
                   }}
                 />
-                {officeUploadPct !== null && (
-                  <div className="mt-1.5 flex items-center gap-2">
-                    <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                      <div className="h-full bg-[#4aa8d8] transition-all" style={{ width: `${officeUploadPct}%` }} />
-                    </div>
-                    <span className="text-[10px] text-gray-500 flex-shrink-0">{officeUploadPct}%</span>
-                  </div>
-                )}
-                {(() => {
-                  const aptFiles = officeNoteFiles.filter(f => f.apartmentId === apartment.id);
-                  if (!aptFiles.length) return null;
-                  return (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {aptFiles.map(f => {
-                        const isImage = f.mimeType.startsWith('image/');
-                        if (f.mimeType.startsWith('audio/')) {
-                          // A memo plays in place. Sending it to the lightbox
-                          // with the photos would open a black frame with
-                          // nothing in it.
-                          return (
-                            <VoiceMemoPlayer
-                              key={f.id}
-                              src={f.driveUrl || f.dataUrl || ''}
-                              onDelete={() => deleteOfficeNoteFile(f.id)}
-                              lang={ui.isRtl ? 'he' : 'en'}
-                              saidLabel={ui.isRtl ? 'נאמר' : 'Said'}
-                              className="max-w-[280px]"
-                            />
-                          );
-                        }
-                        return (
-                          <div key={f.id} className="relative group w-14 h-14 rounded-lg border border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center cursor-pointer"
-                            onClick={() => {
-                              const allFiles = officeNoteFiles.filter(of => of.apartmentId === apartment.id);
-                              const items = allFiles.map(of => ({
-                                fileId: of.driveFileId ?? '',
-                                filename: of.filename,
-                                mimeType: of.mimeType,
-                                thumbSrc: of.driveFileId ? driveThumbUrl(of.driveFileId, 800) : of.dataUrl,
-                                downloadHref: of.driveFileId ? `https://drive.google.com/uc?export=download&id=${of.driveFileId}` : of.dataUrl,
-                              }));
-                              setLightbox({ items, index: allFiles.findIndex(of => of.id === f.id) });
-                            }}
-                          >
-                            {isImage
-                              ? <DriveImg
-                                  src={f.driveFileId ? driveThumbUrl(f.driveFileId, 400) : f.dataUrl}
-                                  alt={f.filename}
-                                  className="w-full h-full object-cover"
-                                />
-                              : <div className="flex flex-col items-center p-1"><BookOpen size={16} className="text-gray-400" /><span className="text-[8px] text-gray-400 truncate w-full text-center mt-0.5">{f.filename}</span></div>
-                            }
-                            {!f.driveFileId && (
-                              <div
-                                title={ui.storedLocallyTitle}
-                                className="absolute bottom-0.5 left-0.5 w-3 h-3 rounded-full bg-amber-400 flex items-center justify-center"
-                              >
-                                <AlertTriangle size={6} color="white" />
-                              </div>
-                            )}
-                            <button onClick={e => { e.stopPropagation(); deleteOfficeNoteFile(f.id); }}
-                              title={ui.removeFileTitle}
-                              className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
-                              <Trash2 size={8} color="white" />
-                            </button>
-                            <a
-                              href={f.driveFileId ? `https://drive.google.com/uc?export=download&id=${f.driveFileId}` : f.dataUrl}
-                              download={!f.driveFileId ? f.filename : undefined}
-                              target={f.driveFileId ? '_blank' : undefined}
-                              rel={f.driveFileId ? 'noopener noreferrer' : undefined}
-                              title={ui.downloadFileTitle}
-                              className="absolute bottom-0.5 right-0.5 w-4 h-4 bg-gray-700/60 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                              <Download size={8} color="white" />
-                            </a>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })()}
               </div>
 
               {/* The Engineering Plans block used to live here AND on the right,

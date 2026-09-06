@@ -201,6 +201,10 @@ for (const [tag, W, H, phone] of PROFILES) {
     await page.waitForTimeout(600);
     await page.locator('[data-problem-who]').selectOption({ index: 1 });
     await page.locator('[data-problem-box] [data-composer-input]').fill('Water on the ceiling under bedroom 2 — check the drain');
+    // The form is a THREAD now: Enter sends the line as a bubble, which also
+    // hands the composer's big mic back (typed text turns it into Send).
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(400);
     await record('[data-problem-box]');
     await page.waitForTimeout(300);
   } catch (e) { console.log(`  ${tag}: problem form failed: ${e.message.split('\n')[0]}`); }
