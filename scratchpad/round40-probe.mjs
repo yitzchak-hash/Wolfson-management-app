@@ -6,6 +6,7 @@
 // banner, Close → waiting, "Is this the fix for…?"; the Problems report; the
 // notes tab as crossed-off stages with bullets and the box at the bottom.
 import { chromium } from 'playwright';
+import { memoDataUrl } from './wav.mjs';
 
 const APP = 'http://localhost:5174';
 let fails = 0;
@@ -15,10 +16,11 @@ const today = iso(new Date());
 const daysAgo = n => { const d = new Date(); d.setDate(d.getDate() - n); return iso(d); };
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
 const files = n => Array.from({ length: n }, (_, i) => ({ name: `site-${i + 1}.png`, mimeType: 'image/png', buffer: PNG }));
+const MEMO = memoDataUrl(3, 5);
 const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 
 function seed(ctx, extraTasks = []) {
-  return ctx.addInitScript(({ today, extraTasks }) => {
+  return ctx.addInitScript(({ today, extraTasks, memo }) => {
     localStorage.setItem('active_project', 'wolfson');
     localStorage.setItem('wolfson_app_version', '3');
     localStorage.setItem('whats_new_seen', '2099-01-01');
@@ -50,10 +52,15 @@ function seed(ctx, extraTasks = []) {
           stageId: 'st-pipe', dueDate: today, priority: 'normal', completedAt: null, createdAt: '2026-08-01', createdBy: 'U-t', createdByName: 'Esther' },
         ...extraTasks,
       ],
-      stageNotes: [{ id: 'SN-1', apartmentId: 'A1-47', stageId: 'st-ready', noteText: 'Keys with the guard', updatedAt: '2026-08-20T09:00:00.000Z', updatedBy: 'U-t', updatedByName: 'Esther' }],
+      stageNotes: [
+        { id: 'SN-1', apartmentId: 'A1-47', stageId: 'st-ready', noteText: 'Keys with the guard', updatedAt: '2026-08-20T09:00:00.000Z', updatedBy: 'U-t', updatedByName: 'Esther' },
+        { id: 'SN-2', apartmentId: 'A1-45', stageId: 'st-pipe', noteText: '', updatedAt: '2026-09-01T09:00:00.000Z', updatedBy: 'U-t', updatedByName: 'Esther',
+          entries: [{ id: 'E-memo', text: '', at: '2026-09-01T09:00:00.000Z', by: 'U-t', byName: 'Esther',
+            attachments: [{ id: 'M-1', filename: 'voice-memo.wav', mimeType: 'audio/wav', dataUrl: memo, transcript: 'Riser access is behind the kitchen cabinet' }] }] },
+      ],
       contractorNotes: [], contractorPhotos: [], canvasElements: [],
     }));
-  }, { today, extraTasks });
+  }, { today, extraTasks, memo: MEMO });
 }
 const stubs = async ctx => {
   await ctx.route('**/api/geocode', async route => {
@@ -67,6 +74,8 @@ const stubs = async ctx => {
   await ctx.route('**://drive.google.com/**', r => r.abort());
 };
 const store = p => p.evaluate(() => JSON.parse(localStorage.getItem('wolfson_app_data')));
+/** A focused field eats the first Escape (the drawer's guard blurs instead of closing) — press until the window is gone. */
+const closeDrawer = async p => { for (let i = 0; i < 3 && await p.locator('.drawer-panel').count(); i++) { await p.keyboard.press('Escape'); await p.waitForTimeout(400); } };
 const bg = (p, sel) => p.locator(sel).first().evaluate(el => getComputedStyle(el).backgroundColor);
 const problemTask = (contractorId, aptId, bld, desc, extra = {}) => ({
   id: `P-${aptId}-${desc.length}`, contractorId, apartmentId: aptId, buildingId: bld, taskDescription: desc,
@@ -210,6 +219,24 @@ const problemTask = (contractorId, aptId, bld, desc, extra = {}) => ({
   check(!!sn && sn.entries?.length === 1 && sn.noteText.includes('Riser access'), 'the bullet is stored as an entry, the flat text kept in step');
   await page.keyboard.press('Escape'); await page.waitForTimeout(400);
 
+  await closeDrawer(page);
+  // the memo card: forty real bars from the bytes, a knob, the words, a sign-off; the worker pill beside CURRENT
+  await page.locator('[data-apt-id="A1-45"]').first().click();
+  await page.waitForTimeout(900);
+  await page.locator('button', { hasText: /^Notes$/ }).first().click();
+  await page.waitForTimeout(1500);
+  const bars = await page.locator('[data-notes-stage="st-pipe"] [data-memo-bars] > span:not([data-memo-knob])').evaluateAll(els => els.map(e => e.getBoundingClientRect().height));
+  check(bars.length === 40 && new Set(bars.map(h => Math.round(h))).size >= 6, 'a stored memo draws forty bars read off its own audio (a real waveform, not flat stubs)', `${bars.length} bars, ${new Set(bars.map(h => Math.round(h))).size} heights`);
+  check(await page.locator('[data-notes-stage="st-pipe"] [data-memo-knob]').count() === 1 && (await page.locator('[data-notes-stage="st-pipe"] [data-memo-time]').innerText()).startsWith('0:03'),
+    'the card carries a scrub knob and the true length');
+  const card = await page.locator('[data-notes-stage="st-pipe"] [data-memo]').first().innerText();
+  check(card.includes('Riser access') && card.includes('Esther'), 'the words and the sign-off sit inside the memo card', card.replace(/\n/g, ' · ').slice(0, 80));
+  check(await page.locator('[data-notes-stage="st-pipe"] [data-stage-worker]').count() === 1 && await page.locator('[data-notes-stage="st-pipe"] select.w-full').count() === 0,
+    'the worker is a small pill in the stage row, not a full-width field');
+  check(await page.locator('[data-notes-stage="st-pipe"] [data-stage-note-box] [data-composer-input]').getAttribute('placeholder').then(v => /Add notes for/.test(v ?? '')),
+    'the "add notes for" words are the grey placeholder, not a label');
+  await page.keyboard.press('Escape'); await page.waitForTimeout(400);
+
   // reports: the Problems subject
   await page.goto(`${APP}/reports`);
   await page.waitForTimeout(2000);
@@ -272,6 +299,17 @@ const problemTask = (contractorId, aptId, bld, desc, extra = {}) => ({
   check(await page.locator('[data-problem-waiting-footer]').count() === 1, 'the sheet now says Waiting for approval');
   await page.mouse.click(10, 30); await page.waitForTimeout(500);
   check(await page.locator('[data-task-card="P-late"][data-problem-card="waiting"]').count() === 1, 'and the card turned rose');
+
+  // the month: Saturday is a slim grey column
+  await page.locator('button', { hasText: /Calendar/ }).first().click();
+  await page.waitForTimeout(800);
+  const cols = await page.locator('[data-calendar-fill] > div').nth(1).evaluate(el => {
+    const kids = [...el.children].slice(0, 7);
+    return kids.map(k => k.getBoundingClientRect().width);
+  }).catch(() => []);
+  check(cols.length === 7 && cols[6] < cols[5] * 0.7, 'Saturday is a slim column', cols.map(c => Math.round(c)).join(','));
+  await page.locator('button', { hasText: /My Tasks/ }).first().click();
+  await page.waitForTimeout(500);
 
   // the map: a red apartment offers the fix first
   await page.locator('button', { hasText: /Building Map/ }).click();

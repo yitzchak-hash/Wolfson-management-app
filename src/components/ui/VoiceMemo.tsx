@@ -14,7 +14,8 @@ import type { Lang } from '../../data/translate';
  * The mechanism lives in data/voiceMemo.ts. This file is only what it looks
  * like, and it implements the familiar interaction on purpose: a microphone
  * that becomes a running timer with a live trace, a bin and a send, then a
- * bubble you can play, scrub and speed up. No third-party artwork or wording.
+ * card you can play, scrub and speed up, with the WORDS under the bars.
+ * No third-party artwork or wording.
  *
  * Every target here is at least 32px, because these are used from a worker's
  * phone on a site, one-handed, and CLAUDE.md counts anything smaller as a
@@ -94,7 +95,7 @@ export function VoiceRecorderButton({
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-full bg-gray-100 border border-gray-200 px-2 py-1 flex-1 min-w-0">
+    <div data-recording-strip className="flex items-center gap-2 rounded-full bg-gray-100 border border-gray-200 px-2 py-1 flex-1 min-w-0">
       {/* Throw it away. Deliberately the LEFT-most control and never the one
           nearest the thumb's resting place, so "send" is not the easy miss. */}
       <button
@@ -118,10 +119,10 @@ export function VoiceRecorderButton({
         onClick={() => { void finish(); }}
         disabled={rec.state === 'stopping'}
         title="Send"
-        className="flex items-center justify-center w-8 h-8 rounded-full bg-[#1e3a5f] text-white
+        className="flex items-center justify-center w-9 h-9 rounded-full bg-[#1e3a5f] text-white
                    hover:bg-[#162d4a] disabled:opacity-50 flex-shrink-0"
       >
-        {rec.state === 'stopping' ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+        {rec.state === 'stopping' ? <Loader2 size={14} className="animate-spin" /> : <Send size={15} />}
       </button>
     </div>
   );
@@ -142,11 +143,76 @@ function LiveTrace({ levels }: { levels: number[] }) {
   );
 }
 
+// ── The waveform ────────────────────────────────────────────────────────────
+
+/**
+ * The LINES of a recording, read off the audio itself.
+ *
+ * A memo stored as a file carries no peaks — the recorder's live trace dies
+ * with the recorder — so a player drawn from stored data showed forty flat
+ * 3px stubs, which the owner rightly could not see. The bytes are decoded
+ * once (a phone decodes a two-minute memo in well under a second), squashed
+ * to forty RMS bars, and remembered per source so scrolling a thread never
+ * decodes twice. Decoding also answers the DURATION honestly: a WebM from
+ * the recorder reports Infinity until it has been played through.
+ */
+const WAVE_CACHE = new Map<string, { peaks: number[]; seconds: number }>();
+const BARS = 40;
+
+function waveKey(src: string): string {
+  return src.length > 200 ? `${src.slice(0, 120)}|${src.length}|${src.slice(-40)}` : src;
+}
+
+async function decodePeaks(src: string): Promise<{ peaks: number[]; seconds: number } | null> {
+  const key = waveKey(src);
+  const hit = WAVE_CACHE.get(key);
+  if (hit) return hit;
+  try {
+    const bytes = await (await fetch(src)).arrayBuffer();
+    const Ctx = (window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext);
+    if (!Ctx) return null;
+    const ac = new Ctx();
+    const buf = await ac.decodeAudioData(bytes.slice(0));
+    void ac.close?.();
+    const data = buf.getChannelData(0);
+    const per = Math.max(1, Math.floor(data.length / BARS));
+    const raw: number[] = [];
+    for (let i = 0; i < BARS; i++) {
+      let sum = 0;
+      const start = i * per;
+      const end = Math.min(data.length, start + per);
+      for (let j = start; j < end; j += 4) sum += data[j] * data[j];
+      raw.push(Math.sqrt(sum / Math.max(1, (end - start) / 4)));
+    }
+    const max = Math.max(0.02, ...raw);
+    const peaks = raw.map(v => Math.min(1, Math.pow(v / max, 0.7)));
+    const out = { peaks, seconds: buf.duration };
+    WAVE_CACHE.set(key, out);
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+function useWaveform(src: string | null, given?: number[]): { peaks: number[]; seconds: number | null } {
+  const [decoded, setDecoded] = useState<{ peaks: number[]; seconds: number } | null>(() => (src ? WAVE_CACHE.get(waveKey(src)) ?? null : null));
+  useEffect(() => {
+    if (!src || given?.length) return;
+    const hit = WAVE_CACHE.get(waveKey(src));
+    if (hit) { setDecoded(hit); return; }
+    let live = true;
+    void decodePeaks(src).then(r => { if (live && r) setDecoded(r); });
+    return () => { live = false; };
+  }, [src, given?.length]);
+  if (given?.length) return { peaks: given.length === BARS ? given : squash(given, BARS), seconds: decoded?.seconds ?? null };
+  return { peaks: decoded?.peaks ?? squash([], BARS), seconds: decoded?.seconds ?? null };
+}
+
 // ── Player ──────────────────────────────────────────────────────────────────
 
 export function VoiceMemoPlayer({
   src, seconds, peaks, onDelete, className = '',
-  transcript, onTranscript, lang, saidLabel = 'Said',
+  transcript, onTranscript, lang, saidLabel = 'Said', who, at, tone = 'light',
 }: {
   src: string;
   /** Known length, so the bubble reads right before the audio has loaded. */
@@ -165,11 +231,17 @@ export function VoiceMemoPlayer({
   /** The READER's language — the words are translated into it, with Show original. */
   lang?: Lang | null;
   saidLabel?: string;
+  /** A sign-off line under the card — the author and the time, small and grey. */
+  who?: string;
+  at?: string;
+  /** `navy` draws the card for a dark surface (the worker's own bubble). */
+  tone?: 'light' | 'navy';
 }) {
   const words = useTranscript(src, transcript, onTranscript);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const barsRef = useRef<HTMLDivElement>(null);
   const [playing, setPlaying] = useState(false);
-  const [at, setAt] = useState(0);
+  const [at_, setAt] = useState(0);
   const [total, setTotal] = useState(seconds ?? 0);
   const [speed, setSpeed] = useState<PlaybackSpeed>(1);
 
@@ -188,6 +260,8 @@ export function VoiceMemoPlayer({
   const [fetching, setFetching] = useState(false);
   const [fetchFailed, setFetchFailed] = useState(false);
   const playableSrc = driveFileId ? fetched : src;
+  const wave = useWaveform(playableSrc, peaks);
+  const length = total > 0 && Number.isFinite(total) ? total : (wave.seconds ?? seconds ?? 0);
 
   // A blob URL holds the whole file in memory until revoked.
   useEffect(() => () => { if (fetched) URL.revokeObjectURL(fetched); }, [fetched]);
@@ -226,8 +300,10 @@ export function VoiceMemoPlayer({
     );
   }
 
-  const bars = peaks?.length ? peaks : squash([], 40);
-  const pct = total > 0 ? Math.min(1, at / total) : 0;
+  const pct = length > 0 ? Math.min(1, at_ / length) : 0;
+  const navy = tone === 'navy';
+  const ink = navy ? '#ffffff' : '#1e3a5f';
+  const rest = navy ? 'rgba(255,255,255,.35)' : '#c3ccd8';
 
   function toggle() {
     if (driveFileId && !fetched) { void fetchDriveAudio(); return; }
@@ -237,17 +313,25 @@ export function VoiceMemoPlayer({
     else { el.pause(); setPlaying(false); }
   }
 
-  function scrubTo(e: React.MouseEvent<HTMLDivElement>) {
+  /** The bars are the scrubber — press or DRAG anywhere along them. */
+  function seekFromPointer(e: React.PointerEvent<HTMLDivElement>) {
     const el = audioRef.current;
-    if (!el || !total) return;
-    const r = e.currentTarget.getBoundingClientRect();
+    const box = barsRef.current;
+    if (!el || !box || !length) return;
+    const r = box.getBoundingClientRect();
     const f = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
-    el.currentTime = f * total;
-    setAt(el.currentTime);
+    const rtl = getComputedStyle(box).direction === 'rtl';
+    const t = (rtl ? 1 - f : f) * length;
+    el.currentTime = t;
+    setAt(t);
   }
 
-  const pill = (
-    <div className={`flex items-center gap-2 rounded-full bg-gray-100 border border-gray-200 px-2 py-1 max-w-full ${className}`}>
+  return (
+    <div
+      data-memo
+      className={`flex flex-col gap-1.5 max-w-full rounded-2xl px-2.5 py-2 ${className}`}
+      style={{ backgroundColor: navy ? 'rgba(255,255,255,.12)' : '#f3f6fa', border: navy ? '1px solid rgba(255,255,255,.18)' : '1px solid #e2e8f0' }}
+    >
       <audio
         ref={audioRef}
         src={playableSrc ?? undefined}
@@ -256,75 +340,94 @@ export function VoiceMemoPlayer({
           const d = e.currentTarget.duration;
           if (Number.isFinite(d) && d > 0) setTotal(d);
         }}
+        onDurationChange={e => {
+          const d = e.currentTarget.duration;
+          if (Number.isFinite(d) && d > 0) setTotal(d);
+        }}
         onTimeUpdate={e => setAt(e.currentTarget.currentTime)}
         onEnded={() => { setPlaying(false); setAt(0); }}
       />
-
-      <button
-        type="button" onClick={toggle}
-        title={playing ? 'Pause' : 'Play'}
-        className="flex items-center justify-center w-8 h-8 rounded-full bg-[#1e3a5f] text-white flex-shrink-0"
-      >
-        {fetching ? <Loader2 size={14} className="animate-spin" />
-          : playing ? <Pause size={14} /> : <Play size={14} />}
-      </button>
-
-      {/* The bars ARE the scrubber — a separate slider underneath would be a
-          second target for the same job in a control this small. */}
-      <div
-        className="flex items-center gap-[2px] h-6 flex-1 min-w-[70px] cursor-pointer"
-        onClick={scrubTo}
-        role="slider"
-        aria-label="Seek"
-        aria-valuemin={0}
-        aria-valuemax={Math.round(total)}
-        aria-valuenow={Math.round(at)}
-        tabIndex={0}
-      >
-        {bars.map((v, i) => (
-          <span
-            key={i}
-            className="flex-1 rounded-full"
-            style={{
-              height: `${Math.max(3, v * 22)}px`,
-              backgroundColor: i / bars.length <= pct ? '#1e3a5f' : '#cbd5e1',
-            }}
-          />
-        ))}
-      </div>
-
-      <span className="text-[11px] text-gray-500 tabular-nums flex-shrink-0">
-        {clock(playing || at > 0 ? at : total)}
-      </span>
-
-      <button
-        type="button"
-        onClick={() => setSpeed(PLAYBACK_SPEEDS[(PLAYBACK_SPEEDS.indexOf(speed) + 1) % PLAYBACK_SPEEDS.length])}
-        title="Playback speed"
-        className="min-w-[32px] h-8 px-1 rounded-full text-[11px] font-bold text-gray-600
-                   hover:bg-gray-200 flex-shrink-0"
-      >
-        {speed}×
-      </button>
-
-      {onDelete && (
+      <div className="flex items-center gap-2.5">
         <button
-          type="button" onClick={onDelete} title="Delete memo"
-          className="flex items-center justify-center w-8 h-8 rounded-full text-gray-400 hover:text-red-500 flex-shrink-0"
+          type="button" onClick={toggle}
+          title={playing ? 'Pause' : 'Play'}
+          data-memo-play
+          className="flex items-center justify-center w-9 h-9 rounded-full text-white flex-shrink-0 active:scale-95"
+          style={{ backgroundColor: navy ? '#ffffff' : '#1e3a5f', color: navy ? '#1e3a5f' : '#ffffff' }}
         >
-          <Trash2 size={14} />
+          {fetching ? <Loader2 size={15} className="animate-spin" />
+            : playing ? <Pause size={15} /> : <Play size={15} className="ms-0.5" />}
         </button>
-      )}
-    </div>
-  );
-  if (!words) return pill;
-  return (
-    <div className="flex flex-col gap-1 max-w-full" data-memo-with-words>
-      {pill}
-      <div data-memo-transcript className="text-[12.5px] leading-snug px-1" style={{ color: '#1f2c3d' }}>
-        <span className="block text-[9.5px] font-extrabold tracking-wider uppercase" style={{ color: '#93a2b1' }}>{saidLabel}</span>
-        <Translated text={words} to={lang} />
+
+        <div className="flex-1 min-w-[90px] flex flex-col gap-0.5">
+          <div
+            ref={barsRef}
+            data-memo-bars
+            className="relative flex items-center gap-[2px] h-7 cursor-pointer select-none touch-none"
+            onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); seekFromPointer(e); }}
+            onPointerMove={e => { if (e.buttons & 1) seekFromPointer(e); }}
+            role="slider"
+            aria-label="Seek"
+            aria-valuemin={0}
+            aria-valuemax={Math.round(length)}
+            aria-valuenow={Math.round(at_)}
+            tabIndex={0}
+          >
+            {wave.peaks.map((v, i) => (
+              <span
+                key={i}
+                className="flex-1 rounded-full"
+                style={{
+                  height: `${Math.max(3, v * 26)}px`,
+                  backgroundColor: (i + 0.5) / wave.peaks.length <= pct ? ink : rest,
+                  transition: 'background-color 80ms linear',
+                }}
+              />
+            ))}
+            {/* The knob — where you are, and what you drag. */}
+            <span
+              data-memo-knob
+              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full pointer-events-none"
+              style={{ insetInlineStart: `${pct * 100}%`, backgroundColor: ink, boxShadow: '0 0 0 2px #fff, 0 1px 3px rgba(0,0,0,.35)' }}
+            />
+          </div>
+          <div className="flex items-center gap-2 text-[10.5px] tabular-nums" style={{ color: navy ? 'rgba(255,255,255,.8)' : '#64748b' }}>
+            <span data-memo-time>{clock(playing || at_ > 0 ? at_ : length)}</span>
+            {(playing || at_ > 0) && length > 0 && <span className="opacity-60">/ {clock(length)}</span>}
+            <span className="flex-1" />
+            <button
+              type="button"
+              onClick={() => setSpeed(PLAYBACK_SPEEDS[(PLAYBACK_SPEEDS.indexOf(speed) + 1) % PLAYBACK_SPEEDS.length])}
+              title="Playback speed"
+              className="min-w-[30px] h-6 px-1.5 rounded-full text-[10.5px] font-bold hover:bg-black/5"
+              style={{ color: navy ? '#fff' : '#475569' }}
+            >
+              {speed}×
+            </button>
+            {onDelete && (
+              <button
+                type="button" onClick={onDelete} title="Delete memo"
+                className="flex items-center justify-center w-7 h-7 rounded-full hover:text-red-500"
+                style={{ color: navy ? 'rgba(255,255,255,.7)' : '#94a3b8' }}
+              >
+                <Trash2 size={13} />
+              </button>
+            )}
+          </div>
+        </div>
       </div>
+
+      {words && (
+        <div data-memo-transcript className="text-[13px] leading-snug px-0.5" style={{ color: navy ? '#fff' : '#1f2c3d' }}>
+          <span className="block text-[9.5px] font-extrabold tracking-wider uppercase" style={{ color: navy ? 'rgba(255,255,255,.65)' : '#93a2b1' }}>{saidLabel}</span>
+          <Translated text={words} to={lang} />
+        </div>
+      )}
+      {(who || at) && (
+        <div className="text-[10px] px-0.5" style={{ color: navy ? 'rgba(255,255,255,.65)' : '#94a3b8' }}>
+          {[who, at].filter(Boolean).join(' · ')}
+        </div>
+      )}
     </div>
   );
 }

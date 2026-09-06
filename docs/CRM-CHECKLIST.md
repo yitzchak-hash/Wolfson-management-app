@@ -61,6 +61,12 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ Every recording shows its words under the player, in the screen's language, with Show original — task attachments, office files, board notes, pending memos included (2026-09-06)
 - ☑ Notes tab: passed stages crossed off and folded with a count, the current open, later grey; bullets with a small grey sign-off; a worker's memo is a bullet with its words; "Add notes for X" + the box at the bottom; Send puts the note above (2026-09-06)
 - ◐ Board sticky notes and boxes keep their inline editor; their memo player shows the words (2026-09-06)
+- ☑ The memo player draws a real waveform from the audio, a drag-to-scrub knob and the true length; the words and the sign-off sit inside the card (2026-09-06)
+- ☑ The message box grows with the words, the clip and the big mic sit on its bottom line, a grey "sending the recording…" bubble stands while a memo uploads (2026-09-06)
+- ☑ A memo or a picture in a thread never prints its filename as the message (2026-09-06)
+- ☑ Notes tab: the worker is a small bubble beside CURRENT; "Add notes for X" is the grey placeholder (2026-09-06)
+- ☑ Worker's month: Saturday is a slim grey column (2026-09-06)
+- ☐ Transcription needs `OPENAI_API_KEY` in Vercel; reading a memo in the worker's own language needs `ANTHROPIC_API_KEY` too — until both are set, recordings play without words
 
 ## Messages, voice and language
 - ☑ Voice memo on every note (thread, stage notes, office notes, task attachments, board notes, pins)

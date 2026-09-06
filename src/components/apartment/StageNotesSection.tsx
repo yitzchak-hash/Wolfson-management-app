@@ -211,10 +211,11 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
     return [...office, ...workers].sort((a, b) => a.at.localeCompare(b.at));
   }
 
-  const attachmentView = (att: StageNoteAttachment, onTranscript?: (t: string) => void) => {
+  const attachmentView = (att: StageNoteAttachment, onTranscript?: (t: string) => void, sign?: { who: string; at: string }) => {
     if (att.mimeType?.startsWith('audio/')) {
-      return <VoiceMemoPlayer src={att.driveUrl || att.dataUrl || ''} className="max-w-[300px]"
-        transcript={att.transcript} onTranscript={onTranscript} lang={lang} saidLabel={s.isRtl ? 'נאמר' : 'Said'} />;
+      return <VoiceMemoPlayer src={att.driveUrl || att.dataUrl || ''} className="w-full"
+        transcript={att.transcript} onTranscript={onTranscript} lang={lang} saidLabel={s.isRtl ? 'נאמר' : 'Said'}
+        who={sign?.who} at={sign?.at} />;
     }
     if (att.mimeType?.startsWith('image/')) {
       const src = att.driveFileId ? driveThumbUrl(att.driveFileId, 300) : att.dataUrl;
@@ -272,9 +273,34 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                 {stageName}
               </span>
               {cur && <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 flex-shrink-0">{s.stageCurrent}</span>}
-              {assignedContractor && !open && (
-                <span className="flex items-center gap-1 text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded flex-shrink-0">
-                  <User size={9} />{assignedContractor.name}
+              {/* Who is on this stage — a small bubble beside CURRENT (owner, 2026-09-06),
+                  never a full-width field crowding the notes. */}
+              {activeContractors.length > 0 && (open || assignedContractor) && (
+                <span className="relative flex-shrink-0 inline-flex items-center" onClick={e => e.stopPropagation()}>
+                  <select
+                    data-stage-worker
+                    value={assignment?.contractorId ?? ''}
+                    onChange={e => handleContractorChange(stage.id, e.target.value)}
+                    className="appearance-none pl-5 pr-5 py-0.5 rounded-full text-[10.5px] font-semibold border cursor-pointer focus:outline-none"
+                    style={assignedContractor
+                      ? { backgroundColor: '#eef4fa', borderColor: '#cfe0f0', color: '#1e3a5f' }
+                      : { backgroundColor: '#f8fafc', borderColor: '#e2e8f0', color: '#94a3b8' }}
+                    title={s.assignContractor}
+                  >
+                    <option value="">{s.assignContractor}</option>
+                    {['drywall', 'ac', 'general'].map(cat => {
+                      const items = activeContractors.filter(c => c.category === cat);
+                      if (!items.length) return null;
+                      const catLabel = cat === 'ac' ? s.categoryAC : cat === 'drywall' ? s.categoryDrywall : s.categoryGeneral;
+                      return (
+                        <optgroup key={cat} label={catLabel}>
+                          {items.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </optgroup>
+                      );
+                    })}
+                  </select>
+                  <User size={9} className="absolute left-1.5 pointer-events-none" style={{ color: assignedContractor ? '#1e3a5f' : '#94a3b8' }} />
+                  <ChevronDown size={9} className="absolute right-1.5 pointer-events-none" style={{ color: assignedContractor ? '#1e3a5f' : '#94a3b8' }} />
                 </span>
               )}
               <span className="ms-auto text-[10.5px] text-gray-400 flex-shrink-0" data-notes-count>{countLabel}</span>
@@ -283,29 +309,6 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
 
             {open && (
               <div className="px-3 pb-3 space-y-3">
-                {activeContractors.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <User size={12} className="text-gray-400 flex-shrink-0" />
-                    <select
-                      value={assignment?.contractorId ?? ''}
-                      onChange={e => handleContractorChange(stage.id, e.target.value)}
-                      className="flex-1 min-w-0 border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white"
-                    >
-                      <option value="">{s.assignContractor}: {s.noneSelected}</option>
-                      {['drywall', 'ac', 'general'].map(cat => {
-                        const items = activeContractors.filter(c => c.category === cat);
-                        if (!items.length) return null;
-                        const catLabel = cat === 'ac' ? s.categoryAC : cat === 'drywall' ? s.categoryDrywall : s.categoryGeneral;
-                        return (
-                          <optgroup key={cat} label={catLabel}>
-                            {items.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                          </optgroup>
-                        );
-                      })}
-                    </select>
-                  </div>
-                )}
-
                 {/* THE BULLETS — oldest first, sign-off small and grey at the end of each line. */}
                 {bullets.length > 0 && (
                   <ul className="space-y-1.5" data-notes-bullets>
@@ -321,13 +324,18 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                           {b.attachments?.length ? (
                             <div className="flex flex-wrap gap-1.5 mt-1">
                               {b.attachments.map(att => (
-                                <span key={att.id}>{attachmentView(att, b.onTranscript ? t => b.onTranscript!(att.id, t) : undefined)}</span>
+                                <span key={att.id} className={att.mimeType?.startsWith('audio/') ? 'w-full max-w-[380px]' : undefined}>
+                                  {attachmentView(att, b.onTranscript ? t => b.onTranscript!(att.id, t) : undefined,
+                                    att.mimeType?.startsWith('audio/') ? { who: b.byName, at: format(new Date(b.at), 'd MMM · HH:mm') } : undefined)}
+                                </span>
                               ))}
                             </div>
                           ) : null}
-                          <span data-notes-signoff className="text-[10px] text-gray-400 whitespace-nowrap">
-                            {b.byName} · {format(new Date(b.at), 'd MMM')}
-                          </span>
+                          {!b.attachments?.some(a => a.mimeType?.startsWith('audio/')) && (
+                            <span data-notes-signoff className="text-[10px] text-gray-400 whitespace-nowrap">
+                              {b.byName} · {format(new Date(b.at), 'd MMM')}
+                            </span>
+                          )}
                         </div>
                       </li>
                     ))}
@@ -365,9 +373,6 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
 
                 {/* THE BOX at the bottom: "Add notes for <Stage>" — Send puts the note above. */}
                 <div>
-                  <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-gray-500 mb-1">
-                    {s.addNotesFor} {stageName}
-                  </div>
                   <MessageBox
                     hook="stage-note-box"
                     value={drafts[stage.id] ?? ''}
@@ -378,7 +383,7 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                     onMemo={memo => attach(stage.id, memoFile(memo), true)}
                     busy={Object.keys(uploading).length > 0}
                     lang={lang}
-                    placeholder={`${s.officeNotesFor} ${stageName}…`}
+                    placeholder={`${s.addNotesFor} ${stageName}…`}
                   >
                     {pendingList.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mb-2">

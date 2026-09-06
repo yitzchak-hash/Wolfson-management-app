@@ -30,6 +30,46 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-12-15',
+    title: 'Problems, tipus, and notes that read like notes',
+    items: [
+      {
+        title: 'Report a problem',
+        body: 'A red button under the stage list. Say who fixes it, by when, what is '
+          + 'wrong (type it, dictate it, or record it) and whether pictures are '
+          + 'needed to close it. The apartment turns red with a big "!" everywhere '
+          + '— the diagram, the tile, the TV — while its real stage waits underneath. '
+          + 'The worker sees it first on every day, closes it into "waiting for '
+          + 'approval", and you approve or send it back from the band under the '
+          + 'apartment\'s title. Bulk update raises one on many apartments at once; '
+          + 'Reports has a Problems list that prints with the pictures.',
+        demo: 'tap',
+      },
+      {
+        title: 'Tipus',
+        body: 'The apartment type (A1, A2, B1…) from a list you keep in project '
+          + 'settings — a dropdown between the number and the family name, printed '
+          + 'as "47 — A2" wherever the number appears, settable in bulk.',
+        demo: 'list',
+      },
+      {
+        title: 'One message box, everywhere',
+        body: 'Every note and task is written the WhatsApp way now: paperclip, the '
+          + 'dictation mic in the box, the big mic that becomes Send. A recording '
+          + 'shows its waveform, can be scrubbed by dragging, and carries its words '
+          + 'underneath once the transcription key is set on the server.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'The notes tab',
+        body: 'Passed stages crossed off and folded, the current stage open, every '
+          + 'note a bullet with a small grey sign-off, the worker in a little bubble '
+          + 'beside CURRENT, and the box at the bottom.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2026-12-20',
     title: 'Problems, Tipus and notes that read like notes',
     items: [

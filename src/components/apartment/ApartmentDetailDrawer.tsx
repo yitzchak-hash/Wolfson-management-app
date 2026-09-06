@@ -478,7 +478,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     } else {
       atts.forEach((att, i) => addContractorNote({
         ...base,
-        text: i === 0 ? (text || att.filename) : att.filename,
+        text: i === 0 && text ? text : (att.mimeType.startsWith('audio/') || att.mimeType.startsWith('image/') ? '' : att.filename),
         attachmentDataUrl: att.driveFileId ? '' : att.dataUrl,
         attachmentFilename: att.filename,
         attachmentMimeType: att.mimeType,

@@ -235,6 +235,7 @@ export function TaskThread({ assignment, notes, photos, viewer, readOnly = false
                 onTranscript={t => { if (!n.transcript) updateContractorNote(n.id, { transcript: t }); }}
                 lang={translateTo}
                 saidLabel={words.said ?? 'Said'}
+                className="w-full min-w-[220px]"
               />
             </div>,
           );

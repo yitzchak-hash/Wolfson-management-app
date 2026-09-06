@@ -126,7 +126,7 @@ export function ProblemForm({ apartments, currentUser, onClose, onSaved }: {
       };
       atts.forEach(att => addContractorNote({
         ...base,
-        text: att.filename,
+        text: att.mimeType.startsWith('audio/') || att.mimeType.startsWith('image/') ? '' : att.filename,
         attachmentDataUrl: att.driveFileId ? '' : att.dataUrl,
         attachmentFilename: att.filename,
         attachmentMimeType: att.mimeType,

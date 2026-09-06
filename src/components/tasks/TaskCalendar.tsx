@@ -34,6 +34,8 @@ export interface CalendarEvent {
 }
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+/** Six working columns and a slim grey Saturday. */
+const WEEK_COLS = 'repeat(6, minmax(0, 1fr)) minmax(0, 0.5fr)';
 
 export function TaskCalendar({
   events,
@@ -169,17 +171,19 @@ export function TaskCalendar({
       </div>
 
       {/* Weekday headers */}
-      <div className="grid grid-cols-7 border-b border-gray-100">
+      {/* Saturday is not a working day (owner, 2026-09-06): its column is
+          narrow and grey so the six days that matter get the width. */}
+      <div className="grid border-b border-gray-100" style={{ gridTemplateColumns: WEEK_COLS }}>
         {weekdayLabels.map((d, i) => (
-          <div key={i} className="py-2 text-center text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+          <div key={i} className={`py-2 text-center text-[10px] font-semibold uppercase tracking-wider ${i === 6 ? 'text-gray-300 bg-gray-50' : 'text-gray-400'}`}>
             {d}
           </div>
         ))}
       </div>
 
       {/* Day grid */}
-      <div className={`grid grid-cols-7 ${fill ? 'flex-1 min-h-0' : ''}`}
-        style={fill ? { gridTemplateRows: `repeat(${weekRows}, minmax(0, 1fr))` } : undefined}>
+      <div className={`grid ${fill ? 'flex-1 min-h-0' : ''}`}
+        style={{ gridTemplateColumns: WEEK_COLS, ...(fill ? { gridTemplateRows: `repeat(${weekRows}, minmax(0, 1fr))` } : {}) }}>
         {days.map((day, idx) => {
           const key = format(day, 'yyyy-MM-dd');
           const allDayEvents = eventsByDay.get(key) ?? [];
@@ -193,7 +197,7 @@ export function TaskCalendar({
               key={idx}
               className={`border-b border-r border-gray-50 p-0.5 sm:p-1.5 flex flex-col gap-0.5 sm:gap-1
                 overflow-hidden ${fill ? 'min-h-0' : 'aspect-square sm:aspect-auto sm:min-h-[132px]'} ${
-                inMonth ? 'bg-white' : 'bg-gray-50/60'
+                idx % 7 === 6 ? 'bg-gray-100/80' : inMonth ? 'bg-white' : 'bg-gray-50/60'
               } ${idx % 7 === 6 ? 'border-r-0' : ''}`}
               /* On a phone a seventh of the width is ~52px, and the old fixed
                  132px height turned every day into a long-necked rectangle —

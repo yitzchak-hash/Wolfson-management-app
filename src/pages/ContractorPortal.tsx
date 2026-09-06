@@ -1055,7 +1055,8 @@ export function ContractorPortal() {
       noteAttachments.forEach((att, i) => {
         addContractorNote({
           ...base,
-          text: i === 0 ? (text || att.filename) : att.filename,
+          // A memo or a picture is the message; only an ordinary file keeps its name as the words.
+          text: i === 0 && text ? text : (att.mimeType.startsWith('audio/') || att.mimeType.startsWith('image/') ? '' : att.filename),
           attachmentDataUrl: att.driveFileId ? '' : att.dataUrl,
           attachmentFilename: att.filename,
           attachmentMimeType: att.mimeType,

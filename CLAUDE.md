@@ -7183,3 +7183,29 @@ Harness: `scratchpad/round40-probe.mjs` (52 checks, two contexts, on the keyed 5
 `/api/geocode` stubbed). Its own lesson is the standing one: a `page.evaluate` patch of localStorage
 followed by `reload()` is overwritten by the app's flush-on-unload — the waiting problem is SEEDED
 in the init script, never patched in.
+
+## The same day, from the owner's screenshots
+- **`VoiceMemoPlayer` reads the WAVEFORM off the bytes** (`decodePeaks`, an
+  AudioContext decode → forty RMS bars, cached per source) whenever no peaks
+  are stored — a memo saved as a file carries none, so every stored memo drew
+  forty flat 3px stubs and "0:00" (a recorder WebM reports Infinity until
+  played). The decode also answers the length. The bars are the scrubber
+  (pointer capture, DRAG works), a knob rides the progress, and the words and
+  the sign-off (`who`/`at`) sit INSIDE the card, so a memo reads as a note.
+- **`MessageBox` grows with the words** (a measured textarea, 1–6 lines) so
+  the clip and the big mic always sit on its bottom line; a `data-memo-sending`
+  bubble stands while `onMemo` uploads. `rows` is now the MINIMUM height.
+- **A memo's filename is never the message**: the three note writers (portal,
+  drawer thread, problem form) send `text: ''` for audio and pictures.
+- Notes tab: the worker is a `[data-stage-worker]` pill in the stage row
+  beside CURRENT; the "Add notes for X" words are the box's placeholder.
+- `TaskCalendar`: Saturday is `WEEK_COLS`' slim seventh column, grey.
+- **The gallery records memos for real**: `scratchpad/gallery.mjs` launches
+  Chromium with `--use-fake-device-for-media-stream` and
+  `--use-file-for-fake-audio-capture=<wav>` (a speech-shaped WAV from
+  `scratchpad/wav.mjs`), grants the microphone, and presses the big mic; the
+  captures are JPEG (11 screens × 11 devices must stay under the artifact's
+  16 MB). `scratchpad/build-gallery.mjs` assembles the page from
+  `gallery-style.css` / `gallery-loader.js` / `gallery-pins.json` (pins are
+  carried forward with `done` + `note`, never dropped). The portal's Calendar
+  tab is permission-gated — seed `seeSchedule` or the shot is the task list.

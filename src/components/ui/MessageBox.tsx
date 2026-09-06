@@ -1,5 +1,5 @@
-import React, { useRef } from 'react';
-import { Mic, Paperclip, Send } from 'lucide-react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
+import { Mic, Paperclip, Send, Loader2 } from 'lucide-react';
 import { VoiceRecorderButton } from './VoiceMemo';
 import { useSpeechToText } from '../../data/voiceSearch';
 import { transcribeMemo } from '../../data/transcribe';
@@ -25,15 +25,21 @@ import type { RecordedMemo } from '../../data/voiceMemo';
  *    words are handed back through `onTranscript` so an empty field can take
  *    them as its text (a memo sent as a task description IS the description).
  *
+ * The box GROWS with what is typed (one line up to six) so the clip and the
+ * mic always sit on its bottom line — a fixed tall box left the mic floating
+ * halfway up and the clip at the foot, which the owner read as misaligned.
+ * While a recording uploads, a grey "sending" bubble stands where the memo
+ * will appear, so the seconds it takes never look like nothing happening.
+ *
  * The transcript comes from the server (transcribe.ts) and only when a key
  * is set; with none the memo simply attaches, as it always did.
  */
 export type MessageLang = 'en' | 'he' | 'ru';
 
-const WORDS: Record<MessageLang, { placeholder: string; dictate: string; attach: string; record: string; send: string }> = {
-  en: { placeholder: 'Your message', dictate: 'Dictate', attach: 'Attach a file', record: 'Record a voice memo', send: 'Send' },
-  he: { placeholder: 'ההודעה שלך', dictate: 'הקלדה קולית', attach: 'צירוף קובץ', record: 'הקלטת הודעה קולית', send: 'שליחה' },
-  ru: { placeholder: 'Ваше сообщение', dictate: 'Голосовой ввод', attach: 'Прикрепить файл', record: 'Записать голосовое', send: 'Отправить' },
+const WORDS: Record<MessageLang, { placeholder: string; dictate: string; attach: string; record: string; send: string; sending: string }> = {
+  en: { placeholder: 'Your message', dictate: 'Dictate', attach: 'Attach a file', record: 'Record a voice memo', send: 'Send', sending: 'Sending the recording…' },
+  he: { placeholder: 'ההודעה שלך', dictate: 'הקלדה קולית', attach: 'צירוף קובץ', record: 'הקלטת הודעה קולית', send: 'שליחה', sending: 'שולח את ההקלטה…' },
+  ru: { placeholder: 'Ваше сообщение', dictate: 'Голосовой ввод', attach: 'Прикрепить файл', record: 'Записать голосовое', send: 'Отправить', sending: 'Отправляю запись…' },
 };
 
 export const dictationLocale = (lang: MessageLang | null | undefined) =>
@@ -52,7 +58,7 @@ export interface MessageBoxProps {
   onTranscript?: (text: string, dataUrl: string) => void;
   lang?: MessageLang | null;
   placeholder?: string;
-  /** Rows for a multi-line box; 1 (default) draws the single-line pill. */
+  /** The box's SMALLEST height in lines; it grows to six as you type. */
   rows?: number;
   /** SEND mode: the arrow shows when this is true even with no text (pending attachments). */
   hasPending?: boolean;
@@ -70,16 +76,32 @@ export interface MessageBoxProps {
   fontSize?: number;
 }
 
+const LINE = 20;
+const MAX_LINES = 6;
+
 export function MessageBox({
   value, onChange, onSend, onAttach, onMemo, onTranscript, lang, placeholder, rows = 1,
   hasPending, onBlur, autoFocus, busy, disabled, accept, className = '', hook, children, fontSize,
 }: MessageBoxProps) {
   const L = WORDS[lang ?? 'en'];
   const fileRef = useRef<HTMLInputElement>(null);
+  const areaRef = useRef<HTMLTextAreaElement>(null);
   const dictate = useSpeechToText(dictationLocale(lang), text => onChange(text));
   const sendMode = !!onSend;
   const canSend = sendMode && (value.trim().length > 0 || !!hasPending);
-  const multi = rows > 1;
+  const [sending, setSending] = useState(false);
+
+  // Grow with the words — measured, never guessed, so a pasted paragraph and a
+  // one-word reply both sit right; capped at six lines, after which it scrolls.
+  useLayoutEffect(() => {
+    const el = areaRef.current;
+    if (!el) return;
+    el.style.height = '0px';
+    const min = Math.max(1, rows) * LINE;
+    const h = Math.max(min, Math.min(MAX_LINES * LINE, el.scrollHeight));
+    el.style.height = `${h}px`;
+    el.style.overflowY = el.scrollHeight > h + 2 ? 'auto' : 'hidden';
+  }, [value, rows, fontSize]);
 
   async function recorded(memo: RecordedMemo) {
     if (!onMemo) return;
@@ -89,18 +111,31 @@ export function MessageBox({
       r.onerror = reject;
       r.readAsDataURL(memo.blob);
     });
-    await onMemo(memo, dataUrl);
+    setSending(true);
+    try {
+      await onMemo(memo, dataUrl);
+    } finally {
+      setSending(false);
+    }
     if (onTranscript) {
       void transcribeMemo(dataUrl).then(t => { if (t) onTranscript(t, dataUrl); });
     }
   }
 
   const hookAttrs = hook ? { [`data-${hook}`]: '' } : {};
+  const multiLook = rows > 1;
 
   return (
     <div className={`min-w-0 ${className}`} data-message-box {...hookAttrs}>
       {children}
-      <div className={`flex gap-2 ${multi ? 'items-end' : 'items-center'}`} data-composer>
+      {sending && (
+        <div data-memo-sending className="mb-2 inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-[12.5px] font-semibold"
+          style={{ backgroundColor: '#f3f6fa', border: '1px solid #e2e8f0', color: '#64748b' }}>
+          <Loader2 size={14} className="animate-spin" style={{ color: '#1e3a5f' }} />
+          {L.sending}
+        </div>
+      )}
+      <div className="flex gap-2 items-end" data-composer>
         {onAttach && (
           <>
             <button
@@ -108,10 +143,10 @@ export function MessageBox({
               data-composer-clip
               onClick={() => fileRef.current?.click()}
               disabled={disabled}
-              className="w-9 h-9 flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 hover:text-[#1e3a5f] flex-shrink-0 disabled:opacity-40"
+              className="w-10 h-10 flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 hover:text-[#1e3a5f] flex-shrink-0 disabled:opacity-40"
               title={L.attach}
             >
-              <Paperclip size={15} />
+              <Paperclip size={16} />
             </button>
             <input
               ref={fileRef} type="file" multiple className="hidden"
@@ -127,8 +162,8 @@ export function MessageBox({
           </>
         )}
         <div
-          className={`flex-1 min-w-0 flex gap-1 bg-white border ps-1.5 pe-3 ${multi ? 'items-start rounded-2xl py-1' : 'items-center rounded-full'}`}
-          style={{ borderColor: dictate.listening ? '#4aa8d8' : '#dbe3ec', minHeight: 42 }}
+          className={`flex-1 min-w-0 flex items-end gap-1 bg-white border ps-1 pe-3 ${multiLook ? 'rounded-2xl' : 'rounded-[22px]'}`}
+          style={{ borderColor: dictate.listening ? '#4aa8d8' : '#dbe3ec', minHeight: 44, paddingTop: 3, paddingBottom: 3 }}
         >
           {dictate.supported && (
             <button
@@ -137,47 +172,30 @@ export function MessageBox({
               onClick={dictate.toggle}
               disabled={disabled}
               title={L.dictate}
-              className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${multi ? 'mt-1' : ''} ${
+              className={`w-9 h-9 mb-[0.5px] rounded-full flex items-center justify-center flex-shrink-0 ${
                 dictate.listening ? 'text-white animate-pulse' : 'text-[#1e3a5f]'}`}
               style={{ backgroundColor: dictate.listening ? '#dc2626' : '#eef4fa' }}
             >
-              <Mic size={15} />
+              <Mic size={16} />
             </button>
           )}
-          {multi ? (
-            <textarea
-              data-composer-input
-              value={value}
-              onChange={e => onChange(e.target.value)}
-              onBlur={onBlur}
-              onKeyDown={e => {
-                if (sendMode && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (canSend) onSend!(); }
-              }}
-              rows={rows}
-              autoFocus={autoFocus}
-              disabled={disabled}
-              placeholder={placeholder ?? L.placeholder}
-              data-enter-own
-              className="flex-1 min-w-0 bg-transparent py-2 text-sm focus:outline-none resize-none"
-              style={fontSize ? { fontSize } : undefined}
-            />
-          ) : (
-            <input
-              data-composer-input
-              value={value}
-              onChange={e => onChange(e.target.value)}
-              onBlur={onBlur}
-              onKeyDown={e => {
-                if (sendMode && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (canSend) onSend!(); }
-              }}
-              autoFocus={autoFocus}
-              disabled={disabled}
-              placeholder={placeholder ?? L.placeholder}
-              data-enter-own={sendMode ? '' : undefined}
-              className="flex-1 min-w-0 bg-transparent py-2 text-sm focus:outline-none"
-              style={fontSize ? { fontSize } : undefined}
-            />
-          )}
+          <textarea
+            ref={areaRef}
+            data-composer-input
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            onBlur={onBlur}
+            onKeyDown={e => {
+              if (sendMode && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (canSend) onSend!(); }
+            }}
+            rows={1}
+            autoFocus={autoFocus}
+            disabled={disabled}
+            placeholder={placeholder ?? L.placeholder}
+            data-enter-own
+            className="flex-1 min-w-0 bg-transparent py-[9px] ps-1 text-sm focus:outline-none resize-none leading-5"
+            style={{ fontSize: fontSize ?? 14, lineHeight: `${LINE}px` }}
+          />
         </div>
         {canSend ? (
           <button
@@ -192,7 +210,7 @@ export function MessageBox({
             <Send size={18} />
           </button>
         ) : onMemo ? (
-          <VoiceRecorderButton big busy={busy} disabled={disabled} onRecorded={recorded} title={L.record} />
+          <VoiceRecorderButton big busy={busy || sending} disabled={disabled} onRecorded={recorded} title={L.record} />
         ) : null}
       </div>
     </div>
