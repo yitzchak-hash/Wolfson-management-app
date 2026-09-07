@@ -7298,3 +7298,44 @@ keeps videos and documents out of the photo widgets. Any new place that
 draws a `ContractorPhoto` goes through it. Harness:
 `scratchpad/photowidget-probe.mjs`.
 
+## The Drive sweep (`src/data/autoJobs.ts` + `AutoJobsCard`)
+Owner, 2026-09-07: intake folders ("Potentials" and the one new jobs land
+in) are watched; every subfolder no job in ANY workspace is linked to
+becomes a Job Board job — family from the folder title, the folder as its
+Drive link, Plans/Photos shared — filed into the "New Jobs Came In" group.
+`BoardSetting.autoJobs` on the Job Board (`on`, `folders`, `lastRunAt`,
+`lastNote`) rides `boardSettings` — no new state key. Rules:
+- **The job's id IS the folder's id** (`G-auto-<folderId>`) so two office
+  machines sweeping at once write the same document; the group is minted
+  under the fixed id `CE-bin-newjobs` (the seeded-bins idiom).
+- **Tombstones first**: `fsGetTombstones('general')` — a job the office
+  deleted forever is never re-minted. Trash is not deletion; a trashed job
+  keeps its link and blocks re-creation by that alone.
+- **Runs from any workspace, writes to the Job Board**: `addJobsToProject`
+  (store) — the open workspace through `importJobs`/`addCanvasElement`,
+  any other through its Firestore collections + local snapshot + a
+  `snapshotTick` bump (the `addAssignmentToProject` idiom).
+  `setBoardSettingFor(pid, …)` is `setBoardSetting` for a named workspace.
+- **The clock is the open app** (no server cron): AppLayout asks every ten
+  minutes whether two hours have passed since `lastRunAt`; the answer is
+  in the synced setting, so five machines share one cadence.
+- Watched folders must be shared with the service account (its email is
+  read off `/api/geocode?health=1` and shown on the card).
+
+## The AI plan reader (`planRead` in api/geocode.js + `src/data/planAi.ts`)
+One picture in — the first page rendered at ≤1800px, or the crop under a
+drawn box (sent ENLARGED, ≤3×, small print reads better) — and
+`{address, phone, family}` out, as printed. Key-guarded like the
+translator; Anthropic when its key is set, else the same OpenAI key that
+transcribes and translates (one key for everything); 501 stands the client
+down for the visit and the local text-layer reader carries on. In
+`readNow` the model's answer WINS over the heuristics; the local cutout
+stays as the eye's picture only when the two agree, else the page itself.
+`health` reports `hasAiKey`.
+
+The draw-a-box picker fixes the same day: the WHOLE sheet is fitted into the
+dialog (a scrolled sheet hid the title block — "I need to see the full plan
+in the box"); `read()` takes a line only when its MIDDLE is inside the box
+and a part only when its CENTRE is (a box grazing the next line dragged
+"Floor:" in); `tidy()` strips `: + - ·` off either end.
+

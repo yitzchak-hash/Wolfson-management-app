@@ -23,6 +23,7 @@
  * must never add a megabyte of PDF engine to the main bundle.
  */
 import { fetchPlanBytes } from './driveApi';
+import { aiPlanReadingAvailable, aiReadPlanImage, canvasToJpeg } from './planAi';
 
 export interface PlanAddressResult {
   /** Best-effort text of the address line. The cutout is the ground truth. */
@@ -34,6 +35,10 @@ export interface PlanAddressResult {
   /** PNG data URL of the region the phone was read from. */
   phoneCutout?: string;
   problem?: 'no-text' | 'no-address' | 'unreachable';
+  /** The family name, when the AI reader found one. */
+  family?: string;
+  /** True when a vision model answered — the address and phone are its reading. */
+  ai?: boolean;
 }
 
 interface Line {
@@ -69,6 +74,11 @@ export function normalizePhoneDigits(s: string): string {
 }
 
 /** Strip the label word itself, so "כתובת: הרצל 12" suggests "הרצל 12". */
+/** Whitespace folded, and no stray ':' '+' '-' hanging off either end. */
+export function tidy(s: string): string {
+  return s.replace(/\s+/g, ' ').replace(/^[\s:：\-–—+·,;]+|[\s:：\-–—+·,;]+$/g, '').trim();
+}
+
 function stripLabel(text: string): string {
   return text.replace(/.*?(כתובת|address)\s*[:\-–]?\s*/i, '').trim();
 }
@@ -253,6 +263,8 @@ export interface RegionReader {
   w: number; h: number;
   /** The text inside a box, corners as FRACTIONS of the image (x across, y down). */
   read(r: { x0: number; y0: number; x1: number; y1: number }): string;
+  /** A JPEG of that box, enlarged — what the AI reader is shown. */
+  crop(r: { x0: number; y0: number; x1: number; y1: number }): string;
   /** Free the pdf.js document. */
   close(): void;
 }
@@ -297,6 +309,7 @@ export async function openRegionReader(fileId: string): Promise<RegionReader | n
 
     return {
       image, w, h,
+      crop(r) { return canvasToJpeg(canvas, r); },
       read(r) {
         // Image fractions -> PDF user space, through the render viewport (y
         // flips there; convertToPdfPoint owns that arithmetic).
@@ -304,15 +317,21 @@ export async function openRegionReader(fileId: string): Promise<RegionReader | n
         const b = vp.convertToPdfPoint(r.x1 * w, r.y1 * h);
         const rx1 = Math.min(a[0], b[0]), rx2 = Math.max(a[0], b[0]);
         const ry1 = Math.min(a[1], b[1]), ry2 = Math.max(a[1], b[1]);
+        // ONLY what is inside the box (owner, 2026-09-07: "even if I draw
+        // the box directly over the address, it still gets the words around
+        // it"). A line counts when its MIDDLE is inside the box's height, and
+        // a part when its CENTRE is inside the box's width — a box that
+        // grazes the next line's edge no longer drags "Floor:" in with it.
         const picked: string[] = [];
         for (const l of lines) {
-          if (l.y2 < ry1 || l.y1 > ry2) continue;
-          const parts = l.parts.filter(pt => pt.x < rx2 && pt.x + (pt.w ?? 24) > rx1);
+          const ly = (l.y1 + l.y2) / 2;
+          if (ly < ry1 || ly > ry2) continue;
+          const parts = l.parts.filter(pt => { const cx = pt.x + (pt.w ?? 24) / 2; return cx >= rx1 && cx <= rx2; });
           if (!parts.length) continue;
           const read = pickReading(variantsOf({ ...l, parts }));
           if (read) picked.push(read);
         }
-        return picked.join(' ').replace(/\s+/g, ' ').trim();
+        return tidy(picked.join(' '));
       },
       close() { void doc.destroy().catch(() => {}); },
     };
@@ -502,7 +521,6 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
       return canvas.toDataURL('image/png');
     };
 
-    if (!bestAddr && !bestPhone) return { problem: 'no-address' };
     const out: PlanAddressResult = {};
     const ba = bestAddr as { line: Line; extra?: Line; text: string } | null;
     const bp = bestPhone as { line: Line; text: string } | null;
@@ -514,6 +532,42 @@ async function readNow(fileId: string): Promise<PlanAddressResult> {
       out.phone = bp.text;
       out.phoneCutout = await cutoutOf(bp.line).catch(() => undefined);
     }
+
+    // THE AI READ (owner, 2026-09-07): when the server has a key, the whole
+    // first page goes to a vision model and ITS answer wins — a heuristic
+    // over an arbitrary title block will always lose some of the time, and
+    // the model reads the block the way a person does. The local cutouts
+    // stay as the eye's picture when they agree; the page itself stands in
+    // when the model found something the text layer had not.
+    if (aiPlanReadingAvailable()) {
+      try {
+        const base = page.getViewport({ scale: 1 });
+        const scale = Math.min(2, 1800 / Math.max(base.width, base.height));
+        const vp = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+          await page.render({ canvasContext: ctx, viewport: vp } as never).promise;
+          const ai = await aiReadPlanImage(canvasToJpeg(canvas, undefined, 1800), 'both', false);
+          if (ai) {
+            out.ai = true;
+            if (ai.address) {
+              if (ai.address !== out.address) out.cutout = out.address && tidy(out.address) === tidy(ai.address) ? out.cutout : canvas.toDataURL('image/jpeg', 0.8);
+              out.address = ai.address;
+            }
+            if (ai.phone) {
+              if (ai.phone !== out.phone) out.phoneCutout = out.phone && out.phone.replace(/\D/g, '') === ai.phone.replace(/\D/g, '') ? out.phoneCutout : canvas.toDataURL('image/jpeg', 0.8);
+              out.phone = ai.phone;
+            }
+            if (ai.family) out.family = ai.family;
+          }
+        }
+      } catch { /* the local read stands */ }
+    }
+
+    if (!out.address && !out.phone) return { problem: 'no-address' };
     return out;
   } finally {
     void doc.destroy().catch(() => {});

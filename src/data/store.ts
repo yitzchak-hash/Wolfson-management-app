@@ -467,6 +467,17 @@ interface AppState {
   addApartment: (apt: Apartment) => void;
   /** Bulk add — one state set, one persist, one (chunked) Firestore batch. */
   importJobs: (jobs: Apartment[]) => void;
+  /**
+   * Jobs (and, optionally, a group node) written into a NAMED workspace —
+   * the Drive sweep runs from whichever workspace the office is standing in
+   * and always writes to the Job Board. The open workspace goes through the
+   * ordinary actions; any other is written to its Firestore collections and
+   * its local snapshot (the addAssignmentToProject idiom). Ids are the
+   * caller's, so two machines sweeping at once land on the same documents.
+   */
+  addJobsToProject: (projectId: string, jobs: Apartment[], group?: CanvasElement) => void;
+  /** setBoardSetting for a workspace other than the open one. */
+  setBoardSettingFor: (projectId: string, key: BoardSettingKey, value: BoardSetting[BoardSettingKey]) => void;
   /** Undo a bulk import: permanently removes jobs whose id carries the import
    *  prefix. Returns how many went. Touches nothing else. */
   removeJobsByIdPrefix: (prefix: string) => number;
@@ -1266,6 +1277,37 @@ export const useStore = create<AppState>((set, get) => ({
     // One chunked batch, not hundreds of single writes — a CSV import lands
     // several hundred jobs at once and each fsSet is its own network round.
     fsBatchSet(projectCollection(get().currentProjectId, 'apartments'), jobs.map(j => ({ id: j.id, data: j })));
+  },
+
+  addJobsToProject: (projectId, jobs, group) => {
+    if (projectId === get().currentProjectId) {
+      if (group && !get().canvasElements.some(e => e.id === group.id)) get().addCanvasElement(group);
+      const have = new Set(get().apartments.map(a => a.id));
+      get().importJobs(jobs.filter(j => !have.has(j.id)));
+      return;
+    }
+    const key = `${projectId}_app_data`;
+    const snap = loadFromStorage<Record<string, unknown>>(key, {});
+    const apts = Array.isArray(snap.apartments) ? snap.apartments as Apartment[] : [];
+    const have = new Set(apts.map(a => a.id));
+    const fresh = jobs.filter(j => !have.has(j.id));
+    const els = Array.isArray(snap.canvasElements) ? snap.canvasElements as CanvasElement[] : [];
+    const addGroup = group && !els.some(e => e.id === group.id) ? group : null;
+    saveToStorage(key, {
+      ...snap,
+      apartments: [...apts, ...fresh],
+      canvasElements: addGroup ? [...els, addGroup] : els,
+    });
+    if (fresh.length) fsBatchSet(projectCollection(projectId, 'apartments'), fresh.map(j => ({ id: j.id, data: j })));
+    if (addGroup) fsSet(projectCollection(projectId, 'canvasElements'), addGroup.id, addGroup);
+    set(st => ({ snapshotTick: st.snapshotTick + 1 }));
+  },
+
+  setBoardSettingFor: (projectId, key, value) => {
+    const next = { ...get().boardSettings, [projectId]: { ...(get().boardSettings[projectId] ?? {}), [key]: value } };
+    set({ boardSettings: next });
+    persist(get);
+    fsSet('settings', 'app', { boardSettings: next });
   },
 
   removeJobsByIdPrefix: (prefix) => {
@@ -2586,7 +2628,7 @@ export const useStore = create<AppState>((set, get) => ({
     const apt = get().apartments.find(a => a.id === apartmentId);
     if (!apt || !text.trim()) return;
     const now = new Date().toISOString();
-    const legacy: StageNoteEntry[] = !apt.noteEntries && apt.generalNotes.trim()
+    const legacy: StageNoteEntry[] = !apt.noteEntries && (apt.generalNotes ?? '').trim()
       ? [{ id: `${apt.id}-note-0`, text: apt.generalNotes, at: apt.updatedAt ?? now, by: apt.updatedBy ?? '', byName: apt.updatedByName ?? 'Office' }]
       : [];
     const entries = [...(apt.noteEntries ?? legacy), { id: generateId(), text: text.trim(), at: now, by: user.id, byName: user.name }];
@@ -2596,7 +2638,7 @@ export const useStore = create<AppState>((set, get) => ({
   removeApartmentNote: (apartmentId, entryId, user) => {
     const apt = get().apartments.find(a => a.id === apartmentId);
     if (!apt) return;
-    const legacy: StageNoteEntry[] = !apt.noteEntries && apt.generalNotes.trim()
+    const legacy: StageNoteEntry[] = !apt.noteEntries && (apt.generalNotes ?? '').trim()
       ? [{ id: `${apt.id}-note-0`, text: apt.generalNotes, at: apt.updatedAt ?? '', by: apt.updatedBy ?? '', byName: apt.updatedByName ?? 'Office' }]
       : [];
     const entries = (apt.noteEntries ?? legacy).filter(e => e.id !== entryId);

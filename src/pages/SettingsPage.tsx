@@ -34,6 +34,7 @@ import { extractFolderId, extractFileId, isUploadBackendConfigured, getFolderNam
 import { fetchContractorSheet } from '../data/sheetApi';
 import { ProjectBuilder } from '../components/settings/ProjectBuilder';
 import { ImportJobsCard } from '../components/settings/ImportJobsCard';
+import { AutoJobsCard } from '../components/settings/AutoJobsCard';
 import { ProjectLayout, layoutToApartments, newSlot, joinSlots, areNeighbours } from '../data/projectLayout';
 
 /** The shape the wall is set to, as a number. Defaults to 16:9. */
@@ -398,7 +399,10 @@ export function SettingsPage({ scope = 'project' }: { scope?: SettingsScope }) {
       {/* The CRM import belongs to the Job Board alone — a deals export maps
           to board tiles and groups, not to apartments in a tower. */}
       {activeTab === 'stages' && scope === 'project' && currentProjectId === 'general' && (
-        <ImportJobsCard onToast={showToast} />
+        <>
+          <AutoJobsCard onToast={showToast} />
+          <ImportJobsCard onToast={showToast} />
+        </>
       )}
       {activeTab === 'users' && (
         <>

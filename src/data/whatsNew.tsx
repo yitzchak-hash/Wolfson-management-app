@@ -51,6 +51,25 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'tap',
       },
       {
+        title: 'New Drive folders become jobs by themselves',
+        body: 'Job Board settings → Automatic jobs from Drive: paste the links '
+          + 'of your intake folders (Potentials and the one new jobs land in), '
+          + 'switch it on, and every two hours a folder nobody has a job for '
+          + 'becomes a job — the family from the folder\'s name, the folder as '
+          + 'its Drive link — filed into a "New Jobs Came In" group. Check now '
+          + 'runs it on the spot.',
+        demo: 'list',
+      },
+      {
+        title: 'The plan reader, done by AI',
+        body: 'With the OpenAI key on the server, the address and phone under '
+          + 'the fields are read by a vision model looking at the sheet the way '
+          + 'a person does. The draw-a-box picker now shows the whole sheet, '
+          + 'reads only what is inside the box, and hands the box to the same '
+          + 'model.',
+        demo: 'tap',
+      },
+      {
         title: 'The photo widgets show every photo',
         body: 'Pictures a worker sent through Drive — closing a task, closing a '
           + 'problem — came out as broken squares on the Latest photos widget '

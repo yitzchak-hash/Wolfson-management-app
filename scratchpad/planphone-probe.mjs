@@ -86,6 +86,8 @@ await ctx.addInitScript(() => {
   }));
 });
 const page = await ctx.newPage();
+page.on('pageerror', e => console.log('PAGEERROR', String(e).split('\n')[0]));
+page.on('console', m => { if (m.type() === 'error') console.log('CONSOLE', m.text().slice(0, 160)); });
 await page.goto(`${APP}/jobs`);
 await page.waitForTimeout(2800);
 await page.locator('[data-node-id="G-born"]').dblclick();

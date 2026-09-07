@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Eye, Loader2, Plus, SquareDashedMousePointer, X } from 'lucide-react';
-import { readPlanAddress, openRegionReader, PlanAddressResult, RegionReader } from '../../data/planAddress';
+import { readPlanAddress, openRegionReader, PlanAddressResult, RegionReader, tidy } from '../../data/planAddress';
+import { aiPlanReadingAvailable, aiReadPlanImage } from '../../data/planAi';
 
 type Frac = { x0: number; y0: number; x1: number; y1: number };
 
@@ -85,6 +86,8 @@ function RegionPicker({ fileId, kind, onUse, onClose }: {
       setBox({ x0: g.at.x0 + dx, y0: g.at.y0 + dy, x1: g.at.x1 + dx, y1: g.at.y1 + dy });
     }
   }
+  const [aiBusy, setAiBusy] = useState(false);
+  const readSeq = useRef(0);
   function onUp() {
     const g = gesture.current;
     gesture.current = null;
@@ -92,7 +95,20 @@ function RegionPicker({ fileId, kind, onUse, onClose }: {
     // The pull, RIGHT AWAY — the box has barely been let go of.
     const b = boxRef.current;
     if (b && Math.abs(b.x1 - b.x0) > 0.005 && Math.abs(b.y1 - b.y0) > 0.005) {
-      setReadText(readerRef.current.read(b));
+      const local = readerRef.current.read(b);
+      setReadText(local);
+      // With an AI key on the server the CROP goes to the model, which reads
+      // exactly what is inside the box — the text layer is the fallback.
+      if (aiPlanReadingAvailable()) {
+        const seq = ++readSeq.current;
+        setAiBusy(true);
+        void aiReadPlanImage(readerRef.current.crop(b), kind, true).then(ai => {
+          if (seq !== readSeq.current) return;
+          setAiBusy(false);
+          const v = ai ? tidy(kind === 'address' ? ai.address : ai.phone) : '';
+          if (v) setReadText(v);
+        });
+      }
     } else {
       setBox(null);   // a stray tap is not a box
       setReadText(null);
@@ -123,7 +139,7 @@ function RegionPicker({ fileId, kind, onUse, onClose }: {
           </span>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
         </div>
-        <div className="flex-1 min-h-0 overflow-auto bg-slate-100 p-2">
+        <div className="flex-1 min-h-0 overflow-hidden bg-slate-100 p-2 flex items-center justify-center">
           {failed ? (
             <p className="text-[12px] text-gray-500 p-6 text-center">
               This sheet has no readable text — it is a scan, a picture of a plan. Type the {kind} in by hand.
@@ -133,11 +149,16 @@ function RegionPicker({ fileId, kind, onUse, onClose }: {
               <Loader2 size={14} className="animate-spin" /> Preparing the sheet…
             </p>
           ) : (
-            <div ref={wrapRef} data-addr-pick-stage className="relative select-none mx-auto"
+            /* The WHOLE sheet, fitted — the owner could not find the title
+               block on a sheet that scrolled ("I need to see the full plan in
+               the box"). The wrapper hugs the image so the box's fractions
+               are the image's. */
+            <div ref={wrapRef} data-addr-pick-stage className="relative select-none inline-block"
               style={{ touchAction: 'none', cursor: 'crosshair', maxWidth: '100%' }}
               onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
               <img src={reader.image} alt="The plan's first page" draggable={false}
-                className="block w-full h-auto rounded-lg border border-gray-200 bg-white" />
+                className="block rounded-lg border border-gray-200 bg-white"
+                style={{ maxWidth: '100%', maxHeight: 'calc(92vh - 118px)', width: 'auto', height: 'auto' }} />
               {bx && (
                 <div data-addr-pick-box className="absolute rounded-sm"
                   style={{ ...bx, border: '2.5px solid #4aa8d8', backgroundColor: 'rgba(74,168,216,.14)',
@@ -153,8 +174,9 @@ function RegionPicker({ fileId, kind, onUse, onClose }: {
             </span>
           ) : readText ? (
             <>
-              <span data-addr-pick-read className="text-[12.5px] font-bold flex-1 min-w-0" dir="auto" style={{ color: '#15803d' }}>
+              <span data-addr-pick-read className="text-[12.5px] font-bold flex-1 min-w-0 flex items-center gap-1.5" dir="auto" style={{ color: '#15803d' }}>
                 Reads: {readText}
+                {aiBusy && <Loader2 size={12} className="animate-spin text-gray-400" />}
               </span>
               <button data-addr-pick-use
                 onClick={() => { onUse(readText); onClose(); }}

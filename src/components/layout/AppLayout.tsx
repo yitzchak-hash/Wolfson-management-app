@@ -3,6 +3,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Header } from './Header';
 import { Sidebar, MobileNav } from './Sidebar';
 import { useStore, ensureProjectSnapshot } from '../../data/store';
+import { sweepDue, sweepAutoJobs } from '../../data/autoJobs';
 import { isFirebaseConfigured } from '../../data/firebase';
 import { PlannerAskModal } from '../board/PlannerAskModal';
 import { UndoLayer } from '../board/UndoLayer';
@@ -144,6 +145,21 @@ export function AppLayout() {
     const { projects, currentProjectId } = useStore.getState();
     projects.filter(p => p.id !== currentProjectId)
       .forEach(p => void ensureProjectSnapshot(p.id));
+  }, []);
+
+  /**
+   * THE DRIVE SWEEP's clock (owner, 2026-09-07: "every two hours a little
+   * sift through"). There is no server to keep time, so the office's open app
+   * is the clock: a look shortly after arriving, then every ten minutes the
+   * question "is it two hours since the last sweep?" — the answer lives in
+   * the synced setting, so five open machines share ONE two-hour cadence
+   * rather than each running its own.
+   */
+  useEffect(() => {
+    const tick = () => { if (sweepDue()) void sweepAutoJobs('timer'); };
+    const first = setTimeout(tick, 20_000);
+    const every = setInterval(tick, 10 * 60_000);
+    return () => { clearTimeout(first); clearInterval(every); };
   }, []);
 
   return (

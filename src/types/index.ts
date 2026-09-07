@@ -59,9 +59,26 @@ export function isBuiltInBin(el: { binKind?: BinKind }): boolean {
  * Bins are NOT stored here: they are real CanvasElements with a `binKind`, so
  * they move, resize and sync exactly like every other node.
  */
+/**
+ * Automatic jobs from Drive (owner, 2026-09-07): the office's intake folders
+ * ("Potentials" and the one new jobs land in) are swept every two hours, and
+ * every subfolder nobody has a job for yet becomes a Job Board job filed into
+ * the "New Jobs Came In" group — the family from the folder's title, exactly
+ * as pasting the link does. Lives in the Job Board's BoardSetting.
+ */
+export interface AutoJobsSetting {
+  on: boolean;
+  /** Drive folder links, one per watched folder — shared with the service account. */
+  folders: string[];
+  lastRunAt?: string;
+  lastNote?: string;
+}
+
 export interface BoardSetting {
   /** What is on the toolbar and in what order. */
   toolbar?: ToolbarSetup;
+  /** The Drive intake sweep — Job Board only. */
+  autoJobs?: AutoJobsSetting;
   /** The workspace's list of apartment types — see Apartment.tipus. */
   tipusim?: string[];
   themeId?: string;

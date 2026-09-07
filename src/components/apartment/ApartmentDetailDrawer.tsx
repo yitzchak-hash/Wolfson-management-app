@@ -1824,7 +1824,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   type NoteRow =
                     | { kind: 'text'; id: string; at: string; who: string; text: string }
                     | { kind: 'file'; id: string; at: string; who: string; file: typeof officeNoteFiles[number] };
-                  const legacy = !apartment.noteEntries && apartment.generalNotes.trim()
+                  const legacy = !apartment.noteEntries && (apartment.generalNotes ?? '').trim()
                     ? [{ id: `${apartment.id}-note-0`, text: apartment.generalNotes, at: apartment.updatedAt ?? '', byName: apartment.updatedByName ?? 'Office' }]
                     : [];
                   const entries = apartment.noteEntries ?? legacy;
