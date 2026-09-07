@@ -18,6 +18,7 @@ import GoalsPage from './pages/GoalsPage';
 import { GlobalCalendarPage } from './pages/GlobalCalendarPage';
 import { ProjectCalendarPage } from './pages/ProjectCalendarPage';
 import { TvPresentationPage } from './pages/TvPresentationPage';
+import { SketchPage } from './pages/SketchPage';
 import { armWorkspaceHistoryRestore } from './data/workspaceHistory';
 
 // Before the router can subscribe to popstate — see workspaceHistory.ts.
@@ -107,6 +108,8 @@ export default function App() {
           <Route path="activity" element={<ActivityLogPage />} />
           {/* What the TV sees, and where the wall is arranged — from a PC. */}
           <Route path="tv-view" element={<TvViewPage />} />
+          {/* The Plan Sketcher's studio over one plan (B10 give-back) — reached from the drawer's Sketch button */}
+          <Route path="sketch/:fileId" element={<SketchPage />} />
           <Route path="settings" element={<SettingsPage scope="project" />} />
           <Route path="app-settings" element={<SettingsPage scope="app" />} />
         </Route>

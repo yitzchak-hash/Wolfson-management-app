@@ -6077,3 +6077,54 @@ real card drag, drop fills + emptied row squishes, strips-mode heights) ·
 `planphone-probe` grew the office-number decoy line and the normaliser
 check. What's New carries the round (its dates run AHEAD of the wall clock —
 a new entry must postdate the previous top one or the red dot never shows).
+
+---
+
+# v2 — the Plan Sketcher's studio, inside (the sketcher's B10 give-back)
+
+The Plan Sketcher (`yitzchak-hash/TzviAir-Plan-Sketcher`, its own app and
+site) was built OVER this app's markup studio, copied byte for byte, and its
+sketch studio — blocks at true size, gvs boxes, pipes and ducts, options per
+floor, the TzviAir sheet and the Excel — comes back here as the sketcher
+wrote it (its pick 6 / 33). The sketcher's `scratchpad/copycheck.mjs` still
+holds the shared set identical between the two repos; **a change to the
+markup studio belongs HERE and reaches the sketcher by re-copy, a change to
+the sketch studio belongs in the sketcher and comes back the same way.**
+
+- `src/components/sketch/` (SketchStudio · BlockShelf · BlockLayer ·
+  BlockSettings · GvsLayer · SketchTools · SketchSettings · ExportDialog),
+  `src/data/{catalog,sketchItems,gvs,pipes,sheetExport,sheetRaster,strings,paths}.ts`
+  and `public/catalog.json` are the sketcher's files, verbatim except for the
+  ONE seam below. `SketchStudio.tsx` is the markup studio FORKED, every
+  addition marked `B7`/`B8`/`B9`/`B10` — never merge it into PlanAnnotator.
+- **The seam is `src/data/sketcherStore.ts`**: the sketcher's own store as an
+  adapter — the same keys and action names (`items`/`sheets`/`blocks`/
+  `blockRules`/`shapes`/`pipes`/`pipeRules`/`exports`/`plans`, upsert / merge
+  / filter by id), the same `sketcher_*` Firestore collections (so a sheet
+  sketched in either app is the same sheet in the other), the rule
+  documents written WHOLE, localStorage `sketcher_app_data` as the offline
+  copy, Firebase-wins listeners started by the sketch page. The studio reads
+  those through `useSketchStore`; `mainUiStrings`, `planAnnotations` and
+  `planPins` it still reads from THIS store, exactly as PlanAnnotator does.
+  It writes nothing to the job app's collections.
+- **The job is the apartment**: `job9` in SketchStudio is built from
+  `apartments` (`aptLabel`, address, phone) and `currentProjectId`, which is
+  what prefills the Export window's title block.
+- Route `/sketch/:fileId?name=&job=&project=&folder=` inside the authed
+  AppLayout block (`SketchPage`; the STUDIO is lazy for pdf.js, the route is
+  not — a lazy route would flash its fallback under the urgent-nav shim).
+  `sketchPath()` in `src/data/paths.ts` is the one way to address it. The
+  door is the drawer's plan bar: a **Sketch** button (`data-sketch-open`)
+  beside Mark up, passing the JOB folder — the export files its sheets under
+  `<job folder> › Engineered Plans › Sketcher` itself. Closing returns to
+  `/jobs` or `/project` by workspace.
+- No new `/api` file — the sketcher's own `drive-list.js` and
+  `classify-layers.js` stay in ITS repo (the clean room and the home screen
+  did not come over; this app has its own doors to a plan). Twelve functions
+  stand, as before.
+
+Harness: `scratchpad/sketchgiveback.mjs` (9 checks, dev server + `npm i
+--no-save playwright pdf-lib`): the Sketch button, the route's query, the
+studio mounting with its shelf and layer, a stamped block landing in
+`sketcher_app_data` and NOT in `wolfson_app_data`, the title block prefilled
+from the apartment, close-returns-home, no page errors.

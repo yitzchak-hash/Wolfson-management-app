@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
-import { Mic, X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer, Phone as PhoneIcon, Loader2 } from 'lucide-react';
+import { Mic, X, Save, Building2, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer, Phone as PhoneIcon, Loader2, Ruler } from 'lucide-react';
 import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel, ContractorAssignment } from '../../types';
 import { TaskThread } from '../tasks/TaskThread';
 import { Send } from 'lucide-react';
@@ -20,6 +20,8 @@ import { LinkField } from '../ui/LinkField';
 import { printSheet, printEsc } from '../../data/printing';
 import { PlanAddressSuggest } from './PlanAddressSuggest';
 import { StagePicker } from './StagePicker';
+import { useNavigate } from 'react-router-dom';
+import { sketchPath } from '../../data/paths';
 import { PlanPinOverlay } from './PlanPinOverlay';
 import { cachedPlanAspect, measurePlanAspect } from '../../data/planAspect';
 // Lazy, deliberately. The markup studio carries pdf.js — about a megabyte of
@@ -166,6 +168,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     contractorPhotos, updateContractorPhoto, planAnnotations, stageNotes, planPins,
     contractorNotes, addContractorNote } = useStore();
   const isGeneralProject = currentProjectId === 'general';
+  const navigate = useNavigate();
   const backendConfigured = isUploadBackendConfigured();
 
   /**
@@ -1018,6 +1021,14 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           <DriveDesktopPath driveLink={planSet.plansFolderId} onToast={onToast} />
         )}
 
+        {/* B10: the Plan Sketcher's studio — blocks at true size, gvs, pipes, options, the TzviAir sheet */}
+        <Tooltip text="Sketch the system on this plan">
+          <button onClick={() => navigate(sketchPath({ fileId, name: planSet.plans.find(p => p.id === fileId)?.name, jobId: apartment?.id, projectId: currentProjectId, folderId: extractFolderId(apartment?.driveLink ?? '') ?? undefined }))}
+            className="flex items-center gap-1.5 px-2.5 py-1 min-h-[30px] rounded-lg text-[11px] font-bold text-white"
+            style={{ backgroundColor: '#1e3a5f', border: '1px solid rgba(255,255,255,.25)' }} data-sketch-open>
+            <Ruler size={11} /> Sketch
+          </button>
+        </Tooltip>
         <Tooltip text="Mark up this plan">
           <button onClick={() => setAnnotating('draw')}
             className="flex items-center gap-1.5 px-2.5 py-1 min-h-[30px] rounded-lg text-[11px] font-bold text-white"
