@@ -3,7 +3,7 @@ import { useStore, loadProjectSnapshot } from './store';
 import { fsGetTombstones, isFirebaseConfigured } from './firebase';
 import {
   isUploadBackendConfigured, extractFolderId, listPlanSubfoldersViaBackend,
-  familyNameFromFolderName, shareJobFolderSurfacesNow,
+  familyNameFromFolderName, shareJobFolderSurfacesNow, getFolderNameViaBackend,
 } from './driveApi';
 
 /**
@@ -30,7 +30,12 @@ export const AUTO_JOBS_EVERY_MS = 2 * 60 * 60 * 1000;
 const TILE_W = 215, TILE_H = 132, GAP = 22, PER_ROW = 4;
 
 let running: Promise<SweepResult> | null = null;
-export interface SweepResult { created: number; skipped: number; note: string; names: string[] }
+export interface SweepResult {
+  created: number; skipped: number; note: string; names: string[];
+  /** What each watched folder held — the arithmetic behind the count, so
+      "only 494?" can be answered from the card rather than guessed at. */
+  folders: { name: string; seen: number; linked: number; fresh: number; unreachable: boolean }[];
+}
 
 export function autoJobsSetting(): AutoJobsSetting | undefined {
   return useStore.getState().boardSettings.general?.autoJobs;
@@ -53,7 +58,7 @@ export function sweepAutoJobs(reason: 'timer' | 'manual'): Promise<SweepResult> 
 async function doSweep(reason: 'timer' | 'manual'): Promise<SweepResult> {
   const st = useStore.getState();
   const setting = autoJobsSetting() ?? { on: false, folders: [] };
-  const fail = (note: string): SweepResult => ({ created: 0, skipped: 0, note, names: [] });
+  const fail = (note: string): SweepResult => ({ created: 0, skipped: 0, note, names: [], folders: [] });
   if (reason === 'timer' && !setting.on) return fail('off');
   const watched = (setting.folders ?? []).map(extractFolderId).filter((x): x is string => !!x);
   if (!watched.length) return fail('No folder links to watch.');
@@ -71,10 +76,18 @@ async function doSweep(reason: 'timer' | 'manual'): Promise<SweepResult> {
 
   const found: { id: string; name: string }[] = [];
   let unreachable = 0;
+  const folders: SweepResult['folders'] = [];
   for (const fid of watched) {
-    const kids = await listPlanSubfoldersViaBackend(fid);
+    const [kids, title] = await Promise.all([listPlanSubfoldersViaBackend(fid), getFolderNameViaBackend(fid)]);
+    const row = { name: title || fid.slice(0, 8) + '…', seen: kids.length, linked: 0, fresh: 0, unreachable: !kids.length };
+    folders.push(row);
     if (!kids.length) { unreachable++; continue; }
-    for (const k of kids) if (!linked.has(k.id) && !dead.has(`G-auto-${k.id}`) && !found.some(f => f.id === k.id)) found.push({ id: k.id, name: k.name });
+    for (const k of kids) {
+      if (linked.has(k.id)) { row.linked++; continue; }
+      if (dead.has(`G-auto-${k.id}`) || found.some(f => f.id === k.id)) continue;
+      found.push({ id: k.id, name: k.name });
+      row.fresh++;
+    }
   }
 
   const now = new Date().toISOString();
@@ -125,9 +138,16 @@ async function doSweep(reason: 'timer' | 'manual'): Promise<SweepResult> {
     await Promise.all(jobs.slice(i, i + 3).map(j => shareJobFolderSurfacesNow(j.driveLink).catch(() => false)));
   }
 
+  // The arithmetic, folder by folder: how many subfolders Drive listed, how
+  // many were already somebody's job (any workspace), how many were new.
+  // Without it a sweep that made 494 jobs out of two folders holding more
+  // reads as "it missed some" when most of them were already on the board.
+  const detail = folders.map(f => f.unreachable
+    ? `${f.name}: could not be read`
+    : `${f.name}: ${f.seen.toLocaleString()} folders, ${f.linked.toLocaleString()} already jobs, ${f.fresh.toLocaleString()} new`).join(' · ');
   const note = unreachable === watched.length && !found.length
     ? 'Drive would not list the watched folders — check they are shared with the service account.'
-    : `${jobs.length} new job${jobs.length === 1 ? '' : 's'}${unreachable ? ` · ${unreachable} folder${unreachable === 1 ? '' : 's'} could not be read` : ''}`;
+    : `${jobs.length} new job${jobs.length === 1 ? '' : 's'} · ${detail}`;
   useStore.getState().setBoardSettingFor('general', 'autoJobs', { ...setting, folders: setting.folders ?? [], lastRunAt: now, lastNote: note });
-  return { created: jobs.length, skipped: found.length - fresh.length, note, names: jobs.map(j => j.displayName) };
+  return { created: jobs.length, skipped: found.length - fresh.length, note, names: jobs.map(j => j.displayName), folders };
 }

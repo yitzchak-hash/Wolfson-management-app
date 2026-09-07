@@ -126,9 +126,12 @@ export default async function handler(req, res) {
 
     // Paginated: 50 with no follow-up silently truncated a Photos folder on
     // its 51st picture — the kind of half-failure nobody reports as broken.
+    // Up to 5,000 entries: the Potentials folder the Drive sweep watches
+    // holds well over a thousand client folders, and the old 1,000 ceiling
+    // silently left the rest out of the sweep.
     const files = [];
     let pageToken;
-    for (let page = 0; page < 5; page++) {
+    for (let page = 0; page < 25; page++) {
       const resp = await drive.files.list({
         q: `'${listId}' in parents and trashed = false`,
         fields: 'nextPageToken,files(id,name,mimeType,shortcutDetails)',

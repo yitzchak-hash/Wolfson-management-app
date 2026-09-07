@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState, useCallback, useEffect } from 'react';
+import React, { useMemo, useRef, useState, useCallback, useEffect, useLayoutEffect } from 'react';
 import { useDeleteImpactLine } from '../ui/DeleteImpact';
 import {
   X, Undo2, Trash2, Search, StickyNote, Square, LayoutGrid, Settings2, Plus, ArrowDownUp,
@@ -103,6 +103,31 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
     const at = i === -1 ? ZOOMS.indexOf(1) : i;
     return ZOOMS[Math.min(ZOOMS.length - 1, Math.max(0, at + dir))] ?? z;
   });
+  /**
+   * Zoom TOWARDS THE POINTER — the board's own rule, which the group never
+   * had: its ctrl+wheel stepped the zoom about the scroller's top-left, so
+   * the thing under the mouse slid away on every notch. The point under the
+   * pointer is remembered (in the surface's own units) and put back under it
+   * in a layout effect once the new zoom has laid out — a scroll written
+   * before the resize would be clamped by the old extent.
+   */
+  const zoomAnchor = useRef<{ fx: number; fy: number; cx: number; cy: number } | null>(null);
+  function zoomAt(clientX: number, clientY: number, dir: 1 | -1) {
+    const el = surfaceRef.current;
+    if (!el) { stepZoom(dir); return; }
+    const r = el.getBoundingClientRect();
+    const cx = clientX - r.left, cy = clientY - r.top;
+    // The framed (origin-shifted) point under the pointer, in board units.
+    zoomAnchor.current = { fx: (el.scrollLeft + cx) / zoom, fy: (el.scrollTop + cy) / zoom, cx, cy };
+    stepZoom(dir);
+  }
+  useLayoutEffect(() => {
+    const a = zoomAnchor.current; const el = surfaceRef.current;
+    if (!a || !el) return;
+    zoomAnchor.current = null;
+    el.scrollLeft = a.fx * zoom - a.cx;
+    el.scrollTop = a.fy * zoom - a.cy;
+  }, [zoom]);
   /** A grab-pan in progress: where the scroll and the pointer both started. */
   const panning = useRef<{ px: number; py: number; sx: number; sy: number } | null>(null);
   /** Panning right now — a ref cannot repaint the cursor, so this rides along. */
@@ -116,6 +141,24 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
    * lasso. Kept in BOARD units, so the maths is the same at any zoom.
    */
   const [lasso, setLasso] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  /** The lasso as of the LAST pointermove — a ref beside the state, because a
+      release that lands right behind a move sees the state one render stale
+      (moves are batched at continuous priority) and would pick from a box
+      short of where the hand let go. */
+  const lassoRef = useRef<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  /**
+   * The board's right-button gestures, in the group too.
+   *
+   * A right press on empty surface is WATCHED: motionless, it is the menu as
+   * before; past 6px it becomes a lasso (beside Ctrl+drag). Right button held
+   * + wheel zooms. Both end with the browser offering its menu, so
+   * `suppressMenu` is a TIMESTAMP the capture-phase guard consumes (<400ms) —
+   * a boolean would swallow the next genuine right-click on platforms that
+   * open the menu at the press and never fire a release-time contextmenu.
+   */
+  const rightDrag = useRef<{ px: number; py: number; wx: number; wy: number; lasso: boolean } | null>(null);
+  const rightDown = useRef(false);
+  const suppressMenu = useRef(0);
   /**
    * The snap lines, live during a gesture.
    *
@@ -335,11 +378,16 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
   function toLocal(e: { clientX: number; clientY: number }) {
     const r = surfaceRef.current?.getBoundingClientRect();
     if (!r) return { x: e.clientX, y: e.clientY };
+    // Plus the frame's origin: the surface shows the content framed from its
+    // own top-left corner, and stored positions live in the unframed space.
     return {
-      x: (e.clientX - r.left + (surfaceRef.current?.scrollLeft ?? 0)) / zoom,
-      y: (e.clientY - r.top + (surfaceRef.current?.scrollTop ?? 0)) / zoom,
+      x: (e.clientX - r.left + (surfaceRef.current?.scrollLeft ?? 0)) / zoom + originRef.current.x,
+      y: (e.clientY - r.top + (surfaceRef.current?.scrollTop ?? 0)) / zoom + originRef.current.y,
     };
   }
+  /** The frame's origin as of the latest render — a ref because the pointer
+      handlers are called between renders. Written where `origin` is computed. */
+  const originRef = useRef({ x: 0, y: 0 });
 
   // ── ink ─────────────────────────────────────────────────────────────────
   /**
@@ -868,11 +916,49 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
     const onWheel = (e: WheelEvent) => {
       if (!(e.ctrlKey || e.metaKey)) return;
       e.preventDefault();
-      stepZoom(e.deltaY < 0 ? 1 : -1);
+      zoomAtRef.current(e.clientX, e.clientY, e.deltaY < 0 ? 1 : -1);
     };
     node.addEventListener('wheel', onWheel, { passive: false });
-    return () => node.removeEventListener('wheel', onWheel);
+    const down = (e: PointerEvent) => { if (e.button === 2) rightDown.current = true; };
+    const up = () => { rightDown.current = false; };
+    node.addEventListener('pointerdown', down);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    // Right-drag lassoes and right-held wheel zooms both end with the browser
+    // offering the context menu; the stamp says the hand meant a gesture.
+    // Capture phase, so the tile and node menus are covered too.
+    const menuGuard = (e: MouseEvent) => {
+      const stamp = suppressMenu.current;
+      suppressMenu.current = 0;
+      if (stamp && Date.now() - stamp < 400) { e.preventDefault(); e.stopPropagation(); }
+    };
+    node.addEventListener('contextmenu', menuGuard, { capture: true });
+    // Right button held + wheel ZOOMS — on the WINDOW in the capture phase,
+    // the board's own lesson: where the right press opens the menu at once
+    // the menu overlay sits under the pointer and a listener on the surface
+    // never hears the wheel.
+    const rightWheel = (e: WheelEvent) => {
+      if (!(rightDown.current || (e.buttons & 2) === 2)) return;
+      const r = node.getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return;
+      e.preventDefault();
+      e.stopPropagation();
+      suppressMenu.current = Date.now();
+      setMenu(null);
+      zoomAtRef.current(e.clientX, e.clientY, e.deltaY < 0 ? 1 : -1);
+    };
+    window.addEventListener('wheel', rightWheel, { passive: false, capture: true });
+    return () => {
+      node.removeEventListener('wheel', onWheel);
+      node.removeEventListener('pointerdown', down);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      node.removeEventListener('contextmenu', menuGuard, { capture: true } as EventListenerOptions);
+      window.removeEventListener('wheel', rightWheel, { capture: true } as EventListenerOptions);
+    };
   }, []);
+  const zoomAtRef = useRef(zoomAt);
+  zoomAtRef.current = zoomAt;
 
   /** Space held = the hand. Released anywhere, so it cannot stick on. */
   useEffect(() => {
@@ -902,15 +988,16 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
       ...nodes.map(n => ({ x: n.x, y: n.y, w: n.w, h: n.h })),
       ...items.map((a, i) => ({ ...jobPos(a, i), ...tileSize(a) })),
     ];
+    const o = originRef.current;
     for (let row = 0; row < 40; row++) {
       for (let col = 0; col < 8; col++) {
-        const x = 20 + col * (w + 16), y = 20 + row * (h + 16);
+        const x = o.x + 20 + col * (w + 16), y = o.y + 20 + row * (h + 16);
         const clear = !taken.some(t =>
           x < t.x + t.w + 8 && x + w + 8 > t.x && y < t.y + t.h + 8 && y + h + 8 > t.y);
         if (clear) return { x, y };
       }
     }
-    return { x: 20, y: 20 };
+    return { x: o.x + 20, y: o.y + 20 };
   }
 
   function place(def: WidgetDef, at?: { x: number; y: number }) {
@@ -963,16 +1050,36 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
     return () => window.removeEventListener('resize', measure);
   }, []);
 
-  const raw = useMemo(() => {
-    let w = box.w, h = box.h;
+  /**
+   * The content's bounds, live (a thing mid-drag counts where it IS).
+   *
+   * `origin` is where the frame starts: the content's top-left corner less a
+   * margin, floored at 0. The surface shows everything FRAMED from there, so
+   * a group whose jobs were all carried down the board does not keep a
+   * screen of empty surface above them — the owner's "it didn't de-expand"
+   * was exactly that band. Stored positions are untouched: the frame is a
+   * translate on the way to the screen and an add on the way back
+   * (`toLocal`), never a rewrite of anybody's records.
+   */
+  const bounds = useMemo(() => {
+    let minX = Infinity, minY = Infinity, maxX = 0, maxY = 0;
     items.forEach((a, i) => {
       const p = jobPos(a, i);
       const sz = tileSize(a);
-      w = Math.max(w, p.x + sz.w + 24); h = Math.max(h, p.y + sz.h + 24);
+      minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
+      maxX = Math.max(maxX, p.x + sz.w); maxY = Math.max(maxY, p.y + sz.h);
     });
-    nodes.forEach(n => { w = Math.max(w, n.x + n.w + 24); h = Math.max(h, n.y + n.h + 24); });
-    return { w, h };
-  }, [items, nodes, jobPos, box]);
+    nodes.forEach(n => {
+      const p = elPos(n);
+      minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
+      maxX = Math.max(maxX, p.x + p.w); maxY = Math.max(maxY, p.y + p.h);
+    });
+    const origin = {
+      x: minX === Infinity ? 0 : Math.max(0, Math.floor(minX) - 20),
+      y: minY === Infinity ? 0 : Math.max(0, Math.floor(minY) - 20),
+    };
+    return { origin, maxX, maxY };
+  }, [items, nodes, jobPos, elPos]);
 
   /**
    * The group gives space back too — but never mid-gesture.
@@ -985,6 +1092,21 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
    * true size is taken.
    */
   const sizingGesture = !!drag || !!resize || !!jobResize || !!drawing;
+  // The origin may only move OUTWARD (up/left) while a gesture is live — the
+  // same "the world only grows under your hand" rule as the extent.
+  const heldOrigin = useRef<{ x: number; y: number } | null>(null);
+  if (sizingGesture) {
+    heldOrigin.current = {
+      x: Math.min(heldOrigin.current?.x ?? Infinity, bounds.origin.x),
+      y: Math.min(heldOrigin.current?.y ?? Infinity, bounds.origin.y),
+    };
+  }
+  const origin = sizingGesture ? heldOrigin.current! : bounds.origin;
+  originRef.current = origin;
+  const raw = {
+    w: Math.max(box.w, bounds.maxX - origin.x + 24),
+    h: Math.max(box.h, bounds.maxY - origin.y + 24),
+  };
   const heldExtent = useRef<{ w: number; h: number } | null>(null);
   if (sizingGesture) {
     heldExtent.current = {
@@ -992,8 +1114,36 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
       h: Math.max(heldExtent.current?.h ?? 0, raw.h),
     };
   }
-  useEffect(() => { if (!sizingGesture) heldExtent.current = null; }, [sizingGesture]);
+  useEffect(() => { if (!sizingGesture) { heldExtent.current = null; heldOrigin.current = null; } }, [sizingGesture]);
   const extent = sizingGesture ? heldExtent.current! : raw;
+  /**
+   * When the frame's origin moves, the view stays where it was: the content
+   * shifted by the same amount inside the scroller, so the scroll follows it.
+   * A layout effect, so it lands before the paint — and the browser clamps
+   * a scroll the shrunken surface no longer has, which is the de-expand.
+   */
+  const prevOrigin = useRef(origin);
+  useLayoutEffect(() => {
+    const el = surfaceRef.current; const prev = prevOrigin.current;
+    prevOrigin.current = origin;
+    if (!el || (prev.x === origin.x && prev.y === origin.y)) return;
+    el.scrollLeft += (prev.x - origin.x) * zoom;
+    el.scrollTop += (prev.y - origin.y) * zoom;
+    readView();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [origin.x, origin.y]);
+
+  /**
+   * What the overview draws: the group's OWN positions (`binX`/`binY`),
+   * framed. It read `canvasX` — the main board's positions — so the little
+   * map showed where the jobs sit OUTSIDE the group.
+   */
+  const overviewJobs = useMemo(() => items.map((a, i) => {
+    const p = jobPos(a, i);
+    return { ...a, canvasX: p.x - origin.x, canvasY: p.y - origin.y };
+  }), [items, jobPos, origin.x, origin.y]);
+  const overviewEls = useMemo(() => nodes.map(n => ({ ...n, x: n.x - origin.x, y: n.y - origin.y })),
+    [nodes, origin.x, origin.y]);
 
   const stageOf = (a: Apartment) => stages.find(s => s.id === a.currentStageId) ?? null;
   const taskCount = (a: Apartment) => contractorAssignments.filter(x => x.apartmentId === a.id).length;
@@ -1030,6 +1180,34 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
       if ((e.key === 'Delete' || e.key === 'Backspace') && selected.size) {
         selected.forEach(id => { if (nodes.some(n => n.id === id)) deleteCanvasElement(id); });
         setSelected(new Set());
+      }
+      // Arrows nudge the selection — 1px, Shift 10px — the board's own
+      // binding. One undo entry per burst: a held key repeats thirty times a
+      // second, and one step per pixel is not the step anybody wants back.
+      const ARROW: Record<string, [number, number]> = {
+        ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1],
+      };
+      if (ARROW[e.key] && !e.metaKey && !e.ctrlKey && !e.altKey && selected.size) {
+        const [ax, ay] = ARROW[e.key];
+        const step = e.shiftKey ? 10 : 1;
+        const jobsSel = items.filter(j => selected.has(j.id) && !j.boardLocked);
+        const elsSel = nodes.filter(n => selected.has(n.id) && !n.locked && n.type !== 'arrow' && !n.attachedTo);
+        if (!jobsSel.length && !elsSel.length) return;
+        e.preventDefault();
+        const move = () => {
+          jobsSel.forEach(j => {
+            const i = items.findIndex(x => x.id === j.id);
+            const p = jobPos(j, i);
+            if (currentUser) updateApartment(j.id, {
+              binX: Math.max(0, Math.round(p.x + ax * step)), binY: Math.max(0, Math.round(p.y + ay * step)),
+            }, currentUser);
+          });
+          elsSel.forEach(n => updateCanvasElement(n.id, {
+            x: Math.max(0, Math.round(n.x + ax * step)), y: Math.max(0, Math.round(n.y + ay * step)),
+          }));
+        };
+        if (e.repeat) move();
+        else track({ weight: 'arrange', label: `Moved ${things(jobsSel.length + elsSel.length)}` }, move);
       }
       /**
        * Ctrl/⌘+A selects every JOB in THIS group — the owner's ask. Scoped to
@@ -1240,6 +1418,15 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
               touchAction: drawMode || eraseMode ? 'none' : undefined,
             }}
             onPointerMove={e => {
+              // The watched right press becomes a lasso the moment it really moves.
+              const rd = rightDrag.current;
+              if (rd && !rd.lasso && (e.buttons & 2) === 2
+                  && Math.hypot(e.clientX - rd.px, e.clientY - rd.py) > 6) {
+                rd.lasso = true;
+                setMenu(null);
+                lassoRef.current = { x0: rd.wx, y0: rd.wy, x1: rd.wx, y1: rd.wy };
+                setLasso(lassoRef.current);
+              }
               if (panning.current && surfaceRef.current) {
                 surfaceRef.current.scrollLeft = panning.current.sx - (e.clientX - panning.current.px);
                 surfaceRef.current.scrollTop = panning.current.sy - (e.clientY - panning.current.py);
@@ -1247,14 +1434,20 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
               }
               if (erasing.current) { eraseAt(e.clientX, e.clientY); return; }
               if (drawing) { extendStroke(e); return; }
-              if (lasso) {
+              if (lasso || lassoRef.current) {
                 const p = toLocal(e);
-                setLasso({ ...lasso, x1: p.x, y1: p.y });
+                const base = lassoRef.current ?? lasso!;
+                lassoRef.current = { ...base, x1: p.x, y1: p.y };
+                setLasso(lassoRef.current);
                 return;
               }
               moveDrag(e); resizeMove(e); jobResizeMove(e);
             }}
             onPointerUp={e => {
+              if (rightDrag.current) {
+                if (rightDrag.current.lasso) suppressMenu.current = Date.now();
+                rightDrag.current = null;
+              }
               if (panning.current) {
                 panning.current = null;
                 setGrabbing(false);
@@ -1271,9 +1464,10 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
                 (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
                 return;
               }
-              if (lasso) {
-                const minX = Math.min(lasso.x0, lasso.x1), maxX = Math.max(lasso.x0, lasso.x1);
-                const minY = Math.min(lasso.y0, lasso.y1), maxY = Math.max(lasso.y0, lasso.y1);
+              const box = lassoRef.current ?? lasso;
+              if (box) {
+                const minX = Math.min(box.x0, box.x1), maxX = Math.max(box.x0, box.x1);
+                const minY = Math.min(box.y0, box.y1), maxY = Math.max(box.y0, box.y1);
                 const hit = new Set<string>();
                 items.forEach((a2, i) => {
                   const p = jobPos(a2, i);
@@ -1285,6 +1479,7 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
                 });
                 setSelected(hit);
                 setLasso(null);
+                lassoRef.current = null;
                 (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
                 return;
               }
@@ -1306,13 +1501,22 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
                 return;
               }
               if (!onSurface) return;
+              if (e.button === 2) {
+                // Nothing decided at the press: motionless, it is the menu;
+                // moved, it is a lasso (the board's own right-drag).
+                const p = toLocal(e);
+                rightDrag.current = { px: e.clientX, py: e.clientY, wx: p.x, wy: p.y, lasso: false };
+                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                return;
+              }
               setMenu(null);
               // Pen, highlighter and eraser take the gesture outright while armed.
               if (e.button === 0 && drawMode) { startStrokeAt(e); return; }
               if (e.button === 0 && eraseMode) { startEraseAt(e); return; }
               if (e.ctrlKey || e.metaKey) {
                 const p = toLocal(e);
-                setLasso({ x0: p.x, y0: p.y, x1: p.x, y1: p.y });
+                lassoRef.current = { x0: p.x, y0: p.y, x1: p.x, y1: p.y };
+                setLasso(lassoRef.current);
                 (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
                 return;
               }
@@ -1336,9 +1540,15 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
               }
             }}
             onContextMenu={e => {
-              if (!(e.target as HTMLElement).dataset.binSurface) return;
+              // A right press on the surface takes pointer capture (for the
+              // lasso), and capture RETARGETS the browser's contextmenu to the
+              // scroller itself — so the surface marker is no longer on the
+              // target. The recorded press says where the hand really was.
+              const rd = rightDrag.current;
+              const onSurface = !!(e.target as HTMLElement).dataset.binSurface || (!!rd && !rd.lasso);
+              if (!onSurface) return;
               e.preventDefault();
-              const p = toLocal(e);
+              const p = rd ? { x: rd.wx, y: rd.wy } : toLocal(e);
               setMenu({ x: e.clientX, y: e.clientY, kind: 'canvas', ids: [], wx: p.x, wy: p.y });
             }}
           >
@@ -1376,6 +1586,18 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
                 width: extent.w, height: extent.h,
                 transform: `scale(${zoom})`, transformOrigin: '0 0',
               }}>
+              {items.length === 0 && nodes.length === 0 && (
+                <div className="absolute inset-0 flex items-center justify-center text-sm pointer-events-none"
+                  style={{ color: theme.dark ? 'rgba(255,255,255,.55)' : 'rgba(15,23,42,.45)' }}>
+                  Nothing here yet — drag jobs onto this group from the board.
+                </div>
+              )}
+            {/* The frame: everything below is laid out in STORED units and
+                shifted here by the origin, so the surface starts at the
+                content's own corner. A zero-size anchor with visible
+                overflow, so the outer world div still takes every press on
+                empty surface. */}
+            <div style={{ position: 'absolute', left: -origin.x, top: -origin.y, width: 0, height: 0, overflow: 'visible' }}>
               {lasso && (
                 <div className="absolute pointer-events-none"
                   style={{
@@ -1408,12 +1630,6 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
                 </svg>
               )}
               <SnapGuides guides={guides} zoom={zoom} />
-              {items.length === 0 && nodes.length === 0 && (
-                <div className="absolute inset-0 flex items-center justify-center text-sm pointer-events-none"
-                  style={{ color: theme.dark ? 'rgba(255,255,255,.55)' : 'rgba(15,23,42,.45)' }}>
-                  Nothing here yet — drag jobs onto this group from the board.
-                </div>
-              )}
 
               {/* The main board's own node, so a group behaves like the board. */}
               {nodes.map(el => {
@@ -1479,6 +1695,7 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
               })}
             </div>
             </div>
+            </div>
           </div>
 
           {eraseMode && <EraserCursor width={eraser.width} zoom={zoom} hostRef={surfaceRef} />}
@@ -1486,8 +1703,8 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
           {/* The board's own overview, in the group's window. */}
           <MiniMap
             panelId="bin-overview"
-            jobs={items}
-            elements={nodes}
+            jobs={overviewJobs}
+            elements={overviewEls}
             stages={stages}
             worldW={extent.w}
             worldH={extent.h}

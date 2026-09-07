@@ -63,8 +63,8 @@ await page.mouse.click(a0.x + 330, a0.y - 20, { button: 'right' });
 await page.waitForTimeout(400);
 const menuText = await page.evaluate(() =>
   [...document.querySelectorAll('.fixed.z-50')].map(d => d.innerText).join('\n'));
-check(menuText.includes('5 SELECTED'), 'right-click on EMPTY board speaks for the selection', menuText.split('\n')[0]);
-check(menuText.includes('Copy (5)') && menuText.includes('Cut (5)') && menuText.includes('Arrange (5)'),
+check(menuText.includes('6 SELECTED'), 'right-click on EMPTY board speaks for the selection (the seeded Goals fixture is the sixth)', menuText.split('\n')[0]);
+check(menuText.includes('Copy (6)') && menuText.includes('Cut (6)') && menuText.includes('Arrange (6)'),
   'with Copy, Cut and Arrange rows');
 
 // The hover animation appears on the Arrange row.

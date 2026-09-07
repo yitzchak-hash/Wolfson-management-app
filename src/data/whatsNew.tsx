@@ -30,6 +30,38 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-12-17',
+    title: 'Every group counts, and a group window handles like the board',
+    items: [
+      {
+        title: 'Group totals — all of them',
+        body: 'The widget that counted Done, Ready, Archive and Trash now lists '
+          + 'EVERY group on the board, including the ones you make and "New Jobs '
+          + 'Came In". The same numbers on the board, the dashboard and the TV, '
+          + 'and pressing a number opens that group\'s list.',
+        demo: 'list',
+      },
+      {
+        title: 'Inside a group, the board\'s own controls',
+        body: 'A group window frames what is in it — carry the jobs down and the '
+          + 'empty band above closes the moment you let go, on every side. The '
+          + 'wheel zooms towards the pointer, a right-drag on empty surface '
+          + 'lassoes, right button held + wheel zooms, the arrow keys nudge a '
+          + 'selection (Shift for 10px), and the little overview draws where things '
+          + 'sit IN the group.',
+        demo: 'drag',
+      },
+      {
+        title: 'The Drive sweep shows its working',
+        body: 'The last-checked line now says, for each watched folder, how many '
+          + 'folders Drive listed, how many were already somebody\'s job in any '
+          + 'workspace, and how many were new — and the listing ceiling went from '
+          + 'a thousand folders to five thousand.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2026-12-16',
     title: 'General notes are notes, and a problem starts as a conversation',
     items: [

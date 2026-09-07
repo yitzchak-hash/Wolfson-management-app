@@ -7353,3 +7353,78 @@ store, the export and Firestore), and the widget reads it through
 `useDriveActivity()` as "Drive · <file>" activity. Harness:
 `scratchpad/driveactivity-probe.mjs`.
 
+
+---
+
+# v2 — every group counts, and the group window frames its content
+
+## The group-totals widget reads the Job Board, not its context
+`BinTotals` (widgets.tsx, id `bin-counter`) is a real component: it lists
+every `type:'bin'` element — the four built-ins in their standing order, then
+every hand-made group (`binKeyOf`/`binLabelOf`, its own colour) — so a group
+made tomorrow, or by the Drive sweep, appears by itself. It reads the JOB
+BOARD's records directly: the live store when that is the open workspace,
+`loadProjectSnapshot('general')` otherwise (subscribed to `snapshotTick`).
+The old entry iterated `BIN_KINDS` (never a custom group) and counted
+`c.jobs` — which on the dashboard and the wall EXCLUDE everything filed away,
+so it read 0 there. Only the shelf's canned context (`SAMPLE_JOBS` ids)
+keeps `c.jobs`. Each number is a `data-no-drag data-el-action` button into
+`c.showList` when a host offers one. Hooks: `data-bin-totals`,
+`data-bin-total=<key>`.
+
+## The group window FRAMES its content (BinBoard.tsx)
+`bounds` → `origin` = the content's top-left less 20, floored at 0. The
+world's children hang off a zero-size anchor translated by `-origin`, so the
+surface starts at the content's own corner and an empty band above or left of
+everything closes up — the owner's "it didn't de-expand". Stored `binX`/
+`binY` and node `x`/`y` are untouched: the frame is a translate on the way
+to the screen and an add on the way back (`toLocal` adds `originRef`).
+During a gesture the origin may only move OUTWARD (held min) and the extent
+only grow (held max) — one hand-off rule; a layout effect shifts the
+scroller by the origin's delta so the view holds still, and the browser's
+clamp of a scroll the shrunken surface no longer has IS the de-expand.
+`freeSpot` starts at the origin so a new note lands in view; the overview is
+handed `overviewJobs`/`overviewEls` shifted by the origin — it used to draw
+`canvasX`, the MAIN board's positions, so the little map showed where the
+jobs sit outside the group.
+
+## The board's gestures, inside a group
+- **Zoom to the pointer**: `zoomAt(clientX, clientY, dir)` remembers the
+  framed point under the pointer and a `useLayoutEffect` on `zoom` scrolls it
+  back under (a scroll written before the resize is clamped by the old
+  extent). Ctrl/⌘+wheel and the right-held wheel both go through it; the
+  header buttons keep `stepZoom`.
+- **Right-drag lassoes** (beside Ctrl+drag): watched at the press, a lasso
+  past 6px, and `suppressMenu` is the board's TIMESTAMP idiom, consumed by a
+  capture-phase `contextmenu` guard on the scroller. **Pointer capture
+  RETARGETS the browser's contextmenu to the scroller**, so the surface
+  marker is no longer on the target — the handler accepts a recorded,
+  un-moved right press as "on the surface" and reads the point from it.
+- **Right button held + wheel zooms**, registered on the WINDOW in the
+  capture phase (the board's lesson: the press-time menu overlay sits under
+  the pointer).
+- **Arrow keys nudge** the selection — 1px, Shift 10px — jobs through
+  `binX/binY`, nodes through `x/y`, one tracked undo entry per burst.
+- **The lasso is hit-tested from a REF** (`lassoRef`), not the state: a
+  release right behind a move sees the state one render stale (moves are
+  batched at continuous priority) and picked from a box short of where the
+  hand let go — the probe's "2 selected" where 3 were crossed.
+
+## The Drive sweep shows its working
+`SweepResult.folders` — per watched folder: `seen`, `linked` (already some
+workspace's job), `fresh`, `unreachable` — and `lastNote` prints it
+("Potentials: 1,320 folders, 1,010 already jobs, 2 new"). `getFolderName-
+ViaBackend` supplies the folder's title. The listing ceiling in
+`api/drive-files.js` went from 5 pages (1,000 entries) to 25 (5,000): the
+watched folders hold well over a thousand client folders. Note the header
+search does NOT read Drive activity — only the Active jobs widget does
+(decided, not built).
+
+Harness: `scratchpad/groupparity-probe.mjs` (19 checks). Its manner: click a
+widget's button through the DOM (the node's pointer capture trap), aim the
+ctrl+wheel at a tile INSIDE the window's 1080px (a tile past its right edge
+is clipped and the wheel lands on the backdrop), and carry a tile to a spot
+that stays inside the window — a release outside takes the job out of the
+group and reads as "the window closed". `arrange.mjs` re-encoded to the
+seeded Goals fixture (6 selected). Pre-existing reds, verified identical
+stashed: `gapboard.mjs` (the group under the board's chrome).

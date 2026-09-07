@@ -12,11 +12,11 @@ import {
 } from 'lucide-react';
 import {
   Apartment, CanvasElement, Stage, ContractorAssignment, Contractor,
-  ContractorPhoto, ActivityLog, BIN_KINDS, BIN_META, isCountableApartment, personColor,
+  ContractorPhoto, ActivityLog, BIN_KINDS, BIN_META, binKeyOf, binLabelOf, isCountableApartment, personColor,
   User, ContractorNote, PlanPin, Employee, TimePunch,
 } from '../types';
 import { portalLink } from './portalLink';
-import { useStore } from './store';
+import { useStore, loadProjectSnapshot } from './store';
 import { soundScore } from './hebrewSearch';
 import { describeActivity } from './activityText';
 import { ClipArtNode, ART_KINDS, ArtKind } from '../components/board/BoardNodes';
@@ -167,6 +167,75 @@ export interface WidgetDef {
    */
   retired?: boolean;
   render: (el: CanvasElement, ctx: WidgetCtx) => React.ReactNode;
+}
+
+// ─── Group totals ─────────────────────────────────────────────────────────────
+/**
+ * Every group on the board, counted — not just the four that ship with it.
+ *
+ * The old version iterated `BIN_KINDS`, so a group made by hand or by the
+ * Drive sweep ("New Jobs Came In") never appeared, and on the dashboard and
+ * the wall the counts read 0 because those contexts hand widgets the LIVE
+ * jobs, which exclude everything filed away. This reads the Job Board's own
+ * records — the open store when that is the workspace, its stored snapshot
+ * otherwise (re-read on `snapshotTick`) — so the same widget says the same
+ * numbers on the board, the dashboard and the TV, and a group added tomorrow
+ * shows up by itself. Each number opens its list.
+ */
+function BinTotals({ c }: { c: WidgetCtx }) {
+  const pid = useStore(s => s.currentProjectId);
+  const liveApts = useStore(s => s.apartments);
+  const liveEls = useStore(s => s.canvasElements);
+  const tick = useStore(s => s.snapshotTick);
+  // The shelf hands widgets the canned jobs; a real board never does.
+  const sampleBoard = c.jobs.length > 0 && SAMPLE_JOBS.some(sj => sj.id === c.jobs[0].id);
+  const rows = useMemo(() => {
+    let apts: Apartment[]; let els: CanvasElement[];
+    if (sampleBoard) { apts = c.jobs; els = []; }
+    else if (pid === 'general') { apts = liveApts; els = liveEls; }
+    else { const snap = loadProjectSnapshot('general'); apts = snap.apartments; els = snap.canvasElements; }
+    const jobs = apts.filter(a => a.buildingId === 'G' && !a.isUnnamed);
+    const bins = els.filter(e => e.type === 'bin');
+    const seen = new Set<string>();
+    const out: { key: string; label: string; color: string; ids: string[] }[] = [];
+    // Built-ins first in their standing order, then the hand-made groups in
+    // the order they were placed — a stable list, so nothing jumps about.
+    for (const k of BIN_KINDS) {
+      seen.add(k);
+      out.push({ key: k, label: BIN_META[k].label, color: BIN_META[k].color,
+        ids: jobs.filter(j => j.boardBin === k).map(j => j.id) });
+    }
+    for (const b of bins) {
+      const key = binKeyOf(b);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ key, label: binLabelOf(b), color: b.color || '#64748b',
+        ids: jobs.filter(j => j.boardBin === key).map(j => j.id) });
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sampleBoard, pid, liveApts, liveEls, tick, c.jobs]);
+  const many = rows.length > 4;
+  return (
+    <Frame title="In the groups" icon={Archive}>
+      <div className={`grid gap-x-2 gap-y-0.5 ${many ? 'grid-cols-2 content-start' : 'grid-cols-2 h-full'}`}
+        data-bin-totals={rows.length}>
+        {rows.map(r => {
+          const Num = c.showList && !c.readOnly ? 'button' as const : 'span' as const;
+          return (
+            <div key={r.key} className="flex items-baseline gap-1 min-w-0" data-bin-total={r.key}>
+              <Num className={`font-black tabular-nums text-[17px] leading-tight ${Num === 'button' ? 'hover:underline' : ''}`}
+                style={{ color: r.color }}
+                {...(Num === 'button' ? { type: 'button' as const, onClick: () => c.showList!(r.label, r.ids), 'data-no-drag': '1', 'data-el-action': '1' } : {})}>
+                {r.ids.length}
+              </Num>
+              <span className="text-[9px] text-gray-500 truncate" title={r.label}>{r.label}</span>
+            </div>
+          );
+        })}
+      </div>
+    </Frame>
+  );
 }
 
 // ─── Shared pieces ───────────────────────────────────────────────────────────
@@ -461,22 +530,9 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
   {
-    id: 'bin-counter', rank: 17, name: 'Bin totals', category: 'live', icon: Archive, w: 200, h: 120,
-    blurb: 'How much sits in Done, Ready, Archive and Trash.',
-    render: (_el, c) => (
-      <Frame title="In the bins" icon={Archive}>
-        <div className="grid grid-cols-2 gap-1 h-full">
-          {BIN_KINDS.map(k => (
-            <div key={k} className="flex items-baseline gap-1">
-              <span className="font-black tabular-nums text-[17px]" style={{ color: BIN_META[k].color }}>
-                {c.jobs.filter(j => j.boardBin === k).length}
-              </span>
-              <span className="text-[9px] text-gray-500 truncate">{BIN_META[k].label}</span>
-            </div>
-          ))}
-        </div>
-      </Frame>
-    ),
+    id: 'bin-counter', rank: 17, name: 'Group totals', category: 'live', icon: Archive, w: 200, h: 120,
+    blurb: 'How much sits in every group on the board — Done, Ready, Archive, Trash and the ones you made.',
+    render: (_el, c) => <BinTotals c={c} />,
   },
 
   // ── Planning ──────────────────────────────────────────────────────────────
