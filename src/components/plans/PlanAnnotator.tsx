@@ -911,14 +911,25 @@ function PlanEditor({
   }, [anchorZoomAt]);
 
   useEffect(() => {
-    const el = stageRef.current;
-    if (!el) return;
+    const root = rootRef.current, stage = stageRef.current;
+    if (!root || !stage) return;
+    /**
+     * Over the sheet the wheel zooms, Ctrl or not. With Ctrl/⌘ held it zooms
+     * from ANYWHERE in the studio — the bars, the rail, the shelf, an open
+     * panel — so the browser's page zoom is never what Ctrl+wheel does here.
+     * Capture phase, so a scroller under the pointer cannot take the gesture
+     * first; a pointer off the sheet zooms about the sheet's middle.
+     */
     function wheel(e: WheelEvent) {
+      const overStage = stage!.contains(e.target as Node);
+      if (!overStage && !e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
-      zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.12 : 1 / 1.12);
+      const r = stage!.getBoundingClientRect();
+      const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+      zoomAt(inside ? e.clientX : r.left + r.width / 2, inside ? e.clientY : r.top + r.height / 2, e.deltaY < 0 ? 1.12 : 1 / 1.12);
     }
-    el.addEventListener('wheel', wheel, { passive: false });
-    return () => el.removeEventListener('wheel', wheel);
+    root.addEventListener('wheel', wheel, { passive: false, capture: true });
+    return () => root.removeEventListener('wheel', wheel, { capture: true } as EventListenerOptions);
   }, [zoomAt]);
 
   /**
@@ -2172,6 +2183,13 @@ function PlanEditor({
         e.preventDefault(); e.shiftKey ? redoOne() : undo();
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redoOne(); }
+      // Ctrl/⌘ with + / − / 0 zooms the SHEET — the keyboard's zoom — never the page.
+      if ((e.ctrlKey || e.metaKey) && ['=', '+', '-', '_', '0'].includes(e.key)) {
+        e.preventDefault();
+        const r = stageRef.current?.getBoundingClientRect();
+        if (e.key === '0') setFitting(true);
+        else if (r) zoomAt(r.left + r.width / 2, r.top + r.height / 2, e.key === '-' || e.key === '_' ? 1 / 1.2 : 1.2);
+      }
       /**
        * Ctrl/⌘+P while a plan is open prints THE PLAN, not the webpage.
        *
