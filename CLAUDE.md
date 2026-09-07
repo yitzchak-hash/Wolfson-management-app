@@ -7339,3 +7339,17 @@ in the box"); `read()` takes a line only when its MIDDLE is inside the box
 and a part only when its CENTRE is (a box grazing the next line dragged
 "Floor:" in); `tidy()` strips `: + - ·` off either end.
 
+## Drive activity feeds the Active-jobs widget (`src/data/driveActivity.ts`)
+Owner, 2026-09-07: "check every hour the latest activity in the drive
+folders". `api/drive-files.js` grew a `recent` mode: ONE `files.list` for
+everything changed since a date (all drives, folders excluded, newest
+first, ≤1000 files) with each file's ANCESTOR folders resolved three levels
+up through a warm-instance parent cache — never a walk of every job
+folder. The client (`refreshDriveActivity`, hourly from AppLayout's ticker
+and on arrival) pins each file to the FIRST ancestor that is some job's
+Drive folder, in any workspace, keeps `{at, byFolder}` per machine in
+`drive_activity` (derived from Drive, not the office's data — out of the
+store, the export and Firestore), and the widget reads it through
+`useDriveActivity()` as "Drive · <file>" activity. Harness:
+`scratchpad/driveactivity-probe.mjs`.
+

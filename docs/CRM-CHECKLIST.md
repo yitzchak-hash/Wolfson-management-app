@@ -64,6 +64,7 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ The memo player draws a real waveform from the audio, a drag-to-scrub knob and the true length; the words and the sign-off sit inside the card (2026-09-06)
 - ☑ The message box grows with the words, the clip and the big mic sit on its bottom line, a grey "sending the recording…" bubble stands while a memo uploads (2026-09-06)
 - ☑ A memo or a picture in a thread never prints its filename as the message (2026-09-06)
+- ☑ Active jobs widget counts Drive activity: hourly `recent` query (files changed in 30 days with ancestor folders) pinned to the job folder above each file; per-machine cache (2026-09-07)
 - ☑ Automatic jobs from Drive: watched intake folders (Job Board project settings), a sweep every 2 hours from the open app and Check now, deterministic ids per folder, tombstones honoured, jobs filed into “New Jobs Came In”, surfaces shared (2026-09-07)
 - ☑ AI plan reader on the same OpenAI key (or Anthropic): address, phone, family read from the page image; the draw-a-box picker sends the crop (2026-09-07)
 - ☑ Draw-a-box picker: whole sheet fitted, reads only what is inside the box, no trailing punctuation (2026-09-07)

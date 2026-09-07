@@ -4,6 +4,7 @@ import { Header } from './Header';
 import { Sidebar, MobileNav } from './Sidebar';
 import { useStore, ensureProjectSnapshot } from '../../data/store';
 import { sweepDue, sweepAutoJobs } from '../../data/autoJobs';
+import { driveActivityDue, refreshDriveActivity } from '../../data/driveActivity';
 import { isFirebaseConfigured } from '../../data/firebase';
 import { PlannerAskModal } from '../board/PlannerAskModal';
 import { UndoLayer } from '../board/UndoLayer';
@@ -156,7 +157,11 @@ export function AppLayout() {
    * rather than each running its own.
    */
   useEffect(() => {
-    const tick = () => { if (sweepDue()) void sweepAutoJobs('timer'); };
+    const tick = () => {
+      if (sweepDue()) void sweepAutoJobs('timer');
+      // And, hourly, what moved in Drive — for the Active-jobs widget.
+      if (driveActivityDue()) void refreshDriveActivity();
+    };
     const first = setTimeout(tick, 20_000);
     const every = setInterval(tick, 10 * 60_000);
     return () => { clearTimeout(first); clearInterval(every); };

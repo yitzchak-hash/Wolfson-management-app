@@ -51,6 +51,14 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'tap',
       },
       {
+        title: 'Active jobs sees Drive too',
+        body: 'Once an hour the app asks Drive what changed in the last thirty '
+          + 'days and pins each change to the job whose folder it lives in — a '
+          + 'photo dropped into a job\'s Photos folder, a new plan — so the '
+          + 'Active jobs widget shows it with the file\'s name.',
+        demo: 'list',
+      },
+      {
         title: 'New Drive folders become jobs by themselves',
         body: 'Job Board settings → Automatic jobs from Drive: paste the links '
           + 'of your intake folders (Potentials and the one new jobs land in), '

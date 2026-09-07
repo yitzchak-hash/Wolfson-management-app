@@ -12,6 +12,7 @@ import { MiniJob } from '../components/board/MiniJob';
 import { PlannerData } from '../components/board/PlannerWidget';
 import { soundScore } from './hebrewSearch';
 import { useStore } from './store';
+import { useDriveActivity } from './driveActivity';
 
 /**
  * The widgets that answer a question nothing else in the app answers.
@@ -260,6 +261,8 @@ function OpenSnags({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
 function ActiveJobs({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
   const storeNotes = useStore(s => s.contractorNotes);
   const notes = c.notes ?? storeNotes;
+  // What moved in the job's Drive folder — refreshed hourly (driveActivity.ts).
+  const drive = useDriveActivity();
   const days = Math.max(1, Math.min(365, Number(d(el).days) || 30));
   const cut = new Date(Date.now() - days * dayMs).toISOString();
 
@@ -271,7 +274,14 @@ function ActiveJobs({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
     if (!cur || at > cur.at) last.set(jobId, { at, what });
   };
   const jobs = liveJobs(c);
-  for (const j of jobs) mark(j.id, j.contentUpdatedAt, 'edited');
+  for (const j of jobs) {
+    mark(j.id, j.contentUpdatedAt, 'edited');
+    if (drive && j.driveLink) {
+      const fid = j.driveLink.match(/folders\/([A-Za-z0-9_-]+)/)?.[1];
+      const hit = fid ? drive.byFolder[fid] : undefined;
+      if (hit) mark(j.id, hit.at, `Drive · ${hit.name}`);
+    }
+  }
   for (const a of liveAssignments(c)) {
     mark(a.apartmentId, a.createdAt, 'new task');
     mark(a.apartmentId, a.completedAt, a.problem ? 'problem closed' : 'task closed');

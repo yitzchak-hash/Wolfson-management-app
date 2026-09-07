@@ -263,7 +263,7 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
     title(),
     {
       key: 'days', label: 'Had activity in the last… (days)', kind: 'number', min: 1, max: 365,
-      hint: 'A task made or closed, a message, a photo, a stage moved, a note. Opening a job does not count.',
+      hint: 'A task made or closed, a message, a photo, a stage moved, a note, or a file changed in the job\'s Drive folder (checked every hour). Opening a job does not count.',
     },
   ],
   'nobody-booked': [
