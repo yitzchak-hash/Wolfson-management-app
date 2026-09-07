@@ -169,6 +169,11 @@ export interface WidgetDef {
   render: (el: CanvasElement, ctx: WidgetCtx) => React.ReactNode;
 }
 
+/** The shelf hands widgets the canned jobs; a real board never does. */
+export function isSampleCtx(c: WidgetCtx): boolean {
+  return c.jobs.length > 0 && SAMPLE_JOBS.some(sj => sj.id === c.jobs[0].id);
+}
+
 // ─── Group totals ─────────────────────────────────────────────────────────────
 /**
  * Every group on the board, counted — not just the four that ship with it.
@@ -187,8 +192,7 @@ function BinTotals({ c }: { c: WidgetCtx }) {
   const liveApts = useStore(s => s.apartments);
   const liveEls = useStore(s => s.canvasElements);
   const tick = useStore(s => s.snapshotTick);
-  // The shelf hands widgets the canned jobs; a real board never does.
-  const sampleBoard = c.jobs.length > 0 && SAMPLE_JOBS.some(sj => sj.id === c.jobs[0].id);
+  const sampleBoard = isSampleCtx(c);
   const rows = useMemo(() => {
     let apts: Apartment[]; let els: CanvasElement[];
     if (sampleBoard) { apts = c.jobs; els = []; }

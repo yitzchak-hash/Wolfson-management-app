@@ -25,6 +25,8 @@ export interface DriveActivity {
   at: string;
   /** Job folder id → the newest change inside it. */
   byFolder: Record<string, { at: string; name: string }>;
+  /** The server ran out of time and answered with what it had. */
+  partial?: boolean;
 }
 
 let current: DriveActivity | null = null;
@@ -73,21 +75,29 @@ async function doRefresh(): Promise<DriveActivity | null> {
     const resp = await fetch('/api/drive-files', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
-      body: JSON.stringify({ recent: { since } }),
+      // The job folders this office has: the server stops climbing a file's
+      // parents the moment it meets one, which is what keeps the call inside
+      // the platform's time limit on a busy Drive.
+      body: JSON.stringify({ recent: { since, folders: [...folders] } }),
     });
     if (!resp.ok) return null;
-    const data = await resp.json() as { files?: { id: string; name: string; modifiedTime: string; ancestors?: string[] }[] };
+    const data = await resp.json() as {
+      files?: { id: string; name: string; modifiedTime: string; ancestors?: string[]; jobFolder?: string | null }[];
+      partial?: boolean;
+    };
     const byFolder: DriveActivity['byFolder'] = {};
     for (const f of data.files ?? []) {
       if (!f.modifiedTime) continue;
-      for (const anc of f.ancestors ?? []) {
-        if (!folders.has(anc)) continue;
-        const cur = byFolder[anc];
-        if (!cur || f.modifiedTime > cur.at) byFolder[anc] = { at: f.modifiedTime, name: f.name };
-        break;
-      }
+      const home = f.jobFolder && folders.has(f.jobFolder) ? f.jobFolder : (f.ancestors ?? []).find(a => folders.has(a));
+      if (!home) continue;
+      const cur = byFolder[home];
+      if (!cur || f.modifiedTime > cur.at) byFolder[home] = { at: f.modifiedTime, name: f.name };
     }
-    current = { at: new Date().toISOString(), byFolder };
+    // A partial answer (the server ran out of time) is still the best this
+    // machine has — kept, but asked again on the next tick rather than in an
+    // hour, by stamping it back far enough to be due.
+    const at = data.partial ? new Date(Date.now() - DRIVE_ACTIVITY_EVERY_MS + 10 * 60 * 1000).toISOString() : new Date().toISOString();
+    current = { at, byFolder, partial: !!data.partial };
     try { localStorage.setItem(KEY, JSON.stringify(current)); } catch { /* full */ }
     emit();
     return current;

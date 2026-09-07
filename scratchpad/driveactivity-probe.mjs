@@ -19,6 +19,10 @@ await ctx.route('**/api/drive-files', async route => {
       { id: 'pl1', name: 'plan-v2.pdf', mimeType: 'application/pdf', modifiedTime: ago(1), ancestors: ['F-jobB', 'F-pot'] },
       // a file in a folder no job owns
       { id: 'x1', name: 'stray.pdf', mimeType: 'application/pdf', modifiedTime: ago(1), ancestors: ['F-nobody'] },
+      // a proposal in a job the import filed into a GROUP — the server settled it (jobFolder), no ancestors needed
+      { id: 'pr1', name: 'proposal.docx', mimeType: 'application/vnd.google-apps.document', modifiedTime: ago(3), ancestors: [], jobFolder: 'F-jobD' },
+      // a file in a TRASHED job's folder — never shown
+      { id: 'tr1', name: 'old.pdf', mimeType: 'application/pdf', modifiedTime: ago(1), ancestors: ['F-jobE'] },
     ] } });
   }
   return route.fulfill({ json: { files: [] } });
@@ -39,8 +43,15 @@ await ctx.addInitScript(() => {
     createdAt: old, updatedAt: old, contentUpdatedAt: old, updatedBy: 'U', updatedByName: 'U', driveLink: `https://drive.google.com/drive/folders/${link}` });
   localStorage.setItem('general_app_data', JSON.stringify({
     users: [user], currentUser: user, contractors: [], stages: [], contractorAssignments: [], contractorNotes: [], contractorPhotos: [], activityLogs: [],
-    apartments: [job('G-a', 'Alpha job', 60, 'F-jobA'), job('G-b', 'Beta job', 320, 'F-jobB'), job('G-c', 'Quiet job', 580, 'F-jobC')],
-    canvasElements: [{ id: 'CE-act', type: 'widget', widget: 'active-jobs', x: 40, y: 40, w: 300, h: 260, z: 5, data: { days: 30 } }],
+    apartments: [job('G-a', 'Alpha job', 60, 'F-jobA'), job('G-b', 'Beta job', 320, 'F-jobB'), job('G-c', 'Quiet job', 580, 'F-jobC'),
+      // filed into a hand-made group by the import (copied in — its own timestamp is not activity)
+      { ...job('G-imp-1-d', 'Grouped job', 0, 'F-jobD'), boardBin: 'CE-bin-old', binnedAt: old, contentUpdatedAt: new Date().toISOString(), createdAt: new Date().toISOString() },
+      { ...job('G-e', 'Binned job', 0, 'F-jobE'), boardBin: 'trash', binnedAt: old },
+      // the sweep copied this one in TODAY and nothing moved in its folder: not activity
+      { ...job('G-auto-F-jobF', 'Swept job', 0, 'F-jobF'), boardBin: 'CE-bin-newjobs', binnedAt: new Date().toISOString(), contentUpdatedAt: new Date().toISOString(), createdAt: new Date().toISOString() }],
+    canvasElements: [{ id: 'CE-act', type: 'widget', widget: 'active-jobs', x: 40, y: 40, w: 300, h: 260, z: 5, data: { days: 30 } },
+      { id: 'CE-bin-old', type: 'bin', x: 700, y: 60, w: 178, h: 92, text: 'Old clients', color: '#64748b' },
+      { id: 'CE-bin-newjobs', type: 'bin', x: 900, y: 60, w: 178, h: 92, text: 'New Jobs Came In', color: '#0ea5e9' }],
   }));
 });
 const page = await ctx.newPage();
@@ -53,11 +64,17 @@ const act = await page.evaluate(() => JSON.parse(localStorage.getItem('drive_act
 check(recentCalls.length >= 1 && /^\d{4}-/.test(recentCalls[0].since), 'the app asked Drive for everything changed since a date', JSON.stringify(recentCalls[0]));
 check(act && act.byFolder['F-jobA']?.name === 'kitchen.jpg' && act.byFolder['F-jobB']?.name === 'plan-v2.pdf' && !act.byFolder['F-nobody'],
   'each change is pinned to the JOB folder above it — a photo in Job A/Photos counts for Job A; a stray file counts for nobody', JSON.stringify(act?.byFolder));
+check(Array.isArray(recentCalls[0]?.folders) && recentCalls[0].folders.includes('F-jobA') && recentCalls[0].folders.includes('F-jobD'),
+  'the app tells the server which folders are jobs, so the server can stop climbing early', `${recentCalls[0]?.folders?.length} folders sent`);
+check(act?.byFolder['F-jobD']?.name === 'proposal.docx', 'a change the server settled itself (jobFolder) is pinned too');
 const node = page.locator('[data-node-id="CE-act"]');
 const txt = (await node.innerText()).replace(/\s+/g, ' ');
-check(/\b2\b/.test(await node.locator('[data-active-count]').innerText()), 'the widget counts the two jobs that moved in Drive', await node.locator('[data-active-count]').innerText());
+check(/\b3\b/.test(await node.locator('[data-active-count]').innerText()), 'the widget counts the three jobs that moved in Drive — the grouped one included', await node.locator('[data-active-count]').innerText());
 check(/Beta job.*Drive · plan-v2\.pdf/.test(txt) && /Alpha job.*Drive · kitchen\.jpg/.test(txt) && !/Quiet job/.test(txt),
   'rows say what moved in Drive, newest first; the quiet job stays off', txt.slice(0, 200));
+check(/Grouped job.*Old clients · Drive · proposal\.docx/.test(txt), 'a job filed in a group appears, labelled with its group', txt.slice(0, 260));
+check(!/Binned job/.test(txt), 'a job in Trash never appears, whatever moved in its folder');
+check(!/Swept job/.test(txt), 'a job the sweep merely copied in today is not "activity"');
 check(txt.indexOf('Beta job') < txt.indexOf('Alpha job'), 'yesterday\'s plan outranks the two-day-old photo');
 // A second visit within the hour asks nothing new.
 await page.reload();

@@ -6,6 +6,62 @@ import { google } from 'googleapis';
 /** Folder → its parents, kept across warm invocations (a folder's parent never changes underneath us in practice). */
 const PARENT_CACHE = new Map();
 
+/**
+ * Which JOB folder each changed file lives under.
+ *
+ * The first version walked every file's parents one lookup at a time, three
+ * levels deep, up to 400 lookups a call — on a busy Drive that is half a
+ * minute of sequential round trips, well past a Hobby function's limit, so
+ * the call timed out and the app never got an answer (silently: a 504 is
+ * "not ok" and the client just tries again next tick). Now:
+ *  - the caller sends the job folder ids it KNOWS (`known`), so a chain stops
+ *    the moment it meets one — most files sit directly in the job folder or
+ *    one level under it (Photos, Engineered Plans);
+ *  - resolution is breadth-first across ALL files, so a folder is looked up
+ *    once however many files it holds, and lookups run in parallel chunks;
+ *  - a time budget ends the walk early and says so (`partial`), rather than
+ *    letting the platform kill the function with nothing returned.
+ * Pure — the Drive client is handed in as `parentOf` — so it is tested
+ * offline (scratchpad/driverecent-test.mjs).
+ */
+export async function resolveJobFolders(files, known, parentOf, opts = {}) {
+  const depth = opts.depth ?? 5;
+  const budgetMs = opts.budgetMs ?? 6500;
+  const chunk = opts.chunk ?? 12;
+  const cache = opts.cache ?? new Map();
+  const t0 = Date.now();
+  // Per file: the frontier of folder ids still to climb from, and every
+  // ancestor seen so far.
+  const rows = files.map(f => ({
+    id: f.id, name: f.name, mimeType: f.mimeType, modifiedTime: f.modifiedTime,
+    frontier: [...(f.parents ?? [])], ancestors: [...(f.parents ?? [])], jobFolder: null,
+  }));
+  const settle = r => { if (!r.jobFolder) { const hit = r.ancestors.find(a => known.has(a)); if (hit) r.jobFolder = hit; } };
+  rows.forEach(settle);
+  let partial = false;
+  for (let level = 0; level < depth; level++) {
+    const open = rows.filter(r => !r.jobFolder && r.frontier.length);
+    if (!open.length) break;
+    // Every folder any open file still needs, once.
+    const need = [...new Set(open.flatMap(r => r.frontier))].filter(id => !cache.has(id));
+    for (let i = 0; i < need.length; i += chunk) {
+      if (Date.now() - t0 > budgetMs) { partial = true; break; }
+      await Promise.all(need.slice(i, i + chunk).map(id => parentOf(id)));
+    }
+    if (partial) break;
+    for (const r of open) {
+      const next = [];
+      for (const id of r.frontier) for (const p of (cache.get(id) ?? [])) if (!r.ancestors.includes(p)) { r.ancestors.push(p); next.push(p); }
+      r.frontier = next;
+      settle(r);
+    }
+  }
+  return {
+    partial,
+    files: rows.map(r => ({ id: r.id, name: r.name, mimeType: r.mimeType, modifiedTime: r.modifiedTime, ancestors: r.ancestors, jobFolder: r.jobFolder })),
+  };
+}
+
 function getDrive() {
   const json = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
   if (!json) throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON is not set');
@@ -45,9 +101,10 @@ export default async function handler(req, res) {
      */
     if (recent) {
       const since = new Date(recent.since || Date.now() - 30 * 86400000).toISOString();
+      const known = new Set(Array.isArray(recent.folders) ? recent.folders.filter(x => typeof x === 'string') : []);
       const files = [];
       let pageToken;
-      for (let page = 0; page < 5; page++) {
+      for (let page = 0; page < 8; page++) {
         const resp = await drive.files.list({
           q: `modifiedTime > '${since}' and trashed = false and mimeType != 'application/vnd.google-apps.folder'`,
           fields: 'nextPageToken,files(id,name,mimeType,modifiedTime,parents)',
@@ -73,23 +130,8 @@ export default async function handler(req, res) {
         PARENT_CACHE.set(id, parents);
         return parents;
       };
-      let lookups = 0;
-      const out = [];
-      for (const f of files) {
-        const ancestors = [];
-        let level = f.parents ?? [];
-        for (let depth = 0; depth < 3 && level.length; depth++) {
-          ancestors.push(...level);
-          const next = [];
-          for (const pid of level) {
-            if (!PARENT_CACHE.has(pid)) { if (lookups >= 400) break; lookups++; }
-            next.push(...await parentOf(pid));
-          }
-          level = next;
-        }
-        out.push({ id: f.id, name: f.name, mimeType: f.mimeType, modifiedTime: f.modifiedTime, ancestors: [...new Set(ancestors)] });
-      }
-      return res.json({ files: out, since });
+      const { files: out, partial } = await resolveJobFolders(files, known, parentOf, { cache: PARENT_CACHE });
+      return res.json({ files: out, since, partial });
     }
 
     // metaOnly: return just the folder's own metadata (used to derive the family

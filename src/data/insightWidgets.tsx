@@ -5,9 +5,9 @@ import {
 } from 'lucide-react';
 import {
   Apartment, CanvasElement, ContractorAssignment,
-  isCountableApartment, personColor, getStageName, relativeTime,
+  isCountableApartment, personColor, getStageName, relativeTime, binKeyOf, binLabelOf, BIN_META, BinKind,
 } from '../types';
-import { WidgetCtx, WidgetDef, Frame, d } from './widgets';
+import { WidgetCtx, WidgetDef, Frame, d, isSampleCtx } from './widgets';
 import { MiniJob } from '../components/board/MiniJob';
 import { PlannerData } from '../components/board/PlannerWidget';
 import { soundScore } from './hebrewSearch';
@@ -273,16 +273,43 @@ function ActiveJobs({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
     const cur = last.get(jobId);
     if (!cur || at > cur.at) last.set(jobId, { at, what });
   };
-  const jobs = liveJobs(c);
+  /**
+   * EVERY job with a folder, not only the ones on the open board.
+   *
+   * `liveJobs` leaves out everything filed into a group — right for a unit
+   * total, and exactly wrong here: the Drive sweep files every new job into
+   * "New Jobs Came In", the import filed a thousand into Done and Archive,
+   * and the office keeps making proposals in those folders. Reading only the
+   * open board drew an empty widget over a busy Drive (the owner's report).
+   * Trash stays out (the search's rule); other groups appear, labelled.
+   */
+  const pid = useStore(s => s.currentProjectId);
+  const storeApts = useStore(s => s.apartments);
+  const storeEls = useStore(s => s.canvasElements);
+  const wide = pid === 'general' && !isSampleCtx(c);
+  const jobs = wide
+    ? storeApts.filter(a => a.buildingId === 'G' && !a.isUnnamed && a.boardBin !== 'trash')
+    : liveJobs(c);
+  const groupOf = (j: Apartment): string | null => {
+    if (!j.boardBin) return null;
+    const el = storeEls.find(e => e.type === 'bin' && binKeyOf(e) === j.boardBin);
+    if (el) return binLabelOf(el);
+    return (BIN_META as Record<string, { label: string }>)[j.boardBin as BinKind]?.label ?? 'Group';
+  };
   for (const j of jobs) {
-    mark(j.id, j.contentUpdatedAt, 'edited');
+    // A job the sweep or the import COPIED IN is bookkeeping, not activity —
+    // five hundred "edited · today" rows would bury what actually moved.
+    // Its Drive folder's own changes still count.
+    const copiedIn = /^G-(auto|imp)-/.test(j.id) && j.contentUpdatedAt === j.createdAt;
+    if (!copiedIn) mark(j.id, j.contentUpdatedAt, 'edited');
     if (drive && j.driveLink) {
       const fid = j.driveLink.match(/folders\/([A-Za-z0-9_-]+)/)?.[1];
       const hit = fid ? drive.byFolder[fid] : undefined;
       if (hit) mark(j.id, hit.at, `Drive · ${hit.name}`);
     }
   }
-  for (const a of liveAssignments(c)) {
+  const jobIds = new Set(jobs.map(j => j.id));
+  for (const a of (wide ? c.assignments.filter(x => jobIds.has(x.apartmentId)) : liveAssignments(c))) {
     mark(a.apartmentId, a.createdAt, 'new task');
     mark(a.apartmentId, a.completedAt, a.problem ? 'problem closed' : 'task closed');
   }
@@ -316,9 +343,10 @@ function ActiveJobs({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
           {list.length === 0 && <Empty>Nothing happened on any job in the last {days} days</Empty>}
           {list.map(j => {
             const e = last.get(j.id)!;
+            const grp = groupOf(j);
             return (
               <MiniJob key={j.id} job={j} stages={c.stages} assignments={c.assignments} onOpen={c.openJob} rtl={c.isRtl}
-                sub={`${e.what} · ${relativeTime(e.at)}`} />
+                sub={`${grp ? `${grp} · ` : ''}${e.what} · ${relativeTime(e.at)}`} />
             );
           })}
         </Scroll>

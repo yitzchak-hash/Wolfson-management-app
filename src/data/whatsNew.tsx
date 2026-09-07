@@ -52,6 +52,17 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'drag',
       },
       {
+        title: 'Active jobs sees the whole Drive',
+        body: 'The Active jobs widget only ever listed jobs sitting on the open '
+          + 'board — so everything the sweep and the import filed into groups '
+          + 'was invisible however busy its folder was. It now shows every job '
+          + 'except Trash, with the group\'s name on the row, and a job merely '
+          + 'copied in today does not count as activity. Behind it, the hourly '
+          + 'Drive check was timing out on a busy Drive and quietly giving up; it '
+          + 'now finishes in a few seconds.',
+        demo: 'list',
+      },
+      {
         title: 'The Drive sweep shows its working',
         body: 'The last-checked line now says, for each watched folder, how many '
           + 'folders Drive listed, how many were already somebody\'s job in any '

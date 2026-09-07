@@ -7428,3 +7428,32 @@ that stays inside the window — a release outside takes the job out of the
 group and reads as "the window closed". `arrange.mjs` re-encoded to the
 seeded Goals fixture (6 selected). Pre-existing reds, verified identical
 stashed: `gapboard.mjs` (the group under the board's chrome).
+
+## Active jobs was reading one board, and the Drive check was timing out
+Two faults behind "the last-30-days widget shows none of the jobs we added":
+- **`liveJobs(c)` leaves out every grouped job** — right for a unit total,
+  wrong here: the sweep files every new job into "New Jobs Came In" and the
+  import filed a thousand into Done/Archive, and the office keeps making
+  proposals in exactly those folders. `ActiveJobs` now reads the store's Job
+  Board records directly when the workspace is `general` (every job but
+  Trash, the search's rule; `isSampleCtx` from widgets.tsx keeps the shelf on
+  its canned jobs), labels a row with its group (`binKeyOf`/`binLabelOf`),
+  takes tasks from `c.assignments` for those jobs, and treats a job the sweep
+  or import COPIED IN (`G-auto-`/`G-imp-` id with `contentUpdatedAt ===
+  createdAt`) as bookkeeping, not activity — five hundred "edited · today"
+  rows would bury what actually moved.
+- **`api/drive-files.js` `recent` resolved ancestors one lookup at a time**,
+  three levels, up to 400 lookups per call — half a minute of sequential
+  round trips against a Hobby function's 10s limit, so the call died and the
+  client (a 504 is "not ok") silently tried again every ten minutes forever.
+  `resolveJobFolders(files, known, parentOf, opts)` is exported and pure:
+  the client sends the job folder ids it KNOWS (`recent.folders`) so a chain
+  stops on meeting one; resolution is breadth-first across all files (a
+  folder is looked up once however many files it holds) in parallel chunks
+  of 12; a 6.5s budget answers `partial: true` with what it has. Each file
+  carries `jobFolder`. `vercel.json` gives that one function `maxDuration:
+  30`. The client stamps a partial answer back so it is due again on the
+  next tick, not in an hour. Offline test: `scratchpad/driverecent-test.mjs`
+  (8 lookups for the fixture, the job folder itself never fetched, the budget
+  answering in 61ms). `driveactivity-probe.mjs` grew the grouped/trashed/
+  copied-in cases.
