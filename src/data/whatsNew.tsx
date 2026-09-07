@@ -51,6 +51,14 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'tap',
       },
       {
+        title: 'The photo widgets show every photo',
+        body: 'Pictures a worker sent through Drive — closing a task, closing a '
+          + 'problem — came out as broken squares on the Latest photos widget '
+          + 'and the wall. They draw through Drive\'s thumbnail now, and videos '
+          + 'stay out of the photo widgets.',
+        demo: 'tap',
+      },
+      {
         title: 'Videos you can see, and a plan you can tap',
         body: 'A video in a task thread is a still with a play button and a '
           + 'full-screen corner — press play and it plays right there. In the '

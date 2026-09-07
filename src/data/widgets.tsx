@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { photoSrcOf, isPicture } from './photoSrc';
 import { createPortal } from 'react-dom';
 import {
   Gauge, ListChecks, Hash, BarChart3, Table2, ShoppingCart, CalendarRange,
@@ -408,7 +409,7 @@ export const WIDGETS: WidgetDef[] = [
       const only = (d(el).jobIds ?? []) as string[];
       const allowed = only.length ? new Set(only) : null;
       const recent = [...c.photos]
-        .filter(p => p.storageUrl || p.driveUrl || p.dataUrl)
+        .filter(p => isPicture(p) && photoSrcOf(p))
         .filter(p => {
           if (!allowed) return true;
           const a = c.assignments.find(x => x.id === p.assignmentId);
@@ -425,7 +426,7 @@ export const WIDGETS: WidgetDef[] = [
               <div className="grid grid-cols-3 gap-1 h-full">
                 {recent.map(p => (
                   <div key={p.id} className="rounded-md overflow-hidden bg-slate-100">
-                    <img src={p.storageUrl || p.driveUrl || p.dataUrl} alt="" className="w-full h-full object-cover" />
+                    <img src={photoSrcOf(p)} alt="" className="w-full h-full object-cover" />
                   </div>
                 ))}
               </div>

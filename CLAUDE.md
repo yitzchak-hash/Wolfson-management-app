@@ -7286,3 +7286,15 @@ preset key with all three; a bare pair is the bug.
   keeps a finger drag scrolling natively. Harness:
   `scratchpad/videoplan-probe.mjs` (records a real webm off a canvas).
 
+## `photoSrcOf(p)` — the one answer to "what address draws this photo"
+`src/data/photoSrc.ts`. The photo widgets (`recent-photos` in all three
+looks, the wall's `LatestPhoto`/`PhotoWall`) used `p.driveUrl` straight as
+an `<img>` source — a Drive web VIEW link is a page, so every picture that
+arrived through the Drive upload path (the closing screen with no Firebase
+Storage) drew as a broken square while the thread showed it fine: the
+owner's "why is the photo widget not showing photos". `photoSrcOf` is
+`storageUrl || driveThumbUrl(driveFileId) || dataUrl`, and `isPicture`
+keeps videos and documents out of the photo widgets. Any new place that
+draws a `ContractorPhoto` goes through it. Harness:
+`scratchpad/photowidget-probe.mjs`.
+

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { photoSrcOf, isPicture } from './photoSrc';
 import { HardHat, CheckCircle2 } from 'lucide-react';
 import {
   Apartment, CanvasElement, Stage, isCountableApartment, getStageName, personColor,
@@ -328,7 +329,7 @@ export function WorkspaceCard({ el, c }: { el: CanvasElement; c: WidgetCtx }) {
 
 export function LatestPhoto({ c }: { c: WidgetCtx }) {
   const shots = useMemo(() => [...c.photos]
-    .filter(p => p.storageUrl || p.driveUrl || p.dataUrl)
+    .filter(p => isPicture(p) && photoSrcOf(p))
     .sort((a, b) => (b.uploadedAt ?? '').localeCompare(a.uploadedAt ?? ''))
     .slice(0, 12), [c.photos]);
   const [at, setAt] = useState(0);
@@ -342,7 +343,7 @@ export function LatestPhoto({ c }: { c: WidgetCtx }) {
   }, [shots.length]);
 
   const p = shots[Math.min(at, Math.max(0, shots.length - 1))];
-  const src = p?.storageUrl || p?.driveUrl || p?.dataUrl;
+  const src = p ? photoSrcOf(p, 1600) : undefined;
   const job = p ? c.jobs.find(j =>
     c.assignments.some(a => a.id === p.assignmentId && a.apartmentId === j.id)) : undefined;
 
@@ -375,7 +376,7 @@ export function PhotoWall({ c }: { c: WidgetCtx }) {
   const groups = useMemo(() => {
     const byJob = new Map<string, { job: Apartment; shots: typeof c.photos }>();
     const sorted = [...c.photos]
-      .filter(p => p.storageUrl || p.driveUrl || p.dataUrl)
+      .filter(p => isPicture(p) && photoSrcOf(p))
       .sort((a, b) => (b.uploadedAt ?? '').localeCompare(a.uploadedAt ?? ''));
     for (const p of sorted) {
       const a = c.assignments.find(x => x.id === p.assignmentId);
@@ -404,7 +405,7 @@ export function PhotoWall({ c }: { c: WidgetCtx }) {
                 {shots.map(p => (
                   <span key={p.id} className="rounded-md overflow-hidden bg-slate-100"
                     style={{ aspectRatio: '1.3' }}>
-                    <img src={p.storageUrl || p.driveUrl || p.dataUrl} alt=""
+                    <img src={photoSrcOf(p)} alt=""
                       className="w-full h-full object-cover" />
                   </span>
                 ))}
