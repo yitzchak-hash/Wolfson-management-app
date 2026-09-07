@@ -1145,6 +1145,19 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
   const overviewEls = useMemo(() => nodes.map(n => ({ ...n, x: n.x - origin.x, y: n.y - origin.y })),
     [nodes, origin.x, origin.y]);
 
+  /** The window's visible rectangle in STORED board units, padded — see the
+      tile loop. `view` is the scroller's own scroll rect, read per frame. */
+  const CULL_PAD = 300;
+  const cullL = view.x / zoom + origin.x - CULL_PAD;
+  const cullT = view.y / zoom + origin.y - CULL_PAD;
+  const cullR = cullL + (view.w || 1400) / zoom + CULL_PAD * 2;
+  const cullB = cullT + (view.h || 900) / zoom + CULL_PAD * 2;
+  const cullVisible = (x: number, y: number, w: number, h: number) =>
+    x < cullR && x + w > cullL && y < cullB && y + h > cullT;
+  const keepJob = (id: string) =>
+    selected.has(id) || highlightJobId === id || jobResize?.id === id
+    || (!!drag && drag.ids.includes(id));
+
   const stageOf = (a: Apartment) => stages.find(s => s.id === a.currentStageId) ?? null;
   const taskCount = (a: Apartment) => contractorAssignments.filter(x => x.apartmentId === a.id).length;
 
@@ -1673,6 +1686,12 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
                   ? { w: Math.max(120, tileSize(a).w + jobResize.dw),
                       h: Math.max(80, tileSize(a).h + jobResize.dh) }
                   : tileSize(a);
+                // Culling, the board's own rule: a tile far outside the window
+                // is not mounted. A 500-job group mounted every tile at once
+                // (a second to open, and every scroll frame reconciling all
+                // of them). Kept regardless: the selection, anything a live
+                // gesture holds, and the job a search is flying to.
+                if (!keepJob(a.id) && !cullVisible(p.x, p.y, sz.w, sz.h)) return null;
                 return (
                   <JobTile
                     key={a.id}

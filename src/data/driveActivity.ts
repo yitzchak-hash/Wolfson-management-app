@@ -17,7 +17,13 @@ import { isUploadBackendConfigured, extractFolderId } from './driveApi';
  */
 const API_KEY = (import.meta.env.VITE_DRIVE_API_KEY as string | undefined) ?? '';
 const KEY = 'drive_activity';
-export const DRIVE_ACTIVITY_EVERY_MS = 60 * 60 * 1000;
+/**
+ * Ten minutes, not an hour (owner, 2026-09-07: a file dropped into a job
+ * folder "I expect to see it on the top row"). The call is cheap now — one
+ * list plus a few dozen parallel lookups — and the widget also re-checks when
+ * the tab comes back to the front and on its own refresh button.
+ */
+export const DRIVE_ACTIVITY_EVERY_MS = 10 * 60 * 1000;
 export const DRIVE_ACTIVITY_DAYS = 30;
 
 export interface DriveActivity {
@@ -52,10 +58,23 @@ export function driveActivityDue(now = Date.now()): boolean {
 }
 
 let running: Promise<DriveActivity | null> | null = null;
+const busyListeners = new Set<() => void>();
 export function refreshDriveActivity(): Promise<DriveActivity | null> {
   if (running) return running;
-  running = doRefresh().finally(() => { running = null; });
+  running = doRefresh().finally(() => { running = null; for (const l of busyListeners) l(); });
+  for (const l of busyListeners) l();
   return running;
+}
+/** True while a check is in flight — for the widget's spinner. */
+export function useDriveActivityBusy(): boolean {
+  return useSyncExternalStore(l => { busyListeners.add(l); return () => { busyListeners.delete(l); }; }, () => !!running, () => false);
+}
+
+// Coming back to the tab is the moment somebody looks for what changed.
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && driveActivityDue()) void refreshDriveActivity();
+  });
 }
 
 async function doRefresh(): Promise<DriveActivity | null> {
@@ -96,7 +115,7 @@ async function doRefresh(): Promise<DriveActivity | null> {
     // A partial answer (the server ran out of time) is still the best this
     // machine has — kept, but asked again on the next tick rather than in an
     // hour, by stamping it back far enough to be due.
-    const at = data.partial ? new Date(Date.now() - DRIVE_ACTIVITY_EVERY_MS + 10 * 60 * 1000).toISOString() : new Date().toISOString();
+    const at = data.partial ? new Date(Date.now() - DRIVE_ACTIVITY_EVERY_MS).toISOString() : new Date().toISOString();
     current = { at, byFolder, partial: !!data.partial };
     try { localStorage.setItem(KEY, JSON.stringify(current)); } catch { /* full */ }
     emit();

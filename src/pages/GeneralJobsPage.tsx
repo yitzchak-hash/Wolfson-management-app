@@ -3189,6 +3189,27 @@ export function GeneralJobsPage() {
     }
   }
 
+  /**
+   * STABLE handles for the three audio callbacks.
+   *
+   * `startRecording` / `stopRecording` / `uploadAudio` are plain functions of
+   * this component, so they were NEW on every render — and they were handed to
+   * every `BoardNode`, which is `React.memo`. A new prop identity per render
+   * defeated the memo on every widget, so panning (which re-renders this page
+   * per frame) re-drew the planner, the Active-jobs list, the group totals and
+   * every clock on every frame: measured 820ms of script per second while
+   * panning against 200 with the widgets removed, on the production bundle.
+   * The ref idiom `H` already uses — the callbacks live in a ref that is
+   * re-pointed each render, and the nodes get wrappers made once.
+   */
+  const audioLive = useRef({ start: (_id: string) => {}, stop: () => {}, upload: (_id: string, _f: File) => {} });
+  const audioHandlers = useRef({
+    start: (id: string) => audioLive.current.start(id),
+    stop: () => audioLive.current.stop(),
+    upload: (id: string, f: File) => audioLive.current.upload(id, f),
+  }).current;
+  audioLive.current = { start: startRecording, stop: stopRecording, upload: uploadAudio };
+
   async function startRecording(elId: string) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -7065,9 +7086,9 @@ export function GeneralJobsPage() {
                   ctx={widgetCtx}
                   editRef={editInputRef}
                   H={H}
-                  onRecord={startRecording}
-                  onStopRecord={stopRecording}
-                  onUploadAudio={uploadAudio}
+                  onRecord={audioHandlers.start}
+                  onStopRecord={audioHandlers.stop}
+                  onUploadAudio={audioHandlers.upload}
                   faded={cutMark.has(el.id)}
                 />
               );

@@ -1,0 +1,20 @@
+import { chromium } from 'playwright';
+const APP = process.env.APP || 'http://localhost:4173';
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } });
+await ctx.addInitScript(() => {
+  localStorage.setItem('active_project', 'general'); localStorage.setItem('general_app_version', '3'); localStorage.setItem('whats_new_seen', '2099-01-01');
+  if (localStorage.getItem('general_app_data')) return;
+  localStorage.setItem('general_app_data', JSON.stringify({ currentUser: { id: 'U-t', name: 'A', code: '999999', role: 'admin', active: true, createdAt: '2026-01-01' }, stages: [], apartments: [{ id: 'G-1', buildingId: 'G', floor: 0, apartmentNumber: '', displayName: 'One', isUnnamed: false, isDuplexApt: false, classification: 'standard', generalNotes: '', currentStageId: null, stageDates: {}, canvasX: 100, canvasY: 300, createdAt: '2026-01-01', updatedAt: '2026-01-01' }], canvasElements: [] }));
+});
+const page = await ctx.newPage();
+page.on('console', m => { if (m.type() === 'error') console.log('CONSOLE', m.text().slice(0, 120)); });
+page.on('requestfailed', r => console.log('REQ FAILED', r.url().slice(0, 100), r.failure()?.errorText));
+const t0 = Date.now();
+await page.goto(`${APP}/jobs`, { waitUntil: 'commit' });
+const at = async (sel) => { try { await page.waitForSelector(sel, { timeout: 40000 }); return `${Date.now() - t0}ms`; } catch { return 'never'; } };
+console.log('viewport', await at('[data-board-viewport]'));
+console.log('first tile', await at('[data-node-id="G-1"]'));
+console.log('seeded bins', await at('[data-node-id="CE-bin-done"]'));
+console.log('url now', page.url());
+await b.close();

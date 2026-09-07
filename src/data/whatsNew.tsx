@@ -52,6 +52,24 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'drag',
       },
       {
+        title: 'The board is quick again',
+        body: 'After the import the board had begun to stutter and jump. Every '
+          + 'widget was being redrawn on every frame of a pan or a drag — the '
+          + 'notebook, the clocks, the lists — for a reason that had nothing to '
+          + 'do with the widgets. Fixed: panning costs a sixth of what it did, '
+          + 'and a group window with hundreds of jobs draws only the tiles in '
+          + 'view, so it opens in a blink and scrolls smoothly.',
+        demo: 'drag',
+      },
+      {
+        title: 'Drive changes show up within minutes',
+        body: 'The Active jobs widget asks Drive every ten minutes instead of '
+          + 'every hour, asks again when you come back to the tab, and has its '
+          + 'own small refresh link ("Drive · 3 min ago") — press it after '
+          + 'dropping a file into a job folder and the job climbs to the top.',
+        demo: 'list',
+      },
+      {
         title: 'Active jobs sees the whole Drive',
         body: 'The Active jobs widget only ever listed jobs sitting on the open '
           + 'board — so everything the sweep and the import filed into groups '

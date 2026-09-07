@@ -7457,3 +7457,35 @@ Two faults behind "the last-30-days widget shows none of the jobs we added":
   (8 lookups for the fixture, the job folder itself never fetched, the budget
   answering in 61ms). `driveactivity-probe.mjs` grew the grouped/trashed/
   copied-in cases.
+
+## The board after the import: one prop broke every widget's memo
+`scratchpad/bigboard-probe.mjs` seeds a board shaped like the office's (~1,650
+jobs, 1,545 of them in groups, 600 tasks, the notebook, the lists) and measures
+against the PRODUCTION bundle (`vite preview` on 4173 — dev-mode numbers are
+five times worse and blame `jsxDEV`). What it found:
+- **`startRecording` / `stopRecording` / `uploadAudio` were plain functions
+  of `GeneralJobsPage`**, new on every render, handed to every `BoardNode` —
+  which is `React.memo`. One unstable prop defeated the memo on every widget,
+  so a pan (which re-renders the page per frame) redrew the planner, the
+  Active-jobs list, the group totals and every clock on every frame. Measured:
+  820ms of script per second while panning, 200 with the widgets removed.
+  They go through `audioHandlers` now — the `H` ref idiom: callbacks in a ref
+  re-pointed each render, wrappers made once. After: 133ms/s, frame median
+  33 → 16.7ms; tile drag 480 → 124ms/s. **Every prop handed to `BoardNode`
+  or `JobTile` must be stable or primitive** — the probe is the guard.
+- **`BinBoard` mounted every tile in the group** (a second to open a 500-job
+  group, and every scroll reconciling all of them). It culls now, the board's
+  own rule, from the scroller's `view` rect in stored units (`+ origin`),
+  keeping the selection, the live gesture's ids and the search hit. 500-job
+  group: 1084 → 423ms to open, 28 tiles mounted.
+- The 13s "load" the probe reports is the Google Fonts stylesheet hanging
+  until this container's proxy resets it — not the app.
+`loadtime-probe.mjs` is the small script that established that.
+
+## The Drive check is quick to notice
+`DRIVE_ACTIVITY_EVERY_MS` is ten minutes (the call is one list plus a few
+dozen parallel lookups now); `driveActivity.ts` also re-checks on
+`visibilitychange → visible` when due, and the Active-jobs widget carries
+`[data-drive-refresh]` — "Drive · 3 min ago", a press checks now, a spinner
+while `useDriveActivityBusy()`. A partial answer stamps `now − EVERY_MS` so
+it is due on the very next tick.

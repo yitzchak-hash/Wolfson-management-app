@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   CalendarOff, EyeOff, UserX, TrendingUp, MapPinned, FileWarning,
-  Layers3, CopyCheck, SkipForward, Activity,
+  Layers3, CopyCheck, SkipForward, Activity, RefreshCw,
 } from 'lucide-react';
 import {
   Apartment, CanvasElement, ContractorAssignment,
@@ -12,7 +12,8 @@ import { MiniJob } from '../components/board/MiniJob';
 import { PlannerData } from '../components/board/PlannerWidget';
 import { soundScore } from './hebrewSearch';
 import { useStore } from './store';
-import { useDriveActivity } from './driveActivity';
+import { useDriveActivity, useDriveActivityBusy, refreshDriveActivity } from './driveActivity';
+import { isUploadBackendConfigured } from './driveApi';
 
 /**
  * The widgets that answer a question nothing else in the app answers.
@@ -263,6 +264,8 @@ function ActiveJobs({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
   const notes = c.notes ?? storeNotes;
   // What moved in the job's Drive folder — refreshed hourly (driveActivity.ts).
   const drive = useDriveActivity();
+  const busy = useDriveActivityBusy();
+  const driveOn = isUploadBackendConfigured();
   const days = Math.max(1, Math.min(365, Number(d(el).days) || 30));
   const cut = new Date(Date.now() - days * dayMs).toISOString();
 
@@ -338,6 +341,16 @@ function ActiveJobs({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
                 className="text-[22px] font-black leading-none text-slate-800 hover:text-[#1e3a5f]">{list.length}</button>
             : <span className="text-[22px] font-black leading-none text-slate-800" data-active-count>{list.length}</span>}
           <span className="text-[9.5px] text-gray-400">of {jobs.length} jobs had something happen</span>
+          {driveOn && !isSampleCtx(c) && (
+            <button type="button" data-no-drag data-el-action data-drive-refresh
+              disabled={busy}
+              onClick={() => { void refreshDriveActivity(); }}
+              title={drive?.at ? `Drive checked ${relativeTime(drive.at)} — press to check now` : 'Check Drive now'}
+              className="ms-auto flex items-center gap-1 text-[9px] text-gray-400 hover:text-[#1e3a5f] disabled:opacity-60">
+              <RefreshCw size={10} className={busy ? 'animate-spin' : ''} />
+              {busy ? 'checking Drive…' : drive?.at ? `Drive · ${relativeTime(drive.at)}` : 'check Drive'}
+            </button>
+          )}
         </div>
         <Scroll>
           {list.length === 0 && <Empty>Nothing happened on any job in the last {days} days</Empty>}

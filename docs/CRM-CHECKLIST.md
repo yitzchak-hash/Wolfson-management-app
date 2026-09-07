@@ -72,6 +72,8 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ Group window controls = the board's: the surface frames its content (empty bands close on every side once the hand is off), zoom to the pointer, right-drag lasso, right-button + wheel zoom, arrow-key nudge, the overview draws the group's own positions (2026-09-07)
 - ☑ Drive sweep reports its arithmetic per watched folder (folders seen · already jobs · new); the folder listing ceiling raised 1,000 → 5,000 (2026-09-07)
 - ☑ Active jobs widget lists every job except Trash (group name on the row); a job copied in by the sweep/import is not activity by itself; the hourly Drive check sends the known job folders, resolves parents breadth-first in parallel under a time budget, and answers partial instead of timing out (2026-09-07)
+- ☑ Board speed after the import: stable audio handlers keep every widget memoised through a pan (script 820 → 133 ms/s on the production bundle); the group window culls tiles outside its view (500-job group: 1.1 s → 0.4 s to open, 28 tiles mounted) (2026-09-07)
+- ☑ Drive activity noticed within minutes: every 10 minutes, on tab focus, and a refresh link on the Active jobs widget saying when Drive was last checked (2026-09-07)
 - ☐ Search ranks by Drive activity — the header search does NOT read Drive activity today; only the Active jobs widget does (decided 2026-09-07: not built until asked)
 - ☑ Photo widgets (Latest photos grid/one/wall, the TV's) draw Drive photos through the thumbnail address, never the view link; videos excluded (2026-09-06)
 - ☑ A video in a thread is a still with a play button and a full-screen corner (plays in place; Drive-only videos fetched on first press); media grids show a frame under the play button (2026-09-06)
