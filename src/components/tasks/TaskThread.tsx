@@ -4,6 +4,7 @@ import { format, isToday, parseISO } from 'date-fns';
 import { Download, X } from 'lucide-react';
 import { ContractorAssignment, ContractorNote, ContractorPhoto } from '../../types';
 import { VoiceMemoPlayer } from '../ui/VoiceMemo';
+import { VideoTile } from '../ui/VideoTile';
 import { fetchPlanBytes, driveThumbUrl } from '../../data/driveApi';
 import { saveBytes } from '../../data/planExport';
 import { Translated } from '../ui/Translated';
@@ -176,7 +177,15 @@ export function TaskThread({ assignment, notes, photos, viewer, readOnly = false
         </div>
       );
     }
-    // A video or any other file is a card you press to open and download.
+    // A video is a still with a play button and a full-screen corner.
+    if ((p.fileType === 'video' || p.mimeType?.startsWith('video/')) && (p.storageUrl || p.dataUrl || p.driveFileId)) {
+      return (
+        <div key={p.id} className={inBubble ? 'mb-1.5' : undefined}>
+          <VideoTile src={p.storageUrl || p.dataUrl || null} driveFileId={p.driveFileId} filename={p.filename} mimeType={p.mimeType} />
+        </div>
+      );
+    }
+    // Any other file is a card you press to open and download.
     return <div key={p.id} className={inBubble ? 'mb-1.5' : undefined}>{fileCard({
       filename: p.filename, mime: p.mimeType, size: p.fileSizeBytes,
       driveFileId: p.driveFileId, url: p.storageUrl, dataUrl: p.dataUrl,
@@ -237,6 +246,12 @@ export function TaskThread({ assignment, notes, photos, viewer, readOnly = false
                 saidLabel={words.said ?? 'Said'}
                 className="w-full min-w-[220px]"
               />
+            </div>,
+          );
+        } else if (n.attachmentMimeType?.startsWith('video/') && (n.attachmentDriveFileId || n.attachmentDataUrl)) {
+          body.push(
+            <div key="att" className="mb-1.5">
+              <VideoTile src={n.attachmentDataUrl || null} driveFileId={n.attachmentDriveFileId} filename={n.attachmentFilename} mimeType={n.attachmentMimeType} />
             </div>,
           );
         } else if (n.attachmentMimeType?.startsWith('image/') && (n.attachmentDriveFileId || n.attachmentDataUrl)) {

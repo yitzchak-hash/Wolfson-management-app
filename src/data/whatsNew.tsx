@@ -51,6 +51,14 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'tap',
       },
       {
+        title: 'Videos you can see, and a plan you can tap',
+        body: 'A video in a task thread is a still with a play button and a '
+          + 'full-screen corner — press play and it plays right there. In the '
+          + 'apartment window, a plain tap anywhere on the plan opens it full '
+          + 'screen, the same as the little corner button.',
+        demo: 'tap',
+      },
+      {
         title: 'Russian all the way through',
         body: 'A worker who reads Russian now gets Russian everywhere on his '
           + 'phone: the day and month names, the notebook, the calendar, the '

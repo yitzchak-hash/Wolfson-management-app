@@ -2681,9 +2681,15 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                   {isImg ? (
                                     <DriveImg src={driveThumbUrl(photo.fileId, 400)} alt={photo.filename} className="w-full h-full object-cover" />
                                   ) : isVid ? (
-                                    <div className="w-full h-full flex flex-col items-center justify-center bg-gray-800">
-                                      <Play size={22} className="text-white" />
-                                      <span className="text-white text-[9px] mt-1 opacity-60 truncate px-1 max-w-full">{photo.filename}</span>
+                                    <div className="w-full h-full relative bg-gray-900">
+                                      <DriveImg src={driveThumbUrl(photo.fileId, 400)} alt={photo.filename} className="w-full h-full object-cover opacity-90" />
+                                      <div className="absolute inset-0 flex items-center justify-center">
+                                        <span className="w-9 h-9 rounded-full flex items-center justify-center text-white"
+                                          style={{ backgroundColor: 'rgba(30,58,95,.85)', border: '2px solid rgba(255,255,255,.85)' }}>
+                                          <Play size={16} fill="currentColor" className="ms-0.5" />
+                                        </span>
+                                      </div>
+                                      <span className="absolute bottom-0.5 inset-x-0 text-center text-white text-[9px] opacity-70 truncate px-1">{photo.filename}</span>
                                     </div>
                                   ) : (
                                     <div className="w-full h-full flex flex-col items-center justify-center bg-blue-50 px-1">

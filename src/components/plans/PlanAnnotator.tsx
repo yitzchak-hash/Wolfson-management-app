@@ -1083,6 +1083,8 @@ function PlanEditor({
    * scrolls it. A click that never travels still just clears the pick.
    */
   const stagePan = useRef<{ x: number; y: number; sl: number; st: number } | null>(null);
+  /** A press on the locked, embedded pane — a motionless lift opens full screen. */
+  const paneTap = useRef<{ x: number; y: number } | null>(null);
   const erased = useRef<Set<string>>(new Set());
   const textRef = useRef<HTMLTextAreaElement>(null);
   /**
@@ -2310,6 +2312,13 @@ function PlanEditor({
   }
 
   function onDown(e: React.PointerEvent<HTMLCanvasElement>) {
+    // The drawer's pane (owner, 2026-09-06): a plain click anywhere on the
+    // sheet opens the same full screen the corner button does. Recorded here,
+    // judged on the lift — a drag that scrolled the sheet is not a click.
+    if (locked && embedded && !isFull) {
+      paneTap.current = { x: e.clientX, y: e.clientY };
+      return;
+    }
     if (locked || tool === 'pan') return;
 
     /**
@@ -2626,6 +2635,7 @@ function PlanEditor({
    */
   function onCancelDraw(e: React.PointerEvent<HTMLCanvasElement>) {
     stagePan.current = null;
+    paneTap.current = null;
     try { (e.target as HTMLCanvasElement).releasePointerCapture(e.pointerId); } catch { /* gone */ }
     // What had already landed in the marks stays — a cancel abandons the
     // stroke in the air, it is not an undo — so a drag or a rub that was
@@ -2637,6 +2647,12 @@ function PlanEditor({
   }
 
   function onUp(e: React.PointerEvent<HTMLCanvasElement>) {
+    const tap = paneTap.current;
+    if (tap) {
+      paneTap.current = null;
+      if (Math.hypot(e.clientX - tap.x, e.clientY - tap.y) < 8) toggleFull();
+      return;
+    }
     if (stagePan.current) {
       stagePan.current = null;
       try { (e.target as HTMLCanvasElement).releasePointerCapture(e.pointerId); } catch { /* gone */ }
@@ -4424,7 +4440,11 @@ function PlanEditor({
                       : tool === 'text' ? 'text'
                       : tool === 'move' ? (picked ? 'move' : 'grab')
                       : showNib ? 'none' : 'crosshair',
-                    pointerEvents: locked || tool === 'pan' ? 'none' : 'auto',
+                    // A locked pane lets the pointer through to the sheet —
+                    // EXCEPT the drawer's embedded pane, which takes a plain
+                    // click as "open full screen" (touch-action keeps a finger
+                    // drag scrolling the sheet natively).
+                    pointerEvents: (locked && !(embedded && !isFull)) || tool === 'pan' ? 'none' : 'auto',
                   }}
                 />
                 {textDraft && (() => {

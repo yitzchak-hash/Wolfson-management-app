@@ -7263,3 +7263,26 @@ component with the date-fns `he`/`ru` locale, `TaskCalendar` takes
 only the portal passes `lang`. A new portal string is `w(en, he, ru)` or a
 preset key with all three; a bare pair is the bug.
 
+## Videos are tiles, and the plan pane opens on a tap
+- `src/components/ui/VideoTile.tsx` — a video as a STILL (its own first
+  frame when playable in place — Firebase Storage, a data URL — or Drive's
+  thumbnail otherwise) with a big play button and a full-screen corner
+  (`data-video-tile` / `data-video-play` / `data-video-full`). Play swaps in
+  the browser's controls; the corner calls `requestFullscreen` on the video
+  itself (`webkitEnterFullscreen` on iPhone Safari). A Drive-only video has
+  no playable address, so its bytes come through `/api/drive-fetch` on the
+  FIRST press, never on mount. **The tile carries a definite width**
+  (`width: 230px; max-width: 100%`): a percentage width inside a
+  shrink-to-fit bubble collapses to nothing — the probe's first run found
+  the full-screen corner covering the whole tile. Used by `TaskThread`
+  (photos and note attachments); the portal grid and the drawer's photos
+  tab draw a real frame under the play button.
+- **The drawer's plan pane opens full screen on a plain click** (owner,
+  2026-09-06): `paneTap` in PlanAnnotator — recorded in onDown when
+  `locked && embedded && !isFull`, judged on the lift (< 8px = a click →
+  `toggleFull()`; a drag is a scroll). The trap: the live canvas had
+  `pointer-events: none` whenever locked, so nothing reached onDown — it is
+  `auto` for the embedded pane while not full screen, and `touch-action`
+  keeps a finger drag scrolling natively. Harness:
+  `scratchpad/videoplan-probe.mjs` (records a real webm off a canvas).
+

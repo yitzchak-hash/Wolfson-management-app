@@ -64,6 +64,8 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ The memo player draws a real waveform from the audio, a drag-to-scrub knob and the true length; the words and the sign-off sit inside the card (2026-09-06)
 - ☑ The message box grows with the words, the clip and the big mic sit on its bottom line, a grey "sending the recording…" bubble stands while a memo uploads (2026-09-06)
 - ☑ A memo or a picture in a thread never prints its filename as the message (2026-09-06)
+- ☑ A video in a thread is a still with a play button and a full-screen corner (plays in place; Drive-only videos fetched on first press); media grids show a frame under the play button (2026-09-06)
+- ☑ Drawer plan pane: a plain click/tap on the sheet opens full screen like the corner button; a drag does not (2026-09-06)
 - ☑ Worker's phone in Russian all the way: inline words, dates and day names (date-fns ru/he locales), the notebook's day names, the calendar's month title and weekday row (2026-09-06)
 - ☑ Widget: Active jobs — every job with activity in the last N days (default 30), newest first, what and how long ago; count opens the list (2026-09-06)
 - ☑ Notes tab: the worker is a small bubble beside CURRENT; "Add notes for X" is the grey placeholder (2026-09-06)
