@@ -47,9 +47,15 @@ Last commits, newest first (see `git log`):
   Hebrew-safe PowerShell opener, paste-a-path detector (`parsePastedPath`,
   `drive_shared_name`); `Apartment.driveFolderName` kept and searched
   (header search, job list, search tile; sweep backfills); `HANDOFF.md`,
-  `docs/artifacts/`. A background agent is writing `docs/research/SEARCH.md`
-  (how to make the search better) — if it is absent, that research was lost
-  and should be redone.
+  `docs/artifacts/`. `docs/research/SEARCH.md` (400 lines) is the reusable research
+  on making the search better — read it before touching search. Its top
+  asks, not yet built: one shared index module for the six search sites,
+  MiniSearch instead of Fuse (multi-token AND, field weights, ~1 ms per
+  keystroke), the remaining unindexed fields (tipus, attachment names, memo
+  transcripts, pins), one Hebrew normaliser, "why it matched" on rows. The
+  folder title is now read by the header search, the job list, the search
+  tile and the board's group window; the TV group window and Find-a-job
+  still do not read it.
 - Galaxy Tab S10 FE gallery + S Pen probe; the pen tray's Escape fixed.
 - Active jobs widget rebuilt as approved (`src/data/activityTouches.ts`).
 - Board speed after the import (stable audio handlers, group-window culling);

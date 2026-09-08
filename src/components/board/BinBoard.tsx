@@ -312,7 +312,8 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
     const rows = apartments
       .filter(a => a.boardBin === binKey && !a.isUnnamed)
       .filter(a => !q || (a.displayName ?? '').toLowerCase().includes(q)
-        || (a.address ?? '').toLowerCase().includes(q));
+        || (a.address ?? '').toLowerCase().includes(q)
+        || (a.driveFolderName ?? '').toLowerCase().includes(q));
     const by: Record<BinSort, (a: Apartment, b: Apartment) => number> = {
       'filed-new': (a, b) => (b.binnedAt ?? '').localeCompare(a.binnedAt ?? ''),
       'filed-old': (a, b) => (a.binnedAt ?? '').localeCompare(b.binnedAt ?? ''),
