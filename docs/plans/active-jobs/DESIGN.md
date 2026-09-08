@@ -5,7 +5,7 @@ whether on the job board, whether in the Drive, whether someone's dealing
 with the job. Done in a very smart way."
 
 The plan page: the "Active Jobs, Rethought" artifact. This file is the same
-plan in words. **Nothing here is built until the owner says so.**
+plan in words. **Approved 2026-09-07 ("all yes") and built the same day** — `src/data/activityTouches.ts`, the widget in `insightWidgets.tsx`, `scratchpad/activitytouches-test.mjs`.
 
 ## The question the widget answers
 Which jobs is the office actually working on right now? Every trace of use

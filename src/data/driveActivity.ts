@@ -26,11 +26,13 @@ const KEY = 'drive_activity';
 export const DRIVE_ACTIVITY_EVERY_MS = 10 * 60 * 1000;
 export const DRIVE_ACTIVITY_DAYS = 30;
 
+export interface DriveTouch { at: string; name: string; who?: string; removed?: boolean; added?: boolean }
+
 export interface DriveActivity {
   /** When this machine last asked. */
   at: string;
-  /** Job folder id → the newest change inside it. */
-  byFolder: Record<string, { at: string; name: string }>;
+  /** Job folder id → the newest change inside it, and the recent ones (newest first, ≤ 20). */
+  byFolder: Record<string, { at: string; name: string; who?: string; removed?: boolean; touches?: DriveTouch[] }>;
   /** The server ran out of time and answered with what it had. */
   partial?: boolean;
 }
@@ -101,7 +103,7 @@ async function doRefresh(): Promise<DriveActivity | null> {
     });
     if (!resp.ok) return null;
     const data = await resp.json() as {
-      files?: { id: string; name: string; modifiedTime: string; ancestors?: string[]; jobFolder?: string | null }[];
+      files?: { id: string; name: string; modifiedTime: string; createdTime?: string; ancestors?: string[]; jobFolder?: string | null; who?: string; removed?: boolean }[];
       partial?: boolean;
     };
     const byFolder: DriveActivity['byFolder'] = {};
@@ -109,8 +111,13 @@ async function doRefresh(): Promise<DriveActivity | null> {
       if (!f.modifiedTime) continue;
       const home = f.jobFolder && folders.has(f.jobFolder) ? f.jobFolder : (f.ancestors ?? []).find(a => folders.has(a));
       if (!home) continue;
+      // Added = born inside the window (created within a minute of its last change).
+      const added = !!f.createdTime && f.createdTime >= since && Math.abs(Date.parse(f.modifiedTime) - Date.parse(f.createdTime)) < 60_000;
+      const t: DriveTouch = { at: f.modifiedTime, name: f.name, who: f.who || undefined, removed: f.removed || undefined, added: added || undefined };
       const cur = byFolder[home];
-      if (!cur || f.modifiedTime > cur.at) byFolder[home] = { at: f.modifiedTime, name: f.name };
+      if (!cur) { byFolder[home] = { ...t, touches: [t] }; continue; }
+      cur.touches = [...(cur.touches ?? []), t].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 20);
+      if (f.modifiedTime > cur.at) Object.assign(cur, t);
     }
     // A partial answer (the server ran out of time) is still the best this
     // machine has — kept, but asked again on the next tick rather than in an

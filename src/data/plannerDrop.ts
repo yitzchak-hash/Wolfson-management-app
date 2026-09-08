@@ -65,6 +65,7 @@ export function placeJobsOnPlanner(
     .map(id => ({
       id: `R-${Math.random().toString(36).slice(2, 8)}`,
       jobId: id,
+      at: new Date().toISOString(),
       ...(foreign ? { projectId } : {}),
     }));
   if (!fresh.length) return { added: 0, ghosted: 0 };

@@ -28,6 +28,10 @@ import { DriveIcon, ZohoIcon, PlanIcon } from '../ui/BrandIcons';
 
 export interface PlannerEntry {
   id: string;
+  /** When this square was written — for the Active-jobs widget's "planned"
+      touch. Absent on entries from before it existed, which are dated by the
+      day they sit on. */
+  at?: string;
   /** A real job from the board. */
   jobId?: string;
   /**
@@ -1740,7 +1744,7 @@ export function PlannerWidget({
                   // lists the job's tasks itself, so the new task shows there.
                   if (landing.some(e => e.jobId === job.id)) continue;
                   next[k2] = [...landing, {
-                    id: newEntryId(), jobId: job.id, ...(taskId ? { taskId } : {}),
+                    id: newEntryId(), jobId: job.id, at: new Date().toISOString(), ...(taskId ? { taskId } : {}),
                   }];
                 }
                 write({ cells: next });

@@ -72,13 +72,13 @@ await page.waitForTimeout(600);
 const node = page.locator('[data-node-id]').filter({ has: page.locator('[data-active-count]') }).first();
 check(await node.count() === 1, 'the widget landed on the board');
 const count = await node.locator('[data-active-count]').innerText();
-check(count === '3', `three jobs had activity in the last 30 days (${count})`);
+check(count === '4', `four jobs had activity in the last 30 days — opening one counts now (${count})`);
 const rows = await node.locator('[data-mini-job], [data-minijob]').allInnerTexts().catch(() => []);
 const text = (await node.innerText()).replace(/\s+/g, ' ');
 check(text.indexOf('Messaged job') < text.indexOf('Edited job') && text.indexOf('Edited job') < text.indexOf('Tasked job'),
   'newest first: the message (1d), the edit (3d), the task (10d)', text.slice(0, 200));
-check(/message from site/.test(text) && /edited/.test(text) && /new task/.test(text), 'each row says what its last activity was');
-check(!/Only looked at/.test(text), 'merely opening a job is not activity');
+check(/message from site/.test(text) && /edited the job/.test(text) && /made a task/.test(text), 'each row says who did what');
+check(/Only looked at.*Probe · opened the job/.test(text), 'opening a job counts (the approved rule), credited to who opened it');
 check(!/Old photo job/.test(text) && !/Quiet job/.test(text), 'a photo from 40 days ago is outside the window; a quiet job is not listed');
 await node.screenshot({ path: `${SCRATCH}/activejobs-node.png` });
 void rows;

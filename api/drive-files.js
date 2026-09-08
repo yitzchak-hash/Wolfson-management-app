@@ -33,7 +33,8 @@ export async function resolveJobFolders(files, known, parentOf, opts = {}) {
   // Per file: the frontier of folder ids still to climb from, and every
   // ancestor seen so far.
   const rows = files.map(f => ({
-    id: f.id, name: f.name, mimeType: f.mimeType, modifiedTime: f.modifiedTime,
+    id: f.id, name: f.name, mimeType: f.mimeType, modifiedTime: f.modifiedTime, createdTime: f.createdTime,
+    who: f.lastModifyingUser?.displayName ?? f.who ?? undefined, removed: !!f.removed,
     frontier: [...(f.parents ?? [])], ancestors: [...(f.parents ?? [])], jobFolder: null,
   }));
   const settle = r => { if (!r.jobFolder) { const hit = r.ancestors.find(a => known.has(a)); if (hit) r.jobFolder = hit; } };
@@ -58,7 +59,7 @@ export async function resolveJobFolders(files, known, parentOf, opts = {}) {
   }
   return {
     partial,
-    files: rows.map(r => ({ id: r.id, name: r.name, mimeType: r.mimeType, modifiedTime: r.modifiedTime, ancestors: r.ancestors, jobFolder: r.jobFolder })),
+    files: rows.map(r => ({ id: r.id, name: r.name, mimeType: r.mimeType, modifiedTime: r.modifiedTime, createdTime: r.createdTime, who: r.who, removed: r.removed, ancestors: r.ancestors, jobFolder: r.jobFolder })),
   };
 }
 
@@ -103,22 +104,31 @@ export default async function handler(req, res) {
       const since = new Date(recent.since || Date.now() - 30 * 86400000).toISOString();
       const known = new Set(Array.isArray(recent.folders) ? recent.folders.filter(x => typeof x === 'string') : []);
       const files = [];
-      let pageToken;
-      for (let page = 0; page < 8; page++) {
-        const resp = await drive.files.list({
-          q: `modifiedTime > '${since}' and trashed = false and mimeType != 'application/vnd.google-apps.folder'`,
-          fields: 'nextPageToken,files(id,name,mimeType,modifiedTime,parents)',
-          orderBy: 'modifiedTime desc',
-          pageSize: 200,
-          pageToken,
-          supportsAllDrives: true,
-          includeItemsFromAllDrives: true,
-          corpora: 'allDrives',
-        });
-        for (const f of resp.data.files ?? []) files.push(f);
-        pageToken = resp.data.nextPageToken;
-        if (!pageToken) break;
-      }
+      /**
+       * Two lists: what changed, and what was REMOVED (a proposal taken out
+       * of a job folder is work on that job — the approved plan). Each file
+       * also says who last touched it, which is the name the widget shows.
+       */
+      const listRecent = async (trashed, pages) => {
+        let pageToken;
+        for (let page = 0; page < pages; page++) {
+          const resp = await drive.files.list({
+            q: `modifiedTime > '${since}' and trashed = ${trashed} and mimeType != 'application/vnd.google-apps.folder'`,
+            fields: 'nextPageToken,files(id,name,mimeType,modifiedTime,createdTime,parents,lastModifyingUser(displayName))',
+            orderBy: 'modifiedTime desc',
+            pageSize: 200,
+            pageToken,
+            supportsAllDrives: true,
+            includeItemsFromAllDrives: true,
+            corpora: 'allDrives',
+          });
+          for (const f of resp.data.files ?? []) files.push({ ...f, removed: trashed });
+          pageToken = resp.data.nextPageToken;
+          if (!pageToken) break;
+        }
+      };
+      await listRecent(false, 8);
+      try { await listRecent(true, 2); } catch (e) { console.warn('drive-files recent (trashed):', e.message); }
       const parentOf = async id => {
         if (PARENT_CACHE.has(id)) return PARENT_CACHE.get(id);
         if (PARENT_CACHE.size > 5000) PARENT_CACHE.clear();

@@ -262,8 +262,17 @@ export const WIDGET_FIELDS: Record<string, WidgetField[]> = {
   'active-jobs': [
     title(),
     {
-      key: 'days', label: 'Had activity in the last… (days)', kind: 'number', min: 1, max: 365,
-      hint: 'A task made or closed, a message, a photo, a stage moved, a note, or a file changed in the job\'s Drive folder (checked every hour). Opening a job does not count.',
+      key: 'days', label: 'Window', kind: 'select',
+      options: [{ value: '7', label: 'Last 7 days' }, { value: '30', label: 'Last 30 days' }, { value: '90', label: 'Last 90 days' }],
+      hint: 'Every trace of use counts: opening the job, an edit, a task, a message or memo, a photo from site, a plan marked up, a day in the notebook, a file added, changed or removed in its Drive folder (checked every ten minutes). Arranging the board never counts.',
+    },
+    {
+      key: 'sort', label: 'Order', kind: 'select',
+      options: [{ value: 'newest', label: 'Newest touch first' }, { value: 'busiest', label: 'Busiest first' }],
+    },
+    {
+      key: 'filter', label: 'Showing', kind: 'select',
+      options: [{ value: 'all', label: 'Everything' }, { value: 'office', label: 'Office' }, { value: 'site', label: 'Site' }, { value: 'drive', label: 'Drive' }, { value: 'notebook', label: 'Notebook' }],
     },
   ],
   'nobody-booked': [

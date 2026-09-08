@@ -2626,7 +2626,7 @@ export function GeneralJobsPage() {
       // literal `taskId: undefined` — clean records, and one less thing for a
       // cloud write to trip on.
       .map(id => ({
-        id: `R-${Math.random().toString(36).slice(2, 8)}`, jobId: id,
+        id: `R-${Math.random().toString(36).slice(2, 8)}`, jobId: id, at: new Date().toISOString(),
         ...(taskId ? { taskId } : {}),
       }));
     if (!fresh.length) return;
@@ -2639,7 +2639,7 @@ export function GeneralJobsPage() {
       cells[k] = [...there, ...ids
         .filter(id => !there.some(e => e.jobId === id))
         .map(id => ({
-          id: `R-${Math.random().toString(36).slice(2, 8)}`, jobId: id,
+          id: `R-${Math.random().toString(36).slice(2, 8)}`, jobId: id, at: new Date().toISOString(),
           ...(taskId ? { taskId } : {}),
         }))];
     }

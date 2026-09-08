@@ -16,7 +16,9 @@ await ctx.route('**/api/drive-files', async route => {
       // a photo inside Job A's Photos folder, two days ago
       { id: 'ph1', name: 'kitchen.jpg', mimeType: 'image/jpeg', modifiedTime: ago(2), ancestors: ['F-photosA', 'F-jobA', 'F-pot'] },
       // a plan straight in Job B's folder, yesterday
-      { id: 'pl1', name: 'plan-v2.pdf', mimeType: 'application/pdf', modifiedTime: ago(1), ancestors: ['F-jobB', 'F-pot'] },
+      { id: 'pl1', name: 'plan-v2.pdf', mimeType: 'application/pdf', modifiedTime: ago(1), createdTime: ago(1), who: 'Moshe', ancestors: ['F-jobB', 'F-pot'] },
+      // a proposal taken OUT of the grouped job's folder, two and a half days ago
+      { id: 'rm1', name: 'old-quote.pdf', mimeType: 'application/pdf', modifiedTime: ago(2.5), who: 'Moshe', removed: true, jobFolder: 'F-jobD', ancestors: [] },
       // a file in a folder no job owns
       { id: 'x1', name: 'stray.pdf', mimeType: 'application/pdf', modifiedTime: ago(1), ancestors: ['F-nobody'] },
       // a proposal in a job the import filed into a GROUP — the server settled it (jobFolder), no ancestors needed
@@ -66,13 +68,14 @@ check(act && act.byFolder['F-jobA']?.name === 'kitchen.jpg' && act.byFolder['F-j
   'each change is pinned to the JOB folder above it — a photo in Job A/Photos counts for Job A; a stray file counts for nobody', JSON.stringify(act?.byFolder));
 check(Array.isArray(recentCalls[0]?.folders) && recentCalls[0].folders.includes('F-jobA') && recentCalls[0].folders.includes('F-jobD'),
   'the app tells the server which folders are jobs, so the server can stop climbing early', `${recentCalls[0]?.folders?.length} folders sent`);
-check(act?.byFolder['F-jobD']?.name === 'proposal.docx', 'a change the server settled itself (jobFolder) is pinned too');
+check(act?.byFolder['F-jobD']?.name === 'old-quote.pdf' && act.byFolder['F-jobD'].removed === true && (act.byFolder['F-jobD'].touches ?? []).some(t => t.name === 'proposal.docx'),
+  'changes the server settled itself (jobFolder) are pinned too — the removal is the newest, the older proposal kept beneath it', JSON.stringify(act?.byFolder['F-jobD']));
 const node = page.locator('[data-node-id="CE-act"]');
 const txt = (await node.innerText()).replace(/\s+/g, ' ');
 check(/\b3\b/.test(await node.locator('[data-active-count]').innerText()), 'the widget counts the three jobs that moved in Drive — the grouped one included', await node.locator('[data-active-count]').innerText());
-check(/Beta job.*Drive · plan-v2\.pdf/.test(txt) && /Alpha job.*Drive · kitchen\.jpg/.test(txt) && !/Quiet job/.test(txt),
+check(/Beta job.*Moshe · Drive · added plan-v2\.pdf/.test(txt) && /Alpha job.*Drive · changed kitchen\.jpg/.test(txt) && !/Quiet job/.test(txt),
   'rows say what moved in Drive, newest first; the quiet job stays off', txt.slice(0, 200));
-check(/Grouped job.*Old clients · Drive · proposal\.docx/.test(txt), 'a job filed in a group appears, labelled with its group', txt.slice(0, 260));
+check(/Grouped job.*Old clients · Moshe · Drive · removed old-quote\.pdf/.test(txt), 'a job filed in a group appears, labelled with its group — and a proposal REMOVED from its folder is its newest touch', txt.slice(0, 300));
 check(!/Binned job/.test(txt), 'a job in Trash never appears, whatever moved in its folder');
 check(!/Swept job/.test(txt), 'a job the sweep merely copied in today is not "activity"');
 check(txt.indexOf('Beta job') < txt.indexOf('Alpha job'), 'yesterday\'s plan outranks the two-day-old photo');

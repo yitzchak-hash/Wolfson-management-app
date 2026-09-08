@@ -52,6 +52,18 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'drag',
       },
       {
+        title: 'Active jobs — every trace of use, on one list',
+        body: 'The widget now answers "which jobs are we actually working on". '
+          + 'Opening a job counts, so does an edit, a task, a message or memo, '
+          + 'a photo from site, a plan marked up, a day in the weekly notebook, '
+          + 'and a file added, changed or REMOVED in the job\'s Drive folder — '
+          + 'with the name of whoever did it. Newest touch first, the touch '
+          + 'count and a square per kind as the heat, a Busiest switch, chips '
+          + 'for Office · Site · Drive · Notebook, and a small tag when a worker '
+          + 'is booked on the job this week.',
+        demo: 'list',
+      },
+      {
         title: 'The board is quick again',
         body: 'After the import the board had begun to stutter and jump. Every '
           + 'widget was being redrawn on every frame of a pan or a drag — the '

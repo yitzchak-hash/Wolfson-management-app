@@ -7489,3 +7489,39 @@ dozen parallel lookups now); `driveActivity.ts` also re-checks on
 `[data-drive-refresh]` — "Drive · 3 min ago", a press checks now, a spinner
 while `useDriveActivityBusy()`. A partial answer stamps `now − EVERY_MS` so
 it is due on the very next tick.
+
+## Active jobs, built as approved (2026-09-07, "all yes")
+The plan is `docs/plans/active-jobs/DESIGN.md` (the "Active Jobs, Rethought"
+artifact); every star was taken. The widget answers "which jobs is the
+office actually working on" from every trace of use the app already records.
+- **`src/data/activityTouches.ts` is PURE** — `touchesOf(sources, now, days)`
+  turns jobs, history, tasks, notes, photos, markups, pins, the weekly
+  notebooks and the Drive check into `Touch {jobId, at, who, kind, side,
+  what}`; `foldByJob` keeps per job the newest touch, the count, the kinds
+  present and a decayed score; `rankJobs` orders newest or busiest;
+  `bookedThisWeek` finds who is booked on each job this week. `now` is
+  passed in; `scratchpad/activitytouches-test.mjs` works the numbers by hand.
+- **Rules kept in the arithmetic**: opening counts (the history's
+  hourly-throttled entries); arranging the board never does; a job the sweep
+  or import COPIED IN (`copiedIn`) has no edit touch, only its folder's real
+  changes; Trash is out; a notebook square is a touch dated by its own stamp
+  — `PlannerEntry.at`, written wherever an entry is minted now — and an
+  UNSTAMPED square by the day it sits on, a day still ahead dated a day back
+  (planning happened before now; dated in the future it would outrank
+  everything that happened).
+- **Drive says who and what**: `api/drive-files.js` `recent` lists
+  `lastModifyingUser(displayName)` and `createdTime`, and runs a second,
+  small list for `trashed = true` files in the window — a proposal taken out
+  of a folder is work on that job. The client keeps up to 20 touches per
+  folder (`DriveTouch {at,name,who,removed,added}`); the row reads "Moshe ·
+  Drive · added proposal-v2.docx", or "Drive · changed X" when Drive has no
+  name — never "Drive · Drive · X".
+- **The widget**: chips All · Office · Site · Drive · Notebook and the
+  Newest/Busiest switch write `data.filter` / `data.sort` on the widget's own
+  bag (remembered per widget; the pencil lists them too, with the 7/30/90
+  window). Each row: group name · who · what · when, the booked chip
+  (`data-active-booked`), the kind squares (`data-active-square`) and the
+  count (`data-active-heat`). The fold is memoised on its inputs and a
+  one-minute tick, never per frame.
+Probes re-encoded to the approved rules: `activejobs-probe` (opening
+counts, "who did what"), `driveactivity-probe` (added / removed / who).

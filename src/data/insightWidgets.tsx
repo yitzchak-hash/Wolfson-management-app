@@ -13,6 +13,9 @@ import { PlannerData } from '../components/board/PlannerWidget';
 import { soundScore } from './hebrewSearch';
 import { useStore } from './store';
 import { useDriveActivity, useDriveActivityBusy, refreshDriveActivity } from './driveActivity';
+import {
+  touchesOf, foldByJob, rankJobs, bookedThisWeek, TouchKind, TouchFilter, TouchSort, TouchSources,
+} from './activityTouches';
 import { isUploadBackendConfigured } from './driveApi';
 
 /**
@@ -259,89 +262,95 @@ function OpenSnags({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
  * job is not activity: the "opened" history entries are looks, not work.
  * The count opens the same list through the host, the standing rule.
  */
+const KIND_STYLE: Record<TouchKind, { bg: string; letter: string; label: string }> = {
+  opened:   { bg: '#1e3a5f', letter: 'O', label: 'opened' },
+  edited:   { bg: '#475569', letter: 'E', label: 'edited · stage · note' },
+  task:     { bg: '#f59e0b', letter: 'T', label: 'task or problem' },
+  message:  { bg: '#7c3aed', letter: 'M', label: 'message or memo' },
+  photo:    { bg: '#dc2626', letter: 'P', label: 'photo or video from site' },
+  plan:     { bg: '#0284c7', letter: 'L', label: 'plan marked up or pinned' },
+  notebook: { bg: '#0d9488', letter: 'N', label: 'in the weekly notebook' },
+  drive:    { bg: '#0f9d58', letter: 'D', label: 'Drive file added, changed or removed' },
+};
+const FILTERS: { id: TouchFilter; label: string }[] = [
+  { id: 'all', label: 'All' }, { id: 'office', label: 'Office' }, { id: 'site', label: 'Site' },
+  { id: 'drive', label: 'Drive' }, { id: 'notebook', label: 'Notebook' },
+];
+
+/**
+ * ACTIVE JOBS — which jobs is the office actually working on right now.
+ *
+ * Built as approved (docs/plans/active-jobs/DESIGN.md): every trace of use
+ * from every source, folded per job by `activityTouches.ts` — last touch
+ * first, with the touch count and one square per kind as the heat; a
+ * Busiest switch; chips for Office / Site / Drive / Notebook; a small chip
+ * when a worker is booked on the job this week. Every job in the workspace
+ * except Trash, the group named on the row. The fold is memoised on its
+ * inputs, so it runs when data changes and never per frame.
+ */
 function ActiveJobs({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
   const storeNotes = useStore(s => s.contractorNotes);
-  const notes = c.notes ?? storeNotes;
-  // What moved in the job's Drive folder — refreshed hourly (driveActivity.ts).
-  const drive = useDriveActivity();
-  const busy = useDriveActivityBusy();
-  const driveOn = isUploadBackendConfigured();
-  const days = Math.max(1, Math.min(365, Number(d(el).days) || 30));
-  const cut = new Date(Date.now() - days * dayMs).toISOString();
-
-  // The latest thing that happened on each job, and what it was.
-  const last = new Map<string, { at: string; what: string }>();
-  const mark = (jobId: string | undefined, at: string | undefined | null, what: string) => {
-    if (!jobId || !at || at < cut) return;
-    const cur = last.get(jobId);
-    if (!cur || at > cur.at) last.set(jobId, { at, what });
-  };
-  /**
-   * EVERY job with a folder, not only the ones on the open board.
-   *
-   * `liveJobs` leaves out everything filed into a group — right for a unit
-   * total, and exactly wrong here: the Drive sweep files every new job into
-   * "New Jobs Came In", the import filed a thousand into Done and Archive,
-   * and the office keeps making proposals in those folders. Reading only the
-   * open board drew an empty widget over a busy Drive (the owner's report).
-   * Trash stays out (the search's rule); other groups appear, labelled.
-   */
+  const storePins = useStore(s => s.planPins);
+  const storeAnnotations = useStore(s => s.planAnnotations);
   const pid = useStore(s => s.currentProjectId);
   const storeApts = useStore(s => s.apartments);
   const storeEls = useStore(s => s.canvasElements);
-  const wide = pid === 'general' && !isSampleCtx(c);
-  const jobs = wide
+  const drive = useDriveActivity();
+  const busy = useDriveActivityBusy();
+  const driveOn = isUploadBackendConfigured();
+  const sample = isSampleCtx(c);
+  const days = Math.max(1, Math.min(365, Number(d(el).days) || 30));
+  const sort: TouchSort = d(el).sort === 'busiest' ? 'busiest' : 'newest';
+  const filter: TouchFilter = (FILTERS.some(f => f.id === d(el).filter) ? d(el).filter : 'all') as TouchFilter;
+  // Re-folded once a minute so "3 min ago" and the window's edge stay honest.
+  const [now, setNow] = React.useState(() => Date.now());
+  React.useEffect(() => { const t = setInterval(() => setNow(Date.now()), 60_000); return () => clearInterval(t); }, []);
+
+  /**
+   * EVERY job with a folder, not only the ones on the open board — the sweep
+   * files every new job into "New Jobs Came In", the import filed a thousand
+   * into Done and Archive, and the office keeps making proposals in exactly
+   * those folders. Trash stays out (the search's rule).
+   */
+  const wide = pid === 'general' && !sample;
+  const jobs = React.useMemo(() => (wide
     ? storeApts.filter(a => a.buildingId === 'G' && !a.isUnnamed && a.boardBin !== 'trash')
-    : liveJobs(c);
+    : liveJobs(c)), [wide, storeApts, c]);
+  const notes = c.notes ?? storeNotes;
+  const elements = c.boardElements ?? storeEls;
+  const fold = React.useMemo(() => {
+    const src: TouchSources = {
+      jobs, logs: c.logs, assignments: c.assignments, notes, photos: c.photos,
+      annotations: sample ? [] : storeAnnotations, pins: c.planPins ?? (sample ? [] : storePins),
+      elements, contractors: c.contractors, drive: sample ? undefined : drive?.byFolder,
+    };
+    return foldByJob(touchesOf(src, now, days), now, days, filter);
+  }, [jobs, c.logs, c.assignments, notes, c.photos, storeAnnotations, c.planPins, storePins, elements, c.contractors, drive, now, days, filter, sample]);
+  const order = React.useMemo(() => rankJobs(fold, sort), [fold, sort]);
+  const booked = React.useMemo(() => bookedThisWeek(c.assignments, c.contractors, now), [c.assignments, c.contractors, now]);
+  const jobById = React.useMemo(() => new Map(jobs.map(j => [j.id, j])), [jobs]);
   const groupOf = (j: Apartment): string | null => {
     if (!j.boardBin) return null;
-    const el = storeEls.find(e => e.type === 'bin' && binKeyOf(e) === j.boardBin);
-    if (el) return binLabelOf(el);
+    const bin = storeEls.find(e => e.type === 'bin' && binKeyOf(e) === j.boardBin);
+    if (bin) return binLabelOf(bin);
     return (BIN_META as Record<string, { label: string }>)[j.boardBin as BinKind]?.label ?? 'Group';
   };
-  for (const j of jobs) {
-    // A job the sweep or the import COPIED IN is bookkeeping, not activity —
-    // five hundred "edited · today" rows would bury what actually moved.
-    // Its Drive folder's own changes still count.
-    const copiedIn = /^G-(auto|imp)-/.test(j.id) && j.contentUpdatedAt === j.createdAt;
-    if (!copiedIn) mark(j.id, j.contentUpdatedAt, 'edited');
-    if (drive && j.driveLink) {
-      const fid = j.driveLink.match(/folders\/([A-Za-z0-9_-]+)/)?.[1];
-      const hit = fid ? drive.byFolder[fid] : undefined;
-      if (hit) mark(j.id, hit.at, `Drive · ${hit.name}`);
-    }
-  }
-  const jobIds = new Set(jobs.map(j => j.id));
-  for (const a of (wide ? c.assignments.filter(x => jobIds.has(x.apartmentId)) : liveAssignments(c))) {
-    mark(a.apartmentId, a.createdAt, 'new task');
-    mark(a.apartmentId, a.completedAt, a.problem ? 'problem closed' : 'task closed');
-  }
-  for (const n of notes) mark(n.apartmentId, n.createdAt, n.authorType === 'contractor' ? 'message from site' : 'message');
-  for (const p of c.photos) mark(p.apartmentId, p.uploadedAt, 'photo from site');
-  for (const l of c.logs) {
-    if (l.actionType === 'opened') continue;
-    mark(l.apartmentId, l.createdAt,
-      l.fieldChanged === 'currentStageId' ? 'stage moved'
-        : l.fieldChanged === 'generalNotes' ? 'note'
-        : l.fieldChanged === 'problem' ? 'problem raised'
-        : l.actionType === 'contractor_assigned' ? 'new task' : 'updated');
-  }
-  const list = jobs
-    .filter(j => last.has(j.id))
-    .sort((a, b) => last.get(b.id)!.at.localeCompare(last.get(a.id)!.at));
+  const list = order.map(id => jobById.get(id)).filter((j): j is Apartment => !!j);
   const title = `Active · last ${days} days`;
+  const setData = (patch: Record<string, unknown>) => c.update({ data: { ...d(el), ...patch } });
+  const readOnly = !!c.readOnly || sample;
 
   return (
     <Frame title={title} icon={Activity} tone="#16a34a">
       <div className="h-full flex flex-col min-h-0">
-        <div className="flex items-baseline gap-1.5 flex-shrink-0 mb-1">
+        <div className="flex items-baseline gap-1.5 flex-shrink-0">
           {c.showList
             ? <button type="button" data-no-drag data-el-action data-active-count
                 onClick={() => c.showList!(title, list.map(j => j.id))}
                 className="text-[22px] font-black leading-none text-slate-800 hover:text-[#1e3a5f]">{list.length}</button>
             : <span className="text-[22px] font-black leading-none text-slate-800" data-active-count>{list.length}</span>}
-          <span className="text-[9.5px] text-gray-400">of {jobs.length} jobs had something happen</span>
-          {driveOn && !isSampleCtx(c) && (
+          <span className="text-[9.5px] text-gray-400">of {jobs.length} jobs</span>
+          {driveOn && !sample && (
             <button type="button" data-no-drag data-el-action data-drive-refresh
               disabled={busy}
               onClick={() => { void refreshDriveActivity(); }}
@@ -352,20 +361,62 @@ function ActiveJobs({ c, el }: { c: WidgetCtx; el: CanvasElement }) {
             </button>
           )}
         </div>
+        {/* The chips: which side of the work, and the order. Written onto the
+            widget's own bag, so the choice is remembered per widget. */}
+        <div className="flex items-center gap-1 flex-shrink-0 my-1 flex-wrap" data-active-chips>
+          {FILTERS.map(f => (
+            <button key={f.id} type="button" data-no-drag data-el-action data-active-filter={f.id}
+              disabled={readOnly}
+              onClick={() => setData({ filter: f.id })}
+              className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${filter === f.id ? 'bg-[#1e3a5f] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+              {f.label}
+            </button>
+          ))}
+          <button type="button" data-no-drag data-el-action data-active-sort
+            disabled={readOnly}
+            onClick={() => setData({ sort: sort === 'newest' ? 'busiest' : 'newest' })}
+            title="Newest touch first, or the busiest job first"
+            className="ms-auto text-[9px] font-bold text-slate-500 hover:text-[#1e3a5f]">
+            {sort === 'newest' ? 'Newest ▾' : 'Busiest ▾'}
+          </button>
+        </div>
         <Scroll>
-          {list.length === 0 && <Empty>Nothing happened on any job in the last {days} days</Empty>}
+          {list.length === 0 && <Empty>Nothing happened on any job in the last {days} days{filter !== 'all' ? ` (${FILTERS.find(f => f.id === filter)?.label.toLowerCase()})` : ''}</Empty>}
           {list.map(j => {
-            const e = last.get(j.id)!;
+            const h = fold.get(j.id)!;
             const grp = groupOf(j);
+            const bk = booked.get(j.id);
             return (
               <MiniJob key={j.id} job={j} stages={c.stages} assignments={c.assignments} onOpen={c.openJob} rtl={c.isRtl}
-                sub={`${grp ? `${grp} · ` : ''}${e.what} · ${relativeTime(e.at)}`} />
+                sub={
+                  <span className="flex items-center gap-1 min-w-0" data-active-row={j.id} data-active-kind={h.last.kind}>
+                    <span className="truncate min-w-0">
+                      {grp && <span className="text-slate-400">{grp} · </span>}
+                      <b className="text-slate-700">{h.last.who}</b> · {h.last.what} · {relativeTime(h.last.at)}
+                    </span>
+                    {bk && <span className="flex-shrink-0 text-[8.5px] font-bold px-1.5 rounded-full bg-emerald-50 text-emerald-700" data-active-booked
+                      title={`${bk.who} is booked on this job on ${bk.day}`}>{bk.who} · {niceShort(bk.day)}</span>}
+                    <span className="ms-auto flex-shrink-0 flex items-center gap-0.5" title={h.kinds.map(k => KIND_STYLE[k].label).join(' · ')}>
+                      {h.kinds.map(k => (
+                        <span key={k} className="inline-grid place-items-center rounded text-[7px] font-black text-white"
+                          style={{ width: 11, height: 11, backgroundColor: KIND_STYLE[k].bg }} data-active-square={k}>{KIND_STYLE[k].letter}</span>
+                      ))}
+                      <span className="text-[8.5px] text-slate-400 ms-0.5 tabular-nums" data-active-heat>{h.count}</span>
+                    </span>
+                  </span>
+                } />
             );
           })}
         </Scroll>
       </div>
     </Frame>
   );
+}
+
+/** "Tue 9 Sep" — the booked chip's day. */
+function niceShort(iso: string): string {
+  const x = new Date(`${iso}T12:00:00`);
+  return isNaN(x.getTime()) ? iso : x.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
 export const INSIGHT_WIDGETS: WidgetDef[] = [
