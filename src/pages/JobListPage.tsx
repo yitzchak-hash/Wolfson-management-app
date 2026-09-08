@@ -5,7 +5,7 @@ import {
   Apartment, isCountableApartment, aptLabel, relativeTime, binLabelOf, binKeyOf,
   getStageName, projectColor,
 } from '../types';
-import { queryVariants, skeleton } from '../data/translit';
+import { searchJobs } from '../data/searchIndex';
 import { MiniJob } from '../components/board/MiniJob';
 import { ApartmentDetailDrawer } from '../components/apartment/ApartmentDetailDrawer';
 import { QuickAddTaskPanel } from '../components/apartment/QuickAddTaskPanel';
@@ -83,18 +83,10 @@ export function JobListPage() {
 
     const query = q.trim();
     if (query.length >= 2) {
-      const v = queryVariants(query);
-      const hit = (text: string) => {
-        const t = text.toLowerCase();
-        if (v.plain.some(p => t.includes(p.toLowerCase()))) return true;
-        if (v.skeletons.length) {
-          const sk = skeleton(text);
-          return v.skeletons.some(k => sk.includes(k));
-        }
-        return false;
-      };
-      list = list.filter(a => hit(
-        `${aptLabel(a)} ${a.driveFolderName ?? ''} ${a.generalNotes ?? ''} ${a.address ?? ''} ${a.phone ?? ''}`));
+      // The app's ONE search (searchIndex) over the visible list: folder
+      // title, address, phone, notes, the other alphabet, a misspelling.
+      // The sort below still orders the rows the way the toggle says.
+      list = searchJobs(list, query, { stages, includeTrash: true }).map(h => h.rec);
     }
 
     const when = (a: Apartment) => a.contentUpdatedAt ?? a.updatedAt ?? '';

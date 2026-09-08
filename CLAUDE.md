@@ -7626,3 +7626,51 @@ opener's try-every-top-folder fallback already covered the helper route;
 this fixes the COPY route, which was the owner's "I pasted it into Explorer
 and it opened nothing".
 
+
+## The search rebuild (2026-09-08, owner: "go ahead and build the search rebuild")
+`docs/research/SEARCH.md` items #2–#10, built in one round. Three modules,
+and every search box in the app reads them:
+- **`src/data/searchIndex.ts`** — ONE MiniSearch index per workspace
+  (`workspaceIndex(key, sources)`), kept between keystrokes and brought up to
+  date record by record (`sync` diffs a per-doc content hash: add / replace /
+  discard), plus a WeakMap ad-hoc index for a bare job list
+  (`searchJobs(jobs, q)` — the job list page, both group windows, Find-a-job)
+  and a small `globalIndex` for workers and stages. A document per record
+  KIND (job · task · snote · msg · group · node · markup · pin · file · worker
+  · stage); a job's fields are its name, the folder title SPLIT into family /
+  first / number / city, address, phone (+ bare digits), tipus, unit tokens
+  (`A1 47 A147 floor3`), the Drive folder / plan file / Zoho ids, notes, the
+  note authors and open-task workers, office file names and memo words.
+  **The tiers are decided here, a whole tier apart** (start −200 · exact −100
+  · prefix 0 · contains/digits 100 · fuzzy 200 · sound 300) — a fuzzy score
+  cannot tell "Levine" from "concealed", which was the whole complaint;
+  relevance, recency, liveness (a grouped job +8) and the learned picks move
+  a hit only INSIDE its tier, and a pick for the SAME query goes straight to
+  the top. Fuzzy only from four letters (`"lev"` is never fuzzed onto a
+  stage); a 1–2 digit query searches unit/number/name alone.
+- **`src/data/hebrewNormalize.ts`** — the one normaliser (NFKD, marks
+  stripped, finals folded, geresh/gershayim/maqaf → ASCII; punctuation
+  BEFORE the mark strip, or the maqaf is stripped before it can become a
+  hyphen) and the one sound key (vav both ways, h dropped, f→p, b→v so
+  "Yosef"/יוסף and "Tzvika"/צביקה meet). `translit.ts` and `hebrewSearch.ts`
+  now delegate to it — two copies used to disagree.
+- **`src/data/searchMemory.ts`** — `search_recent` and `search_picks`
+  (per machine, never synced); picks keyed `<workspace>|<kind:id>`, weight
+  halving every 30 days; `pickedForQuery` matches the same query or more
+  letters of the same ONE word — two words are a new question ("cohen ramat"
+  no longer inherits the "cohen" pick). `clearPicks` behind
+  `[data-search-clear-picks]` on the empty header box.
+Rules paid for: **a `group:` filter lists the jobs IN the group, never the
+group itself**; a group window's list search must be memoised on the data
+(`binJobs`), not filtered per render, or the ad-hoc index rebuilds on every
+wall tick; the `sk` field is tokenised on spaces and queried with a
+MiniSearch query OBJECT (AND across words, OR across each word's vav
+readings); `searchIndex` never imports `widgets.tsx` (`widgetNameOf` is
+passed in). Header rows and the tile carry `[data-search-why]` ("Drive
+folder: …", "Phone: …", "Memo: …"); filter words `stage:` `group:` `worker:`
+`ws:` `is:problem` `is:pending` (Hebrew twins) with `[data-search-hint]`
+under the list; 60ms render debounce. `fuse.js` is gone. Probes:
+`hebnorm-test.mjs` · `searchindex-test.mjs` · `searchperf.mjs` (3,736 docs
+in ~215ms, worst keystroke 22ms) · `gsearch.mjs` (+6; its block 2 now
+searches for itself — it used to read the previous block's rows). Green:
+round20, searchtile-probe, foldertitle-probe, storefull.

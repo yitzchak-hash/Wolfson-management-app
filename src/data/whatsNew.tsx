@@ -30,6 +30,42 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-12-19',
+    title: 'One search, everywhere — and it says where it found the job',
+    items: [
+      {
+        title: 'Every search box gives the same answer',
+        body: 'The header search, the search tile, the job list, the group '
+          + 'windows on the board and the TV, and the Find-a-job widget now '
+          + 'all read ONE index. A job is found by its family name, the Drive '
+          + 'folder\'s title (family, first name, folder number, city), the '
+          + 'address, the phone (with or without dashes), the type, a pasted '
+          + 'Drive or Zoho link, a task\'s words, a message, a voice memo\'s '
+          + 'transcription, a punch-list pin or a file\'s name — and a job '
+          + 'whose name starts with what you typed always comes first.',
+        demo: 'list',
+      },
+      {
+        title: 'Hebrew and English meet, and the row says why',
+        body: 'כהן finds Cohen and Cohen finds כהן; Yosef finds יוסף; a name '
+          + 'typed on the wrong keyboard still lands. When a hit was found '
+          + 'somewhere other than its name, a small line under the row says '
+          + 'where — "Drive folder: Cohen, David - 5555 - Ramat Gan", '
+          + '"Phone: 050-…", "Memo: …" — so a right answer never looks wrong.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'Narrow it with a word',
+        body: 'stage:piping, group:done, worker:moshe, ws:netiv, is:problem '
+          + 'and is:pending narrow the list (Hebrew twins work too). Typing a '
+          + 'number finds a unit or a phone. The search learns what you pick '
+          + 'and forgets it slowly; an empty box now offers to forget it '
+          + 'altogether.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2026-12-18',
     title: 'A job is found by its Drive folder\'s name, wherever you search',
     items: [

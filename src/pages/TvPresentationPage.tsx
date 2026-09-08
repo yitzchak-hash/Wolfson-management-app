@@ -6,7 +6,7 @@ import { Apartment, CanvasElement, isCountableApartment, binKeyOf, binLabelOf, g
 import { withAlpha, WidgetSurface } from '../components/board/BoardItems';
 import { tvScreenId, reportTvScreen } from '../data/tvScreens';
 import { tvViewbox } from '../data/tvRegion';
-import { queryVariants, skeleton } from '../data/translit';
+import { searchJobs } from '../data/searchIndex';
 import { DriveIcon, ZohoIcon, PlanIcon } from '../components/ui/BrandIcons';
 import { getBoardTheme } from '../data/boardThemes';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
@@ -970,6 +970,15 @@ export function TvPresentationPage() {
   ) : null;
 
   const stageOf = (a: Apartment) => stages.find(s => s.id === a.currentStageId) ?? null;
+  /** The open group's jobs, one array per data change (the group window's search indexes it). */
+  const binJobs = useMemo(() => {
+    if (!openBin) return [];
+    // binKeyOf, never binKind: a group made by hand (or by the import) has no
+    // binKind, so the old test matched nothing and every custom group opened
+    // empty on the wall.
+    const key = binKeyOf(openBin);
+    return apartments.filter(a => a.boardBin === key && !a.isUnnamed && a.showOnTv !== false);
+  }, [apartments, openBin]);
   const pending = (a: Apartment) =>
     contractorAssignments.filter(x => x.apartmentId === a.id && !x.completedAt).length;
 
@@ -1799,24 +1808,13 @@ export function TvPresentationPage() {
                 // binKeyOf, never binKind: a group made by hand (or by the
                 // import) has no binKind, so the old test matched nothing and
                 // every custom group opened empty on the wall.
-                const key = binKeyOf(openBin);
-                let inside = apartments.filter(a =>
-                  a.boardBin === key && !a.isUnnamed && a.showOnTv !== false);
                 const query = binQuery.trim();
-                if (query.length >= 2) {
-                  const v = queryVariants(query);
-                  const hit = (text: string) => {
-                    const low = text.toLowerCase();
-                    if (v.plain.some(p => low.includes(p.toLowerCase()))) return true;
-                    if (v.skeletons.length) {
-                      const sk = skeleton(text);
-                      return v.skeletons.some(k => sk.includes(k));
-                    }
-                    return false;
-                  };
-                  inside = inside.filter(a => hit(
-                    `${a.displayName ?? ''} ${a.driveFolderName ?? ''} ${a.address ?? ''} ${a.phone ?? ''} ${a.generalNotes ?? ''}`));
-                }
+                // The app's ONE search over the group's list (searchIndex) —
+                // `binJobs` is memoised above so the index is built once per
+                // data change, not per wall tick.
+                const inside = query.length >= 2
+                  ? searchJobs(binJobs, query, { stages, includeTrash: true }).map(h => h.rec)
+                  : binJobs;
                 if (!inside.length) {
                   return <p className="text-gray-400 px-2 py-6 text-center">
                     {query ? t('Nothing matches that.', 'אין תוצאות.') : t('Nothing in here.', 'אין כאן דבר.')}

@@ -17,7 +17,7 @@ import {
 } from '../types';
 import { portalLink } from './portalLink';
 import { useStore, loadProjectSnapshot } from './store';
-import { soundScore } from './hebrewSearch';
+import { searchJobs } from './searchIndex';
 import { describeActivity } from './activityText';
 import { ClipArtNode, ART_KINDS, ArtKind } from '../components/board/BoardNodes';
 import { MiniJob } from '../components/board/MiniJob';
@@ -2691,26 +2691,18 @@ function JobFinder({ el, ctx }: { el: CanvasElement; ctx: WidgetCtx }) {
   const hits = useMemo(() => {
     const needle = q.trim();
     if (needle.length < 1) return [];
-    const plain = needle.toLowerCase();
-    return ctx.jobs
-      .map(j => {
-        const name = j.displayName?.trim() ?? '';
-        // The Drive folder's own title is searched too — a word that lives
-        // only there ("Potentials", a first name the family field lacks)
-        // used to find the job nowhere but the header search.
-        const folder = j.driveFolderName ?? '';
-        const written = `${name} ${j.apartmentNumber ?? ''} ${j.address ?? ''} ${folder}`.toLowerCase();
-        // Typed-as-written beats sounds-alike, so an exact search is never
-        // pushed down the list by a phonetic near-miss.
-        const literal = written.includes(plain) ? 1.5 : 0;
-        const heard = Math.max(soundScore(needle, name), soundScore(needle, j.address ?? ''),
-          folder ? soundScore(needle, folder) : 0);
-        return { job: j, score: Math.max(literal, heard) };
-      })
-      .filter(r => r.score > 0.55)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 40);
-  }, [q, ctx.jobs]);
+    // The app's ONE search (searchIndex) over the widget's jobs — the folder
+    // title, the address, the phone, the notes, the other alphabet and a
+    // misspelling all answer here exactly as they do in the header search.
+    // A single letter still answers (the shelf preview types one), as a
+    // plain prefix of the name.
+    if (needle.length < 2) {
+      const one = needle.toLowerCase();
+      return ctx.jobs.filter(j => (j.displayName ?? '').toLowerCase().startsWith(one)).slice(0, 40).map(job => ({ job }));
+    }
+    return searchJobs(ctx.jobs, needle, { stages: ctx.stages, includeTrash: true, limit: 40 })
+      .map(h => ({ job: h.rec }));
+  }, [q, ctx.jobs, ctx.stages]);
 
   const anchorRef = useRef<HTMLDivElement>(null);
   const drop = useSearchOpen(q);

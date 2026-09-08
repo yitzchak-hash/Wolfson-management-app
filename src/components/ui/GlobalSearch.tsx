@@ -1,23 +1,34 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Search, X, Building2, ClipboardList, FileText, MessageSquare,
-  HardHat, Layers, FolderOpen, StickyNote, PenLine, Crosshair, Clock, Mic,
+  HardHat, Layers, FolderOpen, StickyNote, PenLine, Crosshair, Clock, Mic, MapPin, Paperclip,
 } from 'lucide-react';
-import Fuse from 'fuse.js';
-import { queryVariants, skeleton } from '../../data/translit';
 import { useSpeechToText } from '../../data/voiceSearch';
 import { usePlannerDrag } from '../../data/plannerDrop';
 import { useStore, loadProjectSnapshot } from '../../data/store';
-import { aptLabel, binLabelOf, binKeyOf, CanvasElement, FocusIntent } from '../../types';
+import {
+  aptLabel, FocusIntent, Apartment, ContractorAssignment, StageNote, ContractorNote,
+  CanvasElement, PlanAnnotation, PlanPin, OfficeNoteFile, Contractor, Stage, MainUiStrings,
+} from '../../types';
 import { WIDGET_BY_ID } from '../../data/widgets';
+import {
+  workspaceIndex, globalIndex, searchIndex, parseQuery, wsMatches, queryIsEnough,
+  SearchHit, WhyField, WorkspaceSources,
+} from '../../data/searchIndex';
+import { readRecent, writeRecent, rememberQuery, notePick, clearPicks, pickKey } from '../../data/searchMemory';
 import { useNavigate } from 'react-router-dom';
 
 interface SearchResult {
+  /** Unique across workspaces: `${projectId}:${docId}`. */
   id: string;
+  /** The index's own key (`kind:recordId`) — what the learned picks are stored under. */
+  docId: string;
   type: 'apartment' | 'task' | 'note' | 'contractor_note'
-      | 'contractor' | 'stage' | 'board' | 'group' | 'markup';
+      | 'contractor' | 'stage' | 'board' | 'group' | 'markup' | 'pin' | 'file';
   title: string;
   subtitle: string;
+  /** Where the query was found, when the title alone would not explain the row. */
+  why?: { label: string; text: string; term: string };
   /**
    * What this result IS, rather than where a route happens to live.
    *
@@ -41,22 +52,26 @@ interface SearchResult {
    * not, so offering to fly to them would be a button that lands nowhere.
    */
   onBoard?: boolean;
-  /**
-   * How well it matched — LOWER is better, and the tier dominates.
-   *
-   * The list used to be insertion order: workers and stages were pushed before
-   * any workspace's jobs, so a stage that scraped past the fuzzy threshold
-   * ("concealed" is one letter off "lev") sat ABOVE the job literally named
-   * "Lev". Every result now carries a rank — name-prefix first, then word
-   * prefix, then substring, then fuzzy, then the other-alphabet passes — and
-   * the whole list is sorted by it once, whatever order it was gathered in.
-   */
+  /** Lower is better; the index decided it (tier first, everything else inside the tier). */
   rank: number;
 }
 
 interface GlobalSearchProps {
   open: boolean;
   onClose: () => void;
+}
+
+/** The matched term, bolded inside the "found in" text. */
+function Marked({ text, term }: { text: string; term: string }) {
+  const at = term ? text.toLowerCase().indexOf(term.toLowerCase()) : -1;
+  if (at < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, at)}
+      <b className="font-semibold text-gray-600">{text.slice(at, at + term.length)}</b>
+      {text.slice(at + term.length)}
+    </>
+  );
 }
 
 /**
@@ -98,6 +113,7 @@ function ResultRow({ result, icon, label, onSelect, onReveal, onHeld, onDropped 
       onClick={onSelect}
       {...drag.handlers}
       style={drag.style}
+      data-search-row
       className="w-full flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors
                  text-left cursor-pointer group/row"
     >
@@ -105,6 +121,14 @@ function ResultRow({ result, icon, label, onSelect, onReveal, onHeld, onDropped 
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium text-gray-800 truncate">{result.title}</div>
         <div className="text-xs text-gray-400 truncate">{result.subtitle}</div>
+        {result.why && (
+          // WHY it matched — the folder title, the phone, a memo's words — so
+          // a row whose title does not contain the query explains itself.
+          <div data-search-why className="text-[11px] text-gray-400 truncate mt-0.5">
+            <span className="text-gray-300">{result.why.label}: </span>
+            <Marked text={result.why.text} term={result.why.term} />
+          </div>
+        )}
       </div>
       {result.onBoard && (
         <button
@@ -121,86 +145,32 @@ function ResultRow({ result, icon, label, onSelect, onReveal, onHeld, onDropped 
   );
 }
 
-/**
- * What was looked for lately.
- *
- * Per machine and never synced: what you searched for is about the hunt you
- * were on at this desk, not about the office's data, so it has no business in
- * the store, the backup or Firestore.
- */
-const RECENT_KEY = 'search_recent';
-const RECENT_MAX = 8;
-
-/**
- * What was PICKED, so the search learns — the way Drive's does.
- *
- * Every chosen result is remembered with how often, how recently, and which
- * queries led to it. A result picked before for the query being typed goes
- * straight to the top; one picked before at all gets a nudge ahead of its
- * tier-mates. Per machine, like the recent searches, and for the same reason.
- */
-const PICKS_KEY = 'search_picks';
-const PICKS_MAX = 150;
-
-interface PickMemory { n: number; last: number; qs: string[] }
-
-function readPicks(): Record<string, PickMemory> {
-  try {
-    const raw = localStorage.getItem(PICKS_KEY);
-    const obj = raw ? JSON.parse(raw) : {};
-    return obj && typeof obj === 'object' ? obj : {};
-  } catch { return {}; }
+/** The "found in" label for each field the index can point at. */
+function whyLabelOf(field: WhyField, s: MainUiStrings): string {
+  switch (field) {
+    case 'folder': case 'family': case 'first': case 'city': case 'num': return s.searchWhyFolder;
+    case 'address': return s.searchWhyAddress;
+    case 'phone': return s.searchWhyPhone;
+    case 'notes': return s.searchWhyNotes;
+    case 'words': return s.searchWhyMemo;
+    case 'files': return s.searchWhyFile;
+    case 'who': return s.searchWhyWorker;
+    case 'link': return s.searchWhyLink;
+    case 'unit': return s.searchWhyUnit;
+    case 'tipus': return s.searchWhyTipus;
+  }
 }
 
-function notePick(id: string, query: string) {
-  try {
-    const picks = readPicks();
-    const q = query.trim().toLowerCase();
-    const p = picks[id] ?? { n: 0, last: 0, qs: [] };
-    p.n += 1;
-    p.last = Date.now();
-    if (q.length >= 2) p.qs = [q, ...p.qs.filter(x => x !== q)].slice(0, 6);
-    picks[id] = p;
-    const ids = Object.keys(picks);
-    if (ids.length > PICKS_MAX) {
-      ids.sort((a, b) => picks[a].last - picks[b].last)
-        .slice(0, ids.length - PICKS_MAX)
-        .forEach(k => delete picks[k]);
-    }
-    localStorage.setItem(PICKS_KEY, JSON.stringify(picks));
-  } catch { /* private window */ }
-}
-
-/** The learned adjustment for one result against one query. Negative = up. */
-function pickBoost(id: string, query: string, picks: Record<string, PickMemory>): number {
-  const p = picks[id];
-  if (!p) return 0;
-  const q = query.trim().toLowerCase();
-  // Picked before while typing this very thing — the answer they meant.
-  if (q.length >= 2 && p.qs.some(x => x.startsWith(q) || q.startsWith(x))) return -10000 - p.n;
-  // Picked before at all — ahead of strangers in its own tier.
-  return -Math.min(p.n, 5) * 8;
-}
-
-function readRecent(): string[] {
-  try {
-    const raw = localStorage.getItem(RECENT_KEY);
-    const list = raw ? JSON.parse(raw) : [];
-    return Array.isArray(list) ? list.filter(x => typeof x === 'string').slice(0, RECENT_MAX) : [];
-  } catch { return []; }
-}
-function writeRecent(list: string[]) {
-  try { localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, RECENT_MAX))); } catch { /* private window */ }
-}
+/** How long a keystroke waits before the search runs — one render per pause, not per letter. */
+const DEBOUNCE_MS = 60;
 
 export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
   const {
     apartments, contractorAssignments, stageNotes, contractorNotes, contractors, stages,
-    canvasElements, planAnnotations, buildings, projects, currentProjectId, setPendingFocus,
-    setCurrentProject,
+    canvasElements, planAnnotations, planPins, officeNoteFiles, projects, currentProjectId,
+    setPendingFocus, setCurrentProject,
   } = useStore();
   const s = useStore(state => state.mainUiStrings);
-  const ui = s;
   const [query, setQuery] = useState('');
   /** A row is being dragged out of the dialog — dim it and free the board. */
   const [dragLive, setDragLive] = useState(false);
@@ -248,337 +218,233 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
   }, [snapTick]);
 
   useEffect(() => {
-    if (query.trim().length < 2) { setResults([]); return; }
+    if (!queryIsEnough(query)) { setResults([]); return; }
 
     /**
-     * One matcher for every category, and it forgives three things at once:
-     *
-     *  · misspelling — the threshold is loose enough that "tedet" still finds
-     *    "Tester";
-     *  · the other alphabet — every text is also indexed as its consonant
-     *    skeleton, so "shapira" finds "שפירא" and "ארצי" finds "Artzi";
-     *  · the wrong keyboard layout — the query is also tried as what the same
-     *    keys would have produced on the other layout.
-     *
-     * Plain-spelling matches rank first; the forgiving passes only add what
-     * spelling alone did not find.
+     * The search is the app's ONE index (`data/searchIndex.ts`) — the same
+     * fields, the same tiers and the same Hebrew rule as the search tile, the
+     * job list, the group windows and the Find-a-job widget. Per workspace:
+     * the open one from the live store, the rest from the snapshot each last
+     * wrote on this machine. The index is kept between keystrokes and only
+     * the records that changed are re-read, so a thousand-job board answers
+     * a letter in a few milliseconds.
      */
-    const V = queryVariants(query);
-    /**
-     * Every match comes back RANKED, lower first:
-     *
-     *   0   the text starts with what was typed        ("Lev" → "Levine")
-     *   5   a word of it does                          ("lev" → "Molly Lev")
-     *   100 it appears somewhere inside                ("lev" → "Shalev")
-     *   200 fuzzy — a misspelling within the threshold ("tedet" → "Tester")
-     *   300 the other-alphabet / wrong-keyboard passes
-     *
-     * The prefix tiers are checked outright rather than through Fuse, because
-     * a fuzzy score cannot tell "Levine" (really starts with it) from
-     * "concealed" (one letter off "lev") — and that difference is the whole
-     * complaint. Fuzzy and skeleton only ADD what the plain tiers missed.
-     */
-    function hunt<T>(items: T[], keys: string[], textOf: (t: T) => string, limit: number): { it: T; rank: number }[] {
-      const f = new Fuse(items, { keys, threshold: 0.45, ignoreLocation: true, minMatchCharLength: 2, includeScore: true });
-      const rows = items.map(it => ({ it, s: skeleton(textOf(it)) })).filter(r => r.s.length >= 2);
-      const fs = new Fuse(rows, { keys: ['s'], threshold: 0.34, ignoreLocation: true, minMatchCharLength: 2, includeScore: true });
-      const best = new Map<T, number>();
-      const put = (it: T, rank: number) => {
-        const b = best.get(it);
-        if (b === undefined || rank < b) best.set(it, rank);
+    const timer = setTimeout(() => {
+      const { filters } = parseQuery(query);
+      const found: SearchResult[] = [];
+      const widgetNameOf = (id: string) => WIDGET_BY_ID.get(id)?.name;
+
+      const searchOne = (pid: string, workspace: string, W: WorkspaceSources, bias: number) => {
+        const index = workspaceIndex(pid, W);
+        const hits = searchIndex(index, query, { projectId: pid, bias, limit: 30, perKind: 6 });
+        const onBoard = pid === 'general';
+        const aptsById = new Map(W.apartments.map(a => [a.id, a]));
+        /**
+         * Where a unit is, in words somebody recognises: the workspace, then
+         * the building when there is one, then the group it is filed in.
+         * "G" is a storage detail and "Apt" is wrong for a job.
+         */
+        const whereIs = (a?: Apartment, binLabel?: string): string => {
+          if (!a) return workspace;
+          const bits = [workspace];
+          if (!onBoard && a.buildingId) bits.push(`Building ${a.buildingId}`);
+          if (binLabel) bits.push(`In ${binLabel}`);
+          return bits.filter(Boolean).join(' · ');
+        };
+        const why = (h: SearchHit) => h.why
+          ? { label: whyLabelOf(h.why.field, s), text: h.why.text, term: h.why.term }
+          : undefined;
+        const push = (h: SearchHit, r: Omit<SearchResult, 'id' | 'docId' | 'projectId' | 'rank' | 'why'>) =>
+          found.push({ ...r, id: `${pid}:${h.docId}`, docId: h.docId, projectId: pid, rank: h.rank, why: why(h) });
+
+        for (const h of hits) {
+          switch (h.kind) {
+            case 'job': {
+              const a = h.rec as Apartment;
+              const extra = (a.generalNotes ?? '').trim()
+                ? a.generalNotes.split('\n')[0].slice(0, 60)
+                : (!onBoard && a.floor ? `Floor ${a.floor}` : '');
+              push(h, {
+                type: 'apartment',
+                title: aptLabel(a) || (onBoard ? 'Job' : 'Unit'),
+                subtitle: [whereIs(a, h.binLabel), extra].filter(Boolean).join(' · '),
+                focus: { kind: 'apartment', id: a.id },
+                onBoard: true,
+              });
+              break;
+            }
+            case 'task': {
+              const t = h.rec as ContractorAssignment;
+              const apt = aptsById.get(t.apartmentId);
+              const worker = contractors.find(c => c.id === t.contractorId);
+              push(h, {
+                type: 'task',
+                title: t.taskDescription.slice(0, 60),
+                subtitle: [apt ? aptLabel(apt) : (t.general ? workspace : ''), worker?.name, whereIs(apt, h.binLabel)].filter(Boolean).join(' · '),
+                focus: apt ? { kind: 'task', id: t.id, apartmentId: t.apartmentId } : { kind: 'contractor', id: t.contractorId },
+                onBoard: !!apt,
+              });
+              break;
+            }
+            case 'snote': {
+              const n = h.rec as StageNote;
+              const apt = aptsById.get(n.apartmentId);
+              const stage = stages.find(st => st.id === n.stageId);
+              const text = n.entries?.length ? n.entries[n.entries.length - 1].text : n.noteText;
+              push(h, {
+                type: 'note',
+                title: (text || n.noteText || '').slice(0, 60),
+                subtitle: [aptLabel(apt), stage?.name, whereIs(apt, h.binLabel)].filter(Boolean).join(' · '),
+                focus: { kind: 'apartment', id: n.apartmentId },
+                onBoard: true,
+              });
+              break;
+            }
+            case 'msg': {
+              const n = h.rec as ContractorNote;
+              const apt = aptsById.get(n.apartmentId);
+              push(h, {
+                type: 'contractor_note',
+                title: (n.text || n.attachmentFilename || '').slice(0, 60),
+                subtitle: [aptLabel(apt), n.authorName, whereIs(apt, h.binLabel)].filter(Boolean).join(' · '),
+                focus: { kind: 'apartment', id: n.apartmentId },
+                onBoard: true,
+              });
+              break;
+            }
+            case 'group': {
+              const el = h.rec as CanvasElement;
+              const n = W.apartments.filter(a => a.boardBin === (el.binKind ?? el.id)).length;
+              push(h, {
+                type: 'group',
+                title: h.binLabel ?? el.text,
+                subtitle: `Group on the job board · ${n} ${n === 1 ? 'job' : 'jobs'}`,
+                focus: { kind: 'group', id: el.id },
+                onBoard: true,
+              });
+              break;
+            }
+            case 'node': {
+              const el = h.rec as CanvasElement;
+              const kind = el.widget ? (widgetNameOf(el.widget) ?? 'Widget') : el.type;
+              const text = `${el.text ?? ''} ${el.docName ?? ''}`.trim();
+              push(h, {
+                type: 'board',
+                title: text.slice(0, 60) || kind,
+                subtitle: `${kind} on the job board${h.binLabel ? ` · in ${h.binLabel}` : ''}`,
+                focus: { kind: 'node', id: el.id },
+                onBoard: true,
+              });
+              break;
+            }
+            case 'markup': {
+              const m = h.rec as PlanAnnotation;
+              const apt = aptsById.get(m.apartmentId);
+              push(h, {
+                type: 'markup',
+                title: `${m.planName ?? 'Plan'} — version ${m.version}`,
+                subtitle: `${apt ? aptLabel(apt) : 'Job'} · marked up by ${m.createdBy || 'the office'}`,
+                focus: { kind: 'markup', apartmentId: m.apartmentId },
+              });
+              break;
+            }
+            case 'pin': {
+              const p = h.rec as PlanPin;
+              const apt = aptsById.get(p.apartmentId);
+              push(h, {
+                type: 'pin',
+                title: (p.text || p.audioTranscript || '').slice(0, 60),
+                subtitle: [aptLabel(apt), p.createdBy, whereIs(apt, h.binLabel)].filter(Boolean).join(' · '),
+                focus: { kind: 'apartment', id: p.apartmentId },
+                onBoard: true,
+              });
+              break;
+            }
+            case 'file': {
+              const f = h.rec as OfficeNoteFile;
+              const apt = aptsById.get(f.apartmentId);
+              push(h, {
+                type: 'file',
+                title: f.filename.slice(0, 60),
+                subtitle: [aptLabel(apt), f.uploadedByName, whereIs(apt, h.binLabel)].filter(Boolean).join(' · '),
+                focus: { kind: 'apartment', id: f.apartmentId },
+                onBoard: true,
+              });
+              break;
+            }
+            default:
+              break;
+          }
+        }
       };
-      for (const q of V.plain) {
-        const ql = q.toLowerCase();
-        if (ql.length < 2) continue;
-        for (const it of items) {
-          const text = textOf(it).toLowerCase();
-          if (!text) continue;
-          if (text.startsWith(ql)) put(it, 0);
-          else if (text.split(/[\s,.·—/()-]+/).some(w => w.startsWith(ql))) put(it, 5);
-          else if (text.includes(ql)) put(it, 100);
+
+      /**
+       * Every workspace, the open one from the live store and the rest from
+       * their own caches. The open one carries no bias so what is in front of
+       * you ranks above what is not, all else equal. A `ws:` word keeps only
+       * the workspaces it names.
+       */
+      for (const p of projects) {
+        if (!wsMatches(filters, p)) continue;
+        const live = p.id === currentProjectId;
+        const W: WorkspaceSources | undefined = live
+          ? { apartments, assignments: contractorAssignments, stageNotes, contractorNotes, canvasElements,
+              planAnnotations, planPins, officeNoteFiles, contractors, stages, widgetNameOf }
+          : snaps[p.id] && { ...snaps[p.id], contractors, stages, widgetNameOf };
+        if (!W) continue;                       // a workspace with nothing cached here
+        searchOne(p.id, p.name, W, live ? 0 : 2);
+      }
+
+      /**
+       * Workers and stages are GLOBAL — bare collections shared by every
+       * workspace — so they are searched ONCE, not once per workspace, or the
+       * same worker would come back three times.
+       */
+      const aptsOf = (pid: string) =>
+        (pid === currentProjectId ? apartments : snaps[pid]?.apartments) ?? [];
+      const g = globalIndex(contractors, stages);
+      for (const h of searchIndex(g, query, { projectId: currentProjectId, limit: 8, perKind: 4 })) {
+        if (h.kind === 'worker') {
+          const c = h.rec as Contractor;
+          const open = contractorAssignments.filter(a => a.contractorId === c.id && !a.completedAt).length;
+          found.push({
+            id: `${currentProjectId}:${h.docId}`, docId: h.docId, type: 'contractor',
+            title: c.name,
+            subtitle: `${c.category} · ${open} open ${open === 1 ? 'task' : 'tasks'} here`,
+            focus: { kind: 'contractor', id: c.id },
+            projectId: currentProjectId,
+            rank: h.rank,
+          });
+        } else if (h.kind === 'stage') {
+          // A stage carrying `projectId: 'general'` is the Job Board's own;
+          // anything else is shared, so it is shown where you are.
+          const st = h.rec as Stage;
+          const pid = st.projectId === 'general' ? 'general' : currentProjectId;
+          const n = aptsOf(pid).filter(a => a.currentStageId === st.id).length;
+          const where = projects.find(p => p.id === pid)?.name ?? '';
+          found.push({
+            id: `${currentProjectId}:${h.docId}`, docId: h.docId, type: 'stage',
+            title: st.name,
+            subtitle: `${where} · ${n} ${n === 1 ? 'unit' : 'units'} at this stage`,
+            focus: { kind: 'stage', id: st.id },
+            projectId: pid,
+            rank: h.rank,
+          });
         }
       }
-      V.plain.forEach(q => f.search(q).forEach(r => put(r.item, 200 + (r.score ?? 0.45) * 90)));
-      V.skeletons.forEach(q => fs.search(q).forEach(r => put(r.item.it, 300 + (r.score ?? 0.34) * 90)));
-      return [...best.entries()]
-        .sort((a, b) => a[1] - b[1])
-        .slice(0, limit)
-        .map(([it, rank]) => ({ it, rank }));
-    }
 
-    /**
-     * A small, per-kind nudge INSIDE a tier: with the same quality of match, a
-     * job outranks a group, a group a worker, and a stage comes last — a stage
-     * is the rarest thing anybody is hunting for by name. Deliberately smaller
-     * than a tier step, so it can never lift a fuzzy match over a real one.
-     */
-    const KIND: Record<SearchResult['type'], number> = {
-      apartment: 0, group: 1, contractor: 2, task: 3, board: 4,
-      note: 5, contractor_note: 6, markup: 7, stage: 8,
-    };
-
-    const found: SearchResult[] = [];
-
-    /**
-     * One workspace's worth of searching.
-     *
-     * Called once per workspace: the open one from the live store, the rest
-     * from the snapshot each last wrote on this machine. Everything below used
-     * to read the store directly, which is exactly why the search only ever
-     * found things in whichever workspace happened to be open.
-     */
-    function searchOne(pid: string, workspace: string, W: {
-      apartments: typeof apartments;
-      assignments: typeof contractorAssignments;
-      stageNotes: typeof stageNotes;
-      contractorNotes: typeof contractorNotes;
-      canvasElements: typeof canvasElements;
-      planAnnotations: typeof planAnnotations;
-    }) {
-    const { apartments, assignments: contractorAssignments, stageNotes,
-            contractorNotes, canvasElements, planAnnotations } = W;
-
-    /**
-     * Trash is the one group search never offers — the user threw it away, and
-     * a result that goes nowhere is worse than no result (confirmed). Jobs in
-     * Done / Ready / Archive still appear, labeled with their group.
-     */
-    const bins = canvasElements.filter(el => el.type === 'bin');
-    const groupNameOf = (a: { boardBin?: string }): string | null => {
-      if (!a.boardBin) return null;
-      const el = bins.find(b => binKeyOf(b) === a.boardBin);
-      return el ? binLabelOf(el) : a.boardBin;
-    };
-    /**
-     * Where a unit is, in words somebody recognises.
-     *
-     * Every result used to read `${buildingId} · Apt ${label}` — which on the
-     * Job Board, where every record carries the internal building id `G`, came
-     * out as "G · Apt Weinstein" on every single row. "G" is a storage detail
-     * and "Apt" is wrong for a job. This says the workspace, then the building
-     * when there is one, then the group it is filed in.
-     */
-    const onBoard = pid === 'general';
-    // With the same quality of match, the workspace in front of you first.
-    const wsBias = pid === currentProjectId ? 0 : 2;
-    const whereIs = (a?: { buildingId?: string; boardBin?: string; floor?: number }): string => {
-      if (!a) return workspace;
-      const bits = [workspace];
-      if (!onBoard && a.buildingId) bits.push(`Building ${a.buildingId}`);
-      const g = groupNameOf(a);
-      if (g) bits.push(`In ${g}`);
-      return bits.filter(Boolean).join(' · ');
-    };
-
-    const searchableApts = apartments.filter(a => !a.isUnnamed && a.boardBin !== 'trash');
-    const trashed = new Set(apartments.filter(a => a.boardBin === 'trash').map(a => a.id));
-
-    // Apartments
-    // The Drive folder's own title, the address and the phone are searched
-    // too — a word that lived only in the folder title found nothing before.
-    hunt(searchableApts, ['displayName', 'apartmentNumber', 'generalNotes', 'driveFolderName', 'address', 'phone'],
-      a => `${a.displayName} ${a.apartmentNumber} ${a.driveFolderName ?? ''}`, 6).forEach(({ it: a, rank }) => {
-      const extra = a.generalNotes.trim()
-        ? a.generalNotes.split('\n')[0].slice(0, 60)
-        : (!onBoard && a.floor ? `Floor ${a.floor}` : '');
-      found.push({
-        id: `apt-${a.id}`, type: 'apartment',
-        title: aptLabel(a) || (onBoard ? 'Job' : 'Unit'),
-        subtitle: [whereIs(a), extra].filter(Boolean).join(' · '),
-        focus: { kind: 'apartment', id: a.id },
-        projectId: pid,
-        onBoard: true,
-        rank: rank + KIND.apartment + wsBias,
-      });
-    });
-
-    // Tasks — a task on a trashed job left every list; it leaves this one too.
-    hunt(contractorAssignments.filter(t => !trashed.has(t.apartmentId)),
-      ['taskDescription'], t => t.taskDescription, 3).forEach(({ it: a, rank }) => {
-      const apt = apartments.find(ap => ap.id === a.apartmentId);
-      const contractor = contractors.find(c => c.id === a.contractorId);
-      found.push({
-        id: `task-${a.id}`, type: 'task',
-        title: a.taskDescription.slice(0, 60),
-        subtitle: [aptLabel(apt), contractor?.name, whereIs(apt)].filter(Boolean).join(' · '),
-        focus: { kind: 'task', id: a.id, apartmentId: a.apartmentId },
-        projectId: pid,
-        onBoard: true,
-        rank: rank + KIND.task + wsBias,
-      });
-    });
-
-    // Stage notes
-    hunt(stageNotes.filter(n => !trashed.has(n.apartmentId)),
-      ['noteText'], n => n.noteText, 3).forEach(({ it: n, rank }) => {
-      const apt = apartments.find(a => a.id === n.apartmentId);
-      const stage = stages.find(st => st.id === n.stageId);
-      found.push({
-        id: `note-${n.id}`, type: 'note',
-        title: n.noteText.slice(0, 60),
-        subtitle: [aptLabel(apt), stage?.name, whereIs(apt)].filter(Boolean).join(' · '),
-        focus: { kind: 'apartment', id: n.apartmentId },
-        projectId: pid,
-        onBoard: true,
-        rank: rank + KIND.note + wsBias,
-      });
-    });
-
-    // Contractor notes
-    hunt(contractorNotes.filter(n => !trashed.has(n.apartmentId)),
-      ['text'], n => n.text, 3).forEach(({ it: n, rank }) => {
-      const apt = apartments.find(a => a.id === n.apartmentId);
-      found.push({
-        id: `cnote-${n.id}`, type: 'contractor_note',
-        title: n.text.slice(0, 60),
-        subtitle: [aptLabel(apt), n.authorName, whereIs(apt)].filter(Boolean).join(' · '),
-        focus: { kind: 'apartment', id: n.apartmentId },
-        projectId: pid,
-        onBoard: true,
-        rank: rank + KIND.contractor_note + wsBias,
-      });
-    });
-
-    // ── Groups on the board, and everything placed on it ──
-    hunt(bins.map(b => ({ el: b, name: binLabelOf(b) })), ['name'], b => b.name, 4)
-      .forEach(({ it: item, rank }) => {
-      const n = apartments.filter(a => a.boardBin === binKeyOf(item.el)).length;
-      found.push({
-        id: `bin-${item.el.id}`, type: 'group',
-        title: item.name,
-        subtitle: `Group on the job board · ${n} ${n === 1 ? 'job' : 'jobs'}`,
-        focus: { kind: 'group', id: item.el.id },
-        projectId: pid,
-        onBoard: true,
-        rank: rank + KIND.group + wsBias,
-      });
-    });
-
-    const nodeRows = canvasElements
-      .filter(el => el.type !== 'bin' && el.type !== 'stroke' && el.type !== 'arrow')
-      .map((el: CanvasElement) => ({
-        el,
-        text: `${el.text ?? ''} ${el.docName ?? ''} ${
-          el.data ? Object.values(el.data).filter(v => typeof v === 'string').join(' ') : ''}`.trim(),
-        kind: el.widget ? (WIDGET_BY_ID.get(el.widget)?.name ?? 'Widget') : el.type,
-      }))
-      .filter(r => r.text);
-    hunt(nodeRows, ['text', 'kind'], r => r.text, 3).forEach(({ it: item, rank }) => {
-      const bin = item.el.board ? bins.find(b => binKeyOf(b) === item.el.board) : undefined;
-      found.push({
-        id: `node-${item.el.id}`, type: 'board',
-        title: item.text.slice(0, 60) || item.kind,
-        subtitle: `${item.kind} on the job board${bin ? ` · in ${binLabelOf(bin)}` : ''}`,
-        focus: { kind: 'node', id: item.el.id },
-        projectId: pid,
-        onBoard: true,
-        rank: rank + KIND.board + wsBias,
-      });
-    });
-
-    // ── Marked-up plans ──
-    hunt(planAnnotations.filter(m => !trashed.has(m.apartmentId)),
-      ['planName', 'createdBy', 'note'], m => m.planName ?? '', 4).forEach(({ it: m, rank }) => {
-      const apt = apartments.find(a => a.id === m.apartmentId);
-      found.push({
-        id: `mark-${m.id}`, type: 'markup',
-        title: `${m.planName ?? 'Plan'} — version ${m.version}`,
-        subtitle: `${apt ? aptLabel(apt) : 'Job'} · marked up by ${m.createdBy || 'the office'}`,
-        focus: { kind: 'markup', apartmentId: m.apartmentId },
-        projectId: pid,
-        rank: rank + KIND.markup + wsBias,
-      });
-    });
-
-    }
-
-    /**
-     * Workers and stages are GLOBAL — bare collections shared by every
-     * workspace — so they are searched ONCE, not once per workspace, or the
-     * same worker would come back three times.
-     */
-    const aptsOf = (pid: string) =>
-      (pid === currentProjectId ? apartments : snaps[pid]?.apartments) ?? [];
-
-    // ── Workers ──
-    // A worker belongs to the company, not to a workspace, and choosing one
-    // shows their task list — which is the one you are standing in.
-    hunt(contractors.filter(c => c.active), ['name', 'email'], c => c.name, 4).forEach(({ it: c, rank }) => {
-      const open = contractorAssignments.filter(a => a.contractorId === c.id && !a.completedAt).length;
-      found.push({
-        id: `con-${c.id}`, type: 'contractor',
-        title: c.name,
-        subtitle: `${c.category} · ${open} open ${open === 1 ? 'task' : 'tasks'} here`,
-        focus: { kind: 'contractor', id: c.id },
-        projectId: currentProjectId,
-        rank: rank + KIND.contractor,
-      });
-    });
-
-    // ── Stages ──
-    // A stage carrying `projectId: 'general'` is the Job Board's own; anything
-    // else is shared, so it is shown where you are.
-    hunt(stages.filter(st => st.active), ['name', 'nameHe', 'description'],
-      st => `${st.name} ${st.nameHe ?? ''}`, 4).forEach(({ it: st, rank }) => {
-      const pid = st.projectId === 'general' ? 'general' : currentProjectId;
-      const n = aptsOf(pid).filter(a => a.currentStageId === st.id).length;
-      const where = projects.find(p => p.id === pid)?.name ?? '';
-      found.push({
-        id: `stage-${st.id}`, type: 'stage',
-        title: st.name,
-        subtitle: `${where} · ${n} ${n === 1 ? 'unit' : 'units'} at this stage`,
-        focus: { kind: 'stage', id: st.id },
-        projectId: pid,
-        rank: rank + KIND.stage,
-      });
-    });
-
-
-    /**
-     * Every workspace, the open one from the live store and the rest from
-     * their own caches. The open one goes FIRST so what is in front of you
-     * ranks above what is not.
-     */
-    const order = [...projects].sort((a, b2) =>
-      (a.id === currentProjectId ? -1 : 0) - (b2.id === currentProjectId ? -1 : 0));
-    order.forEach(p => {
-      const live = p.id === currentProjectId;
-      const W = live
-        ? { apartments, assignments: contractorAssignments, stageNotes,
-            contractorNotes, canvasElements, planAnnotations }
-        : snaps[p.id];
-      if (!W) return;                       // a workspace with nothing cached here
-      searchOne(p.id, p.name, W);
-    });
-
-    /**
-     * ONE sort over everything, whatever order it was gathered in — the tiers
-     * first, the learned picks on top of them. A stable sort, so two results
-     * with the same rank keep the gather order (open workspace first).
-     */
-    const picks = readPicks();
-    found.sort((a, b) =>
-      (a.rank + pickBoost(a.id, query, picks)) - (b.rank + pickBoost(b.id, query, picks)));
-    setResults(found);
+      // ONE stable sort over everything — the index already folded the tier,
+      // the relevance, the recency and the learned picks into each rank.
+      found.sort((a, b) => a.rank - b.rank);
+      setResults(found.slice(0, 40));
+    }, DEBOUNCE_MS);
+    return () => clearTimeout(timer);
   }, [query, apartments, contractorAssignments, stageNotes, contractorNotes, contractors, stages,
-      canvasElements, planAnnotations, projects, currentProjectId, snaps]);
+      canvasElements, planAnnotations, planPins, officeNoteFiles, projects, currentProjectId, snaps, s]);
 
-  /**
-   * Actually go and SHOW it.
-   *
-   * The page is chosen by what the thing is: a stage is seen on the board or
-   * the diagram, filtered to it; a worker is seen on the task list, filtered to
-   * them; a group is seen by opening it. The intent travels with the
-   * navigation and the arriving page consumes it, so neither end has to know
-   * anything about the other's internals.
-   */
   /** Remember what was looked for, newest first and never twice. */
   function remember(q: string) {
-    const t = q.trim();
-    if (t.length < 2) return;
-    const next = [t, ...readRecent().filter(x => x.toLowerCase() !== t.toLowerCase())];
-    writeRecent(next);
-    setRecent(next.slice(0, RECENT_MAX));
+    setRecent(rememberQuery(q));
   }
 
   /**
@@ -594,7 +460,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
     remember(query);
     // The learning half: what was chosen, for what was typed. Next time the
     // same few letters go in, this result is the first answer.
-    notePick(result.id, query);
+    notePick(pickKey(result.projectId, result.docId), parseQuery(query).text);
     if (result.projectId !== currentProjectId) setCurrentProject(result.projectId);
     setPendingFocus(focus);
     const jobBoard = result.projectId === 'general';
@@ -639,12 +505,15 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
     group: <FolderOpen size={14} className="text-fuchsia-600" />,
     board: <StickyNote size={14} className="text-teal-600" />,
     markup: <PenLine size={14} className="text-rose-500" />,
+    pin: <MapPin size={14} className="text-red-500" />,
+    file: <Paperclip size={14} className="text-slate-500" />,
   };
 
   const TYPE_LABEL: Record<SearchResult['type'], string> = {
     apartment: s.searchTypeApartment, task: s.searchTypeTask, note: s.searchTypeNote,
     contractor_note: s.searchTypeContractorNote,
-    contractor: 'Contractor', stage: 'Stage', group: 'Group', board: 'On the board', markup: 'Markup',
+    contractor: s.searchTypeContractor, stage: s.searchTypeStage, group: s.searchTypeGroup,
+    board: s.searchTypeBoard, markup: s.searchTypeMarkup, pin: s.searchTypePin, file: s.searchTypeFile,
   };
 
   if (!open) return null;
@@ -703,7 +572,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
                   // The drop landed (a notebook square, or the board — where
                   // it also leaves its group). Remember the pick and get out
                   // of the way so the result is visible where it landed.
-                  notePick(result.id, query);
+                  notePick(pickKey(result.projectId, result.docId), parseQuery(query).text);
                   setDragLive(false);
                   onClose();
                 }}
@@ -718,14 +587,24 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
           <div className="py-1">
             <div className="flex items-center justify-between px-4 py-1.5">
               <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
-                {ui.isRtl ? 'חיפושים אחרונים' : 'Recent searches'}
+                {s.searchRecentTitle}
               </span>
-              <button
-                onClick={() => { writeRecent([]); setRecent([]); }}
-                className="text-[10.5px] text-gray-400 hover:text-gray-600"
-              >
-                {ui.isRtl ? 'לנקות' : 'Clear'}
-              </button>
+              <span className="flex items-center gap-3">
+                <button
+                  data-search-clear-picks
+                  onClick={clearPicks}
+                  title={s.searchClearPicks}
+                  className="text-[10.5px] text-gray-400 hover:text-gray-600"
+                >
+                  {s.searchClearPicks}
+                </button>
+                <button
+                  onClick={() => { writeRecent([]); setRecent([]); }}
+                  className="text-[10.5px] text-gray-400 hover:text-gray-600"
+                >
+                  {s.searchClear}
+                </button>
+              </span>
             </div>
             {recent.map(r => (
               <button
@@ -744,14 +623,12 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
 
         {/* Only the open workspace is live; the rest are whatever this machine
             last saw. Said out loud, because otherwise a job somebody knows
-            exists is simply missing with no explanation. */}
-        {projects.length > 1 && (
-          <div className="px-4 py-1.5 border-t border-gray-100 text-[10.5px] text-gray-400">
-            {ui.isRtl
-              ? 'מחפש בכל סביבות העבודה. סביבה שלא נפתחה במחשב הזה מוצגת לפי מה שנשמר כאן לאחרונה.'
-              : 'Searching every workspace. The ones that are not open show what this machine last saw of them.'}
-          </div>
-        )}
+            exists is simply missing with no explanation. And the filter words,
+            because a word nobody is told about is a word nobody types. */}
+        <div className="px-4 py-1.5 border-t border-gray-100 text-[10.5px] text-gray-400 space-y-0.5">
+          {projects.length > 1 && <div>{s.searchFooter}</div>}
+          <div data-search-hint className="text-gray-300">{s.searchHint}</div>
+        </div>
       </div>
     </div>
   );

@@ -1,11 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import Fuse from 'fuse.js';
 import { Mic, Search, X } from 'lucide-react';
-import { Apartment, CanvasElement, aptLabel, binLabelOf, getStageName } from '../../types';
+import { Apartment, CanvasElement, aptLabel, getStageName } from '../../types';
 import { d, WidgetCtx } from '../../data/widgets';
 import { useStore, loadProjectSnapshot } from '../../data/store';
-import { queryVariants, skeleton } from '../../data/translit';
+import { workspaceIndex, searchIndex } from '../../data/searchIndex';
 import { useSpeechToText } from '../../data/voiceSearch';
 
 /**
@@ -147,6 +146,8 @@ interface Hit {
   stageColor?: string;
   binLabel?: string;
   score: number;
+  /** Where it matched when the name does not say — the folder title, a phone, a note. */
+  why?: string;
 }
 
 /**
@@ -193,100 +194,37 @@ function SearchWindow({ c, onClose }: { c: WidgetCtx; onClose: () => void }) {
   }, [projects, currentProjectId, snapTick]);
 
   /**
-   * The POOL: every findable job across every workspace, with the text it
-   * can be found by. Built from the data, not the query, so typing does not
-   * re-walk three workspaces per letter.
-   */
-  const pool = useMemo(() => {
-    const stageNameOf = (job: Apartment, sts: typeof stages) => {
-      const st = sts.find(x => x.id === job.currentStageId);
-      return st ? { name: getStageName(st, isRtl), color: st.color } : {};
-    };
-    const groupLabel = (job: Apartment, els: CanvasElement[]) => {
-      if (!job.boardBin || job.boardBin === 'trash') return undefined;
-      const el = els.find(e => e.id === job.boardBin || e.binKind === job.boardBin);
-      if (el) return binLabelOf(el);
-      return job.boardBin.charAt(0).toUpperCase() + job.boardBin.slice(1);
-    };
-    const taskMap = (as: { apartmentId: string; taskDescription?: string }[]) => {
-      const m = new Map<string, string>();
-      for (const a of as) {
-        if (!a.taskDescription) continue;
-        m.set(a.apartmentId, `${m.get(a.apartmentId) ?? ''} ${a.taskDescription}`);
-      }
-      return m;
-    };
-    const out: (Hit & { hay: string; label: string })[] = [];
-    const walk = (
-      jobs: Apartment[], sts: typeof stages, els: CanvasElement[],
-      taskTexts: Map<string, string>, pid?: string, ws?: string,
-    ) => {
-      for (const job of jobs) {
-        if (job.isUnnamed || job.boardBin === 'trash') continue;   // Trash never appears.
-        const label = aptLabel(job) || job.address?.trim() || '';
-        if (!label) continue;
-        const st = stageNameOf(job, sts);
-        out.push({
-          key: `${pid ?? 'here'}:${job.id}`, job, projectId: pid, workspace: ws,
-          stageName: st.name, stageColor: st.color, binLabel: groupLabel(job, els),
-          score: 0, label,
-          hay: `${label} ${job.driveFolderName ?? ''} ${job.address ?? ''} ${job.phone ?? ''} ${job.generalNotes ?? ''} ${taskTexts.get(job.id) ?? ''}`,
-        });
-      }
-    };
-    walk(apartments, stages, canvasElements, taskMap(c.assignments));
-    for (const { pid, name, snap } of snaps) {
-      walk(snap.apartments ?? [], snap.stages ?? stages, snap.canvasElements ?? [],
-        taskMap(snap.assignments ?? []), pid, name);
-    }
-    return out;
-  }, [apartments, stages, canvasElements, c.assignments, snaps, isRtl]);
-
-  /**
-   * The fuzzy net is over the NAME alone. Run over the whole hay it matched
-   * task words against half the query ("coen" ≈ "condenser") and buried the
-   * real Cohen under strangers; address, phone, notes and task text are
-   * still found by the substring and skeleton tiers.
-   */
-  const fuse = useMemo(
-    () => new Fuse(pool, { keys: ['label'], threshold: 0.4, ignoreLocation: true, includeScore: true }),
-    [pool]);
-
-  /**
-   * Three tiers, GlobalSearch's own manner: a real substring first, then a
-   * FUZZY hit (Fuse at ~0.4 — "coen" finds Cohen), then the skeleton /
-   * transliteration net (Hebrew against English, the wrong keyboard). The
-   * open workspace outranks the others inside each tier.
+   * The app's ONE search (`data/searchIndex.ts`), jobs only, across every
+   * workspace: the open one live (INCLUDING its groups — a finished job must
+   * still be findable, labeled), the others from their snapshots. The index
+   * per workspace is kept between keystrokes and shared with the header
+   * search, so typing here costs the same few milliseconds.
    */
   const results = useMemo<Hit[]>(() => {
     const q = query.trim();
     if (q.length < 2) return [];
-    const v = queryVariants(q);
-    const ql = q.toLowerCase();
-    const best = new Map<string, Hit>();
-    const offer = (h: Hit, score: number) => {
-      const have = best.get(h.key);
-      if (!have || score < have.score) best.set(h.key, { ...h, score });
+    const out: Hit[] = [];
+    const walk = (pid: string, ws: string | undefined, jobs: Apartment[], sts: typeof stages,
+                  els: CanvasElement[], tasks: typeof c.assignments, bias: number) => {
+      const index = workspaceIndex(`tile:${pid}`, { apartments: jobs, stages: sts, canvasElements: els, assignments: tasks });
+      for (const h of searchIndex(index, q, { kinds: ['job'], projectId: pid, bias, limit: 30, perKind: 30 })) {
+        const job = h.rec as Apartment;
+        const st = sts.find(x => x.id === job.currentStageId);
+        out.push({
+          key: `${ws ? pid : 'here'}:${job.id}`, job, projectId: ws ? pid : undefined, workspace: ws,
+          stageName: st ? getStageName(st, isRtl) : undefined, stageColor: st?.color,
+          binLabel: h.binLabel, score: h.rank,
+          why: h.why ? `${h.why.text}` : undefined,
+        });
+      }
     };
-    for (const row of pool) {
-      const low = row.hay.toLowerCase();
-      if (v.plain.some(p => low.includes(p.toLowerCase()))) {
-        const name = row.label.toLowerCase();
-        offer(row, (name.startsWith(ql) ? 0 : name.includes(ql) ? 5 : 10) + (row.projectId ? 2 : 0));
-        continue;
-      }
-      if (v.skeletons.length) {
-        const sk = skeleton(row.hay);
-        if (v.skeletons.some(k => sk.includes(k))) offer(row, 30 + (row.projectId ? 2 : 0));
-      }
+    walk(currentProjectId, undefined, apartments, stages, canvasElements, c.assignments, 0);
+    for (const { pid, name, snap } of snaps) {
+      walk(pid, name, snap.apartments ?? [], snap.stages?.length ? snap.stages : stages,
+        snap.canvasElements ?? [], snap.assignments ?? [], 2);
     }
-    for (const p of v.plain) {
-      for (const m of fuse.search(p)) {
-        offer(m.item, 20 + (m.score ?? 0.4) * 8 + (m.item.projectId ? 2 : 0));
-      }
-    }
-    return [...best.values()].sort((a, b) => a.score - b.score).slice(0, 30);
-  }, [query, pool, fuse]);
+    return out.sort((a, b) => a.score - b.score).slice(0, 30);
+  }, [query, apartments, stages, canvasElements, c.assignments, snaps, isRtl, currentProjectId]);
 
   const openHit = (h: Hit) => {
     onClose();
@@ -360,6 +298,9 @@ function SearchWindow({ c, onClose }: { c: WidgetCtx; onClose: () => void }) {
                 <span className="block text-[11.5px] text-slate-400 truncate">
                   {[h.workspace, h.binLabel, h.stageName, h.job.address].filter(Boolean).join(' · ')}
                 </span>
+                {h.why && (
+                  <span data-search-why className="block text-[11px] text-slate-400 truncate">{h.why}</span>
+                )}
               </span>
             </button>
           ))}

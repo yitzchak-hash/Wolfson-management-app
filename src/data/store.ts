@@ -76,6 +76,8 @@ export function loadProjectSnapshot(projectId: string): {
   contractorNotes: ContractorNote[];
   canvasElements: CanvasElement[];
   planAnnotations: PlanAnnotation[];
+  planPins: PlanPin[];
+  officeNoteFiles: OfficeNoteFile[];
 } {
   const data = loadFromStorage(getProjectStorageKey(projectId), null) as Record<string, unknown> | null;
   return {
@@ -87,6 +89,8 @@ export function loadProjectSnapshot(projectId: string): {
     contractorNotes: (data?.contractorNotes as ContractorNote[] | null) ?? [],
     canvasElements: (data?.canvasElements as CanvasElement[] | null) ?? [],
     planAnnotations: (data?.planAnnotations as PlanAnnotation[] | null) ?? [],
+    planPins: (data?.planPins as PlanPin[] | null) ?? [],
+    officeNoteFiles: (data?.officeNoteFiles as OfficeNoteFile[] | null) ?? [],
   };
 }
 
