@@ -7612,3 +7612,17 @@ Standing pre-existing red noted: `round28.mjs`'s group-window section
 (dblclick on the Done bin times out; identical with the diff stashed) — its
 Add Job section passes.
 
+## The office's real Drive path (2026-09-08)
+`G:\תיקיות אחסון שיתופי\TA Zoho Docs\Potentials\<client folder>` — the
+owner's own Explorer path. So: the localised "Shared drives" folder is the
+THREE-word `תיקיות אחסון שיתופי` (the earlier test guessed two words), the
+shared drive is named **TA Zoho Docs** (not "TzviAir"), and client folders
+sit directly under `Potentials` (and the newer `Leads`). `HEBREW_SHARED_DRIVES`
++ `defaultSharedName(lang)` in `drivePath.ts`: a Hebrew-language browser
+composes the copied path with the Hebrew name before anybody has pasted a
+path; a pasted path (`drive_shared_name`, per machine) always wins.
+`drivehelper-test.mjs` carries the real path as a case. The PowerShell
+opener's try-every-top-folder fallback already covered the helper route;
+this fixes the COPY route, which was the owner's "I pasted it into Explorer
+and it opened nothing".
+

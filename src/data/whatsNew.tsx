@@ -52,6 +52,15 @@ export const WHATS_NEW: WhatsNewEntry[] = [
           + 'workspace — so the ~1,000 linked jobs pick it up by themselves.',
         demo: 'sparkle',
       },
+      {
+        title: 'The Drive folder path opens on a Hebrew PC',
+        body: 'The copied Explorer path used to say "Shared drives", which a '
+          + 'Hebrew Windows does not have — it calls that folder "תיקיות אחסון '
+          + 'שיתופי". On a Hebrew computer the path now uses that name by '
+          + 'itself; pasting one real path into the settings still sets it '
+          + 'exactly for that machine.',
+        demo: 'tap',
+      },
     ],
   },
   {

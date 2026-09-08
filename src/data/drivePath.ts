@@ -46,6 +46,17 @@ export const setDriveRoot = (v: string): void => {
  * was the office's report. Per machine, never synced, like the root.
  */
 const SHARED_KEY = 'drive_shared_name';
+/**
+ * The name a Hebrew Windows gives the folder — CONFIRMED from the office's
+ * own Explorer path (2026-09-08): `G:\תיקיות אחסון שיתופי\TA Zoho Docs\…`.
+ * Used as the default on a Hebrew-language browser when nobody has pasted a
+ * path on this machine yet, so the copied path opens in Explorer on the
+ * office's PCs without a setup step. A pasted path always wins.
+ */
+export const HEBREW_SHARED_DRIVES = 'תיקיות אחסון שיתופי';
+export function defaultSharedName(lang: string = typeof navigator !== 'undefined' ? navigator.language : ''): string {
+  return /^he\b/i.test(lang) ? HEBREW_SHARED_DRIVES : 'Shared drives';
+}
 export const getSharedName = (): string => (localStorage.getItem(SHARED_KEY) ?? '').trim();
 export const setSharedName = (v: string): void => {
   const clean = v.trim().replace(/[\\/]+$/, '');
@@ -157,7 +168,7 @@ export async function folderPath(driveLinkOrId: string): Promise<FolderPath | nu
 export function composeLocalPath(root: string, path: FolderPath, sharedName = getSharedName()): string {
   const sep = separatorFor(root);
   const top = path.inSharedDrive
-    ? [sharedName || 'Shared drives', ...(path.driveName ? [path.driveName] : [])]
+    ? [sharedName || defaultSharedName(), ...(path.driveName ? [path.driveName] : [])]
     : ['My Drive'];
   return [root.replace(/[\\/]+$/, ''), ...top, ...path.segments].join(sep);
 }

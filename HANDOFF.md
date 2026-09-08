@@ -40,10 +40,20 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-08, second round of the day)
+## Where things stand (2026-09-08, third round of the day)
 Last commits, newest first (see `git log`):
-- **This round** (opened by the owner typing only "HANDOFF.md" — read it and
-  continue): the Drive folder title finished as the search research's item
+- **This round**: the owner re-sent his previous prompt (handoff / helper /
+  search — all three already built) WITH the two example paths, both
+  identical: `G:\תיקיות אחסון שיתופי\TA Zoho Docs\Potentials\Yeshivat
+  Chevron Haktana`. Confirmed: the Hebrew "Shared drives" folder is the
+  three-word `תיקיות אחסון שיתופי`, the shared drive is "TA Zoho Docs". Built:
+  `defaultSharedName(lang)` in `drivePath.ts` — a Hebrew browser composes the
+  COPIED path with that name before anybody pastes a path (the copy route was
+  the "pasted it into Explorer, nothing opened" fault; the helper route
+  already had the try-every-top-folder fallback). `drivehelper-test.mjs`
+  carries the real path. What's New 2026-12-18 grew a third item.
+- **Earlier today** (opened by the owner typing only "HANDOFF.md" — read it
+  and continue): the Drive folder title finished as the search research's item
   #1. The previous handoff CLAIMED the sweep backfilled `driveFolderName`;
   it did not (the store action had no caller). Now: Add Job writes the title
   at submit (and the raced heal writes it after), the import wizard reads the
@@ -70,11 +80,11 @@ Last commits, newest first (see `git log`):
 1. **A handoff file kept updated after every response** — DONE (this file,
    `docs/artifacts/`, the rule in CLAUDE.md).
 2. **The Drive folder helper button** (Windows, Hebrew computers) — rebuilt
-   last round; NOT yet tried on a real Hebrew Windows. **He said he will send
-   two example file paths from a job** — STILL WAITING. When they arrive,
-   check them against `parsePastedPath` and `composeLocalPath`
-   (`scratchpad/drivehelper-test.mjs` has the cases) and confirm the Hebrew
-   name of the "Shared drives" folder.
+   two rounds ago; the example paths ARRIVED this round and are in the test.
+   NOT yet tried on a real Hebrew Windows — that is the one thing left: press
+   Get the helper, double-click the one file, tick the box, press the folder
+   button (and the plain Copy path should now open in Explorer on a Hebrew
+   PC with no setup).
 3. **Search**: a word only in a job's Drive folder TITLE did not find the
    job — fixed last round at the header search; this round every door stores
    the title and every search site reads it. The research file is
@@ -104,13 +114,12 @@ Last commits, newest first (see `git log`):
   ad-hoc package prunes the other, install both together).
 
 ## The last reply the owner saw (so the next one continues it)
-The previous reply (the helper round) asked him to send the two example
-paths and to try the helper on one Hebrew PC. He answered with just
-"HANDOFF.md". This round's reply says: read the handoff, everything was
-pushed and production matched; the one loose end found was that the folder
-title was NOT being backfilled despite the handoff saying so, and now every
-door stores it and every search reads it — a first name or folder number
-finds the job in Find-a-job and on the TV's group windows too; the linked
-jobs fill in by themselves on the next Drive check; still waiting on the two
-paths and the helper try-out; the bigger search rebuild (one index, more
-fields, Hebrew, ranking) is written up and waits for his word.
+He re-sent his three-ask prompt with the two paths and asked whether
+anything was missed in the move to this account. This round's reply says:
+nothing was missed — the handoff file, the one-file helper and the
+folder-title search were all built and pushed in the previous rounds; his
+paths confirmed the Hebrew folder name and the drive name, and the copied
+path now uses the Hebrew name on a Hebrew PC by itself; the one thing left
+is for the office to try the helper (and the copied path) on a real Hebrew
+Windows; the bigger search rebuild (one index, more fields, Hebrew matching,
+ranking) is written up in `docs/research/SEARCH.md` and waits for his word.

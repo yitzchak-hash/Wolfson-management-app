@@ -37,7 +37,18 @@ check(D.parsePastedPath('hello world') === null, 'nonsense is refused');
 // The composed path uses the localised name
 const path = { segments: ['Cohen, David - 5555'], driveName: 'TzviAir', inSharedDrive: true };
 check(D.composeLocalPath('G:', path, 'אחסון שיתופי') === 'G:\\אחסון שיתופי\\TzviAir\\Cohen, David - 5555', 'the copied path uses the folder name this computer really has');
-check(D.composeLocalPath('G:', path, '') === 'G:\\Shared drives\\TzviAir\\Cohen, David - 5555', 'and "Shared drives" when nobody has pasted one');
+check(D.composeLocalPath('G:', path, '') === 'G:\\Shared drives\\TzviAir\\Cohen, David - 5555', 'and "Shared drives" when nobody has pasted one (this container is not Hebrew)');
+// The owner's REAL path (2026-09-08): the three-word Hebrew folder, the shared drive "TA Zoho Docs".
+const real = D.parsePastedPath('G:\\תיקיות אחסון שיתופי\\TA Zoho Docs\\Potentials\\Yeshivat Chevron Haktana');
+check(real && real.root === 'G:' && real.sharedName === 'תיקיות אחסון שיתופי' && real.sep === '\\',
+  'the office\'s own Explorer path gives G: and "תיקיות אחסון שיתופי"', JSON.stringify(real));
+const realPath = { segments: ['Potentials', 'Yeshivat Chevron Haktana'], driveName: 'TA Zoho Docs', inSharedDrive: true };
+check(D.composeLocalPath('G:', realPath, real.sharedName) === 'G:\\תיקיות אחסון שיתופי\\TA Zoho Docs\\Potentials\\Yeshivat Chevron Haktana',
+  'and composes back to exactly the path Explorer showed');
+check(D.defaultSharedName('he-IL') === 'תיקיות אחסון שיתופי' && D.defaultSharedName('en-US') === 'Shared drives',
+  'a Hebrew browser defaults to the Hebrew folder name before anybody pastes a path');
+check(D.composeLocalPath('G:', realPath, D.defaultSharedName('he')) === 'G:\\תיקיות אחסון שיתופי\\TA Zoho Docs\\Potentials\\Yeshivat Chevron Haktana',
+  'so the copied path opens on a Hebrew PC with no setup');
 await server.close();
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASS');
 process.exit(fails ? 1 : 0);

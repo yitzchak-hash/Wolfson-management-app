@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { HardDrive, Check, Loader2, X, Download, FolderOpen } from 'lucide-react';
 import {
   folderPath, composeLocalPath, getDriveRoot, setDriveRoot, guessRoot, separatorFor,
-  getSharedName, setSharedName, parsePastedPath,
+  getSharedName, setSharedName, parsePastedPath, defaultSharedName,
 } from '../../data/drivePath';
 import {
   guessPlatform, helperInstalled, setHelperInstalled, openUrl,
@@ -209,7 +209,7 @@ export function DriveDesktopPath({ driveLink, onToast, variant = 'icon', onDone 
             <p className={`text-[11px] mt-1.5 mb-4 leading-snug ${pasteNote.startsWith('Got it') ? 'text-green-700' : 'text-gray-400'}`} data-paste-note>
               {pasteNote || (shared
                 ? <>On this computer the shared-drives folder is called <b>{shared}</b>.</>
-                : <>In File Explorer open the job's folder, click the address bar, copy, paste here. That sets both the root and what this computer calls "Shared drives".</>)}
+                : <>In File Explorer open the job's folder, click the address bar, copy, paste here. That sets both the root and what this computer calls "Shared drives" (until then a Hebrew browser assumes <b>{defaultSharedName()}</b>).</>)}
             </p>
 
             <div className="rounded-xl border border-gray-200 p-3 mb-4">
