@@ -7585,3 +7585,30 @@ path. `Apartment.driveFolderName` (CANVAS_ONLY) is the folder's own title,
 kept by the drawer, pasted links and the sweep (which backfills every
 linked job it lists via `setDriveFolderNames`), and searched by the header
 search, the job list and the search tile.
+
+## The folder title reaches every door (2026-09-08, the handoff round)
+The previous handoff said the sweep backfilled `driveFolderName` — it did
+not: `setDriveFolderNames` existed with NO caller, and the sweep minted jobs
+without the title. Finished as the search research's item #1:
+- **Add Job** keeps the title its lookup fetched (`jobFolderTitle` ref, keyed
+  by folder id so a re-pasted link cannot carry the old title) and writes it
+  at submit; the post-submit heal now runs when the name is blank OR the
+  title is unknown, and writes both in one `updateApartment`.
+- **The wizard** reads the title for EVERY linked row (not only blank-family
+  ones); a typed family still stands. `TemplateRow.folderName` /
+  `PlannedJob.folderName` carry it to the job.
+- **The sweep** writes `driveFolderName` on minted jobs and BACKFILLS it onto
+  every linked job it lists, in whichever workspace owns the folder
+  (`owners` map → `setDriveFolderNames(pid, names)`), so the ~1,000 linked
+  jobs pick it up on the next two-hourly check with no button.
+- **Read by** Find-a-job (`written` + a `soundScore` over the title) and the
+  TV group window's search, joining the header search, the job list, the
+  search tile and the board's group window.
+Harness: `scratchpad/foldertitle-probe.mjs` (10 — Add Job settled and raced,
+Find-a-job, the wall's group window; the Find-a-job hit is counted as a
+SECOND mention of the name, because the tile on the board is the first).
+`autojobs-probe` grew the minted-title and cross-workspace-backfill checks.
+Standing pre-existing red noted: `round28.mjs`'s group-window section
+(dblclick on the Done bin times out; identical with the diff stashed) — its
+Add Job section passes.
+

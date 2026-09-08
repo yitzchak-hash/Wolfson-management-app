@@ -2695,11 +2695,16 @@ function JobFinder({ el, ctx }: { el: CanvasElement; ctx: WidgetCtx }) {
     return ctx.jobs
       .map(j => {
         const name = j.displayName?.trim() ?? '';
-        const written = `${name} ${j.apartmentNumber ?? ''} ${j.address ?? ''}`.toLowerCase();
+        // The Drive folder's own title is searched too — a word that lives
+        // only there ("Potentials", a first name the family field lacks)
+        // used to find the job nowhere but the header search.
+        const folder = j.driveFolderName ?? '';
+        const written = `${name} ${j.apartmentNumber ?? ''} ${j.address ?? ''} ${folder}`.toLowerCase();
         // Typed-as-written beats sounds-alike, so an exact search is never
         // pushed down the list by a phonetic near-miss.
         const literal = written.includes(plain) ? 1.5 : 0;
-        const heard = Math.max(soundScore(needle, name), soundScore(needle, j.address ?? ''));
+        const heard = Math.max(soundScore(needle, name), soundScore(needle, j.address ?? ''),
+          folder ? soundScore(needle, folder) : 0);
         return { job: j, score: Math.max(literal, heard) };
       })
       .filter(r => r.score > 0.55)

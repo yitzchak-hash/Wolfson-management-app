@@ -1815,7 +1815,7 @@ export function TvPresentationPage() {
                     return false;
                   };
                   inside = inside.filter(a => hit(
-                    `${a.displayName ?? ''} ${a.address ?? ''} ${a.phone ?? ''} ${a.generalNotes ?? ''}`));
+                    `${a.displayName ?? ''} ${a.driveFolderName ?? ''} ${a.address ?? ''} ${a.phone ?? ''} ${a.generalNotes ?? ''}`));
                 }
                 if (!inside.length) {
                   return <p className="text-gray-400 px-2 py-6 text-center">

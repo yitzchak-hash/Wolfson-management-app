@@ -63,6 +63,12 @@ check(!auto.some(a => a.id === 'G-auto-F-linked') && !auto.some(a => a.id === 'G
 const c1 = auto.find(a => a.id === 'G-auto-F-c1');
 check(c1?.displayName === 'Cohen, David' && c1.driveLink === 'https://drive.google.com/drive/folders/F-c1',
   'the family comes from the folder title, the folder is the Drive link', `${c1?.displayName} ${c1?.driveLink}`);
+check(c1?.driveFolderName === 'Cohen, David - 5555 - notes',
+  'a minted job carries the folder TITLE for search', JSON.stringify(c1?.driveFolderName));
+const wolf = await page.evaluate(() => JSON.parse(localStorage.getItem('wolfson_app_data') || '{}'));
+const linkedApt = (wolf.apartments ?? []).find(a => a.id === 'A1-53');
+check(linkedApt?.driveFolderName === 'Already, Linked - 1',
+  'the sweep backfills the title onto a job ANOTHER workspace already links to', JSON.stringify(linkedApt?.driveFolderName));
 const group = (d.canvasElements ?? []).find(e => e.id === 'CE-bin-newjobs');
 check(!!group && group.type === 'bin' && group.text === 'New Jobs Came In', 'the "New Jobs Came In" group was minted once under its fixed id');
 check(auto.every(a => a.boardBin === 'CE-bin-newjobs'), 'every new job sits in that group');

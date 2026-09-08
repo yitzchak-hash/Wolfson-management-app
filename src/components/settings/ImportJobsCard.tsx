@@ -134,10 +134,12 @@ export function ImportJobsCard({ onToast }: { onToast: (msg: string, type?: 'suc
     setFileName(f.name);
     setDone(null);
     setPlan(null);
-    // Blank family names are read from the Drive folder titles, in gentle
-    // chunks — the wizard has the service account's permission, the sheet
-    // does not need retyping what Drive already knows.
-    const need = rows.filter(r => !r.family && r.driveUrl && extractFolderId(r.driveUrl));
+    // Every linked row's Drive folder TITLE is read, in gentle chunks — the
+    // wizard has the service account's permission, the sheet does not need
+    // retyping what Drive already knows. The title fills a BLANK family name
+    // (a typed one stands) and rides onto the job as `driveFolderName`, so a
+    // word that lives only in the folder's title finds the job everywhere.
+    const need = rows.filter(r => r.driveUrl && extractFolderId(r.driveUrl));
     if (need.length && isUploadBackendConfigured()) {
       setEnriching({ done: 0, total: need.length });
       const CHUNK = 5;
@@ -145,7 +147,9 @@ export function ImportJobsCard({ onToast }: { onToast: (msg: string, type?: 'suc
         await Promise.all(need.slice(i, i + CHUNK).map(async r => {
           const fid = extractFolderId(r.driveUrl)!;
           const name = await getFolderNameViaBackend(fid).catch(() => null);
-          if (name) r.family = familyNameFromFolderName(name);
+          if (!name) return;
+          r.folderName = name;
+          if (!r.family) r.family = familyNameFromFolderName(name);
         }));
         setEnriching({ done: Math.min(i + CHUNK, need.length), total: need.length });
       }
@@ -265,6 +269,7 @@ export function ImportJobsCard({ onToast }: { onToast: (msg: string, type?: 'suc
           classification: 'standard', shinuiDetails: null,
           generalNotes: t.notes, isUnnamed: false,
           driveLink: t.driveUrl || undefined,
+          driveFolderName: t.folderName || undefined,
           zohoLink: t.zoho || undefined,
           address: t.address || undefined,
           phone: t.phone || undefined,
@@ -404,7 +409,7 @@ export function ImportJobsCard({ onToast }: { onToast: (msg: string, type?: 'suc
       {enriching && (
         <div className="mt-3 flex items-center gap-2 text-xs text-gray-600">
           <Loader2 size={13} className="animate-spin" />
-          Reading family names from Drive folders… {enriching.done}/{enriching.total}
+          Reading the Drive folders’ titles… {enriching.done}/{enriching.total}
         </div>
       )}
 

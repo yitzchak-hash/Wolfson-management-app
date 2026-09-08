@@ -40,67 +40,77 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-08)
+## Where things stand (2026-09-08, second round of the day)
 Last commits, newest first (see `git log`):
-- **This round**: the Windows Drive-folder helper rebuilt as ONE installer
-  (`src/data/tzviairHelper.ts`, `DriveDesktopPath.tsx`, the settings card),
-  Hebrew-safe PowerShell opener, paste-a-path detector (`parsePastedPath`,
-  `drive_shared_name`); `Apartment.driveFolderName` kept and searched
-  (header search, job list, search tile; sweep backfills); `HANDOFF.md`,
-  `docs/artifacts/`. `docs/research/SEARCH.md` (400 lines) is the reusable research
-  on making the search better — read it before touching search. Its top
-  asks, not yet built: one shared index module for the six search sites,
-  MiniSearch instead of Fuse (multi-token AND, field weights, ~1 ms per
-  keystroke), the remaining unindexed fields (tipus, attachment names, memo
-  transcripts, pins), one Hebrew normaliser, "why it matched" on rows. The
-  folder title is now read by the header search, the job list, the search
-  tile and the board's group window; the TV group window and Find-a-job
-  still do not read it.
-- Galaxy Tab S10 FE gallery + S Pen probe; the pen tray's Escape fixed.
-- Active jobs widget rebuilt as approved (`src/data/activityTouches.ts`).
-- Board speed after the import (stable audio handlers, group-window culling);
-  Drive check every 10 minutes with a refresh link.
-- Group totals list every group; group windows frame their content and take
-  the board's gestures; Drive sweep reports seen/linked/new.
+- **This round** (opened by the owner typing only "HANDOFF.md" — read it and
+  continue): the Drive folder title finished as the search research's item
+  #1. The previous handoff CLAIMED the sweep backfilled `driveFolderName`;
+  it did not (the store action had no caller). Now: Add Job writes the title
+  at submit (and the raced heal writes it after), the import wizard reads the
+  title for every linked row, the Drive sweep writes it on minted jobs AND
+  backfills it onto every linked job it lists in any workspace, and
+  Find-a-job + the TV group window read it. Probe:
+  `scratchpad/foldertitle-probe.mjs` (10), `autojobs-probe.mjs` (+2).
+  What's New `2026-12-18`. Nothing else changed.
+- Search research (`docs/research/SEARCH.md`): item #1 done; #2–#10 (one
+  shared MiniSearch index, the unindexed fields — tipus, attachment names,
+  memo transcripts, pins — one Hebrew normaliser, ranking, "why it matched")
+  are NOT built and are a real project (L + several M). Read that file
+  before touching search.
+- Previous round: `HANDOFF.md` + `docs/artifacts/`; the Windows Drive-folder
+  helper as ONE Hebrew-safe installer (`src/data/tzviairHelper.ts`,
+  `parsePastedPath`, `drive_shared_name`); `Apartment.driveFolderName`
+  introduced and searched by the header search, job list, search tile,
+  board group window.
+- Before that: Galaxy Tab S10 FE gallery + S Pen probe; Active jobs rebuilt
+  as approved; board speed after the import; group totals / group windows;
+  the Drive sweep reporting seen/linked/new.
 
 ## What the owner last asked (his exact wants)
-1. **A handoff file kept updated after every response** so any AI can continue
-   with no lost context, and every artifact saved in the repo in order as
-   versions, never overwritten — DONE this round (this file, `docs/artifacts/`).
-2. **The Drive folder helper button** (Windows, Hebrew computers): sometimes
-   downloaded a .reg, sometimes a .cmd; the .cmd said the path is not in G:
-   although it is; pasting the copied path into Explorer opened nothing.
-   Rebuilt this round (see above). **He said he will send two example file
-   paths from a job** — when they arrive, check them against `parsePastedPath`
-   and `composeLocalPath` (scratchpad/drivehelper-test.mjs has the cases) and
-   confirm the Hebrew name of the "Shared drives" folder.
-3. **Search**: a word that was only in a job's Drive folder TITLE did not find
-   the job. Fixed by storing and indexing `driveFolderName`; he also asked for
-   an agent to research how to make search better and to keep that as a
-   reusable file → `docs/research/SEARCH.md`.
+1. **A handoff file kept updated after every response** — DONE (this file,
+   `docs/artifacts/`, the rule in CLAUDE.md).
+2. **The Drive folder helper button** (Windows, Hebrew computers) — rebuilt
+   last round; NOT yet tried on a real Hebrew Windows. **He said he will send
+   two example file paths from a job** — STILL WAITING. When they arrive,
+   check them against `parsePastedPath` and `composeLocalPath`
+   (`scratchpad/drivehelper-test.mjs` has the cases) and confirm the Hebrew
+   name of the "Shared drives" folder.
+3. **Search**: a word only in a job's Drive folder TITLE did not find the
+   job — fixed last round at the header search; this round every door stores
+   the title and every search site reads it. The research file is
+   `docs/research/SEARCH.md`.
 
 ## Open threads / things to verify on production
-- The Drive helper has NOT been run on a real Hebrew Windows yet — the office
-  should: press Get the helper, double-click the one file, tick the box, press
-  the folder button. If Windows SmartScreen objects: More info → Run anyway.
-- The Active jobs widget's Drive rows depend on Vercel env `VITE_DRIVE_API_KEY`
-  and the function `api/drive-files.js` (`maxDuration` 30 in vercel.json).
+- The sweep's backfill runs on its two-hourly timer (or the card's Run now)
+  and needs `VITE_DRIVE_API_KEY`; after the first sweep on production the
+  linked jobs should carry `driveFolderName` — check one in the drawer's
+  Drive row (it shows the folder's title) or search a first name.
+- The Drive helper: the office should press Get the helper, double-click the
+  one file, tick the box, press the folder button. SmartScreen: More info →
+  Run anyway.
+- The Active jobs widget's Drive rows depend on Vercel env
+  `VITE_DRIVE_API_KEY` and `api/drive-files.js` (`maxDuration` 30).
 - Keys (Vercel only, never in the app): `OPENAI_API_KEY` (transcription,
   translation, the AI plan reader), optional `ANTHROPIC_API_KEY`,
   `GOOGLE_SERVICE_ACCOUNT_JSON`, `API_KEY` = `VITE_DRIVE_API_KEY`.
 - Standing pre-existing red harnesses (not this round's): `boardsize.mjs`
   (left-edge auto-pan), `gapboard.mjs` (a group under the board's chrome),
-  `stripsrow-probe` (2 checks), `mobdiagram.mjs` (stale assertion).
-- Decided, not built: search ranking by Drive activity; the Add Job modal
-  storing the folder title at submit (only paste/drawer/sweep store it now).
+  `stripsrow-probe` (2 checks), `mobdiagram.mjs` (stale assertion),
+  `round28.mjs` group-window section (dblclick on the Done bin times out;
+  its Add Job section passes).
+- Decided, not built: search ranking by Drive activity; SEARCH.md #2–#10.
+- Container notes: `npm ci` then `npm install --no-save playwright@1.54.1`
+  (also `@pdf-lib/fontkit` if a plan-reader probe needs it — installing one
+  ad-hoc package prunes the other, install both together).
 
 ## The last reply the owner saw (so the next one continues it)
-Summary of the previous assistant's final message: the Tab S10 FE page was
-published with 80 clean screens and 21 pen checks; the pen tray's Escape bug
-was fixed and pushed. Then the owner wrote the three asks above. The reply to
-THAT (this round) says: the handoff file and artifacts folder exist and the
-rule is in CLAUDE.md; the helper is one file now and why the old one failed
-(second download blocked; ASCII-only decoding and OEM code page broke Hebrew
-paths; ProgramData/HKCR needed admin); the folder title is now searched; the
-search research file is in `docs/research/SEARCH.md`; and it asks him to send
-the two example paths and to try the helper on one Hebrew PC.
+The previous reply (the helper round) asked him to send the two example
+paths and to try the helper on one Hebrew PC. He answered with just
+"HANDOFF.md". This round's reply says: read the handoff, everything was
+pushed and production matched; the one loose end found was that the folder
+title was NOT being backfilled despite the handoff saying so, and now every
+door stores it and every search reads it — a first name or folder number
+finds the job in Find-a-job and on the TV's group windows too; the linked
+jobs fill in by themselves on the next Drive check; still waiting on the two
+paths and the helper try-out; the bigger search rebuild (one index, more
+fields, Hebrew, ranking) is written up and waits for his word.

@@ -30,6 +30,31 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-12-18',
+    title: 'A job is found by its Drive folder\'s name, wherever you search',
+    items: [
+      {
+        title: 'Every search reads the folder title',
+        body: 'The name of a job\'s Google Drive folder ("Cohen, David - 5555 - '
+          + 'notes") is now searched by the Find-a-job widget and the group '
+          + 'windows on the TV as well — the header search, the job list, the '
+          + 'search tile and the board\'s group windows already did. A first '
+          + 'name or a folder number that never made it into the family field '
+          + 'finds the job everywhere.',
+        demo: 'list',
+      },
+      {
+        title: 'And every door keeps it',
+        body: 'Add Job stores the folder\'s name the moment you paste the link '
+          + '(even if you press Add before it has been read), the import wizard '
+          + 'stores it for every linked row, and the automatic Drive check '
+          + 'writes it onto every job it already knows about — in any '
+          + 'workspace — so the ~1,000 linked jobs pick it up by themselves.',
+        demo: 'sparkle',
+      },
+    ],
+  },
+  {
     date: '2026-12-17',
     title: 'Every group counts, and a group window handles like the board',
     items: [

@@ -468,6 +468,14 @@ export function GeneralJobsPage() {
   /** Was the family name typed BY HAND? A hand-typed name is never overwritten
       by the Drive-folder autofill; an autofilled one may be refined. */
   const jobNameTyped = useRef(false);
+  /**
+   * The folder's own TITLE, as the lookup fetched it — written onto the job
+   * as `driveFolderName` at submit so the header search, the job list and
+   * the search tile can find the job by a word that is only in the title.
+   * The paste path, the drawer and the sweep already store it; Add Job was
+   * the one door that read the title and threw it away.
+   */
+  const jobFolderTitle = useRef<{ folderId: string; title: string } | null>(null);
   /** The Drive folder's title arriving — a quiet "looking it up…" note. */
   const [nameLookup, setNameLookup] = useState(false);
   /**
@@ -500,6 +508,7 @@ export function GeneralJobsPage() {
       const folder = await getFolderNameViaBackend(folderId);
       if (stale) return;
       setNameLookup(false);
+      if (folder) jobFolderTitle.current = { folderId, title: folder };
       const fam = folder ? familyNameFromFolderName(folder) : '';
       if (fam && !jobNameTyped.current) setJobName(fam);
     }, 450);
@@ -8137,7 +8146,7 @@ export function GeneralJobsPage() {
       {/* ── Add Job modal ── */}
       {showAddModal && (
         <>
-          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => { setShowAddModal(false); setNewJobAt(null); jobNameTyped.current = false; setNameLookup(false); }} />
+          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => { setShowAddModal(false); setNewJobAt(null); jobNameTyped.current = false; jobFolderTitle.current = null; setNameLookup(false); }} />
           <div className="fixed z-50 bg-white rounded-2xl shadow-2xl p-6"
             style={{ left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: 'min(420px, 92vw)' }}>
             <h2 className="text-lg font-bold text-gray-900 mb-4">{s.addJobBtn}</h2>
@@ -8151,8 +8160,12 @@ export function GeneralJobsPage() {
               const pos = newJobAt
                 ? { x: Math.max(0, newJobAt.x - TILE_W / 2), y: Math.max(0, newJobAt.y - TILE_H / 2) }
                 : tileCentreSpot();
+              const linkFolderId = jobDrive.trim() ? extractFolderId(jobDrive.trim()) : null;
+              const knownTitle = linkFolderId && jobFolderTitle.current?.folderId === linkFolderId
+                ? jobFolderTitle.current.title : undefined;
               addApartment({
                 id, buildingId: 'G', apartmentNumber: '',
+                driveFolderName: knownTitle,
                 displayName: jobName.trim(), floor: 0, colPosition: 1, colSpan: 1,
                 isDuplexApt: false, currentStageId: null, classification: 'standard',
                 shinuiDetails: null, generalNotes: '', isUnnamed: false,
@@ -8173,23 +8186,24 @@ export function GeneralJobsPage() {
                * but only while the name is still blank — a name typed or
                * filled in the meantime is never clobbered.
                */
-              const healFolderId = !jobName.trim() && jobDrive.trim()
-                ? extractFolderId(jobDrive.trim()) : null;
+              const healFolderId = linkFolderId && (!jobName.trim() || !knownTitle) ? linkFolderId : null;
               if (healFolderId) {
                 getFolderNameViaBackend(healFolderId).then(n => {
-                  const derived = n ? familyNameFromFolderName(n) : '';
-                  if (!derived) return;
+                  if (!n) return;
+                  const derived = familyNameFromFolderName(n);
                   const st = useStore.getState();
                   const j = st.apartments.find(a => a.id === id);
-                  if (j && !(j.displayName ?? '').trim() && st.currentUser) {
-                    st.updateApartment(id, { displayName: derived }, st.currentUser);
-                  }
+                  if (!j || !st.currentUser) return;
+                  const patch: Partial<Apartment> = {};
+                  if (j.driveFolderName !== n) patch.driveFolderName = n;
+                  if (derived && !(j.displayName ?? '').trim()) patch.displayName = derived;
+                  if (Object.keys(patch).length) st.updateApartment(id, patch, st.currentUser);
                 }).catch(() => {});
               }
               // Glowing until first selected — the "this one is new" marker.
               markFresh([id]);
               setJobName(''); setJobAddress(''); setJobZoho(''); setJobDrive('');
-              jobNameTyped.current = false; setNameLookup(false);
+              jobNameTyped.current = false; jobFolderTitle.current = null; setNameLookup(false);
               setShowAddModal(false); setNewJobAt(null);
             }} className="space-y-3">
               {/* The DRIVE LINK first: paste it and the family name fills
@@ -8227,7 +8241,7 @@ export function GeneralJobsPage() {
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
               </div>
               <div className="flex gap-2 pt-1">
-                <button type="button" onClick={() => { setShowAddModal(false); jobNameTyped.current = false; setNameLookup(false); }}
+                <button type="button" onClick={() => { setShowAddModal(false); jobNameTyped.current = false; jobFolderTitle.current = null; setNameLookup(false); }}
                   className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-all">
                   {s.cancel}
                 </button>

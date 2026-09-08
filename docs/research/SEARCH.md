@@ -331,8 +331,12 @@ Effort is rough: S = an hour or two, M = a day, L = two to three days.
 | 9 | **Latency hygiene**: 60–80 ms trailing debounce on the RENDER only; the effect must not re-run on unrelated store slices (index updates are pushed, not pulled); measure on the office touchscreen with the `smoulder`/`boardperf` manner and keep a `searchperf` probe at 1,650 jobs. | Under 50 ms per key everywhere. | S (after #2) |
 | 10 | **Recent + picks per workspace** and a "clear learned picks" control; picks keyed by `kind:id`, decayed. | Learning helps instead of sticking. | S |
 
-#1 is half-landed and small — finish it regardless of the rest; it is the
-report. #2 is the foundation for #3–#9; do not bolt more fields onto the six
+**#1 is DONE (2026-09-08, the round after this document)**: Add Job (submit +
+the raced heal), the wizard and the sweep write the title; the sweep backfills
+every linked job it lists in any workspace (the only caller of
+`setDriveFolderNames`); Find-a-job, the board group window and the TV group
+window read it. Probes: `foldertitle-probe.mjs`, `autojobs-probe.mjs`. The
+`gsearch` cross-workspace seed is the one sub-item not touched. #2 is the foundation for #3–#9; do not bolt more fields onto the six
 existing scanners (today's change had to touch three of them for one field,
 which is the cost the shared index removes).
 
