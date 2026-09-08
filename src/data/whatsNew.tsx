@@ -30,6 +30,23 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-12-21',
+    title: 'A shortcut to a worker\'s link opens the worker\'s link',
+    items: [
+      {
+        title: 'Save the portal to the home screen',
+        body: 'Chrome\'s "Add to Home screen" and "Create shortcut" never '
+          + 'saved the page you were on — they read the app\'s own address '
+          + 'book and opened the office home instead of the worker\'s page. '
+          + 'While a worker\'s link is open the page now carries its own '
+          + 'entry: the icon is labelled with his name and opens exactly his '
+          + 'link, on a phone or a PC. Every worker\'s portal is its own app, '
+          + 'separate from the office one.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2026-12-19',
     title: 'One search, everywhere — and it says where it found the job',
     items: [

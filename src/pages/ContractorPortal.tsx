@@ -34,6 +34,7 @@ import {
 import { saveBytes, safeFileName } from '../data/planExport';
 import { TaskThread } from '../components/tasks/TaskThread';
 import { Translated, TrText } from '../components/ui/Translated';
+import { installPortalManifest } from '../data/portalManifest';
 
 const CATEGORY_LABELS: Record<string, Record<string, string>> = {
   en: { drywall: 'Drywall', ac: 'AC', general: 'General' },
@@ -533,6 +534,20 @@ export function ContractorPortal() {
   }, []);
 
   const workerNow = contractors.find(c => c.token === token) ?? null;
+
+  /**
+   * A shortcut made from this page must open THIS page.
+   *
+   * Chrome's install / Add-to-Home-screen launches the manifest's start_url
+   * — the office home — so the manifest link is swapped for one naming the
+   * worker's own link while the portal is mounted. Re-run when the worker's
+   * name lands, so the icon is labelled with him rather than "TzviAir".
+   */
+  const workerName = workerNow?.name ?? null;
+  useEffect(() => {
+    if (!token) return;
+    return installPortalManifest({ token, workerName });
+  }, [token, workerName]);
 
   /**
    * Language: chosen from either end, and the same choice on both.

@@ -7697,3 +7697,23 @@ its own:
   with the rest minus its first segment — so an already-installed helper
   copes with a path missing the drive name or wearing the English folder
   name. `drivehelper-test.mjs` carries all of it (+6 checks).
+
+## A shortcut to the worker's link (2026-09-08)
+Chrome's "Add to Home screen" / "Install" / "Create shortcut" never saves the
+page you are on — it fetches the site's web app manifest and launches ITS
+`start_url`. `public/site.webmanifest` says `start_url: "/"`, so a shortcut
+made from `/c/<token>` opened the office home: the owner's "it takes me back
+to the main workspace page". (iPhone Safari ignores the manifest's start
+address and saves the current page, which is why it only showed on Chrome.)
+`src/data/portalManifest.ts` — `installPortalManifest({ token, workerName })`
+points the page's `link[rel=manifest]` at a manifest made on the spot (a
+`blob:` URL — a manifest must be FETCHED and there is no serverless slot to
+spare): `start_url`, `scope` and `id` are all the worker's absolute link, so
+each portal is its own app apart from the office's and from each other; the
+name is `TzviAir · <worker>` and `document.title` follows. Absolute URLs
+throughout — a relative one would resolve against the blob. The portal calls
+it in an effect keyed on `token` + the worker's name (the record can land
+after the page), and the undo restores `/site.webmanifest` only when the
+link is still the one it set. Probe: `scratchpad/portalmanifest-probe.mjs`
+(8 checks: blob manifest, start_url/scope/id = the link, the name, the office
+manifest back on `/login`, the swap again on return).

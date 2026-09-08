@@ -27,7 +27,9 @@ exactly there.
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2026-12-19` — the next entry must be a later date). 6. A CLAUDE.md
+   newest is `2026-12-21` — the next entry must be a later date (an older
+   entry lower down also wears `2026-12-20`; the marker compares only the TOP
+   entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`. 8. Rewrite THIS file.
 9. Commit (footer: `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`
    + `Claude-Session: <session url>`), push the working branch, then
@@ -41,8 +43,18 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-08, fifth round of the day)
+## Where things stand (2026-09-08, sixth round of the day)
 Last commits, newest first (see `git log`):
+- **This round — the Chrome shortcut** (owner: "Okay, it works" for the
+  helper, then: saving a Chrome shortcut to a worker's link "takes me back to
+  the main workspace page"). Cause: Chrome's Add-to-Home-screen / Install /
+  Create-shortcut never saves the page you are on — it launches the site
+  manifest's `start_url`, which is `/`. Fix: `src/data/portalManifest.ts` —
+  while `/c/<token>` is mounted the page's manifest link points at a blob
+  manifest whose `start_url`, `scope` and `id` are the worker's own absolute
+  link, named `TzviAir · <worker>` (the tab title follows); the office
+  manifest returns on unmount. Every worker's portal is its own app. Probe
+  `portalmanifest-probe.mjs` (8). What's New `2026-12-21`.
 - **This round — the helper's "still error"**: his screenshot showed the
   path the app built was `G:\Shared drives\Potentials\…` — the shared drive's
   own name ("TA Zoho Docs") missing, because the server names it through
@@ -79,10 +91,13 @@ Last commits, newest first (see `git log`):
 ## What the owner last asked (his exact wants)
 1. **A handoff file kept updated after every response** — DONE (this file,
    `docs/artifacts/`, the rule in CLAUDE.md).
-2. **The Drive folder helper button** (Windows, Hebrew computers) — rebuilt;
-   NOT yet tried on a real Hebrew Windows. The office should press Get the
-   helper, double-click the one file, tick the box, press the folder button;
-   the plain Copy path should also open in Explorer on a Hebrew PC now.
+2. **The Drive folder helper button** (Windows, Hebrew computers) — rebuilt
+   and CONFIRMED WORKING by the owner ("Okay, it works", 2026-09-08) after the
+   drive-name fix.
+4. **A Chrome shortcut to a worker's link** must open that link — DONE this
+   round (see above). He should re-make the shortcut from the worker's page
+   AFTER the deploy; a shortcut made before it still points at the old
+   manifest's home.
 3. **Search** — the folder-title fault fixed at the root, and now the full
    rebuild he asked for after the research ("go ahead and build the search
    rebuild") is built and pushed.
@@ -96,8 +111,11 @@ Last commits, newest first (see `git log`):
 - The sweep's backfill of folder titles runs on its two-hourly timer (needs
   `VITE_DRIVE_API_KEY`); until it has run, jobs linked before 2026-09-08
   carry no title and are found by name/address/phone only.
-- The Drive helper on a real Hebrew Windows (SmartScreen: More info → Run
-  anyway).
+- **Re-make the worker shortcut after the deploy** (Chrome menu → Add to Home
+  screen / Install / Create shortcut, from the worker's `/c/…` page). The icon
+  should carry the worker's name and open his page. If a shortcut STILL lands
+  on the office home, the phone's Chrome may have the office app installed
+  with scope `/` — uninstall that one first, then re-add from the portal.
 - Keys (Vercel only, never in the app): `OPENAI_API_KEY` (transcription,
   translation, the AI plan reader), optional `ANTHROPIC_API_KEY`,
   `GOOGLE_SERVICE_ACCOUNT_JSON`, `API_KEY` = `VITE_DRIVE_API_KEY`.
@@ -114,18 +132,13 @@ Last commits, newest first (see `git log`):
   `npx vite --port 5173` and `VITE_DRIVE_API_KEY=test npx vite --port 5174`.
 
 ## The last reply the owner saw (so the next one continues it)
-He sent a screenshot of the helper's dialog ("still error": Not on this
-computer yet: G:\Shared drives\Potentials\Yeshivat Chevron Haktana). This
-round's reply says: the path was missing the drive's own name, it is fixed at
-the root and pushed; press the folder button again on the same job (no
-reinstall needed for that; re-download the helper if he wants the deeper
-search); if it still fails, paste the real Explorer path into the Drive
-settings box once and the exact names are learned. Before that: he said "go
-ahead and build the search rebuild". This round's reply says: it
-is built and on production — every search box now reads one index, a job is
-found by anything written about it (folder title, address, phone, links,
-tasks, messages, memos, pins, files), Hebrew and English meet, a row says
-where it matched, filter words narrow the list, and the search learns what
-he picks with a way to make it forget; what to try on the real board is
-listed above; the one thing still waiting on the office is trying the
-Drive-folder helper on a real Hebrew Windows.
+He said the helper now works, and asked why saving a Chrome shortcut to a
+worker's link takes him back to the main workspace page. This round's reply
+says: Chrome never saves the page itself — it saves the app's own start
+address, which was the office home; the worker's page now carries its own
+start address (his link, his name on the icon), so a shortcut made from it
+opens exactly that page, on a phone or a PC, and each worker's portal is a
+separate app from the office one; it is on production, and he should make the
+shortcut again from the worker's page (an old shortcut keeps pointing home).
+Before that: the helper's missing drive name was fixed and the search rebuild
+was built and pushed (see the earlier rounds above).
