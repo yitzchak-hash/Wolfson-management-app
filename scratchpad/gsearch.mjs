@@ -31,7 +31,9 @@ await ctx.addInitScript(() => {
   if (!localStorage.getItem('general_app_data')) {
     localStorage.setItem('general_app_data', JSON.stringify({
       currentUser: user, stages: [],
-      apartments: [base('G-s1', { displayName: 'Zambini Boardjob' })],
+      apartments: [base('G-s1', { displayName: 'Zambini Boardjob' }),
+        // A word that lives ONLY in the Drive folder's title (the owner's report).
+        base('G-s2', { displayName: 'Cohen', driveFolderName: 'Cohen, David - 5555 - Quxtown', canvasX: 400, canvasY: 400 })],
       canvasElements: [],
     }));
   }
@@ -90,6 +92,13 @@ const close = async () => { await page.keyboard.press('Escape'); await page.wait
   check(r.some(x => /Boardjob/.test(x.text)), 'the Job Board one is there');
   check(r.some(x => /Wolfsonfamily/.test(x.text)), 'the WOLFSON one is there — a different workspace');
   check(r.some(x => /Netivfamily/.test(x.text)), 'and the NETIV one');
+}
+// ── The Drive folder title is searched ──
+{
+  await close();
+  await search('Quxtown');
+  const r2 = await rows();
+  check(r2.some(x => /Cohen/.test(x.text)), 'a word that lives only in the job\'s Drive folder title finds the job', JSON.stringify(r2.map(x => x.text.slice(0, 60))));
   check(r.some(x => /Wolfson/.test(x.text) && /Building A1/.test(x.text)),
     'and each row says which workspace and building it is in',
     r.find(x => /Wolfsonfamily/.test(x.text))?.text ?? '');

@@ -94,7 +94,7 @@ export function JobListPage() {
         return false;
       };
       list = list.filter(a => hit(
-        `${aptLabel(a)} ${a.generalNotes ?? ''} ${a.address ?? ''} ${a.phone ?? ''}`));
+        `${aptLabel(a)} ${a.driveFolderName ?? ''} ${a.generalNotes ?? ''} ${a.address ?? ''} ${a.phone ?? ''}`));
     }
 
     const when = (a: Apartment) => a.contentUpdatedAt ?? a.updatedAt ?? '';

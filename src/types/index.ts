@@ -722,6 +722,14 @@ export interface Apartment {
    */
   stageMarks?: Record<string, 'done' | 'pending'>;
   driveLink?: string; // Google Drive folder URL for this apartment's files
+  /**
+   * The Drive folder's own TITLE ("Cohen, David - 5555 - Ramat Gan"), kept
+   * whenever the app reads it — the sweep, the drawer, a pasted link. The
+   * family name is derived from it and the rest was thrown away, so a word
+   * that lived only in the folder title could not be searched (the owner's
+   * report). Indexed by the header search, the job list and the search tile.
+   */
+  driveFolderName?: string;
   plansPdfLink?: string; // Google Drive link to the Engineering Plans PDF
   /**
    * The ONE punch-list PDF the background pin filer keeps in Drive

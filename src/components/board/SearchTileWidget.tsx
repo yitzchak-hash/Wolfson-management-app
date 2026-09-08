@@ -230,7 +230,7 @@ function SearchWindow({ c, onClose }: { c: WidgetCtx; onClose: () => void }) {
           key: `${pid ?? 'here'}:${job.id}`, job, projectId: pid, workspace: ws,
           stageName: st.name, stageColor: st.color, binLabel: groupLabel(job, els),
           score: 0, label,
-          hay: `${label} ${job.address ?? ''} ${job.phone ?? ''} ${job.generalNotes ?? ''} ${taskTexts.get(job.id) ?? ''}`,
+          hay: `${label} ${job.driveFolderName ?? ''} ${job.address ?? ''} ${job.phone ?? ''} ${job.generalNotes ?? ''} ${taskTexts.get(job.id) ?? ''}`,
         });
       }
     };

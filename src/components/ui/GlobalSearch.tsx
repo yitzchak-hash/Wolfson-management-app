@@ -374,8 +374,10 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
     const trashed = new Set(apartments.filter(a => a.boardBin === 'trash').map(a => a.id));
 
     // Apartments
-    hunt(searchableApts, ['displayName', 'apartmentNumber', 'generalNotes'],
-      a => `${a.displayName} ${a.apartmentNumber}`, 6).forEach(({ it: a, rank }) => {
+    // The Drive folder's own title, the address and the phone are searched
+    // too — a word that lived only in the folder title found nothing before.
+    hunt(searchableApts, ['displayName', 'apartmentNumber', 'generalNotes', 'driveFolderName', 'address', 'phone'],
+      a => `${a.displayName} ${a.apartmentNumber} ${a.driveFolderName ?? ''}`, 6).forEach(({ it: a, rank }) => {
       const extra = a.generalNotes.trim()
         ? a.generalNotes.split('\n')[0].slice(0, 60)
         : (!onBoard && a.floor ? `Floor ${a.floor}` : '');

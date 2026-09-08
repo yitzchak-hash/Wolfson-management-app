@@ -52,6 +52,23 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'drag',
       },
       {
+        title: 'The folder button works on a Hebrew Windows',
+        body: 'Get the helper now downloads ONE file. Double-click it — no '
+          + 'administrator — and the folder button opens File Explorer, Hebrew '
+          + 'folder names included. In the button\'s settings you can paste any '
+          + 'folder path copied from Explorer, and the app learns where Drive is '
+          + 'and what this computer calls "Shared drives", so the copied path '
+          + 'opens too.',
+        demo: 'tap',
+      },
+      {
+        title: 'Search finds words in the Drive folder\'s name',
+        body: 'A job\'s Drive folder title ("Cohen, David - 5555 - Ramat Gan") '
+          + 'is kept on the job and searched, along with the address and phone. '
+          + 'The Drive sweep fills it in for every job it sees.',
+        demo: 'list',
+      },
+      {
         title: 'Escape on the pen tray closes the tray, nothing else',
         body: 'With the pen drawer open, one Escape could close the whole plan '
           + 'studio and the job window behind it. Found while checking the app '

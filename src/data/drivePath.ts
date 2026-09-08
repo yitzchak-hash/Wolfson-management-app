@@ -37,6 +37,40 @@ export const setDriveRoot = (v: string): void => {
   else localStorage.removeItem(ROOT_KEY);
 };
 
+/**
+ * What Drive for desktop calls "Shared drives" on THIS computer.
+ *
+ * Drive for desktop LOCALISES the two top folders: on a Hebrew Windows the
+ * folder is not "Shared drives" at all, so a path composed with the English
+ * name does not exist on disk — pasting it into Explorer opens nothing, which
+ * was the office's report. Per machine, never synced, like the root.
+ */
+const SHARED_KEY = 'drive_shared_name';
+export const getSharedName = (): string => (localStorage.getItem(SHARED_KEY) ?? '').trim();
+export const setSharedName = (v: string): void => {
+  const clean = v.trim().replace(/[\\/]+$/, '');
+  if (clean) localStorage.setItem(SHARED_KEY, clean);
+  else localStorage.removeItem(SHARED_KEY);
+};
+
+/**
+ * Read the root AND the shared-drives folder name off a path somebody pasted
+ * from File Explorer or Finder — the one thing nobody can get wrong, because
+ * it is copied, not typed. "G:\אחסון שיתופי\TzviAir\Cohen…" gives root "G:"
+ * and shared-drives folder "אחסון שיתופי"; a Mac path gives the CloudStorage
+ * folder and the localised name after it.
+ */
+export function parsePastedPath(text: string): { root: string; sharedName: string; sep: '\\' | '/' } | null {
+  const t = text.trim().replace(/^["']|["']$/g, '').replace(/^file:\/\/\/?/i, '');
+  const win = t.match(/^([A-Za-z]:)[\\/]+([^\\/]+)/);
+  if (win) return { root: win[1], sharedName: win[2], sep: '\\' };
+  const mac = t.match(/^(\/Users\/[^/]+\/Library\/CloudStorage\/[^/]+)\/([^/]+)/);
+  if (mac) return { root: mac[1], sharedName: mac[2], sep: '/' };
+  const generic = t.match(/^(\/[^/]+(?:\/[^/]+)*?)\/(Shared drives|My Drive|[^/]+)\/[^/]+/);
+  if (generic && /CloudStorage|GoogleDrive|Google Drive/i.test(generic[1])) return { root: generic[1], sharedName: generic[2], sep: '/' };
+  return null;
+}
+
 /** Backslashes for a Windows root, forward slashes for anything else. */
 export function separatorFor(root: string): '\\' | '/' {
   return /^[A-Za-z]:/.test(root) || root.includes('\\') ? '\\' : '/';
@@ -120,10 +154,10 @@ export async function folderPath(driveLinkOrId: string): Promise<FolderPath | nu
  * office typed — asking somebody to include them is asking them to get one of
  * two spellings right for no reason.
  */
-export function composeLocalPath(root: string, path: FolderPath): string {
+export function composeLocalPath(root: string, path: FolderPath, sharedName = getSharedName()): string {
   const sep = separatorFor(root);
   const top = path.inSharedDrive
-    ? ['Shared drives', ...(path.driveName ? [path.driveName] : [])]
+    ? [sharedName || 'Shared drives', ...(path.driveName ? [path.driveName] : [])]
     : ['My Drive'];
   return [root.replace(/[\\/]+$/, ''), ...top, ...path.segments].join(sep);
 }

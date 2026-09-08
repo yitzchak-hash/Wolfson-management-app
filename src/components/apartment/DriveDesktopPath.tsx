@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { HardDrive, Check, Loader2, X, Download, FolderOpen } from 'lucide-react';
 import {
   folderPath, composeLocalPath, getDriveRoot, setDriveRoot, guessRoot, separatorFor,
+  getSharedName, setSharedName, parsePastedPath,
 } from '../../data/drivePath';
 import {
   guessPlatform, helperInstalled, setHelperInstalled, openUrl,
@@ -42,6 +43,9 @@ export function DriveDesktopPath({ driveLink, onToast, variant = 'icon', onDone 
   const [done, setDone] = useState(false);
   const [panel, setPanel] = useState(false);
   const [root, setRoot] = useState(getDriveRoot);
+  const [shared, setShared] = useState(getSharedName);
+  const [pasted, setPasted] = useState('');
+  const [pasteNote, setPasteNote] = useState('');
   const [hasHelper, setHasHelper] = useState(helperInstalled);
   const [copied, setCopied] = useState('');
   const timer = useRef<number>(0);
@@ -173,8 +177,39 @@ export function DriveDesktopPath({ driveLink, onToast, variant = 'icon', onDone 
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono
                          outline-none focus:border-[#4aa8d8]"
             />
-            <p className="text-[11px] text-gray-400 mt-1.5 mb-4 leading-snug">
+            <p className="text-[11px] text-gray-400 mt-1.5 mb-3 leading-snug">
               The folder containing <b>Shared drives</b> and <b>My Drive</b>. {guess.note}
+            </p>
+
+            {/*
+              The one thing nobody can get wrong: a path COPIED out of Explorer.
+              Drive for desktop localises "Shared drives" (a Hebrew Windows has
+              a Hebrew folder), so the name is read off a real path rather than
+              guessed — and the root comes with it.
+            */}
+            <label className="block text-xs font-semibold text-gray-700 mb-1">
+              Or paste any folder path from inside the TzviAir drive
+            </label>
+            <input
+              value={pasted}
+              data-paste-path
+              onChange={e => {
+                setPasted(e.target.value);
+                const p = parsePastedPath(e.target.value);
+                if (p) {
+                  setRoot(p.root); setDriveRoot(p.root);
+                  setShared(p.sharedName); setSharedName(p.sharedName);
+                  setPasteNote(`Got it: Drive is ${p.root} and its shared-drives folder is called "${p.sharedName}".`);
+                } else setPasteNote(e.target.value.trim() ? 'That does not look like a folder path from Explorer or Finder.' : '');
+              }}
+              placeholder={sep === '\\' ? 'G:\\…\\TzviAir\\Cohen, David - 5555' : '/Users/you/Library/CloudStorage/GoogleDrive-…/…/TzviAir/…'}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono
+                         outline-none focus:border-[#4aa8d8]"
+            />
+            <p className={`text-[11px] mt-1.5 mb-4 leading-snug ${pasteNote.startsWith('Got it') ? 'text-green-700' : 'text-gray-400'}`} data-paste-note>
+              {pasteNote || (shared
+                ? <>On this computer the shared-drives folder is called <b>{shared}</b>.</>
+                : <>In File Explorer open the job's folder, click the address bar, copy, paste here. That sets both the root and what this computer calls "Shared drives".</>)}
             </p>
 
             <div className="rounded-xl border border-gray-200 p-3 mb-4">
@@ -198,10 +233,9 @@ export function DriveDesktopPath({ driveLink, onToast, variant = 'icon', onDone 
                   if (!r) { onToast?.('Fill in where Drive is first.', 'error'); return; }
                   setDriveRoot(r);
                   if (platform === 'windows') {
-                    const { reg, cmd } = windowsInstaller(r);
-                    download('open-folder.cmd', cmd);
-                    setTimeout(() => download('tzviair-helper.reg', reg), 400);
-                    onToast?.('Two files downloaded — see the steps below');
+                    const { cmd } = windowsInstaller(r);
+                    download('install-tzviair-helper.cmd', cmd);
+                    onToast?.('One file downloaded — double-click it, see the steps below');
                   } else {
                     download('install-tzviair.sh', macInstaller(r));
                     onToast?.('Installer downloaded — see the steps below');
@@ -216,10 +250,10 @@ export function DriveDesktopPath({ driveLink, onToast, variant = 'icon', onDone 
               <ol className="mt-2.5 text-[11px] text-gray-500 leading-snug list-decimal pl-4 space-y-0.5">
                 {platform === 'windows' ? (
                   <>
-                    <li>Put <span className="font-mono">open-folder.cmd</span> in
-                      {' '}<span className="font-mono">C:\ProgramData\TzviAir\</span> (create the folder).</li>
-                    <li>Double-click <span className="font-mono">tzviair-helper.reg</span> and say yes.</li>
-                    <li>Tick the box above.</li>
+                    <li>Double-click <span className="font-mono">install-tzviair-helper.cmd</span> in your Downloads.
+                      If Windows says it protected your PC, press <b>More info → Run anyway</b>. No administrator needed.</li>
+                    <li>It says "Installed". Tick the box above.</li>
+                    <li>Press the folder button on any job. The first time, the browser asks once whether to open TzviAir — say Always.</li>
                   </>
                 ) : (
                   <>

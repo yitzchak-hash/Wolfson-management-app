@@ -41,66 +41,93 @@ export const openUrl = (path: string): string =>
   `tzviair://open?path=${encodeURIComponent(path)}`;
 
 /**
- * Windows: a registry file plus the script it points at.
+ * Windows: ONE file, `install-tzviair-helper.cmd`, and why it is built this way.
  *
- * The registry entry cannot parse a URL on its own, so it hands the whole
- * thing to a small script which pulls the path out, checks it, and opens it.
+ * The first version handed over TWO files — a .cmd to be put in ProgramData by
+ * hand and a .reg to double-click — and browsers block the second automatic
+ * download more often than not, so people got one or the other and neither
+ * worked alone ("sometimes it downloads a registry file, sometimes a command
+ * file"). Worse, the .cmd decoded the path by hand for ASCII only and compared
+ * it in cmd.exe's OEM code page: a client folder with a HEBREW name, or the
+ * Hebrew name Drive gives "Shared drives" on a Hebrew Windows, never matched,
+ * and the helper refused every real folder as "not inside G:".
+ *
+ * Now the installer:
+ *  · registers the scheme for the CURRENT USER (HKCU\Software\Classes) — no
+ *    administrator prompt, and browsers honour per-user handlers;
+ *  · writes a small PowerShell opener into %LOCALAPPDATA%\TzviAir\ from a
+ *    base64 string, so the .cmd itself stays pure ASCII whatever the path
+ *    holds, and the opener decodes the URL as UTF-8 the way a browser encodes it;
+ *  · the opener, when the composed path does not exist, swaps the "Shared
+ *    drives" segment for whichever top folder under the root actually holds
+ *    the rest of the path — so a Hebrew Windows works without anybody typing
+ *    the Hebrew name.
+ * It still opens a FOLDER and nothing else, and still refuses a path outside
+ * the root it was installed with.
  */
-export function windowsInstaller(driveRoot: string): { reg: string; cmd: string } {
-  const scriptPath = 'C:\\\\ProgramData\\\\TzviAir\\\\open-folder.cmd';
-  const reg = `Windows Registry Editor Version 5.00
+export function windowsOpener(driveRoot: string): string {
+  const root = driveRoot.replace(/[\\/]+$/, '').replace(/'/g, "''");
+  return [
+    'param([string]$Url)',
+    "$root = '" + root + "'",
+    'Add-Type -AssemblyName System.Windows.Forms',
+    'function Say($t) { [System.Windows.Forms.MessageBox]::Show($t, "TzviAir") | Out-Null }',
+    '$i = $Url.IndexOf("path=")',
+    'if ($i -lt 0) { Say("Nothing to open."); exit 1 }',
+    '$p = [System.Uri]::UnescapeDataString($Url.Substring($i + 5)).Replace("/", "\\").TrimEnd("\\")',
+    '# THE CHECK: anything can address tzviair://, so only a folder under the Drive root is ever opened.',
+    'if (-not $p.ToLower().StartsWith($root.ToLower())) { Say("Refused: that folder is not inside " + $root); exit 1 }',
+    'if (-not (Test-Path -LiteralPath $p)) {',
+    '  # The app names the top folder "Shared drives"; a Hebrew Windows names it differently.',
+    '  # Try every top folder under the root with the rest of the path.',
+    '  $rest = $p.Substring($root.Length).TrimStart("\\")',
+    '  $parts = $rest.Split("\\")',
+    '  if ($parts.Length -ge 2) {',
+    '    $tail = ($parts | Select-Object -Skip 1) -join "\\"',
+    '    foreach ($d in Get-ChildItem -LiteralPath ($root + "\\") -Directory -ErrorAction SilentlyContinue) {',
+    '      $cand = Join-Path $d.FullName $tail',
+    '      if (Test-Path -LiteralPath $cand) { $p = $cand; break }',
+    '    }',
+    '  }',
+    '}',
+    'if (-not (Test-Path -LiteralPath $p)) { Say("Not on this computer yet: " + $p + "`n`nGoogle Drive may still be syncing it."); exit 1 }',
+    'Start-Process explorer.exe -ArgumentList ("`"" + $p + "`"")',
+    '',
+  ].join('\r\n');
+}
 
-; Lets the TzviAir job board open a Drive folder in File Explorer.
-; Opening a folder is all it can do — it never runs anything inside one.
+/** Base64 of UTF-8 text — what the installer carries the opener as. */
+function b64(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin);
+}
 
-[HKEY_CLASSES_ROOT\\tzviair]
-@="URL:TzviAir"
-"URL Protocol"=""
-
-[HKEY_CLASSES_ROOT\\tzviair\\shell\\open\\command]
-@="\\"${scriptPath}\\" \\"%1\\""
-`;
-
-  const cmd = `@echo off
-setlocal enabledelayedexpansion
-rem  Opens a Google Drive folder in File Explorer for the TzviAir job board.
-rem  Installed once per machine. It opens a folder and does nothing else.
-
-rem  The whole URL arrives as one argument: tzviair://open?path=<encoded>
-set "URL=%~1"
-set "P=!URL:*path=!"
-set "P=!P:~1!"
-
-rem  Percent-decoding, for the characters a Windows path can actually contain.
-set "P=!P:%%3A=:!"
-set "P=!P:%%5C=\\!"
-set "P=!P:%%2F=/!"
-set "P=!P:%%20= !"
-set "P=!P:%%2C=,!"
-set "P=!P:%%27='!"
-set "P=!P:%%26=&!"
-set "P=!P:+= !"
-
-rem  THE CHECK. Anything can address tzviair://, so a request is only honoured
-rem  when it points inside the Drive root this was installed with.
-set "ROOT=${driveRoot.replace(/\\/g, '\\\\')}"
-echo !P! | findstr /b /i /c:"!ROOT!" >nul
-if errorlevel 1 (
-  echo Refused: that folder is not inside !ROOT!
-  timeout /t 4 >nul
-  exit /b 1
-)
-
-if not exist "!P!" (
-  echo That folder is not on this computer yet: !P!
-  echo Google Drive may still be syncing it.
-  timeout /t 6 >nul
-  exit /b 1
-)
-
-start "" explorer.exe "!P!"
-`;
-  return { reg, cmd };
+export function windowsInstaller(driveRoot: string): { cmd: string } {
+  const opener = b64(windowsOpener(driveRoot));
+  const cmd = [
+    '@echo off',
+    'rem  TzviAir folder opener - installs for the current user, no administrator needed.',
+    'rem  Lets the job board open a Google Drive folder in File Explorer. It opens a folder',
+    'rem  and does nothing else, and refuses any folder outside your Drive.',
+    'setlocal',
+    'set "DIR=%LOCALAPPDATA%\\TzviAir"',
+    'set "PS1=%DIR%\\open-folder.ps1"',
+    'if not exist "%DIR%" mkdir "%DIR%"',
+    'powershell -NoProfile -ExecutionPolicy Bypass -Command "$e = New-Object System.Text.UTF8Encoding($true); [IO.File]::WriteAllText($env:LOCALAPPDATA + \'\\TzviAir\\open-folder.ps1\', [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(\'' + opener + '\')), $e)"',
+    'if not exist "%PS1%" ( echo Could not write the opener. & pause & exit /b 1 )',
+    'reg add "HKCU\\Software\\Classes\\tzviair" /ve /t REG_SZ /d "URL:TzviAir" /f >nul',
+    'reg add "HKCU\\Software\\Classes\\tzviair" /v "URL Protocol" /t REG_SZ /d "" /f >nul',
+    'reg add "HKCU\\Software\\Classes\\tzviair\\shell\\open\\command" /ve /t REG_SZ /d "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \\"%PS1%\\" \\"%%1\\"" /f >nul',
+    'echo.',
+    'echo Installed. Go back to the job board, tick "The one-click helper is installed here",',
+    'echo and the folder button will open File Explorer.',
+    'echo.',
+    'pause',
+    '',
+  ].join('\r\n');
+  return { cmd };
 }
 
 /**

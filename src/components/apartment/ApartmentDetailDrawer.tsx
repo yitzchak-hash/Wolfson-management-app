@@ -578,6 +578,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
            * the folder title the first time the job is opened. Only a BLANK
            * name: a typed one is never clobbered.
            */
+          // The folder's own title is kept on the job, so the search can find
+          // a word that lives only there (bookkeeping — never bumps "edited").
+          if (currentUser && n && apartment.driveFolderName !== n) {
+            updateApartment(apartment.id, { driveFolderName: n }, currentUser);
+          }
           if (!(apartment.displayName ?? '').trim() && currentUser) {
             const derived = familyNameFromFolderName(n);
             if (derived) {
@@ -1015,9 +1020,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
     const folderName = await getFolderNameViaBackend(folderId);
     if (!folderName) return;
     const derived = familyNameFromFolderName(folderName);
-    if (!derived || derived === familyName) return;
+    if (!derived || derived === familyName) {
+      if (apartment && apartment.driveFolderName !== folderName) updateApartment(apartment.id, { driveFolderName: folderName }, currentUser);
+      return;
+    }
     setFamilyName(derived);
-    updateApartment(apartment!.id, { displayName: derived }, currentUser);
+    updateApartment(apartment!.id, { displayName: derived, driveFolderName: folderName }, currentUser);
     onToast(`${ui.familyName}: ${derived}`);
   }
 

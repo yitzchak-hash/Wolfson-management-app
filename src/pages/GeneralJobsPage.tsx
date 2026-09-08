@@ -3115,15 +3115,16 @@ export function GeneralJobsPage() {
     const id = genId('G');
     const isDrive = intent.kind === 'drive';
     let name = '';
+    let pastedTitle: string | undefined;
     if (isDrive) {
       const folderId = extractFolderId(intent.value);
       if (folderId) {
         const folderName = await getFolderNameViaBackend(folderId).catch(() => null);
-        if (folderName) name = familyNameFromFolderName(folderName);
+        if (folderName) { name = familyNameFromFolderName(folderName); pastedTitle = folderName; }
       }
     }
     addApartment({
-      id, buildingId: 'G', apartmentNumber: '',
+      id, buildingId: 'G', apartmentNumber: '', driveFolderName: pastedTitle,
       displayName: name, floor: 0, colPosition: 1, colSpan: 1,
       isDuplexApt: false, currentStageId: null, classification: 'standard',
       shinuiDetails: null, generalNotes: '', isUnnamed: false,

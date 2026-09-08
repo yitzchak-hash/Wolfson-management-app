@@ -2339,10 +2339,9 @@ function ThisComputerCard({ onToast }: { onToast: (msg: string, type?: 'success'
             if (!r) { onToast('Fill in where Drive is first.', 'error'); return; }
             setDriveRoot(r);
             if (platform === 'windows') {
-              const { reg, cmd } = windowsInstaller(r);
-              download('open-folder.cmd', cmd);
-              setTimeout(() => download('tzviair-helper.reg', reg), 400);
-              onToast('Two files downloaded — put the .cmd in C:\\ProgramData\\TzviAir\\, then run the .reg');
+              const { cmd } = windowsInstaller(r);
+              download('install-tzviair-helper.cmd', cmd);
+              onToast('One file downloaded — double-click install-tzviair-helper.cmd (More info → Run anyway if Windows asks)');
             } else {
               download('install-tzviair.sh', macInstaller(r));
               onToast('Installer downloaded — run: bash install-tzviair.sh');

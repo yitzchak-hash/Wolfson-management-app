@@ -1,0 +1,123 @@
+<title>Active Jobs, Rethought</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Public+Sans:wght@400;600;800&display=swap">
+<style>
+:root{--ink:#14213d;--navy:#1e3a5f;--accent:#4aa8d8;--paper:#f6f4ee;--card:#ffffff;--line:#d9d6cc;--muted:#6b7280;--star:#b8860b;--good:#16a34a;--warn:#d97706;--red:#dc2626;--chip:#eef4fa}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--ink:#e8ecf3;--navy:#9cc7e6;--accent:#63b8e6;--paper:#171b24;--card:#1f2530;--line:#343b48;--muted:#98a2b3;--chip:#243040}}
+:root[data-theme="dark"]{--ink:#e8ecf3;--navy:#9cc7e6;--accent:#63b8e6;--paper:#171b24;--card:#1f2530;--line:#343b48;--muted:#98a2b3;--chip:#243040}
+body{background:var(--paper);color:var(--ink);font-family:"Public Sans",system-ui,sans-serif;font-size:15px;line-height:1.5}
+.wrap{max-width:980px;margin:0 auto;padding:40px 24px 80px}
+h1{font-family:Fraunces,Georgia,serif;font-weight:800;font-size:44px;line-height:1.05;margin:0 0 8px;text-wrap:balance}
+h2{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:26px;margin:44px 0 12px;text-wrap:balance}
+.lede{font-size:18px;max-width:64ch;color:var(--ink)}
+.eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:800}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media (max-width:760px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px}
+.card h3{margin:0 0 6px;font-size:16px}
+.rec{border-color:var(--star);box-shadow:0 0 0 3px color-mix(in srgb,var(--star) 18%,transparent)}
+.star{color:var(--star);font-weight:800}
+.widget{background:#fff;color:#0f172a;border-radius:16px;box-shadow:0 10px 30px rgba(15,23,42,.18);width:min(420px,100%);font-family:"Public Sans",system-ui,sans-serif}
+.widget .head{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid #e5e7eb}
+.widget .title{font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:800;color:#1e3a5f}
+.widget .big{font-size:24px;font-weight:900;color:#0f172a;line-height:1}
+.widget .sub{font-size:10px;color:#9ca3af}
+.chips{display:flex;gap:6px;padding:8px 14px;flex-wrap:wrap;border-bottom:1px solid #f1f5f9}
+.chip{font-size:10px;padding:3px 9px;border-radius:999px;background:#f1f5f9;color:#475569;font-weight:700}
+.chip.on{background:#1e3a5f;color:#fff}
+.row{display:grid;grid-template-columns:10px 1fr auto;gap:10px;align-items:center;padding:8px 14px;border-bottom:1px solid #f8fafc}
+.dot{width:10px;height:10px;border-radius:50%}
+.name{font-weight:800;font-size:13px}
+.name .grp{font-weight:600;color:#64748b;font-size:10px;margin-left:6px;background:#f1f5f9;padding:1px 6px;border-radius:999px}
+.last{font-size:11px;color:#475569}
+.last b{color:#0f172a}
+.kinds{display:flex;gap:4px;justify-content:flex-end}
+.k{width:16px;height:16px;border-radius:5px;display:grid;place-items:center;font-size:9px;font-weight:800;color:#fff}
+.heat{font-size:10px;color:#94a3b8;text-align:right;margin-top:2px}
+.widget .foot{display:flex;justify-content:space-between;align-items:center;padding:8px 14px;font-size:10px;color:#94a3b8}
+.legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;margin-top:10px}
+.legend div{display:flex;gap:8px;align-items:center;font-size:13px}
+ol.decisions{counter-reset:d;list-style:none;padding:0;margin:0;display:grid;gap:12px}
+ol.decisions li{counter-increment:d;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px 14px 56px;position:relative}
+ol.decisions li::before{content:counter(d);position:absolute;left:16px;top:12px;width:28px;height:28px;border-radius:50%;background:var(--navy);color:#fff;display:grid;place-items:center;font-weight:800;font-size:13px}
+ol.decisions li b{display:block;margin-bottom:4px}
+.opt{display:block;padding:2px 0}
+.small{font-size:13px;color:var(--muted)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+td,th{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.wide{overflow-x:auto}
+</style>
+<div class="wrap">
+  <div class="eyebrow">TzviAir · a plan to approve · 7 September 2026</div>
+  <h1>Active jobs, rethought</h1>
+  <p class="lede">One question, answered honestly: <b>which jobs is the office actually working on right now?</b> Not "which jobs were edited in the app" — every trace of use, wherever it happens: someone opens the job, a worker sends a photo, a proposal lands in the Drive folder, a day is planned in the notebook.</p>
+
+  <h2>What it will look like</h2>
+  <div class="grid">
+    <div>
+      <div class="widget">
+        <div class="head"><span class="title">Active · last 30 days</span><span class="big" style="margin-left:auto">23</span><span class="sub">of 1,648 jobs</span></div>
+        <div class="chips"><span class="chip on">All</span><span class="chip">Office</span><span class="chip">Site</span><span class="chip">Drive</span><span class="chip">Notebook</span><span class="chip" style="margin-left:auto">Newest ▾</span></div>
+        <div class="row"><span class="dot" style="background:#0ea5e9"></span><div><div class="name">Cohen, David <span class="grp">New Jobs Came In</span></div><div class="last"><b>Moshe</b> · Drive · added <b>proposal-v2.docx</b> · 4 min ago</div></div><div><div class="kinds"><span class="k" style="background:#0f9d58">D</span><span class="k" style="background:#1e3a5f">O</span></div><div class="heat">3 touches</div></div></div>
+        <div class="row"><span class="dot" style="background:#f59e0b"></span><div><div class="name">Weinstein, Steven</div><div class="last"><b>Yossi</b> · photo from site · 22 min ago</div></div><div><div class="kinds"><span class="k" style="background:#dc2626">P</span><span class="k" style="background:#7c3aed">M</span><span class="k" style="background:#1e3a5f">O</span></div><div class="heat">9 touches</div></div></div>
+        <div class="row"><span class="dot" style="background:#16a34a"></span><div><div class="name">Levi, Sara <span class="grp">Done</span></div><div class="last"><b>Esther</b> · opened the job · 1 h ago</div></div><div><div class="kinds"><span class="k" style="background:#1e3a5f">O</span></div><div class="heat">1 touch</div></div></div>
+        <div class="row"><span class="dot" style="background:#0ea5e9"></span><div><div class="name">Aharonov, Miri</div><div class="last"><b>Esther</b> · notebook · Yossi on Tue 9 Sep · 2 h ago</div></div><div><div class="kinds"><span class="k" style="background:#0d9488">N</span><span class="k" style="background:#f59e0b">T</span></div><div class="heat">4 touches</div></div></div>
+        <div class="row"><span class="dot" style="background:#64748b"></span><div><div class="name">Shapiro, Ruth <span class="grp">Archive</span></div><div class="last"><b>Moshe</b> · Drive · removed <b>old-quote.pdf</b> · yesterday</div></div><div><div class="kinds"><span class="k" style="background:#0f9d58">D</span></div><div class="heat">1 touch</div></div></div>
+        <div class="row"><span class="dot" style="background:#dc2626"></span><div><div class="name">Katz, Avi</div><div class="last"><b>Yossi</b> · problem closed, waiting for approval · yesterday</div></div><div><div class="kinds"><span class="k" style="background:#dc2626">P</span><span class="k" style="background:#7c3aed">M</span><span class="k" style="background:#f59e0b">T</span></div><div class="heat">6 touches</div></div></div>
+        <div class="foot"><span>Drive · checked 3 min ago ↻</span><span>press a row to open · press the number for the list</span></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <h3>How to read a row</h3>
+        <p class="small">The name and its stage colour, the group it sits in, then the <b>last touch</b>: who, what, when. On the right, one small square per <b>kind</b> of touch inside the window, and how many touches there were — a job that was touched nine times this week is busier than one opened once, and the eye should see that without reading.</p>
+        <div class="legend">
+          <div><span class="k" style="background:#1e3a5f">O</span> opened the job</div>
+          <div><span class="k" style="background:#475569">E</span> edited, stage moved, note</div>
+          <div><span class="k" style="background:#f59e0b">T</span> task made or closed</div>
+          <div><span class="k" style="background:#7c3aed">M</span> message or memo</div>
+          <div><span class="k" style="background:#dc2626">P</span> photo, problem, pin</div>
+          <div><span class="k" style="background:#0f9d58">D</span> Drive file added, changed, removed</div>
+          <div><span class="k" style="background:#0d9488">N</span> planned in the notebook</div>
+          <div><span class="k" style="background:#0284c7">L</span> plan marked up</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2>What counts as "using a job"</h2>
+  <div class="wide"><table>
+    <tr><th>Trace</th><th>Where the app already records it</th><th>Who</th><th>Shown as</th></tr>
+    <tr><td>Opening the job window</td><td>the history's "opened" entries (one per person per job per hour)</td><td>the person</td><td>Esther · opened the job</td></tr>
+    <tr><td>Editing a field, moving the stage, a note</td><td>the job's record and its history</td><td>the editor</td><td>Esther · stage → Piping</td></tr>
+    <tr><td>A task made, closed, a problem raised or closed</td><td>tasks</td><td>the office or the worker</td><td>Yossi · closed the task</td></tr>
+    <tr><td>A message, a voice memo, a picture from site</td><td>task threads and photos</td><td>the author</td><td>Yossi · photo from site</td></tr>
+    <tr><td>A plan marked up, a punch-list pin placed or resolved</td><td>markups and pins</td><td>the author</td><td>Tzvi · marked up the plan</td></tr>
+    <tr><td>A day planned or moved in the weekly notebook</td><td>the notebook's squares</td><td>the planner</td><td>Esther · notebook · Yossi on Tue</td></tr>
+    <tr><td>A file added, changed or <b>removed</b> in the job's Drive folder</td><td>the ten-minute Drive check, now also asking who changed it and what was trashed</td><td>the Google account</td><td>Moshe · Drive · added proposal-v2.docx</td></tr>
+    <tr><td>Arranging the board — moving a tile, colouring it, filing it into a group</td><td>—</td><td>—</td><td><b>never counts</b>: tidying is not working</td></tr>
+    <tr><td>A job the sweep or the import copied in</td><td>—</td><td>—</td><td><b>not by itself</b>: its folder's real changes count</td></tr>
+  </table></div>
+
+  <h2>Three ways to rank it</h2>
+  <div class="grid">
+    <div class="card rec"><h3><span class="star">★</span> A · Last touch first, with heat</h3><p class="small">The newest touch decides the order — the job somebody just used is on top, always, whoever used it and wherever. The touch count and the kind squares say how busy it has been. A "Busiest" switch in the sort menu flips to B when you want it.</p><p class="small"><b>Why this one:</b> the order is always explainable ("it's first because Moshe just added a file"), it matches how the list already reads, and the heat is still visible.</p></div>
+    <div class="card"><h3>B · Busiest first</h3><p class="small">A score per job: every touch adds a point that fades over the window, so a job touched nine times this week beats one touched once an hour ago.</p><p class="small"><b>Trade-off:</b> the file Moshe added a minute ago can sit in fourth place under three busier jobs — exactly the case you tested and expected on top.</p></div>
+    <div class="card"><h3>C · A feed, day by day</h3><p class="small">Every touch as its own line under Today / Yesterday / This week, jobs repeating.</p><p class="small"><b>Trade-off:</b> it answers "what happened" rather than "which jobs" — more reading, and a busy day is a wall.</p></div>
+  </div>
+
+  <h2>Decisions to lock</h2>
+  <p class="small">The ★ is my recommendation. Say "approved" to take every star, or answer by number.</p>
+  <ol class="decisions">
+    <li><b>Does opening a job count as using it?</b><span class="opt"><span class="star">★</span> Yes — once per person per job per hour, shown as "opened the job".</span><span class="opt">No — only changes count.</span></li>
+    <li><b>Drive removals</b><span class="opt"><span class="star">★</span> Yes — "removed old-quote.pdf" counts, with who removed it. A proposal taken out is work on that job.</span><span class="opt">No — only files added or changed.</span></li>
+    <li><b>Order</b><span class="opt"><span class="star">★</span> Last touch first; a Busiest switch in the widget's sort menu.</span><span class="opt">Busiest first always.</span></li>
+    <li><b>Which jobs</b><span class="opt"><span class="star">★</span> Every job in the workspace, groups included and labelled; Trash never.</span><span class="opt">Only jobs on the open board.</span></li>
+    <li><b>Filters on the widget</b><span class="opt"><span class="star">★</span> All · Office · Site · Drive · Notebook, as chips under the title; the chosen one is remembered per widget.</span><span class="opt">No chips — one list.</span></li>
+    <li><b>Window</b><span class="opt"><span class="star">★</span> 30 days by default; 7 · 30 · 90 in the pencil.</span><span class="opt">Fixed 30.</span></li>
+    <li><b>Who is dealing with it now</b><span class="opt"><span class="star">★</span> A small chip on the row when a worker is booked on the job this week ("Yossi · Tue"), so a job in hand reads as in hand even if nobody touched it today.</span><span class="opt">Leave it out.</span></li>
+  </ol>
+
+  <h2>Under the bonnet, in one paragraph</h2>
+  <p class="small">One pure function turns every source the app already has into a single list of <b>touches</b> — job, when, who, kind, a short sentence — and folds it per job into "last touch, touch count, kinds present". It runs once when the data changes, never per frame, so the board stays as quick as it is now. The Drive check adds two cheap things to the same call: the name of the account that changed each file, and the files trashed in the window. Nothing new is stored; the widget reads what is there. The list a number opens, the row that opens the job, the group label and the ten-minute Drive refresh all stay as they are.</p>
+</div>

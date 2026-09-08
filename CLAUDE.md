@@ -7550,3 +7550,38 @@ Probe rules: poll for the studio's canvases (a cold server compiles pdf.js);
 a button inside a sideways scroller (the version rail) is reachable, not
 off-screen; seed one Job Board job for the pen-versus-finger drag; the
 `Galaxy Tab S4` user agent with `isMobile: true`.
+
+## HANDOFF.md is the short memory — rewrite it at the end of EVERY round
+`HANDOFF.md` at the repo root says where the work stands: the last commits,
+the owner's last asks in his words, what is pending, and a summary of the
+last reply he saw — so that any assistant opening this repo cold continues
+exactly where the previous one stopped. **Rewrite it before the push of every
+round** (step 8 of the ritual it describes). `docs/artifacts/INDEX.md` lists
+every published page with its link and source; a new page gets a dated copy
+in `docs/artifacts/` in the same commit (never overwrite — a republish is a
+new dated file).
+
+## The Drive folder helper (2026-09-08): one file, Hebrew-safe
+`windowsInstaller(root)` returns ONE `.cmd` (`install-tzviair-helper.cmd`):
+it registers `tzviair://` under `HKCU\Software\Classes` (per user, no
+administrator) and writes a PowerShell opener to `%LOCALAPPDATA%\TzviAir\`
+from a base64 string, so the .cmd is pure ASCII whatever the root holds.
+The old pair (a .cmd for ProgramData + a .reg for HKCR) failed three ways:
+the browser blocked the second automatic download ("sometimes a .reg,
+sometimes a .cmd"), both locations needed admin, and the batch opener
+decoded only ASCII and compared in the OEM code page, so any Hebrew segment
+— a client folder, or the Hebrew name Drive for desktop gives "Shared
+drives" — read as "not inside G:". The opener (`windowsOpener`) decodes with
+`[Uri]::UnescapeDataString`, and when the composed path does not exist it
+tries every top folder under the root with the rest of the path, so the
+localised "Shared drives" is found without anybody typing it.
+**JS-literal trap paid for**: `"\"` inside a single-quoted TS string is an
+escaped quote, not a backslash — the first build shipped `Split("")`.
+`drivehelper-test.mjs` asserts every backslash survived.
+The settings panel takes a PASTED Explorer/Finder path (`parsePastedPath`):
+root + the localised shared-drives folder name (`drive_shared_name`, per
+machine like the root), which `composeLocalPath` then uses for the copied
+path. `Apartment.driveFolderName` (CANVAS_ONLY) is the folder's own title,
+kept by the drawer, pasted links and the sweep (which backfills every
+linked job it lists via `setDriveFolderNames`), and searched by the header
+search, the job list and the search tile.

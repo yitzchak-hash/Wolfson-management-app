@@ -478,6 +478,12 @@ interface AppState {
   addJobsToProject: (projectId: string, jobs: Apartment[], group?: CanvasElement) => void;
   /** setBoardSetting for a workspace other than the open one. */
   setBoardSettingFor: (projectId: string, key: BoardSettingKey, value: BoardSetting[BoardSettingKey]) => void;
+  /**
+   * Remember Drive folder titles on jobs of ANY workspace (id → title) — the
+   * sweep's backfill. Bookkeeping: never bumps "last edited", one batched
+   * cloud write, the other workspace through its snapshot.
+   */
+  setDriveFolderNames: (projectId: string, names: Record<string, string>) => void;
   /** Undo a bulk import: permanently removes jobs whose id carries the import
    *  prefix. Returns how many went. Touches nothing else. */
   removeJobsByIdPrefix: (prefix: string) => number;
@@ -1145,7 +1151,7 @@ export const useStore = create<AppState>((set, get) => ({
 
     // Board position is not "content" — tidying the board must not make every
     // tile read "edited just now".
-    const CANVAS_ONLY = new Set(['canvasX', 'canvasY', 'tileColor', 'boardBin', 'binnedAt', 'boardLocked', 'boardGroup', 'tileW', 'tileH', 'viewPos', 'ghosts', 'stageOrder', 'showOnTv', 'pinsDriveFileId']);
+    const CANVAS_ONLY = new Set(['canvasX', 'canvasY', 'tileColor', 'boardBin', 'binnedAt', 'boardLocked', 'boardGroup', 'tileW', 'tileH', 'viewPos', 'ghosts', 'stageOrder', 'showOnTv', 'pinsDriveFileId', 'driveFolderName']);
     const touchedContent = Object.keys(changes).some(k => !CANVAS_ONLY.has(k));
     if (touchedContent) updated.contentUpdatedAt = now;
 
@@ -1300,6 +1306,31 @@ export const useStore = create<AppState>((set, get) => ({
     });
     if (fresh.length) fsBatchSet(projectCollection(projectId, 'apartments'), fresh.map(j => ({ id: j.id, data: j })));
     if (addGroup) fsSet(projectCollection(projectId, 'canvasElements'), addGroup.id, addGroup);
+    set(st => ({ snapshotTick: st.snapshotTick + 1 }));
+  },
+
+  setDriveFolderNames: (projectId, names) => {
+    const ids = Object.keys(names);
+    if (!ids.length) return;
+    const patch = (a: Apartment) => (names[a.id] !== undefined && names[a.id] !== a.driveFolderName)
+      ? { ...a, driveFolderName: names[a.id] } : a;
+    if (projectId === get().currentProjectId) {
+      const next = get().apartments.map(patch);
+      const changed = next.filter((a, i) => a !== get().apartments[i]);
+      if (!changed.length) return;
+      set({ apartments: next });
+      persist(get);
+      fsBatchSet(projectCollection(projectId, 'apartments'), changed.map(a => ({ id: a.id, data: { driveFolderName: a.driveFolderName } })));
+      return;
+    }
+    const key = `${projectId}_app_data`;
+    const snap = loadFromStorage<Record<string, unknown>>(key, {});
+    const apts = Array.isArray(snap.apartments) ? snap.apartments as Apartment[] : [];
+    const next = apts.map(patch);
+    const changed = next.filter((a, i) => a !== apts[i]);
+    if (!changed.length) return;
+    saveToStorage(key, { ...snap, apartments: next });
+    fsBatchSet(projectCollection(projectId, 'apartments'), changed.map(a => ({ id: a.id, data: { driveFolderName: a.driveFolderName } })));
     set(st => ({ snapshotTick: st.snapshotTick + 1 }));
   },
 
