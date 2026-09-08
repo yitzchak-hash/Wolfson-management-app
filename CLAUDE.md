@@ -7525,3 +7525,28 @@ office actually working on" from every trace of use the app already records.
   one-minute tick, never per frame.
 Probes re-encoded to the approved rules: `activejobs-probe` (opening
 counts, "who did what"), `driveactivity-probe` (added / removed / who).
+
+## The Galaxy Tab S10 FE (2026-09-08)
+The office bought two. Its own page is the "Galaxy Tab S10 FE Gallery"
+artifact, built by `scratchpad/build-tabs10.mjs` from `gallery.mjs`'s four
+new profiles — `tabs10-port` 720×1152 / `tabs10-land` 1152×720 (device ratio
+2, the usual) and `tabs10-port15` 768×1229 / `tabs10-land15` 1229×768 (ratio
+1.5, in case) — plus `scratchpad/tabs10-pen.mjs`, which drives the studio
+and the board with a PEN pointer (CDP `Input.dispatchMouseEvent` with
+`pointerType: 'pen'`) and a finger. **720 is below the desktop line and 768
+is exactly on it**, so which ratio the tablet reports decides whether
+upright is the phone layout or the desktop one; both are captured and the
+page says how to tell on the device.
+
+What the probe found: **Escape on the open pen tray closed the studio AND
+the job window.** The studio's keydown effect has no dep array and
+re-registers on every render, so any render after the tray mounts puts it
+AHEAD of the tray's capture listener; its ladder saw nothing of its own and
+called `onClose()` without stopping the key, and the drawer's Escape then
+fired too. The ladder now checks `penTray` / `shapeTray` first. On a desk it
+was a race the markup2 harness happened to win.
+
+Probe rules: poll for the studio's canvases (a cold server compiles pdf.js);
+a button inside a sideways scroller (the version rail) is reachable, not
+off-screen; seed one Job Board job for the pen-versus-finger drag; the
+`Galaxy Tab S4` user agent with `isMobile: true`.

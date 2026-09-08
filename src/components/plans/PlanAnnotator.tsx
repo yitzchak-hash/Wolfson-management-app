@@ -3112,7 +3112,18 @@ function PlanEditor({
         // "rub every mark off?" threw you out of the plan as well.
         if (confirmReset || confirmClose) { e.stopPropagation(); return; }
         let mine = true;
-        if (textDraft) setTextDraft(null);
+        /**
+         * An open tray is the studio's own first step. The tray has its own
+         * capture listener that stops the key — but THIS listener is
+         * re-registered on every render (no dep array), so any render after
+         * the tray mounts puts it AHEAD of the tray's in the capture order,
+         * and the ladder then fell through to onClose(): one Escape on the
+         * pen tray closed the studio AND the job window behind it. Found by
+         * the Galaxy Tab probe; on a desk it was a race the harness won.
+         */
+        if (penTray) setPenTray(null);
+        else if (shapeTray) setShapeTray(null);
+        else if (textDraft) setTextDraft(null);
         else if (showPalette) setShowPalette(false);
         else if (showMore) setShowMore(false);
         else if (showLayers) setShowLayers(false);

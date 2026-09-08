@@ -52,6 +52,13 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         demo: 'drag',
       },
       {
+        title: 'Escape on the pen tray closes the tray, nothing else',
+        body: 'With the pen drawer open, one Escape could close the whole plan '
+          + 'studio and the job window behind it. Found while checking the app '
+          + 'on the new Galaxy Tab S10 FE; one press now backs out one thing.',
+        demo: 'tap',
+      },
+      {
         title: 'Active jobs — every trace of use, on one list',
         body: 'The widget now answers "which jobs are we actually working on". '
           + 'Opening a job counts, so does an edit, a task, a message or memo, '

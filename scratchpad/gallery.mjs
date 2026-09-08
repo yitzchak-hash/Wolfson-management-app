@@ -52,15 +52,22 @@ const PROFILES = [
   ['ipadpro11',   834, 1194, false],
   ['ipadpro13', 1366, 1024,  false],
   ['pc',         1920, 1080, false],  // the office computer
+  // Galaxy Tab S10 FE (10.9″, 2304×1440). Android tablets usually report a
+  // device ratio of 2 → 720×1152 CSS px; if this one reports 1.5 it is
+  // 768×1229 — and 768 is exactly the desktop line, so BOTH are captured.
+  ['tabs10-port',   720, 1152, true, 2],
+  ['tabs10-land',  1152,  720, true, 2],
+  ['tabs10-port15', 768, 1229, true, 1.5],
+  ['tabs10-land15', 1229, 768, true, 1.5],
 ];
 
 // `node gallery.mjs iphone galaxy pc` re-captures only those profiles.
 const only = process.argv.slice(2);
-for (const [tag, W, H, phone] of PROFILES) {
+for (const [tag, W, H, phone, dpr] of PROFILES) {
   if (only.length && !only.includes(tag)) continue;
   const ctx = await browser.newContext({
     viewport: { width: W, height: H },
-    isMobile: phone, hasTouch: true, deviceScaleFactor: phone ? 2 : W >= 1600 ? 1 : 1.5,
+    isMobile: phone, hasTouch: true, deviceScaleFactor: dpr ?? (phone ? 2 : W >= 1600 ? 1 : 1.5),
     userAgent: devices['iPhone 13'].userAgent,
     permissions: ['microphone'],
   });
