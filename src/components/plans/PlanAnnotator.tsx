@@ -789,11 +789,22 @@ function PlanEditor({
   planFileId, planName, apartmentId, apartmentLabel, driveFolderUrl, plansFolderId,
   authorName, readOnly = false, askWho = false, people = [], plans = [], embedded = false,
   barExtrasRef, barInto, barInto2,
-  touchScale = 1, chooseSaveFolder = false,
+  touchScale = 1, chooseSaveFolder = false, sheetOverlay,
   tabStrip, initialWork, workRef, onOpenPlanNewTab, onUnsavedChange,
   onClose, onToast, onPickPlan, onStartMarkup, onSavedToDrive,
 }: {
   planFileId: string;
+  /**
+   * Something the HOST draws ON THE SHEET — the punch-list pins.
+   *
+   * A pin is a percentage of the PLAN, so its overlay has to be laid over the
+   * sheet itself: the canvases, which zoom, scroll and pinch as one. Laid over
+   * the pane around them (the old way) the pin sat at a percentage of the
+   * BOX, and every margin, fit and zoom put it somewhere other than where it
+   * was placed — the owner's "the pins don't stick to the plan". Rendered
+   * inside the sheet wrapper, `absolute inset-0` there IS the sheet.
+   */
+  sheetOverlay?: React.ReactNode;
   planName?: string;
   apartmentId: string;
   apartmentLabel: string;
@@ -1086,6 +1097,15 @@ function PlanEditor({
   /** A press on the locked, embedded pane — a motionless lift opens full screen. */
   const paneTap = useRef<{ x: number; y: number } | null>(null);
   const erased = useRef<Set<string>>(new Set());
+  /**
+   * The pen's side button is the eraser — held while touching, the stroke
+   * rubs out instead of drawing, and letting go of the button puts the pen
+   * you were holding straight back (the tool itself never changes). The
+   * owner's "what does the S Pen button do on our program?" — nothing, until
+   * now. Chrome reports the barrel as button 2 (`buttons & 2`) and a pen's
+   * eraser END as button 5 (`buttons & 32`); both mean rub out.
+   */
+  const tempErase = useRef(false);
   const textRef = useRef<HTMLTextAreaElement>(null);
   /**
    * The nib ghost's own element, so it can be moved without a render.
@@ -1345,7 +1365,7 @@ function PlanEditor({
     });
   }, []);
   useEffect(() => {
-    if (compact || linkedVersion == null) { setVlink(null); return; }
+    if (linkedVersion == null) { setVlink(null); return; }
     const measure = () => {
       const root = rootRef.current;
       const btn = root?.querySelector('[data-version-active]');
@@ -1355,11 +1375,27 @@ function PlanEditor({
       const br = btn.getBoundingClientRect();
       const sr = sheet.getBoundingClientRect();
       if (br.height < 4 || sr.width < 40) { setVlink(null); return; }
-      // Rounded endpoints, so a sub-pixel re-measure cannot rewrite the path.
-      const x1 = Math.round(br.right - rr.left - 4);
-      const y1 = Math.round(br.top - rr.top + 8);                  // from the dot
-      const x2 = Math.round(Math.max(x1 + 24, sr.left - rr.left)); // to the plan's edge
-      const y2 = Math.round(sr.top - rr.top + sr.height * 0.2);    // 20% down the sheet
+      // A tab scrolled out of its rail has nothing to connect from.
+      if (br.right < rr.left || br.left > rr.right || br.bottom < rr.top || br.top > rr.bottom) {
+        setVlink(null); return;
+      }
+      let x1: number, y1: number, x2: number, y2: number;
+      if (railRow) {
+        // The rail runs along the BOTTOM on an upright tablet (the owner's
+        // "I don't see the green line in vertical mode" — it was simply not
+        // drawn there): from the tab's top edge UP to the sheet's bottom
+        // edge, 20% in from its left. Rounded, as below.
+        x1 = Math.round(br.left + br.width / 2 - rr.left);
+        y1 = Math.round(br.top - rr.top - 2);
+        x2 = Math.round(sr.left - rr.left + sr.width * 0.2);
+        y2 = Math.round(Math.min(y1 - 24, sr.bottom - rr.top));
+      } else {
+        // Rounded endpoints, so a sub-pixel re-measure cannot rewrite the path.
+        x1 = Math.round(br.right - rr.left - 4);
+        y1 = Math.round(br.top - rr.top + 8);                  // from the dot
+        x2 = Math.round(Math.max(x1 + 24, sr.left - rr.left)); // to the plan's edge
+        y2 = Math.round(sr.top - rr.top + sr.height * 0.2);    // 20% down the sheet
+      }
       const d = scribblePath(x1, y1, x2, y2, linkedVersion ?? 1);
       setVlink(prev => (prev && prev.d === d ? prev : { d, x2, y2 }));
     };
@@ -1367,7 +1403,7 @@ function PlanEditor({
     const iv = setInterval(measure, 1000);
     window.addEventListener('resize', measure);
     return () => { clearInterval(iv); window.removeEventListener('resize', measure); };
-  }, [linkedVersion, compact, scale, page]);
+  }, [linkedVersion, railRow, scale, page]);
 
   // ---- load the PDF ------------------------------------------------------
   useEffect(() => {
@@ -2179,7 +2215,12 @@ function PlanEditor({
   const SPLITTABLE = new Set(['pen', 'pencil', 'marker', 'highlighter', 'line']);
 
   function eraseAt(nx: number, ny: number, whole: boolean) {
-    const radius = (width / REF) * 0.55 + 0.004;
+    // The pen's side button rubs out at the ERASER's own width, not the pen's
+    // — a fine pen's radius is a couple of points on a thousand-point sheet,
+    // and a hand moving at any speed steps straight over the line it is
+    // aiming at.
+    const w = tempErase.current ? Math.max(width, toolById('eraser').width) : width;
+    const radius = (w / REF) * 0.55 + 0.004;
 
     if (whole) {
       let hit = false;
@@ -2399,7 +2440,9 @@ function PlanEditor({
     (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
     e.preventDefault();
 
-    if (isEraser) {
+    tempErase.current = e.pointerType === 'pen' && !isEraser
+      && ((e.buttons & 34) !== 0 || e.button === 5 || e.button === 2);
+    if (isEraser || tempErase.current) {
       erased.current = new Set();
       drawing.current = { pen: new PenStroke({ sensitivity: 0 }), pts: [], startedAt: Date.now() };
       eraseAt(nx, ny, tool === 'eraser-object');
@@ -2531,7 +2574,7 @@ function PlanEditor({
     if (!d) return;
     e.preventDefault();
 
-    if (isEraser) {
+    if (isEraser || tempErase.current) {
       const { nx, ny } = norm(e);
       eraseAt(nx, ny, tool === 'eraser-object');
       return;
@@ -2640,7 +2683,8 @@ function PlanEditor({
     // What had already landed in the marks stays — a cancel abandons the
     // stroke in the air, it is not an undo — so a drag or a rub that was
     // under way still counts as a change, or the autosave would not see it.
-    if (moving.current?.moved || (drawing.current && isEraser)) { setRedo([]); setDirty(true); }
+    if (moving.current?.moved || (drawing.current && (isEraser || tempErase.current))) { setRedo([]); setDirty(true); }
+    tempErase.current = false;
     erased.current = new Set();
     cancelStroke();
     setNibAt(null);
@@ -2679,7 +2723,9 @@ function PlanEditor({
     try { (e.target as HTMLCanvasElement).releasePointerCapture(e.pointerId); } catch { /* already gone */ }
     if (!d) return;
 
-    if (isEraser) {
+    const barrel = tempErase.current;
+    tempErase.current = false;
+    if (isEraser || barrel) {
       // The partial eraser rewrites strokes rather than collecting ids, so it
       // marks itself dirty as it goes; the whole-mark one is counted here.
       setRedo([]); setDirty(true);
@@ -4418,7 +4464,7 @@ function PlanEditor({
                     // A long press with a finger is how the eraser is used; the
                     // browser reads it as "open this image in a new tab". A
                     // right click with a mouse is left alone.
-                    if (lastPointerType.current === 'touch') e.preventDefault();
+                    if (lastPointerType.current === 'touch' || lastPointerType.current === 'pen') e.preventDefault();
                   }}
                   onDoubleClick={e => {
                     // Double-click a balloon to retype it. It does NOT have to
@@ -4458,6 +4504,11 @@ function PlanEditor({
                     pointerEvents: (locked && !(embedded && !isFull)) || tool === 'pan' ? 'none' : 'auto',
                   }}
                 />
+                {sheetOverlay && (
+                  <div className="absolute inset-0" style={{ pointerEvents: 'none' }}>
+                    {sheetOverlay}
+                  </div>
+                )}
                 {textDraft && (() => {
                   /* Typing happens INSIDE the balloon. The box below is placed
                      over the balloon's own text area at the balloon's own type

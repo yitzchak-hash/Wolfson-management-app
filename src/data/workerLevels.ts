@@ -88,9 +88,12 @@ export const DEFAULT_WORKER_LEVELS: WorkerLevel[] = [
     name: 'Contractor',
     nameHe: 'קבלן',
     builtIn: true,
-    description: 'Their own work and nothing else. The building diagrams can be switched on; '
-      + 'the planner never is.',
-    perms: on('ownTasks', 'completeTasks', 'uploadPhotos', 'addNotes', 'seePlans', 'seeSnags'),
+    // OWNER RULING (2026-09-08): every worker sees the buildings by default —
+    // the diagrams and every unit on them, not only their own. Switch them off
+    // per worker; the level ships with them on.
+    description: 'Their own work, with the building diagrams. The planner never.',
+    perms: on('ownTasks', 'completeTasks', 'uploadPhotos', 'addNotes', 'seePlans', 'seeSnags',
+      'seeDiagrams', 'seeAllApartments'),
   },
   {
     id: 'lvl-technician',

@@ -7717,3 +7717,61 @@ after the page), and the undo restores `/site.webmanifest` only when the
 link is still the one it set. Probe: `scratchpad/portalmanifest-probe.mjs`
 (8 checks: blob manifest, start_url/scope/id = the link, the name, the office
 manifest back on `/login`, the swap again on return).
+
+## The tablet round (2026-09-08): pins on the sheet, a finger that scrolls, the pen's button
+- **Pins ride the SHEET, through `PlanEditor.sheetOverlay`.** A `PlanPin` is a
+  percentage of the PLAN, and both hosts laid `PlanPinOverlay` over the BOX
+  around the plan — the drawer's pane (a fitted, zoomable sheet with margins)
+  and the portal's Drive preview iframe (Google's own surround) — so a pin at
+  40%/60% of the box sat nowhere near 40%/60% of the plan: the owner's "the
+  pins don't stick to the exact location". The annotator now renders the
+  host's overlay INSIDE `sheetWrapRef` (absolute inset-0 there IS the sheet,
+  and it follows zoom, scroll and the pinch transform). The drawer passes the
+  overlay as `sheetOverlay`; the portal's EXPANDED preview draws
+  `<PlanAnnotator embedded readOnly sheetOverlay=…>` (the drawer's precedent)
+  and keeps Google's iframe only as the collapsed thumbnail. Consequence for
+  harnesses: the pin controls exist once pdf.js has drawn — poll for the Pin
+  button, serve a real PDF on `/api/drive-fetch`, and ABORT drive.google.com
+  (an HTML answer there trips the aspect probe's image decode into "This plan
+  would not open"). Playwright consults routes NEWEST-first: a catch-all
+  `**/api/**` stub must be registered BEFORE the drive-fetch one.
+- **The portal's Mark up** (`[data-portal-markup]`, `perms.markUpPlans`): the
+  full studio (lazy) with `authorName` = the worker; the Engineered Plans
+  folder is resolved on open via `findPlanSetViaBackend` so the sketch files
+  where the office looks. New optional `ContractorUiStrings.markUpBtn` (three
+  presets, fallback rule).
+- **Workers see the buildings by default** (owner): the Contractor level ships
+  with `seeDiagrams` + `seeAllApartments`. Existing workers on that level
+  inherit it (a level is what its switches say; only a personal override
+  differs).
+- **A finger scrolls a widget's list** (`touchScrollerUnder` + `touchScroll`
+  in GeneralJobsPage): a node carries `touch-action: none`, so the browser
+  never scrolled a widget's `overflow-auto` body for a finger and the finger
+  rule panned the board instead ("the active last 30 days doesn't scroll").
+  A finger press with a scroller under it — on the widget's body OR on a row
+  that is a button (`data-el-action` or not; the marks that exempt a control
+  from the board's DRAG do not exempt it from being scrolled past) — scrolls
+  it by hand from the finger's travel, 6px slop, no pan; the board pans only
+  where nothing under the finger scrolls. `data-wheel-own` surfaces (the map)
+  are never taken. And **`usePlannerDrag` ignores fingers** (touch navigates,
+  never arranges): the ghost card springing up under a scrolling finger was
+  the "very jumpy". A stylus still drags a row.
+- **The pen's side button erases** (`tempErase` in PlanAnnotator): a pen
+  press with `buttons & 2`/`button 2` (barrel) or `buttons & 32`/`button 5`
+  (eraser end) rubs out for that stroke at the ERASER's width (the pen's own
+  width is a couple of points and a moving hand steps over the line), the
+  tool state untouched; the canvas's contextmenu is prevented for a pen.
+  Probed with CDP `mousePressed button:'right' buttons:2 pointerType:'pen'`
+  — Chromium delivers pointerdown button 2 + contextmenu + moves, no cancel.
+- **Touch-sized sliders** (`@media (any-hover: none)` in index.css): the ink
+  slider's box grows to a thumb's height with the painted track kept thin
+  (`background-clip: content-box`), 28–30px knobs, `touch-action: none`.
+- **The version connector draws in compact too**: it bailed on `compact`, and
+  the office's tablets are 720 wide upright — the phone layout — so the green
+  line never showed in portrait. With `railRow` the scribble runs from the
+  bottom rail's active tab UP to the sheet's bottom edge; a tab scrolled out
+  of its rail draws nothing.
+Harness: `scratchpad/round41-probe.mjs` (four contexts, 22 checks). Re-encoded:
+`planphone.mjs` (poll for the Pin button), `pinvoice-probe.mjs` (PDF route,
+canvas box). Green: touchpan, ipadcheck, plandownload, markup2-probe, plantabs
+(warm), the four audits.

@@ -1494,6 +1494,8 @@ export interface ContractorUiStrings {
   monthlyLabel?: string;
   /** The punch-list pins on the plan — optional, same rule. */
   pinAddBtn?: string;
+  /** The portal's Mark-up button, shown only to a worker whose level allows it. */
+  markUpBtn?: string;
   pinClickPlan?: string;
   pinNotePlaceholder?: string;
   /** The portal's notification bell — optional, same rule. */
@@ -1604,6 +1606,7 @@ export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   weeklyLabel: 'Weekly',
   monthlyLabel: 'Monthly',
   pinAddBtn: 'Pin',
+  markUpBtn: 'Mark up',
   pinClickPlan: 'Tap the plan',
   pinNotePlaceholder: 'What needs doing here?',
   notifTitle: 'Updates',
@@ -1709,6 +1712,7 @@ export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   weeklyLabel: 'שבועי',
   monthlyLabel: 'חודשי',
   pinAddBtn: 'נעץ',
+  markUpBtn: 'סימון על התוכנית',
   pinClickPlan: 'געו בתוכנית',
   pinNotePlaceholder: 'מה צריך לעשות כאן?',
   notifTitle: 'עדכונים',
@@ -1819,6 +1823,7 @@ export const RUSSIAN_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   weeklyLabel: 'Неделя',
   monthlyLabel: 'Месяц',
   pinAddBtn: 'Метка',
+  markUpBtn: 'Разметка',
   pinClickPlan: 'Нажмите на план',
   pinNotePlaceholder: 'Что здесь нужно сделать?',
   notifTitle: 'Обновления',

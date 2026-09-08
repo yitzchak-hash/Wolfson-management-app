@@ -27,7 +27,7 @@ exactly there.
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2026-12-21` — the next entry must be a later date (an older
+   newest is `2026-12-22` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`. 8. Rewrite THIS file.
@@ -43,8 +43,20 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-08, sixth round of the day)
+## Where things stand (2026-09-08, seventh round of the day)
 Last commits, newest first (see `git log`):
+- **This round — the tablet list** (eight asks in one voice message): new
+  workers see the buildings by default (Contractor level +seeDiagrams
+  +seeAllApartments); a worker with `markUpPlans` gets Mark up on the portal
+  plan (the full studio); on the board a finger SCROLLS a widget's list
+  instead of panning, and a finger never drags a job row (the "jumpy"); the
+  pen's side button erases while held; touch-sized ink sliders; the green
+  version connector draws on an upright tablet (bottom rail); and the pins
+  ride the SHEET (`PlanEditor.sheetOverlay`) in the office pane and the
+  worker's preview — the portal's expanded preview now draws the sheet itself
+  instead of Google's iframe. Probe `round41-probe.mjs` (22). What's New
+  `2026-12-22`. NOT understood / not built: "the job widgets can be messed
+  around on an iPad" — asked him what he meant.
 - **This round — the Chrome shortcut** (owner: "Okay, it works" for the
   helper, then: saving a Chrome shortcut to a worker's link "takes me back to
   the main workspace page"). Cause: Chrome's Add-to-Home-screen / Install /
@@ -94,8 +106,11 @@ Last commits, newest first (see `git log`):
 2. **The Drive folder helper button** (Windows, Hebrew computers) — rebuilt
    and CONFIRMED WORKING by the owner ("Okay, it works", 2026-09-08) after the
    drive-name fix.
-4. **A Chrome shortcut to a worker's link** must open that link — DONE this
-   round (see above). He should re-make the shortcut from the worker's page
+4. **A Chrome shortcut to a worker's link** must open that link — DONE
+   (see above).
+5. **The tablet list** (2026-09-08, voice message) — all built except the one
+   sentence nobody could parse: "the job widgets can be messed around on an
+   iPad". Waiting on his answer (moved by accident? cannot be moved?). He should re-make the shortcut from the worker's page
    AFTER the deploy; a shortcut made before it still points at the old
    manifest's home.
 3. **Search** — the folder-title fault fixed at the root, and now the full
@@ -132,13 +147,13 @@ Last commits, newest first (see `git log`):
   `npx vite --port 5173` and `VITE_DRIVE_API_KEY=test npx vite --port 5174`.
 
 ## The last reply the owner saw (so the next one continues it)
-He said the helper now works, and asked why saving a Chrome shortcut to a
-worker's link takes him back to the main workspace page. This round's reply
-says: Chrome never saves the page itself — it saves the app's own start
-address, which was the office home; the worker's page now carries its own
-start address (his link, his name on the icon), so a shortcut made from it
-opens exactly that page, on a phone or a PC, and each worker's portal is a
-separate app from the office one; it is on production, and he should make the
-shortcut again from the worker's page (an old shortcut keeps pointing home).
-Before that: the helper's missing drive name was fixed and the search rebuild
-was built and pushed (see the earlier rounds above).
+He sent eight tablet asks in one message. This round's reply says, item by
+item: workers now start with the buildings shown; a worker allowed to mark up
+sees Mark up on his plan; a finger scrolls a widget's list and the jumpiness
+was a job row being dragged by the finger, which no longer happens; the pen's
+side button erases while held; the sliders are finger-sized; the green line
+draws in portrait; and the pins now sit on the plan itself in both the office
+window and the worker's phone (the phone draws the sheet the office's way
+instead of Google's frame). It asks what he meant by "the job widgets can be
+messed around on an iPad" — moved by accident, or cannot be moved at all —
+before touching the finger rule. Everything is on production.

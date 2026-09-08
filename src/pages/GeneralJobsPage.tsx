@@ -143,6 +143,34 @@ function scrollsHere(el: HTMLElement, horizontal: boolean, marked: boolean): boo
  * Selecting a widget hands it the wheel; this is what the wheel is then given
  * to.
  */
+/**
+ * The scroller a FINGER is resting on, if any, between the press and the node.
+ *
+ * A widget's list (Active jobs, the notebook, any Frame) is `overflow-auto`
+ * under a node that carries `touch-action: none` — so the browser never
+ * scrolls it for a finger, and the board's finger rule panned the whole board
+ * instead: the owner's "the active last 30 days doesn't scroll up and down
+ * when I slide with my finger". A press that lands on something with room to
+ * scroll scrolls THAT, by hand (see touchScroll); the board only pans when
+ * nothing under the finger can move. `data-wheel-own` surfaces (the map) own
+ * their gestures and are never taken.
+ */
+function touchScrollerUnder(target: Element | null, stopAt: Element): HTMLElement | null {
+  let el = target as HTMLElement | null;
+  while (el && el !== stopAt) {
+    if (el.nodeType === 1) {
+      if (el.hasAttribute('data-wheel-own')) return null;
+      const style = getComputedStyle(el);
+      const y = style.overflowY, x = style.overflowX;
+      const vy = (y === 'auto' || y === 'scroll' || y === 'overlay') && el.scrollHeight - el.clientHeight > 1;
+      const vx = (x === 'auto' || x === 'scroll' || x === 'overlay') && el.scrollWidth - el.clientWidth > 1;
+      if (vy || vx) return el;
+    }
+    el = el.parentElement;
+  }
+  return null;
+}
+
 function innerScroller(node: HTMLElement, horizontal: boolean): HTMLElement | null {
   const all = node.querySelectorAll<HTMLElement>('*');
   for (const el of all) {
@@ -4121,6 +4149,16 @@ export function GeneralJobsPage() {
     if (isFingerTouch(e) && !e.ctrlKey && !e.metaKey) {
       if ((e.target as HTMLElement).closest('a,button,input,textarea,select,[data-no-drag],[data-el-action]')) return;
       e.stopPropagation();
+      // A list under the finger scrolls; the board pans only when nothing does.
+      const sc = touchScrollerUnder(e.target as Element, e.currentTarget as Element);
+      if (sc) {
+        touchScroll.current = {
+          id: e.pointerId, el: sc, px: e.clientX, py: e.clientY,
+          sl: sc.scrollLeft, st: sc.scrollTop, moved: false, node: el,
+        };
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        return;
+      }
       panRef.current = { px: e.clientX, py: e.clientY, ox: pan.x, oy: pan.y };
       setPanning(true);
       panFromEl.current = el;
@@ -4181,6 +4219,7 @@ export function GeneralJobsPage() {
   }
 
   function onElPointerMove(e: React.PointerEvent) {
+    if (touchScroll.current?.id === e.pointerId) { applyTouchScroll(e.nativeEvent); return; }
     if (panRef.current && panFromEl.current) {
       const st = panRef.current;
       setPan(clampPanRef.current({ x: st.ox + (e.clientX - st.px), y: st.oy + (e.clientY - st.py) }));
@@ -4251,6 +4290,16 @@ export function GeneralJobsPage() {
     setGuides([]);
     stopEdgePush();
     erasing.current = false;
+    if (e && touchScroll.current?.id === e.pointerId) {
+      const ts = touchScroll.current;
+      touchScroll.current = null;
+      // A tap that never scrolled still READS, exactly like a pan-tap.
+      if (!ts.moved) {
+        if (el.type === 'bin') setOpenBin(binKeyOf(el));
+        else setSelectedElIds(new Set([el.id]));
+      }
+      return;
+    }
     if (panRef.current && panFromEl.current) {
       // A tap that never moved still READS: a group opens its window, anything
       // else is picked out so its state shows. Nothing on a finger EDITS.
@@ -5098,13 +5147,44 @@ export function GeneralJobsPage() {
   const pinchStart = useRef<{ zoom: number; pan: { x: number; y: number }; px: number; py: number } | null>(null);
   /** A finger resting on a widget button, watched for the drag that turns it
    *  into a board pan (see onViewportPointerDown). */
-  const deferredPan = useRef<{ id: number; px: number; py: number } | null>(null);
+  const deferredPan = useRef<{ id: number; px: number; py: number; scroller?: HTMLElement | null } | null>(null);
+  /**
+   * A finger scrolling a widget's list by hand — see touchScrollerUnder. The
+   * node carries `touch-action: none`, so the browser will not do it; every
+   * move writes the scroller's scrollTop/scrollLeft from the finger's travel.
+   * `moved` is the slop gate: a tap is a tap until the finger has gone 6px.
+   */
+  const touchScroll = useRef<{
+    id: number; el: HTMLElement; px: number; py: number; sl: number; st: number;
+    moved: boolean; node: CanvasElement | null;
+  } | null>(null);
+  const applyTouchScroll = useCallback((e: PointerEvent) => {
+    const ts = touchScroll.current;
+    if (!ts || e.pointerId !== ts.id) return;
+    const dx = e.clientX - ts.px, dy = e.clientY - ts.py;
+    if (!ts.moved && Math.hypot(dx, dy) < 6) return;
+    ts.moved = true;
+    ts.el.scrollTop = ts.st - dy;
+    ts.el.scrollLeft = ts.sl - dx;
+  }, []);
   useEffect(() => {
     const move = (e: PointerEvent) => {
       const d = deferredPan.current;
       if (!d || e.pointerId !== d.id) return;
       if (Math.hypot(e.clientX - d.px, e.clientY - d.py) < 10) return;
       deferredPan.current = null;
+      if (d.scroller) {
+        // The button sits in a list: the drag scrolls the LIST, not the board.
+        touchScroll.current = {
+          id: e.pointerId, el: d.scroller, px: d.px, py: d.py,
+          sl: d.scroller.scrollLeft, st: d.scroller.scrollTop, moved: true, node: null,
+        };
+        applyTouchScroll(e);
+        const swallowClick = (ce: MouseEvent) => { ce.stopPropagation(); ce.preventDefault(); };
+        window.addEventListener('click', swallowClick, { capture: true, once: true });
+        setTimeout(() => window.removeEventListener('click', swallowClick, { capture: true }), 800);
+        return;
+      }
       panRef.current = { px: e.clientX, py: e.clientY, ox: panRef2.current.x, oy: panRef2.current.y };
       setPanning(true);
       try { viewportRef.current?.setPointerCapture(e.pointerId); } catch { /* pointer gone */ }
@@ -5115,11 +5195,18 @@ export function GeneralJobsPage() {
     };
     const up = (e: PointerEvent) => {
       if (deferredPan.current?.id === e.pointerId) deferredPan.current = null;
+      if (touchScroll.current?.id === e.pointerId && !touchScroll.current.node) touchScroll.current = null;
     };
+    const scrollMove = (e: PointerEvent) => {
+      // The deferred (button-born) scroll has no capture — it rides the window.
+      if (touchScroll.current && !touchScroll.current.node) applyTouchScroll(e);
+    };
+    window.addEventListener('pointermove', scrollMove);
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
     window.addEventListener('pointercancel', up);
     return () => {
+      window.removeEventListener('pointermove', scrollMove);
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', up);
@@ -5134,6 +5221,7 @@ export function GeneralJobsPage() {
       panFromJob.current = null;
       panFromEl.current = null;
       deferredPan.current = null;
+      touchScroll.current = null;
       setPanning(false);
       const r = viewportRef.current?.getBoundingClientRect();
       pinchStart.current = {
@@ -5229,9 +5317,20 @@ export function GeneralJobsPage() {
      * tap ladder) are left entirely alone, as are text fields.
      */
     if (isFingerTouch(e) && e.button === 0
-        && (e.target as HTMLElement).closest('a,button')
-        && !(e.target as HTMLElement).closest('[data-no-drag],[data-el-action],input,textarea,select')) {
-      deferredPan.current = { id: e.pointerId, px: e.clientX, py: e.clientY };
+        && !(e.target as HTMLElement).closest('input,textarea,select')) {
+      const t = e.target as HTMLElement;
+      // Anything with room to scroll under the finger — a widget's list, its
+      // rows being buttons or not, `data-el-action` or not — scrolls. The
+      // marks that exempt a control from the board's drag do not exempt it
+      // from being SCROLLED past; only a surface owning the whole gesture
+      // (`data-wheel-own`, the map) is left alone, and touchScrollerUnder
+      // already answers null for those.
+      const scroller = touchScrollerUnder(t, e.currentTarget as Element);
+      if (scroller) {
+        deferredPan.current = { id: e.pointerId, px: e.clientX, py: e.clientY, scroller };
+      } else if (t.closest('a,button') && !t.closest('[data-no-drag],[data-el-action]')) {
+        deferredPan.current = { id: e.pointerId, px: e.clientX, py: e.clientY };
+      }
     }
   }
   function onViewportPointerMove(e: React.PointerEvent) {

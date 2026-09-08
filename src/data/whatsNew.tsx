@@ -30,6 +30,44 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-12-22',
+    title: 'The tablet round: pins that stick, a finger that scrolls, a pen button that erases',
+    items: [
+      {
+        title: 'Pins sit exactly where they were put',
+        body: 'A punch-list pin is a spot on the PLAN, and it now rides the plan itself '
+          + '— through every zoom, scroll and pinch, in the job window and on the '
+          + 'worker\'s phone alike. The worker\'s preview draws the sheet the same way '
+          + 'the office does instead of borrowing Google\'s frame, which is what had '
+          + 'been nudging every pin off its spot.',
+        demo: 'pin',
+      },
+      {
+        title: 'A finger scrolls a widget\'s list',
+        body: 'On a tablet, sliding a finger up and down a list — Active jobs, a job '
+          + 'list, the notebook — scrolls that list. The board pans only where nothing '
+          + 'under the finger can scroll, and a finger never picks a job row up to drag '
+          + 'it (the stylus still does).',
+        demo: 'drag',
+      },
+      {
+        title: 'The pen\'s side button is the eraser',
+        body: 'Hold the S Pen\'s button while drawing and the stroke rubs out instead; '
+          + 'let go and you are back on the pen you were holding. The width and '
+          + 'see-through sliders are finger-sized on a touch screen, and the green '
+          + 'line from the version tab to the plan is drawn on an upright tablet too.',
+        demo: 'tap',
+      },
+      {
+        title: 'Workers see the buildings, and can mark up when allowed',
+        body: 'A new worker starts with the building diagrams and every unit on them. '
+          + 'A worker whose level allows marking up a plan now has a Mark up button on '
+          + 'the plan in his portal, opening the same studio the office uses.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2026-12-21',
     title: 'A shortcut to a worker\'s link opens the worker\'s link',
     items: [
