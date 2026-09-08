@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { HardDrive, Check, Loader2, X, Download, FolderOpen } from 'lucide-react';
 import {
   folderPath, composeLocalPath, getDriveRoot, setDriveRoot, guessRoot, separatorFor,
-  getSharedName, setSharedName, parsePastedPath, defaultSharedName,
+  getSharedName, setSharedName, setDriveName, parsePastedPath, defaultSharedName,
 } from '../../data/drivePath';
 import {
   guessPlatform, helperInstalled, setHelperInstalled, openUrl,
@@ -199,7 +199,8 @@ export function DriveDesktopPath({ driveLink, onToast, variant = 'icon', onDone 
                 if (p) {
                   setRoot(p.root); setDriveRoot(p.root);
                   setShared(p.sharedName); setSharedName(p.sharedName);
-                  setPasteNote(`Got it: Drive is ${p.root} and its shared-drives folder is called "${p.sharedName}".`);
+                  if (p.driveName) setDriveName(p.driveName);
+                  setPasteNote(`Got it: Drive is ${p.root}, its shared-drives folder is called "${p.sharedName}"${p.driveName ? ` and the shared drive is "${p.driveName}"` : ''}.`);
                 } else setPasteNote(e.target.value.trim() ? 'That does not look like a folder path from Explorer or Finder.' : '');
               }}
               placeholder={sep === '\\' ? 'G:\\…\\TzviAir\\Cohen, David - 5555' : '/Users/you/Library/CloudStorage/GoogleDrive-…/…/TzviAir/…'}

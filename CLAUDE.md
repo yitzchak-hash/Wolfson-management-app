@@ -7674,3 +7674,26 @@ under the list; 60ms render debounce. `fuse.js` is gone. Probes:
 in ~215ms, worst keystroke 22ms) · `gsearch.mjs` (+6; its block 2 now
 searches for itself — it used to read the previous block's rows). Green:
 round20, searchtile-probe, foldertitle-probe, storefull.
+
+## The missing drive segment (2026-09-08, the owner's "still error" screenshot)
+The helper's dialog read `Not on this computer yet: G:\Shared drives\Potentials\
+Yeshivat Chevron Haktana` — the shared drive's OWN name ("TA Zoho Docs") was
+absent, so the path existed nowhere and the top-folder fallback could never
+find it. `api/drive-path.js` names the drive through `drives.get`, which
+Google answers only for a MEMBER of the shared drive; the service account was
+given the folders, not membership, so the name came back null and
+`composeLocalPath` silently dropped the segment. Three fixes, each enough on
+its own:
+- **Server**: on a refused `drives.get`, `files.get(driveId)` — the drive's
+  root is a file whose name is the drive's name.
+- **Client** (`drivePath.ts`): `DEFAULT_SHARED_DRIVE = 'TA Zoho Docs'`; the
+  drive segment is NEVER skipped (server's name → the pasted path's
+  `driveName`, kept per machine in `drive_drive_name` → the default).
+  `parsePastedPath` now reads the drive's name as the segment after the
+  shared-drives folder (only when a folder follows it; a My Drive path names
+  no drive).
+- **The openers** (`tzviairHelper.ts`): Windows and Mac both search every top
+  folder AND every drive folder one level down, with the rest of the path and
+  with the rest minus its first segment — so an already-installed helper
+  copes with a path missing the drive name or wearing the English folder
+  name. `drivehelper-test.mjs` carries all of it (+6 checks).

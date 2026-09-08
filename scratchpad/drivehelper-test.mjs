@@ -49,6 +49,19 @@ check(D.defaultSharedName('he-IL') === 'תיקיות אחסון שיתופי' &&
   'a Hebrew browser defaults to the Hebrew folder name before anybody pastes a path');
 check(D.composeLocalPath('G:', realPath, D.defaultSharedName('he')) === 'G:\\תיקיות אחסון שיתופי\\TA Zoho Docs\\Potentials\\Yeshivat Chevron Haktana',
   'so the copied path opens on a Hebrew PC with no setup');
+// The 2026-09-08 screenshot: the server could NOT name the drive (drives.get
+// refused), so the path lost the "TA Zoho Docs" segment and nothing could find it.
+const noName = { segments: ['Potentials', 'Yeshivat Chevron Haktana'], driveName: null, inSharedDrive: true };
+check(D.composeLocalPath('G:', noName, real.sharedName, '') === 'G:\\תיקיות אחסון שיתופי\\TA Zoho Docs\\Potentials\\Yeshivat Chevron Haktana',
+  'a path the server could not name still carries the office\'s shared drive', D.composeLocalPath('G:', noName, real.sharedName, ''));
+check(real.driveName === 'TA Zoho Docs', 'the pasted path teaches the drive\'s name', real.driveName);
+check(D.composeLocalPath('G:', noName, real.sharedName, 'Other Drive') === 'G:\\תיקיות אחסון שיתופי\\Other Drive\\Potentials\\Yeshivat Chevron Haktana',
+  'and a taught name beats the default');
+check(D.parsePastedPath('G:\\My Drive\\Notes').driveName === '', 'a My Drive path names no drive');
+check(opener.includes('foreach ($s in Get-ChildItem -LiteralPath $d.FullName -Directory') && opener.includes('$tail2'),
+  'the Windows opener also searches the drive folders one level down, with and without the first segment');
+const mac2 = H.macInstaller('/Users/e/Library/CloudStorage/GoogleDrive-e@x.com');
+check(mac2.includes('for s in "$d"*/; do') && mac2.includes('TAIL2'), 'and so does the Mac opener');
 await server.close();
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASS');
 process.exit(fails ? 1 : 0);

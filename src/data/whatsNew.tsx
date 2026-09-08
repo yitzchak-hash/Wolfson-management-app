@@ -63,6 +63,16 @@ export const WHATS_NEW: WhatsNewEntry[] = [
           + 'altogether.',
         demo: 'tap',
       },
+      {
+        title: 'The Drive folder button finds the folder',
+        body: 'The path the app built was missing the shared drive\'s own name '
+          + '("TA Zoho Docs"), so the helper said "not on this computer yet" for '
+          + 'a folder that was there. The path now always carries it, pasting a '
+          + 'real path into the settings teaches the exact name, and the helper '
+          + 'itself looks one folder deeper before giving up — the copy of the '
+          + 'helper already installed works too.',
+        demo: 'tap',
+      },
     ],
   },
   {

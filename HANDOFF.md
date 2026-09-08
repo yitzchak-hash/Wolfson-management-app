@@ -41,8 +41,18 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-08, fourth round of the day)
+## Where things stand (2026-09-08, fifth round of the day)
 Last commits, newest first (see `git log`):
+- **This round — the helper's "still error"**: his screenshot showed the
+  path the app built was `G:\Shared drives\Potentials\…` — the shared drive's
+  own name ("TA Zoho Docs") missing, because the server names it through
+  `drives.get`, which Google refuses to a non-member service account. Fixed
+  three ways: the server tries the drive's root file for the name; the client
+  never skips the segment (server name → the name a pasted path taught this
+  machine → the default "TA Zoho Docs"); the Windows and Mac openers search
+  the drive folders one level down before saying "not on this computer".
+  `drivehelper-test.mjs` +6. The copy of the helper already on his PC works
+  with the corrected path; a re-download gets the deeper search too.
 - **This round — the search rebuild** (owner: "go ahead and build the search
   rebuild"): `docs/research/SEARCH.md` items #2–#10 are BUILT. One MiniSearch
   index per workspace (`src/data/searchIndex.ts`) read by all six search
@@ -104,7 +114,14 @@ Last commits, newest first (see `git log`):
   `npx vite --port 5173` and `VITE_DRIVE_API_KEY=test npx vite --port 5174`.
 
 ## The last reply the owner saw (so the next one continues it)
-He said "go ahead and build the search rebuild". This round's reply says: it
+He sent a screenshot of the helper's dialog ("still error": Not on this
+computer yet: G:\Shared drives\Potentials\Yeshivat Chevron Haktana). This
+round's reply says: the path was missing the drive's own name, it is fixed at
+the root and pushed; press the folder button again on the same job (no
+reinstall needed for that; re-download the helper if he wants the deeper
+search); if it still fails, paste the real Explorer path into the Drive
+settings box once and the exact names are learned. Before that: he said "go
+ahead and build the search rebuild". This round's reply says: it
 is built and on production — every search box now reads one index, a job is
 found by anything written about it (folder title, address, phone, links,
 tasks, messages, memos, pins, files), Hebrew and English meet, a row says
