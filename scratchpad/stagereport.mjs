@@ -2,8 +2,9 @@
 // crossed off, a box click crosses one off by hand, a right-click marks it
 // half done (glowing orange clock); the header grows the office's pending
 // list; and on the worker's building map an apartment opens the step-by-step
-// "I did work here" flow — not-finished files a note and marks the stage
-// pending, finished runs the 3-picture closing screen and marks it done.
+// "I'm going to work here" flow (2026-09-15) — the stage it is AT makes an
+// OPEN task for today, and the CLOSE asks what stage it is at now, runs the
+// 3-picture closing screen, moves the unit there and crosses the stage off.
 import { chromium } from 'playwright';
 
 const APP = 'http://localhost:5173';
@@ -97,7 +98,8 @@ check(await page.locator('.drawer-panel').count() === 1
   'a row opens that apartment');
 await page.close();
 
-// ── 3 · THE WORKER: not finished → a note, and the stage goes pending ───────
+// ── 3 · THE WORKER: "I'm going to work here" → the stage it is AT → an OPEN task today
+// (owner, 2026-09-15: the finish is decided at the CLOSE, never at the start)
 page = await ctx.newPage();
 page.on('pageerror', e => { console.log('PAGE ERROR', e.message); fails++; });
 await page.goto(`${APP}/c/tok-jo`);
@@ -111,65 +113,59 @@ await page.waitForTimeout(700);
 check(await page.locator('[data-work-sheet]').count() === 1
   && (await page.locator('[data-work-sheet]').innerText()).includes('Artzi'),
   'tapping an apartment opens its sheet');
-check(await page.locator('[data-work-here]').count() === 1, 'with the big I-did-work-here button');
+check(await page.locator('[data-work-here]').count() === 1
+  && /going to work here/i.test(await page.locator('[data-work-here]').innerText()),
+  'with the big "I\'m going to work here" button');
 await page.locator('[data-work-here]').click();
 await page.waitForTimeout(400);
-// The worker's-phone round: the first and the last stage are never offered (reportStages default).
-check(await page.locator('[data-work-stages] button').count() === 2,
-  'What did you do? — the stages he may report, one per row');
-await page.locator('[data-work-stages] button:has-text("Piping")').click();
-await page.waitForTimeout(400);
-check(await page.locator('[data-finished-yes]').count() === 1
-  && await page.locator('[data-finished-no]').count() === 1,
-  'Did you finish this stage? — yes or no');
-await page.locator('[data-finished-no]').click();
-await page.waitForTimeout(400);
-await page.locator('[data-work-note] textarea').fill('Two bedrooms still open');
-await page.locator('[data-work-send]').click();
+check(await page.locator('[data-work-stages] button').count() === 4,
+  'What stage is it at? — every stage of the workspace, one per row');
+check(await page.locator('[data-work-stage="S2"][data-current]').count() === 1,
+  "the unit's own stage is marked as the one it is at now");
+check(await page.locator('[data-finished-yes]').count() === 0 && await page.locator('[data-work-note]').count() === 0,
+  'no "did you finish?" and no note at the START');
+await page.locator('[data-work-stage="S2"]').click();
 await page.waitForTimeout(900);
 let d = await store(page);
-marks = d.apartments.find(a => a.id === 'A1-7').stageMarks ?? {};
-check(marks.S2 === 'pending', 'not-finished marks the stage half done', JSON.stringify(marks));
+const today = new Date(); today.setHours(0, 0, 0, 0);
+const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 const report = d.contractorAssignments.find(a => a.stageReport && a.stageId === 'S2');
-check(!!report && !report.completedAt, 'an OPEN stage-report task carries it', report?.taskDescription);
-check((d.contractorNotes ?? []).some(n => n.assignmentId === report?.id && n.text === 'Two bedrooms still open'),
-  "and the worker's note of what is left hangs under the task");
+check(!!report && !report.completedAt && report.dueDate === todayIso && report.contractorId === 'C-jo',
+  'an OPEN stage-report task for TODAY was made on the unit', JSON.stringify({ due: report?.dueDate, done: report?.completedAt }));
+check((d.apartments.find(a => a.id === 'A1-7').stageMarks ?? {}).S2 !== 'pending', 'nothing is marked half done by starting');
+check(await page.locator('[data-work-sheet]').count() === 0 && await page.locator('[data-close-job]').count() === 1,
+  'and the task sheet opened on it, with Close job ready for the end of the day');
 
-// ── 4 · THE WORKER: finished → pictures, close, and the stage goes done ─────
-await page.locator('[data-apt-id="A1-7"]').first().click();
-await page.waitForTimeout(700);
-await page.locator('[data-work-here]').click();
-await page.waitForTimeout(400);
-await page.locator('[data-work-stages] button:has-text("Concealed units")').click();
-await page.waitForTimeout(400);
-await page.locator('[data-finished-yes]').click();
-await page.waitForTimeout(900);
-check(await page.locator('[data-closing-panel]').count() === 1,
-  'finished hands over to the standing closing screen (3 pictures)');
+// ── 4 · THE WORKER at the end of the day: close → "what stage is it at now?" → pictures → closed
+await page.locator('[data-close-job]').first().click();
+await page.waitForTimeout(500);
+check(await page.locator('[data-closing-panel]').count() === 1, 'Close job opens the standing closing screen');
+check(await page.locator('[data-close-stage]').count() === 1
+  && await page.locator('[data-close-stage-pick="S2"][data-on]').count() === 1,
+  'it asks what stage the unit is at NOW, the task\'s own stage picked');
+await page.locator('[data-close-stage-pick="S3"]').click();
+await page.waitForTimeout(200);
+check(await page.locator('[data-close-stage-pick="S3"][data-on]').count() === 1, 'picking Concealed units lights it');
 await page.locator('input[type="file"][accept*="video"][accept*=".zip"]').setInputFiles(files(3));
 await page.waitForTimeout(2500);
 await page.locator('[data-close-now]').click();
-await page.waitForTimeout(1200);
+await page.waitForTimeout(1500);
 d = await store(page);
 marks = d.apartments.find(a => a.id === 'A1-7').stageMarks ?? {};
-check(marks.S3 === 'done', 'closing the report marks the stage DONE on the apartment', JSON.stringify(marks));
-const doneReport = d.contractorAssignments.find(a => a.stageReport && a.stageId === 'S3' && a.completedAt);
-check(!!doneReport?.completedAt, 'and the report task itself is closed');
+const doneReport = d.contractorAssignments.find(a => a.id === report.id);
+check(!!doneReport?.completedAt && doneReport.stageWhenDone === 'S3', 'the task closed carrying the stage he named as when-done',
+  JSON.stringify({ done: doneReport?.completedAt, to: doneReport?.stageWhenDone }));
+check(d.apartments.find(a => a.id === 'A1-7').currentStageId === 'S3', 'and the unit MOVED to Concealed units');
+check(marks.S2 === 'done', 'the stage he worked on is crossed off', JSON.stringify(marks));
 await page.close();
 
-// ── 5 · THE OFFICE again: both pendings on the list, notes and all ──────────
+// ── 5 · THE OFFICE again: the pending it marked itself still stands; the worker made none ──
 page = await ctx.newPage();
 page.on('pageerror', e => { console.log('PAGE ERROR', e.message); fails++; });
 await page.goto(`${APP}/project`);
 await page.waitForTimeout(2800);
-// Concealed units was closed in section 4, so one half-done stage (Piping) remains.
 check((await page.locator('[data-pending-bell]').innerText()).trim() === '1',
-  'the office bell now counts the remaining half-done stage');
-await page.locator('[data-pending-bell]').click();
-await page.waitForTimeout(400);
-const menu2 = await page.locator('[data-pending-menu]').innerText();
-check(menu2.includes('Piping') && menu2.includes('Two bedrooms still open'),
-  "the worker's report is on the list, note and all", menu2.replace(/\n/g, ' · ').slice(0, 110));
+  "the office bell still counts its own half-done stage (the worker's start marks nothing)");
 
 await b.close();
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASS');

@@ -4,7 +4,7 @@ import { X, Undo2, Save, ArrowUp, ArrowDown, Merge, Split, Pencil, Hash, Rows3, 
 import { Apartment, MainUiStrings, aptLabel, isCountableApartment, projectColor } from '../../types';
 import { useStore } from '../../data/store';
 import {
-  FloorRow, RowHeight, aptCol, aptSpan, buildFloorRows, floorKey, positionMap, rowCells, rowLabelText,
+  FloorRow, RowHeight, aptCol, aptSpan, buildFloorRows, floorKey, placedColumns, positionMap, rowCells, rowLabelText,
 } from '../../data/floorRows';
 
 /**
@@ -44,6 +44,19 @@ const fmt = (t: string, v: Record<string, string | number>) =>
   t.replace(/\{(\w+)\}/g, (_, k: string) => String(v[k] ?? ''));
 
 const cloneDraft = (d: Draft): Draft => ({ apts: d.apts.map(a => ({ ...a })), heights: structuredClone(d.heights) });
+
+/**
+ * An EMPTY position is selectable too — it has no record, so its selection id
+ * names the spot: `E|<building>|<floor>|<col>`. Merging over one makes a blank
+ * record for it first (the same placeholder Add position mints), so a lobby
+ * can be merged across a row that never had a record in every square.
+ */
+const emptyId = (bid: string, floor: number, col: number) => `E|${bid}|${floor}|${col}`;
+function parseEmpty(id: string): { bid: string; floor: number; col: number } | null {
+  if (!id.startsWith('E|')) return null;
+  const [, bid, f, c] = id.split('|');
+  return { bid, floor: Number(f), col: Number(c) };
+}
 
 /** The units of one floor, in column order (covered placeholders left out). */
 function unitsOn(apts: Apartment[], bid: string, floor: number): Apartment[] {
@@ -303,15 +316,15 @@ function Btn({ children, onClick, primary, hook, disabled, tone }: {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 type Menu =
-  | { x: number; y: number; kind: 'cell'; id: string; floor: number; col: number }
-  | { x: number; y: number; kind: 'empty'; floor: number; col: number }
-  | { x: number; y: number; kind: 'floor'; floor: number };
+  | { x: number; y: number; kind: 'cell'; id: string; bid: string; floor: number; col: number }
+  | { x: number; y: number; kind: 'empty'; bid: string; floor: number; col: number }
+  | { x: number; y: number; kind: 'floor'; bid: string; floor: number };
 
 type Modal =
   | { kind: 'rename'; id: string }
   | { kind: 'number'; id: string }
   | { kind: 'move'; ids: string[]; toFloor: number; toCol?: number }
-  | { kind: 'renumber'; floor: number }
+  | { kind: 'renumber'; bid: string; floor: number }
   | { kind: 'save' }
   | { kind: 'discard' };
 
@@ -337,14 +350,22 @@ export function LayoutStudio({ onClose, onToast }: {
     () => [...buildingsAll].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)),
     [buildingsAll]);
 
-  const fresh = useCallback((): Draft => ({
-    apts: liveApartments.filter(a => a.buildingId !== 'G').map(a => ({ ...a })),
-    heights: structuredClone(liveHeights ?? {}),
-  }), [liveApartments, liveHeights]);
+  const fresh = useCallback((): Draft => {
+    // The draft carries the column each unit is DRAWN at: a record whose
+    // guessed column collided with another's was stepped aside on screen,
+    // and the draft must agree with the screen or a merge of two neighbours
+    // is refused as "not adjacent". Saving writes the resolved column only
+    // where it differs — which is what fixes the collision for good.
+    const placed = new Map<string, number>();
+    for (const b of buildings) placedColumns(b.id, liveApartments).forEach((c, id) => placed.set(id, c));
+    return {
+      apts: liveApartments.filter(a => a.buildingId !== 'G').map(a => ({ ...a, colPosition: placed.get(a.id) ?? a.colPosition })),
+      heights: structuredClone(liveHeights ?? {}),
+    };
+  }, [liveApartments, liveHeights, buildings]);
 
   const [draft, setDraft] = useState<Draft>(fresh);
   const [history, setHistory] = useState<Draft[]>([]);
-  const [bid, setBid] = useState<string>(buildings[0]?.id ?? '');
   const [sel, setSel] = useState<string[]>([]);
   const [menu, setMenu] = useState<Menu | null>(null);
   const [modal, setModal] = useState<Modal | null>(null);
@@ -379,20 +400,29 @@ export function LayoutStudio({ onClose, onToast }: {
     });
   }, []);
 
-  // ── The building on screen ──
-  const rows = useMemo(() => buildFloorRows(bid, draft.apts, draft.heights[bid]), [bid, draft]);
-  const pos = useMemo(() => positionMap(bid, draft.apts), [bid, draft]);
+  // ── Every building, side by side (owner, 2026-09-15: all three at once) ──
+  const perB = useMemo(() => buildings.map(b => ({
+    id: b.id,
+    rows: buildFloorRows(b.id, draft.apts, draft.heights[b.id]),
+    pos: positionMap(b.id, draft.apts),
+  })), [buildings, draft]);
+  const rowsOf = (bid: string) => perB.find(x => x.id === bid)?.rows ?? [];
+  const posOf = (bid: string) => perB.find(x => x.id === bid)?.pos ?? new Map<string, Apartment>();
   const stageColor = useCallback((id: string | null | undefined) =>
     id ? stages.find(st => st.id === id)?.color ?? '#e2e8f0' : '#e2e8f0', [stages]);
-  const unitCount = useMemo(() => draft.apts.filter(a => a.buildingId === bid && isCountableApartment(a)).length, [draft, bid]);
+  const unitCount = useMemo(() => draft.apts.filter(a => isCountableApartment(a)).length, [draft]);
   const byId = useMemo(() => new Map(draft.apts.map(a => [a.id, a])), [draft]);
   const rowLabel = (row: FloorRow) => rowLabelText(row, s.lobby, s.groundCommercial);
-  const rowOfFloor = (floor: number) => rows.find(r => r.floor === floor);
-  const labelOfFloor = (floor: number) => { const r = rowOfFloor(floor); return r ? rowLabel(r) : String(floor); };
+  const rowOfFloor = (bid: string, floor: number) => rowsOf(bid).find(r => r.floor === floor);
+  const labelOfFloor = (bid: string, floor: number) => { const r = rowOfFloor(bid, floor); return r ? rowLabel(r) : String(floor); };
   const unitLabel = (a: Apartment | undefined) => a ? (aptLabel(a) === '?' ? s.lbBlankSlot : aptLabel(a)) : s.lbBlankSlot;
 
   // A selected unit that is no longer in the draft (removed) drops out of the selection.
-  const selUnits = sel.map(id => byId.get(id)).filter((a): a is Apartment => !!a && !a.coveredBy && a.buildingId === bid);
+  const selUnits = sel.map(id => byId.get(id)).filter((a): a is Apartment => !!a && !a.coveredBy);
+  const selEmpties = sel.map(parseEmpty).filter((e): e is { bid: string; floor: number; col: number } => !!e);
+  const selCount = selUnits.length + selEmpties.length;
+  /** The selection in its order — units first, then empty positions — for a merge. */
+  const selForMerge = () => [...selUnits.map(u => u.id), ...selEmpties.map(e => emptyId(e.bid, e.floor, e.col))];
 
   // ── Selection ──
   function clickCell(e: React.MouseEvent, id: string) {
@@ -402,7 +432,7 @@ export function LayoutStudio({ onClose, onToast }: {
       const me = byId.get(id);
       if (anchor && me && anchor.floor === me.floor && anchor.buildingId === me.buildingId) {
         const lo = Math.min(aptCol(anchor), aptCol(me)), hi = Math.max(aptCol(anchor), aptCol(me));
-        const range = unitsOn(draft.apts, bid, me.floor).filter(u => aptCol(u) >= lo && aptCol(u) <= hi).map(u => u.id);
+        const range = unitsOn(draft.apts, me.buildingId, me.floor).filter(u => aptCol(u) >= lo && aptCol(u) <= hi).map(u => u.id);
         setSel(prev => [...prev, ...range.filter(r => !prev.includes(r))]);
         return;
       }
@@ -440,22 +470,22 @@ export function LayoutStudio({ onClose, onToast }: {
     const T = Math.min(box.y0, box.y1), B = Math.max(box.y0, box.y1);
     if (R - L < 6 && B - T < 6) { setSel([]); return; }
     const hits: string[] = [];
-    gridRef.current?.querySelectorAll<HTMLElement>('[data-builder-cell]').forEach(el => {
+    gridRef.current?.querySelectorAll<HTMLElement>('[data-builder-cell],[data-builder-empty]').forEach(el => {
       const r = el.getBoundingClientRect();
-      if (r.right > L && r.left < R && r.bottom > T && r.top < B) hits.push(el.dataset.builderCell!);
+      if (r.right > L && r.left < R && r.bottom > T && r.top < B) hits.push(el.dataset.builderCell ?? el.dataset.builderEmpty!);
     });
     setSel(e.shiftKey ? prev => [...prev, ...hits.filter(h => !prev.includes(h))] : hits);
   }
 
   // ── Drag a cell onto another floor / position ──
-  function onDropTo(floor: number, col?: number) {
+  function onDropTo(bid: string, floor: number, col?: number) {
     const id = dragId;
     setDragId(null); setDropAt(null);
     if (!id) return;
     const unit = byId.get(id);
-    if (!unit) return;
+    if (!unit || unit.buildingId !== bid) return;   // a unit never crosses buildings by a drag
     if (unit.floor === floor) {
-      const there = col ? pos.get(`${floor}-${col}`) : undefined;
+      const there = col ? posOf(bid).get(`${floor}-${col}`) : undefined;
       if (there && there.id !== id) { edit(d => swapUnits(d, id, there.id)); return; }
       if (col && col !== aptCol(unit)) { edit(d => moveUnit(d, id, floor, col)); return; }
       return;
@@ -469,6 +499,7 @@ export function LayoutStudio({ onClose, onToast }: {
   function moveByRows(ids: string[], dir: -1 | 1) {
     const units = ids.map(id => byId.get(id)).filter((a): a is Apartment => !!a);
     if (!units.length) return;
+    const rows = rowsOf(units[0].buildingId);
     const idx = rows.findIndex(r => r.floor === units[0].floor);
     const target = rows[idx + dir];
     if (idx === -1 || !target) { onToast(dir === -1 ? s.lbTopAlready : s.lbBottomAlready, 'error'); return; }
@@ -479,6 +510,7 @@ export function LayoutStudio({ onClose, onToast }: {
     if (modal?.kind !== 'move') return;
     const { ids, toFloor, toCol } = modal;
     const choice = moveChoice;
+    const bid = byId.get(ids[0])?.buildingId ?? '';
     edit(d => {
       let next = d;
       ids.forEach((id, i) => { next = moveUnit(next, id, toFloor, i === 0 ? toCol : undefined); });
@@ -486,20 +518,31 @@ export function LayoutStudio({ onClose, onToast }: {
       return next;
     });
     setModal(null);
-    onToast(fmt(s.lbMoved, { f: labelOfFloor(toFloor) }));
+    onToast(fmt(s.lbMoved, { f: labelOfFloor(bid, toFloor) }));
   }
   function doMerge(ids: string[]) {
-    const why = mergeRefusal(draft, ids, s);
+    // An empty position in the selection becomes a blank record first — the
+    // spot is then a real square the merge can span.
+    const cur = cloneDraft(draftRef.current);
+    const realIds: string[] = [];
+    for (const id of ids) {
+      const em = parseEmpty(id);
+      if (!em) { realIds.push(id); continue; }
+      const rec = blankRecord(em.bid, em.floor, em.col);
+      cur.apts.push(rec);
+      realIds.push(rec.id);
+    }
+    const why = mergeRefusal(cur, realIds, s);
     if (why) { onToast(why, 'error'); return; }
-    edit(d => mergeUnits(d, ids));
-    setSel([ids[0]]);
+    edit(() => mergeUnits(cur, realIds));
+    setSel([realIds[0]]);
     onToast(s.lbMerged);
   }
   function doUnmerge(id: string) {
     edit(d => unmergeUnit(d, id));
     onToast(s.lbUnmerged);
   }
-  function setRowHeight(floor: number, h: RowHeight) {
+  function setRowHeight(bid: string, floor: number, h: RowHeight) {
     edit(d => {
       const mine = { ...(d.heights[bid] ?? {}) };
       if (h === 'normal') delete mine[floorKey(floor)]; else mine[floorKey(floor)] = h;
@@ -526,7 +569,7 @@ export function LayoutStudio({ onClose, onToast }: {
     if (modal?.kind !== 'renumber') return;
     const start = parseInt(renum.start, 10);
     if (!Number.isFinite(start)) return;
-    edit(d => renumberFloor(d, bid, modal.floor, start, renum.dir));
+    edit(d => renumberFloor(d, modal.bid, modal.floor, start, renum.dir));
     setModal(null);
   }
 
@@ -539,14 +582,14 @@ export function LayoutStudio({ onClose, onToast }: {
     const user = currentUser;
     for (const a of draft.apts) {
       const live = liveById.get(a.id);
-      const title = `${a.buildingId} · ${labelOfFloor(a.floor)} · ${unitLabel(live ?? a)}`;
+      const title = `${a.buildingId} · ${labelOfFloor(a.buildingId, a.floor)} · ${unitLabel(live ?? a)}`;
       if (!live) {
         out.push({ key: a.id, title, lines: [s.lbChangeNew], write: () => addApartment(a) });
         continue;
       }
       const patch: Partial<Apartment> = {};
       const lines: string[] = [];
-      if (live.floor !== a.floor) { patch.floor = a.floor; lines.push(fmt(s.lbChangeFloor, { a: labelOfFloor(live.floor), b: labelOfFloor(a.floor) })); }
+      if (live.floor !== a.floor) { patch.floor = a.floor; lines.push(fmt(s.lbChangeFloor, { a: labelOfFloor(a.buildingId, live.floor), b: labelOfFloor(a.buildingId, a.floor) })); }
       if (aptCol(live) !== aptCol(a)) { patch.colPosition = aptCol(a); lines.push(fmt(s.lbChangeCol, { a: aptCol(live), b: aptCol(a) })); }
       if (aptSpan(live) !== aptSpan(a)) {
         patch.colSpan = aptSpan(a);
@@ -564,7 +607,7 @@ export function LayoutStudio({ onClose, onToast }: {
     for (const live of liveApartments) {
       if (live.buildingId === 'G' || draftIds.has(live.id)) continue;
       out.push({
-        key: live.id, title: `${live.buildingId} · ${labelOfFloor(live.floor)} · ${unitLabel(live)}`,
+        key: live.id, title: `${live.buildingId} · ${labelOfFloor(live.buildingId, live.floor)} · ${unitLabel(live)}`,
         lines: [s.lbChangeRemoved], write: () => deleteApartment(live.id),
       });
     }
@@ -609,18 +652,18 @@ export function LayoutStudio({ onClose, onToast }: {
 
   function openCellMenu(x: number, y: number, a: Apartment) {
     setSel(prev => prev.includes(a.id) ? prev : [a.id]);
-    setMenu({ x, y, kind: 'cell', id: a.id, floor: a.floor, col: aptCol(a) });
+    setMenu({ x, y, kind: 'cell', id: a.id, bid: a.buildingId, floor: a.floor, col: aptCol(a) });
   }
 
   // ── Menu rows ──
   const menuUnit = menu?.kind === 'cell' ? byId.get(menu.id) : undefined;
   const menuIds = menu?.kind === 'cell' ? (sel.includes(menu.id) && selUnits.length > 1 ? selUnits.map(u => u.id) : [menu.id]) : [];
   const canUnmerge = !!menuUnit && (aptSpan(menuUnit) > 1 || draft.apts.some(a => a.coveredBy === menuUnit.id));
-  const menuFloor = menu?.floor;
-  const menuRow = menuFloor !== undefined ? rowOfFloor(menuFloor) : undefined;
+  const menuRow = menu ? rowOfFloor(menu.bid, menu.floor) : undefined;
 
   const moveInfo = modal?.kind === 'move' ? (() => {
     const first = byId.get(modal.ids[0]);
+    const bid = first?.buildingId ?? '';
     let sim: Draft = cloneDraft(draft);
     modal.ids.forEach((id, i) => { sim = moveUnit(sim, id, modal.toFloor, i === 0 ? modal.toCol : undefined); });
     sim = resequenceTower(sim, bid);
@@ -632,8 +675,8 @@ export function LayoutStudio({ onClose, onToast }: {
   const renumberPreview = modal?.kind === 'renumber' ? (() => {
     const start = parseInt(renum.start, 10);
     if (!Number.isFinite(start)) return [];
-    const after = renumberFloor(cloneDraft(draft), bid, modal.floor, start, renum.dir);
-    const before = unitsOn(draft.apts, bid, modal.floor);
+    const after = renumberFloor(cloneDraft(draft), modal.bid, modal.floor, start, renum.dir);
+    const before = unitsOn(draft.apts, modal.bid, modal.floor);
     return before.filter(a => a.apartmentNumber.trim() !== '').map(a => {
       const n = after.apts.find(x => x.id === a.id)!.apartmentNumber;
       return { id: a.id, from: a.apartmentNumber, to: n };
@@ -648,15 +691,6 @@ export function LayoutStudio({ onClose, onToast }: {
       <div className="flex items-center gap-2 px-3 py-2 text-white flex-shrink-0 flex-wrap"
         style={{ backgroundColor: tone }}>
         <span className="font-bold text-sm tracking-wide me-2">{s.lbTitle}</span>
-        <div className="flex items-center gap-1">
-          {buildings.map(b => (
-            <button key={b.id} data-builder-tab={b.id}
-              onClick={() => { setBid(b.id); setSel([]); }}
-              className={`px-3 py-1 rounded-lg text-[12px] font-bold ${bid === b.id ? 'bg-white text-gray-900' : 'bg-white/15 hover:bg-white/25'}`}>
-              {b.id}
-            </button>
-          ))}
-        </div>
         <span className="text-[11px] opacity-80 tabular-nums ms-2">{fmt(s.lbUnits, { n: unitCount })}</span>
         <div className="ms-auto flex items-center gap-1.5">
           <button data-builder-undo onClick={undo} disabled={!dirty} title={s.lbUndo}
@@ -680,8 +714,15 @@ export function LayoutStudio({ onClose, onToast }: {
         onPointerDown={onGridPointerDown} onPointerMove={onGridPointerMove}
         onPointerUp={onGridPointerUp} onPointerCancel={onGridPointerUp}
         onContextMenu={e => { if (e.target === e.currentTarget) e.preventDefault(); }}>
-        <div className="inline-flex flex-col rounded-xl bg-white border border-gray-200 shadow-sm overflow-hidden" style={{ minWidth: 'fit-content' }}>
-          <div className="text-center font-bold text-white tracking-widest text-sm py-1.5" style={{ backgroundColor: '#1e3a5f' }}>{bid}</div>
+        <div className="flex items-start gap-6" style={{ minWidth: 'fit-content' }}>
+        {perB.map(({ id: bid, rows, pos }) => (
+        <div key={bid} data-builder-building={bid} className="inline-flex flex-col rounded-xl bg-white border border-gray-200 shadow-sm overflow-hidden flex-shrink-0" style={{ minWidth: 'fit-content' }}>
+          <div className="text-center font-bold text-white tracking-widest text-sm py-1.5" style={{ backgroundColor: '#1e3a5f' }}>
+            {bid}
+            <span className="ms-2 text-[10px] font-semibold opacity-70 tabular-nums tracking-normal">
+              {fmt(s.lbUnits, { n: draft.apts.filter(a => a.buildingId === bid && isCountableApartment(a)).length })}
+            </span>
+          </div>
           {/* Roof */}
           <div className="flex items-stretch border-b border-gray-100" style={{ height: 22 }}>
             <div className="flex-shrink-0" style={{ width: LABEL_W, backgroundColor: '#dbeafe' }} />
@@ -695,7 +736,7 @@ export function LayoutStudio({ onClose, onToast }: {
             const rowH = Math.round(hBase) + 10;
             const label = rowLabel(row);
             const rowBg = row.kind === 'ground' ? '#fef9c3' : row.kind === 'basement' ? '#e8f0fb' : row.kind === 'lobby' ? '#f0fdf4' : '#f1f5f9';
-            const isDropRow = dropAt === `${row.floor}`;
+            const isDropRow = dropAt === `${bid}:${row.floor}`;
             const items: React.ReactNode[] = [];
             cells.forEach(cell => {
               if (!crosses && cell.col === leftN + 1) {
@@ -704,15 +745,23 @@ export function LayoutStudio({ onClose, onToast }: {
               const w = CELL_W * cell.span + GAP * (cell.span - 1) + (cell.col <= leftN && cell.col + cell.span - 1 > leftN ? STAIR_W + GAP : 0);
               const apt = cell.apt;
               if (!apt) {
-                const key = `${row.floor}-${cell.col}`;
+                const key = `${bid}:${row.floor}-${cell.col}`;
+                const eid = emptyId(bid, row.floor, cell.col);
+                const selectedE = sel.includes(eid);
                 items.push(
-                  <div key={key} data-builder-empty={key}
+                  <div key={key} data-builder-empty={eid} data-builder-pos={`${row.floor}-${cell.col}`}
+                    role="button" tabIndex={0}
+                    onClick={e => clickCell(e, eid)}
                     onDragOver={e => { if (dragId) { e.preventDefault(); setDropAt(key); } }}
                     onDragLeave={() => setDropAt(null)}
-                    onDrop={e => { e.preventDefault(); onDropTo(row.floor, cell.col); }}
-                    onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setMenu({ x: e.clientX, y: e.clientY, kind: 'empty', floor: row.floor, col: cell.col }); }}
-                    className="rounded-md flex-shrink-0 border border-dashed"
-                    style={{ width: w, height: hBase, borderColor: dropAt === key ? tone : '#d1d5db',
+                    onDrop={e => { e.preventDefault(); onDropTo(bid, row.floor, cell.col); }}
+                    onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setSel(prev => prev.includes(eid) ? prev : [eid]); setMenu({ x: e.clientX, y: e.clientY, kind: 'empty', bid, floor: row.floor, col: cell.col }); }}
+                    onPointerDown={e => startPress(e, () => setMenu({ x: e.clientX, y: e.clientY, kind: 'empty', bid, floor: row.floor, col: cell.col }))}
+                    onPointerUp={endPress} onPointerMove={endPress} onPointerCancel={endPress}
+                    className="rounded-md flex-shrink-0 border border-dashed cursor-pointer"
+                    style={{ width: w, height: hBase,
+                      borderColor: selectedE ? '#1c1f26' : dropAt === key ? tone : '#d1d5db',
+                      boxShadow: selectedE ? '0 0 0 2.5px rgba(28,31,38,.22)' : undefined,
                       backgroundImage: 'repeating-linear-gradient(45deg, transparent 0 4px, #eceae4 4px 5px)' }} />,
                 );
                 return;
@@ -727,10 +776,10 @@ export function LayoutStudio({ onClose, onToast }: {
               const name = apt.displayName?.trim() && apt.displayName.trim() !== apt.apartmentNumber?.trim() ? apt.displayName.trim() : '';
               const num = apt.apartmentNumber?.trim() ?? '';
               const color = stageColor(apt.currentStageId);
-              const key = `${row.floor}-${cell.col}`;
+              const key = `${bid}:${row.floor}-${cell.col}`;
               items.push(
                 <div key={apt.id}
-                  data-builder-cell={apt.id} data-builder-pos={key} data-builder-span={cell.span}
+                  data-builder-cell={apt.id} data-builder-pos={`${row.floor}-${cell.col}`} data-builder-span={cell.span}
                   data-builder-num={num} data-builder-name={name} data-builder-stage={apt.currentStageId ?? ''}
                   role="button" tabIndex={0}
                   draggable
@@ -738,7 +787,7 @@ export function LayoutStudio({ onClose, onToast }: {
                   onDragEnd={() => { setDragId(null); setDropAt(null); }}
                   onDragOver={e => { if (dragId && dragId !== apt.id) { e.preventDefault(); setDropAt(key); } }}
                   onDragLeave={() => setDropAt(null)}
-                  onDrop={e => { e.preventDefault(); onDropTo(row.floor, cell.col); }}
+                  onDrop={e => { e.preventDefault(); onDropTo(bid, row.floor, cell.col); }}
                   onClick={e => clickCell(e, apt.id)}
                   onDoubleClick={() => { setField(apt.displayName ?? ''); setModal({ kind: 'rename', id: apt.id }); }}
                   onContextMenu={e => { e.preventDefault(); e.stopPropagation(); openCellMenu(e.clientX, e.clientY, apt); }}
@@ -773,11 +822,11 @@ export function LayoutStudio({ onClose, onToast }: {
               <div key={row.key} data-builder-row={row.key} data-builder-kind={row.kind}
                 className={`flex items-center ${ri < rows.length - 1 ? 'border-b border-gray-100' : ''}`}
                 style={{ height: rowH, backgroundColor: isDropRow ? `${tone}14` : undefined }}
-                onDragOver={e => { if (dragId) { e.preventDefault(); if (e.target === e.currentTarget) setDropAt(`${row.floor}`); } }}
-                onDrop={e => { e.preventDefault(); onDropTo(row.floor); }}>
+                onDragOver={e => { if (dragId) { e.preventDefault(); if (e.target === e.currentTarget) setDropAt(`${bid}:${row.floor}`); } }}
+                onDrop={e => { e.preventDefault(); onDropTo(bid, row.floor); }}>
                 <div data-builder-floor-label={label}
-                  onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setMenu({ x: e.clientX, y: e.clientY, kind: 'floor', floor: row.floor }); }}
-                  onPointerDown={e => startPress(e, () => setMenu({ x: e.clientX, y: e.clientY, kind: 'floor', floor: row.floor }))}
+                  onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setMenu({ x: e.clientX, y: e.clientY, kind: 'floor', bid, floor: row.floor }); }}
+                  onPointerDown={e => startPress(e, () => setMenu({ x: e.clientX, y: e.clientY, kind: 'floor', bid, floor: row.floor }))}
                   onPointerUp={endPress} onPointerMove={endPress}
                   title={s.lbFloorLabelTip}
                   className="flex-shrink-0 self-stretch flex items-center justify-center text-center text-gray-600 font-bold border-e border-gray-200 cursor-context-menu"
@@ -788,6 +837,8 @@ export function LayoutStudio({ onClose, onToast }: {
               </div>
             );
           })}
+        </div>
+        ))}
         </div>
 
         {lasso && (
@@ -812,10 +863,10 @@ export function LayoutStudio({ onClose, onToast }: {
           <ArrowDown size={12} /> {s.lbMoveDown}
         </button>
         <span className="w-px h-5 bg-gray-200 mx-0.5" />
-        <button data-merge-btn disabled={selUnits.length < 2} onClick={() => doMerge(selUnits.map(u => u.id))}
+        <button data-merge-btn disabled={selCount < 2} onClick={() => doMerge(selForMerge())}
           className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11.5px] font-bold text-white disabled:opacity-40"
           style={{ backgroundColor: '#2d6a9f' }}>
-          <Merge size={12} /> {s.lbMergeSelected} ({selUnits.length})
+          <Merge size={12} /> {s.lbMergeSelected} ({selCount})
         </button>
         <button data-unmerge-btn
           disabled={!(selUnits.length === 1 && (aptSpan(selUnits[0]) > 1 || draft.apts.some(a => a.coveredBy === selUnits[0].id)))}
@@ -835,7 +886,7 @@ export function LayoutStudio({ onClose, onToast }: {
           <Hash size={12} /> {s.lbSetNumber}
         </button>
         <span className="ms-auto text-[10.5px] text-gray-400">
-          {selUnits.length ? fmt(s.lbSelected, { n: selUnits.length }) + ' · ' : ''}{s.lbSelectHint}
+          {selCount ? fmt(s.lbSelected, { n: selCount }) + ' · ' : ''}{s.lbSelectHint}
         </span>
       </div>
 
@@ -856,19 +907,19 @@ export function LayoutStudio({ onClose, onToast }: {
                 <Item close={() => setMenu(null)} id="move-up" icon={ArrowUp} label={s.lbMoveUp} onClick={() => moveByRows(menuIds, -1)} />
                 <Item close={() => setMenu(null)} id="move-down" icon={ArrowDown} label={s.lbMoveDown} onClick={() => moveByRows(menuIds, 1)} />
                 <Sep />
-                <Item close={() => setMenu(null)} id="merge" icon={Merge} label={`${s.lbMergeSelected} (${selUnits.length})`} disabled={selUnits.length < 2} onClick={() => doMerge(selUnits.map(u => u.id))} />
+                <Item close={() => setMenu(null)} id="merge" icon={Merge} label={`${s.lbMergeSelected} (${selCount})`} disabled={selCount < 2} onClick={() => doMerge(selForMerge())} />
                 <Item close={() => setMenu(null)} id="unmerge" icon={Split} label={s.lbUnmerge} disabled={!canUnmerge} onClick={() => doUnmerge(menuUnit.id)} />
                 <Sep />
                 <Item close={() => setMenu(null)} id="renumber" icon={Hash} label={s.lbRenumberFloor} onClick={() => {
-                  const nums = unitsOn(draft.apts, bid, menuUnit.floor).map(a => Number(a.apartmentNumber)).filter(n => Number.isFinite(n) && n > 0);
+                  const nums = unitsOn(draft.apts, menuUnit.buildingId, menuUnit.floor).map(a => Number(a.apartmentNumber)).filter(n => Number.isFinite(n) && n > 0);
                   setRenum({ start: String(nums.length ? Math.min(...nums) : 1), dir: 'ltr' });
-                  setModal({ kind: 'renumber', floor: menuUnit.floor });
+                  setModal({ kind: 'renumber', bid: menuUnit.buildingId, floor: menuUnit.floor });
                 }} />
-                <HeightRow cur={rowOfFloor(menuUnit.floor)?.height ?? 'normal'} s={s} onPick={h => { setRowHeight(menuUnit.floor, h); setMenu(null); }} />
+                <HeightRow cur={rowOfFloor(menuUnit.buildingId, menuUnit.floor)?.height ?? 'normal'} s={s} onPick={h => { setRowHeight(menuUnit.buildingId, menuUnit.floor, h); setMenu(null); }} />
                 <Sep />
-                <Item close={() => setMenu(null)} id="add-position" icon={Plus} label={s.lbAddPosition} onClick={() => edit(d => addPosition(d, bid, menuUnit.floor, aptCol(menuUnit) + aptSpan(menuUnit) - 1))} />
+                <Item close={() => setMenu(null)} id="add-position" icon={Plus} label={s.lbAddPosition} onClick={() => edit(d => addPosition(d, menuUnit.buildingId, menuUnit.floor, aptCol(menuUnit) + aptSpan(menuUnit) - 1))} />
                 <Item close={() => setMenu(null)} id="remove-position" icon={Minus} label={s.lbRemovePosition} onClick={() => {
-                  const next = removePosition(cloneDraft(draft), bid, menuUnit.floor, aptCol(menuUnit));
+                  const next = removePosition(cloneDraft(draft), menuUnit.buildingId, menuUnit.floor, aptCol(menuUnit));
                   if (!next) { onToast(s.lbRemoveRefused, 'error'); return; }
                   edit(() => next);
                 }} />
@@ -877,25 +928,26 @@ export function LayoutStudio({ onClose, onToast }: {
             {menu.kind === 'empty' && (
               <>
                 <div className="px-3 pt-1 pb-1 text-[9.5px] font-extrabold text-gray-400 tracking-wider">{s.lbBlankSlot.toUpperCase()}</div>
-                <Item close={() => setMenu(null)} id="add-position" icon={Plus} label={s.lbAddPosition} onClick={() => edit(d => addPosition(d, bid, menu.floor, menu.col))} />
+                <Item close={() => setMenu(null)} id="merge" icon={Merge} label={`${s.lbMergeSelected} (${selCount})`} disabled={selCount < 2} onClick={() => doMerge(selForMerge())} />
+                <Item close={() => setMenu(null)} id="add-position" icon={Plus} label={s.lbAddPosition} onClick={() => edit(d => addPosition(d, menu.bid, menu.floor, menu.col))} />
                 <Item close={() => setMenu(null)} id="remove-position" icon={Minus} label={s.lbRemovePosition} onClick={() => {
-                  const next = removePosition(cloneDraft(draft), bid, menu.floor, menu.col);
+                  const next = removePosition(cloneDraft(draft), menu.bid, menu.floor, menu.col);
                   if (!next) { onToast(s.lbRemoveRefused, 'error'); return; }
                   edit(() => next);
                 }} />
-                <HeightRow cur={rowOfFloor(menu.floor)?.height ?? 'normal'} s={s} onPick={h => { setRowHeight(menu.floor, h); setMenu(null); }} />
+                <HeightRow cur={rowOfFloor(menu.bid, menu.floor)?.height ?? 'normal'} s={s} onPick={h => { setRowHeight(menu.bid, menu.floor, h); setMenu(null); }} />
               </>
             )}
             {menu.kind === 'floor' && menuRow && (
               <>
                 <div className="px-3 pt-1 pb-1 text-[9.5px] font-extrabold text-gray-400 tracking-wider">{rowLabel(menuRow).toUpperCase()}</div>
-                <HeightRow cur={rowOfFloor(menu.floor)?.height ?? 'normal'} s={s} onPick={h => { setRowHeight(menu.floor, h); setMenu(null); }} />
+                <HeightRow cur={rowOfFloor(menu.bid, menu.floor)?.height ?? 'normal'} s={s} onPick={h => { setRowHeight(menu.bid, menu.floor, h); setMenu(null); }} />
                 <Item close={() => setMenu(null)} id="renumber" icon={Hash} label={s.lbRenumberFloor} onClick={() => {
-                  const nums = unitsOn(draft.apts, bid, menu.floor).map(a => Number(a.apartmentNumber)).filter(n => Number.isFinite(n) && n > 0);
+                  const nums = unitsOn(draft.apts, menu.bid, menu.floor).map(a => Number(a.apartmentNumber)).filter(n => Number.isFinite(n) && n > 0);
                   setRenum({ start: String(nums.length ? Math.min(...nums) : 1), dir: 'ltr' });
-                  setModal({ kind: 'renumber', floor: menu.floor });
+                  setModal({ kind: 'renumber', bid: menu.bid, floor: menu.floor });
                 }} />
-                <Item close={() => setMenu(null)} id="add-position" icon={Plus} label={s.lbAddPosition} onClick={() => edit(d => addPosition(d, bid, menu.floor, menuRow.cols))} />
+                <Item close={() => setMenu(null)} id="add-position" icon={Plus} label={s.lbAddPosition} onClick={() => edit(d => addPosition(d, menu.bid, menu.floor, menuRow.cols))} />
               </>
             )}
           </div>
@@ -905,7 +957,7 @@ export function LayoutStudio({ onClose, onToast }: {
       {/* Modals */}
       {modal?.kind === 'move' && moveInfo && (
         <Shell onClose={() => setModal(null)} hook="data-move-modal">
-          <h3 className="font-bold text-gray-900 mb-3">{fmt(s.lbMoveAsk, { a: moveInfo.label, f: labelOfFloor(modal.toFloor) })}</h3>
+          <h3 className="font-bold text-gray-900 mb-3">{fmt(s.lbMoveAsk, { a: moveInfo.label, f: labelOfFloor(moveInfo.first?.buildingId ?? '', modal.toFloor) })}</h3>
           <label className="flex items-start gap-2 p-2.5 rounded-lg border border-gray-200 mb-2 cursor-pointer" data-move-keep>
             <input type="radio" name="movenum" checked={moveChoice === 'keep'} onChange={() => setMoveChoice('keep')} className="mt-0.5" />
             <span className="text-sm text-gray-800">
@@ -914,7 +966,7 @@ export function LayoutStudio({ onClose, onToast }: {
           </label>
           <label className="flex items-start gap-2 p-2.5 rounded-lg border border-gray-200 mb-4 cursor-pointer" data-move-renumber>
             <input type="radio" name="movenum" checked={moveChoice === 'renumber'} onChange={() => setMoveChoice('renumber')} className="mt-0.5" />
-            <span className="text-sm text-gray-800">{fmt(s.lbRenumberOpt, { f: labelOfFloor(modal.toFloor), range: moveInfo.range })}</span>
+            <span className="text-sm text-gray-800">{fmt(s.lbRenumberOpt, { f: labelOfFloor(moveInfo.first?.buildingId ?? '', modal.toFloor), range: moveInfo.range })}</span>
           </label>
           <div className="flex gap-2 justify-end">
             <Btn tone={tone} onClick={() => setModal(null)}>{s.cancel}</Btn>
@@ -942,7 +994,7 @@ export function LayoutStudio({ onClose, onToast }: {
       )}
       {modal?.kind === 'renumber' && (
         <Shell onClose={() => setModal(null)} hook="data-renumber-modal">
-          <h3 className="font-bold text-gray-900 mb-1">{s.lbRenumberFloor.replace(/…$/, '')} — {labelOfFloor(modal.floor)}</h3>
+          <h3 className="font-bold text-gray-900 mb-1">{s.lbRenumberFloor.replace(/…$/, '')} — {modal.bid} · {labelOfFloor(modal.bid, modal.floor)}</h3>
           <p className="text-[11px] text-gray-500 mb-3">{s.lbRenumberHint}</p>
           <div className="flex gap-3 mb-3">
             <label className="text-[11px] font-bold text-gray-500">

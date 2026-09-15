@@ -652,6 +652,8 @@ export function PlannerWidget({
 
   const updateAssignment = useStore(st => st.updateContractorAssignment);
   const deleteAssignment = useStore(st => st.deleteContractorAssignment);
+  const updateAssignmentInProject = useStore(st => st.updateAssignmentInProject);
+  const deleteAssignmentInProject = useStore(st => st.deleteAssignmentInProject);
 
   function setCell(key: string, entries: PlannerEntry[]) {
     const next = { ...cells };
@@ -999,13 +1001,22 @@ export function PlannerWidget({
     if (out.getDay() === 6) out.setDate(out.getDate() + 1);   // never Saturday
     return iso(out);
   };
-  const writeDays = (task: ContractorAssignment, dds: string[], more: Partial<ContractorAssignment> = {}) => {
+  /**
+   * Writes a task's days — in ITS OWN workspace. A bar for a task that lives
+   * elsewhere (the worker's Wolfson job drawn on the Job Board's notebook)
+   * used to be untouchable: no X, no drag, "an old thing sitting under
+   * everything I cannot delete". It goes through the cross-workspace writer
+   * now, so every bar on the sheet answers the same gestures.
+   */
+  const writeDays = (task: ContractorAssignment, dds: string[], more: Partial<ContractorAssignment> = {}, pid?: string) => {
     const sorted = [...new Set(dds)].sort();
-    updateAssignment(task.id, {
+    const patch = {
       ...more,
       dueDate: sorted.length ? sorted[sorted.length - 1] : null,
       days: sorted.length > 1 ? sorted : undefined,
-    });
+    };
+    if (pid && pid !== currentProjectId) updateAssignmentInProject(pid, task.id, patch);
+    else updateAssignment(task.id, patch);
   };
 
   function openBar(bar: TaskBarSeg) {
@@ -1020,7 +1031,6 @@ export function PlannerWidget({
   }
   /** A bar dropped on a square: the task's days shift, and its worker follows the row. */
   function dropBarTo(bar: TaskBarSeg, target: RotaHit) {
-    if (bar.foreign) return;
     const cid = rowContractorId(target.person);
     if (!cid) return;
     if (bar.days[0] === target.day && cid === bar.task.contractorId) return;
@@ -1045,13 +1055,12 @@ export function PlannerWidget({
       label: `Moved ${bar.label} to ${squareName(cellKey(target.person, target.day))}`,
       explain: `${bar.label} goes back to its previous days${cid !== bar.task.contractorId ? ' and worker' : ''}. `
         + 'The task itself is not otherwise touched.',
-    }, () => writeDays(bar.task, next, cid !== bar.task.contractorId ? { contractorId: cid } : {}));
+    }, () => writeDays(bar.task, next, cid !== bar.task.contractorId ? { contractorId: cid } : {}, bar.projectId));
     const cover = runCover(target.day);
     if (Object.keys(cover).length) write(cover);
   }
   /** The bar's right edge pulled to a day: this stretch runs from its start to there. */
   function resizeBarTo(bar: TaskBarSeg, day: string) {
-    if (bar.foreign) return;
     const startDay = bar.days[0];
     let n = 1;
     if (day > startDay) {
@@ -1069,30 +1078,33 @@ export function PlannerWidget({
       weight: 'content',
       label: `${bar.label}: ${n} day${n === 1 ? '' : 's'} from ${startDay}`,
       explain: `${bar.label} goes back to the days it had before the edge was pulled.`,
-    }, () => writeDays(bar.task, next));
+    }, () => writeDays(bar.task, next, {}, bar.projectId));
     if (seg.length) { const cover = runCover(seg[seg.length - 1]); if (Object.keys(cover).length) write(cover); }
   }
   /** The X on a bar: this stretch's days come off the task; the last one asks. */
   function removeBar(bar: TaskBarSeg) {
-    if (bar.foreign) return;
     const others = daysOf(bar.task).filter(dd => !bar.days.includes(dd));
     if (!others.length) { setBarAsk(bar); return; }
     track({
       weight: 'content',
       label: `Took ${bar.label} off ${bar.days.length} day${bar.days.length === 1 ? '' : 's'}`,
       explain: `${bar.label} comes back onto ${bar.days.join(', ')}. The task keeps its other days either way.`,
-    }, () => writeDays(bar.task, others));
+    }, () => writeDays(bar.task, others, {}, bar.projectId));
   }
   function resolveBarAsk(alsoDelete: boolean) {
     const bar = barAsk;
     setBarAsk(null);
     if (!bar) return;
-    if (alsoDelete) { deleteAssignment(bar.task.id); return; }
+    if (alsoDelete) {
+      if (bar.projectId && bar.projectId !== currentProjectId) deleteAssignmentInProject(bar.projectId, bar.task.id);
+      else deleteAssignment(bar.task.id);
+      return;
+    }
     track({
       weight: 'content',
       label: `Took ${bar.label} off the notebook`,
       explain: `${bar.label} comes back onto its days. The task is kept either way.`,
-    }, () => writeDays(bar.task, []));
+    }, () => writeDays(bar.task, [], {}, bar.projectId));
   }
 
   const todayIso = iso(new Date());
@@ -1564,14 +1576,14 @@ export function PlannerWidget({
                                   readOnly={ro || state === 'ending'} isRtl={LT === 'he-IL'}
                                   onOpen={() => openBar(starts)}
                                   onDropTo={t => dropBarTo(starts, t)}
-                                  onDragOff={() => { if (!starts.foreign) setBarAsk(starts); }}
+                                  onDragOff={() => setBarAsk(starts)}
                                   onRemove={() => removeBar(starts)}
                                   onResizeTo={dd => resizeBarTo(starts, dd)} />
                               );
                             }
                             const covered = rowBars.some(bar => bar.lane === lane && bar.startIdx < dayIdx && dayIdx < bar.startIdx + bar.len);
                             return covered
-                              ? <span key={`sp-${lane}`} aria-hidden="true" style={{ height: z(strips ? 22 : 40) }} />
+                              ? <span key={`sp-${lane}`} aria-hidden="true" style={{ height: barHeight(z, textSize, strips) }} />
                               : null;
                           })}
                           {entries.map(en => (
@@ -1752,6 +1764,17 @@ function monthKey(d: Date): string {
 const SLOT_H = 58;
 
 /** One drawn stretch of a task on one worker's row in one week. */
+/**
+ * A bar's height — the SAME number the spacer under a covered square reserves.
+ * The bar used to be `minHeight` and grew with big type, past the band the
+ * next square had kept free, and lay across that square's own card: a card
+ * "under stuff" that could not be pressed.
+ */
+export function barHeight(z: (n: number) => number, size: number, strips: boolean): number {
+  if (strips) return z(22);
+  return Math.max(z(40), Math.round(size * 1.25 + Math.max(z(7), size - z(2)) * 1.25 + z(8)));
+}
+
 export interface TaskBarSeg {
   id: string;
   taskId: string;
@@ -1798,9 +1821,9 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, onOpen, onDropTo, onDra
 }) {
   const drag = useRef<{ x: number; y: number; live: boolean; resize: boolean } | null>(null);
   const [held, setHeld] = useState(false);
-  const editable = !readOnly && !bar.foreign;
+  const editable = !readOnly;
   const color = bar.stageFrom?.color ?? '#6366f1';
-  const h = z(strip ? 22 : 40);
+  const h = barHeight(z, size, strip);
   const n = bar.len;
 
   const handlers = editable ? {
@@ -1856,14 +1879,14 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, onOpen, onDropTo, onDra
       data-no-drag data-el-action data-task-bar={bar.taskId} data-bar-days={bar.len}
       className="group/bar relative rounded-md min-w-0 flex-shrink-0"
       title={bar.done ? 'Done — crossed off, never removed'
-        : bar.foreign ? `${bar.workspace ?? 'Another workspace'} — opens on a click`
+        : bar.foreign ? `${bar.workspace ?? 'Another workspace'} — click to open · drag to move · X takes it off`
         : 'Click to open · drag to move · pull the right edge for more days'}
       style={{
         position: 'relative', zIndex: 3,
         // n cells plus the gaps and paddings between them — the bar lies
         // across real cells, so its width is the cells' own.
         width: n > 1 ? `calc(${n * 100}% + ${(n - 1) * 5}px)` : '100%',
-        minHeight: h,
+        height: h, overflow: 'hidden',
         backgroundColor: bar.done ? '#f1f5f9' : '#eef4fa',
         border: `1px solid ${bar.done ? '#e2e8f0' : '#c7d4e0'}`,
         borderLeft: `${Math.max(3, z(4))}px solid ${color}`,

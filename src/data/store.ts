@@ -585,6 +585,9 @@ interface AppState {
    * phone and the notebook (which read every snapshot) see it at once.
    */
   addAssignmentToProject: (projectId: string, fields: Omit<ContractorAssignment, 'id' | 'createdAt'>) => string;
+  /** Edit / delete a task that lives in ANOTHER workspace (the notebook's foreign bars) — its Firestore collection + local snapshot. */
+  updateAssignmentInProject: (projectId: string, id: string, patch: Partial<ContractorAssignment>) => void;
+  deleteAssignmentInProject: (projectId: string, id: string) => void;
   addContractorPhoto: (p: Omit<ContractorPhoto, 'id' | 'uploadedAt'>) => string;
   updateContractorPhoto: (id: string, changes: Partial<ContractorPhoto>) => void;
   deleteContractorPhoto: (id: string) => void;
@@ -2327,6 +2330,28 @@ export const useStore = create<AppState>((set, get) => ({
     fsSet(projectCollection(projectId, 'contractorAssignments'), a.id, a);
     set(st => ({ snapshotTick: st.snapshotTick + 1 }));
     return a.id;
+  },
+
+  updateAssignmentInProject: (projectId, id, patch) => {
+    if (projectId === get().currentProjectId) { get().updateContractorAssignment(id, patch); return; }
+    const key = `${projectId}_app_data`;
+    const snap = loadFromStorage<Record<string, unknown>>(key, {});
+    const list = Array.isArray(snap.contractorAssignments) ? snap.contractorAssignments as ContractorAssignment[] : [];
+    const cur = list.find(a => a.id === id);
+    if (!cur) return;
+    const next = { ...cur, ...patch, updatedAt: new Date().toISOString() } as ContractorAssignment;
+    saveToStorage(key, { ...snap, contractorAssignments: list.map(a => (a.id === id ? next : a)) });
+    fsSet(projectCollection(projectId, 'contractorAssignments'), id, next);
+    set(st => ({ snapshotTick: st.snapshotTick + 1 }));
+  },
+  deleteAssignmentInProject: (projectId, id) => {
+    if (projectId === get().currentProjectId) { get().deleteContractorAssignment(id); return; }
+    const key = `${projectId}_app_data`;
+    const snap = loadFromStorage<Record<string, unknown>>(key, {});
+    const list = Array.isArray(snap.contractorAssignments) ? snap.contractorAssignments as ContractorAssignment[] : [];
+    saveToStorage(key, { ...snap, contractorAssignments: list.filter(a => a.id !== id) });
+    fsDelete(projectCollection(projectId, 'contractorAssignments'), id);
+    set(st => ({ snapshotTick: st.snapshotTick + 1 }));
   },
 
   addContractorPhoto: (fields) => {

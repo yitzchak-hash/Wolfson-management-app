@@ -85,13 +85,14 @@ const blank81 = await page.locator('[data-builder-cell="A1-81"]').evaluate(el =>
 check(blank81 === 'dashed', '2e a blank slot draws dashed', blank81);
 
 // ── 3. The floors ──
-const labels = await attrs(page, '[data-builder-floor-label]', 'data-builder-floor-label');
+// Every building is on screen at once now — scope the row queries to A1.
+const labels = await attrs(page, '[data-builder-building="A1"] [data-builder-floor-label]', 'data-builder-floor-label');
 check(labels[0] === '15' && labels[1] === '14' && labels[2] === '13', '3 rows start 15 · 14 · 13', labels.slice(0, 4).join(','));
 check(!labels.some(l => /ground|commercial/i.test(l)), '3b no Ground / Commercial row');
 check(labels.includes('1 · Lobby'), '3c one "1 · Lobby" row', labels.join(','));
 check(labels.indexOf('1 · Lobby') === labels.indexOf('1') + 1 && labels[labels.indexOf('1 · Lobby') + 1] === '-0.5', '3d lobby sits between floor 1 and the basements');
 check(await page.locator('[data-builder-cell="A1-77"]').count() === 0, '3e the floor-0 record is not drawn anywhere');
-const rowsH = await page.locator('[data-builder-row]').evaluateAll(els => els.map(e => e.getBoundingClientRect().height));
+const rowsH = await page.locator('[data-builder-building="A1"] [data-builder-row]').evaluateAll(els => els.map(e => e.getBoundingClientRect().height));
 check(new Set(rowsH.map(Math.round)).size === 1, '3f every row is the same height (lobby and basement included)', [...new Set(rowsH.map(Math.round))].join(','));
 
 // ── 4. A unit with a name and no number ──
@@ -117,7 +118,7 @@ await mv.waitFor({ state: 'hidden' });
 const c51 = page.locator('[data-builder-cell="A1-51"]');
 const c51row = await c51.evaluate(el => el.closest('[data-builder-row]').getAttribute('data-builder-row'));
 check(c51row === '13' && await c51.getAttribute('data-builder-num') === '51', '5d 51 landed on the floor below with its number kept', c51row);
-check(labels.length === (await page.locator('[data-builder-row]').count()), '5e no floor appeared or vanished');
+check(labels.length === (await page.locator('[data-builder-building="A1"] [data-builder-row]').count()), '5e no floor appeared or vanished');
 
 // ── 6. Merge across the row ──
 await page.locator('[data-builder-cell="A1-45"]').click();
@@ -154,12 +155,12 @@ check(await menu.count() === 0, '8c Escape closes the menu (and not the studio)'
 check(await studio.isVisible(), '8d the studio is still open');
 
 // ── 9. Row height from the floor label ──
-await page.locator('[data-builder-floor-label="12"]').click({ button: 'right' });
+await page.locator('[data-builder-building="A1"] [data-builder-floor-label="12"]').click({ button: 'right' });
 await menu.waitFor({ state: 'visible' });
 check(await menu.locator('[data-menu-item="renumber"]').count() === 1 && await menu.locator('[data-row-height]').count() === 3, '9 the floor label menu offers Row height and Renumber');
 await menu.locator('[data-row-height="tall"]').click();
-const h13 = await page.locator('[data-builder-row="13"]').evaluate(el => el.getBoundingClientRect().height);
-const h14 = await page.locator('[data-builder-row="14"]').evaluate(el => el.getBoundingClientRect().height);
+const h13 = await page.locator('[data-builder-building="A1"] [data-builder-row="13"]').evaluate(el => el.getBoundingClientRect().height);
+const h14 = await page.locator('[data-builder-building="A1"] [data-builder-row="14"]').evaluate(el => el.getBoundingClientRect().height);
 check(h13 > h14 * 1.3, '9b the tall row is taller', `${h13} vs ${h14}`);
 
 // ── 10. Save: the change list, then the writes ──
@@ -210,6 +211,23 @@ check(c51d === '13', '11i 51 sits on its new floor on the diagram');
 await page.goto(`${APP}/settings`);
 await page.getByRole('button', { name: /^Buildings$/ }).first().click();
 await studio.waitFor({ state: 'visible' });
+
+// ── 13. All buildings at once; empty squares select and merge (owner, 2026-09-15) ──
+check(await page.locator('[data-builder-building]').count() === 3, '13 all three buildings are on screen at once');
+const a2Labels = await attrs(page, '[data-builder-building="A2"] [data-builder-floor-label]', 'data-builder-floor-label');
+check(a2Labels.includes('-1') && a2Labels.includes('-4') && !a2Labels.includes('-0.5'),
+  '13b A2 draws its basement rows with no records at all (and no -0.5, which is A1\'s)', a2Labels.slice(-5).join(','));
+const e1 = page.locator('[data-builder-empty="E|A2|10|1"]'), e2 = page.locator('[data-builder-empty="E|A2|10|2"]');
+check(await e1.count() === 1 && await e2.count() === 1, '13c empty positions stand on A2 floor 10');
+await e1.click();
+await e2.click({ modifiers: ['Control'] });
+check(/2 selected/.test(await page.locator('[data-layout-studio]').innerText()), '13d two EMPTY squares select');
+check(await page.locator('[data-merge-btn]').isEnabled(), '13e and Merge is offered for them');
+await page.locator('[data-merge-btn]').click();
+await page.waitForTimeout(200);
+check(await page.locator('[data-builder-building="A2"] [data-builder-row="10"] [data-builder-cell][data-builder-span="2"]').count() === 1,
+  '13f the merge made ONE unit spanning both squares');
+
 await page.locator('[data-builder-cell="A1-48"]').click();
 await page.locator('[data-rename-btn]').click();
 // Key by key: a modal declared inside the render body remounts on every

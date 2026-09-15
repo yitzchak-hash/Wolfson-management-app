@@ -30,6 +30,43 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-12-24',
+    title: 'The basements are back, all three buildings at once, and the worker starts his day',
+    items: [
+      {
+        title: 'Every basement row, in every building',
+        body: 'The rows below the lobby — A1\'s -0.5 and every tower\'s -1 to -4 — are '
+          + 'part of the building\'s shape again, drawn whether or not their records have '
+          + 'arrived, so the jobs you put there are where you left them. A unit named on the '
+          + 'old Ground row shows too. Two records that used to land on the same square now '
+          + 'sit side by side instead of one hiding the other.',
+        demo: 'list',
+      },
+      {
+        title: 'The layout builder shows all three buildings',
+        body: 'A1, A2 and A3 side by side, each with its own count. Any square is '
+          + 'selectable now — an empty one too — so a row can be merged across squares '
+          + 'that never held a record; the merge makes them one unit.',
+        demo: 'tap',
+      },
+      {
+        title: 'Every bar on the notebook can be moved or taken off',
+        body: 'A task from another workspace drawn on this notebook was untouchable — no X, '
+          + 'no drag. It answers the same gestures now, and its bar never lies over the '
+          + 'card in the next square.',
+        demo: 'drag',
+      },
+      {
+        title: 'On the phone: "I\'m going to work here"',
+        body: 'Tap a unit on the map, press the big button, pick the stage it is at, and an '
+          + 'open task for today is on your calendar and the office\'s notebook. At the end '
+          + 'of the day open the task and close it: the closing screen asks what stage it is '
+          + 'at now, takes the pictures, and moves the unit there.',
+        demo: 'pin',
+      },
+    ],
+  },
+  {
     date: '2026-12-23',
     title: 'Buildings, plans and the notebook: the six approved scenes, built',
     items: [

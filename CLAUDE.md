@@ -7886,3 +7886,68 @@ Harnesses: `notebookbars-probe` (36) · `multiday` (re-encoded to bars) ·
 seeded Goals fixture intercepting the week plus — pre-existing (the round32
 lesson). planaddr's "1 FAILED" is the sandboxed-frame localStorage page error,
 identical on the untouched base.
+
+---
+
+# v2 — the same day, from the owner's first look (basements, three buildings, the stuck bar, the day's start)
+
+## The rows are the building's SHAPE, not a summary of the loaded records
+`floorsOf` in `floorRows.ts`: Wolfson's canonical floors are the tower 16..1
+AND the basements each tower was built with (A1 -0.5, every tower -1..-4).
+Basement rows that only existed once their slot records had synced read as
+"the jobs I had on -0.5 vanished" and "A2 and A3 have no basement". Floor 0
+(the removed Ground/Commercial row) COMES BACK while a countable unit sits on
+it — a real job is never hidden by a model decision. Two more faults behind
+the same report:
+- **`aptCol`'s fallback sent every number ≥ 55 to column 3** — including the
+  basement / ground / first-floor slots 57+, so records written before
+  positions existed all claimed one square. 57+ is four to a floor now.
+- **`positionMap` never drops a record**: two records on one square step the
+  later one right to the next free column (`placeUnits`, shared with
+  `buildFloorRows` so the row grows to hold it; `placedColumns` exports the
+  drawn columns). A wrong column can be seen and dragged; a vanished unit
+  cannot. The studio's draft is built from the DRAWN columns, so a bumped
+  unit merges with its real neighbour and Save writes the fix.
+
+## The studio shows every building, and an empty square is a square
+`LayoutStudio` renders `perB` — all buildings side by side (no tabs), each
+with its own count; every menu and modal carries the building (`bid` on
+`Menu`/the renumber modal), `onDropTo(bid, …)`, `setRowHeight(bid, …)`.
+An EMPTY position (no record) is selectable — click, ctrl, shift, lasso —
+under the id `E|<bid>|<floor>|<col>` (`emptyId`/`parseEmpty`), and
+`doMerge` materialises each selected empty into a blank record first, so a
+lobby merges across squares that never held a record. Merge is offered on
+`selCount` (units + empties). Hooks: `[data-builder-building=<id>]`,
+`[data-builder-empty=E|…]`. builder2-probe scopes its row queries to A1 and
+grew section 13.
+
+## Every notebook bar answers the same gestures
+`updateAssignmentInProject` / `deleteAssignmentInProject` in the store (the
+`addAssignmentToProject` idiom: the workspace's Firestore collection + its
+local snapshot + `snapshotTick`). `writeDays` takes the bar's `projectId`,
+so a bar for a task that lives in ANOTHER workspace drags, resizes and comes
+off like any other — it used to be `editable = !readOnly && !bar.foreign`:
+no X, no drag, the owner's "an old one sitting under stuff that I cannot
+select to delete". And `barHeight(z, size, strips)` is ONE number for the
+bar's `height` (overflow hidden) and the spacer a covered square reserves:
+the bar was `minHeight` and grew with big type past its lane, lying over
+the next square's card.
+
+## The worker STARTS the day; the close decides the finish (owner, 2026-09-15)
+Supersedes "I did work here" with its finished / not-yet / what-is-left
+steps, all deleted. The map sheet's big button is **"I'm going to work
+here"** (`goingToWorkBtn`) → the part-of-a-general-job ask (unchanged) →
+**"What stage is it at?"** (`whatStageNow`; EVERY active stage, the unit's
+own marked `[data-work-stage][data-current]`) → `startWork(st)`: ONE OPEN
+`stageReport` task dated today on the unit, on his stage — on his calendar
+and the office's notebook the moment it exists — and the task sheet opens
+on it (`arriveClosingRef` is NOT set: nothing is decided at the start).
+The CLOSING screen grew `[data-close-stage]` — "What stage is it at now?"
+(`stageNowLabel`), the workspace's stages as pills, seeded from the task's
+when-done stage, else its stage, else the unit's; `handleConfirmComplete`
+writes `stageWhenDone` BEFORE `completedAt`, so the store's standing
+completion rule moves the unit there and the stage-report rule crosses the
+worked stage off. Hidden for problems and general jobs. Three new optional
+ContractorUiStrings (three presets, fallback rule). `stagereport.mjs`
+re-encoded: the start makes an open task and marks nothing; the close asks,
+moves the unit, crosses the stage off; the office's own pending survives.

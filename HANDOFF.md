@@ -27,7 +27,7 @@ exactly there.
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2026-12-23` — the next entry must be a later date (an older
+   newest is `2026-12-24` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`. 8. Rewrite THIS file.
@@ -43,8 +43,35 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-15 — the six scenes BUILT)
+## Where things stand (2026-09-15 — the six scenes built, then his first look)
 Last commits, newest first (see `git log`):
+- **2026-09-15, sixth pass — the owner's first look at the build, four
+  reports, all fixed** (the last CLAUDE.md section is the record).
+  (1) "My job on -0.5 vanished / A2 and A3 show no basement": the row model
+  drew basement rows only from loaded records — now every tower's basements
+  are part of its SHAPE (A1 -0.5, all -1..-4), a real unit on the old Ground
+  row still shows, the column fallback for slots 57+ no longer stacks them
+  on one square, and two records on one square step aside instead of one
+  hiding the other. (2) "Why not all three buildings at once / squares I
+  press are not selectable or mergeable": the studio draws every building
+  side by side, and an EMPTY square is selectable and merges by becoming a
+  blank record. (3) "An old thing on Oct 6 sitting under stuff I cannot
+  select to delete": a bar for a task in ANOTHER workspace was untouchable —
+  the store gained cross-workspace task writers and every bar drags/resizes/
+  comes off; a bar's height is now the exact lane height so it never lies
+  over the next square's card. (4) The worker's flow, in his words: the map
+  button is "I'm going to work here" → the stage it is at → an OPEN task for
+  today (on his calendar + the office notebook); at the end of the day he
+  closes the task and the closing screen asks "what stage is it at now?",
+  takes the pictures, and the unit moves there. The finished / not-yet /
+  what-is-left steps are GONE. Probes green: builder2-probe (+section 13),
+  notebookbars, multiday, stagereport (re-encoded to the new flow) plus the
+  regressions. **Tell him plainly**: the "I did work here" question is gone
+  by his design — a stage is now marked half-done only by the office
+  (right-click in the stage picker); and one thing I could not verify
+  without his data: the Oct 6 item was diagnosed from the code (a foreign
+  task's bar), so if it is still stuck after this deploy the next step is a
+  screenshot with the bar's hover title.
 - **2026-09-15, fifth pass — "build it" arrived and ALL SIX SCENES ARE BUILT**
   (scenes 1 and 2 by two sub-agents in worktrees, merged; 3–6 in the main
   session; the full record is the last CLAUDE.md section). What the owner

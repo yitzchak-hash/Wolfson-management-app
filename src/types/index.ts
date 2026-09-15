@@ -1543,6 +1543,10 @@ export interface ContractorUiStrings {
   whatsLeft?: string;
   sendToOffice?: string;
   halfDoneSaved?: string;
+  /** "I'm going to work here" (owner, 2026-09-15): the start-of-day button, the stage-now asks. Optional, same rule. */
+  goingToWorkBtn?: string;
+  whatStageNow?: string;
+  stageNowLabel?: string;
   /** The closing screen and the task thread (the 2026-08-30 UI round) — optional, same rule. */
   jobClosedLabel?: string;
   closingTitle?: string;
@@ -1652,6 +1656,9 @@ export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   whatsLeft: 'What is left to do?',
   sendToOffice: 'Send to the office',
   halfDoneSaved: 'Sent — the office will see it as half done.',
+  goingToWorkBtn: "I'm going to work here",
+  whatStageNow: 'What stage is it at?',
+  stageNowLabel: 'What stage is it at now?',
   jobClosedLabel: 'Job closed',
   closingTitle: 'Closing the job',
   sendAndClose: 'Send and close the job',
@@ -1758,6 +1765,9 @@ export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   whatsLeft: 'מה נשאר לעשות?',
   sendToOffice: 'שליחה למשרד',
   halfDoneSaved: 'נשלח — המשרד יראה את זה כחצי גמור.',
+  goingToWorkBtn: 'אני הולך לעבוד כאן',
+  whatStageNow: 'באיזה שלב זה נמצא?',
+  stageNowLabel: 'באיזה שלב זה עכשיו?',
   jobClosedLabel: 'העבודה נסגרה',
   closingTitle: 'סגירת העבודה',
   sendAndClose: 'שליחה וסגירת העבודה',
@@ -1869,6 +1879,9 @@ export const RUSSIAN_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   whatsLeft: 'Что осталось сделать?',
   sendToOffice: 'Отправить в офис',
   halfDoneSaved: 'Отправлено — офис увидит это как наполовину готовое.',
+  goingToWorkBtn: 'Я буду здесь работать',
+  whatStageNow: 'На каком этапе это сейчас?',
+  stageNowLabel: 'На каком этапе это теперь?',
   jobClosedLabel: 'Работа закрыта',
   closingTitle: 'Закрытие работы',
   sendAndClose: 'Отправить и закрыть работу',

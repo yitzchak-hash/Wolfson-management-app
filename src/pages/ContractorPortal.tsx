@@ -673,13 +673,21 @@ export function ContractorPortal() {
    *  taken on that screen" is exactly the difference. */
   const preClosingIds = useRef<Set<string>>(new Set());
   const [planDlBusy, setPlanDlBusy] = useState(false);
-  /** The map's "I did work here" flow — one small screen at a time. */
+  /**
+   * The map's "I'm going to work here" flow (owner, 2026-09-15) — one small
+   * screen at a time: the button, (which general job it is part of), the
+   * stage the unit is AT. That is the whole start: it makes an OPEN task for
+   * today, on his calendar and the office's notebook. At the end of the day
+   * he opens the task and closes it, and the CLOSING screen asks what stage
+   * it is at now. Nothing is decided about the finish at the start.
+   */
   const [workHere, setWorkHere] = useState<null | {
-    aptId: string; step: 'view' | 'part' | 'stage' | 'finished' | 'note'; stageId?: string;
+    aptId: string; step: 'view' | 'part' | 'stage'; stageId?: string;
     /** The general job this report is filed under, once he has said so. */
     partOf?: string | null;
   }>(null);
-  const [leftNote, setLeftNote] = useState('');
+  /** The closing screen's "what stage is it at now" — the task's when-done stage, chosen at the close. */
+  const [closeStage, setCloseStage] = useState<string | null>(null);
   /** How many pictures a closing needs. photosOptional workers skip it. */
   const MIN_CLOSE_MEDIA = 3;
   /** Weekly is what a worker plans his van by; the month grid is one press away. */
@@ -1167,6 +1175,8 @@ export function ContractorPortal() {
       preClosingIds.current = new Set(getMedia(selectedAssignment.id).map(m => m.id));
       setClosingComment('');
       setFinishAsk(null);
+      const liveA = contractorAssignments.find(x => x.id === selectedAssignment.id) ?? selectedAssignment;
+      setCloseStage(liveA.stageWhenDone ?? liveA.stageId ?? getApt(liveA.apartmentId)?.currentStageId ?? null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [closing]);
@@ -1175,6 +1185,13 @@ export function ContractorPortal() {
     if (!selectedAssignment) return;
     const apt = getApt(selectedAssignment.apartmentId);
     const completedAt = new Date().toISOString();
+    // The stage he says the unit is at NOW becomes the task's when-done
+    // stage, written BEFORE the close so the store's completion rule moves
+    // the unit there in the same motion.
+    const liveA = contractorAssignments.find(x => x.id === selectedAssignment.id) ?? selectedAssignment;
+    if (closeStage && closeStage !== (liveA.stageWhenDone ?? null) && !liveA.problem) {
+      updateContractorAssignment(selectedAssignment.id, { stageWhenDone: closeStage });
+    }
     updateContractorAssignment(selectedAssignment.id, { completedAt });
     addActivityLog({
       apartmentId: selectedAssignment.apartmentId,
@@ -1366,6 +1383,10 @@ export function ContractorPortal() {
   const photosNeeded = selProblem ? selProblem.photosRequired : !contractor?.photosOptional;
   const canComplete = (selMedia.length >= MIN_CLOSE_MEDIA || !photosNeeded)
     && !selectedAssignment?.completedAt && selProblem?.status !== 'waiting';
+  /** This workspace's stages, in order — the closing screen's "what stage now" row. */
+  const wsStageList = stages
+    .filter(st => (currentProjectId === 'general' ? st.projectId === 'general' : !st.projectId) && st.active)
+    .sort((a, b) => a.order - b.order);
 
   type FilterKey = 'yesterday' | 'today' | 'tomorrow' | 'week' | 'all';
   // ALL leads, per the owner — the everything view is the anchor the eye
@@ -2756,6 +2777,32 @@ export function ContractorPortal() {
                     </div>
                   ) : (
                     <div className="max-w-md mx-auto w-full space-y-6">
+                      {/* 0 · what stage is the unit at NOW — the task's when-done
+                          stage, chosen at the close (owner, 2026-09-15). The
+                          store moves the unit there when the task closes. */}
+                      {!selProblem && !a.general && wsStageList.length > 0 && (
+                        <div data-close-stage>
+                          <p className="text-center font-extrabold text-gray-800 mb-2" style={{ fontSize: 16, lineHeight: 1.35 }}>
+                            {s.stageNowLabel || (w('What stage is it at now?', 'באיזה שלב זה עכשיו?', 'На каком этапе это теперь?'))}
+                          </p>
+                          <div className="flex flex-wrap justify-center gap-1.5">
+                            {wsStageList.map(st => {
+                              const on = closeStage === st.id;
+                              return (
+                                <button key={st.id} data-close-stage-pick={st.id} data-on={on ? '1' : undefined}
+                                  onClick={() => setCloseStage(st.id)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-bold border active:scale-[0.98]"
+                                  style={on
+                                    ? { backgroundColor: st.color, borderColor: st.color, color: '#fff' }
+                                    : { borderColor: '#e5e7eb', color: '#374151', backgroundColor: '#fff' }}>
+                                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: on ? '#fff' : st.color }} />
+                                  {getStageName(st, !!s.isRtl)}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                       {/* 1 · the pictures — the rule names MIN_CLOSE_MEDIA, so
                           changing the constant changes the sentence. */}
                       <div>
@@ -2906,11 +2953,9 @@ export function ContractorPortal() {
         const allowedReport = workerNow?.reportStages?.[currentProjectId]
           ?? allWsStages.slice(1, Math.max(1, allWsStages.length - 1)).map(st => st.id);
         const wsStages = allWsStages.filter(st => allowedReport.includes(st.id));
-        const pickedStage = wsStages.find(st => st.id === workHere.stageId);
         /** His open general jobs here — the "is this part of…?" question. */
         const generalJobs = assignments.filter(x => x.general && !x.completedAt);
-        const stageOrder = (id: string | null | undefined) => allWsStages.find(st => st.id === id)?.order ?? -1;
-        /** File the report under the general job he named. */
+        /** File the visit under the general job he named. */
         const recordVisit = (rid: string, st: typeof allWsStages[0]) => {
           const gid = workHere.partOf;
           if (!gid) return;
@@ -2923,65 +2968,35 @@ export function ContractorPortal() {
         const aptTasks = assignments.filter(a => a.apartmentId === apt.id);
         const curStage = getStage(apt.currentStageId);
         const todayIso = new Date().toISOString().slice(0, 10);
-        const closeSheet = () => { setWorkHere(null); setLeftNote(''); };
+        const closeSheet = () => setWorkHere(null);
         const mintId = () => `SR-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-        const reportBase = (st: typeof wsStages[0], desc: string) => ({
-          contractorId,
-          apartmentId: apt.id,
-          buildingId: apt.buildingId,
-          taskDescription: desc,
-          dueDate: todayIso,
-          stageId: st.id,
-          priority: 'normal',
-          completedAt: null,
-          stageReport: true,
-          createdBy: contractorId,
-          createdByName: contractor?.name ?? '',
-        });
-        const finishedYes = () => {
-          if (!pickedStage) return;
+        /**
+         * "I'm going to work here" + the stage it is AT → one OPEN task for
+         * today on this unit, on the stage he named. It is drawn on his
+         * calendar and on the office's notebook the moment it exists; the
+         * finish is decided at the CLOSE (the closing screen asks what stage
+         * it is at now), never here.
+         */
+        const startWork = (st: typeof allWsStages[0]) => {
           const rid = mintId();
           addContractorAssignment({
             id: rid,
-            ...reportBase(pickedStage,
-              `${getStageName(pickedStage, !!s.isRtl)} — ${w('stage report', 'דיווח שלב', 'отчёт по этапу')}`),
+            contractorId,
+            apartmentId: apt.id,
+            buildingId: apt.buildingId,
+            taskDescription: `${getStageName(st, !!s.isRtl)} — ${w('working here today', 'עובד כאן היום', 'работаю здесь сегодня')}`,
+            dueDate: todayIso,
+            stageId: st.id,
+            priority: 'normal',
+            completedAt: null,
+            stageReport: true,
+            createdBy: contractorId,
+            createdByName: contractor?.name ?? '',
           } as never);
-          recordVisit(rid, pickedStage);
+          recordVisit(rid, st);
           const rec = useStore.getState().contractorAssignments.find(a => a.id === rid);
           closeSheet();
-          if (rec) { arriveClosingRef.current = true; setSelectedAssignment(rec); }
-        };
-        const sendNotFinished = () => {
-          if (!pickedStage || !leftNote.trim()) return;
-          const rid = mintId();
-          addContractorAssignment({
-            id: rid,
-            ...reportBase(pickedStage,
-              `${w('Finish', 'להשלים', 'Завершить')} ${getStageName(pickedStage, !!s.isRtl)}`),
-          } as never);
-          addContractorNote({
-            assignmentId: rid,
-            apartmentId: apt.id,
-            contractorId,
-            text: leftNote.trim(),
-            authorType: 'contractor' as const,
-            authorId: contractorId,
-            authorName: contractor?.name ?? '',
-          });
-          recordVisit(rid, pickedStage);
-          /* "Not yet" marks the stage half done AND moves the apartment to it
-             when it is further along than where it stood (owner's rule) —
-             never backwards. */
-          updateApartment(apt.id,
-            {
-              stageMarks: { ...(apt.stageMarks ?? {}), [pickedStage.id]: 'pending' },
-              ...(stageOrder(pickedStage.id) > stageOrder(apt.currentStageId) ? { currentStageId: pickedStage.id } : {}),
-            },
-            {
-              id: contractorId, name: contractor?.name ?? 'Worker', code: '',
-              role: 'viewer', active: true, createdAt: new Date().toISOString(),
-            } as never);
-          closeSheet();
+          if (rec) setSelectedAssignment(rec);
         };
         return (
           <>
@@ -3041,7 +3056,7 @@ export function ContractorPortal() {
                       className="w-full py-4 rounded-xl text-base font-bold text-white flex items-center justify-center gap-2 active:scale-[0.98]"
                       style={{ background: 'linear-gradient(135deg, #1e3a5f, #2c4f78)' }}>
                       <Hammer size={19} />
-                      {s.workHereBtn || (w('I did work here', 'עבדתי כאן', 'Я здесь работал'))}
+                      {s.goingToWorkBtn || (w("I'm going to work here", 'אני הולך לעבוד כאן', 'Я буду здесь работать'))}
                     </button>
                   </>
                 )}
@@ -3073,78 +3088,32 @@ export function ContractorPortal() {
                 {workHere.step === 'stage' && (
                   <>
                     <p className="text-center font-extrabold text-gray-800" style={{ fontSize: 17 }}>
-                      {s.whatDidYouDo || (w('What did you do?', 'מה עשית?', 'Что вы сделали?'))}
+                      {s.whatStageNow || (w('What stage is it at?', 'באיזה שלב זה נמצא?', 'На каком этапе это сейчас?'))}
                     </p>
                     <div className="space-y-2" data-work-stages>
-                      {wsStages.map(st => (
-                        <button key={st.id}
-                          onClick={() => setWorkHere({ ...workHere, step: 'finished', stageId: st.id })}
-                          className="w-full flex items-center gap-2.5 border border-gray-200 rounded-xl px-3.5 py-3 text-left rtl:text-right active:scale-[0.99]">
-                          <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: st.color }} />
-                          <span className="text-sm font-bold text-gray-800">{getStageName(st, !!s.isRtl)}</span>
-                        </button>
-                      ))}
+                      {allWsStages.map(st => {
+                        const isCur = apt.currentStageId === st.id;
+                        return (
+                          <button key={st.id} data-work-stage={st.id} data-current={isCur ? '1' : undefined}
+                            onClick={() => startWork(st)}
+                            className="w-full flex items-center gap-2.5 rounded-xl px-3.5 py-3 text-left rtl:text-right active:scale-[0.99] border"
+                            style={isCur ? { borderColor: st.color, backgroundColor: `${st.color}14` } : { borderColor: '#e5e7eb' }}>
+                            <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: st.color }} />
+                            <span className="text-sm font-bold text-gray-800 flex-1">{getStageName(st, !!s.isRtl)}</span>
+                            {isCur && (
+                              <span className="text-[10px] font-extrabold uppercase tracking-wide" style={{ color: st.color }}>
+                                {w('now', 'עכשיו', 'сейчас')}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                     <button onClick={() => setWorkHere({ ...workHere, step: 'view' })}
                       className="w-full text-center text-xs font-semibold text-gray-400">
                       {w('Back', 'חזרה', 'Назад')}
                     </button>
                   </>
-                )}
-                {workHere.step === 'finished' && pickedStage && (
-                  <div data-work-finished className="space-y-3">
-                    <p className="text-center font-extrabold text-gray-800" style={{ fontSize: 17, lineHeight: 1.35 }}>
-                      {s.didYouFinish || (w('Did you finish this stage?', 'סיימת את השלב הזה?', 'Вы закончили этот этап?'))}
-                    </p>
-                    <p className="text-center font-bold flex items-center justify-center gap-2" style={{ color: '#0369a1', fontSize: 15 }}>
-                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: pickedStage.color }} />
-                      {getStageName(pickedStage, !!s.isRtl)}
-                    </p>
-                    <button data-finished-yes onClick={finishedYes}
-                      className="w-full py-3.5 rounded-xl font-bold text-white text-base"
-                      style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}>
-                      {s.finishedYes || (w('Yes — it is finished', 'כן — זה גמור', 'Да — готово'))}
-                    </button>
-                    <button data-finished-no onClick={() => setWorkHere({ ...workHere, step: 'note' })}
-                      className="w-full py-3.5 rounded-xl font-bold text-base"
-                      style={{ backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fdba74' }}>
-                      {s.finishedNo || (w('Not yet', 'עוד לא', 'Ещё нет'))}
-                    </button>
-                    <button onClick={() => setWorkHere({ ...workHere, step: 'stage' })}
-                      className="w-full text-center text-xs font-semibold text-gray-400">
-                      {w('Back', 'חזרה', 'Назад')}
-                    </button>
-                  </div>
-                )}
-                {workHere.step === 'note' && pickedStage && (
-                  <div data-work-note className="space-y-3">
-                    <p className="text-center font-extrabold text-gray-800" style={{ fontSize: 17 }}>
-                      {s.whatsLeft || (w('What is left to do?', 'מה נשאר לעשות?', 'Что осталось сделать?'))}
-                    </p>
-                    <textarea
-                      value={leftNote}
-                      onChange={e => setLeftNote(e.target.value)}
-                      rows={3}
-                      autoFocus
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
-                      placeholder={s.whatsLeft || (w('What is left to do?', 'מה נשאר לעשות?', 'Что осталось сделать?'))}
-                    />
-                    <button data-work-send onClick={sendNotFinished} disabled={!leftNote.trim()}
-                      className="w-full py-3.5 rounded-xl font-bold text-white text-base flex items-center justify-center gap-2 disabled:opacity-40"
-                      style={{ backgroundColor: '#1e3a5f' }}>
-                      <Send size={16} />
-                      {s.sendToOffice || (w('Send to the office', 'שליחה למשרד', 'Отправить в офис'))}
-                    </button>
-                    <p className="text-center text-[11px] text-gray-400">
-                      {s.halfDoneSaved || (s.isRtl
-                        ? 'המשרד יראה את השלב הזה כחצי גמור.'
-                        : 'The office will see this stage as half done.')}
-                    </p>
-                    <button onClick={() => setWorkHere({ ...workHere, step: 'finished' })}
-                      className="w-full text-center text-xs font-semibold text-gray-400">
-                      {w('Back', 'חזרה', 'Назад')}
-                    </button>
-                  </div>
                 )}
               </div>
             </div>

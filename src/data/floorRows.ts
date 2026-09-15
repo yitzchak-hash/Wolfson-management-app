@@ -1,4 +1,4 @@
-import { Apartment } from '../types';
+import { Apartment, isCountableApartment } from '../types';
 
 /**
  * THE ONE ROW MODEL for a building.
@@ -63,6 +63,10 @@ export function aptCol(apt: Pick<Apartment, 'colPosition' | 'apartmentNumber' | 
   if (Number.isFinite(c) && c >= 1) return Math.floor(c);
   const n = Number(apt.apartmentNumber);
   if (isWolfsonBuilding(apt.buildingId) && Number.isFinite(n) && n >= 1) {
+    // 57+ are the basement / ground / first-floor slots, four to a floor —
+    // the old rule sent every one of them to column 3, and records that
+    // shared a position silently hid each other.
+    if (n >= 57) return ((n - 57) % 4) + 1;
     if (n >= 55) return n === 55 ? 1 : 3;
     if (n >= 53) return n === 53 ? 1 : 3;
     if (n <= 52) return ((n - 1) % 4) + 1;
@@ -97,25 +101,38 @@ export function rowNumOf(buildingId: string, floor: number): string {
   return String(floor);
 }
 
-/** Wolfson's canonical floors — always drawn, even when a floor holds no record. */
-function wolfsonCanonicalFloors(): number[] {
+/**
+ * Wolfson's canonical floors — always drawn, even when a floor holds no
+ * record: the tower 16..1 AND the basements the building was built with
+ * (A1 has the half-level -0.5; every tower has -1..-4). The rows are the
+ * building's shape, not a summary of whatever records happen to be loaded —
+ * a basement row that only appeared once its slot records synced read as
+ * "my basement jobs vanished".
+ */
+function wolfsonCanonicalFloors(buildingId: string): number[] {
   const out: number[] = [];
   for (let f = 16; f >= 1; f--) out.push(f);
+  if (buildingId === 'A1') out.push(-0.5);
+  out.push(-1, -2, -3, -4);
   return out;
 }
 
 /** The floors a building draws, top first. */
 export function floorsOf(buildingId: string, apartments: Apartment[]): number[] {
   const set = new Set<number>();
-  if (isWolfsonBuilding(buildingId)) wolfsonCanonicalFloors().forEach(f => set.add(f));
+  if (isWolfsonBuilding(buildingId)) wolfsonCanonicalFloors(buildingId).forEach(f => set.add(f));
+  let groundHasUnit = false;
   for (const a of apartments) {
     if (a.buildingId !== buildingId) continue;
     if (!Number.isFinite(a.floor)) continue;
     set.add(a.floor);
     if (a.isDuplexApt) set.add(a.floor + 1);
+    if (a.floor === 0 && isCountableApartment(a)) groundHasUnit = true;
   }
-  // The empty Ground / Commercial row is gone from the Wolfson model.
-  if (isWolfsonBuilding(buildingId)) set.delete(0);
+  // The empty Ground / Commercial row is gone from the Wolfson model — but a
+  // REAL unit somebody named there is never hidden: the row comes back for
+  // as long as it holds one.
+  if (isWolfsonBuilding(buildingId) && !groundHasUnit) set.delete(0);
   return [...set].sort((a, b) => b - a);
 }
 
@@ -125,14 +142,9 @@ export function buildFloorRows(
   heights?: Record<string, RowHeight> | null,
 ): FloorRow[] {
   const floors = floorsOf(buildingId, apartments);
-  const mine = apartments.filter(a => a.buildingId === buildingId);
+  const { colsByFloor } = placeUnits(buildingId, apartments);
   return floors.map(floor => {
-    let cols = 4;
-    for (const a of mine) {
-      if (a.floor === floor || (a.isDuplexApt && a.floor + 1 === floor)) {
-        cols = Math.max(cols, aptCol(a) + aptSpan(a) - 1);
-      }
-    }
+    const cols = Math.max(4, colsByFloor.get(floor) ?? 0);
     const key = floorKey(floor);
     const h = heights?.[key];
     return {
@@ -171,14 +183,49 @@ export function rowHeightPx(row: Pick<FloorRow, 'height'>, buildingId: string, m
  * left out — the unit that covers them is what is drawn there.
  */
 export function positionMap(buildingId: string, apartments: Apartment[]): Map<string, Apartment> {
-  const m = new Map<string, Apartment>();
-  for (const a of apartments) {
-    if (a.buildingId !== buildingId || a.coveredBy) continue;
-    const col = aptCol(a);
-    m.set(`${a.floor}-${col}`, a);
-    if (a.isDuplexApt) m.set(`${a.floor + 1}-${col}`, a);
+  return placeUnits(buildingId, apartments).pos;
+}
+
+/** id → the column each unit is DRAWN at (after collisions are stepped aside). */
+export function placedColumns(buildingId: string, apartments: Apartment[]): Map<string, number> {
+  return placeUnits(buildingId, apartments).colOf;
+}
+
+/**
+ * The placement itself, shared by `positionMap` and `buildFloorRows` so the
+ * row widths and the drawn cells can never disagree. Two records claiming
+ * ONE position — the old column rule did that to every basement slot — never
+ * hide each other: the later one steps right to the next free column, and
+ * the row grows to hold it. A wrong column is a thing you can see and drag;
+ * a vanished unit is not.
+ */
+function placeUnits(buildingId: string, apartments: Apartment[]): {
+  pos: Map<string, Apartment>; colsByFloor: Map<number, number>; colOf: Map<string, number>;
+} {
+  const pos = new Map<string, Apartment>();
+  const colsByFloor = new Map<number, number>();
+  const colOf = new Map<string, number>();
+  const claim = (floor: number, col: number, span: number) => {
+    colsByFloor.set(floor, Math.max(colsByFloor.get(floor) ?? 0, col + span - 1));
+  };
+  const free = (floor: number, col: number, span: number) => {
+    for (let c = col; c < col + span; c++) if (pos.has(`${floor}-${c}`)) return false;
+    return true;
+  };
+  const mine = apartments
+    .filter(a => a.buildingId === buildingId && !a.coveredBy)
+    // A record with a stored column is placed first; the guessed ones fill in after.
+    .sort((a, b) => Number(Number.isFinite(Number(b.colPosition))) - Number(Number.isFinite(Number(a.colPosition))));
+  for (const a of mine) {
+    const span = aptSpan(a);
+    let col = aptCol(a);
+    while (!free(a.floor, col, span) || (a.isDuplexApt && !free(a.floor + 1, col, 1))) col += 1;
+    for (let c = col; c < col + span; c++) pos.set(`${a.floor}-${c}`, a);
+    colOf.set(a.id, col);
+    claim(a.floor, col, span);
+    if (a.isDuplexApt) { pos.set(`${a.floor + 1}-${col}`, a); claim(a.floor + 1, col, 1); }
   }
-  return m;
+  return { pos, colsByFloor, colOf };
 }
 
 /**
