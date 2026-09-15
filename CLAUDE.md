@@ -7775,3 +7775,114 @@ Harness: `scratchpad/round41-probe.mjs` (four contexts, 22 checks). Re-encoded:
 `planphone.mjs` (poll for the Pin button), `pinvoice-probe.mjs` (PDF route,
 canvas box). Green: touchpan, ipadcheck, plandownload, markup2-probe, plantabs
 (warm), the four audits.
+
+---
+
+# v2 — Buildings, Plans and the Notebook Plus (built 2026-09-15, the six approved scenes)
+
+The spec is the "Buildings, Plans and the Notebook Plus" artifact (v4, copy
+`docs/artifacts/2026-09-15-buildings-plans-notebook-plus-v4.html`), ten stars
+locked by the owner, then "build it". Scenes 1 and 2 were built by two
+sub-agents in worktrees and merged; 3–6 in the main session.
+
+## The notebook draws tasks FROM THE TASKS (scenes 3 + 6)
+- **No stored per-day task cards.** `barsByRow` in `PlannerWidget` derives
+  one `TaskBarSeg` per consecutive-column run of `daysOf(task)` per week (a
+  task crossing the week edge is two stretches of ONE bar id); greedy lanes;
+  foreign tasks from snapshots. `TaskBar` (`[data-task-bar=<taskId>]
+  [data-bar-days=n]`, width `calc(n*100% + (n-1)*5px)`) drags through the
+  standing `rotaCellAt`/`quickBoxTake` doors (`dropBarTo` keeps the
+  WORKING-DAY pattern by index-mapping `workingRun`), its `[data-bar-edge]`
+  resizes (`resizeBarTo`), its `[data-bar-remove]` X takes a stretch off and
+  the LAST stretch asks keep-dateless / delete (`PlannerRemoveDialog`). A
+  closed task draws dimmed + struck with `[data-bar-done]` "done" /
+  "finished early" (its stretch ran past `completedAt`).
+- **The one-time FOLD** (`foldedFor` ref per element, waits for
+  `assignments.length`): every `taskId` entry leaves `cells`, its days are
+  added to the live task, one `write({cells})`. Parked job entries (a job
+  with no task, "Just put it on the planner") survive as `PlannerCard`s;
+  legacy free-words notes stay readable until removed and can no longer be
+  created (locked answer 4).
+- **The hover plus** (`[data-cell-plus]`, mouse hover; a finger's first tap
+  on an empty square) opens `PlannerTaskDialog` with NO job: job search
+  across every workspace (`searchJobs` over the live list + snapshots,
+  `[data-job-hit=<id>]`), general job = workspace → building
+  (`[data-general-job]` → `[data-general-ws-pick]` → `[data-general-bld-pick]`),
+  who = a search over every active worker, several at once
+  (`[data-who-pick=<id>][data-on]`; one not on the sheet gets a row in the
+  same `write`), MessageBox, `StagePairPicker`, start day + `TaskDaysPicker`.
+  Creation goes through `addContractorAssignment` (or
+  `addAssignmentToProject` for a foreign workspace) and NOTHING is written
+  into `cells` unless `[data-just-park]` was pressed. **The plus tucks into
+  the square's corner once the square holds a bar** — centred (z 4) it sat
+  over the bar (z 3) and took every press meant to grab the bar.
+- **`Field` is a DIV, never a `<label>`**: a search hit is a button that
+  UNMOUNTS in the very click that picks it, and Chrome's label activation
+  then forwards the click to the next labelable descendant — the picked
+  row's own clear X. Every pick undid itself before the eye could see it.
+- **The "already has work" ask** (`plannerAsk`, now the named `PlannerAsk`
+  type — ONE LINE in AppState, or the backup audit cannot parse the key) is
+  raised by `addContractorAssignment` only when another OPEN task on the
+  same apartment shares a day; `PlannerAskModal` names who is there and
+  offers `[data-ask-remove]` "Pick another day" (deletes the task just
+  made) / `[data-ask-keep]` "Add anyway". Two workers picked in ONE dialog
+  are siblings, not an overlap: the dialog answers 'keep' itself when both
+  sides of the ask are ids it just minted.
+- Cells carry `data-cell-person` / `data-cell-day` (and keep `group/cell`,
+  which every notebook harness selects by).
+
+## Every task knows the stage it is ON (scenes 4 + 5)
+`src/components/tasks/StagePair.tsx`: `StagePairPicker` (`[data-stage-pair]`,
+`[data-stage-from]` / `[data-stage-to]`, "The job's stage · X" default, a
+stage past the job's wears " · not reached yet") and `StagePairPill`
+(`[data-stage-pill]`, from → to) on every task row. `ContractorAssignment.stageId`
+IS the from-stage; `stageWhenDone` the to. **Picking a stage on a task never
+moves the job** — the old `updateApartment(currentStageId)` on stage pick is
+gone from QuickAddTaskPanel, TasksPage and BulkAddTaskModal. `TaskDaysPicker`
+takes the pair; its non-consecutive second stretch offers
+`[data-different-stages]` → a second pair → `[data-split-ask]` (one task or
+two, default two); `taskWrites(start, days, pair, split)` returns one or two
+records and every form loops it. Nine new MainUiStrings keys (`stageOnLabel`
+… `splitOneLabel`).
+
+## The plan pane browses Drive (scene 2)
+`src/components/plans/PlanBrowser.tsx` — breadcrumb over a tile grid, folder
+tiles then file tiles, lazy Drive thumbnails (IntersectionObserver), the
+STAR (`[data-tile-star=<id>][data-starred]`) on any viewable file in any
+folder — markups included — writes ONLY `plansPdfLink`; the expand arrow
+(`[data-tile-preview]`) previews the sheet with `[data-preview-back]`
+"‹ Back to <folder>" and `[data-preview-star]`; a non-viewable file (.dwg)
+wears a type badge and neither control. The drawer auto-browses at the job
+root when there is a Drive link and nothing to show; `[data-plan-browse]` on
+bar 2 opens it at the plans folder; the browser stays MOUNTED under a preview
+so Back returns to the same folder and scroll. `PlanPicker` is the same tile
+grid with the same star (`onStar`/`starredId`/`onPreview`).
+`listFolderChildrenViaBackend` in driveApi (folders + files, no new route).
+Probe lesson: Playwright's click scrolls its target into view — a same-scroll
+check must preview a tile already IN view.
+
+## Buildings is a full-screen layout studio (scene 1)
+`src/data/floorRows.ts` is THE row model both screens read
+(`buildFloorRows` → rows top-first with kind wide|normal|lobby|ground|basement,
+`rowHeightPx` with tall ×1.5 / short ×0.6, `aptCol`, `aptSpan`). Wolfson's
+floor 0 (Ground/Commercial) is removed from the model; the lobby row is
+`1 · Lobby`. `src/components/settings/LayoutStudio.tsx` (portalled, z-120):
+real cells, lasso / shift / ctrl select, drag to another floor or position,
+right-click + long-press menu (rename, set/blank number, move up/down — asks
+keep the number (default) / renumber, merge selected across a row, unmerge,
+renumber the floor, row height, add/remove position), Save previews the
+change list then writes through `updateApartment` / `addApartment` /
+`deleteApartment` (blank positions only) / `setBoardSetting('floorHeights')`.
+`Apartment.colSpan` now MEANS positions covered; `Apartment.coveredBy` marks
+the blank placeholder under a merged unit (never drawn or counted);
+`BoardSetting.floorHeights` rides boardSettings. **`BuildingDiagram` has ONE
+`BuildingColumn`** driven by the row model (`NetivBuildingColumn` is an
+alias) — the two-component trap is gone. A merged unit spans in the diagram,
+Building Progress (`gridColumn: span N`) and the worker's map. Flag for the
+owner: two rows now wear the number "1" (floor 1 and `1 · Lobby`).
+
+Harnesses: `notebookbars-probe` (36) · `multiday` (re-encoded to bars) ·
+`builder2-probe` (54) · `planbrowser-probe` (44). `round22.mjs` is red on the
+seeded Goals fixture intercepting the week plus — pre-existing (the round32
+lesson). planaddr's "1 FAILED" is the sandboxed-frame localStorage page error,
+identical on the untouched base.

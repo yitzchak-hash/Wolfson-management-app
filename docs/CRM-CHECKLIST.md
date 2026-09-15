@@ -39,7 +39,13 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 
 ## Tasks and scheduling
 - ☑ Multi-day tasks (all days on the task, Friday per stretch, non-consecutive stretches)
-- ☑ Weekly notebook: drop a job on a person's day, day cards, move/copy/off asks, quick-assign box
+- ☑ Weekly notebook: drop a job on a person's day, move/copy/off asks, quick-assign box
+- ☑ The notebook draws every task as ONE bar across its days (from the task, no stored day cards; old cards folded once); drag moves the task (working-day pattern kept), the edge resizes, the X takes a stretch off; closed = struck "done" / "finished early" (2026-09-15)
+- ☑ Hover plus on a square → add-a-job dialog: job search across workspaces, general job = workspace → building, who = search (several; a new worker gets a row), MessageBox, stage on → when-done, the day picker; free-words squares no longer creatable (2026-09-15)
+- ☑ "Already has work" ask only on the same job + same day, with Add anyway / Pick another day (2026-09-15)
+- ☑ Every task form picks the stage the task is ON (any stage, "not reached yet") and the when-done stage; a task never moves the job; task rows read "on → to"; a non-consecutive second stretch can carry different stages (one task or two, asked) (2026-09-15)
+- ☑ Plan pane browses the job's Drive folder (breadcrumb, folder + picture tiles, thumbnails, preview arrow + Back); the star on any file in any folder = the worker's plan; the Plans chooser is the same tiles + star (2026-09-15)
+- ☑ Project settings → Buildings is a full-screen layout studio with real cells: rename, blank number, move a floor (keep number / renumber), merge across a row into one unit drawn merged everywhere, row height normal/tall/short, floors = the project page's (2026-09-15)
 - ☑ General jobs — a task for a workspace, not an apartment: "General job" checkbox + workspace select on the Tasks page; notebook card reads "Wolfson"; phone card reads "Work at Wolfson" / עבודה בבניינים של וולפסון / Работа в Wolfson; "Is this part of…?" on a stage report (Yes preselected); visits list on the task (2026-09-03)
 - ☑ General job closes like any task, with or without visits (starred answer taken, 2026-09-03)
 - ☑ "Is this part of…?" asks every time a general job is running, Yes first (starred answer taken, 2026-09-03)

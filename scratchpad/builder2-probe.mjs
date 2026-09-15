@@ -9,10 +9,10 @@
 // boardSettings and reaches the diagram.
 //
 // Manner: seed through addInitScript ONLY when the key is absent (the app's
-// flush-on-unload overwrites a patch), against a dev server on 5175.
+// flush-on-unload overwrites a patch), against the dev server on 5173.
 import { chromium } from 'playwright';
 
-const APP = process.env.APP ?? 'http://localhost:5175';
+const APP = process.env.APP ?? 'http://localhost:5173';
 let fails = 0;
 const check = (ok, l, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${l}${extra ? ' — ' + extra : ''}`); if (!ok) fails++; };
 

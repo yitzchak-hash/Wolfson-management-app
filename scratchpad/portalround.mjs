@@ -153,14 +153,17 @@ await admin.locator('button:has-text("Workers")').first().click();
 await admin.waitForTimeout(600);
 const tog = admin.locator('[data-diagrams-toggle]');
 check(await tog.count() === 1, 'each worker row carries the building-diagrams toggle');
-check((await tog.innerText()).includes('own units only'), 'off by default: own units only');
+// Since the tablet round (2026-09-08) the Contractor level ships WITH the
+// diagrams, so the effective default is on; one press turns it off through
+// a personal override differing from the level.
+check((await tog.innerText()).includes('building diagrams'), 'on by default: building diagrams (the level ships with them)');
 await tog.click();
 await admin.waitForTimeout(700);
-check((await tog.innerText()).includes('building diagrams'), 'one press turns the full diagrams on');
+check((await tog.innerText()).includes('own units only'), 'one press turns it to own units only');
 d = await store();
 const jo = d.contractors.find(c => c.id === 'C-jo');
-check(!!jo.perms?.seeDiagrams && !!jo.perms?.seeAllApartments,
-  'and it wrote the two permission switches', JSON.stringify(jo.perms));
+check(jo.perms?.seeDiagrams === false && jo.perms?.seeAllApartments === false,
+  'and it wrote the two permission switches as overrides', JSON.stringify(jo.perms));
 
 await b.close();
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASS');

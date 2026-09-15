@@ -9,14 +9,14 @@
 // folder, root one crumb up) with Back returning to the sheet; and the Plans
 // chooser draws tiles wearing the star and the preview arrow.
 //
-// Runs against a keyed dev server on 5176 (the drawer's Drive block is rightly
+// Runs against a keyed dev server on 5174 (the drawer's Drive block is rightly
 // dead without a key). Every /api route is stubbed — the catch-all FIRST,
 // because Playwright consults routes newest-first — and drive.google.com is
 // aborted (the aspect probe's image decode must fail fast, not hang).
 import { chromium } from 'playwright';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
-const APP = 'http://localhost:5176';
+const APP = process.env.APP ?? 'http://localhost:5174';
 let fails = 0;
 const check = (ok, l, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${l}${extra ? ' — ' + extra : ''}`); if (!ok) fails++; };
 

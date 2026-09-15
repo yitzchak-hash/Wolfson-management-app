@@ -27,7 +27,7 @@ exactly there.
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2026-12-22` — the next entry must be a later date (an older
+   newest is `2026-12-23` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`. 8. Rewrite THIS file.
@@ -43,8 +43,52 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-08, seventh round of the day)
+## Where things stand (2026-09-15 — the six scenes BUILT)
 Last commits, newest first (see `git log`):
+- **2026-09-15, fifth pass — "build it" arrived and ALL SIX SCENES ARE BUILT**
+  (scenes 1 and 2 by two sub-agents in worktrees, merged; 3–6 in the main
+  session; the full record is the last CLAUDE.md section). What the owner
+  will see: (1) project settings → Buildings opens a full-screen layout
+  studio with the real units (number, family, stage colour), right-click for
+  rename / blank number / move a floor (asks keep-number or renumber) / merge
+  selected cells across a row into ONE unit drawn merged on the project
+  page, Building Progress and the worker's map / row height
+  normal·tall·short; the floors match the project page (the Ground/Commercial
+  row is gone; note TWO rows now wear "1" — floor 1 and "1 · Lobby", flag
+  it to him). (2) The drawer's plan pane browses the job's Drive folder like
+  Drive when no plan is chosen (breadcrumb, folder + picture tiles with
+  thumbnails; .dwg wears a badge and no controls); the arrow previews with
+  "Back to <folder>"; the STAR on any viewable file in any folder — markups
+  included — is the worker's plan; the Plans chooser is the same tiles with
+  the same star; a browse button on bar 2 when a plans folder exists. (3+6)
+  The notebook draws every task as ONE bar across its days (Google
+  Calendar); old per-day cards folded into their tasks by themselves; drag
+  moves the whole task keeping the working-day pattern, the edge resizes,
+  the X takes a stretch off (the last one asks keep-dateless / delete); a
+  closed task is struck "done" / "finished early"; a square's HOVER plus
+  opens the add-a-job dialog (job search across workspaces, general job =
+  workspace → building, who = search adding a row, MessageBox, the stage
+  pair, the day picker); the free-words card cannot be created any more;
+  the "already has work" ask fires only on the same job + same day with
+  Add anyway / Pick another day. (4+5) Every task form picks the stage the
+  task is ON ("not reached yet" for a future stage — and picking a stage
+  NEVER moves the job any more) and the when-done stage; task rows read
+  "on → to"; a non-consecutive second stretch may carry different stages
+  (one task or two, asked, default two). Probes green: notebookbars-probe
+  (36), multiday (re-encoded to bars), builder2-probe (54),
+  planbrowser-probe (44), taskdaysforms, round34-probe, notebook2way,
+  plantabs, portalround, progresscells, stagefit, deskcheck, drawerround.
+  Standing reds, verified pre-existing: round22 (the seeded Goals fixture
+  intercepts the week plus), planaddr (a sandboxed-frame localStorage page
+  error), mobdiagram (stale assertion). **Behaviour changes to tell him
+  plainly**: dropping a tile on a square now CREATES A TASK (the tile stays
+  on the board; "Just put it on the planner" parks a card without a task);
+  a task's days are edited by moving/resizing the bar or in the job
+  window, and the notebook follows because it draws the task itself; the
+  notebook no longer holds free-text notes. What needs his eyes on
+  production: the fold of his real cards (runs once per notebook on first
+  open), the Buildings studio on Wolfson's real 168 units, the browser on a
+  real Drive folder (thumbnails need the service account).
 - **2026-09-15, fourth pass — VERSION 4: his screenshot arrived and is read
   into scene 6** (copy `docs/artifacts/2026-09-15-buildings-plans-notebook-plus-v4.html`):
   Yaakov's row, week of 4 Oct — Sun 4 + Mon 5 DASHED "Streter, D… ·

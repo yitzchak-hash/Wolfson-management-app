@@ -405,6 +405,13 @@ const defaultData = {
   contractorPhotos: [] as ContractorPhoto[],
 };
 
+/** The overlap question — one line in AppState so the backup audit can read the key. */
+export interface PlannerAsk {
+  jobId: string; contractorId: string; dueDate: string; taskId: string;
+  days: string[];
+  overlap: { taskId: string; contractorId: string; days: string[]; stageId: string | null };
+}
+
 interface AppState {
   dataVersion: number;
   currentUser: User | null;
@@ -658,11 +665,7 @@ interface AppState {
    * days (locked answer 8, 2026-09-15: the ask fires on an OVERLAP — same job,
    * same day — and on nothing else). Names the task that was there.
    */
-  plannerAsk: {
-    jobId: string; contractorId: string; dueDate: string; taskId: string;
-    days: string[];
-    overlap: { taskId: string; contractorId: string; days: string[]; stageId: string | null };
-  } | null;
+  plannerAsk: PlannerAsk | null;
   answerPlannerAsk: (choice: 'keep' | 'remove' | 'skip') => void;
 
   // Dashboard layout customization

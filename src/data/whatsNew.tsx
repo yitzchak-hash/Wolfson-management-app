@@ -30,6 +30,62 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-12-23',
+    title: 'Buildings, plans and the notebook: the six approved scenes, built',
+    items: [
+      {
+        title: 'The notebook draws a task as ONE bar',
+        body: 'A task across three days is one bar across three squares, the way a '
+          + 'calendar draws it — not three little cards that could disagree with the '
+          + 'task. Drag the bar to move the whole task (Friday and Saturday are still '
+          + 'skipped), pull its right edge for more days, press its X to take a stretch '
+          + 'off. A closed task stays on the sheet, struck through, saying "done" or '
+          + '"finished early". Your old day cards folded into their tasks by themselves.',
+        demo: 'drag',
+      },
+      {
+        title: 'A plus on the square you are pointing at',
+        body: 'Hover any square and a plus appears; it opens the add-a-job dialog: '
+          + 'search every workspace for the job (or pick a workspace and building for a '
+          + 'general job), search for who — more than one, and somebody not on the '
+          + 'sheet gets a row — say what has to be done, pick the stage the task is ON '
+          + 'and where the job moves when it is done, and the days. The "already has '
+          + 'work" question now appears only when the same job already has work on '
+          + 'that day, with Add anyway or Pick another day.',
+        demo: 'tap',
+      },
+      {
+        title: 'Every task knows which stage it is on',
+        body: 'Every task form — the job window, the Tasks page, the bulk add, the '
+          + 'notebook — asks which stage the task is on (a stage the job has not '
+          + 'reached yet says so) and where the job moves when the task is closed. '
+          + 'Picking a stage on a task never moves the job any more. A non-consecutive '
+          + 'task can carry different stages for its second stretch, and asks whether '
+          + 'that should be one task or two.',
+        demo: 'list',
+      },
+      {
+        title: 'The plan pane browses the job\'s Drive folder',
+        body: 'With no plan chosen, the pane shows the job\'s folder like Drive does: '
+          + 'folders, pictures with thumbnails, a breadcrumb. The arrow on a tile '
+          + 'previews the sheet with a Back to the folder; the star on any file — in '
+          + 'any folder, markups included — makes it the plan the worker sees. The Plans '
+          + 'chooser is the same tile view with the same star.',
+        demo: 'pin',
+      },
+      {
+        title: 'Buildings is a full-screen layout builder',
+        body: 'Project settings → Buildings opens full screen with the real units drawn '
+          + '(number, family, stage colour). Right-click a cell for everything: rename, '
+          + 'set or blank the number, move up or down a floor (asked: keep the number or '
+          + 'renumber), merge the selected cells across a row into ONE unit that looks '
+          + 'merged on the project page, Building Progress and the worker\'s map, row '
+          + 'height normal / tall / short. The floors match the project page exactly.',
+        demo: 'zoom',
+      },
+    ],
+  },
+  {
     date: '2026-12-22',
     title: 'The tablet round: pins that stick, a finger that scrolls, a pen button that erases',
     items: [
