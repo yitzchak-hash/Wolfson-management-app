@@ -1,0 +1,460 @@
+<title>Buildings, Plans and the Notebook Plus</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Caveat:wght@600;700&display=swap">
+<style>/*__APP_CSS__*/</style>
+<style>
+  html, body { background: #e8ebf0 !important; margin: 0; overscroll-behavior: auto !important; color-scheme: light; }
+  body { font-family: Inter, system-ui, sans-serif; color: #1f2937; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 20px 90px; }
+  h1 { font-size: 26px; font-weight: 900; color: #1e3a5f; margin: 0 0 4px; letter-spacing: -.01em; }
+  .sub { font-size: 14px; color: #4b5563; max-width: 72ch; margin: 0 0 6px; line-height: 1.5; }
+  .mark { font-family: Caveat, cursive; color: #c0392b; }
+  .scene { background: #f6f7f9; border: 1px solid #d8dde5; border-radius: 18px; padding: 22px; margin-top: 26px; }
+  .scene h2 { font-size: 17px; font-weight: 900; color: #1e3a5f; margin: 0 0 4px; }
+  .scene p.lead { font-size: 13.5px; color: #4b5563; margin: 0 0 16px; max-width: 76ch; line-height: 1.5; }
+  .ba { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+  @media (max-width: 860px) { .ba { grid-template-columns: 1fr; } }
+  .pane { position: relative; }
+  .pane .tag { display: inline-block; font: 800 10.5px Inter; letter-spacing: .1em; padding: 3px 10px; border-radius: 999px; margin-bottom: 8px; }
+  .pane.before .tag { background: #e5e7eb; color: #6b7280; }
+  .pane.after .tag { background: #c0392b; color: #fff; }
+  .pane.before .shot { filter: saturate(.75); opacity: .92; }
+  .shot { background: #fff; border: 1px solid #d8dde5; border-radius: 14px; overflow: hidden; position: relative; box-shadow: 0 16px 34px -26px rgba(15,23,42,.45); }
+  .notes { margin-top: 16px; }
+  .notes ol { margin: 0; padding: 0; list-style: none; columns: 2; column-gap: 26px; }
+  @media (max-width: 860px) { .notes ol { columns: 1; } }
+  .notes li { break-inside: avoid; display: block; position: relative; padding-left: 32px; font-size: 13.5px; color: #374151; margin: 0 0 11px; line-height: 1.45; }
+  .notes li .k { position: absolute; left: 0; top: 0; width: 22px; height: 22px; border-radius: 50%; background: #c0392b; color: #fff; font: 800 12px Inter; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+  .n { position: absolute; width: 24px; height: 24px; border-radius: 50%; background: #c0392b; color: #fff; font: 800 12.5px Inter; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 3px #fff, 0 4px 10px rgba(0,0,0,.25); z-index: 8; }
+  .say { font-family: Caveat, cursive; color: #c0392b; font-size: 21px; line-height: 1.15; margin: 0 0 10px; }
+  .rules { background: #fff; border: 1px solid #d8dde5; border-radius: 14px; padding: 18px 20px; margin-top: 26px; }
+  .rules h2 { font-size: 15px; font-weight: 800; color: #1e3a5f; margin: 0 0 10px; }
+  .rules li { font-size: 13.5px; color: #374151; margin: 7px 0; max-width: 84ch; line-height: 1.45; }
+  .rules b { color: #1e3a5f; }
+  .q { display: flex; gap: 10px; align-items: flex-start; margin: 12px 0; font-size: 13.5px; color: #374151; line-height: 1.45; }
+  .q .star { color: #c0392b; font-family: Caveat, cursive; font-size: 22px; line-height: 1; flex-shrink: 0; }
+  .q b { color: #1e3a5f; }
+  .q .rec { display: inline-block; background: #fdecea; color: #c0392b; font: 800 10.5px Inter; letter-spacing: .06em; padding: 2px 7px; border-radius: 999px; margin-inline-start: 6px; vertical-align: 1px; }
+  .files { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; color: #374151; }
+  .files li { margin: 4px 0; }
+
+  /* ── app chrome, drawn ── */
+  .bar { background: #1e3a5f; color: #fff; padding: 10px 14px; display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 800; }
+  .bar .sp { flex: 1; }
+  .bar .pill { background: rgba(255,255,255,.14); padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+  .bar .x { width: 24px; height: 24px; border-radius: 8px; background: rgba(255,255,255,.14); display: flex; align-items: center; justify-content: center; font-size: 13px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 9px; font-size: 12px; font-weight: 800; border: 1px solid #d5dde8; background: #fff; color: #1e3a5f; }
+  .btn.pri { background: #1e3a5f; color: #fff; border-color: #1e3a5f; }
+  .btn.red { background: #c0392b; color: #fff; border-color: #c0392b; }
+  .btn.ghost { background: transparent; border-color: transparent; color: #6b7280; }
+  .tabs { display: flex; gap: 6px; }
+  .tabs span { padding: 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 800; color: #4b5563; background: #eef1f5; }
+  .tabs span.on { background: #b8860b; color: #fff; }
+
+  /* the settings strip (before) */
+  .settings-page { background: #f3f4f6; padding: 14px; }
+  .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
+  .card h4 { margin: 0 0 6px; font-size: 12.5px; font-weight: 800; color: #1e3a5f; }
+  .card p { margin: 0; font-size: 11.5px; color: #6b7280; }
+
+  /* the builder grid */
+  .grid { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; }
+  .fl { display: flex; align-items: center; gap: 6px; }
+  .fl .lab { width: 38px; flex: none; text-align: right; font-size: 10.5px; font-weight: 800; color: #9ca3af; padding-right: 6px; border-right: 1px solid #f1f5f9; font-variant-numeric: tabular-nums; }
+  .fl .lab.named { color: #1e3a5f; font-size: 10px; }
+  .fl .stair { width: 10px; flex: none; height: 100%; background: repeating-linear-gradient(0deg, #e5e7eb 0 2px, transparent 2px 6px); border-radius: 2px; }
+  .c { width: 54px; height: 40px; border: 1.5px solid #e2e8f0; border-radius: 6px; background: #fff; display: flex; align-items: flex-end; justify-content: center; font-size: 12.5px; font-weight: 800; color: #334155; padding-bottom: 6px; flex: none; font-variant-numeric: tabular-nums; }
+  .c.empty { border-style: dashed; border-color: #cbd5e1; background-image: repeating-linear-gradient(45deg, transparent 0 4px, #d8d2c4 4px 5px); }
+  .c.thin { height: 26px; padding-bottom: 3px; font-size: 10px; overflow: hidden; white-space: nowrap; align-items: center; }
+  .c.wide { width: 114px; }
+  /* the after cells: real units */
+  .u { width: 74px; height: 58px; border-radius: 7px; border: 1.5px solid #e2e8f0; background: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; flex: none; position: relative; overflow: hidden; }
+  .u .no { font-size: 13px; font-weight: 900; color: #1e3a5f; line-height: 1; }
+  .u .no small { font-weight: 700; color: #64748b; font-size: 9.5px; }
+  .u .fam { font-size: 8.5px; color: #475569; margin-top: 3px; line-height: 1.15; padding: 0 3px; }
+  .u .stg { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; }
+  .u.wide2 { width: 154px; }
+  .u.row4 { width: 100%; height: 58px; }
+  .u.row4 .no { font-size: 14px; }
+  .u.row4 .fam { font-size: 10px; }
+  .u.sel { border-color: #1c1f26; box-shadow: 0 0 0 2.5px rgba(28,31,38,.2); }
+  .u.ghost { opacity: .45; border-style: dashed; }
+  .u.empty { border-style: dashed; border-color: #cbd5e1; background: repeating-linear-gradient(45deg, #fff 0 4px, #f1f0ec 4px 5px); }
+  .u.empty .no { color: #b0bccb; font-weight: 700; font-size: 10px; }
+  .strike { position: relative; }
+  .strike::after { content: ''; position: absolute; left: 40px; right: 0; top: 50%; border-top: 3px solid #c0392b; transform: rotate(-1.5deg); opacity: .85; }
+  .cap { font-family: Caveat, cursive; color: #c0392b; font-size: 18px; margin: 0; }
+  .float { position: absolute; background: #fff; border: 1px solid #d8dde5; border-radius: 12px; box-shadow: 0 14px 30px -14px rgba(15,23,42,.45); padding: 10px 12px; font-size: 12px; z-index: 6; }
+  .float h5 { margin: 0 0 6px; font-size: 12.5px; font-weight: 900; color: #1e3a5f; }
+  .float .opt { display: flex; align-items: center; gap: 8px; padding: 5px 0; color: #374151; }
+  .float .opt i { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid #9ca3af; display: inline-block; flex: none; }
+  .float .opt i.on { border-color: #1e3a5f; background: radial-gradient(#1e3a5f 45%, #fff 50%); }
+  .hint { font-size: 11px; color: #6b7280; }
+  .sbar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-top: 1px solid #eef1f5; background: #fafbfc; font-size: 12px; color: #374151; }
+
+  /* the drawer with the plan pane */
+  .drawer { display: grid; grid-template-columns: 200px 1fr; min-height: 330px; }
+  .fields { padding: 12px; border-right: 1px solid #eef1f5; }
+  .fld { margin-bottom: 9px; }
+  .fld .l { font-size: 9px; font-weight: 800; letter-spacing: .08em; color: #64748b; text-transform: uppercase; margin-bottom: 3px; }
+  .fld .v { border: 1px solid #dbe3ec; border-radius: 8px; padding: 6px 8px; font-size: 11.5px; color: #1f2937; background: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .plane { background: #f1f5f9; position: relative; display: flex; flex-direction: column; }
+  .pbar { background: #1e3a5f; color: #fff; padding: 7px 10px; display: flex; align-items: center; gap: 8px; font-size: 11.5px; font-weight: 800; }
+  .pbar2 { background: #2c4f78; color: #fff; padding: 6px 10px; display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700; }
+  .pbar .sp, .pbar2 .sp { flex: 1; }
+  .crumb { display: flex; align-items: center; gap: 6px; padding: 8px 12px; font-size: 11.5px; color: #4b5563; background: #fff; border-bottom: 1px solid #eef1f5; }
+  .crumb b { color: #1e3a5f; }
+  .crumb .sep { color: #b0bccb; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; padding: 12px; }
+  .tile { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; position: relative; font-size: 10.5px; color: #374151; }
+  .tile .th { height: 72px; display: flex; align-items: center; justify-content: center; background: #f8fafc; border-bottom: 1px solid #eef1f5; position: relative; overflow: hidden; }
+  .tile .th.pdf { background: #fff; }
+  .tile .th.pdf::before { content: ''; position: absolute; inset: 8px 12px; border: 1px solid #cbd5e1; background:
+    linear-gradient(#94a3b8, #94a3b8) 12px 10px / 40% 1px no-repeat,
+    linear-gradient(#cbd5e1, #cbd5e1) 12px 16px / 60% 1px no-repeat,
+    linear-gradient(#cbd5e1, #cbd5e1) 12px 22px / 50% 1px no-repeat,
+    repeating-linear-gradient(90deg, #e2e8f0 0 1px, transparent 1px 9px) 0 30px / 100% 22px no-repeat,
+    repeating-linear-gradient(0deg, #e2e8f0 0 1px, transparent 1px 9px) 0 30px / 100% 22px no-repeat; }
+  .tile .th.fold { background: #f1f5f9; }
+  .tile .th.fold::before { content: ''; width: 46px; height: 34px; background: #4aa8d8; border-radius: 4px; box-shadow: inset 0 6px 0 #3a90bc; }
+  .tile .th.fold::after { content: ''; position: absolute; width: 20px; height: 6px; background: #3a90bc; border-radius: 3px 3px 0 0; top: 17px; left: calc(50% - 23px); }
+  .tile .th.img { background: linear-gradient(135deg, #cbd5e1, #94a3b8); }
+  .tile .th.dwg { background: #f1f5f9; color: #64748b; font-weight: 900; font-size: 11px; letter-spacing: .08em; }
+  .tile .nm { padding: 6px 7px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile .star { position: absolute; top: 5px; right: 5px; width: 20px; height: 20px; border-radius: 50%; background: rgba(255,255,255,.92); border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #cbd5e1; }
+  .tile .star.on { color: #f59e0b; border-color: #f59e0b; background: #fffbeb; }
+  .tile.opened { border-color: #1e3a5f; box-shadow: 0 0 0 2px rgba(30,58,95,.18); }
+  .sheet { flex: 1; margin: 12px; background: #fff; border: 1px solid #d5dde8; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 11.5px; position: relative; min-height: 180px; }
+  .sheet .lines { position: absolute; inset: 18px; background:
+    repeating-linear-gradient(90deg, #e2e8f0 0 1px, transparent 1px 14px),
+    repeating-linear-gradient(0deg, #e2e8f0 0 1px, transparent 1px 14px); opacity: .7; }
+  .sheet .box { position: absolute; right: 26px; bottom: 26px; width: 34%; height: 22%; border: 1.5px solid #94a3b8; background: #fff; }
+  .spin { width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid #cbd5e1; border-top-color: #1e3a5f; margin-right: 8px; }
+  .listrow { display: flex; align-items: center; gap: 8px; padding: 7px 10px; font-size: 12px; color: #374151; border-bottom: 1px solid #f1f5f9; }
+  .listrow .ic { width: 14px; height: 14px; border-radius: 3px; background: #4aa8d8; flex: none; }
+  .listrow .ic.f { background: #e2e8f0; border: 1px solid #cbd5e1; }
+  .phone-mini { width: 150px; background: #0b1220; border-radius: 22px; padding: 7px; flex: none; }
+  .phone-mini .scr { background: #f1f5f9; border-radius: 16px; overflow: hidden; font-size: 9px; }
+  .phone-mini .hd { background: #1e3a5f; color: #fff; padding: 6px 8px; font-weight: 800; font-size: 9px; }
+  .phone-mini .pl { margin: 6px; background: #fff; border: 1px solid #d5dde8; height: 70px; position: relative; }
+  .phone-mini .pl .lines { position: absolute; inset: 6px; background: repeating-linear-gradient(90deg, #e2e8f0 0 1px, transparent 1px 8px), repeating-linear-gradient(0deg, #e2e8f0 0 1px, transparent 1px 8px); opacity: .7; }
+
+  /* the notebook */
+  .nb { padding: 10px 12px; }
+  .nb table { border-collapse: separate; border-spacing: 4px; width: 100%; }
+  .nb th { font-size: 10px; font-weight: 800; color: #64748b; text-align: center; padding: 3px 0; }
+  .nb th.per { text-align: left; width: 74px; }
+  .nb td { background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; height: 56px; vertical-align: top; padding: 4px; position: relative; font-size: 9.5px; }
+  .nb td.per { background: transparent; border: 0; font-weight: 800; color: #1e3a5f; font-size: 11px; vertical-align: middle; }
+  .nb td.per i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+  .jc { background: #eef4fa; border: 1px solid #c7d4e0; border-radius: 5px; padding: 3px 5px; font-weight: 800; color: #1e3a5f; font-size: 9.5px; margin-bottom: 3px; }
+  .jc small { display: block; font-weight: 600; color: #64748b; font-size: 8.5px; }
+  .ta { border: 1px solid #94a3b8; border-radius: 4px; background: #fff; height: 30px; font-size: 9px; color: #94a3b8; padding: 3px; position: relative; }
+  .ta::after { content: ''; position: absolute; right: 2px; bottom: 2px; width: 7px; height: 7px; background: repeating-linear-gradient(135deg, transparent 0 2px, #cbd5e1 2px 3px); }
+  .dots { position: absolute; right: 4px; top: 3px; font-size: 11px; color: #94a3b8; letter-spacing: 1px; }
+  .tinyplus { position: absolute; left: 5px; bottom: 3px; width: 10px; height: 10px; border-radius: 2px; color: #d1d5db; font-size: 10px; line-height: 10px; text-align: center; }
+  .bigplus { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  .bigplus i { width: 32px; height: 32px; border-radius: 50%; background: #1e3a5f; color: #fff; font: 900 22px Inter; line-height: 32px; text-align: center; display: block; box-shadow: 0 8px 18px -8px rgba(30,58,95,.8); }
+  .dlg { background: #fff; border: 1px solid #d8dde5; border-radius: 14px; box-shadow: 0 20px 40px -22px rgba(15,23,42,.5); overflow: hidden; width: 100%; max-width: 380px; margin: 12px auto; font-size: 12px; }
+  .dlg .top { background: #1e3a5f; color: #fff; padding: 9px 12px; font-weight: 900; font-size: 13px; display: flex; gap: 8px; align-items: center; }
+  .dlg .top small { font-weight: 600; opacity: .8; }
+  .dlg .body { padding: 10px 12px; }
+  .dlg .l { font-size: 9px; font-weight: 800; letter-spacing: .08em; color: #64748b; text-transform: uppercase; margin: 8px 0 4px; }
+  .dlg .in { border: 1px solid #dbe3ec; border-radius: 9px; padding: 6px 9px; font-size: 12px; color: #1f2937; background: #fff; display: flex; align-items: center; gap: 6px; }
+  .dlg .in .ph { color: #94a3b8; }
+  .res { border: 1px solid #e2e8f0; border-radius: 9px; overflow: hidden; margin-top: 4px; }
+  .res div { display: flex; align-items: center; gap: 7px; padding: 6px 9px; border-bottom: 1px solid #f1f5f9; font-size: 11.5px; color: #1f2937; }
+  .res div:last-child { border-bottom: 0; }
+  .res .ws { margin-inline-start: auto; font-size: 9.5px; font-weight: 800; padding: 1px 7px; border-radius: 999px; color: #fff; }
+  .res .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .res div.on { background: #eef4fa; }
+  .who { display: flex; gap: 5px; flex-wrap: wrap; }
+  .who span { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 999px; border: 1px solid #d5dde8; font-size: 11px; font-weight: 700; color: #374151; }
+  .who span.on { background: #1e3a5f; color: #fff; border-color: #1e3a5f; }
+  .who i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .comp { display: flex; align-items: center; gap: 6px; }
+  .comp .clip { width: 28px; height: 28px; border-radius: 50%; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: center; color: #64748b; font-size: 12px; flex: none; }
+  .comp .box { flex: 1; height: 34px; border: 1px solid #dbe3ec; border-radius: 17px; display: flex; align-items: center; gap: 5px; padding: 0 10px 0 5px; color: #94a3b8; font-size: 11.5px; }
+  .comp .box .mic { width: 24px; height: 24px; border-radius: 50%; background: #eef4fa; color: #1e3a5f; display: flex; align-items: center; justify-content: center; font-size: 11px; }
+  .comp .big { width: 34px; height: 34px; border-radius: 50%; background: #1e3a5f; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; flex: none; }
+  .daysrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .step { display: inline-flex; align-items: center; border: 1px solid #d5dde8; border-radius: 9px; overflow: hidden; }
+  .step span { padding: 5px 9px; font-weight: 800; color: #1e3a5f; font-size: 12px; }
+  .step span.pm { background: #f3f4f6; color: #6b7280; }
+  .green { font-size: 11px; color: #15803d; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 5px 9px; margin-top: 8px; }
+  .foot { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-top: 1px solid #eef1f5; background: #fafbfc; }
+  .foot .sp { flex: 1; }
+</style>
+
+<div class="wrap">
+  <h1>Buildings, Plans and the Notebook Plus</h1>
+  <p class="sub">Three behaviour changes, drawn before they are built: the building layout in project settings showing the
+    real apartments and taking the whole screen; the plan chooser browsing Drive like Drive, with a star on the main plan;
+    and the notebook's day squares adding a job through a proper dialog. Each scene is a BEFORE beside an AFTER; the red
+    dots match the notes under them. The starred questions at the end are the ones only you can answer.</p>
+  <p class="mark" style="font-size:20px;margin:0">Nothing here is built. Say "build it" and this page is the spec.</p>
+
+  <!-- ═══════════ 1 · THE LAYOUT BUILDER ═══════════ -->
+  <div class="scene">
+    <h2>1 · Project settings → Buildings: the real apartments, on the whole screen</h2>
+    <p class="lead">Today the builder draws bare numbered squares in a strip of the settings page, with its own idea of the floors.
+      After: it is the project page's own diagram, editable — same rows, same names, same colours — full screen, so what you
+      are moving is the thing you know.</p>
+    <div class="ba">
+      <div class="pane before">
+        <span class="tag">BEFORE</span>
+        <div class="shot">
+          <div class="bar" style="background:#b8860b">Wolfson · project settings <span class="sp"></span><span class="pill">Stages</span><span class="pill" style="background:#fff;color:#b8860b">Buildings</span><span class="pill">Workers</span></div>
+          <div class="settings-page">
+            <div class="card"><h4>Buildings</h4><p>Add, rename and lay out the buildings of this workspace.</p>
+              <div class="grid" style="padding:10px 0 0">
+                <div class="fl"><span class="lab">14</span><span class="c wide">53</span><span class="stair"></span><span class="c wide">54</span></div>
+                <div class="fl"><span class="lab">13</span><span class="c">49</span><span class="c">50</span><span class="stair"></span><span class="c">51</span><span class="c">52</span></div>
+                <div class="fl"><span class="lab">…</span><span class="c">–</span><span class="c">–</span><span class="stair"></span><span class="c">–</span><span class="c">–</span></div>
+                <div class="fl"><span class="lab">1</span><span class="c">1</span><span class="c">2</span><span class="stair"></span><span class="c">3</span><span class="c">4</span></div>
+                <div class="fl" style="position:relative"><span class="lab named">Ground</span><span class="c empty"></span><span class="c empty"></span><span class="stair"></span><span class="c empty"></span><span class="c empty"></span><span class="n" style="right:-4px;top:6px">1</span></div>
+                <div class="fl" style="position:relative"><span class="lab named">Lobby</span><span class="c thin">Lobby &amp; ent</span><span class="c thin empty"></span><span class="stair"></span><span class="c thin empty"></span><span class="c thin empty"></span><span class="n" style="right:-4px;top:0">2</span></div>
+                <div class="fl"><span class="lab">-1</span><span class="c">61</span><span class="c">62</span><span class="stair"></span><span class="c">63</span><span class="c">64</span></div>
+              </div>
+              <p class="hint" style="margin-top:8px">Numbers only. A square says "57" and nothing about who lives there. <span class="n" style="position:static;display:inline-flex;width:20px;height:20px;font-size:11px;vertical-align:-5px">3</span></p>
+            </div>
+            <div class="card"><h4>Contractor sheet</h4><p>The status sheet link for this workspace…</p></div>
+          </div>
+        </div>
+      </div>
+      <div class="pane after">
+        <span class="tag">AFTER</span>
+        <div class="shot">
+          <div class="bar" style="background:#b8860b">Buildings · Wolfson <span class="sp"></span>
+            <span class="tabs"><span class="on">A1</span><span>A2</span><span>A3</span></span>
+            <span class="btn" style="padding:4px 9px;font-size:11px">Undo</span><span class="btn pri" style="padding:4px 9px;font-size:11px;background:#1e3a5f">Save layout</span><span class="x">✕</span>
+            <span class="n" style="right:8px;top:-12px">4</span></div>
+          <div class="grid" style="position:relative">
+            <p class="cap" style="position:absolute;right:14px;top:6px">the whole screen, like the project page</p>
+            <div class="fl"><span class="lab">Roof</span></div>
+            <div class="fl"><span class="lab">15</span><span class="u wide2"><span class="no">55</span><span class="fam">Katz, Meir</span><i class="stg" style="background:#10b981"></i></span><span class="stair"></span><span class="u wide2"><span class="no">56</span><span class="fam">Friedman</span><i class="stg" style="background:#0ea5e9"></i></span></div>
+            <div class="fl"><span class="lab">14</span><span class="u wide2"><span class="no">53</span><span class="fam">Levi, Dana</span><i class="stg" style="background:#6366f1"></i></span><span class="stair"></span><span class="u wide2"><span class="no">54</span><span class="fam">Shwartz</span><i class="stg" style="background:#f59e0b"></i></span></div>
+            <div class="fl" style="position:relative"><span class="lab">13</span><span class="u"><span class="no">49</span><span class="fam">Aharonov</span><i class="stg" style="background:#8b5cf6"></i></span><span class="u"><span class="no">50</span><span class="fam">Cohen, Avi</span><i class="stg" style="background:#8b5cf6"></i></span><span class="stair"></span><span class="u sel"><span class="no">51</span><span class="fam">Mizrahi</span><i class="stg" style="background:#14b8a6"></i></span><span class="u"><span class="no">52</span><span class="fam">Weinstein, Steven</span><i class="stg" style="background:#ef4444"></i></span>
+              <span class="n" style="left:212px;top:-8px">5</span>
+              <div class="float" style="left:300px;top:-6px;width:210px">
+                <h5>Move 51 to floor 12?</h5>
+                <div class="opt"><i class="on"></i>Keep its number, 51</div>
+                <div class="opt"><i></i>Renumber floor 12 as 45–48 and shift the rest</div>
+                <div style="display:flex;gap:6px;margin-top:6px"><span class="btn pri" style="padding:4px 9px;font-size:11px">Move</span><span class="btn ghost" style="padding:4px 6px;font-size:11px">Cancel</span></div>
+              </div>
+            </div>
+            <div class="fl"><span class="lab">12</span><span class="u"><span class="no">45</span><span class="fam">Peretz</span><i class="stg" style="background:#6366f1"></i></span><span class="u ghost"><span class="no">51</span><span class="fam">Mizrahi</span></span><span class="stair"></span><span class="u"><span class="no">47</span><span class="fam">Aharonov, Moshe</span><i class="stg" style="background:#10b981"></i></span><span class="u"><span class="no">48</span><span class="fam">Gold</span><i class="stg" style="background:#0ea5e9"></i></span></div>
+            <div class="fl"><span class="lab">…</span><span class="u empty"><span class="no">2–11</span></span><span class="u empty"><span class="no"></span></span><span class="stair"></span><span class="u empty"><span class="no"></span></span><span class="u empty"><span class="no"></span></span></div>
+            <div class="fl" style="position:relative"><span class="lab named">1 · Lobby</span><span class="u row4" style="background:#fbeade;border-color:#d08a5e"><span class="no">Lobby &amp; entrance <small>· one job</small></span><span class="fam">Cohen Bros. · piping in the shafts, ceiling units in the entrance hall</span><i class="stg" style="background:#6366f1"></i></span>
+              <span class="n" style="left:38px;top:-10px">6</span><span class="n" style="right:-8px;top:18px">7</span></div>
+            <div class="fl strike" style="position:relative"><span class="lab named" style="color:#c0392b">Ground</span><span class="u empty" style="border-color:#f3c9c4"><span class="no">Ground / Commercial</span></span><span class="u empty" style="border-color:#f3c9c4"></span><span class="stair"></span><span class="u empty" style="border-color:#f3c9c4"></span><span class="u empty" style="border-color:#f3c9c4"></span>
+              <span class="n" style="right:-8px;top:18px">8</span></div>
+            <div class="fl"><span class="lab">-0.5</span><span class="u"><span class="no">57</span><span class="fam">Parking A</span><i class="stg" style="background:#14b8a6"></i></span><span class="u"><span class="no">58</span><span class="fam">Storage</span></span><span class="stair"></span><span class="u"><span class="no">59</span><span class="fam">Gym</span><i class="stg" style="background:#10b981"></i></span><span class="u"><span class="no">60</span><span class="fam">Pool plant</span></span></div>
+            <div class="fl"><span class="lab">-1</span><span class="u"><span class="no">61</span><span class="fam">Parking B</span></span><span class="u"><span class="no">62</span><span class="fam">Machine room</span></span><span class="stair"></span><span class="u"><span class="no">63</span></span><span class="u"><span class="no">64</span></span></div>
+            <div class="fl"><span class="lab">-2</span><span class="u"><span class="no">65</span></span><span class="u"><span class="no">66</span></span><span class="stair"></span><span class="u"><span class="no">67</span></span><span class="u"><span class="no">68</span></span></div>
+          </div>
+          <div class="sbar"><b>1 selected</b> · 51 — Mizrahi <span class="sp"></span><span class="btn" style="padding:4px 9px;font-size:11px">Move a floor ↑↓</span><span class="btn" style="padding:4px 9px;font-size:11px">Merge selected</span><span class="btn" style="padding:4px 9px;font-size:11px">Renumber…</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <p class="say">"at least I can see what I'm touching and when I'm moving"</p>
+      <ol>
+        <li><span class="k">1</span>The builder's own "Ground" row. It exists in the layout model but the project page draws nothing there; it is empty and in the way.</li>
+        <li><span class="k">2</span>The lobby row is thinner than a normal row, so its one named unit is cut off mid-word.</li>
+        <li><span class="k">3</span>A square carries a number and nothing else — no family, no stage — so you cannot tell what you are dragging.</li>
+        <li><span class="k">4</span><b>The builder takes the whole screen</b> when you open Buildings: a full-height sheet with the building tabs, Undo, Save and a close X. The rest of project settings is untouched; this one card opens big.</li>
+        <li><span class="k">5</span><b>Move a floor.</b> Drag a cell onto another floor (or press "Move a floor ↑↓" with it selected). It asks about the number: keep it (the family keeps the number everyone knows) or renumber that floor and shift the rest. Nothing is renumbered silently — the same ask the builder already has for other renumberings.</li>
+        <li><span class="k">6</span><b>Every cell is the real unit</b>: the number, the family name, the stage as a colour bar — the diagram's own cell, the Building Progress look. A blank slot stays a dashed square.</li>
+        <li><span class="k">7</span><b>Merge across the row.</b> Select several cells (click, shift+click, or drag a box across a row) and press "Merge selected": they become ONE square spanning their positions, one unit, one job, one number. The lobby is one job, so the lobby is one square. "Unmerge" splits it back.</li>
+        <li><span class="k">8</span><b>The floors are the project page's floors</b>, exactly: Roof, 15 and 14 wide, 13 down to 2, "1 · Lobby" (the ground floor and the lobby are the same row), then -0.5, -1, -2. The empty Ground / Commercial row is dropped. Every row is the same height, so a named lobby or basement unit never loses its text.</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ═══════════ 2 · THE PLAN CHOOSER ═══════════ -->
+  <div class="scene">
+    <h2>2 · The plan pane browses Drive — and a star marks the main plan</h2>
+    <p class="lead">Today a Drive link with no Engineered Plans folder leaves the pane saying it found no plans, and the only way to a
+      sheet is the small chooser dialog. After: the pane IS the folder — folders and plans as tiles with thumbnails, right where
+      the sheet will be — and any plan anywhere can wear the star that makes it the one the contractor sees.</p>
+    <div class="ba">
+      <div class="pane before">
+        <span class="tag">BEFORE</span>
+        <div class="shot">
+          <div class="bar">47 — A2 <span style="opacity:.7;font-weight:600">Aharonov, Moshe</span><span class="sp"></span><span class="x">✕</span></div>
+          <div class="drawer">
+            <div class="fields">
+              <div class="fld"><div class="l">Family</div><div class="v">Aharonov, Moshe</div></div>
+              <div class="fld"><div class="l">Drive folder</div><div class="v" style="color:#2d6a9f">drive.google.com/…/1xK9…</div></div>
+              <div class="fld"><div class="l">Stage</div><div class="v">Concealed units</div></div>
+              <div class="fld"><div class="l">Address</div><div class="v">Ha-Gefen 12, Beit Shemesh</div></div>
+            </div>
+            <div class="plane">
+              <div class="pbar">Engineering Plans <span class="sp"></span>Mark up</div>
+              <div class="pbar2">Plans ▾ <span class="sp"></span>Layers · Download · Print</div>
+              <div class="sheet" style="flex-direction:column;gap:8px"><div style="display:flex;align-items:center"><span class="spin"></span>Finding the plan in Drive…</div><div style="font-size:11px;color:#b0bccb">No plans in this folder yet.</div>
+                <span class="n" style="left:12px;top:12px">1</span></div>
+              <div class="float" style="left:40px;top:120px;width:230px;padding:0;overflow:hidden">
+                <div class="pbar" style="font-size:11px">📁 Engineered Plans ▾ <span class="sp"></span>✕</div>
+                <div class="listrow" style="color:#94a3b8">🔍 Search this job's plans and folders</div>
+                <div class="listrow"><span class="ic f"></span>Photos</div>
+                <div class="listrow"><span class="ic f"></span>Old plans</div>
+                <div class="listrow"><span class="ic f"></span>Proposals</div>
+                <div class="listrow" style="color:#94a3b8;font-size:11px">Nothing to mark up in this folder.</div>
+                <span class="n" style="right:-10px;top:30px">2</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="pane after">
+        <span class="tag">AFTER</span>
+        <div class="shot">
+          <div class="bar">47 — A2 <span style="opacity:.7;font-weight:600">Aharonov, Moshe</span><span class="sp"></span><span class="x">✕</span></div>
+          <div class="drawer">
+            <div class="fields">
+              <div class="fld"><div class="l">Family</div><div class="v">Aharonov, Moshe</div></div>
+              <div class="fld"><div class="l">Drive folder</div><div class="v" style="color:#2d6a9f">drive.google.com/…/1xK9…</div></div>
+              <div class="fld"><div class="l">Stage</div><div class="v">Concealed units</div></div>
+              <div class="fld"><div class="l">Address</div><div class="v">Ha-Gefen 12, Beit Shemesh</div></div>
+              <div class="fld" style="margin-top:14px"><div class="l">Contractor's plan</div><div class="v" style="display:flex;gap:5px;align-items:center"><span style="color:#f59e0b">★</span>plan-A2-47-rev3.pdf</div></div>
+            </div>
+            <div class="plane" style="position:relative">
+              <div class="pbar">Aharonov, Moshe — Drive <span class="sp"></span><span class="pill" style="background:rgba(255,255,255,.14);padding:2px 7px;border-radius:999px;font-size:10px">▦ browse</span> Mark up</div>
+              <div class="crumb"><b>Aharonov, Moshe</b><span class="sep">›</span>Old plans<span class="sep">›</span><b>2024</b>
+                <span class="n" style="right:8px;top:4px">3</span></div>
+              <div class="tiles">
+                <div class="tile"><div class="th fold"></div><div class="nm">Photos</div></div>
+                <div class="tile"><div class="th fold"></div><div class="nm">Proposals</div></div>
+                <div class="tile opened"><div class="th pdf"></div><div class="nm">plan-A2-47-rev3.pdf</div><span class="star on">★</span></div>
+                <div class="tile"><div class="th pdf"></div><div class="nm">plan-A2-47-rev2.pdf</div><span class="star">★</span></div>
+                <div class="tile"><div class="th img"></div><div class="nm">site-2024-03.jpg</div><span class="star">★</span></div>
+                <div class="tile"><div class="th dwg">DWG</div><div class="nm">A2-47-mech.dwg</div></div>
+                <span class="n" style="left:-10px;top:-10px">4</span>
+                <span class="n" style="left:230px;top:-10px">5</span>
+              </div>
+              <p class="hint" style="padding:0 12px 10px;margin:0">A PDF or a picture opens in this pane on a click. A .dwg has no star and no preview — it opens in AutoCAD from the folder path.</p>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:14px;align-items:flex-start;margin-top:12px">
+          <div class="phone-mini"><div class="scr"><div class="hd">47 — A2 · Aharonov</div><div style="padding:5px 6px 0;font-weight:800;color:#1e3a5f">Plan</div><div class="pl"><div class="lines"></div></div><div style="padding:0 6px 6px;color:#64748b">★ plan-A2-47-rev3.pdf</div></div></div>
+          <div style="font-size:12.5px;color:#374151;line-height:1.45;flex:1;position:relative"><span class="n" style="left:-34px;top:-2px">6</span><b style="color:#1e3a5f">The star is what the phone shows.</b> Whatever you star — in the plans folder, in Old plans, a marked-up version in Annotated Plans — becomes the contractor's plan and the plan the drawer opens on next time. One star per apartment; starring another moves it.</div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <p class="say">"just like on Google Drive, there's folders that you can click into and then see a plan"</p>
+      <ol>
+        <li><span class="k">1</span>With no Engineered Plans folder the pane waits, then says there is nothing — the sheet is two folders down and the pane cannot show you the way.</li>
+        <li><span class="k">2</span>The chooser is a list with a folder dropdown; a folder holding only pictures and a .dwg answers "nothing to mark up".</li>
+        <li><span class="k">3</span><b>A breadcrumb</b> at the top of the pane: the job folder, then each folder you stepped into. Press any part to go back up. When the job has an Engineered Plans folder the pane opens on the starred plan as it does now; the browse button in the bar drops you into the folder view.</li>
+        <li><span class="k">4</span><b>Folders and files as tiles</b>, in the space where the sheet is drawn: a folder tile steps in; a plan tile shows its first page (Drive's own thumbnail — the same picture the plan-aspect check already fetches), a picture shows itself, a drawing shows its type. Files that cannot open in the pane carry no star.</li>
+        <li><span class="k">5</span><b>The star on every plan tile</b>, in every folder — the plans folder, a side folder, Annotated Plans. The same star sits on the pane's bar for the sheet being viewed, and in the Plans chooser dialog, which becomes the same tile view.</li>
+        <li><span class="k">6</span>Starring writes the apartment's plan link — the field the contractor's phone reads and the drawer reopens on. Nothing else changes: markup versions, pins and the folder stay where they are.</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ═══════════ 3 · THE NOTEBOOK PLUS ═══════════ -->
+  <div class="scene">
+    <h2>3 · The notebook: a day square adds a job, not a text field</h2>
+    <p class="lead">Today the only thing a square offers is a tiny hover plus that drops in a free-words entry — the "three dots"
+      box that lets you type and nothing more. After: a press on the square shows a big plus, and the plus opens the dialog that
+      makes a real task: which job, who, what, how many days.</p>
+    <div class="ba">
+      <div class="pane before">
+        <span class="tag">BEFORE</span>
+        <div class="shot">
+          <div class="bar" style="background:#fff;color:#1e3a5f;border-bottom:1px solid #eef1f5">Weekly notebook <span class="pill" style="background:#eef4fa;color:#1e3a5f">SEP 14</span></div>
+          <div class="nb"><table>
+            <tr><th class="per"></th><th>Sun 14</th><th>Mon 15</th><th>Tue 16</th><th>Wed 17</th><th>Thu 18</th></tr>
+            <tr><td class="per"><i style="background:#0ea5e9"></i>Moshe</td><td><div class="jc">Aharonov<small>47 — A2 · concealed</small></div></td><td style="position:relative"><div class="jc">Cohen, Avi<small>Job Board</small></div><div class="ta">Pardes 8 am<span class="dots">⋯</span></div><span class="n" style="right:-10px;top:-10px">1</span></td><td style="position:relative"><span class="tinyplus">+</span><span class="n" style="left:-4px;bottom:-8px">2</span></td><td></td><td></td></tr>
+            <tr><td class="per"><i style="background:#f59e0b"></i>Yossi</td><td></td><td></td><td><div class="jc">Levi, Dana<small>53 — A1 · day 1 of 2</small></div></td><td><div class="jc">Levi, Dana<small>53 — A1 · day 2 of 2</small></div></td><td></td></tr>
+          </table></div>
+        </div>
+      </div>
+      <div class="pane after">
+        <span class="tag">AFTER</span>
+        <div class="shot">
+          <div class="bar" style="background:#fff;color:#1e3a5f;border-bottom:1px solid #eef1f5">Weekly notebook <span class="pill" style="background:#eef4fa;color:#1e3a5f">SEP 14</span></div>
+          <div class="nb"><table>
+            <tr><th class="per"></th><th>Sun 14</th><th>Mon 15</th><th>Tue 16</th><th>Wed 17</th><th>Thu 18</th></tr>
+            <tr><td class="per"><i style="background:#0ea5e9"></i>Moshe</td><td><div class="jc">Aharonov<small>47 — A2 · concealed</small></div></td><td><div class="jc">Cohen, Avi<small>Job Board</small></div></td><td style="position:relative;border-color:#1e3a5f"><div class="bigplus"><i>+</i></div><span class="n" style="right:-10px;top:-10px">3</span></td><td></td><td></td></tr>
+            <tr><td class="per"><i style="background:#f59e0b"></i>Yossi</td><td></td><td></td><td><div class="jc">Levi, Dana<small>53 — A1 · day 1 of 2</small></div></td><td><div class="jc">Levi, Dana<small>53 — A1 · day 2 of 2</small></div></td><td></td></tr>
+          </table></div>
+          <div class="dlg" style="position:relative">
+            <span class="n" style="left:-10px;top:-10px">4</span>
+            <div class="top">Add a job <small>· Moshe · Tuesday 16 Sep</small></div>
+            <div class="body">
+              <div class="l">Which job</div>
+              <div class="in">🔍 <span>lev</span><span class="ph">|</span></div>
+              <div class="res" style="position:relative">
+                <div class="on"><span class="dot" style="background:#6366f1"></span>53 — A1 — Levi, Dana<span class="ws" style="background:#b8860b">Wolfson</span></div>
+                <div><span class="dot" style="background:#10b981"></span>Levi &amp; Sons — Ha-Zayit 4<span class="ws" style="background:#ea6b13">Job Board</span></div>
+                <div><span class="dot" style="background:#cbd5e1"></span>12 — B2 — Levin<span class="ws" style="background:#0d9488">Netiv</span></div>
+                <div style="color:#6b7280;font-size:11px">＋ A general job in a workspace (no unit) — Wolfson · A1</div>
+                <span class="n" style="right:-10px;top:8px">5</span>
+              </div>
+              <div class="l">Who</div>
+              <div class="who"><span class="on"><i style="background:#fff"></i>Moshe</span><span><i style="background:#f59e0b"></i>Yossi</span><span><i style="background:#8b5cf6"></i>Cohen Bros.</span></div>
+              <div class="l">What has to be done</div>
+              <div class="comp"><span class="clip">📎</span><div class="box"><span class="mic">🎤</span>Concealed units in the bedrooms…</div><span class="big">🎙</span></div>
+              <div class="l">Days</div>
+              <div class="daysrow"><span class="in" style="padding:5px 9px">Tue 16 Sep</span><span class="step"><span class="pm">−</span><span>2 days</span><span class="pm">+</span></span><span class="hint">☐ include Friday</span></div>
+              <div class="green">Tuesday 16 and Wednesday 17 September · 2 days</div>
+              <div class="l">When it's done, the job moves to</div>
+              <div class="in">Inline fans installed ▾</div>
+            </div>
+            <div class="foot"><span class="btn ghost" style="font-size:11px">Just a note instead</span><span class="sp"></span><span class="btn ghost">Cancel</span><span class="btn pri">Add the job</span>
+              <span class="n" style="left:100px;top:-12px">6</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <p class="say">"those three dots don't work. It just lets you type a weird text field"</p>
+      <ol>
+        <li><span class="k">1</span>The free-words entry: a bare text box in the square with a "⋯" that does nothing. It was the paper sheet's "Pardes 8 am" — but it makes no task, has no job, and reads as broken.</li>
+        <li><span class="k">2</span>The plus is hover-only and tiny; on a touchscreen it does not exist at all.</li>
+        <li><span class="k">3</span><b>Press a square</b> (click or tap, anywhere that is not a card) and a big plus appears in it; press the plus and the dialog opens for that person and that day. A second press on the square puts the plus away.</li>
+        <li><span class="k">4</span><b>The same dialog the drop already uses</b>, with one step in front: the job. Person and day are filled in from the square; the person can be changed to anyone on the sheet.</li>
+        <li><span class="k">5</span><b>The job search runs across every workspace</b> — a Wolfson or Netiv apartment, a Job Board job — with the workspace tag on each row, and the forgiving search the header has (Hebrew, wrong keyboard, one letter off). The last row makes a general job in a workspace with no unit, exactly as the Tasks page can. Picking a unit from another workspace makes a task THERE and a card here — the notebook's existing cross-workspace card.</li>
+        <li><span class="k">6</span><b>Add the job</b> creates the task (with its days, when-done stage, the memo or files) and one card per day on that person's row — the standing drop flow. "Just a note instead" keeps the free-words card for the rare "Pardes 8 am" — small and grey, no longer what the plus does.</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ═══════════ RULES ═══════════ -->
+  <div class="rules">
+    <h2>Rules the build keeps</h2>
+    <ul>
+      <li><b>The builder draws the diagram's own rows.</b> One row model feeds both the project page and the builder, so they cannot disagree about the floors again; the empty Ground / Commercial row is removed from that model, not hidden.</li>
+      <li><b>A merged row is ONE unit.</b> The kept unit takes the positions of the others; the others become blank placeholders that do not count. Its number, name, stage, tasks and Drive folder are the kept unit's. Unmerge restores the placeholders as blank slots — nothing is deleted.</li>
+      <li><b>Nothing is renumbered silently.</b> Moving a floor asks; merging keeps the kept unit's number; every write goes through the builder's Save, and Save shows the list of changes before it writes (as it does today).</li>
+      <li><b>The star writes one field</b> — the apartment's plan link — and nothing else. A missing plans folder no longer means "no plan": the pane browses the job folder from its root.</li>
+      <li><b>Thumbnails are Drive's own</b> (the same picture the plan-aspect check already reads), fetched per tile as it scrolls into view, never for a whole folder at once.</li>
+      <li><b>The notebook plus makes a real task</b> through the standing drop dialog; one card per day, the task keeps all its days, the worker's phone shows every day. The free-words card survives only behind "Just a note instead".</li>
+      <li><b>Every new string is bilingual</b> — the dialog, the breadcrumb, the merge ask — from the strings object, both presets.</li>
+    </ul>
+    <h2 style="margin-top:16px">Where it lands</h2>
+    <ul class="files">
+      <li>src/components/settings/ProjectBuilder.tsx · src/data/projectLayout.ts (row model, merge, move-a-floor) · SettingsPage.tsx (full-screen Buildings)</li>
+      <li>src/components/diagram/BuildingDiagram.tsx (row heights, the shared row model)</li>
+      <li>src/components/plans/PlanBrowser.tsx (new: breadcrumb + tiles) · PlanPicker.tsx (tile view + star) · ApartmentDetailDrawer.tsx (the pane hosts the browser) · driveApi.ts (folder listing with thumbnails)</li>
+      <li>src/components/board/PlannerWidget.tsx (big plus) · PlannerDialogs.tsx (the job step) · plannerDrop.ts</li>
+    </ul>
+  </div>
+
+  <!-- ═══════════ QUESTIONS ═══════════ -->
+  <div class="rules">
+    <h2>The starred questions</h2>
+    <div class="q"><span class="star">★</span><div><b>1 · Moving an apartment to another floor.</b> Default to keeping its number <span class="rec">RECOMMENDED</span>, with "renumber the floor" as the second choice in the ask? Or always renumber?</div></div>
+    <div class="q"><span class="star">★</span><div><b>2 · A merged row.</b> One real unit spanning the row, the others blank placeholders <span class="rec">RECOMMENDED</span> — or a linked group like today's merged pairs, where each unit keeps its own record and number?</div></div>
+    <div class="q"><span class="star">★</span><div><b>3 · The star on a marked-up version.</b> Starring an Annotated Plans file makes THAT the contractor's plan <span class="rec">RECOMMENDED</span> — or should only original sheets take the star, with markups shown beside it as now?</div></div>
+    <div class="q"><span class="star">★</span><div><b>4 · The free-words card.</b> Keep it behind "Just a note instead" <span class="rec">RECOMMENDED</span>, or drop it — every square entry must be a job?</div></div>
+    <div class="q"><span class="star">★</span><div><b>5 · Row heights.</b> Every floor the same height, lobby and basements included <span class="rec">RECOMMENDED</span> — or keep basements shorter and only fix the cut-off text?</div></div>
+    <div class="q"><span class="star">★</span><div><b>6 · Who can be picked in the notebook dialog.</b> Only people on that sheet <span class="rec">RECOMMENDED</span>, or any worker (adding a row for them)?</div></div>
+    <p class="mark" style="font-size:20px;margin:14px 0 0">Answer the stars, say "build it", and this page is the spec.</p>
+  </div>
+</div>

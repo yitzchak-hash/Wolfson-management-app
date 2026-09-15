@@ -40,8 +40,40 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-08)
+## Where things stand (2026-09-15)
 Last commits, newest first (see `git log`):
+- **This round (nothing built — a plan page only)**: the owner asked for
+  urgent changes in three places and for before/after previews in ONE
+  artifact before anything is built. Published "Buildings, Plans and the
+  Notebook Plus" (https://claude.ai/artifact/Y8ujqL3CjhocFFGn5C5W9B; copy in
+  `docs/artifacts/2026-09-15-buildings-plans-notebook-plus.html`; template
+  `scratchpad/settings-plans-notebook-plan.template.html`, built with
+  `scratchpad/build-plan-page.mjs`). It ends in six starred questions. **Build
+  only when he answers the stars and says "build it".** What the page
+  proposes, in short: (1) project settings → Buildings opens full screen and
+  draws the diagram's own cells (number + family + stage colour); move a cell
+  to another floor with an ask about the number; select several cells and
+  merge them into one square spanning the row (the lobby is one job); the
+  builder's floors become the project page's floors exactly (Roof, 15/14 wide,
+  13…2, "1 · Lobby", -0.5, -1, -2 — the empty Ground / Commercial row
+  dropped); every row the same height so lobby text is never cut off.
+  (2) The drawer's plan pane browses the job's Drive folder like Drive —
+  breadcrumb, folder tiles, plan tiles with Drive thumbnails — whenever there
+  is no Engineered Plans folder (and behind a browse button when there is);
+  a star on every plan tile in every folder, and in the Plans chooser, writes
+  `plansPdfLink` = the contractor's plan and what the drawer reopens on.
+  (3) The notebook: pressing a day square shows a big plus; the plus opens
+  the standing drop dialog with a job-search step in front (every workspace,
+  apartment or general job), who, what (MessageBox), days, when-done stage;
+  the free-words entry survives only behind "Just a note instead".
+  Facts gathered for the build: builder = `src/components/settings/ProjectBuilder.tsx`
+  (CELL_W 54 / CELL_H 40, number-only cells, floor label inputs) +
+  `src/data/projectLayout.ts` (joinSlots/unjoinSlot/proposeNumbering/…);
+  diagram rows in `BuildingDiagram.tsx` `getFloorRows` (lobby/ground rows 44px
+  vs 68 normal — the cut-off); the free-words entry is
+  `PlannerWidget.tsx` ~line 1638 (`setCell(key, [...entries, {id, text:''}])`);
+  `PlanPicker.tsx` props `{driveLink, plansFolderId, plans, current, onPick,
+  onOpenNewTab, onClose}`; thumbnails via `driveThumbUrl` (photoSrc.ts).
 - **This round**: the Windows Drive-folder helper rebuilt as ONE installer
   (`src/data/tzviairHelper.ts`, `DriveDesktopPath.tsx`, the settings card),
   Hebrew-safe PowerShell opener, paste-a-path detector (`parsePastedPath`,
@@ -64,6 +96,23 @@ Last commits, newest first (see `git log`):
   the board's gestures; Drive sweep reports seen/linked/new.
 
 ## What the owner last asked (his exact wants)
+0. **(2026-09-15, OPEN — awaiting his stars)** "There's a few fixes we need to
+   do really urgently": in Wolfson project settings → Buildings he cannot see
+   the actual apartments with their saved info ("at least I can see what I'm
+   touching and when I'm moving"); add moving an apartment a floor with the
+   numbering handled; merge several apartments across a whole row into one
+   square (the lobby is one job); the lobby row is thinner and its text is
+   cut off; project settings may take the entire screen; the builder's floors
+   must match the project page (Lobby/Ground, then -0.5, -1, -2; the empty
+   Ground / Commercial floor is unnecessary). Pasting a Drive link with no
+   Engineered Plans folder: the plan selector should browse like Google Drive
+   (clickable folders, thumbnails) where the plan preview is; a star next to
+   any plan in any folder = the main plan the contractor sees, and the
+   apartment reopens on it. The notebook: clicking a day should show a big
+   plus that prompts for the job (building project or apartment), who, and
+   details, and create the task — the "three dots" free-text entry is broken.
+   He wants "previews of all these behavior changes in an artifact, before and
+   afters" — done; nothing built yet.
 1. **A handoff file kept updated after every response** so any AI can continue
    with no lost context, and every artifact saved in the repo in order as
    versions, never overwritten — DONE this round (this file, `docs/artifacts/`).
@@ -95,6 +144,17 @@ Last commits, newest first (see `git log`):
   storing the folder title at submit (only paste/drawer/sweep store it now).
 
 ## The last reply the owner saw (so the next one continues it)
+**Newest (2026-09-15)**: the reply gave him the link to "Buildings, Plans and
+the Notebook Plus", said each scene is a before beside an after with numbered
+notes, listed the six starred questions (move-a-floor keeps its number?; a
+merged row is one unit?; a marked-up version can take the star?; keep the
+free-words card behind "Just a note instead"?; every row the same height?;
+only people on the sheet in the notebook dialog?) with the recommended
+answer on each, and asked him to answer the stars and say "build it". The
+next assistant's job: read his answers, then build exactly what the page
+shows with those answers, one round, probes and all.
+
+Previous round's summary follows.
 Summary of the previous assistant's final message: the Tab S10 FE page was
 published with 80 clean screens and 21 pen checks; the pen tray's Escape bug
 was fixed and pushed. Then the owner wrote the three asks above. The reply to
