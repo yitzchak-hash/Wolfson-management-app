@@ -143,6 +143,14 @@ export interface BoardSetting {
    */
   stickyBuildingName?: boolean;
   /**
+   * Row height per floor of each building: buildingId → floor key
+   * (`String(floor)`) → 'tall' | 'short'. Absent means normal. Set from the
+   * layout builder's right-click menu; read by the diagram's row model
+   * (floorRows.ts) and the builder alike. Rides in `boardSettings`, so
+   * persist / sync / export / import need no new key.
+   */
+  floorHeights?: Record<string, Record<string, 'tall' | 'short'>>;
+  /**
    * Margin, in board units, kept clear on all four sides — like the margins
    * on a page. Nothing is dropped inside it, so the work never sits flush
    * against the chrome. Absent means the default (BOARD_MARGIN).
@@ -596,7 +604,21 @@ export interface Apartment {
   displayName: string;
   floor: number;
   colPosition: number;  // 1-4 within the 4-col building grid
-  colSpan: number;      // 1 = single col, 2 = spans left or right half
+  /**
+   * How many positions to its RIGHT this unit covers, 1 = its own only.
+   * Wolfson's 55/56 ship with 2 (each is half a floor). The layout builder's
+   * "Merge selected" sets it on the kept unit — one record, one job, one
+   * number, drawn as ONE wide cell everywhere the building is drawn — and
+   * marks the positions it covers with `coveredBy` (see floorRows.ts).
+   */
+  colSpan: number;
+  /**
+   * This record is a blank placeholder sitting UNDER a merged unit: the id of
+   * the unit whose `colSpan` covers its position. Never drawn, never counted
+   * (it is also `isUnnamed`), never deleted — "Unmerge" clears the field and
+   * the position comes back as an ordinary blank slot. Rides in `apartments`.
+   */
+  coveredBy?: string;
   isDuplexApt: boolean; // true for apts 55-56 (shown on 2 floors)
   currentStageId: string | null;
   classification: Classification;
@@ -2029,6 +2051,70 @@ export interface MainUiStrings {
   stagePendingListTitle: string;
   stagePendingEmpty: string;
   openedJob: string;
+  // Layout builder (Buildings, full screen)
+  lbTitle: string;
+  lbUndo: string;
+  lbSaveLayout: string;
+  lbCloseTip: string;
+  lbDiscardAsk: string;
+  lbDiscard: string;
+  lbKeepEditing: string;
+  lbRename: string;
+  lbSetNumber: string;
+  lbMoveUp: string;
+  lbMoveDown: string;
+  lbMergeSelected: string;
+  lbUnmerge: string;
+  lbRenumberFloor: string;
+  lbRowHeight: string;
+  lbRowNormal: string;
+  lbRowTall: string;
+  lbRowShort: string;
+  lbAddPosition: string;
+  lbRemovePosition: string;
+  lbRemoveRefused: string;
+  lbMoveAsk: string;
+  lbKeepNumber: string;
+  lbKeepNoNumber: string;
+  lbRenumberOpt: string;
+  lbMoveBtn: string;
+  lbTopAlready: string;
+  lbBottomAlready: string;
+  lbNumberField: string;
+  lbNameField: string;
+  lbApply: string;
+  lbStartAt: string;
+  lbDirection: string;
+  lbLeftToRight: string;
+  lbRightToLeft: string;
+  lbRenumberHint: string;
+  lbSavePreview: string;
+  lbNoChanges: string;
+  lbWrite: string;
+  lbChangeFloor: string;
+  lbChangeCol: string;
+  lbChangeNumber: string;
+  lbChangeName: string;
+  lbChangeMerged: string;
+  lbChangeUnmerged: string;
+  lbChangeCovered: string;
+  lbChangeUncovered: string;
+  lbChangeNew: string;
+  lbChangeRemoved: string;
+  lbChangeHeights: string;
+  lbSelectHint: string;
+  lbUnits: string;
+  lbSelected: string;
+  lbBlankSlot: string;
+  lbNoNumber: string;
+  lbMergeNeedsRow: string;
+  lbMerged: string;
+  lbUnmerged: string;
+  lbSaved: string;
+  lbMoved: string;
+  lbOpenBuilder: string;
+  lbCardText: string;
+  lbFloorLabelTip: string;
   // Header
   syncSaving: string;
   syncSaved: string;
@@ -2697,6 +2783,70 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   stagePendingListTitle: 'Half-done stages',
   stagePendingEmpty: 'Nothing is waiting — no half-done stages.',
   openedJob: 'opened',
+  // Layout builder
+  lbTitle: 'Buildings layout',
+  lbUndo: 'Undo',
+  lbSaveLayout: 'Save layout',
+  lbCloseTip: 'Close (Esc)',
+  lbDiscardAsk: 'Discard unsaved changes?',
+  lbDiscard: 'Discard',
+  lbKeepEditing: 'Keep editing',
+  lbRename: 'Rename…',
+  lbSetNumber: 'Set number…',
+  lbMoveUp: 'Move up a floor',
+  lbMoveDown: 'Move down a floor',
+  lbMergeSelected: 'Merge selected',
+  lbUnmerge: 'Unmerge',
+  lbRenumberFloor: 'Renumber this floor…',
+  lbRowHeight: 'Row height',
+  lbRowNormal: 'Normal',
+  lbRowTall: 'Tall',
+  lbRowShort: 'Short',
+  lbAddPosition: 'Add a position here',
+  lbRemovePosition: 'Remove position',
+  lbRemoveRefused: 'Only a blank position can be removed — move or clear the unit first',
+  lbMoveAsk: 'Move {a} to floor {f}?',
+  lbKeepNumber: 'Keep its number, {n}',
+  lbKeepNoNumber: 'Keep it as it is (no number)',
+  lbRenumberOpt: 'Renumber floor {f} as {range} and shift the rest',
+  lbMoveBtn: 'Move',
+  lbTopAlready: 'Already the top floor',
+  lbBottomAlready: 'Already the bottom floor',
+  lbNumberField: 'Number — leave blank for no number',
+  lbNameField: 'Name',
+  lbApply: 'Apply',
+  lbStartAt: 'Start at',
+  lbDirection: 'Direction',
+  lbLeftToRight: 'Left to right',
+  lbRightToLeft: 'Right to left',
+  lbRenumberHint: 'Only positions that already carry a number are renumbered — a unit whose number was left blank stays blank.',
+  lbSavePreview: 'These changes will be written',
+  lbNoChanges: 'Nothing has changed',
+  lbWrite: 'Write {n} changes',
+  lbChangeFloor: 'floor {a} → {b}',
+  lbChangeCol: 'position {a} → {b}',
+  lbChangeNumber: 'number {a} → {b}',
+  lbChangeName: 'name {a} → {b}',
+  lbChangeMerged: 'now one unit over {n} positions',
+  lbChangeUnmerged: 'back to one position',
+  lbChangeCovered: 'blank, under a merged unit',
+  lbChangeUncovered: 'blank slot again',
+  lbChangeNew: 'new blank position',
+  lbChangeRemoved: 'blank position removed',
+  lbChangeHeights: 'row heights',
+  lbSelectHint: 'Click a cell · Shift+click adds · drag a box across a row · right-click for actions · drag a cell onto another floor',
+  lbUnits: '{n} units',
+  lbSelected: '{n} selected',
+  lbBlankSlot: 'blank',
+  lbNoNumber: 'no number',
+  lbMergeNeedsRow: 'Pick two or more cells side by side on ONE floor',
+  lbMerged: 'Merged into one unit',
+  lbUnmerged: 'Positions restored',
+  lbSaved: 'Layout saved',
+  lbMoved: 'Moved to floor {f}',
+  lbOpenBuilder: 'Open the layout builder',
+  lbCardText: 'Move units between floors, merge positions into one unit, rename, renumber and set row heights — full screen, with a list of every change before it is written.',
+  lbFloorLabelTip: 'Right-click for row height and renumbering',
   // Header
   syncSaving: 'Saving…',
   syncSaved: 'Saved ✓',
@@ -3361,6 +3511,70 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   stagePendingListTitle: 'שלבים חצי גמורים',
   stagePendingEmpty: 'אין שלבים חצי גמורים.',
   openedJob: 'פתח/ה את',
+  // Layout builder
+  lbTitle: 'פריסת הבניינים',
+  lbUndo: 'בטל',
+  lbSaveLayout: 'שמור פריסה',
+  lbCloseTip: 'סגור (Esc)',
+  lbDiscardAsk: 'לבטל שינויים שלא נשמרו?',
+  lbDiscard: 'בטל שינויים',
+  lbKeepEditing: 'המשך לערוך',
+  lbRename: 'שנה שם…',
+  lbSetNumber: 'קבע מספר…',
+  lbMoveUp: 'העלה קומה',
+  lbMoveDown: 'הורד קומה',
+  lbMergeSelected: 'מזג נבחרים',
+  lbUnmerge: 'בטל מיזוג',
+  lbRenumberFloor: 'מספר מחדש את הקומה…',
+  lbRowHeight: 'גובה שורה',
+  lbRowNormal: 'רגיל',
+  lbRowTall: 'גבוה',
+  lbRowShort: 'נמוך',
+  lbAddPosition: 'הוסף מקום כאן',
+  lbRemovePosition: 'הסר מקום',
+  lbRemoveRefused: 'אפשר להסיר רק מקום ריק — קודם הזז או נקה את היחידה',
+  lbMoveAsk: 'להעביר את {a} לקומה {f}?',
+  lbKeepNumber: 'להשאיר את המספר, {n}',
+  lbKeepNoNumber: 'להשאיר כמו שהוא (בלי מספר)',
+  lbRenumberOpt: 'למספר את קומה {f} כ-{range} ולהזיז את השאר',
+  lbMoveBtn: 'העבר',
+  lbTopAlready: 'זו כבר הקומה העליונה',
+  lbBottomAlready: 'זו כבר הקומה התחתונה',
+  lbNumberField: 'מספר — השאר ריק ליחידה בלי מספר',
+  lbNameField: 'שם',
+  lbApply: 'החל',
+  lbStartAt: 'התחל מ-',
+  lbDirection: 'כיוון',
+  lbLeftToRight: 'משמאל לימין',
+  lbRightToLeft: 'מימין לשמאל',
+  lbRenumberHint: 'ממוספרים רק מקומות שכבר יש להם מספר — יחידה שהמספר שלה נשאר ריק נשארת בלי מספר.',
+  lbSavePreview: 'השינויים האלה ייכתבו',
+  lbNoChanges: 'שום דבר לא השתנה',
+  lbWrite: 'כתוב {n} שינויים',
+  lbChangeFloor: 'קומה {a} ← {b}',
+  lbChangeCol: 'מקום {a} ← {b}',
+  lbChangeNumber: 'מספר {a} ← {b}',
+  lbChangeName: 'שם {a} ← {b}',
+  lbChangeMerged: 'עכשיו יחידה אחת על פני {n} מקומות',
+  lbChangeUnmerged: 'חזרה למקום אחד',
+  lbChangeCovered: 'ריק, מתחת ליחידה ממוזגת',
+  lbChangeUncovered: 'שוב מקום ריק',
+  lbChangeNew: 'מקום ריק חדש',
+  lbChangeRemoved: 'מקום ריק הוסר',
+  lbChangeHeights: 'גבהי שורות',
+  lbSelectHint: 'לחיצה בוחרת · Shift+לחיצה מוסיפה · גרירת מסגרת על שורה · קליק ימני לפעולות · גרירת תא לקומה אחרת',
+  lbUnits: '{n} יחידות',
+  lbSelected: '{n} נבחרו',
+  lbBlankSlot: 'ריק',
+  lbNoNumber: 'בלי מספר',
+  lbMergeNeedsRow: 'בחר שני תאים או יותר, זה לצד זה, על קומה אחת',
+  lbMerged: 'מוזג ליחידה אחת',
+  lbUnmerged: 'המקומות שוחזרו',
+  lbSaved: 'הפריסה נשמרה',
+  lbMoved: 'הועבר לקומה {f}',
+  lbOpenBuilder: 'פתח את בונה הפריסה',
+  lbCardText: 'הזזת יחידות בין קומות, מיזוג מקומות ליחידה אחת, שינוי שם, מספור וגובה שורות — במסך מלא, עם רשימת כל השינויים לפני הכתיבה.',
+  lbFloorLabelTip: 'קליק ימני לגובה שורה ומספור מחדש',
   // Header
   syncSaving: 'שומר...',
   syncSaved: 'נשמר ✓',
