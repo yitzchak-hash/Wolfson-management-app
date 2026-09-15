@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
-import { Mic, X, Save, Building2, MessageSquare, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer, Phone as PhoneIcon, Loader2 } from 'lucide-react';
+import { Mic, X, Save, Building2, MessageSquare, AlertTriangle, Link, Unlink, ExternalLink, BookOpen, Download, Eye, EyeOff, Activity, RefreshCw, Paperclip, Trash2, ChevronDown, ChevronRight, ClipboardList, CheckCircle2, CalendarDays, FileText, UserCheck, Plus, Camera, Play, ChevronLeft, FolderOpen, Clock, RotateCcw, Edit2, BarChart3, PenLine, Maximize2, Printer, Phone as PhoneIcon, Loader2, Folder, Star } from 'lucide-react';
 import { Apartment, User, getStageName, TaskAttachment, TaskPriority, aptLabel, ContractorAssignment } from '../../types';
 import { TaskThread } from '../tasks/TaskThread';
 import { Translated } from '../ui/Translated';
@@ -28,6 +28,7 @@ import { ProblemForm } from './ProblemForm';
 import { ProblemBand } from './ProblemBand';
 import { problemState } from '../../data/problems';
 import { PlanPinOverlay } from './PlanPinOverlay';
+import { PlanBrowser, Crumb, TileFile } from '../plans/PlanBrowser';
 import { cachedPlanAspect, measurePlanAspect } from '../../data/planAspect';
 // Lazy, deliberately. The markup studio carries pdf.js — about a megabyte of
 // PDF engine — and nobody should pay for that on the login screen. It arrives
@@ -347,6 +348,18 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   /** The Drive folder's own title, so the link field can show it instead of a URL. */
   const [driveFolderName, setDriveFolderName] = useState('');
   /**
+   * THE PLAN BROWSER — the job's Drive folder browsed like Drive, in the
+   * pane where the sheet goes. `browsePath` is the breadcrumb (the job folder
+   * first), null when the pane shows the sheet; a job with no plans folder
+   * browses from its root by itself (see `autoBrowse`). `browsePreview` is a
+   * sheet opened FROM the browser — a look: the browser stays mounted under
+   * it (same folder, same scroll) and Back returns there. Per drawer open,
+   * nothing persisted. `plansFolderName` names the Engineered Plans crumb.
+   */
+  const [browsePath, setBrowsePath] = useState<Crumb[] | null>(null);
+  const [browsePreview, setBrowsePreview] = useState<{ file: TileFile; folderName: string } | null>(null);
+  const [plansFolderName, setPlansFolderName] = useState('');
+  /**
    * The plan pane is sized TO THE SHEET, not to whatever is left over.
    *
    * The Drive preview letterboxes the PDF inside its box, and the surround is
@@ -561,11 +574,19 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
 
       setPickedPlanName('');
       setDriveFolderName('');
+      setBrowsePath(null);
+      setBrowsePreview(null);
+      setPlansFolderName('');
       if (apartment.driveLink && backendConfigured) {
         // One scan gets the originals, the markups and the folder a new markup
         // has to be filed into.
+        const rootId = extractFolderId(apartment.driveLink);
         findPlanSetViaBackend(apartment.driveLink).then(ps => {
           setPlanSet(ps);
+          // The browser's crumb for the plans folder wants its real title.
+          if (ps.plansFolderId && ps.plansFolderId !== rootId) {
+            getFolderNameViaBackend(ps.plansFolderId).then(n => { if (n) setPlansFolderName(n); }).catch(() => {});
+          }
         }).catch(() => {});
         const fid = extractFolderId(apartment.driveLink);
         if (fid) getFolderNameViaBackend(fid).then(n => {
@@ -640,6 +661,23 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   if (!apartment) return null;
 
   const detectedPdfId = availablePdfs[selectedPdfIdx]?.id ?? null;
+  /**
+   * The browser's three facts. A job with a Drive link and NO plan to show
+   * browses its folder root by itself (this replaces the old "No plans in
+   * this folder yet" empty state); a job with a plan browses only when the
+   * bar's browse button was pressed. A preview from the browser is what the
+   * pane draws while it stands. The STAR is the apartment's plansPdfLink.
+   */
+  const rootFolderId = apartment.driveLink ? extractFolderId(apartment.driveLink) : null;
+  const autoBrowse = !detectedPdfId && !shownPlanId && !fetchingPdf && !!rootFolderId && backendConfigured;
+  const browsing = autoBrowse || !!browsePath;
+  const paneFileId = browsePreview?.file.id ?? (browsing ? null : (shownPlanId ?? detectedPdfId));
+  const studioFileId = browsePreview?.file.id ?? shownPlanId ?? detectedPdfId;
+  const starredPlanId = plansPdfLink ? extractFileId(plansPdfLink) : null;
+  const rootCrumb: Crumb = { id: rootFolderId ?? '', name: driveFolderName || ui.driveFolder };
+  // The root crumb takes the folder's title whenever it lands, even after a step in.
+  const activePath: Crumb[] = (browsePath ?? [rootCrumb]).map((c, i) =>
+    (i === 0 && c.id === rootFolderId && driveFolderName ? { ...c, name: driveFolderName } : c));
 
   // Saved markup versions of the plan currently selected, so the drawer can
   // show how many there are and link straight to the newest PDF.
@@ -658,7 +696,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    * from the first frame with a spinner; if the folder turns out to hold no
    * plans it folds away once, honestly.
    */
-  const planPaneOn = planWanted && (!!detectedPdfId || (fetchingPdf && !!apartment.driveLink));
+  const planPaneOn = planWanted && (!!detectedPdfId || (fetchingPdf && !!apartment.driveLink) || browsing);
   /**
    * Splitting the window is a WIDE-screen arrangement. Below 800px there is
    * no side to put the plan on — an upright iPad (768) and every phone reach
@@ -1104,8 +1142,26 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    * picker beside it was two doors to one room. Saved versions goes with them
    * — the Plans picker already lists the Annotated Plans folder.
    */
+  /** THE STAR: this file is the contractor's plan. Writes plansPdfLink and nothing else. */
+  function starPlan(file: { id: string }) {
+    if (!currentUser) return;
+    const link = `https://drive.google.com/file/d/${file.id}/view`;
+    setPlansPdfLink(link);
+    updateApartment(apartment!.id, { plansPdfLink: link }, currentUser);
+    onToast(ui.planStarredToast);
+  }
+
+  /** The bar's browse button: the browser opens on the plans folder, the job root one crumb up. */
+  function openBrowser() {
+    const path: Crumb[] = planSet.plansFolderId && planSet.plansFolderId !== rootFolderId
+      ? [rootCrumb, { id: planSet.plansFolderId, name: plansFolderName || 'Engineered Plans' }]
+      : [rootCrumb];
+    setBrowsePreview(null);
+    setBrowsePath(path);
+  }
+
   function planControls() {
-    const fileId = shownPlanId ?? detectedPdfId;
+    const fileId = paneFileId;
     if (!fileId) return null;
     return (
       <>
@@ -1140,6 +1196,14 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         style={{ backgroundColor: '#2c4f78' }}>
         <span ref={setViewerBar2Slot} className="flex items-center gap-1.5 min-w-0 flex-1" />
 
+        {rootFolderId && backendConfigured && !browsePreview && (
+          <Tooltip text={ui.planBrowseBtn} side="left">
+            <button data-plan-browse onClick={openBrowser}
+              className="p-1.5 rounded-lg text-white/70 hover:bg-white/15">
+              <Folder size={14} />
+            </button>
+          </Tooltip>
+        )}
         <Tooltip text="Full screen" side="left">
           <button onClick={() => setAnnotating('view')}
             className="p-1.5 rounded-lg text-white/70 hover:bg-white/15">
@@ -1159,7 +1223,68 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
 
   function planPane(variant: 'side' | 'tab') {
     const asTab = variant === 'tab';
-    const fileId = shownPlanId ?? detectedPdfId;
+    const fileId = paneFileId;
+    const frame = (body: React.ReactNode) => (
+      <div
+        className={`relative flex flex-col min-h-0 ${asTab ? 'h-full' : 'border-l border-gray-200'}`}
+        style={asTab
+          ? { backgroundColor: '#f8fafc' }
+          // minWidth 0: a flex item refuses to shrink below its content's
+          // min-width by default, and the sheet's canvases have one — without
+          // this the pane could hold the row wider than the clipped modal.
+          : { flex: '1 1 54%', minWidth: 0, backgroundColor: '#f8fafc' }}
+      >
+        {body}
+      </div>
+    );
+
+    // THE BROWSER stands in the pane — and stays mounted UNDER a preview, so
+    // Back returns to the same folder at the same scroll.
+    if (browsing) {
+      const backTo = browsePath && (shownPlanId ?? detectedPdfId) ? () => setBrowsePath(null) : undefined;
+      const previewStarred = !!browsePreview && starredPlanId === browsePreview.file.id;
+      return frame(
+        <>
+          <div className="absolute inset-0 flex flex-col min-h-0">
+            <PlanBrowser
+              hidden={!!browsePreview}
+              path={activePath}
+              onPath={setBrowsePath}
+              starredId={starredPlanId}
+              onStar={starPlan}
+              onPreview={(file, folderName) => setBrowsePreview({ file, folderName })}
+              onBack={backTo}
+              onHide={planSideOn ? () => setPlanPaneOn(false) : undefined}
+              currentId={shownPlanId ?? detectedPdfId}
+            />
+          </div>
+          {browsePreview && fileId && (
+            <div data-plan-preview={fileId} className="absolute inset-0 flex flex-col min-h-0 z-[1]"
+              style={{ backgroundColor: '#f8fafc' }}>
+              {/* The preview's own strip: back to the folder, and the star. */}
+              <div className="flex items-center gap-1.5 min-w-0 px-2 py-1 flex-shrink-0" style={{ backgroundColor: '#16304f' }}>
+                <button data-preview-back onClick={() => setBrowsePreview(null)}
+                  className="flex items-center gap-0.5 px-1.5 py-1 min-h-[30px] rounded-lg text-[11px] font-bold text-white/90 hover:bg-white/15 min-w-0">
+                  {ui.isRtl ? <ChevronRight size={14} className="flex-shrink-0" /> : <ChevronLeft size={14} className="flex-shrink-0" />}
+                  <span className="truncate">{ui.planBackTo.replace('{folder}', browsePreview.folderName)}</span>
+                </button>
+                <div className="flex-1" />
+                <button data-preview-star data-starred={previewStarred ? '1' : '0'}
+                  onClick={() => starPlan(browsePreview.file)}
+                  disabled={previewStarred}
+                  title={previewStarred ? ui.planIsMain : ui.planMakeMain}
+                  className={`flex items-center gap-1 px-2 py-1 min-h-[30px] rounded-lg text-[11px] font-bold ${
+                    previewStarred ? 'bg-amber-400 text-white' : 'text-white/90 hover:bg-white/15'}`}>
+                  <Star size={13} fill={previewStarred ? 'currentColor' : 'none'} />
+                  {previewStarred ? ui.planIsMain : ui.planMakeMain}
+                </button>
+              </div>
+              {sheet(fileId)}
+            </div>
+          )}
+        </>,
+      );
+    }
 
     // No file yet — either the hunt is still running (spinner, so the pane is
     // present from the first frame instead of popping in two seconds later),
@@ -1194,16 +1319,13 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       );
     }
 
+    return frame(sheet(fileId));
+  }
+
+  /** The sheet with its two bars — the pane's ordinary body, and a preview's. */
+  function sheet(fileId: string) {
     return (
-      <div
-        className={`flex flex-col min-h-0 ${asTab ? 'h-full' : 'border-l border-gray-200'}`}
-        style={asTab
-          ? { backgroundColor: '#f8fafc' }
-          // minWidth 0: a flex item refuses to shrink below its content's
-          // min-width by default, and the sheet's canvases have one — without
-          // this the pane could hold the row wider than the clipped modal.
-          : { flex: '1 1 54%', minWidth: 0, backgroundColor: '#f8fafc' }}
-      >
+      <>
         {/* The plan's two bars, at the pane's own left edge. */}
         {planControls()}
         {/*
@@ -1231,9 +1353,10 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               embedded
               readOnly
               planFileId={fileId}
-              planName={planSet.plans.find(p => p.id === fileId)?.name
-                ?? pickedPlanName
-                ?? ui.engineeringPlans}
+              planName={browsePreview?.file.id === fileId ? browsePreview.file.name
+                : (planSet.plans.find(p => p.id === fileId)?.name
+                  || pickedPlanName
+                  || ui.engineeringPlans)}
               apartmentId={apartment!.id}
               apartmentLabel={aptLabel(apartment!)}
               driveFolderUrl={apartment!.driveLink}
@@ -1244,6 +1367,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               barInto2={viewerBar2Slot}
               plansFolderId={planSet.plansFolderId ?? undefined}
               plans={planSet.plans}
+              onStarPlan={starPlan}
+              starredPlanId={starredPlanId}
               /*
                 Plans is the chooser now, so what it picks has to land back
                 here. The rule the chip row carried is kept exactly: only an
@@ -1273,14 +1398,14 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                   authorName={currentUser?.name ?? ''}
                   controlsInto={planBarSlot}
                   driveFolderLink={apartment!.driveLink}
-                  planFileId={shownPlanId ?? detectedPdfId}
+                  planFileId={fileId}
                   plansFolderId={planSet.plansFolderId}
                 />
               }
             />
           </Suspense>
         </div>
-      </div>
+      </>
     );
   }
 
@@ -2770,7 +2895,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
 
         {/* Bring it back — the side pane only. Below 800px the plan was never
             put away, it lives in its own tab. */}
-        {planWide && !planPaneOn && detectedPdfId && (
+        {planWide && !planPaneOn && (detectedPdfId || browsing) && (
           <button
             onClick={() => setPlanPaneOn(true)}
             title="Show the plan beside the details"
@@ -2785,7 +2910,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       {/* Plan markup studio. Full screen and above the drawer, because marking
           up a construction drawing in a panel the width of a phone is not
           marking anything up. */}
-      {annotating && detectedPdfId && (
+      {annotating && studioFileId && (
         <Suspense fallback={
           <div className="fixed inset-0 z-[150] flex items-center justify-center gap-2 text-white text-sm"
             style={{ backgroundColor: '#111827' }}>
@@ -2793,9 +2918,12 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
           </div>
         }>
         <PlanAnnotator
-          planFileId={shownPlanId ?? detectedPdfId}
-          planName={planSet.plans.find(p => p.id === (shownPlanId ?? detectedPdfId))?.name
-            ?? availablePdfs[selectedPdfIdx]?.name}
+          planFileId={studioFileId}
+          planName={browsePreview?.file.id === studioFileId ? browsePreview.file.name
+            : (planSet.plans.find(p => p.id === studioFileId)?.name
+              ?? availablePdfs[selectedPdfIdx]?.name)}
+          onStarPlan={starPlan}
+          starredPlanId={starredPlanId}
           apartmentId={apartment.id}
           apartmentLabel={isGeneralProject ? (apartment.displayName || 'Job') : aptLabel(apartment)}
           driveFolderUrl={driveLink}

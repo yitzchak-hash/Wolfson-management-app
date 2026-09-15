@@ -2377,6 +2377,17 @@ export interface MainUiStrings {
   // Apartment Drawer extra
   downloadLabel: string;
   /** The plan download's two questions — see PlanAnnotator's download sheet. */
+  /** The plan browser — the job's Drive folder browsed in the pane, and the star. */
+  planBrowseBtn: string;
+  planBackToPlan: string;
+  planBackTo: string;
+  planMakeMain: string;
+  planIsMain: string;
+  planPreviewTitle: string;
+  planFolderEmpty: string;
+  planFolderUnreachable: string;
+  planNotViewable: string;
+  planStarredToast: string;
   dlTitle: string;
   dlWhatStep: string;
   dlWithMarkup: string;
@@ -3033,6 +3044,16 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   stageNameEnglishPlaceholder: 'English name',
   // Apartment Drawer extra
   downloadLabel: 'Download',
+  planBrowseBtn: "Browse the job's Drive folder",
+  planBackToPlan: 'Back to the plan',
+  planBackTo: 'Back to {folder}',
+  planMakeMain: 'Make this the main plan',
+  planIsMain: 'The main plan — what the worker sees',
+  planPreviewTitle: 'Open this sheet here',
+  planFolderEmpty: 'This folder is empty',
+  planFolderUnreachable: 'Drive would not let the app read this folder',
+  planNotViewable: 'Cannot be opened here',
+  planStarredToast: 'Main plan set',
   dlTitle: 'Download this plan',
   dlWhatStep: 'What should be in it?',
   dlWithMarkup: 'With the markings',
@@ -3687,6 +3708,16 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   stageNameEnglishPlaceholder: 'שם באנגלית',
   // Apartment Drawer extra
   downloadLabel: 'הורד',
+  planBrowseBtn: 'עיון בתיקיית הדרייב של העבודה',
+  planBackToPlan: 'חזרה לתוכנית',
+  planBackTo: 'חזרה אל {folder}',
+  planMakeMain: 'הפוך לתוכנית הראשית',
+  planIsMain: 'התוכנית הראשית — מה שהעובד רואה',
+  planPreviewTitle: 'פתיחת הגיליון כאן',
+  planFolderEmpty: 'התיקייה ריקה',
+  planFolderUnreachable: 'דרייב לא מאפשר לאפליקציה לקרוא את התיקייה',
+  planNotViewable: 'לא ניתן לפתוח כאן',
+  planStarredToast: 'התוכנית הראשית נקבעה',
   dlTitle: 'הורדת התוכנית',
   dlWhatStep: 'מה ייכלל בקובץ?',
   dlWithMarkup: 'כולל הסימונים',

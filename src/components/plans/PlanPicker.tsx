@@ -1,34 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Search, Folder, FileText, Image as ImageIcon, Loader2, X, ExternalLink, CornerDownRight } from 'lucide-react';
+import { ChevronDown, Search, Folder, Loader2, X, CornerDownRight } from 'lucide-react';
 import {
   DriveFolder, PlanEntry, listFoldersViaBackend, listMarkableViaBackend,
   listFolderPlansViaBackend, listPlanSubfoldersViaBackend,
 } from '../../data/driveApi';
-import { usePlanDownload } from '../../data/planCache';
+import { FileTile, SkeletonTiles, TileGrid } from './PlanBrowser';
 
 /** A folder in the dropdown — `sub` marks a child slotted in under its parent. */
 type FolderRow = DriveFolder & { sub?: boolean };
-
-/**
- * How far a plan's background download has got — quiet, on the row's right.
- * "ready" means its bytes are already here and pressing the row opens it with
- * no wait at all.
- */
-function DownloadNote({ fileId }: { fileId: string }) {
-  const pct = usePlanDownload(fileId);
-  if (pct == null) return null;
-  if (pct >= 100) {
-    return <span data-plan-ready className="text-[9.5px] font-bold text-emerald-600 flex-shrink-0">ready</span>;
-  }
-  return (
-    <span data-plan-downloading className="flex items-center gap-1 flex-shrink-0 text-[9.5px] text-slate-400 tabular-nums">
-      <span className="w-[42px] h-[3px] rounded-full overflow-hidden bg-slate-200">
-        <span className="block h-full rounded-full bg-[#4aa8d8]" style={{ width: `${pct}%` }} />
-      </span>
-      {pct}%
-    </span>
-  );
-}
 
 /**
  * Which plan, out of which folder.
@@ -46,7 +25,7 @@ function DownloadNote({ fileId }: { fileId: string }) {
  */
 export function PlanPicker({
   driveLink, plansFolderId, plansFolderName = 'Engineered Plans',
-  plans, current, onPick, onOpenNewTab, onClose,
+  plans, current, onPick, onOpenNewTab, onClose, onStar, starredId, onPreview,
 }: {
   driveLink?: string;
   plansFolderId?: string | null;
@@ -64,6 +43,15 @@ export function PlanPicker({
   /** Offered per row when the host runs tabs — opens the plan in a NEW tab. */
   onOpenNewTab?: (p: PlanEntry) => void;
   onClose: () => void;
+  /**
+   * THE STAR: "make this the contractor's plan". The host writes plansPdfLink;
+   * the picker only draws which tile wears it (`starredId`, the apartment's
+   * plansPdfLink). Without the callback no star is drawn at all.
+   */
+  onStar?: (p: PlanEntry) => void;
+  starredId?: string | null;
+  /** The tile's expand arrow — open this sheet as a LOOK, never a choice. */
+  onPreview?: (p: PlanEntry, folder: { id: string; name: string }) => void;
 }) {
   const [openList, setOpenList] = useState(false);
   const [folders, setFolders] = useState<FolderRow[]>([]);
@@ -260,41 +248,21 @@ export function PlanPicker({
     return needle ? folders.filter(f => f.name.toLowerCase().includes(needle)) : folders;
   }, [folders, q]);
 
-  // A div wearing role=button, NOT a <button>: the open-in-new-tab control
-  // inside it is a real button, and a button inside a button is invalid
-  // markup that browsers flatten (the Building Progress lesson).
-  const Row = ({ p, sub, onChoose }: { p: PlanEntry; sub?: string; onChoose: () => void }) => (
-    <div
-      data-plan-row={p.id}
-      role="button" tabIndex={0}
-      onClick={onChoose}
-      onKeyDown={e => { if (e.key === 'Enter') onChoose(); }}
-      className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg hover:bg-gray-50 text-left cursor-pointer"
-      style={p.id === current ? { backgroundColor: 'rgba(74,168,216,.12)' } : undefined}
-    >
-      {p.isImage
-        ? <ImageIcon size={14} className="text-emerald-600 flex-shrink-0" />
-        : <FileText size={14} className="text-[#1e3a5f] flex-shrink-0" />}
-      <span className="flex-1 min-w-0">
-        <span className="block truncate text-[12.5px] text-slate-700">{p.name}</span>
-        {sub && <span className="block truncate text-[10.5px] text-slate-400">{sub}</span>}
-      </span>
-      <DownloadNote fileId={p.id} />
-      {p.kind === 'annotated' && (
-        <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 flex-shrink-0">
-          marked up
-        </span>
-      )}
-      {onOpenNewTab && (
-        <button data-open-new-tab={p.id}
-          onClick={e => { e.stopPropagation(); onOpenNewTab(p); }}
-          title="Open in a new tab"
-          className="flex items-center gap-1 px-1.5 py-1 rounded-lg border border-gray-200 text-[10px]
-                     font-bold text-[#1e3a5f] hover:border-[#4aa8d8] flex-shrink-0">
-          <ExternalLink size={11} /> new tab
-        </button>
-      )}
-    </div>
+  const here = folder ?? { id: plansFolderId ?? '', name: plansFolderName };
+  /** A plan as a tile — the browser's own tile, keyed `data-plan-row` for the standing probes. */
+  const tile = (p: PlanEntry, sub: string | undefined, onChoose: () => void, inFolder: { id: string; name: string }) => (
+    <FileTile
+      key={`${inFolder.id}-${p.id}`}
+      rowHook="plan-row"
+      file={{ id: p.id, name: p.name, isImage: p.isImage, annotated: p.kind === 'annotated', viewable: true }}
+      current={p.id === current}
+      starred={!!starredId && starredId === p.id}
+      sub={sub}
+      onOpen={onChoose}
+      onStar={onStar ? () => onStar(p) : undefined}
+      onPreview={onPreview ? () => onPreview(p, inFolder) : undefined}
+      onOpenNewTab={onOpenNewTab ? () => onOpenNewTab(p) : undefined}
+    />
   );
 
   return (
@@ -304,7 +272,7 @@ export function PlanPicker({
       <div data-plan-picker
         className="fixed z-[163] rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col"
         style={{ left: '50%', top: '50%', transform: 'translate(-50%,-50%)',
-                 width: 'min(460px, 94vw)', maxHeight: '76vh' }}>
+                 width: 'min(560px, 94vw)', maxHeight: '76vh' }}>
 
         {/* The folder, as a button. */}
         <div className="flex items-center gap-2 px-3 py-2.5" style={{ backgroundColor: '#1e3a5f' }}>
@@ -368,21 +336,19 @@ export function PlanPicker({
 
           {/* The file list waits out loud too — never stale rows, never a
               blank that fills in with a jump. */}
-          {busy && shown.length === 0 && [0, 1, 2].map(i => (
-            <div key={i} data-plan-skeleton className="flex items-center gap-2 px-2.5 py-2.5 animate-pulse">
-              <span className="w-3.5 h-3.5 rounded bg-slate-200" />
-              <span className="h-3 rounded bg-slate-200" style={{ width: `${64 - i * 12}%` }} />
-            </div>
-          ))}
+          {busy && shown.length === 0 && (
+            <TileGrid><SkeletonTiles hook="plan-skeleton" count={3} /></TileGrid>
+          )}
           {shown.length === 0 && !busy && (
             <p className="px-2 py-3 text-[11.5px] text-gray-400">
               Nothing to mark up in this folder.
             </p>
           )}
-          {shown.map(p => (
-            <Row key={p.id} p={p}
-              onChoose={() => onPick(p, folder ?? { id: plansFolderId ?? '', name: plansFolderName })} />
-          ))}
+          {shown.length > 0 && (
+            <TileGrid>
+              {shown.map(p => tile(p, undefined, () => onPick(p, here), here))}
+            </TileGrid>
+          )}
 
           {/* Found somewhere else in the job. Choosing one opens its folder. */}
           {wider.length > 0 && (
@@ -390,19 +356,18 @@ export function PlanPicker({
               <div className="px-2 pt-3 pb-1 text-[9.5px] font-extrabold tracking-wide text-gray-400">
                 ELSEWHERE IN THIS JOB
               </div>
-              {wider.map(({ file, folder: f }) => (
-                <Row key={`${f.id}-${file.id}`} p={file} sub={f.name}
-                  onChoose={() => {
-                    // Open the folder it lives in as well as selecting it —
-                    // being told a file exists and left to find it is the same
-                    // as not being told.
-                    setFolder(f);
-                    setQ('');
-                    setWider([]);
-                    void listMarkableViaBackend(f.id).then(setFiles);
-                    onPick(file, f, true);   // stay open, on that folder
-                  }} />
-              ))}
+              <TileGrid>
+                {wider.map(({ file, folder: f }) => tile(file, f.name, () => {
+                  // Open the folder it lives in as well as selecting it —
+                  // being told a file exists and left to find it is the same
+                  // as not being told.
+                  setFolder(f);
+                  setQ('');
+                  setWider([]);
+                  void listMarkableViaBackend(f.id).then(setFiles);
+                  onPick(file, f, true);   // stay open, on that folder
+                }, f))}
+              </TileGrid>
             </>
           )}
         </div>
