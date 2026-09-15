@@ -45,6 +45,26 @@ unasked.
 
 ## Where things stand (2026-09-08, seventh round of the day)
 Last commits, newest first (see `git log`):
+- **2026-09-15, third pass — VERSION 3: ALL TEN STARS ANSWERED AND LOCKED.**
+  The owner's answers, now on the page (copy
+  `docs/artifacts/2026-09-15-buildings-plans-notebook-plus-v3.html`):
+  1 keep the number (renumber second) · 2 a merged row is one unit AND LOOKS
+  merged — one wide cell across the row in the builder, the project page,
+  Building Progress and the worker's map · 3 anything starred is the main
+  plan, markups included · 4 the free-words card is DROPPED, every square
+  entry is a job (existing notes stay readable until removed) · 5 all rows
+  the same height PLUS a per-floor row height in the builder's right-click
+  menu (normal/tall/short) · 6 any worker — picking one not on the sheet adds
+  their row first · 7 one source of truth (tasks drawn from tasks, no stored
+  per-day cards, one-time fold of existing cards) · 8 the ask fires on same
+  job + same day only · 9 one task when both stretches share the stages, ASK
+  when they differ · 10 the FROM stage = any stage, "not reached yet" hint.
+  The page also carries a coverage table checking every ask from his two
+  messages — all ✓ except his screenshots, which have STILL not arrived.
+  **He has not yet said "build it"** — the page ends asking for the
+  screenshots and those words. The next assistant builds scenes 1–6 exactly
+  as drawn, in one round, the moment he says so (or, if he answers with more
+  changes, folds them into version 4 first).
 - **2026-09-15, second pass — VERSION 2 of the plan page, still nothing built.**
   The owner approved version 1 ("everything looks good") and added remarks,
   all drawn into the SAME artifact (version 2; dated copy
@@ -228,7 +248,12 @@ Last commits, newest first (see `git log`):
   `npx vite --port 5173` and `VITE_DRIVE_API_KEY=test npx vite --port 5174`.
 
 ## The last reply the owner saw (so the next one continues it)
-**Newest (2026-09-15, second pass)**: the reply said version 2 is at the
+**Newest (2026-09-15, third pass)**: the reply said version 3 is at the
+same link with all ten answers locked and a coverage table, that every ask
+from his two messages is accounted for, and that only two things are
+outstanding: his screenshots (still not received) and the words "build it".
+
+Earlier: **Newest (2026-09-15, second pass)**: the reply said version 2 is at the
 same link, that no screenshots arrived, listed what was added from his
 remarks, explained the three faults (the day-blind ask; the drawer's task
 edit not touching the notebook's stored cards; stored cards vs derived

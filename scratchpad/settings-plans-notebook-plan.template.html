@@ -39,6 +39,10 @@
   .v2 { display: inline-block; background: #c0392b; color: #fff; font: 800 9.5px Inter; letter-spacing: .08em; padding: 2px 6px; border-radius: 999px; vertical-align: 2px; margin-inline-end: 4px; }
   .v2box { margin-top: 14px; background: #fff; border: 1.5px dashed #c0392b; border-radius: 14px; padding: 12px 16px; font-size: 13px; color: #374151; line-height: 1.5; max-width: 96ch; }
   .v2box b { color: #c0392b; }
+  .v3 { display: inline-block; background: #1e3a5f; color: #fff; font: 800 9.5px Inter; letter-spacing: .08em; padding: 2px 6px; border-radius: 999px; vertical-align: 2px; margin-inline-end: 4px; }
+  .cover td { padding: 5px 8px; border-bottom: 1px solid #f1f5f9; font-size: 12.5px; vertical-align: top; }
+  .cover td:first-child { color: #16a34a; font-weight: 900; width: 22px; }
+  .cover td:last-child { color: #64748b; white-space: nowrap; }
   .why { background: #fffbeb; border: 1px solid #fde68a; border-radius: 14px; padding: 14px 18px; margin-top: 14px; font-size: 13.5px; color: #374151; line-height: 1.5; }
   .why h3 { margin: 0 0 6px; font-size: 14px; font-weight: 900; color: #92400e; }
   .why p { margin: 6px 0; max-width: 92ch; }
@@ -208,7 +212,7 @@
     real apartments and taking the whole screen; the plan chooser browsing Drive like Drive, with a star on the main plan;
     and the notebook's day squares adding a job through a proper dialog. Each scene is a BEFORE beside an AFTER; the red
     dots match the notes under them. The starred questions at the end are the ones only you can answer.</p>
-  <p class="mark" style="font-size:20px;margin:0">Version 2 — your remarks drawn in. Nothing here is built. Say "build it" and this page is the spec.</p>
+  <p class="mark" style="font-size:20px;margin:0">Version 3 — every star answered and LOCKED. Nothing is built yet. Say "build it" and this page is the spec.</p>
   <div class="v2box">
     <b>What changed in version 2</b> (everything marked <span class="v2">v2</span> below): a unit may have a name and no number ·
     the builder's controls also live in a right-click menu · the plan browser gets a preview arrow with a way back · the
@@ -217,7 +221,20 @@
     picks the FROM stage and the TO stage · non-consecutive stretches can carry different stages, and ask "one task or two" ·
     the notebook gets ONE kind of square that spans its days · the "already in the planner" ask fires only on an overlap ·
     and the four-days-after-unchecking bug is explained and fixed at its root.
-    <span class="mark" style="display:block;margin-top:6px;font-size:17px">No screenshots reached me with your message — only the words. Send them again and I will fold them in.</span>
+    <span class="mark" style="display:block;margin-top:6px;font-size:17px">Your screenshots still have not reached me — only the words. Send them again and I will fold them in.</span>
+  </div>
+  <div class="v2box" style="border-style:solid;border-color:#1e3a5f">
+    <b style="color:#1e3a5f">Version 3 — your answers, locked</b> (marked <span class="v3">locked</span> where they changed a drawing):
+    <b style="color:#1e3a5f">1</b> a moved apartment keeps its number, renumber is the second choice ·
+    <b style="color:#1e3a5f">2</b> a merged row is ONE unit and LOOKS like one — one wide square across the row, in the builder, on the project page, in Building Progress and on the worker's map ·
+    <b style="color:#1e3a5f">3</b> anything starred is the main plan, a marked-up version included ·
+    <b style="color:#1e3a5f">4</b> the free-words card is DROPPED — every square entry is a job ·
+    <b style="color:#1e3a5f">5</b> every row the same height, plus a per-floor row height in the builder (it is cheap: the floor already has a record) ·
+    <b style="color:#1e3a5f">6</b> any worker: picking somebody not on the sheet adds their row first, then the job lands on it ·
+    <b style="color:#1e3a5f">7</b> one source of truth — the task's days ·
+    <b style="color:#1e3a5f">8</b> the ask fires on same job, same day ·
+    <b style="color:#1e3a5f">9</b> one task when both stretches share the stages, ASK when they differ ·
+    <b style="color:#1e3a5f">10</b> the FROM stage can be any stage, with a "not reached yet" hint.
   </div>
 
   <!-- ═══════════ 1 · THE LAYOUT BUILDER ═══════════ -->
@@ -289,6 +306,7 @@
                 <div>⊟ Unmerge</div>
                 <hr>
                 <div>⋯ Renumber this floor…</div>
+                <div>↕ Row height ▸</div>
                 <div>＋ Add a position here</div>
                 <div style="color:#b91c1c">✕ Remove position</div>
                 <span class="n" style="right:-10px;top:-10px">10</span>
@@ -308,10 +326,10 @@
         <li><span class="k">4</span><b>The builder takes the whole screen</b> when you open Buildings: a full-height sheet with the building tabs, Undo, Save and a close X. The rest of project settings is untouched; this one card opens big.</li>
         <li><span class="k">5</span><b>Move a floor.</b> Drag a cell onto another floor (or press "Move a floor ↑↓" with it selected). It asks about the number: keep it (the family keeps the number everyone knows) or renumber that floor and shift the rest. Nothing is renumbered silently — the same ask the builder already has for other renumberings.</li>
         <li><span class="k">6</span><b>Every cell is the real unit</b>: the number, the family name, the stage as a colour bar — the diagram's own cell, the Building Progress look. A blank slot stays a dashed square.</li>
-        <li><span class="k">7</span><b>Merge across the row.</b> Select several cells (click, shift+click, or drag a box across a row) and press "Merge selected": they become ONE square spanning their positions, one unit, one job, one number. The lobby is one job, so the lobby is one square. "Unmerge" splits it back.</li>
+        <li><span class="k">7</span><b>Merge across the row.</b> Select several cells (click, shift+click, or drag a box across a row) and press "Merge selected": they become ONE square spanning their positions, one unit, one job, one number. The lobby is one job, so the lobby is one square. "Unmerge" splits it back. <span class="v3">locked</span> It LOOKS merged everywhere: the project page draws the same wide cell across the row, and so do Building Progress and the worker's building map.</li>
         <li><span class="k">9</span><span class="v2">v2</span><b>A unit may have a name and no number.</b> The number box on a cell can be left blank ("Gym", "Lobby &amp; entrance", "Machine room"); the cell shows the name alone, it still counts as a unit, and it is labelled by its name everywhere the app writes a label. Merging never forces a number either.</li>
         <li><span class="k">10</span><span class="v2">v2</span><b>Right-click on any cell</b> (or long-press on the tablet) opens the same controls as the bottom bar: Rename, Set number (or leave blank), Move up / down a floor, Merge selected, Unmerge, Renumber this floor, Add a position, Remove position. With several cells selected, the row-wide actions act on all of them.</li>
-        <li><span class="k">8</span><b>The floors are the project page's floors</b>, exactly: Roof, 15 and 14 wide, 13 down to 2, "1 · Lobby" (the ground floor and the lobby are the same row), then -0.5, -1, -2. The empty Ground / Commercial row is dropped. Every row is the same height, so a named lobby or basement unit never loses its text.</li>
+        <li><span class="k">8</span><b>The floors are the project page's floors</b>, exactly: Roof, 15 and 14 wide, 13 down to 2, "1 · Lobby" (the ground floor and the lobby are the same row), then -0.5, -1, -2. The empty Ground / Commercial row is dropped. Every row is the same height, so a named lobby or basement unit never loses its text. <span class="v3">locked</span> A floor's row height can also be set by hand — right-click the floor label → Row height (normal · tall · short) — for a row that carries long names.</li>
       </ol>
     </div>
   </div>
@@ -452,7 +470,7 @@
               <div style="display:flex;gap:6px;align-items:center;margin-top:6px;font-size:11px;color:#6b7280;position:relative"><span class="v2">v2</span>then: <span class="who"><span class="on">Wolfson</span><span>Netiv</span></span><span class="arrow">›</span><span class="who"><span>A1</span><span class="on">A2</span><span>A3</span></span><span class="n" style="right:-10px;top:-6px">7</span></div>
               <div class="l">Who <span style="font-weight:600;letter-spacing:0;text-transform:none;color:#94a3b8">· search, anyone</span></div>
               <div class="in" style="position:relative">🔍 <span>mo</span><span class="ph">|</span><span class="n" style="right:-10px;top:-10px">8</span></div>
-              <div class="who" style="margin-top:5px"><span class="on"><i style="background:#fff"></i>Moshe</span><span><i style="background:#0ea5e9"></i>Mordechai</span></div>
+              <div class="who" style="margin-top:5px"><span class="on"><i style="background:#fff"></i>Moshe</span><span><i style="background:#0ea5e9"></i>Mordechai <span style="font-weight:600;color:#94a3b8">· not on the sheet yet</span></span></div>
               <div class="l">What has to be done</div>
               <div class="comp"><span class="clip">📎</span><div class="box"><span class="mic">🎤</span>Concealed units in the bedrooms…</div><span class="big">🎙</span></div>
               <div class="l">Stage <span style="font-weight:600;letter-spacing:0;text-transform:none;color:#94a3b8">· from → when done</span></div>
@@ -461,7 +479,7 @@
               <div class="daysrow"><span class="in" style="padding:5px 9px">Tue 16 Sep</span><span class="step"><span class="pm">−</span><span>2 days</span><span class="pm">+</span></span><span class="hint">☐ include Friday</span><span class="hint">☐ non-consecutive</span></div>
               <div class="green">Tuesday 16 and Wednesday 17 September · 2 days</div>
             </div>
-            <div class="foot"><span class="btn ghost" style="font-size:11px">Just a note instead</span><span class="sp"></span><span class="btn ghost">Cancel</span><span class="btn pri">Add the job</span>
+            <div class="foot"><span class="sp"></span><span class="btn ghost">Cancel</span><span class="btn pri">Add the job</span>
               <span class="n" style="left:100px;top:-12px">6</span></div>
           </div>
         </div>
@@ -470,15 +488,15 @@
     <div class="notes">
       <p class="say">"those three dots don't work. It just lets you type a weird text field"</p>
       <ol>
-        <li><span class="k">1</span>The free-words entry: a bare text box in the square with a "⋯" that does nothing. It was the paper sheet's "Pardes 8 am" — but it makes no task, has no job, and reads as broken.</li>
+        <li><span class="k">1</span>The free-words entry: a bare text box in the square with a "⋯" that does nothing. It makes no task, has no job, and reads as broken — dropped for good (star 4).</li>
         <li><span class="k">2</span>The plus is hover-only and tiny; on a touchscreen it does not exist at all.</li>
         <li><span class="k">3</span><span class="v2">v2</span><b>The big plus appears only while the pointer HOVERS the square</b> (on a touch screen, on the first tap of an empty square) — the sheet is never spammed with pluses. Press it and the dialog opens for that person and that day.</li>
         <li><span class="k">4</span><b>The same dialog the drop already uses</b>, with one step in front: the job. Person and day are filled in from the square; the person can be changed to anyone on the sheet.</li>
         <li><span class="k">5</span><b>The job search runs across every workspace</b> — a Wolfson or Netiv apartment, a Job Board job — with the workspace tag on each row, and the forgiving search the header has (Hebrew, wrong keyboard, one letter off). Picking a unit from another workspace makes a task THERE and shows it here.</li>
         <li><span class="k">7</span><span class="v2">v2</span><b>A general job in a workspace is two picks</b>: the last row opens the workspace choice (Wolfson · Netiv — the Job Board has no buildings), and THEN the building (A1 / A2 / A3 for Wolfson, B1 / B2 for Netiv). Nothing is pre-filled.</li>
-        <li><span class="k">8</span><span class="v2">v2</span><b>Who is a search too</b>: type a few letters and pick from the workers and office people; the square's own person is pre-picked. More than one can be picked.</li>
+        <li><span class="k">8</span><span class="v2">v2</span><b>Who is a search too</b>: type a few letters and pick from the workers and office people; the square's own person is pre-picked. More than one can be picked. <span class="v3">locked</span> Anyone at all: picking somebody who is not on the sheet adds their row first, and the job lands on it.</li>
         <li><span class="k">9</span><span class="v2">v2</span><b>Both stages</b>: the stage the work is ON (from — the job's current stage by default, any stage allowed, even one not reached yet) and the stage the job moves to when the task is closed. The same pair as Add task everywhere (scene 4). "What has to be done" is the one message box (paperclip, dictation, big mic), and Days is the standard day picker with its non-consecutive switch (scene 5).</li>
-        <li><span class="k">6</span><b>Add the job</b> creates the task (with its days, stages, the memo or files) and it appears on the notebook as one bar across its days (scene 6). "Just a note instead" keeps the free-words card for the rare "Pardes 8 am" — small and grey, no longer what the plus does.</li>
+        <li><span class="k">6</span><b>Add the job</b> creates the task (with its days, stages, the memo or files) and it appears on the notebook as one bar across its days (scene 6). <span class="v3">locked</span> The free-words card is gone: every entry on a square is a job. Notes already written stay readable until they are removed; no new ones can be made.</li>
       </ol>
     </div>
   </div>
@@ -558,6 +576,7 @@
           <div class="green">Tue 16, Wed 17 (Piping) · Mon 22, Tue 23 (Wall units) · 4 days</div>
           <div class="float" style="position:static;margin-top:10px;width:auto"><h5>One task, or two?</h5>
             <div class="opt"><i class="on"></i><b>Two tasks</b> — each stretch is its own task with its own stages; the worker closes each one</div>
+            <div class="hint" style="margin:2px 0 4px 22px">asked only because the stages differ</div>
             <div class="opt"><i></i><b>One task in two parts</b> — one description, one close, the stage moves at the end</div>
             <span class="n" style="position:absolute;right:-10px;top:-10px">3</span></div>
         </div></div>
@@ -568,7 +587,7 @@
       <ol>
         <li><span class="k">1</span>The second stretch is more days of the same task. There is no way to say "the second visit is a different stage".</li>
         <li><span class="k">2</span><b>"Different stages" on the second stretch</b> reveals its own on → to pair; the green readout names each stretch's stage.</li>
-        <li><span class="k">3</span><b>The form asks once</b>: two tasks (the default when the stages differ — a worker closes Piping on the 17th and Wall units on the 23rd separately) or one task in two parts. Two tasks are written as two records; the notebook shows two bars either way.</li>
+        <li><span class="k">3</span><span class="v3">locked</span><b>Same stages on both stretches → ONE task, no question. Different stages → the form asks</b>: two tasks (a worker closes Piping on the 17th and Wall units on the 23rd separately) or one task in two parts. Two tasks are written as two records; the notebook shows two bars either way.</li>
       </ol>
     </div>
   </div>
@@ -586,7 +605,7 @@
       <p>· <b>Unchecking non-consecutive left four days.</b> The editor rewrote the task's days correctly (two days). But the notebook's four cards are its own records, and nothing removed the two that no longer match. You were looking at the notebook's copy, not the task.</p>
       <p>· <b>"This job is already in the planner" on every save.</b> The rule today is: when a task with a date and a worker is created, if the job has ANY card ANYWHERE on the notebook, ask. It never looks at the day. Two tasks on one job on different days are perfectly normal, and the question fired anyway — then offered "add a ghost / move the card / skip", which are questions about the notebook's copy, not about your work.</p>
       <h3 style="margin-top:12px">The fix: one source of truth — the task's days</h3>
-      <p>The notebook stops keeping its own copy of tasks. <b>Every task with a worker and days is drawn from the task itself</b>, as one bar across those days on that worker's row. Dragging the bar to another day edits the task's days; dragging it to another row changes the worker; the X takes the day off the task. Edit the task anywhere — the drawer, the phone, the Tasks page — and the notebook simply follows, because there is nothing to keep in step. The notebook keeps its own records only for the two things that are not tasks: a free-words note ("Pardes 8 am") and a job parked on a day with no task yet.</p>
+      <p>The notebook stops keeping its own copy of tasks. <b>Every task with a worker and days is drawn from the task itself</b>, as one bar across those days on that worker's row. Dragging the bar to another day edits the task's days; dragging it to another row changes the worker; the X takes the day off the task. Edit the task anywhere — the drawer, the phone, the Tasks page — and the notebook simply follows, because there is nothing to keep in step. The notebook keeps its own record only for a job parked on a day with no task yet — drawn as the same bar, one day long, no words. Free-words notes are dropped (star 4).</p>
       <p><b>The ask becomes an overlap check.</b> Only when the new task's days land on a day the same job already has work — same job, same day — does it ask, and the question is about the work: "Levi, Dana already has Yossi on Tuesday 16 (Piping). Add anyway · Pick another day". Different days, different jobs: no question.</p>
     </div>
     <div class="ba" style="margin-top:14px">
@@ -621,7 +640,7 @@
         <li><span class="k">1</span>Three separate cards for one three-day task — the notebook's own copies, one per day, with pills to say they belong together.</li>
         <li><span class="k">2</span>A dashed chip: a real task drawn from the task list because nobody placed it. Same job, different look, different behaviour.</li>
         <li><span class="k">3</span><b>One bar across its days</b>, the Google Calendar manner: the job's name, "on → to" stages, the day count; the left edge in the stage colour; a non-consecutive task is two bars; a closed task is one dimmed, struck bar. Drag it to move it, pull its end to make it longer, the X takes a day off.</li>
-        <li><span class="k">4</span><b>Every task looks the same</b> whether it was placed here, made in the drawer, or booked from the phone — because they are all the task itself. Only a free-words note keeps the small grey card.</li>
+        <li><span class="k">4</span><b>Every task looks the same</b> whether it was placed here, made in the drawer, or booked from the phone — because they are all the task itself. <span class="v3">locked</span> There is no other kind of square: a job parked on a day with no task is simply a one-day bar with no words yet, and the free-words note is gone.</li>
         <li><span class="k">5</span><b>The ask fires only on an overlap</b> — same job, same day — and says who is already there. The old ghost / move / skip question is gone with the copies it was about.</li>
       </ol>
     </div>
@@ -635,7 +654,7 @@
       <li><b>Nothing is renumbered silently.</b> Moving a floor asks; merging keeps the kept unit's number; every write goes through the builder's Save, and Save shows the list of changes before it writes (as it does today).</li>
       <li><b>The star writes one field</b> — the apartment's plan link — and nothing else. A missing plans folder no longer means "no plan": the pane browses the job folder from its root.</li>
       <li><b>Thumbnails are Drive's own</b> (the same picture the plan-aspect check already reads), fetched per tile as it scrolls into view, never for a whole folder at once.</li>
-      <li><b>The notebook plus makes a real task</b> through the standing drop dialog; the task keeps all its days, the worker's phone shows every day. The free-words card survives only behind "Just a note instead".</li>
+      <li><b>The notebook plus makes a real task</b> through the standing drop dialog; the task keeps all its days, the worker's phone shows every day. There is no free-words card any more.</li>
       <li><span class="v2">v2</span><b>The task is the only record of a task.</b> The notebook draws every task from the task's own worker and days; it stores nothing about tasks itself. Every existing per-day card is converted ONCE on arrival (its days folded into its task, then the card dropped), so nothing planned is lost.</li>
       <li><span class="v2">v2</span><b>A task carries its ON stage</b> (a new field beside the when-done stage; absent means "the job's stage at the time", so every old task reads as it always did). Closing moves the job to the when-done stage, unchanged.</li>
       <li><span class="v2">v2</span><b>The overlap ask</b> compares days: same job, any worker, any day in common. Nothing else asks.</li>
@@ -653,18 +672,46 @@
 
   <!-- ═══════════ QUESTIONS ═══════════ -->
   <div class="rules">
-    <h2>The starred questions</h2>
-    <p class="hint" style="margin:0 0 10px">You said everything looks good, so stars 1–6 are taken as recommended unless you say otherwise. The new ones are 7–10.</p>
-    <div class="q"><span class="star">★</span><div><b>1 · Moving an apartment to another floor.</b> Default to keeping its number <span class="rec">RECOMMENDED</span>, with "renumber the floor" as the second choice in the ask? Or always renumber?</div></div>
-    <div class="q"><span class="star">★</span><div><b>2 · A merged row.</b> One real unit spanning the row, the others blank placeholders <span class="rec">RECOMMENDED</span> — or a linked group like today's merged pairs, where each unit keeps its own record and number?</div></div>
-    <div class="q"><span class="star">★</span><div><b>3 · The star on a marked-up version.</b> Starring an Annotated Plans file makes THAT the contractor's plan <span class="rec">RECOMMENDED</span> — or should only original sheets take the star, with markups shown beside it as now?</div></div>
-    <div class="q"><span class="star">★</span><div><b>4 · The free-words card.</b> Keep it behind "Just a note instead" <span class="rec">RECOMMENDED</span>, or drop it — every square entry must be a job?</div></div>
-    <div class="q"><span class="star">★</span><div><b>5 · Row heights.</b> Every floor the same height, lobby and basements included <span class="rec">RECOMMENDED</span> — or keep basements shorter and only fix the cut-off text?</div></div>
-    <div class="q"><span class="star">★</span><div><b>6 · Who can be picked in the notebook dialog.</b> Only people on that sheet <span class="rec">RECOMMENDED</span>, or any worker (adding a row for them)?</div></div>
-    <div class="q"><span class="star">★</span><div><b>7 · One source of truth.</b> The notebook draws tasks from the tasks and keeps no cards of its own <span class="rec">RECOMMENDED</span> — the only way the four-days bug and the extra ask stay gone. The alternative keeps the copies and adds code to keep them in step, which is what has been failing.</div></div>
-    <div class="q"><span class="star">★</span><div><b>8 · The overlap rule.</b> Ask only when the same JOB has work on the same DAY <span class="rec">RECOMMENDED</span> — or narrower: only when it is the same STAGE on the same day?</div></div>
-    <div class="q"><span class="star">★</span><div><b>9 · Different stages on the second stretch.</b> Default to TWO tasks when the stages differ <span class="rec">RECOMMENDED</span>, one task when they are the same — or always ask?</div></div>
-    <div class="q"><span class="star">★</span><div><b>10 · The FROM stage.</b> Any stage, including ones the job has not reached, with a "not reached yet" hint <span class="rec">RECOMMENDED</span> — or only the current stage and later ones?</div></div>
-    <p class="mark" style="font-size:20px;margin:14px 0 0">Answer 7–10, send the screenshots, say "build it", and this page is the spec.</p>
+    <h2>The starred questions — answered and locked (2026-09-15)</h2>
+    <div class="q"><span class="star">★</span><div><b>1 · Moving an apartment to another floor</b> — keeps its number; "renumber the floor" is the second choice in the ask. <span class="v3">locked</span></div></div>
+    <div class="q"><span class="star">★</span><div><b>2 · A merged row</b> — one real unit, and it LOOKS like a merged row: one wide square across the row, everywhere the building is drawn. <span class="v3">locked</span></div></div>
+    <div class="q"><span class="star">★</span><div><b>3 · The star</b> — anything starred is the main plan, a marked-up version included. <span class="v3">locked</span></div></div>
+    <div class="q"><span class="star">★</span><div><b>4 · The free-words card</b> — dropped. Every square entry is a job. <span class="v3">locked</span></div></div>
+    <div class="q"><span class="star">★</span><div><b>5 · Row heights</b> — every floor the same height, and a per-floor row height in the builder's right-click menu (normal · tall · short). <span class="v3">locked</span></div></div>
+    <div class="q"><span class="star">★</span><div><b>6 · Who</b> — any worker; picking one not on the sheet adds their row first, then the job. <span class="v3">locked</span></div></div>
+    <div class="q"><span class="star">★</span><div><b>7 · One source of truth</b> — the notebook draws tasks from the tasks and keeps no cards of its own. <span class="v3">locked</span></div></div>
+    <div class="q"><span class="star">★</span><div><b>8 · The overlap rule</b> — ask only when the same job has work on the same day. <span class="v3">locked</span></div></div>
+    <div class="q"><span class="star">★</span><div><b>9 · Different stages on the second stretch</b> — one task when the stages match; ask "one or two" when they differ. <span class="v3">locked</span></div></div>
+    <div class="q"><span class="star">★</span><div><b>10 · The FROM stage</b> — any stage, including ones not reached, with a "not reached yet" hint. <span class="v3">locked</span></div></div>
+
+    <h2 style="margin-top:20px">Coverage — every ask from your two messages, checked against the page</h2>
+    <table class="cover" style="border-collapse:collapse;width:100%">
+      <tr><td>✓</td><td>See the real apartments with their saved info in the layout builder, like Building Progress</td><td>scene 1 · 6</td></tr>
+      <tr><td>✓</td><td>Move an apartment a floor, the numbering handled</td><td>scene 1 · 5, star 1</td></tr>
+      <tr><td>✓</td><td>Select several apartments and merge them into one square across the whole row (the lobby is one job)</td><td>scene 1 · 7, star 2</td></tr>
+      <tr><td>✓</td><td>The lobby row thinner, text cut off</td><td>scene 1 · 2 → 8, star 5</td></tr>
+      <tr><td>✓</td><td>Project settings may take the whole screen</td><td>scene 1 · 4</td></tr>
+      <tr><td>✓</td><td>Floors match the project page: Lobby / Ground, then -0.5, -1, -2; the empty Ground / Commercial floor dropped</td><td>scene 1 · 8</td></tr>
+      <tr><td>✓</td><td>A job may have no apartment number</td><td>scene 1 · 9</td></tr>
+      <tr><td>✓</td><td>Every new builder control also in the right-click menu</td><td>scene 1 · 10</td></tr>
+      <tr><td>✓</td><td>A Drive link with no Engineered Plans folder: browse like Drive — folders, thumbnails of plans and folders — where the preview is</td><td>scene 2 · 3, 4</td></tr>
+      <tr><td>✓</td><td>A star beside any plan in any folder = the main plan the contractor sees; the apartment reopens on it</td><td>scene 2 · 5, 6, star 3</td></tr>
+      <tr><td>✓</td><td>Expand arrows to preview a plan before choosing, then back to where you were browsing</td><td>scene 2 · 7, 8</td></tr>
+      <tr><td>✓</td><td>A day square shows a big plus — only on hover — and prompts for the job, who, details, and creates the task</td><td>scene 3 · 3–9</td></tr>
+      <tr><td>✓</td><td>The "three dots" free-text entry that does nothing</td><td>scene 3 · 1, star 4</td></tr>
+      <tr><td>✓</td><td>A general job: pick the workspace, then the building (3 in Wolfson, 2 in Netiv)</td><td>scene 3 · 7</td></tr>
+      <tr><td>✓</td><td>Who is a search</td><td>scene 3 · 8, star 6</td></tr>
+      <tr><td>✓</td><td>"What has to be done" is the same chat box as everywhere</td><td>scene 3 · 9</td></tr>
+      <tr><td>✓</td><td>Days work like the rest of the day system</td><td>scene 3 · 9</td></tr>
+      <tr><td>✓</td><td>The before and after stage available in the notebook dialog</td><td>scene 3 · 9</td></tr>
+      <tr><td>✓</td><td>Add task everywhere: pick the stage going from and to; the list says "on Installation → going to Drywall"; future stages allowed</td><td>scene 4, star 10</td></tr>
+      <tr><td>✓</td><td>Non-consecutive: a "different stages" checkbox for the second part; ask same task or split</td><td>scene 5, star 9</td></tr>
+      <tr><td>✓</td><td>Got stuck on "there's already a job on that day" — the ask should fire only on an overlap</td><td>scene 6, star 8</td></tr>
+      <tr><td>✓</td><td>Unchecking non-consecutive and saving still showed four days</td><td>scene 6 (why + the root fix), star 7</td></tr>
+      <tr><td>✓</td><td>Two kinds of squares — one kind that spans its days like Google Calendar, and why there were two</td><td>scene 6</td></tr>
+      <tr><td>✓</td><td>Previews as before/afters in one artifact, no device gallery each time</td><td>this page</td></tr>
+      <tr><td style="color:#c0392b">✗</td><td>Your screenshots — they have not arrived. Send them again.</td><td>—</td></tr>
+    </table>
+    <p class="mark" style="font-size:20px;margin:14px 0 0">Everything is locked. Send the screenshots and say "build it".</p>
   </div>
 </div>
