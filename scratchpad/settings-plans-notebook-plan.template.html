@@ -221,7 +221,7 @@
     picks the FROM stage and the TO stage · non-consecutive stretches can carry different stages, and ask "one task or two" ·
     the notebook gets ONE kind of square that spans its days · the "already in the planner" ask fires only on an overlap ·
     and the four-days-after-unchecking bug is explained and fixed at its root.
-    <span class="mark" style="display:block;margin-top:6px;font-size:17px">Your screenshots still have not reached me — only the words. Send them again and I will fold them in.</span>
+    <span class="mark" style="display:block;margin-top:6px;font-size:17px">Your notebook screenshot arrived and is read in scene 6 — it shows exactly the two kinds of square.</span>
   </div>
   <div class="v2box" style="border-style:solid;border-color:#1e3a5f">
     <b style="color:#1e3a5f">Version 3 — your answers, locked</b> (marked <span class="v3">locked</span> where they changed a drawing):
@@ -604,6 +604,8 @@
       <p><b>So one task can exist twice</b>: once as the task, once as the notebook's cards. And that is exactly the two faults you hit:</p>
       <p>· <b>Unchecking non-consecutive left four days.</b> The editor rewrote the task's days correctly (two days). But the notebook's four cards are its own records, and nothing removed the two that no longer match. You were looking at the notebook's copy, not the task.</p>
       <p>· <b>"This job is already in the planner" on every save.</b> The rule today is: when a task with a date and a worker is created, if the job has ANY card ANYWHERE on the notebook, ask. It never looks at the day. Two tasks on one job on different days are perfectly normal, and the question fired anyway — then offered "add a ghost / move the card / skip", which are questions about the notebook's copy, not about your work.</p>
+      <h3 style="margin-top:12px">Your screenshot, read (2026-09-15)</h3>
+      <p>Yaakov's row, the week of 4 October: <b>Sunday 4 and Monday 5 carry a dashed "Streter, D… · Installation"</b> — a task with Yaakov and those two days, drawn from the task list because nobody placed it on the notebook. <b>Tuesday 6 carries a solid green "Streter, De… · Installation"</b> — a card the notebook stored itself, wearing the stage's colour. Same job, same worker, same stage, two records, two looks. Editing one could never move the other. After the build the three days are ONE bar, "Streter, Debbie · Installation → …", Sunday to Tuesday, drawn from the task alone.</p>
       <h3 style="margin-top:12px">The fix: one source of truth — the task's days</h3>
       <p>The notebook stops keeping its own copy of tasks. <b>Every task with a worker and days is drawn from the task itself</b>, as one bar across those days on that worker's row. Dragging the bar to another day edits the task's days; dragging it to another row changes the worker; the X takes the day off the task. Edit the task anywhere — the drawer, the phone, the Tasks page — and the notebook simply follows, because there is nothing to keep in step. The notebook keeps its own record only for a job parked on a day with no task yet — drawn as the same bar, one day long, no words. Free-words notes are dropped (star 4).</p>
       <p><b>The ask becomes an overlap check.</b> Only when the new task's days land on a day the same job already has work — same job, same day — does it ask, and the question is about the work: "Levi, Dana already has Yossi on Tuesday 16 (Piping). Add anyway · Pick another day". Different days, different jobs: no question.</p>
@@ -710,8 +712,8 @@
       <tr><td>✓</td><td>Unchecking non-consecutive and saving still showed four days</td><td>scene 6 (why + the root fix), star 7</td></tr>
       <tr><td>✓</td><td>Two kinds of squares — one kind that spans its days like Google Calendar, and why there were two</td><td>scene 6</td></tr>
       <tr><td>✓</td><td>Previews as before/afters in one artifact, no device gallery each time</td><td>this page</td></tr>
-      <tr><td style="color:#c0392b">✗</td><td>Your screenshots — they have not arrived. Send them again.</td><td>—</td></tr>
+      <tr><td>✓</td><td>Your screenshot — the Streter week on Yaakov's row, read in scene 6</td><td>scene 6</td></tr>
     </table>
-    <p class="mark" style="font-size:20px;margin:14px 0 0">Everything is locked. Send the screenshots and say "build it".</p>
+    <p class="mark" style="font-size:20px;margin:14px 0 0">Everything is locked and your screenshot is on the page. Say "build it".</p>
   </div>
 </div>

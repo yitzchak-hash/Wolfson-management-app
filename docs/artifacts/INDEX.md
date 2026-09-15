@@ -26,6 +26,7 @@ the time and can be rebuilt from the template, or read at the link.
 | 2026-09-15 | Buildings, Plans and the Notebook Plus (awaiting the owner's stars) | https://claude.ai/artifact/Y8ujqL3CjhocFFGn5C5W9B | docs/artifacts/2026-09-15-buildings-plans-notebook-plus.html · scratchpad/settings-plans-notebook-plan.template.html |
 | 2026-09-15 | Buildings, Plans and the Notebook Plus — VERSION 2 (the owner's remarks drawn in; awaiting stars 7–10 + his screenshots) | https://claude.ai/artifact/Y8ujqL3CjhocFFGn5C5W9B | docs/artifacts/2026-09-15-buildings-plans-notebook-plus-v2.html · scratchpad/settings-plans-notebook-plan.template.html |
 | 2026-09-15 | Buildings, Plans and the Notebook Plus — VERSION 3 (all ten stars answered and LOCKED; coverage table; awaiting "build it" + his screenshots) | https://claude.ai/artifact/Y8ujqL3CjhocFFGn5C5W9B | docs/artifacts/2026-09-15-buildings-plans-notebook-plus-v3.html · scratchpad/settings-plans-notebook-plan.template.html |
+| 2026-09-15 | Buildings, Plans and the Notebook Plus — VERSION 4 (his notebook screenshot read into scene 6; awaiting "build it") | https://claude.ai/artifact/Y8ujqL3CjhocFFGn5C5W9B | docs/artifacts/2026-09-15-buildings-plans-notebook-plus-v4.html · scratchpad/settings-plans-notebook-plan.template.html |
 
 Earlier plan pages from the same method (Arrange, Tasks That Take Days,
 Plan Tabs, Notebook Strips) have their templates in `scratchpad/*-plan.template.html`

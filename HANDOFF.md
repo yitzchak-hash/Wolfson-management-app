@@ -45,6 +45,12 @@ unasked.
 
 ## Where things stand (2026-09-08, seventh round of the day)
 Last commits, newest first (see `git log`):
+- **2026-09-15, fourth pass — VERSION 4: his screenshot arrived and is read
+  into scene 6** (copy `docs/artifacts/2026-09-15-buildings-plans-notebook-plus-v4.html`):
+  Yaakov's row, week of 4 Oct — Sun 4 + Mon 5 DASHED "Streter, D… ·
+  Installation" (derived task chips, a task nobody placed) beside Tue 6 SOLID
+  green (a stored card): the two-records-two-looks fault exactly. Coverage
+  is now all ✓. **Still awaiting the words "build it".**
 - **2026-09-15, third pass — VERSION 3: ALL TEN STARS ANSWERED AND LOCKED.**
   The owner's answers, now on the page (copy
   `docs/artifacts/2026-09-15-buildings-plans-notebook-plus-v3.html`):
@@ -248,7 +254,11 @@ Last commits, newest first (see `git log`):
   `npx vite --port 5173` and `VITE_DRIVE_API_KEY=test npx vite --port 5174`.
 
 ## The last reply the owner saw (so the next one continues it)
-**Newest (2026-09-15, third pass)**: the reply said version 3 is at the
+**Newest (2026-09-15, fourth pass)**: the reply read his screenshot (two
+dashed chips from a task, one solid stored card, same job, same worker),
+folded it into scene 6, and said the only outstanding thing is "build it".
+
+Earlier: **Newest (2026-09-15, third pass)**: the reply said version 3 is at the
 same link with all ten answers locked and a coverage table, that every ask
 from his two messages is accounted for, and that only two things are
 outstanding: his screenshots (still not received) and the words "build it".
