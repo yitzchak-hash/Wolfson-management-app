@@ -1940,6 +1940,15 @@ export interface MainUiStrings {
   selectContractor: string;
   selectApartment: string;
   stageOptional: string;
+  stageOnLabel: string;
+  stageToLabel: string;
+  stageJobsStage: string;
+  stageNotReached: string;
+  stageLeaveAlone: string;
+  stageDifferentLabel: string;
+  splitAskLabel: string;
+  splitTwoLabel: string;
+  splitOneLabel: string;
   taskDescriptionPlaceholder: string;
   // Common extras
   confirm: string;
@@ -2596,6 +2605,15 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   selectContractor: 'Select worker *',
   selectApartment: 'Select apartment *',
   stageOptional: 'Stage (optional)',
+  stageOnLabel: 'Stage',
+  stageToLabel: "When it's done, move to",
+  stageJobsStage: "The job's stage",
+  stageNotReached: 'not reached yet',
+  stageLeaveAlone: 'Leave the stage alone',
+  stageDifferentLabel: 'Different stages for this stretch',
+  splitAskLabel: 'One task, or two?',
+  splitTwoLabel: 'Two tasks — each stretch is its own',
+  splitOneLabel: 'One task in two parts',
   taskDescriptionPlaceholder: 'Task description *',
   // Common extras
   confirm: 'Confirm',
@@ -3241,6 +3259,15 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   selectContractor: 'בחר קבלן *',
   selectApartment: 'בחר דירה *',
   stageOptional: 'שלב (אופציונלי)',
+  stageOnLabel: 'שלב',
+  stageToLabel: 'כשמסיימים, לעבור ל',
+  stageJobsStage: 'השלב של הדירה',
+  stageNotReached: 'טרם הגיעו',
+  stageLeaveAlone: 'להשאיר את השלב',
+  stageDifferentLabel: 'שלבים אחרים למקטע הזה',
+  splitAskLabel: 'משימה אחת או שתיים?',
+  splitTwoLabel: 'שתי משימות — לכל מקטע משלו',
+  splitOneLabel: 'משימה אחת בשני חלקים',
   taskDescriptionPlaceholder: 'תיאור המשימה *',
   // Common extras
   confirm: 'אישור',

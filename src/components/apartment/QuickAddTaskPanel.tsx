@@ -10,7 +10,8 @@ import { contractorLoad, loadTooltip, loadColor } from '../../data/contractorLoa
 import { taskShareText, copyTaskShare } from '../../data/taskShare';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import { findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, isUploadBackendConfigured, extractFolderId } from '../../data/driveApi';
-import { TaskDaysPicker, daysFields } from '../tasks/TaskDaysPicker';
+import { TaskDaysPicker, daysFields, taskWrites, splitStringsOf, TaskSplit } from '../tasks/TaskDaysPicker';
+import { StagePairPicker, StagePairPill, stagePairStrings, StagePairValue } from '../tasks/StagePair';
 
 const CAT_COLORS: Record<ContractorCategory, string> = {
   drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981',
@@ -58,7 +59,11 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
   /** Every day the task will cover — the multi-day block, every form now. */
   const [taskDays, setTaskDays] = useState<string[]>([]);
   const [daysEpoch, setDaysEpoch] = useState(0);
-  const [stageId, setStageId] = useState(apartment.currentStageId ?? '');
+  // The stage the task is ON (defaults to the job's stage; any stage allowed,
+  // even one not reached — locked answer 10) and where the job goes when it
+  // is closed. Picking a FROM stage never moves the job.
+  const [pair, setPair] = useState<StagePairValue>({ from: apartment.currentStageId ?? '', to: '' });
+  const [split, setSplit] = useState<TaskSplit | null>(null);
   const [priority, setPriority] = useState('');
   const [showForm, setShowForm] = useState(true);
   const [hideCompleted, setHideCompleted] = useState(false);
@@ -176,17 +181,25 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
       buildingId: apartment.buildingId,
       taskDescription: task.trim(),
       ...daysFields(dueDate, taskDays),
-      stageId: stageId || null,
+      stageId: pair.from || null,
+      ...(pair.to ? { stageWhenDone: pair.to } : {}),
       completedAt: null,
       createdBy: currentUser.id,
       createdByName: currentUser.name,
       ...(finalAttachments.length ? { attachments: finalAttachments } : {}),
       ...(priority ? { priority: priority as import('../../types').TaskPriority } : {}),
     } as ContractorAssignment;
-    addContractorAssignment(made);
-    if (stageId && stageId !== apartment.currentStageId) {
-      updateApartment(apartment.id, { currentStageId: stageId }, currentUser);
-    }
+    // One record — or two, when the second stretch carries different stages
+    // and the office said "two tasks" (locked answer 9). The FROM stage never
+    // moves the job: a task for a future stage is a task, not a stage change.
+    const writes = taskWrites(dueDate, taskDays, pair, split);
+    writes.forEach((w, i) => {
+      const rec = i === 0 ? { ...made, ...w } : {
+        ...made, ...w,
+        id: Math.random().toString(36).substr(2, 9) + Date.now().toString(36) + i,
+      };
+      addContractorAssignment(rec as ContractorAssignment);
+    });
     setTask('');
     setContractorId('');
     setDueDate('');
@@ -374,11 +387,8 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                               {contractor.name}
                             </span>
                           )}
-                          {stage && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded"
-                              style={{ backgroundColor: stage.color + '20', color: stage.color }}>
-                              {getStageName(stage, s.isRtl)}
-                            </span>
+                          {(stage || a.stageWhenDone) && (
+                            <StagePairPill task={a} stages={stages} isRtl={s.isRtl} size="xs" />
                           )}
                         </div>
                         <p className={`text-xs leading-snug ${a.completedAt ? 'line-through text-gray-400' : 'text-gray-700'}`}>
@@ -608,14 +618,11 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
-                    <select
-                      value={stageId}
-                      onChange={e => setStageId(e.target.value)}
-                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
-                    >
-                      <option value="">{s.stageOptional}</option>
-                      {sortedStages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
+                    <div className="col-span-2">
+                      <StagePairPicker stages={sortedStages} currentStageId={apartment.currentStageId} value={pair}
+                        onChange={setPair} strings={stagePairStrings(s)} isRtl={s.isRtl}
+                        box="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
+                    </div>
                     <input
                       type="date"
                       value={dueDate}
@@ -625,7 +632,9 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                     {/* The multi-day block — the same rules as the notebook's
                         drop dialog, in every workspace and at every stage. */}
                     <div className="col-span-2">
-                      <TaskDaysPicker key={daysEpoch} start={dueDate} onDaysChange={setTaskDays} />
+                      <TaskDaysPicker key={daysEpoch} start={dueDate} onDaysChange={setTaskDays}
+                        stages={sortedStages} currentStageId={apartment.currentStageId} pair={pair}
+                        onSplitChange={setSplit} pairStrings={stagePairStrings(s)} splitStrings={splitStringsOf(s)} isRtl={s.isRtl} />
                     </div>
                     <select
                       value={priority}

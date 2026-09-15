@@ -23,6 +23,7 @@ import {
 import { DEFAULT_TIME_CLOCK, resolvePunch } from './timeClock';
 import { purgeJobsFromPlanner, isPlannerElement } from './plannerPurge';
 import { DEFAULT_WORKER_LEVELS } from './workerLevels';
+import { daysOf } from './taskDays';
 
 /** How many AUTOMATIC layout snapshots rotate, separate from the 10 manual. */
 const LAYOUTS_AUTO_MAX = 8;
@@ -652,8 +653,17 @@ interface AppState {
    * question. Session-only. Answered by answerPlannerAsk with one of the
    * three confirmed choices.
    */
-  plannerAsk: { widgetId: string; jobId: string; contractorId: string; dueDate: string } | null;
-  answerPlannerAsk: (choice: 'ghost' | 'skip' | 'move') => void;
+  /**
+   * A dated task was just made for a job that ALREADY has work on one of those
+   * days (locked answer 8, 2026-09-15: the ask fires on an OVERLAP — same job,
+   * same day — and on nothing else). Names the task that was there.
+   */
+  plannerAsk: {
+    jobId: string; contractorId: string; dueDate: string; taskId: string;
+    days: string[];
+    overlap: { taskId: string; contractorId: string; days: string[]; stageId: string | null };
+  } | null;
+  answerPlannerAsk: (choice: 'keep' | 'remove' | 'skip') => void;
 
   // Dashboard layout customization
   dashboardWidgetOrder: string[];
@@ -816,30 +826,10 @@ export const useStore = create<AppState>((set, get) => ({
     const st = get();
     const ask = st.plannerAsk;
     set({ plannerAsk: null });
-    if (!ask || choice === 'skip') return;
-
-    const el = st.canvasElements.find(x => x.id === ask.widgetId);
-    if (!el) return;
-    const data = (el.data ?? {}) as { cells?: Record<string, { id: string; jobId?: string; text?: string }[]> };
-    const cells = { ...(data.cells ?? {}) };
-
-    if (choice === 'move') {
-      // The job leaves wherever it was standing; the ghost below is its new home.
-      for (const key of Object.keys(cells)) {
-        const kept = cells[key].filter(en => en.jobId !== ask.jobId);
-        if (kept.length !== cells[key].length) {
-          if (kept.length) cells[key] = kept; else delete cells[key];
-        }
-      }
-    }
-
-    const key = `c:${ask.contractorId}|${ask.dueDate}`;
-    const landing = cells[key] ?? [];
-    // Never the same job twice in one square.
-    if (!landing.some(en => en.jobId === ask.jobId)) {
-      cells[key] = [...landing, { id: `R-${Math.random().toString(36).slice(2, 8)}`, jobId: ask.jobId }];
-    }
-    get().updateCanvasElement(el.id, { data: { ...(el.data ?? {}), cells } });
+    if (!ask || choice !== 'remove') return;
+    // "Pick another day": the task that just landed on a day the job already
+    // had work on is taken back out. Nothing else is touched.
+    if (st.contractorAssignments.some(x => x.id === ask.taskId)) get().deleteContractorAssignment(ask.taskId);
   },
   setDashboardLayout: (order: string[], hidden: string[]) => {
     set({ dashboardWidgetOrder: order, dashboardHiddenWidgets: hidden });
@@ -2111,15 +2101,16 @@ export const useStore = create<AppState>((set, get) => ({
      * next to the fact that raises it, and drawn by the admin layout;
      * session-only, never persisted, and the worker portal never renders it.
      */
-    if (a.dueDate && a.contractorId) {
-      const holder = get().canvasElements.find(el =>
-        el.type === 'widget' && el.widget === 'rota'
-        && Object.values(((el.data ?? {}) as { cells?: Record<string, { jobId?: string }[]> }).cells ?? {})
-          .some(list => list.some(en => en.jobId === a.apartmentId)));
-      if (holder) {
+    if (a.dueDate && a.contractorId && a.apartmentId) {
+      const mine = daysOf(a);
+      const clash = get().contractorAssignments.find(o =>
+        o.id !== a.id && o.apartmentId === a.apartmentId && !o.completedAt
+        && daysOf(o).some(dd => mine.includes(dd)));
+      if (clash) {
         set({ plannerAsk: {
-          widgetId: holder.id, jobId: a.apartmentId,
-          contractorId: a.contractorId, dueDate: a.dueDate,
+          jobId: a.apartmentId, contractorId: a.contractorId, dueDate: a.dueDate, taskId: a.id,
+          days: mine,
+          overlap: { taskId: clash.id, contractorId: clash.contractorId, days: daysOf(clash), stageId: clash.stageId ?? null },
         } });
       }
     }

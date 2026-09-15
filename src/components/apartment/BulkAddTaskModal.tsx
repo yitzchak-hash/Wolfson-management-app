@@ -7,7 +7,8 @@ import { Apartment, ContractorCategory, TaskAttachment, TaskPriority } from '../
 import { useStore } from '../../data/store';
 import { VoiceMemoPlayer } from '../ui/VoiceMemo';
 import { MessageBox, memoFile } from '../ui/MessageBox';
-import { TaskDaysPicker, daysFields } from '../tasks/TaskDaysPicker';
+import { TaskDaysPicker, daysFields, taskWrites, splitStringsOf, TaskSplit } from '../tasks/TaskDaysPicker';
+import { StagePairPicker, stagePairStrings, StagePairValue } from '../tasks/StagePair';
 import { contractorLoad } from '../../data/contractorLoad';
 import {
   isUploadBackendConfigured, extractFolderId,
@@ -41,7 +42,8 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
   const [contractorId, setContractorId] = useState('');
   const [task, setTask] = useState('');
   const [dueDate, setDueDate] = useState('');
-  const [stageId, setStageId] = useState('');
+  const [pair, setPair] = useState<StagePairValue>({ from: '', to: '' });
+  const [split, setSplit] = useState<TaskSplit | null>(null);
   const [selectedAptIds, setSelectedAptIds] = useState<Set<string>>(new Set());
   const [buildingTab, setBuildingTab] = useState<BuildingTab>('all');
   const [priority, setPriority] = useState<TaskPriority | ''>('');
@@ -243,21 +245,21 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
     const apts = selectedApts;
     apts.forEach((apt, i) => {
       const atts = attsList[i] ?? [];
-      addContractorAssignment({
-        contractorId,
-        apartmentId: apt.id,
-        buildingId: apt.buildingId,
-        taskDescription: task.trim(),
-        ...daysFields(dueDate, taskDays),
-        stageId: stageId || null,
-        completedAt: null,
-        createdBy: currentUser?.id ?? '',
-        createdByName: currentUser?.name ?? 'Office',
-        ...(priority ? { priority } : {}),
-        ...(atts.length ? { attachments: atts } : {}),
-      });
-      if (stageId && stageId !== apt.currentStageId && currentUser) {
-        updateApartment(apt.id, { currentStageId: stageId }, currentUser);
+      // The FROM stage never moves the job (a task on a future stage is a
+      // task); two stretches with different stages may be two records.
+      for (const w of taskWrites(dueDate, taskDays, pair, split)) {
+        addContractorAssignment({
+          contractorId,
+          apartmentId: apt.id,
+          buildingId: apt.buildingId,
+          taskDescription: task.trim(),
+          ...w,
+          completedAt: null,
+          createdBy: currentUser?.id ?? '',
+          createdByName: currentUser?.name ?? 'Office',
+          ...(priority ? { priority } : {}),
+          ...(atts.length ? { attachments: atts } : {}),
+        });
       }
     });
     onToast(`${apts.length} task${apts.length !== 1 ? 's' : ''} created`);
@@ -492,16 +494,10 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
 
                     {/* Stage + Due date */}
                     <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-xs font-medium text-gray-500 block mb-1">{s.stageLabel}</label>
-                        <select
-                          value={stageId}
-                          onChange={e => setStageId(e.target.value)}
-                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white"
-                        >
-                          <option value="">{s.noneOption}</option>
-                          {sortedStages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                        </select>
+                      <div className="col-span-2">
+                        <StagePairPicker stages={sortedStages} value={pair} onChange={setPair}
+                          strings={stagePairStrings(s)} isRtl={s.isRtl}
+                          box="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white" />
                       </div>
                       <div>
                         <label className="text-xs font-medium text-gray-500 block mb-1">{s.dueDateLabel}</label>
@@ -515,7 +511,9 @@ export function BulkAddTaskModal({ onClose, onToast }: Props) {
                     </div>
 
                     {/* How many days — the shared multi-day block */}
-                    <TaskDaysPicker start={dueDate} onDaysChange={setTaskDays} />
+                    <TaskDaysPicker start={dueDate} onDaysChange={setTaskDays}
+                      stages={sortedStages} pair={pair} onSplitChange={setSplit}
+                      pairStrings={stagePairStrings(s)} splitStrings={splitStringsOf(s)} isRtl={s.isRtl} />
 
                     {/* Priority */}
                     <div>

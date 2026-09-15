@@ -9,7 +9,8 @@ import {
 } from 'lucide-react';
 import { BulkAddTaskModal } from '../components/apartment/BulkAddTaskModal';
 import { TaskCalendar, CalendarEvent } from '../components/tasks/TaskCalendar';
-import { TaskDaysPicker, daysFields } from '../components/tasks/TaskDaysPicker';
+import { TaskDaysPicker, daysFields, taskWrites, splitStringsOf, TaskSplit } from '../components/tasks/TaskDaysPicker';
+import { StagePairPicker, StagePairPill, stagePairStrings } from '../components/tasks/StagePair';
 import { ContractorAssignment, ContractorCategory, TaskAttachment, TaskPriority, getStageName, aptLabel, isCountableApartment } from '../types';
 import { Toast } from '../components/ui/Toast';
 import { printTable, printDot, printPill } from '../data/printing';
@@ -74,6 +75,9 @@ export function TasksPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [showBulkAdd, setShowBulkAdd] = useState(false);
   const [addForm, setAddForm] = useState({ contractorId: '', aptId: '', task: '', dueDate: '', stageId: '', priority: '' });
+  /** Where the job moves when the task is closed (the pair's second half). */
+  const [addTo, setAddTo] = useState('');
+  const [addSplit, setAddSplit] = useState<TaskSplit | null>(null);
   /**
    * A GENERAL JOB (owner, 2026-09-03): "General job" ticked swaps the
    * apartment picker for a workspace (and, in the open workspace, an
@@ -317,22 +321,24 @@ export function TasksPage() {
     if (!addForm.aptId) return;
     const apt = apartments.find(a => a.id === addForm.aptId);
     if (!apt) return;
-    addContractorAssignment({
-      contractorId: addForm.contractorId,
-      apartmentId: addForm.aptId,
-      buildingId: apt.buildingId,
-      taskDescription: addForm.task.trim(),
-      ...daysFields(addForm.dueDate, addDays),
-      stageId: addForm.stageId || null,
-      completedAt: null,
-      createdBy: currentUser?.id ?? '',
-      createdByName: currentUser?.name ?? 'Office',
-      attachments: addAttachments.length > 0 ? addAttachments : undefined,
-      priority: (addForm.priority as TaskPriority) || undefined,
-    });
-    if (addForm.stageId && addForm.stageId !== apt.currentStageId && currentUser) {
-      updateApartment(apt.id, { currentStageId: addForm.stageId }, currentUser);
+    // One record, or two when the second stretch carries different stages and
+    // the office said "two" (locked answer 9). The FROM stage never moves the
+    // job — a task on a future stage is a task, not a stage change.
+    for (const w of taskWrites(addForm.dueDate, addDays, { from: addForm.stageId, to: addTo }, addSplit)) {
+      addContractorAssignment({
+        contractorId: addForm.contractorId,
+        apartmentId: addForm.aptId,
+        buildingId: apt.buildingId,
+        taskDescription: addForm.task.trim(),
+        ...w,
+        completedAt: null,
+        createdBy: currentUser?.id ?? '',
+        createdByName: currentUser?.name ?? 'Office',
+        attachments: addAttachments.length > 0 ? addAttachments : undefined,
+        priority: (addForm.priority as TaskPriority) || undefined,
+      });
     }
+    setAddTo(''); setAddSplit(null);
     setAddForm({ contractorId: '', aptId: '', task: '', dueDate: '', stageId: '', priority: '' });
     setAddDays([]);
     setAddDaysEpoch(e => e + 1);
@@ -692,14 +698,16 @@ export function TasksPage() {
                   ))}
               </select>
               )}
-              <select
-                value={addForm.stageId}
-                onChange={e => setAddForm(f => ({ ...f, stageId: e.target.value }))}
-                className="border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white"
-              >
-                <option value="">{s.stageOptional}</option>
-                {sortedStages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
+              {!addGeneral && (
+                <div className="col-span-2">
+                  <StagePairPicker stages={sortedStages}
+                    currentStageId={apartments.find(a => a.id === addForm.aptId)?.currentStageId}
+                    value={{ from: addForm.stageId, to: addTo }}
+                    onChange={v => { setAddForm(f => ({ ...f, stageId: v.from })); setAddTo(v.to); }}
+                    strings={stagePairStrings(s)} isRtl={s.isRtl}
+                    box="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white" />
+                </div>
+              )}
               <input
                 type="date"
                 value={addForm.dueDate}
@@ -720,7 +728,11 @@ export function TasksPage() {
             {/* The multi-day block — same rules as the notebook's drop
                 dialog, now on every form in every workspace. */}
             <div className="mt-2">
-              <TaskDaysPicker key={addDaysEpoch} start={addForm.dueDate} onDaysChange={setAddDays} />
+              <TaskDaysPicker key={addDaysEpoch} start={addForm.dueDate} onDaysChange={setAddDays}
+                stages={addGeneral ? undefined : sortedStages}
+                currentStageId={apartments.find(a => a.id === addForm.aptId)?.currentStageId}
+                pair={{ from: addForm.stageId, to: addTo }} onSplitChange={setAddSplit}
+                pairStrings={stagePairStrings(s)} splitStrings={splitStringsOf(s)} isRtl={s.isRtl} />
             </div>
             <MessageBox
               hook="add-task-box"
@@ -869,13 +881,8 @@ export function TasksPage() {
                               </span>
                             : <>{a.buildingId} · {s.aptPrefix} {aptLabel(apt)}</>}
                         </span>
-                        {stage && (
-                          <span
-                            className="text-xs px-1.5 py-0.5 rounded"
-                            style={{ backgroundColor: stage.color + '22', color: stage.color }}
-                          >
-                            {getStageName(stage, s.isRtl)}
-                          </span>
+                        {(stage || a.stageWhenDone) && (
+                          <StagePairPill task={a} stages={stages} isRtl={s.isRtl} />
                         )}
                         {a.priority && a.priority !== 'normal' && (
                           <span className={`text-xs px-1.5 py-0.5 rounded border font-medium ${PRIORITY_CONFIG[a.priority].cls}`}>

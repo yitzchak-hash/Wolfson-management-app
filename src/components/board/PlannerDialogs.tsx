@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { X, Paperclip, Loader2, AlertTriangle } from 'lucide-react';
+import { X, Paperclip, Loader2, AlertTriangle, Search, Plus, Building2 } from 'lucide-react';
 import {
-  Apartment, Contractor, Stage, TaskAttachment, TaskPriority, User, personColor,
+  Apartment, Contractor, Stage, TaskAttachment, TaskPriority, User, personColor, aptLabel,
 } from '../../types';
-import { useStore } from '../../data/store';
+import { useStore, loadProjectSnapshot } from '../../data/store';
+import { searchJobs } from '../../data/searchIndex';
+import { TaskDaysPicker, taskWrites, splitStringsOf, TaskSplit } from '../tasks/TaskDaysPicker';
+import { StagePairPicker, stagePairStrings, StagePairValue } from '../tasks/StagePair';
 import {
   isUploadBackendConfigured, extractFolderId, findOrCreateFolderViaBackend, uploadFileViaBackend, shareFileToDrive,
 } from '../../data/driveApi';
@@ -33,46 +36,112 @@ import { MessageBox, memoFile } from '../ui/MessageBox';
  * Friday, and a Non-consecutive switch that opens a second stretch. A green
  * line always reads out exactly which days the task will sit on.
  */
+export interface TaskDialogResult {
+  /** The tasks that were made — none for "just put it on the planner". */
+  taskIds: string[];
+  days: string[];
+  contractorIds: string[];
+  jobId?: string;
+  /** Where the job lives when it is not this workspace's. */
+  projectId?: string;
+  /** A general job in a workspace (no unit): the workspace and building. */
+  general?: { projectId: string; buildingId?: string };
+  parked?: boolean;
+}
+
+/**
+ * The add-a-job / drop card, as approved on "Buildings, Plans and the Notebook
+ * Plus" (locked 2026-09-15, scene 3): WHICH JOB (a search across every
+ * workspace, or a general job in a workspace → building), WHO (a search over
+ * every worker; more than one can be picked; somebody not on the sheet gets
+ * a row — the widget adds it), WHAT (the one message box), the STAGE PAIR
+ * (on → when done, scene 4), and the standard day picker with its second
+ * stretch and "different stages" (scene 5). `job` is given when the card was
+ * dropped on a square; absent, the job step is shown first.
+ *
+ * Everything it makes is a TASK. The notebook draws tasks from the tasks
+ * (locked answer 7), so nothing here writes a square.
+ */
 export function PlannerTaskDialog({
-  job, person, dayIso, stages, contractors, onCancel, onDone,
+  job, jobs, person, dayIso, stages, contractors, onCancel, onDone,
 }: {
-  job: Apartment;
-  /** The row it was dropped on — a contractor if that person is one. */
+  job?: Apartment;
+  /** This workspace's jobs, for the search. */
+  jobs?: Apartment[];
+  /** The row it was opened from — a contractor if that person is one. */
   person: { name: string; color: string; contractorId?: string };
   dayIso: string;
   stages: Stage[];
   contractors: Contractor[];
   onCancel: () => void;
-  /**
-   * taskId is undefined when they chose "just put it on the planner";
-   * `days` is every day the task covers, so the caller can put a card on
-   * each of them.
-   */
-  onDone: (taskId?: string, days?: string[]) => void;
+  onDone: (result: TaskDialogResult) => void;
 }) {
-  const { addContractorAssignment, currentUser } = useStore();
+  const {
+    addContractorAssignment, addAssignmentToProject, currentUser, currentProjectId, projects,
+    buildings: liveBuildings, stages: allStages, mainUiStrings: s,
+  } = useStore();
+  const snapTick = useStore(st => st.snapshotTick);
+  const isRtl = !!s.isRtl;
+  const t = (en: string, he: string) => (isRtl ? he : en);
 
-  const [contractorId, setContractorId] = useState(person.contractorId ?? '');
-  const [stageWhenDone, setStageWhenDone] = useState('');
+  // ── Which job ──────────────────────────────────────────────────────────
+  const [picked, setPicked] = useState<{ job: Apartment; projectId: string } | null>(
+    job ? { job, projectId: currentProjectId } : null);
+  const [general, setGeneral] = useState<{ projectId: string; buildingId?: string } | null>(null);
+  const [genStep, setGenStep] = useState<'ws' | 'bld' | null>(null);
+  const [genWs, setGenWs] = useState('');
+  const [q, setQ] = useState('');
+  const jobStage = picked?.job.currentStageId ?? job?.currentStageId ?? '';
+
+  const stagesFor = (pid: string) => allStages
+    .filter(st => st.active && (pid === 'general' ? st.projectId === 'general' : !st.projectId))
+    .sort((x, y) => x.order - y.order);
+  const stageList = picked ? (picked.projectId === currentProjectId ? stages : stagesFor(picked.projectId))
+    : general ? stagesFor(general.projectId) : stages;
+
+  const hits = useMemo(() => {
+    const query = q.trim();
+    if (!query || picked || general) return [] as { job: Apartment; projectId: string; ws: string }[];
+    const out: { job: Apartment; projectId: string; ws: string }[] = [];
+    const wsName = (pid: string) => projects.find(p => p.id === pid)?.shortName ?? projects.find(p => p.id === pid)?.name ?? pid;
+    const take = (list: Apartment[], pid: string) => {
+      const real = list.filter(a => !a.isUnnamed && a.boardBin !== 'trash');
+      for (const h of searchJobs(real, query, { stages: stagesFor(pid), projectId: pid, limit: 6 }).slice(0, 6)) {
+        out.push({ job: h.rec, projectId: pid, ws: wsName(pid) });
+      }
+    };
+    take(jobs ?? [], currentProjectId);
+    for (const p of projects) {
+      if (p.id === currentProjectId) continue;
+      take(loadProjectSnapshot(p.id).apartments, p.id);
+    }
+    return out.slice(0, 10);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, picked, general, jobs, projects, currentProjectId, snapTick]);
+
+  const buildingsOf = (pid: string): { id: string; name?: string }[] =>
+    pid === currentProjectId ? liveBuildings : loadProjectSnapshot(pid).buildings;
+
+  // ── Who ────────────────────────────────────────────────────────────────
+  const [who, setWho] = useState<string[]>(person.contractorId ? [person.contractorId] : []);
+  const [whoQ, setWhoQ] = useState('');
+  const active = contractors.filter(c => c.active);
+  const whoHits = useMemo(() => {
+    const qq = whoQ.trim().toLowerCase();
+    const list = qq ? active.filter(c => c.name.toLowerCase().includes(qq)) : active;
+    return list.slice(0, 12);
+  }, [whoQ, active]);
+
+  // ── The stage pair, what, days ────────────────────────────────────────
+  const [pair, setPair] = useState<StagePairValue>({ from: jobStage, to: '' });
+  useEffect(() => { setPair(pv => ({ ...pv, from: jobStage })); }, [jobStage]);
   const [task, setTask] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  /**
-   * The days. One stretch by default, starting on the day dropped on;
-   * Non-consecutive opens a second with its own start and count. Saturday
-   * never counts; Friday is per-stretch and asked only when it matters —
-   * the arithmetic lives in taskDays.ts, tested offline.
-   */
-  const [stretches, setStretches] = useState<DayStretch[]>([{ start: dayIso, days: 1 }]);
-  const [noncon, setNoncon] = useState(false);
-  const active = noncon ? stretches : stretches.slice(0, 1);
-  const allDays = useMemo(() => stretchDays(active), [active]);
-  const patchStretch = (i: number, patch: Partial<DayStretch>) =>
-    setStretches(prev => prev.map((st, j) => (j === i ? { ...st, ...patch } : st)));
-
-  const currentStage = stages.find(s => s.id === job.currentStageId);
+  const [start, setStart] = useState(dayIso);
+  const [days, setDays] = useState<string[]>([dayIso]);
+  const [split, setSplit] = useState<TaskSplit | null>(null);
+  const allDays = days.length ? days : (start ? [start] : []);
 
   useEffect(() => {
     function key(e: KeyboardEvent) { if (e.key === 'Escape') onCancel(); }
@@ -80,9 +149,10 @@ export function PlannerTaskDialog({
     return () => window.removeEventListener('keydown', key);
   }, [onCancel]);
 
+  const jobFolder = picked?.job.driveLink;
   async function attach(): Promise<TaskAttachment[]> {
     if (!files.length) return [];
-    const folderId = job.driveLink ? extractFolderId(job.driveLink) : null;
+    const folderId = jobFolder ? extractFolderId(jobFolder) : null;
     // Same route the ordinary form uses: Drive when it is set up, and the
     // file's own bytes only as a fallback so nothing is silently dropped.
     if (isUploadBackendConfigured() && folderId) {
@@ -109,31 +179,55 @@ export function PlannerTaskDialog({
     })));
   }
 
+  const jobKnown = !!picked || !!general;
+  const canMake = jobKnown && who.length > 0 && task.trim().length > 0 && allDays.length > 0;
+
   async function make() {
-    if (!contractorId || !task.trim() || !allDays.length) return;
+    if (!canMake) return;
     setBusy(true);
     try {
       const attachments = await attach();
-      const id = `T-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-      addContractorAssignment({
-        id,
-        apartmentId: job.id,
-        buildingId: job.buildingId,
-        contractorId,
-        taskDescription: task.trim(),
-        // The task carries ALL of its days; dueDate stays the LAST one, so
-        // everything written for the single-date world (sorting, overdue,
-        // badges) stays correct — late only once every day has passed.
-        dueDate: allDays[allDays.length - 1],
-        ...(allDays.length > 1 ? { days: allDays } : {}),
-        ...(stageWhenDone ? { stageWhenDone } : {}),
-        stageId: job.currentStageId ?? null,
-        priority: 'normal' as TaskPriority,
-        attachments,
-        createdAt: new Date().toISOString(),
-        createdBy: currentUser?.name ?? '',
-      } as never);
-      onDone(id, allDays);
+      const writes = taskWrites(start, allDays, pair, split);
+      const targetPid = picked?.projectId ?? general?.projectId ?? currentProjectId;
+      const ids: string[] = [];
+      for (const cid of who) {
+        for (const w of writes) {
+          const fields = {
+            apartmentId: picked?.job.id ?? '',
+            buildingId: picked?.job.buildingId ?? general?.buildingId ?? '',
+            ...(general ? { general } : {}),
+            contractorId: cid,
+            taskDescription: task.trim(),
+            ...w,
+            priority: 'normal' as TaskPriority,
+            attachments,
+            completedAt: null,
+            createdBy: currentUser?.id ?? '',
+            createdByName: currentUser?.name ?? 'Office',
+          };
+          if (targetPid !== currentProjectId) {
+            ids.push(addAssignmentToProject(targetPid, fields as never));
+          } else {
+            const id = `T-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+            addContractorAssignment({ id, createdAt: new Date().toISOString(), ...fields } as never);
+            ids.push(id);
+          }
+        }
+      }
+      // Two workers picked in ONE dialog are two tasks on the same job and
+      // the same days — a deliberate act, not the overlap the store's ask
+      // exists for. When both sides of a raised ask were minted just now,
+      // answer it here; an overlap with an OLDER task still asks.
+      const st = useStore.getState();
+      if (st.plannerAsk && ids.includes(st.plannerAsk.taskId) && ids.includes(st.plannerAsk.overlap.taskId)) {
+        st.answerPlannerAsk('keep');
+      }
+      onDone({
+        taskIds: ids, days: allDays, contractorIds: who,
+        jobId: picked?.job.id,
+        projectId: targetPid !== currentProjectId ? targetPid : undefined,
+        ...(general ? { general } : {}),
+      });
     } finally {
       setBusy(false);
     }
@@ -141,63 +235,132 @@ export function PlannerTaskDialog({
 
   const box = 'w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12.5px] outline-none '
     + 'focus:ring-2 focus:ring-[#1e3a5f]/25 bg-white';
-
-  /** "Wed 26 Aug" — short enough that a week of them fits on the green line. */
-  const fmtDay = (iso: string) =>
-    parseDay(iso).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  const wsName = (pid: string) => projects.find(p => p.id === pid)?.shortName ?? projects.find(p => p.id === pid)?.name ?? pid;
+  const wsColor = (pid: string) => projects.find(p => p.id === pid)?.color ?? '#64748b';
+  const jobTitle = picked ? (aptLabel(picked.job) || picked.job.displayName || t('this job', 'העבודה'))
+    : general ? `${wsName(general.projectId)}${general.buildingId ? ` · ${general.buildingId}` : ''}` : '';
+  const dayWord = parseDay(dayIso).toLocaleDateString(isRtl ? 'he-IL' : 'en-US', { weekday: 'long', day: 'numeric', month: 'short' });
+  const title = job
+    ? `${t('Put', 'לשבץ את')} ${jobTitle} ${t('on', 'אצל')} ${person.name} · ${dayWord}`
+    : `${t('Add a job', 'הוספת עבודה')} · ${person.name} · ${dayWord}`;
 
   return (
-    <Shell onCancel={onCancel} title={`Put ${job.displayName || 'this job'} on ${person.name}'s ${
-      allDays.length > 1 ? 'week' : parseDay(dayIso).toLocaleDateString(undefined, { weekday: 'long' })}?`}>
-      <div className="grid gap-2.5">
-        {/* The explainer paragraph is gone, per the owner — the form says what
-            it needs and the office knows what a drop means by now. */}
-        <div className="grid grid-cols-2 gap-2.5">
-          {/* Where the job STANDS — shown, not asked. Beside it, where it
-              moves when this task is closed; the store applies that at the
-              completion write, whichever screen closes it. */}
-          <Field label="Current stage">
-            <div className={`${box} bg-slate-50 text-gray-600 flex items-center gap-1.5`}>
-              <span className="w-2 h-2 rounded-full flex-shrink-0"
-                style={{ backgroundColor: currentStage?.color ?? '#cbd5e1' }} />
-              <span className="truncate">{currentStage?.name ?? 'Not started'}</span>
-            </div>
+    <Shell onCancel={onCancel} title={title}>
+      <div data-task-dialog className="grid gap-2.5">
+        {/* WHICH JOB — a search across every workspace, or a general job. */}
+        {!job && (
+          <Field label={t('Which job', 'איזו עבודה')}>
+            {picked ? (
+              <div data-job-picked className={`${box} flex items-center gap-2`}>
+                <span className="w-2 h-2 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: stageList.find(st => st.id === picked.job.currentStageId)?.color ?? '#cbd5e1' }} />
+                <span className="truncate flex-1 font-semibold">{jobTitle}</span>
+                <span className="text-[9.5px] font-extrabold px-1.5 py-0.5 rounded-full text-white"
+                  style={{ backgroundColor: wsColor(picked.projectId) }}>{wsName(picked.projectId)}</span>
+                <button data-job-clear onClick={() => setPicked(null)} className="text-gray-400 hover:text-gray-600"><X size={12} /></button>
+              </div>
+            ) : general ? (
+              <div data-job-general className={`${box} flex items-center gap-2`}>
+                <Building2 size={13} className="text-gray-400 flex-shrink-0" />
+                <span className="truncate flex-1 font-semibold">{t('General job', 'עבודה כללית')} · {jobTitle}</span>
+                <button data-job-clear onClick={() => { setGeneral(null); setGenStep(null); }} className="text-gray-400 hover:text-gray-600"><X size={12} /></button>
+              </div>
+            ) : genStep === 'ws' ? (
+              <div data-general-ws className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] text-gray-500">{t('Which workspace?', 'איזה מרחב עבודה?')}</span>
+                {projects.map(p => (
+                  <button key={p.id} data-general-ws-pick={p.id}
+                    onClick={() => {
+                      const blds = buildingsOf(p.id);
+                      if (blds.length) { setGenWs(p.id); setGenStep('bld'); }
+                      else { setGeneral({ projectId: p.id }); setGenStep(null); }
+                    }}
+                    className="px-2.5 py-1 rounded-full text-[11.5px] font-bold text-white"
+                    style={{ backgroundColor: p.color ?? '#64748b' }}>{p.shortName ?? p.name}</button>
+                ))}
+                <button onClick={() => setGenStep(null)} className="text-[11px] text-gray-400 hover:text-gray-600">{t('back', 'חזרה')}</button>
+              </div>
+            ) : genStep === 'bld' ? (
+              <div data-general-bld className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] text-gray-500">{wsName(genWs)} · {t('which building?', 'איזה בניין?')}</span>
+                {buildingsOf(genWs).map(b => (
+                  <button key={b.id} data-general-bld-pick={b.id}
+                    onClick={() => { setGeneral({ projectId: genWs, buildingId: b.id }); setGenStep(null); }}
+                    className="px-2.5 py-1 rounded-full text-[11.5px] font-bold border border-gray-200 text-gray-700 hover:bg-gray-50">{b.id}</button>
+                ))}
+                <button onClick={() => setGenStep('ws')} className="text-[11px] text-gray-400 hover:text-gray-600">{t('back', 'חזרה')}</button>
+              </div>
+            ) : (
+              <div>
+                <div className={`${box} flex items-center gap-1.5`}>
+                  <Search size={13} className="text-gray-400 flex-shrink-0" />
+                  <input data-job-search autoFocus value={q} onChange={e => setQ(e.target.value)}
+                    placeholder={t('Search every workspace — a name, a number, an address', 'חיפוש בכל מרחבי העבודה — שם, מספר, כתובת')}
+                    className="flex-1 min-w-0 outline-none bg-transparent text-[12.5px]" />
+                </div>
+                <div className="mt-1 rounded-lg border border-gray-200 overflow-hidden">
+                  {hits.map(h => (
+                    <button key={`${h.projectId}:${h.job.id}`} data-job-hit={h.job.id}
+                      onClick={() => { setPicked({ job: h.job, projectId: h.projectId }); setQ(''); }}
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-[12px] border-b border-gray-100 last:border-b-0 hover:bg-slate-50">
+                      <span className="w-2 h-2 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: stagesFor(h.projectId).find(st => st.id === h.job.currentStageId)?.color ?? '#cbd5e1' }} />
+                      <span className="truncate flex-1">{aptLabel(h.job) || h.job.displayName || h.job.address}</span>
+                      <span className="text-[9.5px] font-extrabold px-1.5 py-0.5 rounded-full text-white flex-shrink-0"
+                        style={{ backgroundColor: wsColor(h.projectId) }}>{h.ws}</span>
+                    </button>
+                  ))}
+                  <button data-general-job onClick={() => setGenStep('ws')}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-[12px] font-bold text-[#1e3a5f] hover:bg-slate-50">
+                    <Plus size={12} /> {t('A general job in a workspace', 'עבודה כללית במרחב עבודה')} ›
+                  </button>
+                </div>
+              </div>
+            )}
           </Field>
-          <Field label="When it's done, move to">
-            <select value={stageWhenDone} onChange={e => setStageWhenDone(e.target.value)} className={box}>
-              <option value="">Leave the stage alone</option>
-              {stages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-          </Field>
-        </div>
+        )}
 
-        <Field label="Who">
-          <select value={contractorId} onChange={e => setContractorId(e.target.value)} className={box}>
-            <option value="">Pick somebody…</option>
-            {contractors.filter(c => c.active).map(c => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
+        {/* WHO — a search over every worker; more than one can be picked.
+            Somebody not on the sheet gets a row: the notebook adds it. */}
+        <Field label={t('Who', 'מי')}>
+          <div className={`${box} flex items-center gap-1.5`}>
+            <Search size={13} className="text-gray-400 flex-shrink-0" />
+            <input data-who-search value={whoQ} onChange={e => setWhoQ(e.target.value)}
+              placeholder={t('Search a worker…', 'חיפוש עובד…')}
+              className="flex-1 min-w-0 outline-none bg-transparent text-[12.5px]" />
+          </div>
+          <div className="flex flex-wrap gap-1 mt-1">
+            {[...active.filter(c => who.includes(c.id)), ...whoHits.filter(c => !who.includes(c.id))].map(c => {
+              const on = who.includes(c.id);
+              return (
+                <button key={c.id} data-who-pick={c.id} data-on={on ? '1' : undefined}
+                  onClick={() => setWho(w => (on ? w.filter(x => x !== c.id) : [...w, c.id]))}
+                  className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold border ${
+                    on ? 'text-white border-transparent' : 'text-gray-700 border-gray-200 hover:bg-gray-50'}`}
+                  style={on ? { backgroundColor: '#1e3a5f' } : undefined}>
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: on ? '#fff' : personColor(c.name, c.color) }} />
+                  {c.name}
+                </button>
+              );
+            })}
+          </div>
         </Field>
 
         {/* ONE box — what to do and any notes were two boxes saying the same
-            thing. The paperclip and the voice memo live in its corner, the
-            drawer's General-notes idiom. */}
-        <Field label="What has to be done">
+            thing. The paperclip and the voice memo live in its corner. */}
+        <Field label={t('What has to be done', 'מה צריך לעשות')}>
           <MessageBox
             hook="planner-task-box"
             rows={3}
-            autoFocus
+            autoFocus={!!job}
             value={task}
             onChange={setTask}
-            placeholder={`What has to happen at ${job.displayName || 'this job'} — and anything the crew needs to know`}
-            onAttach={picked => setFiles(prev => [...prev, ...picked])}
+            placeholder={t('What has to happen — and anything the crew needs to know', 'מה צריך לקרות — וכל מה שהצוות צריך לדעת')}
+            onAttach={pickedFiles => setFiles(prev => [...prev, ...pickedFiles])}
             onMemo={memo => { setFiles(prev => [...prev, memoFile(memo)]); }}
-            onTranscript={text => setTask(t => t.trim() ? t : text)}
+            onTranscript={text => setTask(v => v.trim() ? v : text)}
           />
         </Field>
-        <input ref={fileRef} type="file" multiple className="hidden"
-          onChange={e => setFiles([...files, ...Array.from(e.target.files ?? [])])} />
         {files.length > 0 && (
           <div className="flex flex-wrap gap-1.5 -mt-1">
             {files.map((f, i) => f.type.startsWith('audio/') ? (
@@ -213,113 +376,51 @@ export function PlannerTaskDialog({
           </div>
         )}
 
-        {/* The days. Saturday never counts; Friday is per-stretch, asked only
-            when the stretch actually passes one; Non-consecutive opens a
-            second stretch with its own start and count. */}
-        {active.map((st, i) => {
-          const run = workingRun(st.start, st.days, st.friday);
-          return (
-            <React.Fragment key={i}>
-              <div className="grid grid-cols-2 gap-2.5">
-                <Field label={i === 0 ? 'Start day' : 'And again from'}>
-                  <input type="date" value={st.start}
-                    onChange={e => { if (e.target.value) patchStretch(i, { start: e.target.value }); }}
-                    className={box} />
-                </Field>
-                <Field label="How many days">
-                  <div className={`${box} flex items-center p-0 overflow-hidden`}>
-                    <button onClick={() => patchStretch(i, { days: Math.max(1, st.days - 1) })}
-                      className="px-3 py-1.5 font-black text-gray-500 hover:bg-gray-50" aria-label="One day fewer">−</button>
-                    <span className="flex-1 text-center font-bold tabular-nums text-gray-700">{st.days}</span>
-                    <button onClick={() => patchStretch(i, { days: Math.min(15, st.days + 1) })}
-                      className="px-3 py-1.5 font-black text-gray-500 hover:bg-gray-50" aria-label="One day more">+</button>
-                  </div>
-                </Field>
-              </div>
-              {run.crossesFriday && (
-                <label className="flex items-center gap-1.5 text-[11.5px] font-semibold text-gray-600 select-none -mt-1"
-                  style={{ cursor: 'pointer' }}>
-                  <input type="checkbox" checked={!!st.friday}
-                    onChange={e => patchStretch(i, { friday: e.target.checked })}
-                    style={{ width: 13, height: 13, accentColor: '#1e3a5f' }} />
-                  Include Friday?
-                </label>
-              )}
-            </React.Fragment>
-          );
-        })}
+        {/* The stage the work is ON, and where the job goes when it is closed. */}
+        {!general && (
+          <Field label={`${s.stageOnLabel} · ${s.stageToLabel}`}>
+            <StagePairPicker stages={stageList} currentStageId={jobStage || null} value={pair} onChange={setPair}
+              strings={stagePairStrings(s)} isRtl={isRtl} box={box} labels={false} />
+          </Field>
+        )}
 
-        <label className="flex items-center gap-2 text-[11.5px] font-semibold text-gray-600 select-none"
-          style={{ cursor: 'pointer' }}>
-          <input type="checkbox" checked={noncon}
-            onChange={e => {
-              const on = e.target.checked;
-              setNoncon(on);
-              if (on && stretches.length === 1) {
-                const run = workingRun(stretches[0].start, stretches[0].days, stretches[0].friday);
-                setStretches([...stretches, { start: nextWorkingDay(run.days[run.days.length - 1]), days: 1 }]);
-              }
-              if (!on) setStretches(prev => prev.slice(0, 1));
-            }}
-            style={{ width: 14, height: 14, accentColor: '#1e3a5f' }} />
-          Non-consecutive — work it in separate stretches
-        </label>
-
-        {/* The green line: exactly which days, always. */}
-        <p data-day-readout className="m-0 text-[12px] font-semibold" style={{ color: '#15803d' }}>
-          → {allDays.map(fmtDay).join(', ')} — {allDays.length} {allDays.length === 1 ? 'day' : 'days'}
-        </p>
+        {/* The days: start, how many, Friday, a second stretch (with its own
+            stages, and the one-or-two ask when they differ). */}
+        <div className="grid grid-cols-2 gap-2.5">
+          <Field label={t('Start day', 'יום התחלה')}>
+            <input data-start-day type="date" value={start}
+              onChange={e => { if (e.target.value) setStart(e.target.value); }} className={box} />
+          </Field>
+        </div>
+        <TaskDaysPicker key={start} start={start} onDaysChange={setDays}
+          stages={general ? undefined : stageList} currentStageId={jobStage || null} pair={pair}
+          onSplitChange={setSplit} pairStrings={stagePairStrings(s)} splitStrings={splitStringsOf(s)} isRtl={isRtl} />
       </div>
 
       <Footer>
-        {/* The no-task escape hatch, demoted to a quiet side button at the
-            LEFT of the footer, per the owner: it is for the rare case where a
-            card should sit on the sheet with no task behind it, and drawn as
-            a peer of "Add the task" it was pressed instead of it. */}
-        <button onClick={() => onDone(undefined)} disabled={busy}
-          className="me-auto px-2 py-1.5 rounded-lg text-[11px] font-semibold
-                     text-gray-400 hover:text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-          title="Rare: the card sits on the planner with no task behind it">
-          Just put it on the planner
-        </button>
-        <button onClick={make} disabled={busy || !contractorId || !task.trim()}
+        {/* The no-task escape hatch stays a quiet side button — for the rare
+            card that should sit on the sheet with no task behind it yet. */}
+        {picked && !general && (
+          <button data-just-park onClick={() => onDone({ taskIds: [], days: [start], contractorIds: who, jobId: picked.job.id,
+              projectId: picked.projectId !== currentProjectId ? picked.projectId : undefined, parked: true })}
+            disabled={busy}
+            className="me-auto px-2 py-1.5 rounded-lg text-[11px] font-semibold
+                       text-gray-400 hover:text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+            title={t('Rare: the job sits on the planner with no task behind it', 'נדיר: העבודה יושבת בלוח בלי משימה')}>
+            {t('Just put it on the planner', 'רק לשים בלוח')}
+          </button>
+        )}
+        <button data-add-the-job onClick={make} disabled={busy || !canMake}
           className="px-3 py-1.5 rounded-lg text-[12.5px] font-bold text-white flex items-center gap-1.5
                      disabled:opacity-40"
           style={{ backgroundColor: '#4aa8d8' }}>
           {busy && <Loader2 size={13} className="animate-spin" />}
-          Add the task
+          {t('Add the job', 'להוסיף את העבודה')}
         </button>
       </Footer>
     </Shell>
   );
 }
-
-/**
- * A recorded-but-not-yet-saved memo, playable — a grey chip saying
- * "voice-memo-....webm" reads as broken (the documented voice-memo rule).
- * MODULE level, and the object URL made and revoked in an effect, once.
- */
-function PendingAudio({ file, onDelete }: { file: File; onDelete: () => void }) {
-  const [url, setUrl] = useState('');
-  useEffect(() => {
-    const u = URL.createObjectURL(file);
-    setUrl(u);
-    return () => URL.revokeObjectURL(u);
-  }, [file]);
-  return url ? <VoiceMemoPlayer src={url} className="max-w-[250px]" onDelete={onDelete} /> : null;
-}
-
-// ── Pulling a job out ────────────────────────────────────────────────────────
-
-/**
- * Only asked when the slot actually made a task.
- *
- * A task can be created from half a dozen places and outlive the planner
- * entirely, so taking a card off a day must not quietly delete work somebody
- * is relying on. If the slot never made a task there is nothing to ask, and the
- * card just comes off.
- */
-// ── The quick-assign drop box's question ────────────────────────────────────
 
 /**
  * "Who, and which day?" — the first half of a drop that never touched the
@@ -426,6 +527,17 @@ export function PlannerRemoveDialog({ jobName, taskName, onCancel, onDone }: {
       </Footer>
     </Shell>
   );
+}
+
+/** A recorded memo waiting to be sent, drawn as the player it will become. */
+function PendingAudio({ file, onDelete }: { file: File; onDelete: () => void }) {
+  const [url, setUrl] = useState('');
+  useEffect(() => {
+    const u = URL.createObjectURL(file);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [file]);
+  return url ? <VoiceMemoPlayer src={url} className="max-w-[250px]" onDelete={onDelete} /> : null;
 }
 
 // ── Dragging a card that is already on the notebook ──────────────────────────
@@ -741,11 +853,19 @@ function Footer({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * A DIV, not a `<label>`. A label forwards a click to its first labelable
+ * descendant when the click's own target is no longer inside it — and a
+ * search hit is a button that UNMOUNTS in the very click that picks it (React
+ * flushes the render synchronously). Chrome then handed that click to the
+ * next button standing in the field, which was the picked row's own clear X:
+ * every pick undid itself before the eye could see it.
+ */
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="block">
+    <div className="block">
       <span className="block text-[10.5px] font-bold text-gray-500 mb-1">{label}</span>
       {children}
-    </label>
+    </div>
   );
 }

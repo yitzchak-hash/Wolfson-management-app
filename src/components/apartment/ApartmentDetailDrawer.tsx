@@ -6,6 +6,7 @@ import { Translated } from '../ui/Translated';
 import { Send } from 'lucide-react';
 import { useStore } from '../../data/store';
 import { TaskDaysPicker, daysFields } from '../tasks/TaskDaysPicker';
+import { StagePairPill } from '../tasks/StagePair';
 import { daysOf } from '../../data/taskDays';
 import { usePhone, useMedia } from '../../data/usePhone';
 import { VoiceRecorderButton, VoiceMemoPlayer } from '../ui/VoiceMemo';
@@ -2259,11 +2260,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                   {contractor.name}
                                 </span>
                               )}
-                              {stage && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded"
-                                  style={{ backgroundColor: stage.color + '20', color: stage.color }}>
-                                  {getStageName(stage, ui.isRtl)}
-                                </span>
+                              {(stage || a.stageWhenDone) && (
+                                <StagePairPill task={a} stages={stages} isRtl={ui.isRtl} size="xs" />
                               )}
                               {a.priority === 'urgent' && (
                                 <span className="text-[10px] px-1.5 py-0.5 rounded border font-medium text-red-600 bg-red-50 border-red-200">

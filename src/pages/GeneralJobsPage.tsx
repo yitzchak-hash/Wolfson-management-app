@@ -2598,10 +2598,27 @@ export function GeneralJobsPage() {
    * A slot holds as many as the day really holds. Nothing is ever squeezed to
    * fit; the row grows instead.
    */
-  function placeOnPlanner(cell: RotaHit, ids: string[], taskId?: string, taskDays?: string[]) {
+  function placeOnPlanner(cell: RotaHit, ids: string[], made?: boolean) {
     setRotaHover(null);
     const el = canvasElements.find(c => c.id === cell.elId);
     if (!el) return;
+    /**
+     * A TASK was made for this drop (locked answer 7, 2026-09-15): the
+     * notebook draws tasks from the tasks themselves, so no card is written —
+     * and a parked card the same job already had in this square comes off,
+     * or the job would be drawn twice.
+     */
+    if (made) {
+      const data0 = (el.data ?? {}) as Record<string, unknown>;
+      const cells0 = { ...((data0.cells ?? {}) as Record<string, PlannerEntry[]>) };
+      const k0 = `${cell.person}|${cell.day}`;
+      const kept = (cells0[k0] ?? []).filter(e => !e.jobId || !ids.includes(e.jobId));
+      if (kept.length !== (cells0[k0] ?? []).length) {
+        if (kept.length) cells0[k0] = kept; else delete cells0[k0];
+        updateCanvasElement(el.id, { data: { ...data0, cells: cells0 } });
+      }
+      return;
+    }
     // Which of these were already living in a notebook — so the message can say
     // "another day" rather than "moved in" for a job that never left.
     const inNotebookAlready = new Set(
@@ -2614,7 +2631,7 @@ export function GeneralJobsPage() {
      * is also what the "day 2 of 3" pill reads). The dialog hands the days
      * back; without them this is the single square that was dropped on.
      */
-    const landDays = taskDays?.length ? taskDays : [cell.day];
+    const landDays = [cell.day];
     /**
      * A quick-assigned day can sit PAST the notebook's drawn run — a date
      * typed into the drop box's question has no square yet, so without this
@@ -2664,7 +2681,6 @@ export function GeneralJobsPage() {
       // cloud write to trip on.
       .map(id => ({
         id: `R-${Math.random().toString(36).slice(2, 8)}`, jobId: id, at: new Date().toISOString(),
-        ...(taskId ? { taskId } : {}),
       }));
     if (!fresh.length) return;
     cells[key] = [...already, ...fresh];
@@ -2677,7 +2693,6 @@ export function GeneralJobsPage() {
         .filter(id => !there.some(e => e.jobId === id))
         .map(id => ({
           id: `R-${Math.random().toString(36).slice(2, 8)}`, jobId: id, at: new Date().toISOString(),
-          ...(taskId ? { taskId } : {}),
         }))];
     }
     const who = personOf(cell.person, contractors, users)?.name ?? cell.person.replace(/^n:/, '');
@@ -8440,17 +8455,18 @@ export function GeneralJobsPage() {
         return (
           <PlannerTaskDialog
             job={plannerDrop.job}
+            jobs={apartments}
             person={who}
             dayIso={plannerDrop.cell.day}
             stages={allStages.filter(st => st.projectId === 'general')}
             contractors={contractors}
             onCancel={() => setPlannerDrop(null)}
-            onDone={(taskId, taskDays) => {
-              placeOnPlanner(plannerDrop.cell, [plannerDrop.job.id], taskId, taskDays);
+            onDone={r => {
+              placeOnPlanner(plannerDrop.cell, [plannerDrop.job.id], r.taskIds.length > 0);
               setPlannerDrop(null);
-              if (taskId) {
-                setToast(taskDays && taskDays.length > 1
-                  ? `On the planner for ${taskDays.length} days, and a task added`
+              if (r.taskIds.length) {
+                setToast(r.days.length > 1
+                  ? `On the planner for ${r.days.length} days, and a task added`
                   : 'On the planner, and a task added');
               }
             }}

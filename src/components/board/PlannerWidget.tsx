@@ -1,16 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { PlannerDropDialog, PlannerDayDialog, PlannerTaskDialog, DayChoice } from './PlannerDialogs';
+import { PlannerDropDialog, PlannerTaskDialog, PlannerRemoveDialog, TaskDialogResult } from './PlannerDialogs';
 import { ChevronUp, ChevronDown, Plus, X, CalendarDays, Maximize2, Eye, EyeOff, ClipboardList } from 'lucide-react';
 import {
   Apartment, CanvasElement, Contractor, User, ContractorAssignment, Stage, personColor,
-  aptLabel,
+  aptLabel, getStageName,
 } from '../../types';
 import {
   registerRota, onRotaHover, rotaCellAt, setRotaHover, RotaHit,
   announceNotebookDrag, quickBoxHover, quickBoxTake,
 } from '../../data/rotaDrop';
-import { daysOf, dayNumberOf, moveTaskDay, removeTaskDay, addTaskDay } from '../../data/taskDays';
+import { daysOf, dayNumberOf, workingRun } from '../../data/taskDays';
 import { useStore, loadProjectSnapshot } from '../../data/store';
 import { useBoardTrack } from '../../data/useBoardUndo';
 import { holidaysOn, hebrewLabel, Holiday } from '../../data/hebrewDates';
@@ -650,26 +650,8 @@ export function PlannerWidget({
       .reduce((n, list) => n + (list ?? []).filter(e => e.jobId === jobId).length, 0);
   }
 
-  /**
-   * Multi-day tasks on the notebook.
-   *
-   * A task that takes days is one record wearing one card per day, every card
-   * carrying its taskId. Moving or removing a SINGLE day is deliberately
-   * silent (the owner's locked decision): the day just moves, and the task's
-   * own `days` list is rewritten to match, so the worker's schedule follows
-   * the office's hand. The question card survives only on the task's LAST
-   * remaining day — where the gesture means leaving the notebook. Only tasks
-   * living in THIS workspace are edited; a foreign entry's task belongs to
-   * its own workspace and its card keeps the ordinary asks.
-   */
   const updateAssignment = useStore(st => st.updateContractorAssignment);
-  const taskOf = (en: PlannerEntry) =>
-    en.taskId && !en.projectId ? assignments.find(a => a.id === en.taskId) : undefined;
-  /** How many squares in this notebook carry that task. */
-  function taskSquares(taskId: string): number {
-    return Object.values(cells)
-      .reduce((n, list) => n + (list ?? []).filter(e => e.taskId === taskId).length, 0);
-  }
+  const deleteAssignment = useStore(st => st.deleteContractorAssignment);
 
   function setCell(key: string, entries: PlannerEntry[]) {
     const next = { ...cells };
@@ -703,53 +685,6 @@ export function PlannerWidget({
   const [dropAsk, setDropAsk] = useState<
     { fromKey: string; entry: PlannerEntry; target: RotaHit | null } | null>(null);
 
-  /**
-   * A dragged day of a MULTI-DAY task, waiting to be told what it meant.
-   *
-   * The owner's 2026-08-27 ruling replaces the earlier silent move with a
-   * question in his own three labels: move this day, add this day to the
-   * existing task, or a new task on this day. The day-number pills renumber
-   * themselves from calendar order after any answer — they are labels, not
-   * identities, so day one dragged past day two simply becomes the later day.
-   */
-  const [dayAsk, setDayAsk] = useState<
-    { fromKey: string; entry: PlannerEntry; target: RotaHit } | null>(null);
-  /** "New task on this day" — the standing task form, three-quarters filled in. */
-  const [newTaskAsk, setNewTaskAsk] = useState<
-    { entry: PlannerEntry; target: RotaHit } | null>(null);
-
-  function resolveDayChoice(choice: DayChoice) {
-    const ask = dayAsk;
-    setDayAsk(null);
-    if (!ask) return;
-    if (choice === 'new') { setNewTaskAsk({ entry: ask.entry, target: ask.target }); return; }
-    const t = taskOf(ask.entry);
-    const fromDay = ask.fromKey.split('|')[1];
-    if (choice === 'merge') {
-      // The landing day is already one of the task's days: the dragged card
-      // comes off and the task shrinks by that one day. Nothing else changes.
-      track({
-        weight: 'content',
-        label: `Merged a day of ${cardName(ask.entry)}`,
-        explain: `The card comes back onto ${squareName(ask.fromKey)}, and that day is `
-          + 'put back on the task. The task itself is not otherwise touched.',
-      }, () => setCell(ask.fromKey, (cells[ask.fromKey] ?? []).filter(x => x.id !== ask.entry.id)));
-      if (t) {
-        const upd = removeTaskDay(daysOf(t), fromDay);
-        if (upd) updateAssignment(t.id, upd);
-      }
-      return;
-    }
-    // 'add' keeps the origin card and grows the task; 'move' rewrites the day.
-    const landed = moveEntry(ask.fromKey, ask.entry, ask.target, choice === 'add');
-    if (landed && t) {
-      const upd = choice === 'add'
-        ? addTaskDay(daysOf(t), ask.target.day)
-        : moveTaskDay(daysOf(t), fromDay, ask.target.day);
-      if (upd) updateAssignment(t.id, upd);
-    }
-  }
-
   /** Carry out whichever the office picked. */
   function resolveDrop(choice: 'move' | 'copy' | 'off') {
     const ask = dropAsk;
@@ -773,17 +708,7 @@ export function PlannerWidget({
     // "Leave it where it was" for a drop outside: there is nowhere to move to,
     // so doing nothing IS the answer.
     if (!ask.target) return;
-    const landed = moveEntry(ask.fromKey, ask.entry, ask.target, choice === 'copy');
-    // The task follows its card: a moved day is rewritten in `days`, a copied
-    // one is added — so the worker's schedule always says what the sheet says.
-    const t = landed ? taskOf(ask.entry) : undefined;
-    if (t) {
-      const fromDay = ask.fromKey.split('|')[1];
-      const upd = choice === 'copy'
-        ? addTaskDay(daysOf(t), ask.target.day)
-        : moveTaskDay(daysOf(t), fromDay, ask.target.day);
-      if (upd) updateAssignment(t.id, upd);
-    }
+    moveEntry(ask.fromKey, ask.entry, ask.target, choice === 'copy');
   }
 
   /**
@@ -926,59 +851,249 @@ export function PlannerWidget({
    * `showTasks` in the pencil turns the whole layer off.
    */
   const tasksOn = flag(d.showTasks, true);
-  const taskChips = useMemo(() => {
-    const map = new Map<string, {
-      id: string; desc: string; label: string; jobId: string;
-      projectId?: string; workspace?: string; done?: boolean;
-    }[]>();
+  const allStages = useStore(st => st.stages);
+  const stagesFor = (pid: string) => pid === currentProjectId ? stages
+    : allStages.filter(st => pid === 'general' ? st.projectId === 'general' : !st.projectId);
+
+  /**
+   * THE BARS — every task, drawn FROM THE TASK (locked answer 7, 2026-09-15).
+   *
+   * The notebook used to keep its own copy of a task as one card per day,
+   * beside a dashed chip for tasks nobody had placed by hand — two records
+   * for one piece of work, which is exactly how "I unchecked non-consecutive
+   * and still see four days" happened. Now a task with a worker and days is
+   * drawn as ONE BAR across those days on that worker's row (the Google
+   * Calendar manner), per week: a non-consecutive task is two bars, a closed
+   * task a dimmed struck one. Nothing about a task is stored here; dragging
+   * a bar edits the task's own days, and every other screen follows.
+   *
+   * Keyed `${person}|${weekStart}`; lanes assigned greedily so two tasks on
+   * the same days stack instead of covering each other.
+   */
+  const barsByRow = useMemo(() => {
+    const map = new Map<string, TaskBarSeg[]>();
     if (!tasksOn) return map;
     const rows = new Set(people.filter(p => p.startsWith('c:')).map(p => p.slice(2)));
     if (!rows.size) return map;
-    const linked = new Set<string>();
-    for (const list of Object.values(cells)) {
-      for (const e of list ?? []) if (e?.taskId) linked.add(e.taskId);
+    const weekIdx = new Map<string, { wk: string; idx: number }>();
+    for (const w of weeks) {
+      for (let i = 0; i < span; i++) weekIdx.set(iso(addDays(w, i)), { wk: iso(w), idx: i });
     }
-    const put = (a: ContractorAssignment, apts: Apartment[], pid?: string, ws?: string) => {
-      /**
-       * A CLOSED task keeps its chip and wears a line through it — the
-       * owner's rule ("if it's done, it's crossed off"): closing a task used
-       * to make its chip vanish from the notebook, which read as the day's
-       * work being REMOVED rather than finished. The chip is the record now,
-       * exactly like a placed card whose task closed.
-       */
-      if (!a.dueDate || !a.contractorId) return;
-      if (!rows.has(a.contractorId) || linked.has(a.id)) return;
+    const put = (a: ContractorAssignment, apts: Apartment[], pid: string, ws?: string) => {
+      if (!a.contractorId || !rows.has(a.contractorId)) return;
+      const dds = daysOf(a).map(x => String(x).slice(0, 10)).sort();
+      if (!dds.length) return;
       const apt = apts.find(x => x.id === a.apartmentId);
-      // A GENERAL JOB has no apartment: its card is named by the WORKSPACE
-      // alone — "Wolfson", nothing about apartments (the owner's ruling).
       const generalName = a.general
         ? (projects.find(p => p.id === a.general!.projectId)?.name ?? a.general.projectId)
           + (a.general.buildingId ? ` · ${a.general.buildingId}` : '')
         : null;
-      // A task that takes days shows itself on EVERY one of them — it carries
-      // all its days now, and one chip on the last day was the old world.
-      for (const day of daysOf(a).map(d => String(d).slice(0, 10))) {
-        const key = `c:${a.contractorId}|${day}`;
+      const label = generalName ?? (apt ? (aptLabel(apt) || apt.address?.trim() || 'Job') : 'Job');
+      const stl = stagesFor(pid);
+      const from = a.stageId ? stl.find(st => st.id === a.stageId) : undefined;
+      const to = a.stageWhenDone ? stl.find(st => st.id === a.stageWhenDone) : undefined;
+      // Consecutive COLUMNS within a week become one segment.
+      let run: { wk: string; start: number; days: string[] } | null = null;
+      const flush = () => {
+        if (!run) return;
+        const key = `c:${a.contractorId}|${run.wk}`;
         const list = map.get(key) ?? [];
         list.push({
-          id: a.id,
-          desc: (a.taskDescription ?? '').trim(),
-          label: generalName ?? (apt ? (aptLabel(apt) || apt.address?.trim() || 'Job') : 'Job'),
-          jobId: a.apartmentId,
-          projectId: pid, workspace: ws,
-          done: !!a.completedAt,
+          id: `${a.id}:${run.days[0]}`, taskId: a.id, task: a, pid: `c:${a.contractorId}`,
+          weekKey: run.wk, startIdx: run.start, len: run.days.length, days: run.days,
+          label, desc: (a.taskDescription ?? '').trim(), jobId: a.apartmentId,
+          projectId: pid === currentProjectId ? undefined : pid, workspace: ws,
+          done: !!a.completedAt, stageFrom: from, stageTo: to,
+          foreign: pid !== currentProjectId, lane: 0,
         });
         map.set(key, list);
+        run = null;
+      };
+      for (const dd of dds) {
+        const at = weekIdx.get(dd);
+        if (!at) { flush(); continue; }   // a day off the drawn run (Saturday, a hidden week)
+        if (run && run.wk === at.wk && at.idx === run.start + run.days.length) { run.days.push(dd); continue; }
+        flush();
+        run = { wk: at.wk, start: at.idx, days: [dd] };
       }
+      flush();
     };
-    assignments.forEach(a => put(a, jobs));
+    assignments.forEach(a => put(a, jobs, currentProjectId));
     for (const p of projects) {
       if (p.id === currentProjectId) continue;
       const snap = loadProjectSnapshot(p.id);
       (snap.assignments ?? []).forEach(a => put(a, snap.apartments, p.id, p.name));
     }
+    // Lanes: earliest start first, longer first; a bar takes the first lane
+    // whose last bar ended before it starts.
+    for (const list of map.values()) {
+      list.sort((x, y) => x.startIdx - y.startIdx || y.len - x.len || x.taskId.localeCompare(y.taskId));
+      const ends: number[] = [];
+      for (const bar of list) {
+        let lane = ends.findIndex(e => e < bar.startIdx);
+        if (lane < 0) { lane = ends.length; ends.push(-1); }
+        bar.lane = lane;
+        ends[lane] = bar.startIdx + bar.len - 1;
+      }
+    }
     return map;
-  }, [tasksOn, people, cells, assignments, jobs, projects, currentProjectId, snapTick]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasksOn, people, assignments, jobs, projects, currentProjectId, snapTick, weeks, span, stages, allStages]);
+
+  /**
+   * THE FOLD — once per notebook, the old per-day task cards become the
+   * task's own days. A card carrying a taskId used to be the notebook's copy
+   * of that task; the task already lists its days (they were written from
+   * the same dialog), so the card only has to make sure its day is on the
+   * task and then go. Foreign cards (another workspace's task) simply go —
+   * that task draws itself from its snapshot. Cards WITHOUT a task (a job
+   * parked on a day, a free-words note) are untouched. Waits for the tasks to
+   * have arrived: "not in assignments" and "nothing loaded yet" look alike.
+   */
+  const foldedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (ro || projection || !assignments.length) return;
+    if (foldedFor.current === el.id) return;
+    const hasTaskCards = Object.values(cells).some(list => (list ?? []).some(e => !!e?.taskId));
+    foldedFor.current = el.id;
+    if (!hasTaskCards) return;
+    const next: Record<string, PlannerEntry[]> = {};
+    const adds = new Map<string, Set<string>>();
+    for (const [key, list] of Object.entries(cells)) {
+      const day = key.slice(key.indexOf('|') + 1);
+      const kept = (list ?? []).filter(e => {
+        if (!e?.taskId) return true;
+        if (!e.projectId) {
+          const t = assignments.find(a => a.id === e.taskId);
+          if (t && !daysOf(t).includes(day)) {
+            const set = adds.get(t.id) ?? new Set<string>();
+            set.add(day); adds.set(t.id, set);
+          }
+        }
+        return false;
+      });
+      if (kept.length) next[key] = kept;
+    }
+    for (const [tid, dds] of adds) {
+      const t = assignments.find(a => a.id === tid);
+      if (!t) continue;
+      const merged = [...new Set([...daysOf(t), ...dds])].sort();
+      updateAssignment(tid, { days: merged.length > 1 ? merged : undefined, dueDate: merged[merged.length - 1] });
+    }
+    write({ cells: next });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ro, projection, assignments.length > 0, el.id]);
+
+  /** The hover plus, and the dialog it opens (scene 3). */
+  const [plusCell, setPlusCell] = useState<string | null>(null);
+  const [plusAsk, setPlusAsk] = useState<{ person: string; day: string } | null>(null);
+  /** A bar being taken off the sheet — keep the task (dateless) or delete it. */
+  const [barAsk, setBarAsk] = useState<TaskBarSeg | null>(null);
+
+  const rowContractorId = (person: string) => (person.startsWith('c:') ? person.slice(2) : null);
+  /** Calendar days between two ISO dates. */
+  const dayDiff = (from: string, to: string) =>
+    Math.round((new Date(`${to}T00:00:00`).getTime() - new Date(`${from}T00:00:00`).getTime()) / 86400000);
+  const shiftDay = (dd: string, n: number) => {
+    const out = addDays(new Date(`${dd}T00:00:00`), n);
+    if (out.getDay() === 6) out.setDate(out.getDate() + 1);   // never Saturday
+    return iso(out);
+  };
+  const writeDays = (task: ContractorAssignment, dds: string[], more: Partial<ContractorAssignment> = {}) => {
+    const sorted = [...new Set(dds)].sort();
+    updateAssignment(task.id, {
+      ...more,
+      dueDate: sorted.length ? sorted[sorted.length - 1] : null,
+      days: sorted.length > 1 ? sorted : undefined,
+    });
+  };
+
+  function openBar(bar: TaskBarSeg) {
+    if (!bar.jobId) return;   // a general job — no unit to open
+    if (bar.projectId && bar.projectId !== currentProjectId) {
+      if (openUnit) { openUnit(bar.projectId, bar.jobId); return; }
+      setCurrentProject(bar.projectId);
+      setPendingFocus({ kind: 'apartment', id: bar.jobId });
+      return;
+    }
+    openJob(bar.jobId);
+  }
+  /** A bar dropped on a square: the task's days shift, and its worker follows the row. */
+  function dropBarTo(bar: TaskBarSeg, target: RotaHit) {
+    if (bar.foreign) return;
+    const cid = rowContractorId(target.person);
+    if (!cid) return;
+    if (bar.days[0] === target.day && cid === bar.task.contractorId) return;
+    /**
+     * The task's days keep their WORKING-DAY pattern: each day is re-read as
+     * "the n-th working day from the stretch's start" and placed as the n-th
+     * working day from the landing day — so a Tue–Wed pair dropped on Thursday
+     * becomes Thu + Sun, never Thu + Saturday, and a non-consecutive task
+     * keeps its gap in working days.
+     */
+    const all = daysOf(bar.task);
+    const friday = all.some(dd => new Date(`${dd}T00:00:00`).getDay() === 5);
+    const first = all[0];
+    const fromRun = workingRun(first, 80, friday).days;
+    const toRun = workingRun(shiftDay(first, dayDiff(bar.days[0], target.day)), 80, friday).days;
+    const next = all.map(dd => {
+      const i = fromRun.indexOf(dd);
+      return i >= 0 && i < toRun.length ? toRun[i] : shiftDay(dd, dayDiff(bar.days[0], target.day));
+    });
+    track({
+      weight: 'content',
+      label: `Moved ${bar.label} to ${squareName(cellKey(target.person, target.day))}`,
+      explain: `${bar.label} goes back to its previous days${cid !== bar.task.contractorId ? ' and worker' : ''}. `
+        + 'The task itself is not otherwise touched.',
+    }, () => writeDays(bar.task, next, cid !== bar.task.contractorId ? { contractorId: cid } : {}));
+    const cover = runCover(target.day);
+    if (Object.keys(cover).length) write(cover);
+  }
+  /** The bar's right edge pulled to a day: this stretch runs from its start to there. */
+  function resizeBarTo(bar: TaskBarSeg, day: string) {
+    if (bar.foreign) return;
+    const startDay = bar.days[0];
+    let n = 1;
+    if (day > startDay) {
+      const friday = bar.days.some(dd => new Date(`${dd}T00:00:00`).getDay() === 5);
+      const probe = workingRun(startDay, 40, friday).days;
+      const idx = probe.indexOf(day);
+      n = idx >= 0 ? idx + 1 : Math.max(1, probe.filter(dd => dd <= day).length);
+    }
+    const friday = bar.days.some(dd => new Date(`${dd}T00:00:00`).getDay() === 5);
+    const seg = workingRun(startDay, n, friday).days;
+    const others = daysOf(bar.task).filter(dd => !bar.days.includes(dd));
+    const next = [...others, ...seg];
+    if (next.length === daysOf(bar.task).length && next.every(dd => daysOf(bar.task).includes(dd))) return;
+    track({
+      weight: 'content',
+      label: `${bar.label}: ${n} day${n === 1 ? '' : 's'} from ${startDay}`,
+      explain: `${bar.label} goes back to the days it had before the edge was pulled.`,
+    }, () => writeDays(bar.task, next));
+    if (seg.length) { const cover = runCover(seg[seg.length - 1]); if (Object.keys(cover).length) write(cover); }
+  }
+  /** The X on a bar: this stretch's days come off the task; the last one asks. */
+  function removeBar(bar: TaskBarSeg) {
+    if (bar.foreign) return;
+    const others = daysOf(bar.task).filter(dd => !bar.days.includes(dd));
+    if (!others.length) { setBarAsk(bar); return; }
+    track({
+      weight: 'content',
+      label: `Took ${bar.label} off ${bar.days.length} day${bar.days.length === 1 ? '' : 's'}`,
+      explain: `${bar.label} comes back onto ${bar.days.join(', ')}. The task keeps its other days either way.`,
+    }, () => writeDays(bar.task, others));
+  }
+  function resolveBarAsk(alsoDelete: boolean) {
+    const bar = barAsk;
+    setBarAsk(null);
+    if (!bar) return;
+    if (alsoDelete) { deleteAssignment(bar.task.id); return; }
+    track({
+      weight: 'content',
+      label: `Took ${bar.label} off the notebook`,
+      explain: `${bar.label} comes back onto its days. The task is kept either way.`,
+    }, () => writeDays(bar.task, []));
+  }
 
   const todayIso = iso(new Date());
 
@@ -1351,10 +1466,9 @@ export function PlannerWidget({
                  * again by itself, because then it has something in it.
                  * Per week and automatic: busy next week = full row there.
                  */
-                const weekEmpty = days.every(dt => {
-                  const k = cellKey(pid, iso(dt));
-                  return !(cells[k]?.length) && !(taskChips.get(k)?.length);
-                });
+                const rowBars = barsByRow.get(`${pid}|${iso(wkStart)}`) ?? [];
+                const laneCount = rowBars.reduce((m, bar) => Math.max(m, bar.lane + 1), 0);
+                const weekEmpty = !rowBars.length && days.every(dt => !(cells[cellKey(pid, iso(dt))]?.length));
                 const rowLit = hover?.person === pid && days.some(dt => iso(dt) === hover.day);
                 const squished = weekEmpty && !rowLit;
                 return (
@@ -1406,7 +1520,17 @@ export function PlannerWidget({
                             if (node && state !== 'ending') cellRefs.current.set(key, node);
                             else cellRefs.current.delete(key);
                           }}
-                          className="group/cell p-0.5 flex flex-col gap-0.5 items-stretch"
+                          className="group/cell relative p-0.5 flex flex-col gap-0.5 items-stretch"
+                          data-cell-person={pid} data-cell-day={day}
+                          onMouseEnter={() => { if (!ro && state === 'on') setPlusCell(key); }}
+                          onMouseLeave={() => setPlusCell(c => (c === key ? null : c))}
+                          onPointerDown={e => {
+                            // A finger has no hover: the first tap on an empty
+                            // square shows the plus, the plus makes the job.
+                            if (e.pointerType === 'touch' && e.target === e.currentTarget && !ro && state === 'on') {
+                              setPlusCell(c => (c === key ? null : key));
+                            }
+                          }}
                           style={{
                             // A slot is a rectangle a job card fits in, and it
                             // grows by whole cards — never by squeezing them.
@@ -1426,6 +1550,30 @@ export function PlannerWidget({
                             outlineOffset: lit ? -2 : -1,
                           }}
                         >
+                          {/* The bars — every task, drawn from the task, spanning
+                              its days; lanes keep two tasks on one day apart. A
+                              cell a bar passes over leaves that lane's height
+                              free, so the bar drawn from the first cell lies over
+                              real room, never over another card. */}
+                          {Array.from({ length: laneCount }, (_, lane) => {
+                            const dayIdx = days.findIndex(x => iso(x) === day);
+                            const starts = rowBars.find(bar => bar.lane === lane && bar.startIdx === dayIdx);
+                            if (starts) {
+                              return (
+                                <TaskBar key={`bar-${starts.id}`} bar={starts} z={z} size={textSize} strip={strips}
+                                  readOnly={ro || state === 'ending'} isRtl={LT === 'he-IL'}
+                                  onOpen={() => openBar(starts)}
+                                  onDropTo={t => dropBarTo(starts, t)}
+                                  onDragOff={() => { if (!starts.foreign) setBarAsk(starts); }}
+                                  onRemove={() => removeBar(starts)}
+                                  onResizeTo={dd => resizeBarTo(starts, dd)} />
+                              );
+                            }
+                            const covered = rowBars.some(bar => bar.lane === lane && bar.startIdx < dayIdx && dayIdx < bar.startIdx + bar.len);
+                            return covered
+                              ? <span key={`sp-${lane}`} aria-hidden="true" style={{ height: z(strips ? 22 : 40) }} />
+                              : null;
+                          })}
                           {entries.map(en => (
                             <PlannerCard
                               lang={lang}
@@ -1444,12 +1592,6 @@ export function PlannerWidget({
                               strip={strips}
                               onOpen={() => {
                                 if (!en.jobId) return;
-                                // Another workspace's job PEEKS — the owner's
-                                // rule: clicking it must not carry you off the
-                                // board you are standing on. Only when the host
-                                // offers no peek does the old travel (switch
-                                // first, then the intent — setCurrentProject
-                                // clears a pending focus on arrival) remain.
                                 if (en.projectId && en.projectId !== currentProjectId) {
                                   if (openUnit) { openUnit(en.projectId, en.jobId); return; }
                                   setCurrentProject(en.projectId);
@@ -1462,185 +1604,53 @@ export function PlannerWidget({
                               onText={v => setCell(key, entries.map(x => (x.id === en.id ? { ...x, text: v } : x)))}
                               onRemove={() => {
                                 /**
-                                 * One day of a multi-day task comes off SILENTLY (the
-                                 * locked decision): the entry goes, the day is rewritten
-                                 * out of the task, and the task carries on on its other
-                                 * days. The questions below are for last-remaining days.
-                                 */
-                                const t = taskOf(en);
-                                if (t && taskSquares(t.id) > 1) {
-                                  track({
-                                    weight: 'content',
-                                    label: `Took a day of ${cardName(en)} off the notebook`,
-                                    explain: `${cardName(en)} goes back onto ${squareName(key)} — one of the `
-                                      + 'days its task covers. The task itself keeps its other days.',
-                                  }, () => setCell(key, entries.filter(x => x.id !== en.id)));
-                                  const upd = removeTaskDay(daysOf(t), day);
-                                  if (upd) updateAssignment(t.id, upd);
-                                  return;
-                                }
-                                /**
-                                 * The X on a job's LAST square is a decision, so it asks.
-                                 *
-                                 * Taking that square away is the job LEAVING the notebook and
-                                 * going back on the board — a different act from tidying one of
-                                 * several days it sits on, and the office should be told which
-                                 * one is about to happen. With copies elsewhere the job is not
-                                 * going anywhere, so there is nothing to ask about and the
-                                 * square just goes.
-                                 *
-                                 * It raises the SAME question a drag off the notebook raises —
-                                 * `target: null` is the off-the-notebook branch of the drop
-                                 * dialog — so the two ways of doing one thing cannot drift
-                                 * into asking it differently.
+                                 * The X on a parked job's LAST square is a decision, so it
+                                 * asks — taking it away is the job leaving the notebook. With
+                                 * copies elsewhere the square just goes.
                                  */
                                 if (en.jobId && squaresFor(en.jobId) <= 1) {
                                   setDropAsk({ fromKey: key, entry: en, target: null });
                                   return;
                                 }
-                                const drop = () => track({
+                                track({
                                   weight: 'content',
                                   label: `Took ${cardName(en)} off ${squareName(key)}`,
                                   explain: `${cardName(en)} goes back onto ${squareName(key)} in the weekly `
-                                    + 'notebook, exactly as it was. The job itself is not touched — it is '
-                                    + 'still on the notebook on its other days.',
+                                    + 'notebook, exactly as it was. The job itself is not touched.',
                                 }, () => setCell(key, entries.filter(x => x.id !== en.id)));
-                                if (en.taskId && onRemoveTask) onRemoveTask(en, () => drop());
-                                else drop();
                               }}
-                              onDragOff={() => {
-                                // Dragging ONE day of a multi-day task off the sheet
-                                // takes just that day, silently — the same act as its X.
-                                const t = taskOf(en);
-                                if (t && taskSquares(t.id) > 1) {
-                                  track({
-                                    weight: 'content',
-                                    label: `Took a day of ${cardName(en)} off the notebook`,
-                                    explain: `${cardName(en)} goes back onto ${squareName(key)} — one of the `
-                                      + 'days its task covers. The task itself keeps its other days.',
-                                  }, () => setCell(key, entries.filter(x => x.id !== en.id)));
-                                  const upd = removeTaskDay(daysOf(t), day);
-                                  if (upd) updateAssignment(t.id, upd);
-                                  return;
-                                }
-                                setDropAsk({ fromKey: key, entry: en, target: null });
-                              }}
+                              onDragOff={() => setDropAsk({ fromKey: key, entry: en, target: null })}
                               onDragTo={(target, copy) => {
-                                const t = taskOf(en);
-                                // Ctrl/⌘ still copies outright — a shortcut for
-                                // anybody who knows it. A copied task card adds
-                                // its landing day to the task.
-                                if (copy) {
-                                  const landed = moveEntry(key, en, target, true);
-                                  if (landed && t) {
-                                    const upd = addTaskDay(daysOf(t), target.day);
-                                    if (upd) updateAssignment(t.id, upd);
-                                  }
-                                  return;
-                                }
-                                /**
-                                 * A single day of a multi-day task ASKS — the owner's
-                                 * 2026-08-27 ruling, superseding the earlier silent
-                                 * move: move this day, add this day to the task, or a
-                                 * new task on this day. Dropping the card back on its
-                                 * own square still means nothing and asks nothing.
-                                 */
-                                if (t && taskSquares(t.id) > 1) {
-                                  if (cellKey(target.person, target.day) === key) return;
-                                  setDayAsk({ fromKey: key, entry: en, target });
-                                  return;
-                                }
-                                // A plain drag asks, because the same gesture used
-                                // to mean three very different things silently.
+                                // Ctrl/⌘ still copies outright; a plain drag asks,
+                                // because the same gesture used to mean three
+                                // different things silently.
+                                if (copy) { moveEntry(key, en, target, true); return; }
+                                if (cellKey(target.person, target.day) === key) return;
                                 setDropAsk({ fromKey: key, entry: en, target });
                               }}
                             />
                           ))}
-                          {/* Tasks with this day and this worker on them —
-                              drawn dashed, because they are the TASK showing
-                              itself, not a planner card: change the task's
-                              date or worker where the task lives and the chip
-                              follows. Clicking opens the job — a PEEK when it
-                              lives in another workspace, so you stay put.
-                              A chip whose JOB already has a card in this same
-                              square is folded into that card (which lists the
-                              job's tasks itself now) — the owner's "separate
-                              tiles for tasks and for the job". */}
-                          {(taskChips.get(key) ?? [])
-                            .filter(t => !entries.some(en => en.jobId === t.jobId))
-                            .map(t => (
+                          {/* The big plus — only while the pointer hovers the
+                              square (locked: never a sheet of pluses). It opens
+                              the add-a-job dialog for this person and day. */}
+                          {!ro && state === 'on' && plusCell === key && (
                             <button
-                              key={t.id}
-                              data-no-drag data-el-action
-                              onClick={() => {
-                                if (!t.jobId) return; // a general job — no unit to open
-                                if (t.projectId && t.projectId !== currentProjectId) {
-                                  if (openUnit) { openUnit(t.projectId, t.jobId); return; }
-                                  setCurrentProject(t.projectId);
-                                  setPendingFocus({ kind: 'apartment', id: t.jobId });
-                                  return;
-                                }
-                                openJob(t.jobId);
-                              }}
-                              title={t.done
-                                ? 'Done — crossed off, never removed'
-                                : 'From the task list — change its day or worker on the task itself'}
-                              className="relative w-full text-left rounded-md px-1.5 py-1 min-w-0"
+                              data-no-drag data-el-action data-cell-plus
+                              onClick={() => { setPlusAsk({ person: pid, day }); setPlusCell(null); }}
+                              title="Add a job on this day"
+                              // Centred on an EMPTY square; tucked into the
+                              // corner once the square holds a bar — centred
+                              // it sat over the bar (z 4 over z 3) and took
+                              // every press meant to grab the bar.
+                              className={`absolute flex items-center justify-center rounded-full text-white shadow-lg ${
+                                laneCount ? 'right-0.5 bottom-0.5' : 'inset-0 m-auto'}`}
                               style={{
-                                border: '1px dashed rgba(15,23,42,.28)',
-                                backgroundColor: 'rgba(255,255,255,.65)',
-                                // Crossed off, not gone — a finished day is a
-                                // record, and deleting the record read as the
-                                // notebook losing the work.
-                                opacity: t.done ? 0.55 : undefined,
+                                width: z(strips || laneCount ? 22 : 30), height: z(strips || laneCount ? 22 : 30),
+                                backgroundColor: '#1e3a5f', opacity: 0.92, zIndex: 4,
+                                pointerEvents: 'auto',
                               }}
                             >
-                              {t.done && (
-                                <span aria-hidden="true" className="pointer-events-none absolute"
-                                  style={{
-                                    left: 4, right: 4, top: '50%',
-                                    borderTop: `${Math.max(2, z(2.5))}px solid #475569`,
-                                    transform: 'rotate(-4deg)', opacity: 0.8,
-                                  }} />
-                              )}
-                              <span className="flex items-start gap-1 min-w-0">
-                                <ClipboardList
-                                  size={Math.max(9, Math.round(z(10)))}
-                                  className="flex-shrink-0 mt-0.5 text-slate-400"
-                                />
-                                <span className="flex-1 min-w-0">
-                                  <span className="block truncate"
-                                    style={{ fontSize: textSize, fontWeight: 700, color: '#334155' }}>
-                                    {t.workspace && (
-                                      <span style={{ color: '#7c3aed' }}>{t.workspace} · </span>
-                                    )}
-                                    {t.label}
-                                  </span>
-                                  {t.desc && (
-                                    <span className="block truncate font-medium"
-                                      style={{ fontSize: Math.max(z(7), textSize - z(2)), color: '#64748b' }}>
-                                      {t.desc}
-                                    </span>
-                                  )}
-                                  {t.done && (
-                                    <span className="block font-semibold"
-                                      style={{ fontSize: Math.max(z(7), textSize - z(3)), color: '#64748b' }}>
-                                      done
-                                    </span>
-                                  )}
-                                </span>
-                              </span>
-                            </button>
-                          ))}
-                          {!ro && state === 'on' && (
-                            <button
-                              data-no-drag data-el-action
-                              onClick={() => setCell(key, [...entries, { id: newEntryId(), text: '' }])}
-                              title="Add a note to this day"
-                              className="self-start px-0.5 text-gray-300 hover:text-[#1e3a5f]
-                                         opacity-0 group-hover/cell:opacity-100 transition-opacity"
-                            >
-                              <Plus size={9} />
+                              <Plus size={Math.max(12, Math.round(z(16)))} strokeWidth={3} />
                             </button>
                           )}
                         </div>
@@ -1677,84 +1687,54 @@ export function PlannerWidget({
         document.body,
       )}
 
-      {/* What dragging ONE DAY of a multi-day task meant — same portal rule. */}
-      {dayAsk && (() => {
-        const t = taskOf(dayAsk.entry);
-        const fromDay = dayAsk.fromKey.split('|')[1];
-        const days = t ? daysOf(t) : [];
-        const num = t ? dayNumberOf(days, fromDay) : null;
-        return createPortal(
-          <PlannerDayDialog
-            jobName={cardName(dayAsk.entry)}
-            dayNum={num?.k ?? 1}
-            dayCount={days.length || 1}
-            fromLabel={squareName(dayAsk.fromKey)}
-            toLabel={squareName(cellKey(dayAsk.target.person, dayAsk.target.day))}
-            toDay={dayName(cellKey(dayAsk.target.person, dayAsk.target.day))}
-            covered={dayAsk.target.day !== fromDay && days.includes(dayAsk.target.day)}
-            onCancel={() => setDayAsk(null)}
-            onDone={resolveDayChoice}
-          />,
-          document.body,
-        );
-      })()}
-
-      {/* "New task on this day": the standing task form, three-quarters filled
-          in — the dragged card never moved, and the form's own days place one
-          card per day on the target person's row. */}
-      {newTaskAsk && (() => {
-        const job = newTaskAsk.entry.jobId ? jobById.get(newTaskAsk.entry.jobId) : undefined;
-        if (!job) return null;
-        const who = personOf(newTaskAsk.target.person, contractors, users);
+      {/* The add-a-job dialog from a square's plus (scene 3). Whatever it
+          makes is a TASK, and the notebook draws tasks from the tasks — so the
+          only thing written here is a row for a worker who was not on the
+          sheet, and a parked card for "just put it on the planner". */}
+      {plusAsk && (() => {
+        const who = personOf(plusAsk.person, contractors, users);
         return createPortal(
           <PlannerTaskDialog
-            job={job}
-            person={who}
-            dayIso={newTaskAsk.target.day}
+            jobs={jobs}
+            person={{ name: who.name, color: who.color, contractorId: rowContractorId(plusAsk.person) ?? undefined }}
+            dayIso={plusAsk.day}
             stages={stages}
             contractors={contractors}
-            onCancel={() => setNewTaskAsk(null)}
-            onDone={(taskId, taskDays) => {
-              /**
-               * The store queues its "this job is on the planner and just got
-               * a dated task" question (plannerAsk) the moment the dialog
-               * creates the task — right for a task typed elsewhere, and
-               * exactly wrong here: this task was made FROM the planner and
-               * its day cards are placed two lines down. Left standing, the
-               * modal's backdrop silently swallowed every later press on the
-               * board. Answer it as "leave the planner alone" ourselves.
-               */
-              const queued = useStore.getState().plannerAsk;
-              if (queued && queued.jobId === newTaskAsk.entry.jobId) {
-                useStore.getState().answerPlannerAsk('skip');
-              }
-              const person = newTaskAsk.target.person;
-              const dds = taskDays?.length ? taskDays : [newTaskAsk.target.day];
-              track({
-                weight: 'content',
-                label: `Planned a new task for ${cardName(newTaskAsk.entry)}`,
-                explain: `The new task's day cards come back off the notebook. The task `
-                  + 'itself stays on the job either way.',
-              }, () => {
-                const next = { ...cells };
-                for (const dd of dds) {
-                  const k2 = cellKey(person, dd);
-                  const landing = next[k2] ?? [];
-                  // The same job twice in ONE square says nothing — its card
-                  // lists the job's tasks itself, so the new task shows there.
-                  if (landing.some(e => e.jobId === job.id)) continue;
-                  next[k2] = [...landing, {
-                    id: newEntryId(), jobId: job.id, at: new Date().toISOString(), ...(taskId ? { taskId } : {}),
-                  }];
+            onCancel={() => setPlusAsk(null)}
+            onDone={(r: TaskDialogResult) => {
+              const patch: Partial<PlannerData> = {};
+              const missing = r.contractorIds.map(c => `c:${c}`).filter(pidc => !people.includes(pidc));
+              if (missing.length) patch.people = [...people, ...missing];
+              const last = r.days[r.days.length - 1];
+              Object.assign(patch, runCover(r.days[0] ?? plusAsk.day), last ? runCover(last) : {});
+              if (r.parked && r.jobId) {
+                const key = cellKey(plusAsk.person, plusAsk.day);
+                const landing = cells[key] ?? [];
+                if (!landing.some(e => e.jobId === r.jobId)) {
+                  patch.cells = { ...cells, [key]: [...landing, {
+                    id: newEntryId(), jobId: r.jobId, at: new Date().toISOString(),
+                    ...(r.projectId ? { projectId: r.projectId } : {}),
+                  }] };
                 }
-                write({ cells: next });
-              });
-              setNewTaskAsk(null);
+              }
+              if (Object.keys(patch).length) write(patch);
+              setPlusAsk(null);
             }}
           />,
           document.body,
         );
       })()}
+
+      {/* A bar's last days coming off: keep the task (dateless) or delete it. */}
+      {barAsk && createPortal(
+        <PlannerRemoveDialog
+          jobName={barAsk.label}
+          taskName={barAsk.desc || 'the task on it'}
+          onCancel={() => setBarAsk(null)}
+          onDone={resolveBarAsk}
+        />,
+        document.body,
+      )}
     </div>
   );
 }
@@ -1770,6 +1750,170 @@ function monthKey(d: Date): string {
 
 /** The height of one empty slot — sized so a job card sits in it comfortably. */
 const SLOT_H = 58;
+
+/** One drawn stretch of a task on one worker's row in one week. */
+export interface TaskBarSeg {
+  id: string;
+  taskId: string;
+  task: ContractorAssignment;
+  pid: string;
+  weekKey: string;
+  startIdx: number;
+  len: number;
+  days: string[];
+  label: string;
+  desc: string;
+  jobId: string;
+  projectId?: string;
+  workspace?: string;
+  done: boolean;
+  stageFrom?: Stage;
+  stageTo?: Stage;
+  foreign: boolean;
+  lane: number;
+}
+
+/**
+ * A task on the sheet — ONE bar across its days (the Google Calendar manner):
+ * the job's name, "on → to" stages and the day count, the ON stage's colour
+ * on its left edge; dimmed and struck when the task is closed. Drag it to
+ * another square to move the whole task; pull its right edge to change how
+ * many days; the X takes this stretch off. A foreign task (another
+ * workspace's) opens on a click and does nothing else — its record lives
+ * elsewhere. Drawn from the FIRST cell of its stretch and laid over the
+ * cells to its right, which leave that lane's height free.
+ */
+function TaskBar({ bar, z, size, strip, readOnly, isRtl, onOpen, onDropTo, onDragOff, onRemove, onResizeTo }: {
+  bar: TaskBarSeg;
+  z: (n: number) => number;
+  size: number;
+  strip: boolean;
+  readOnly: boolean;
+  isRtl: boolean;
+  onOpen: () => void;
+  onDropTo: (target: RotaHit) => void;
+  onDragOff: () => void;
+  onRemove: () => void;
+  onResizeTo: (day: string) => void;
+}) {
+  const drag = useRef<{ x: number; y: number; live: boolean; resize: boolean } | null>(null);
+  const [held, setHeld] = useState(false);
+  const editable = !readOnly && !bar.foreign;
+  const color = bar.stageFrom?.color ?? '#6366f1';
+  const h = z(strip ? 22 : 40);
+  const n = bar.len;
+
+  const handlers = editable ? {
+    onPointerDown: (e: React.PointerEvent) => {
+      if ((e.target as HTMLElement).closest('[data-card-action]')) return;
+      const resize = !!(e.target as HTMLElement).closest('[data-bar-edge]');
+      drag.current = { x: e.clientX, y: e.clientY, live: false, resize };
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      e.stopPropagation();
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      const dd = drag.current;
+      if (!dd) return;
+      if (!dd.live && Math.hypot(e.clientX - dd.x, e.clientY - dd.y) < 4) return;
+      if (!dd.live && !dd.resize) announceNotebookDrag(true);
+      dd.live = true;
+      setHeld(true);
+      const hit = rotaCellAt(e.clientX, e.clientY);
+      setRotaHover(dd.resize ? (hit && hit.person === bar.pid ? hit : null) : hit);
+      if (!dd.resize) quickBoxHover(e.clientX, e.clientY);
+    },
+    onPointerUp: (e: React.PointerEvent) => {
+      const dd = drag.current;
+      drag.current = null;
+      setHeld(false);
+      announceNotebookDrag(false);
+      (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+      if (!dd?.live) {
+        if (!(e.target as HTMLElement).closest('[data-card-action],[data-bar-edge]')) onOpen();
+        return;
+      }
+      const target = rotaCellAt(e.clientX, e.clientY);
+      setRotaHover(null);
+      if (dd.resize) { if (target && target.person === bar.pid) onResizeTo(target.day); return; }
+      if (quickBoxTake(e.clientX, e.clientY, bar.label,
+        (person, dayIso) => onDropTo({ elId: '', probeId: 'quick-assign', person, day: dayIso }))) return;
+      if (target) { onDropTo(target); return; }
+      onDragOff();
+    },
+    onPointerCancel: () => {
+      drag.current = null; setHeld(false); setRotaHover(null); announceNotebookDrag(false);
+    },
+  } : { onClick: () => onOpen() };
+
+  const pair = bar.stageFrom || bar.stageTo
+    ? `${bar.stageFrom ? getStageName(bar.stageFrom, isRtl) : ''}${bar.stageTo ? ` → ${getStageName(bar.stageTo, isRtl)}` : ''}`
+    : '';
+  const sub = [pair, bar.desc].filter(Boolean).join(' · ');
+
+  return (
+    <div
+      {...handlers}
+      data-no-drag data-el-action data-task-bar={bar.taskId} data-bar-days={bar.len}
+      className="group/bar relative rounded-md min-w-0 flex-shrink-0"
+      title={bar.done ? 'Done — crossed off, never removed'
+        : bar.foreign ? `${bar.workspace ?? 'Another workspace'} — opens on a click`
+        : 'Click to open · drag to move · pull the right edge for more days'}
+      style={{
+        position: 'relative', zIndex: 3,
+        // n cells plus the gaps and paddings between them — the bar lies
+        // across real cells, so its width is the cells' own.
+        width: n > 1 ? `calc(${n * 100}% + ${(n - 1) * 5}px)` : '100%',
+        minHeight: h,
+        backgroundColor: bar.done ? '#f1f5f9' : '#eef4fa',
+        border: `1px solid ${bar.done ? '#e2e8f0' : '#c7d4e0'}`,
+        borderLeft: `${Math.max(3, z(4))}px solid ${color}`,
+        padding: `${Math.max(2, z(3))}px ${Math.max(4, z(6))}px`,
+        opacity: held ? 0.45 : bar.done ? 0.6 : undefined,
+        cursor: editable ? 'grab' : 'pointer',
+        touchAction: 'none',
+        transition: 'opacity 120ms ease',
+      }}
+    >
+      {bar.done && (
+        <span aria-hidden="true" className="pointer-events-none absolute"
+          style={{ left: 6, right: 6, top: '50%', borderTop: `${Math.max(2, z(2))}px solid #475569`, transform: 'rotate(-2deg)', opacity: 0.8 }} />
+      )}
+      <div className="flex items-start gap-1 min-w-0">
+        <div className="flex-1 min-w-0">
+          <div className="truncate" style={{ fontSize: size, fontWeight: 800, color: '#1e3a5f', lineHeight: 1.2 }}>
+            {bar.workspace && <span style={{ color: '#7c3aed' }}>{bar.workspace} · </span>}
+            {bar.label}
+            {bar.done && (
+              // The record: a stretch whose days ran PAST the close says so.
+              <span data-bar-done style={{ color: '#64748b', fontWeight: 700 }}>
+                {' · '}{(bar.task.completedAt ?? '').slice(0, 10) < bar.days[bar.days.length - 1] ? 'finished early' : 'done'}
+              </span>
+            )}
+          </div>
+          {!strip && sub && (
+            <div className="truncate" style={{ fontSize: Math.max(z(7), size - z(2)), fontWeight: 600, color: '#64748b' }}>
+              {sub}{n > 1 ? ` · ${n} days` : ''}
+            </div>
+          )}
+        </div>
+        {editable && (
+          <button data-card-action data-bar-remove onClick={e => { e.stopPropagation(); onRemove(); }}
+            title="Take this off the sheet"
+            className="flex-shrink-0 rounded text-slate-400 hover:text-red-500 opacity-0 group-hover/bar:opacity-100"
+            style={{ padding: 1 }}>
+            <X size={Math.max(9, Math.round(z(10)))} />
+          </button>
+        )}
+      </div>
+      {editable && (
+        <span data-bar-edge aria-hidden="true"
+          className="absolute top-0 bottom-0 cursor-ew-resize"
+          style={{ right: 0, width: Math.max(6, z(8)) }}
+          title="Pull for more days" />
+      )}
+    </div>
+  );
+}
 
 /**
  * One thing in a slot.
