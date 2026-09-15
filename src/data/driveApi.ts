@@ -957,3 +957,51 @@ export async function listPlansViaBackend(plansFolderId: string): Promise<{
   out.sort((a, b) => (a.kind === b.kind ? b.name.localeCompare(a.name, undefined, { numeric: true }) : 0));
   return { plans: out, annotatedFolderId };
 }
+
+/**
+ * One entry of a folder browsed like Drive itself — folder or file, with the
+ * one question the browser asks of a file already answered: can this be
+ * OPENED here (`viewable`, the isViewableFile rule), so a CAD file wears a
+ * type badge and no star instead of a preview that shows nothing.
+ */
+export interface DriveChild {
+  id: string;
+  name: string;
+  mimeType: string;
+  isFolder: boolean;
+  viewable: boolean;
+  isImage: boolean;
+}
+
+/**
+ * A folder's FOLDERS AND FILES together, for the plan browser.
+ *
+ * The route already answers both with mime types (shortcut-aware and
+ * paginated — see api/drive-files.js); the siblings above each keep one
+ * half. Folders first, A–Z; files in natural order (sheet 2 before sheet
+ * 10). `null` — not an empty list — when Drive refused the listing, so the
+ * browser can say "would not let the app read this folder" rather than
+ * drawing an empty folder that is not empty.
+ */
+export async function listFolderChildrenViaBackend(folderId: string): Promise<
+  { folders: DriveChild[]; files: DriveChild[] } | null
+> {
+  try {
+    const rows = await listFolderViaBackend(folderId);
+    const nat = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+    const folders: DriveChild[] = rows
+      .filter(f => f.mimeType === FOLDER_MIME)
+      .map(f => ({ id: f.id, name: f.name, mimeType: f.mimeType, isFolder: true, viewable: false, isImage: false }))
+      .sort((a, b) => nat(a.name, b.name));
+    const files: DriveChild[] = rows
+      .filter(f => f.mimeType !== FOLDER_MIME)
+      .map(f => ({
+        id: f.id, name: f.name, mimeType: f.mimeType, isFolder: false,
+        viewable: isViewableFile(f), isImage: isImageFile(f),
+      }))
+      .sort((a, b) => nat(a.name, b.name));
+    return { folders, files };
+  } catch {
+    return null;
+  }
+}

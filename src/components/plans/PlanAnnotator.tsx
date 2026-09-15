@@ -792,6 +792,7 @@ function PlanEditor({
   touchScale = 1, chooseSaveFolder = false, sheetOverlay,
   tabStrip, initialWork, workRef, onOpenPlanNewTab, onUnsavedChange,
   onClose, onToast, onPickPlan, onStartMarkup, onSavedToDrive,
+  onPreviewPlan, onStarPlan, starredPlanId,
 }: {
   planFileId: string;
   /**
@@ -893,6 +894,15 @@ function PlanEditor({
   onOpenPlanNewTab?: (p: PlanChoice) => void;
   /** Fires when this tab's has-unsaved-marks answer changes, for its cloud. */
   onUnsavedChange?: (unsaved: boolean) => void;
+  /** The picker's expand arrow — open the sheet as a LOOK (the wrapper decides where). */
+  onPreviewPlan?: (p: PlanChoice) => void;
+  /**
+   * THE STAR on the picker's tiles: "make this the contractor's plan". The
+   * host writes plansPdfLink; `starredPlanId` is what it holds now. Without
+   * the callback the picker draws no star.
+   */
+  onStarPlan?: (p: PlanChoice) => void;
+  starredPlanId?: string | null;
   onClose: () => void;
   onToast?: (msg: string, kind?: 'success' | 'error') => void;
   onPickPlan?: (p: PlanChoice) => void;
@@ -4874,6 +4884,12 @@ function PlanEditor({
             onOpenPlanNewTab(p);
             setShowPlans(false);
           })}
+          onStar={onStarPlan}
+          starredId={starredPlanId}
+          onPreview={onPreviewPlan && (p => {
+            onPreviewPlan(p);
+            setShowPlans(false);
+          })}
           onClose={() => setShowPlans(false)}
         />
       )}
@@ -5209,7 +5225,7 @@ function AskFirst({ title, body, confirm, second, danger, onCancel, onConfirm, o
  * version numbers). Nothing else about saving changes.
  */
 type PlanHostProps = Omit<Parameters<typeof PlanEditor>[0],
-  'tabStrip' | 'initialWork' | 'workRef' | 'onOpenPlanNewTab' | 'onUnsavedChange'>;
+  'tabStrip' | 'initialWork' | 'workRef' | 'onOpenPlanNewTab' | 'onUnsavedChange' | 'onPreviewPlan'>;
 
 /** Session memory of every tab's work — survives host remounts, not reloads. */
 const tabWorkMap = new Map<string, TabWork>();
@@ -5501,7 +5517,7 @@ export function PlanAnnotator(props: PlanHostProps) {
   /** Picks from the Plans chooser: a sketch gets ITS OWN tab; an original
    *  replaces the current tab (as pressing a row always did) and still goes
    *  through the host, which is what writes plansPdfLink for originals. */
-  const handlePick = useCallback((p: PlanChoice) => {
+  const handlePick = useCallback((p: PlanChoice, look = false) => {
     if (p.kind === 'annotated') { openInNewTab(p); return; }
     const apply = stashRef.current();
     setState(s => {
@@ -5519,8 +5535,21 @@ export function PlanAnnotator(props: PlanHostProps) {
         activeId: s.activeId,
       };
     });
-    onPickPlan?.(p);
+    // A LOOK replaces the sheet on screen and tells the host nothing — the
+    // host's onPickPlan is what writes plansPdfLink, and a preview is never
+    // a choice.
+    if (!look) onPickPlan?.(p);
   }, [openInNewTab, onPickPlan]);
+
+  /**
+   * The picker's expand arrow. Where there is a tab strip the look opens in
+   * its own tab (the + already means exactly this); a preview surface has no
+   * strip, so the look takes the current sheet's place — silently.
+   */
+  const handleLook = useCallback((p: PlanChoice) => {
+    if (!readOnly && !embedded) { openInNewTab(p); return; }
+    handlePick(p, true);
+  }, [readOnly, embedded, openInNewTab, handlePick]);
 
   if (!active) return null;
 
@@ -5555,6 +5584,7 @@ export function PlanAnnotator(props: PlanHostProps) {
       onSavedToDrive={noteSaved}
       onUnsavedChange={setActiveUnsaved}
       onPickPlan={handlePick}
+      onPreviewPlan={handleLook}
       /* No strip means no visible tab to open into — the picker's
          open-in-new-tab rows exist only where the strip does. */
       onOpenPlanNewTab={(!readOnly && !embedded) ? openInNewTab : undefined}
@@ -5569,6 +5599,10 @@ export function PlanAnnotator(props: PlanHostProps) {
         plans={mergedPlans}
         current={active.fileId}
         onPick={p => plusPick(p)}
+        /* From the + every door is a fresh tab and a look — the arrow too. */
+        onPreview={p => plusPick(p)}
+        onStar={props.onStarPlan}
+        starredId={props.starredPlanId}
         onClose={() => setPlusOpen(false)}
       />
     )}
