@@ -2,6 +2,7 @@
 // player, file attachments (paperclip + slightly bigger mic, bottom right),
 // and the delete-only-your-own rule.
 import { chromium } from 'playwright';
+import { PDFDocument, rgb } from 'pdf-lib';
 
 const SCRATCH = '/tmp/claude-0/-home-user-Wolfson-management-app/b8d14d64-4aa3-5544-895c-576d1b3eced3/scratchpad';
 let fails = 0;
@@ -43,9 +44,17 @@ await ctx.addInitScript(([today, wav]) => {
 }, [day(0), WAV]);
 
 const page = await ctx.newPage();
-// The plan iframe points at drive.google.com — dead in this container; give it
-// an empty page so nothing hangs.
-await page.route('**://drive.google.com/**', r => r.fulfill({ status: 200, contentType: 'text/html', body: '<html></html>' }));
+// The expanded preview draws the sheet ITSELF now (pdf.js over /api/drive-fetch,
+// with the pins on the sheet), so a real PDF is served on that route; the
+// collapsed thumbnail still points at drive.google.com — aborted, so nothing
+// hangs (an HTML answer there trips the aspect probe's image decode).
+const planDoc = await PDFDocument.create();
+const pg = planDoc.addPage([1191, 842]);
+pg.drawRectangle({ x: 30, y: 30, width: 1131, height: 782, borderWidth: 2, borderColor: rgb(0.1, 0.1, 0.2) });
+const planBytes = Buffer.from(await planDoc.save());
+await page.route('**/api/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
+await page.route('**/api/drive-fetch', r => r.fulfill({ status: 200, contentType: 'application/pdf', body: planBytes }));
+await page.route('**://drive.google.com/**', r => r.abort());
 await page.goto('http://localhost:5173/c/t1');
 await page.waitForTimeout(2500);
 
@@ -65,6 +74,11 @@ await page.evaluate(() => {
   const f = document.querySelector('iframe[title="Engineering Plans"]');
   f?.parentElement?.click();
 });
+// The pins ride the sheet — wait for pdf.js to draw it.
+for (let i = 0; i < 80; i++) {
+  if (await page.evaluate(() => [...document.querySelectorAll('[data-plan-surface="pane"] canvas')].some(c => c.width > 50))) break;
+  await page.waitForTimeout(250);
+}
 await page.waitForTimeout(600);
 
 // The worker has an Add Pin control now.
@@ -77,7 +91,7 @@ const pinBtn = await page.evaluate(() => {
 check(!!pinBtn, 'the worker sees an Add Pin button on the plan');
 await page.waitForTimeout(300);
 // Tap the plan to drop the pin.
-const frame = await page.locator('iframe[title="Engineering Plans"]').boundingBox();
+const frame = await page.locator('[data-plan-surface="pane"] canvas').first().boundingBox();
 await page.mouse.click(frame.x + frame.width * 0.6, frame.y + frame.height * 0.55);
 await page.waitForTimeout(700);
 const pins = await page.evaluate(() =>

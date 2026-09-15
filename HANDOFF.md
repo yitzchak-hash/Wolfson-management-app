@@ -15,7 +15,8 @@ exactly there.
 - App: the TzviAir job board / CRM — React 19 + TS + Vite, Zustand, Firestore,
   Vercel. Production branch `claude/blissful-cray-spTFY` deploys to
   wolfson-management-app.vercel.app. This session also pushes
-  `claude/ui-widget-fixes-fosqdk`; both must end each round at the same commit.
+  `claude/handoff-documentation-aei1ev`; both must end each round at the
+  same commit.
 - Three workspaces: Wolfson (buildings), Netiv (buildings), the Job Board
   (`general`, free canvas, ~1,650 jobs after the CRM import and the Drive sweep).
 
@@ -26,7 +27,9 @@ exactly there.
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2026-12-17` — the next entry must be a later date). 6. A CLAUDE.md
+   newest is `2026-12-22` — the next entry must be a later date (an older
+   entry lower down also wears `2026-12-20`; the marker compares only the TOP
+   entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`. 8. Rewrite THIS file.
 9. Commit (footer: `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`
    + `Claude-Session: <session url>`), push the working branch, then
@@ -40,60 +43,96 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-15)
+## Where things stand (2026-09-08, seventh round of the day)
 Last commits, newest first (see `git log`):
-- **This round (nothing built — a plan page only)**: the owner asked for
+- **2026-09-15 — a plan page only, nothing built**: the owner asked for
   urgent changes in three places and for before/after previews in ONE
   artifact before anything is built. Published "Buildings, Plans and the
   Notebook Plus" (https://claude.ai/artifact/Y8ujqL3CjhocFFGn5C5W9B; copy in
   `docs/artifacts/2026-09-15-buildings-plans-notebook-plus.html`; template
   `scratchpad/settings-plans-notebook-plan.template.html`, built with
   `scratchpad/build-plan-page.mjs`). It ends in six starred questions. **Build
-  only when he answers the stars and says "build it".** What the page
-  proposes, in short: (1) project settings → Buildings opens full screen and
-  draws the diagram's own cells (number + family + stage colour); move a cell
-  to another floor with an ask about the number; select several cells and
-  merge them into one square spanning the row (the lobby is one job); the
-  builder's floors become the project page's floors exactly (Roof, 15/14 wide,
-  13…2, "1 · Lobby", -0.5, -1, -2 — the empty Ground / Commercial row
-  dropped); every row the same height so lobby text is never cut off.
-  (2) The drawer's plan pane browses the job's Drive folder like Drive —
-  breadcrumb, folder tiles, plan tiles with Drive thumbnails — whenever there
-  is no Engineered Plans folder (and behind a browse button when there is);
-  a star on every plan tile in every folder, and in the Plans chooser, writes
-  `plansPdfLink` = the contractor's plan and what the drawer reopens on.
-  (3) The notebook: pressing a day square shows a big plus; the plus opens
-  the standing drop dialog with a job-search step in front (every workspace,
-  apartment or general job), who, what (MessageBox), days, when-done stage;
-  the free-words entry survives only behind "Just a note instead".
-  Facts gathered for the build: builder = `src/components/settings/ProjectBuilder.tsx`
-  (CELL_W 54 / CELL_H 40, number-only cells, floor label inputs) +
-  `src/data/projectLayout.ts` (joinSlots/unjoinSlot/proposeNumbering/…);
-  diagram rows in `BuildingDiagram.tsx` `getFloorRows` (lobby/ground rows 44px
-  vs 68 normal — the cut-off); the free-words entry is
-  `PlannerWidget.tsx` ~line 1638 (`setCell(key, [...entries, {id, text:''}])`);
+  only when he answers the stars and says "build it".** What it proposes:
+  (1) project settings → Buildings opens full screen and draws the diagram's
+  own cells (number + family + stage colour); move a cell to another floor
+  with an ask about the number; select several cells and merge them into one
+  square spanning the row (the lobby is one job); the builder's floors become
+  the project page's floors exactly (Roof, 15/14 wide, 13…2, "1 · Lobby",
+  -0.5, -1, -2 — the empty Ground / Commercial row dropped); every row the
+  same height so lobby text is never cut off. (2) The drawer's plan pane
+  browses the job's Drive folder like Drive — breadcrumb, folder tiles, plan
+  tiles with Drive thumbnails — whenever there is no Engineered Plans folder
+  (behind a browse button when there is); a star on every plan tile in every
+  folder, and in the Plans chooser, writes `plansPdfLink` = the contractor's
+  plan and what the drawer reopens on. (3) The notebook: pressing a day
+  square shows a big plus; the plus opens the standing drop dialog with a
+  job-search step in front (every workspace, apartment or general job), who,
+  what (MessageBox), days, when-done stage; the free-words entry survives
+  only behind "Just a note instead". Facts for the build: builder =
+  `src/components/settings/ProjectBuilder.tsx` (CELL_W 54 / CELL_H 40,
+  number-only cells) + `src/data/projectLayout.ts` (joinSlots / unjoinSlot /
+  proposeNumbering); diagram rows in `BuildingDiagram.tsx` `getFloorRows`
+  (lobby/ground rows 44px vs 68 normal — the cut-off); the free-words entry
+  is `PlannerWidget.tsx` ~line 1638 (`setCell(key, [...entries, {id, text:''}])`);
   `PlanPicker.tsx` props `{driveLink, plansFolderId, plans, current, onPick,
   onOpenNewTab, onClose}`; thumbnails via `driveThumbUrl` (photoSrc.ts).
-- **This round**: the Windows Drive-folder helper rebuilt as ONE installer
-  (`src/data/tzviairHelper.ts`, `DriveDesktopPath.tsx`, the settings card),
-  Hebrew-safe PowerShell opener, paste-a-path detector (`parsePastedPath`,
-  `drive_shared_name`); `Apartment.driveFolderName` kept and searched
-  (header search, job list, search tile; sweep backfills); `HANDOFF.md`,
-  `docs/artifacts/`. `docs/research/SEARCH.md` (400 lines) is the reusable research
-  on making the search better — read it before touching search. Its top
-  asks, not yet built: one shared index module for the six search sites,
-  MiniSearch instead of Fuse (multi-token AND, field weights, ~1 ms per
-  keystroke), the remaining unindexed fields (tipus, attachment names, memo
-  transcripts, pins), one Hebrew normaliser, "why it matched" on rows. The
-  folder title is now read by the header search, the job list, the search
-  tile and the board's group window; the TV group window and Find-a-job
-  still do not read it.
-- Galaxy Tab S10 FE gallery + S Pen probe; the pen tray's Escape fixed.
-- Active jobs widget rebuilt as approved (`src/data/activityTouches.ts`).
-- Board speed after the import (stable audio handlers, group-window culling);
-  Drive check every 10 minutes with a refresh link.
-- Group totals list every group; group windows frame their content and take
-  the board's gestures; Drive sweep reports seen/linked/new.
+  This session's branch was merged with production (six commits from another
+  session: the search rebuild, the Hebrew drive name, the portal manifest,
+  the tablet round) — read those entries below as well.
+- **This round — the tablet list** (eight asks in one voice message): new
+  workers see the buildings by default (Contractor level +seeDiagrams
+  +seeAllApartments); a worker with `markUpPlans` gets Mark up on the portal
+  plan (the full studio); on the board a finger SCROLLS a widget's list
+  instead of panning, and a finger never drags a job row (the "jumpy"); the
+  pen's side button erases while held; touch-sized ink sliders; the green
+  version connector draws on an upright tablet (bottom rail); and the pins
+  ride the SHEET (`PlanEditor.sheetOverlay`) in the office pane and the
+  worker's preview — the portal's expanded preview now draws the sheet itself
+  instead of Google's iframe. Probe `round41-probe.mjs` (22). What's New
+  `2026-12-22`. NOT understood / not built: "the job widgets can be messed
+  around on an iPad" — asked him what he meant.
+- **This round — the Chrome shortcut** (owner: "Okay, it works" for the
+  helper, then: saving a Chrome shortcut to a worker's link "takes me back to
+  the main workspace page"). Cause: Chrome's Add-to-Home-screen / Install /
+  Create-shortcut never saves the page you are on — it launches the site
+  manifest's `start_url`, which is `/`. Fix: `src/data/portalManifest.ts` —
+  while `/c/<token>` is mounted the page's manifest link points at a blob
+  manifest whose `start_url`, `scope` and `id` are the worker's own absolute
+  link, named `TzviAir · <worker>` (the tab title follows); the office
+  manifest returns on unmount. Every worker's portal is its own app. Probe
+  `portalmanifest-probe.mjs` (8). What's New `2026-12-21`.
+- **This round — the helper's "still error"**: his screenshot showed the
+  path the app built was `G:\Shared drives\Potentials\…` — the shared drive's
+  own name ("TA Zoho Docs") missing, because the server names it through
+  `drives.get`, which Google refuses to a non-member service account. Fixed
+  three ways: the server tries the drive's root file for the name; the client
+  never skips the segment (server name → the name a pasted path taught this
+  machine → the default "TA Zoho Docs"); the Windows and Mac openers search
+  the drive folders one level down before saying "not on this computer".
+  `drivehelper-test.mjs` +6. The copy of the helper already on his PC works
+  with the corrected path; a re-download gets the deeper search too.
+- **This round — the search rebuild** (owner: "go ahead and build the search
+  rebuild"): `docs/research/SEARCH.md` items #2–#10 are BUILT. One MiniSearch
+  index per workspace (`src/data/searchIndex.ts`) read by all six search
+  boxes — header, search tile, job list, the board's and the TV's group
+  windows, Find-a-job. A job is found by its name, the Drive folder title
+  (split into family / first / number / city), address, phone with or without
+  dashes, tipus, unit tokens, a pasted Drive/Zoho link, a task's words, a
+  message, a memo's transcription, a punch-list pin, a file name. One Hebrew
+  normaliser + sound key (`hebrewNormalize.ts`; `translit.ts` and
+  `hebrewSearch.ts` delegate). Tiers a whole tier apart (starts-with first,
+  sounds-like last). "Found in …" line under header rows and tile rows.
+  Filter words `stage:` `group:` `worker:` `ws:` `is:problem` `is:pending`
+  (Hebrew twins), a hint under the list. Learned picks per workspace, 30-day
+  fade, "Forget what I picked before" on the empty box. `fuse.js` removed.
+  Probes: `hebnorm-test`, `searchindex-test`, `searchperf` (3,736 docs index
+  in ~215ms; worst keystroke 22ms), `gsearch` (+6). What's New `2026-12-19`.
+- Earlier today: the owner's real Explorer path (`G:\תיקיות אחסון שיתופי\TA
+  Zoho Docs\Potentials\…`) confirmed the Hebrew "Shared drives" name and the
+  drive name; a Hebrew browser composes the copied path with it by itself
+  (`defaultSharedName`). Before that: the Drive folder title stored by every
+  door and searched everywhere (SEARCH.md #1); HANDOFF.md + `docs/artifacts/`;
+  the one-file Hebrew-safe Windows helper.
 
 ## What the owner last asked (his exact wants)
 0. **(2026-09-15, OPEN — awaiting his stars)** "There's a few fixes we need to
@@ -113,35 +152,50 @@ Last commits, newest first (see `git log`):
    details, and create the task — the "three dots" free-text entry is broken.
    He wants "previews of all these behavior changes in an artifact, before and
    afters" — done; nothing built yet.
-1. **A handoff file kept updated after every response** so any AI can continue
-   with no lost context, and every artifact saved in the repo in order as
-   versions, never overwritten — DONE this round (this file, `docs/artifacts/`).
-2. **The Drive folder helper button** (Windows, Hebrew computers): sometimes
-   downloaded a .reg, sometimes a .cmd; the .cmd said the path is not in G:
-   although it is; pasting the copied path into Explorer opened nothing.
-   Rebuilt this round (see above). **He said he will send two example file
-   paths from a job** — when they arrive, check them against `parsePastedPath`
-   and `composeLocalPath` (scratchpad/drivehelper-test.mjs has the cases) and
-   confirm the Hebrew name of the "Shared drives" folder.
-3. **Search**: a word that was only in a job's Drive folder TITLE did not find
-   the job. Fixed by storing and indexing `driveFolderName`; he also asked for
-   an agent to research how to make search better and to keep that as a
-   reusable file → `docs/research/SEARCH.md`.
+1. **A handoff file kept updated after every response** — DONE (this file,
+   `docs/artifacts/`, the rule in CLAUDE.md).
+2. **The Drive folder helper button** (Windows, Hebrew computers) — rebuilt
+   and CONFIRMED WORKING by the owner ("Okay, it works", 2026-09-08) after the
+   drive-name fix.
+4. **A Chrome shortcut to a worker's link** must open that link — DONE
+   (see above).
+5. **The tablet list** (2026-09-08, voice message) — all built except the one
+   sentence nobody could parse: "the job widgets can be messed around on an
+   iPad". Waiting on his answer (moved by accident? cannot be moved?). He should re-make the shortcut from the worker's page
+   AFTER the deploy; a shortcut made before it still points at the old
+   manifest's home.
+3. **Search** — the folder-title fault fixed at the root, and now the full
+   rebuild he asked for after the research ("go ahead and build the search
+   rebuild") is built and pushed.
 
 ## Open threads / things to verify on production
-- The Drive helper has NOT been run on a real Hebrew Windows yet — the office
-  should: press Get the helper, double-click the one file, tick the box, press
-  the folder button. If Windows SmartScreen objects: More info → Run anyway.
-- The Active jobs widget's Drive rows depend on Vercel env `VITE_DRIVE_API_KEY`
-  and the function `api/drive-files.js` (`maxDuration` 30 in vercel.json).
+- **Try the new search on the real board**: type a first name that only
+  lives in a folder title, a phone number without dashes, a Hebrew spelling
+  of an English family, `group:done <name>`, `is:problem`. The row should say
+  where it matched. If anything ranks wrong, `scratchpad/searchindex-test.mjs`
+  is where a worked example goes first.
+- The sweep's backfill of folder titles runs on its two-hourly timer (needs
+  `VITE_DRIVE_API_KEY`); until it has run, jobs linked before 2026-09-08
+  carry no title and are found by name/address/phone only.
+- **Re-make the worker shortcut after the deploy** (Chrome menu → Add to Home
+  screen / Install / Create shortcut, from the worker's `/c/…` page). The icon
+  should carry the worker's name and open his page. If a shortcut STILL lands
+  on the office home, the phone's Chrome may have the office app installed
+  with scope `/` — uninstall that one first, then re-add from the portal.
 - Keys (Vercel only, never in the app): `OPENAI_API_KEY` (transcription,
   translation, the AI plan reader), optional `ANTHROPIC_API_KEY`,
   `GOOGLE_SERVICE_ACCOUNT_JSON`, `API_KEY` = `VITE_DRIVE_API_KEY`.
 - Standing pre-existing red harnesses (not this round's): `boardsize.mjs`
   (left-edge auto-pan), `gapboard.mjs` (a group under the board's chrome),
-  `stripsrow-probe` (2 checks), `mobdiagram.mjs` (stale assertion).
-- Decided, not built: search ranking by Drive activity; the Add Job modal
-  storing the folder title at submit (only paste/drawer/sweep store it now).
+  `stripsrow-probe` (2 checks), `mobdiagram.mjs` (stale assertion),
+  `round28.mjs` group-window section (dblclick on the Done bin times out;
+  its Add Job section passes); `storefull.mjs`'s one standing false
+  positive (`nobody-booked`).
+- Decided, not built: search ranking by Drive activity (CRM-CHECKLIST).
+- Container notes: `npm ci` then `npm install --no-save playwright@1.54.1`
+  (also `@pdf-lib/fontkit` if a plan-reader probe needs it — installing one
+  ad-hoc package prunes the other, install both together). Dev servers:
+  `npx vite --port 5173` and `VITE_DRIVE_API_KEY=test npx vite --port 5174`.
 
 ## The last reply the owner saw (so the next one continues it)
 **Newest (2026-09-15)**: the reply gave him the link to "Buildings, Plans and
@@ -154,13 +208,14 @@ answer on each, and asked him to answer the stars and say "build it". The
 next assistant's job: read his answers, then build exactly what the page
 shows with those answers, one round, probes and all.
 
-Previous round's summary follows.
-Summary of the previous assistant's final message: the Tab S10 FE page was
-published with 80 clean screens and 21 pen checks; the pen tray's Escape bug
-was fixed and pushed. Then the owner wrote the three asks above. The reply to
-THAT (this round) says: the handoff file and artifacts folder exist and the
-rule is in CLAUDE.md; the helper is one file now and why the old one failed
-(second download blocked; ASCII-only decoding and OEM code page broke Hebrew
-paths; ProgramData/HKCR needed admin); the folder title is now searched; the
-search research file is in `docs/research/SEARCH.md`; and it asks him to send
-the two example paths and to try the helper on one Hebrew PC.
+Earlier replies follow.
+He sent eight tablet asks in one message. This round's reply says, item by
+item: workers now start with the buildings shown; a worker allowed to mark up
+sees Mark up on his plan; a finger scrolls a widget's list and the jumpiness
+was a job row being dragged by the finger, which no longer happens; the pen's
+side button erases while held; the sliders are finger-sized; the green line
+draws in portrait; and the pins now sit on the plan itself in both the office
+window and the worker's phone (the phone draws the sheet the office's way
+instead of Google's frame). It asks what he meant by "the job widgets can be
+messed around on an iPad" — moved by accident, or cannot be moved at all —
+before touching the finger rule. Everything is on production.

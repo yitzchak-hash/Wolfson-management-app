@@ -372,6 +372,24 @@ html, body {
 }
 .ink-slider::-moz-range-track { height: 4px; border-radius: 999px; background: rgba(255,255,255,.18); }
 
+/* A finger cannot land on a 4px track with a 15px knob (the owner's "the
+   width and see-through sliders are hard to move" on the tablet). Where the
+   device has no hover — a touch screen, never "is this a tablet" — the box
+   grows to a thumb's height with the painted track kept thin inside it
+   (background-clip on the content box), and the knobs grow to touch size. */
+@media (any-hover: none) {
+  .ink-slider {
+    height: 6px; padding: 12px 0; box-sizing: content-box; background-clip: content-box;
+    touch-action: none;
+  }
+  .ink-slider::-webkit-slider-thumb { width: 28px; height: 28px; border-width: 4px; }
+  .ink-slider::-moz-range-thumb { width: 28px; height: 28px; border-width: 4px; }
+  .alpha-slider { height: 20px; touch-action: none; }
+  .alpha-slider::-webkit-slider-thumb { width: 30px; height: 30px; border-width: 4px; }
+  .alpha-slider::-moz-range-thumb { width: 30px; height: 30px; border-width: 4px; }
+  .ink-hue { height: 20px; touch-action: none; }
+}
+
 /* The see-through slider in the pen tray — the Samsung manner: the track IS a
    ramp from nothing to the ink, drawn over a checkerboard so "nothing" is
    visibly transparent rather than white. The two background layers (colour

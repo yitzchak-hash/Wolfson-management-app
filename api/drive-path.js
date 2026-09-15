@@ -87,8 +87,16 @@ export default async function handler(req, res) {
         const d = await drive.drives.get({ driveId, fields: 'name' });
         driveName = d.data.name ?? null;
       } catch {
-        // A drive we cannot name is still a drive we can walk. The caller can
-        // fall back to asking for the whole root rather than composing one.
+        // drives.get is answered only for a MEMBER of the shared drive; a
+        // service account that was merely given the folders is refused. The
+        // drive's root is also a FILE whose name is the drive's name, and
+        // files.get on it needs only access to something inside — try that
+        // before giving up. A drive we still cannot name is still a drive we
+        // can walk: the client fills the name from its own setting/default.
+        try {
+          const f = await drive.files.get({ fileId: driveId, fields: 'name', supportsAllDrives: true });
+          driveName = f.data.name ?? null;
+        } catch { /* the client has a default */ }
       }
     }
 

@@ -1259,17 +1259,25 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     currentUser);
                 }
               }}
+              /*
+                The pins ride ON THE SHEET (the annotator's own slot), not
+                over the pane: a pin is a percentage of the plan, and over the
+                pane it landed at a percentage of the box — off by every
+                margin, fit and zoom. See PlanEditor.sheetOverlay.
+              */
+              sheetOverlay={
+                <PlanPinOverlay
+                  apartmentId={apartment!.id}
+                  apartmentLabel={aptLabel(apartment!)}
+                  authorName={currentUser?.name ?? ''}
+                  controlsInto={planBarSlot}
+                  driveFolderLink={apartment!.driveLink}
+                  planFileId={shownPlanId ?? detectedPdfId}
+                  plansFolderId={planSet.plansFolderId}
+                />
+              }
             />
           </Suspense>
-          <PlanPinOverlay
-            apartmentId={apartment!.id}
-            apartmentLabel={aptLabel(apartment!)}
-            authorName={currentUser?.name ?? ''}
-            controlsInto={planBarSlot}
-            driveFolderLink={apartment!.driveLink}
-            planFileId={shownPlanId ?? detectedPdfId}
-            plansFolderId={planSet.plansFolderId}
-          />
         </div>
       </div>
     );

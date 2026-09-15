@@ -92,20 +92,35 @@ const close = async () => { await page.keyboard.press('Escape'); await page.wait
   check(r.some(x => /Boardjob/.test(x.text)), 'the Job Board one is there');
   check(r.some(x => /Wolfsonfamily/.test(x.text)), 'the WOLFSON one is there — a different workspace');
   check(r.some(x => /Netivfamily/.test(x.text)), 'and the NETIV one');
+  check(r.some(x => /Wolfson/.test(x.text) && /Building A1/.test(x.text)),
+    'and each row says which workspace and building it is in',
+    r.find(x => /Wolfsonfamily/.test(x.text))?.text ?? '');
 }
-// ── The Drive folder title is searched ──
+// ── The Drive folder title is searched, and the row says so ──
 {
   await close();
   await search('Quxtown');
   const r2 = await rows();
   check(r2.some(x => /Cohen/.test(x.text)), 'a word that lives only in the job\'s Drive folder title finds the job', JSON.stringify(r2.map(x => x.text.slice(0, 60))));
-  check(r.some(x => /Wolfson/.test(x.text) && /Building A1/.test(x.text)),
-    'and each row says which workspace and building it is in',
-    r.find(x => /Wolfsonfamily/.test(x.text))?.text ?? '');
+  const why = await page.locator('[data-search-why]').first().textContent().catch(() => '');
+  check(/Drive folder/.test(why ?? '') && /Quxtown/.test(why ?? ''), 'and the row says it was found in the Drive folder title', why ?? '');
+  check(await page.locator('[data-search-hint]').count() === 1, 'the filter words are shown under the list');
+  // A filter word narrows: ws:wolf keeps only Wolfson's Zambini.
+  await close();
+  await search('ws:wolf zambini');
+  const r3 = await rows();
+  check(r3.length >= 1 && r3.every(x => /Wolfson/.test(x.text)), 'ws:wolf keeps only the Wolfson rows', JSON.stringify(r3.map(x => x.text.slice(0, 50))));
+  // The other alphabet: the Hebrew spelling finds the English name.
+  await close();
+  await search('זמביני');
+  const r4 = await rows();
+  check(r4.some(x => /Zambini/.test(x.text)), 'the Hebrew spelling finds the English name', JSON.stringify(r4.map(x => x.text.slice(0, 40))));
+  await close();
 }
 
 // ── 2. The reveal button is offered outside the Job Board ────────────────
 {
+  await search('Zambini');
   const r = await rows();
   const wolf = r.find(x => /Wolfsonfamily/.test(x.text));
   check(!!wolf?.reveal, 'the "show me where it is" button is on a result from another workspace',
@@ -134,6 +149,7 @@ const close = async () => { await page.keyboard.press('Escape'); await page.wait
   check(recent.stored.includes('Zambini'), 'the search is remembered on this machine',
     JSON.stringify(recent.stored));
   check(recent.shown, 'and an empty box shows it back');
+  check(await page.locator('[data-search-clear-picks]').count() === 1, 'and offers to forget the learned picks');
 
   // Pressing one puts it in the box.
   await page.evaluate(() => [...document.querySelectorAll('button')]

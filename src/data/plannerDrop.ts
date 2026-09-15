@@ -171,6 +171,11 @@ export function usePlannerDrag(jobId: string, opts?: {
       e.stopPropagation();
     },
     onPointerDown: (e: React.PointerEvent) => {
+      // The finger rule: touch NAVIGATES, it never arranges. A finger on a row
+      // is scrolling the list it sits in (the board scrolls it by hand); the
+      // ghost card that used to spring up under a scrolling finger is what
+      // made a widget "very jumpy" on the tablet. A stylus still drags.
+      if (e.pointerType === 'touch') return;
       if (!enabled || e.button !== 0 || (!anyRota() && !anyBoardDrop())) return;
       drag.current = { x: e.clientX, y: e.clientY, live: false };
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);

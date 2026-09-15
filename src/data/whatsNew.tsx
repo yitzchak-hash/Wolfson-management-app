@@ -30,6 +30,141 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-12-22',
+    title: 'The tablet round: pins that stick, a finger that scrolls, a pen button that erases',
+    items: [
+      {
+        title: 'Pins sit exactly where they were put',
+        body: 'A punch-list pin is a spot on the PLAN, and it now rides the plan itself '
+          + '— through every zoom, scroll and pinch, in the job window and on the '
+          + 'worker\'s phone alike. The worker\'s preview draws the sheet the same way '
+          + 'the office does instead of borrowing Google\'s frame, which is what had '
+          + 'been nudging every pin off its spot.',
+        demo: 'pin',
+      },
+      {
+        title: 'A finger scrolls a widget\'s list',
+        body: 'On a tablet, sliding a finger up and down a list — Active jobs, a job '
+          + 'list, the notebook — scrolls that list. The board pans only where nothing '
+          + 'under the finger can scroll, and a finger never picks a job row up to drag '
+          + 'it (the stylus still does).',
+        demo: 'drag',
+      },
+      {
+        title: 'The pen\'s side button is the eraser',
+        body: 'Hold the S Pen\'s button while drawing and the stroke rubs out instead; '
+          + 'let go and you are back on the pen you were holding. The width and '
+          + 'see-through sliders are finger-sized on a touch screen, and the green '
+          + 'line from the version tab to the plan is drawn on an upright tablet too.',
+        demo: 'tap',
+      },
+      {
+        title: 'Workers see the buildings, and can mark up when allowed',
+        body: 'A new worker starts with the building diagrams and every unit on them. '
+          + 'A worker whose level allows marking up a plan now has a Mark up button on '
+          + 'the plan in his portal, opening the same studio the office uses.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
+    date: '2026-12-21',
+    title: 'A shortcut to a worker\'s link opens the worker\'s link',
+    items: [
+      {
+        title: 'Save the portal to the home screen',
+        body: 'Chrome\'s "Add to Home screen" and "Create shortcut" never '
+          + 'saved the page you were on — they read the app\'s own address '
+          + 'book and opened the office home instead of the worker\'s page. '
+          + 'While a worker\'s link is open the page now carries its own '
+          + 'entry: the icon is labelled with his name and opens exactly his '
+          + 'link, on a phone or a PC. Every worker\'s portal is its own app, '
+          + 'separate from the office one.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
+    date: '2026-12-19',
+    title: 'One search, everywhere — and it says where it found the job',
+    items: [
+      {
+        title: 'Every search box gives the same answer',
+        body: 'The header search, the search tile, the job list, the group '
+          + 'windows on the board and the TV, and the Find-a-job widget now '
+          + 'all read ONE index. A job is found by its family name, the Drive '
+          + 'folder\'s title (family, first name, folder number, city), the '
+          + 'address, the phone (with or without dashes), the type, a pasted '
+          + 'Drive or Zoho link, a task\'s words, a message, a voice memo\'s '
+          + 'transcription, a punch-list pin or a file\'s name — and a job '
+          + 'whose name starts with what you typed always comes first.',
+        demo: 'list',
+      },
+      {
+        title: 'Hebrew and English meet, and the row says why',
+        body: 'כהן finds Cohen and Cohen finds כהן; Yosef finds יוסף; a name '
+          + 'typed on the wrong keyboard still lands. When a hit was found '
+          + 'somewhere other than its name, a small line under the row says '
+          + 'where — "Drive folder: Cohen, David - 5555 - Ramat Gan", '
+          + '"Phone: 050-…", "Memo: …" — so a right answer never looks wrong.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'Narrow it with a word',
+        body: 'stage:piping, group:done, worker:moshe, ws:netiv, is:problem '
+          + 'and is:pending narrow the list (Hebrew twins work too). Typing a '
+          + 'number finds a unit or a phone. The search learns what you pick '
+          + 'and forgets it slowly; an empty box now offers to forget it '
+          + 'altogether.',
+        demo: 'tap',
+      },
+      {
+        title: 'The Drive folder button finds the folder',
+        body: 'The path the app built was missing the shared drive\'s own name '
+          + '("TA Zoho Docs"), so the helper said "not on this computer yet" for '
+          + 'a folder that was there. The path now always carries it, pasting a '
+          + 'real path into the settings teaches the exact name, and the helper '
+          + 'itself looks one folder deeper before giving up — the copy of the '
+          + 'helper already installed works too.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
+    date: '2026-12-18',
+    title: 'A job is found by its Drive folder\'s name, wherever you search',
+    items: [
+      {
+        title: 'Every search reads the folder title',
+        body: 'The name of a job\'s Google Drive folder ("Cohen, David - 5555 - '
+          + 'notes") is now searched by the Find-a-job widget and the group '
+          + 'windows on the TV as well — the header search, the job list, the '
+          + 'search tile and the board\'s group windows already did. A first '
+          + 'name or a folder number that never made it into the family field '
+          + 'finds the job everywhere.',
+        demo: 'list',
+      },
+      {
+        title: 'And every door keeps it',
+        body: 'Add Job stores the folder\'s name the moment you paste the link '
+          + '(even if you press Add before it has been read), the import wizard '
+          + 'stores it for every linked row, and the automatic Drive check '
+          + 'writes it onto every job it already knows about — in any '
+          + 'workspace — so the ~1,000 linked jobs pick it up by themselves.',
+        demo: 'sparkle',
+      },
+      {
+        title: 'The Drive folder path opens on a Hebrew PC',
+        body: 'The copied Explorer path used to say "Shared drives", which a '
+          + 'Hebrew Windows does not have — it calls that folder "תיקיות אחסון '
+          + 'שיתופי". On a Hebrew computer the path now uses that name by '
+          + 'itself; pasting one real path into the settings still sets it '
+          + 'exactly for that machine.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2026-12-17',
     title: 'Every group counts, and a group window handles like the board',
     items: [

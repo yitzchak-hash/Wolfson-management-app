@@ -7585,3 +7585,193 @@ path. `Apartment.driveFolderName` (CANVAS_ONLY) is the folder's own title,
 kept by the drawer, pasted links and the sweep (which backfills every
 linked job it lists via `setDriveFolderNames`), and searched by the header
 search, the job list and the search tile.
+
+## The folder title reaches every door (2026-09-08, the handoff round)
+The previous handoff said the sweep backfilled `driveFolderName` — it did
+not: `setDriveFolderNames` existed with NO caller, and the sweep minted jobs
+without the title. Finished as the search research's item #1:
+- **Add Job** keeps the title its lookup fetched (`jobFolderTitle` ref, keyed
+  by folder id so a re-pasted link cannot carry the old title) and writes it
+  at submit; the post-submit heal now runs when the name is blank OR the
+  title is unknown, and writes both in one `updateApartment`.
+- **The wizard** reads the title for EVERY linked row (not only blank-family
+  ones); a typed family still stands. `TemplateRow.folderName` /
+  `PlannedJob.folderName` carry it to the job.
+- **The sweep** writes `driveFolderName` on minted jobs and BACKFILLS it onto
+  every linked job it lists, in whichever workspace owns the folder
+  (`owners` map → `setDriveFolderNames(pid, names)`), so the ~1,000 linked
+  jobs pick it up on the next two-hourly check with no button.
+- **Read by** Find-a-job (`written` + a `soundScore` over the title) and the
+  TV group window's search, joining the header search, the job list, the
+  search tile and the board's group window.
+Harness: `scratchpad/foldertitle-probe.mjs` (10 — Add Job settled and raced,
+Find-a-job, the wall's group window; the Find-a-job hit is counted as a
+SECOND mention of the name, because the tile on the board is the first).
+`autojobs-probe` grew the minted-title and cross-workspace-backfill checks.
+Standing pre-existing red noted: `round28.mjs`'s group-window section
+(dblclick on the Done bin times out; identical with the diff stashed) — its
+Add Job section passes.
+
+## The office's real Drive path (2026-09-08)
+`G:\תיקיות אחסון שיתופי\TA Zoho Docs\Potentials\<client folder>` — the
+owner's own Explorer path. So: the localised "Shared drives" folder is the
+THREE-word `תיקיות אחסון שיתופי` (the earlier test guessed two words), the
+shared drive is named **TA Zoho Docs** (not "TzviAir"), and client folders
+sit directly under `Potentials` (and the newer `Leads`). `HEBREW_SHARED_DRIVES`
++ `defaultSharedName(lang)` in `drivePath.ts`: a Hebrew-language browser
+composes the copied path with the Hebrew name before anybody has pasted a
+path; a pasted path (`drive_shared_name`, per machine) always wins.
+`drivehelper-test.mjs` carries the real path as a case. The PowerShell
+opener's try-every-top-folder fallback already covered the helper route;
+this fixes the COPY route, which was the owner's "I pasted it into Explorer
+and it opened nothing".
+
+
+## The search rebuild (2026-09-08, owner: "go ahead and build the search rebuild")
+`docs/research/SEARCH.md` items #2–#10, built in one round. Three modules,
+and every search box in the app reads them:
+- **`src/data/searchIndex.ts`** — ONE MiniSearch index per workspace
+  (`workspaceIndex(key, sources)`), kept between keystrokes and brought up to
+  date record by record (`sync` diffs a per-doc content hash: add / replace /
+  discard), plus a WeakMap ad-hoc index for a bare job list
+  (`searchJobs(jobs, q)` — the job list page, both group windows, Find-a-job)
+  and a small `globalIndex` for workers and stages. A document per record
+  KIND (job · task · snote · msg · group · node · markup · pin · file · worker
+  · stage); a job's fields are its name, the folder title SPLIT into family /
+  first / number / city, address, phone (+ bare digits), tipus, unit tokens
+  (`A1 47 A147 floor3`), the Drive folder / plan file / Zoho ids, notes, the
+  note authors and open-task workers, office file names and memo words.
+  **The tiers are decided here, a whole tier apart** (start −200 · exact −100
+  · prefix 0 · contains/digits 100 · fuzzy 200 · sound 300) — a fuzzy score
+  cannot tell "Levine" from "concealed", which was the whole complaint;
+  relevance, recency, liveness (a grouped job +8) and the learned picks move
+  a hit only INSIDE its tier, and a pick for the SAME query goes straight to
+  the top. Fuzzy only from four letters (`"lev"` is never fuzzed onto a
+  stage); a 1–2 digit query searches unit/number/name alone.
+- **`src/data/hebrewNormalize.ts`** — the one normaliser (NFKD, marks
+  stripped, finals folded, geresh/gershayim/maqaf → ASCII; punctuation
+  BEFORE the mark strip, or the maqaf is stripped before it can become a
+  hyphen) and the one sound key (vav both ways, h dropped, f→p, b→v so
+  "Yosef"/יוסף and "Tzvika"/צביקה meet). `translit.ts` and `hebrewSearch.ts`
+  now delegate to it — two copies used to disagree.
+- **`src/data/searchMemory.ts`** — `search_recent` and `search_picks`
+  (per machine, never synced); picks keyed `<workspace>|<kind:id>`, weight
+  halving every 30 days; `pickedForQuery` matches the same query or more
+  letters of the same ONE word — two words are a new question ("cohen ramat"
+  no longer inherits the "cohen" pick). `clearPicks` behind
+  `[data-search-clear-picks]` on the empty header box.
+Rules paid for: **a `group:` filter lists the jobs IN the group, never the
+group itself**; a group window's list search must be memoised on the data
+(`binJobs`), not filtered per render, or the ad-hoc index rebuilds on every
+wall tick; the `sk` field is tokenised on spaces and queried with a
+MiniSearch query OBJECT (AND across words, OR across each word's vav
+readings); `searchIndex` never imports `widgets.tsx` (`widgetNameOf` is
+passed in). Header rows and the tile carry `[data-search-why]` ("Drive
+folder: …", "Phone: …", "Memo: …"); filter words `stage:` `group:` `worker:`
+`ws:` `is:problem` `is:pending` (Hebrew twins) with `[data-search-hint]`
+under the list; 60ms render debounce. `fuse.js` is gone. Probes:
+`hebnorm-test.mjs` · `searchindex-test.mjs` · `searchperf.mjs` (3,736 docs
+in ~215ms, worst keystroke 22ms) · `gsearch.mjs` (+6; its block 2 now
+searches for itself — it used to read the previous block's rows). Green:
+round20, searchtile-probe, foldertitle-probe, storefull.
+
+## The missing drive segment (2026-09-08, the owner's "still error" screenshot)
+The helper's dialog read `Not on this computer yet: G:\Shared drives\Potentials\
+Yeshivat Chevron Haktana` — the shared drive's OWN name ("TA Zoho Docs") was
+absent, so the path existed nowhere and the top-folder fallback could never
+find it. `api/drive-path.js` names the drive through `drives.get`, which
+Google answers only for a MEMBER of the shared drive; the service account was
+given the folders, not membership, so the name came back null and
+`composeLocalPath` silently dropped the segment. Three fixes, each enough on
+its own:
+- **Server**: on a refused `drives.get`, `files.get(driveId)` — the drive's
+  root is a file whose name is the drive's name.
+- **Client** (`drivePath.ts`): `DEFAULT_SHARED_DRIVE = 'TA Zoho Docs'`; the
+  drive segment is NEVER skipped (server's name → the pasted path's
+  `driveName`, kept per machine in `drive_drive_name` → the default).
+  `parsePastedPath` now reads the drive's name as the segment after the
+  shared-drives folder (only when a folder follows it; a My Drive path names
+  no drive).
+- **The openers** (`tzviairHelper.ts`): Windows and Mac both search every top
+  folder AND every drive folder one level down, with the rest of the path and
+  with the rest minus its first segment — so an already-installed helper
+  copes with a path missing the drive name or wearing the English folder
+  name. `drivehelper-test.mjs` carries all of it (+6 checks).
+
+## A shortcut to the worker's link (2026-09-08)
+Chrome's "Add to Home screen" / "Install" / "Create shortcut" never saves the
+page you are on — it fetches the site's web app manifest and launches ITS
+`start_url`. `public/site.webmanifest` says `start_url: "/"`, so a shortcut
+made from `/c/<token>` opened the office home: the owner's "it takes me back
+to the main workspace page". (iPhone Safari ignores the manifest's start
+address and saves the current page, which is why it only showed on Chrome.)
+`src/data/portalManifest.ts` — `installPortalManifest({ token, workerName })`
+points the page's `link[rel=manifest]` at a manifest made on the spot (a
+`blob:` URL — a manifest must be FETCHED and there is no serverless slot to
+spare): `start_url`, `scope` and `id` are all the worker's absolute link, so
+each portal is its own app apart from the office's and from each other; the
+name is `TzviAir · <worker>` and `document.title` follows. Absolute URLs
+throughout — a relative one would resolve against the blob. The portal calls
+it in an effect keyed on `token` + the worker's name (the record can land
+after the page), and the undo restores `/site.webmanifest` only when the
+link is still the one it set. Probe: `scratchpad/portalmanifest-probe.mjs`
+(8 checks: blob manifest, start_url/scope/id = the link, the name, the office
+manifest back on `/login`, the swap again on return).
+
+## The tablet round (2026-09-08): pins on the sheet, a finger that scrolls, the pen's button
+- **Pins ride the SHEET, through `PlanEditor.sheetOverlay`.** A `PlanPin` is a
+  percentage of the PLAN, and both hosts laid `PlanPinOverlay` over the BOX
+  around the plan — the drawer's pane (a fitted, zoomable sheet with margins)
+  and the portal's Drive preview iframe (Google's own surround) — so a pin at
+  40%/60% of the box sat nowhere near 40%/60% of the plan: the owner's "the
+  pins don't stick to the exact location". The annotator now renders the
+  host's overlay INSIDE `sheetWrapRef` (absolute inset-0 there IS the sheet,
+  and it follows zoom, scroll and the pinch transform). The drawer passes the
+  overlay as `sheetOverlay`; the portal's EXPANDED preview draws
+  `<PlanAnnotator embedded readOnly sheetOverlay=…>` (the drawer's precedent)
+  and keeps Google's iframe only as the collapsed thumbnail. Consequence for
+  harnesses: the pin controls exist once pdf.js has drawn — poll for the Pin
+  button, serve a real PDF on `/api/drive-fetch`, and ABORT drive.google.com
+  (an HTML answer there trips the aspect probe's image decode into "This plan
+  would not open"). Playwright consults routes NEWEST-first: a catch-all
+  `**/api/**` stub must be registered BEFORE the drive-fetch one.
+- **The portal's Mark up** (`[data-portal-markup]`, `perms.markUpPlans`): the
+  full studio (lazy) with `authorName` = the worker; the Engineered Plans
+  folder is resolved on open via `findPlanSetViaBackend` so the sketch files
+  where the office looks. New optional `ContractorUiStrings.markUpBtn` (three
+  presets, fallback rule).
+- **Workers see the buildings by default** (owner): the Contractor level ships
+  with `seeDiagrams` + `seeAllApartments`. Existing workers on that level
+  inherit it (a level is what its switches say; only a personal override
+  differs).
+- **A finger scrolls a widget's list** (`touchScrollerUnder` + `touchScroll`
+  in GeneralJobsPage): a node carries `touch-action: none`, so the browser
+  never scrolled a widget's `overflow-auto` body for a finger and the finger
+  rule panned the board instead ("the active last 30 days doesn't scroll").
+  A finger press with a scroller under it — on the widget's body OR on a row
+  that is a button (`data-el-action` or not; the marks that exempt a control
+  from the board's DRAG do not exempt it from being scrolled past) — scrolls
+  it by hand from the finger's travel, 6px slop, no pan; the board pans only
+  where nothing under the finger scrolls. `data-wheel-own` surfaces (the map)
+  are never taken. And **`usePlannerDrag` ignores fingers** (touch navigates,
+  never arranges): the ghost card springing up under a scrolling finger was
+  the "very jumpy". A stylus still drags a row.
+- **The pen's side button erases** (`tempErase` in PlanAnnotator): a pen
+  press with `buttons & 2`/`button 2` (barrel) or `buttons & 32`/`button 5`
+  (eraser end) rubs out for that stroke at the ERASER's width (the pen's own
+  width is a couple of points and a moving hand steps over the line), the
+  tool state untouched; the canvas's contextmenu is prevented for a pen.
+  Probed with CDP `mousePressed button:'right' buttons:2 pointerType:'pen'`
+  — Chromium delivers pointerdown button 2 + contextmenu + moves, no cancel.
+- **Touch-sized sliders** (`@media (any-hover: none)` in index.css): the ink
+  slider's box grows to a thumb's height with the painted track kept thin
+  (`background-clip: content-box`), 28–30px knobs, `touch-action: none`.
+- **The version connector draws in compact too**: it bailed on `compact`, and
+  the office's tablets are 720 wide upright — the phone layout — so the green
+  line never showed in portrait. With `railRow` the scribble runs from the
+  bottom rail's active tab UP to the sheet's bottom edge; a tab scrolled out
+  of its rail draws nothing.
+Harness: `scratchpad/round41-probe.mjs` (four contexts, 22 checks). Re-encoded:
+`planphone.mjs` (poll for the Pin button), `pinvoice-probe.mjs` (PDF route,
+canvas box). Green: touchpan, ipadcheck, plandownload, markup2-probe, plantabs
+(warm), the four audits.

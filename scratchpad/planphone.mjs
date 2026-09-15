@@ -193,7 +193,10 @@ await page.locator('[class*="cursor-pointer"]', { hasText: /^53/ }).first().tap(
 await page.waitForTimeout(1200);
 const planTab2 = page.locator('.drawer-panel button').filter({ hasText: /^Plan/ });
 if (await planTab2.count()) { await planTab2.first().tap(); await page.waitForTimeout(900); }
+// The pin controls ride the SHEET now (the annotator's own slot), so they
+// appear once pdf.js has drawn it — poll rather than assume a beat.
 const pinBtn = page.getByRole('button', { name: /^Pin$/ });
+for (let i = 0; i < 60 && !(await pinBtn.count()); i++) await page.waitForTimeout(250);
 if (await pinBtn.count()) {
   await pinBtn.first().tap();
   const box = await page.locator('div.relative.flex-1.min-h-0').filter({ has: page.locator('canvas') }).first().boundingBox();

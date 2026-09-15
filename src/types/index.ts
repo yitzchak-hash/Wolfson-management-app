@@ -1494,6 +1494,8 @@ export interface ContractorUiStrings {
   monthlyLabel?: string;
   /** The punch-list pins on the plan — optional, same rule. */
   pinAddBtn?: string;
+  /** The portal's Mark-up button, shown only to a worker whose level allows it. */
+  markUpBtn?: string;
   pinClickPlan?: string;
   pinNotePlaceholder?: string;
   /** The portal's notification bell — optional, same rule. */
@@ -1604,6 +1606,7 @@ export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   weeklyLabel: 'Weekly',
   monthlyLabel: 'Monthly',
   pinAddBtn: 'Pin',
+  markUpBtn: 'Mark up',
   pinClickPlan: 'Tap the plan',
   pinNotePlaceholder: 'What needs doing here?',
   notifTitle: 'Updates',
@@ -1709,6 +1712,7 @@ export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   weeklyLabel: 'שבועי',
   monthlyLabel: 'חודשי',
   pinAddBtn: 'נעץ',
+  markUpBtn: 'סימון על התוכנית',
   pinClickPlan: 'געו בתוכנית',
   pinNotePlaceholder: 'מה צריך לעשות כאן?',
   notifTitle: 'עדכונים',
@@ -1819,6 +1823,7 @@ export const RUSSIAN_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   weeklyLabel: 'Неделя',
   monthlyLabel: 'Месяц',
   pinAddBtn: 'Метка',
+  markUpBtn: 'Разметка',
   pinClickPlan: 'Нажмите на план',
   pinNotePlaceholder: 'Что здесь нужно сделать?',
   notifTitle: 'Обновления',
@@ -2425,6 +2430,29 @@ export interface MainUiStrings {
   searchTypeContractorNote: string;
   searchNoResults: string;
   searchStartTyping: string;
+  searchTypeContractor: string;
+  searchTypeStage: string;
+  searchTypeGroup: string;
+  searchTypeBoard: string;
+  searchTypeMarkup: string;
+  searchTypePin: string;
+  searchTypeFile: string;
+  /** "Found in …" — where a hit matched when its title does not say so. */
+  searchWhyFolder: string;
+  searchWhyAddress: string;
+  searchWhyPhone: string;
+  searchWhyNotes: string;
+  searchWhyMemo: string;
+  searchWhyFile: string;
+  searchWhyWorker: string;
+  searchWhyLink: string;
+  searchWhyUnit: string;
+  searchWhyTipus: string;
+  searchRecentTitle: string;
+  searchClear: string;
+  searchClearPicks: string;
+  searchFooter: string;
+  searchHint: string;
   // Reports — column headers
   colBuilding: string;
   colApartment: string;
@@ -3049,6 +3077,28 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   searchTypeContractorNote: 'Contractor Note',
   searchNoResults: 'No results',
   searchStartTyping: 'Start typing to search…',
+  searchTypeContractor: 'Worker',
+  searchTypeStage: 'Stage',
+  searchTypeGroup: 'Group',
+  searchTypeBoard: 'On the board',
+  searchTypeMarkup: 'Markup',
+  searchTypePin: 'Punch list',
+  searchTypeFile: 'File',
+  searchWhyFolder: 'Drive folder',
+  searchWhyAddress: 'Address',
+  searchWhyPhone: 'Phone',
+  searchWhyNotes: 'Notes',
+  searchWhyMemo: 'Memo',
+  searchWhyFile: 'File',
+  searchWhyWorker: 'Worker',
+  searchWhyLink: 'Link',
+  searchWhyUnit: 'Unit',
+  searchWhyTipus: 'Type',
+  searchRecentTitle: 'Recent searches',
+  searchClear: 'Clear',
+  searchClearPicks: 'Forget what I picked before',
+  searchFooter: 'Searching every workspace. The ones that are not open show what this machine last saw of them.',
+  searchHint: 'Narrow it: stage:piping · group:done · worker:moshe · ws:netiv · is:problem · is:pending',
   // Reports — column headers
   colBuilding: 'Building',
   colApartment: 'Apartment',
@@ -3672,6 +3722,28 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   searchTypeContractorNote: 'הערת קבלן',
   searchNoResults: 'אין תוצאות',
   searchStartTyping: 'התחל להקליד לחיפוש…',
+  searchTypeContractor: 'עובד',
+  searchTypeStage: 'שלב',
+  searchTypeGroup: 'קבוצה',
+  searchTypeBoard: 'על הלוח',
+  searchTypeMarkup: 'סימון על תוכנית',
+  searchTypePin: 'רשימת ליקויים',
+  searchTypeFile: 'קובץ',
+  searchWhyFolder: 'תיקיית דרייב',
+  searchWhyAddress: 'כתובת',
+  searchWhyPhone: 'טלפון',
+  searchWhyNotes: 'הערות',
+  searchWhyMemo: 'הקלטה',
+  searchWhyFile: 'קובץ',
+  searchWhyWorker: 'עובד',
+  searchWhyLink: 'קישור',
+  searchWhyUnit: 'יחידה',
+  searchWhyTipus: 'טיפוס',
+  searchRecentTitle: 'חיפושים אחרונים',
+  searchClear: 'לנקות',
+  searchClearPicks: 'לשכוח מה בחרתי בעבר',
+  searchFooter: 'מחפש בכל סביבות העבודה. סביבה שלא נפתחה במחשב הזה מוצגת לפי מה שנשמר כאן לאחרונה.',
+  searchHint: 'לצמצם: stage:piping · group:done · worker:moshe · ws:netiv · is:problem · is:pending',
   // Reports — column headers
   colBuilding: 'בניין',
   colApartment: 'דירה',

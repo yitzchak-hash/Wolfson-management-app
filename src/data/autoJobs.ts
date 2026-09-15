@@ -67,14 +67,24 @@ async function doSweep(reason: 'timer' | 'manual'): Promise<SweepResult> {
   // Every folder any workspace already has a job for — the cross-workspace
   // guard the import carries too.
   const linked = new Set<string>();
+  /** Which job (in which workspace) each linked folder belongs to — the
+      sweep is the natural backfill for `driveFolderName`, since it is the
+      one thing that LISTS every client folder with its title. */
+  const owners = new Map<string, { pid: string; aptId: string; title?: string }[]>();
   const pids = [...new Set([...st.projects.map(p => p.id), 'general'])];
   for (const pid of pids) {
     const apts = pid === st.currentProjectId ? st.apartments : loadProjectSnapshot(pid).apartments;
-    for (const a of apts) { const id = a.driveLink ? extractFolderId(a.driveLink) : null; if (id) linked.add(id); }
+    for (const a of apts) {
+      const id = a.driveLink ? extractFolderId(a.driveLink) : null;
+      if (!id) continue;
+      linked.add(id);
+      owners.set(id, [...(owners.get(id) ?? []), { pid, aptId: a.id, title: a.driveFolderName }]);
+    }
   }
   const dead = isFirebaseConfigured ? await fsGetTombstones('general').catch(() => new Set<string>()) : new Set<string>();
 
   const found: { id: string; name: string }[] = [];
+  const backfill: Record<string, Record<string, string>> = {};
   let unreachable = 0;
   const folders: SweepResult['folders'] = [];
   for (const fid of watched) {
@@ -83,7 +93,15 @@ async function doSweep(reason: 'timer' | 'manual'): Promise<SweepResult> {
     folders.push(row);
     if (!kids.length) { unreachable++; continue; }
     for (const k of kids) {
-      if (linked.has(k.id)) { row.linked++; continue; }
+      if (linked.has(k.id)) {
+        row.linked++;
+        // A linked folder's title is written onto its job when it is missing
+        // or has changed — one machine's sweep serves every search door.
+        for (const o of owners.get(k.id) ?? []) {
+          if (k.name && o.title !== k.name) (backfill[o.pid] ??= {})[o.aptId] = k.name;
+        }
+        continue;
+      }
       if (dead.has(`G-auto-${k.id}`) || found.some(f => f.id === k.id)) continue;
       found.push({ id: k.id, name: k.name });
       row.fresh++;
@@ -123,6 +141,7 @@ async function doSweep(reason: 'timer' | 'manual'): Promise<SweepResult> {
       isDuplexApt: false, currentStageId: null, classification: 'standard', shinuiDetails: null,
       generalNotes: '', isUnnamed: false,
       driveLink: `https://drive.google.com/drive/folders/${f.id}`,
+      driveFolderName: f.name,
       boardBin: bin, binnedAt: now,
       canvasX: GAP + (slot % PER_ROW) * (TILE_W + GAP),
       canvasY: GAP + Math.floor(slot / PER_ROW) * (TILE_H + GAP),
@@ -131,6 +150,7 @@ async function doSweep(reason: 'timer' | 'manual'): Promise<SweepResult> {
   });
 
   if (jobs.length || newGroup) useStore.getState().addJobsToProject('general', jobs, newGroup);
+  for (const [pid, names] of Object.entries(backfill)) useStore.getState().setDriveFolderNames(pid, names);
 
   // The folder's Plans and Photos open up for everyone, exactly as a pasted
   // link does — in threes, so a first sweep over a big folder stays gentle.

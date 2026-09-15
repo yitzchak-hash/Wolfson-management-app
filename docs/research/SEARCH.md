@@ -331,10 +331,33 @@ Effort is rough: S = an hour or two, M = a day, L = two to three days.
 | 9 | **Latency hygiene**: 60–80 ms trailing debounce on the RENDER only; the effect must not re-run on unrelated store slices (index updates are pushed, not pulled); measure on the office touchscreen with the `smoulder`/`boardperf` manner and keep a `searchperf` probe at 1,650 jobs. | Under 50 ms per key everywhere. | S (after #2) |
 | 10 | **Recent + picks per workspace** and a "clear learned picks" control; picks keyed by `kind:id`, decayed. | Learning helps instead of sticking. | S |
 
-#1 is half-landed and small — finish it regardless of the rest; it is the
-report. #2 is the foundation for #3–#9; do not bolt more fields onto the six
-existing scanners (today's change had to touch three of them for one field,
-which is the cost the shared index removes).
+**#1 is DONE (2026-09-08, the round after this document)**: Add Job (submit +
+the raced heal), the wizard and the sweep write the title; the sweep backfills
+every linked job it lists in any workspace (the only caller of
+`setDriveFolderNames`); Find-a-job, the board group window and the TV group
+window read it. Probes: `foldertitle-probe.mjs`, `autojobs-probe.mjs`. The
+`gsearch` cross-workspace seed is the one sub-item not touched.
+
+**#2–#10 are BUILT (2026-09-08, the same day, owner: "go ahead and build the
+search rebuild")** — `src/data/searchIndex.ts` (one MiniSearch index per
+workspace, kept between keystrokes and re-synced record by record; a WeakMap
+ad-hoc index for a bare job list), `src/data/hebrewNormalize.ts` (the one
+normaliser + sound key; `translit.ts` and `hebrewSearch.ts` delegate to it),
+`src/data/searchMemory.ts` (recent queries, learned picks keyed per workspace,
+30-day half-life, `clearPicks`). All six sites read the index. Fields indexed:
+name, folder title split into family / first / number / city, address, phone
+(+ digits), tipus, unit tokens (`A1 47 A147 floor3`), Drive folder / plan file
+/ Zoho ids, notes, note authors + open-task workers, office file names, memo
+transcripts; tasks, stage notes, messages, groups, board nodes, markups, pins
+and office files are documents of their own. Tiers a whole tier apart
+(start · exact · prefix · contains · digits · fuzzy · sound); recency,
+liveness (a grouped job +8) and picks move a hit only inside its tier, a pick
+for the SAME query goes to the top. Filter words: `stage:` `group:` `worker:`
+`ws:` `is:problem` `is:pending` (Hebrew twins). "Why it matched" on the header
+rows and the tile. Probes: `hebnorm-test.mjs`, `searchindex-test.mjs`,
+`searchperf.mjs` (3,736 docs index in ~215ms, worst keystroke 22ms), `gsearch`
+(+6). `fuse.js` is gone from the dependencies. Not done, by decision: ranking
+by Drive activity (CRM-CHECKLIST).
 
 ---
 

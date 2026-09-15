@@ -11,6 +11,7 @@ import {
 } from '../../types';
 import { getBoardTheme } from '../../data/boardThemes';
 import { arrangeGrid } from '../../data/arrangeGrid';
+import { searchJobs } from '../../data/searchIndex';
 import { WidgetStore } from './WidgetStore';
 import { WidgetDef, WidgetCtx, WIDGET_BY_ID } from '../../data/widgets';
 import {
@@ -299,8 +300,13 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
   });
   useEffect(() => { localStorage.setItem('bin_sort', sort); }, [sort]);
 
+  /** The group's own jobs — one array per data change, so the index built on it is reused per keystroke. */
+  const binJobs = useMemo(
+    () => apartments.filter(a => a.boardBin === binKey && !a.isUnnamed),
+    [apartments, binKey]);
+
   const items = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = query.trim();
     const openOf = (a: Apartment) =>
       contractorAssignments.filter(t => t.apartmentId === a.id && !t.completedAt).length;
     const stageOrder = (a: Apartment) => {
@@ -309,11 +315,12 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
       // of the work, it is the absence of an answer.
       return st ? st.order : Number.MAX_SAFE_INTEGER;
     };
-    const rows = apartments
-      .filter(a => a.boardBin === binKey && !a.isUnnamed)
-      .filter(a => !q || (a.displayName ?? '').toLowerCase().includes(q)
-        || (a.address ?? '').toLowerCase().includes(q)
-        || (a.driveFolderName ?? '').toLowerCase().includes(q));
+    // The app's ONE search (searchIndex): folder title, address, phone,
+    // notes, the other alphabet, a misspelling — the same answers as the
+    // header search, over this group's list alone.
+    const rows = q.length >= 2
+      ? searchJobs(binJobs, q, { stages, includeTrash: true }).map(h => h.rec)
+      : [...binJobs];
     const by: Record<BinSort, (a: Apartment, b: Apartment) => number> = {
       'filed-new': (a, b) => (b.binnedAt ?? '').localeCompare(a.binnedAt ?? ''),
       'filed-old': (a, b) => (a.binnedAt ?? '').localeCompare(b.binnedAt ?? ''),
@@ -325,7 +332,7 @@ export function BinBoard({ bin, onClose, onOpenJob, highlightJobId, onRestored }
       'tasks': (a, b) => openOf(b) - openOf(a),
     };
     return rows.sort(by[sort] ?? by['filed-new']);
-  }, [apartments, binKey, query, sort, stages, contractorAssignments]);
+  }, [binJobs, query, sort, stages, contractorAssignments]);
 
   const nodes = useMemo(
     () => canvasElements.filter(el => el.board === binKey && el.type !== 'bin'),

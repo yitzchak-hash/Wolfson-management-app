@@ -80,6 +80,9 @@ export function parseCsv(text: string): string[][] {
 export interface TemplateRow {
   driveUrl: string;
   family: string;
+  /** The Drive folder's own title, when the wizard read it — kept on the job
+      as `driveFolderName` so every search door can find it. */
+  folderName?: string;
   address: string;
   phone: string;
   zoho: string;
@@ -153,6 +156,7 @@ export interface PlannedJob {
   family: string;
   driveUrl: string;
   folderId: string | null;
+  folderName?: string;
   address: string;
   phone: string;
   zoho: string;
@@ -237,6 +241,7 @@ export function planImport(rows: TemplateRow[], ctx: PlanContext): ImportPlan {
       family: row.family,
       driveUrl: row.driveUrl,
       folderId,
+      folderName: row.folderName,
       address: row.address,
       phone: normalizePhone(row.phone),
       zoho: row.zoho,

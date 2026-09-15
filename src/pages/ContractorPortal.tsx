@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useEffect } from 'react';
+import React, { useState, useRef, useMemo, useEffect, lazy, Suspense } from 'react';
 import { useParams } from 'react-router-dom';
 import { useStore, loadAllProjectsTaskData, ensureProjectSnapshot } from '../data/store';
 import { ContractorAssignment, ContractorPhoto, Contractor, Apartment, Project, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, RUSSIAN_CONTRACTOR_UI_STRINGS, PortalLang, getStageName, aptLabel, workAtLabel, projectColor } from '../types';
@@ -34,6 +34,12 @@ import {
 import { saveBytes, safeFileName } from '../data/planExport';
 import { TaskThread } from '../components/tasks/TaskThread';
 import { Translated, TrText } from '../components/ui/Translated';
+import { installPortalManifest } from '../data/portalManifest';
+import { findPlanSetViaBackend } from '../data/driveApi';
+// Lazy — the studio carries pdf.js, and a worker who never opens a plan should
+// not download it (the drawer's precedent).
+const PlanAnnotator = lazy(() =>
+  import('../components/plans/PlanAnnotator').then(m => ({ default: m.PlanAnnotator })));
 
 const CATEGORY_LABELS: Record<string, Record<string, string>> = {
   en: { drywall: 'Drywall', ac: 'AC', general: 'General' },
@@ -535,6 +541,20 @@ export function ContractorPortal() {
   const workerNow = contractors.find(c => c.token === token) ?? null;
 
   /**
+   * A shortcut made from this page must open THIS page.
+   *
+   * Chrome's install / Add-to-Home-screen launches the manifest's start_url
+   * — the office home — so the manifest link is swapped for one naming the
+   * worker's own link while the portal is mounted. Re-run when the worker's
+   * name lands, so the icon is labelled with him rather than "TzviAir".
+   */
+  const workerName = workerNow?.name ?? null;
+  useEffect(() => {
+    if (!token) return;
+    return installPortalManifest({ token, workerName });
+  }, [token, workerName]);
+
+  /**
    * Language: chosen from either end, and the same choice on both.
    *
    * The worker's own pick is stored ON the worker, so the office sees what
@@ -667,6 +687,13 @@ export function ContractorPortal() {
   const [calWeekOff, setCalWeekOff] = useState(0);
   const phonePortal = usePhone();
   const [showHistory, setShowHistory] = useState(false);
+  /**
+   * The markup studio, for a worker whose level allows it (`markUpPlans`).
+   * The Engineered Plans folder is looked up on open so his sketch is filed
+   * where the office looks (Annotated Plans INSIDE it); until it answers, the
+   * job folder stands in.
+   */
+  const [markup, setMarkup] = useState<{ aptId: string; fileId: string; plansFolderId?: string } | null>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const noteAttachRef = useRef<HTMLInputElement>(null);
 
@@ -2452,6 +2479,21 @@ export function ContractorPortal() {
                           className="flex items-center gap-1 text-xs text-[#1e3a5f] hover:underline disabled:opacity-50">
                           <Download size={11} /> {planDlBusy ? '…' : s.download}
                         </button>
+                        {perms.markUpPlans && apt && (
+                          <button data-portal-markup
+                            onClick={() => {
+                              setMarkup({ aptId: apt.id, fileId: plansPdfFileId });
+                              if (apt.driveLink) {
+                                void findPlanSetViaBackend(apt.driveLink).then(ps => {
+                                  if (ps.plansFolderId) setMarkup(m => m && m.aptId === apt.id
+                                    ? { ...m, plansFolderId: ps.plansFolderId ?? undefined } : m);
+                                }).catch(() => { /* the job folder stands in */ });
+                              }
+                            }}
+                            className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 font-medium">
+                            <PenLine size={11} /> {s.markUpBtn || w('Mark up', 'סימון', 'Разметка')}
+                          </button>
+                        )}
                         <button onClick={() => setShowPlansPdf(v => !v)}
                           className="text-xs px-2.5 py-1 rounded-lg bg-[#1e3a5f] text-white font-medium">
                           {showPlansPdf ? s.hide : s.view}
@@ -2487,34 +2529,63 @@ export function ContractorPortal() {
                       );
                     })()}
                     <div
-                      className="rounded-xl overflow-hidden border border-gray-200 cursor-pointer relative"
-                      style={{ height: showPlansPdf ? '420px' : '160px' }}
-                      onClick={() => setShowPlansPdf(v => !v)}
+                      className="rounded-xl overflow-hidden border border-gray-200 relative"
+                      style={{ height: showPlansPdf ? '520px' : '160px', cursor: showPlansPdf ? undefined : 'pointer' }}
+                      onClick={showPlansPdf ? undefined : () => setShowPlansPdf(true)}
                     >
-                      <iframe
-                        src={drivePreviewUrl(plansPdfFileId)}
-                        width="100%"
-                        height={showPlansPdf ? '420' : '160'}
-                        allow="autoplay"
-                        title="Engineering Plans"
-                        style={{ border: 'none', display: 'block', pointerEvents: showPlansPdf ? 'auto' : 'none' }}
-                      />
-                      {/* The SAME pins the office sees, drawn from the same
-                          coordinates. Workers WRITE now too (the owner's
-                          2026-08-31 ask): a worker on site can drop a pin,
-                          speak a memo into it or attach a photo — but only
-                          delete a pin they placed themselves. */}
-                      {showPlansPdf && apt && (
-                        <div onClick={e => e.stopPropagation()}>
-                          <PlanPinOverlay
-                            apartmentId={apt.id}
-                            apartmentLabel={aptLabel(apt)}
-                            authorName={contractor?.name ?? ''}
-                            driveFolderLink={apt.driveLink}
-                            workerMode
-                            planFileId={plansPdfFileId}
-                          />
+                      {/*
+                        Expanded, the sheet is drawn by the app's own renderer
+                        (the drawer's and the wall's precedent) with the pins
+                        laid ON THE SHEET through the annotator's own slot. The
+                        Drive preview iframe framed the plan in a surround of
+                        its own, so a pin at 40%/60% of the BOX sat nowhere
+                        near 40%/60% of the PLAN — the owner's "the pins don't
+                        stick to the exact location, which is the whole point
+                        of the pin". Collapsed, Google's preview still stands
+                        in as the thumbnail (no PDF is downloaded for a glance).
+                        Workers WRITE pins too (2026-08-31): drop, memo, photo —
+                        and delete only their own.
+                      */}
+                      {showPlansPdf && apt ? (
+                        <div className="absolute inset-0" onClick={e => e.stopPropagation()}>
+                          <Suspense fallback={
+                            <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm">
+                              {s.engineeringPlans}…
+                            </div>
+                          }>
+                            <PlanAnnotator
+                              key={plansPdfFileId}
+                              embedded
+                              readOnly
+                              planFileId={plansPdfFileId}
+                              planName={s.engineeringPlans}
+                              apartmentId={apt.id}
+                              apartmentLabel={aptLabel(apt)}
+                              driveFolderUrl={apt.driveLink}
+                              authorName={contractor?.name ?? ''}
+                              onClose={() => setShowPlansPdf(false)}
+                              sheetOverlay={
+                                <PlanPinOverlay
+                                  apartmentId={apt.id}
+                                  apartmentLabel={aptLabel(apt)}
+                                  authorName={contractor?.name ?? ''}
+                                  driveFolderLink={apt.driveLink}
+                                  workerMode
+                                  planFileId={plansPdfFileId}
+                                />
+                              }
+                            />
+                          </Suspense>
                         </div>
+                      ) : (
+                        <iframe
+                          src={drivePreviewUrl(plansPdfFileId)}
+                          width="100%"
+                          height="160"
+                          allow="autoplay"
+                          title="Engineering Plans"
+                          style={{ border: 'none', display: 'block', pointerEvents: 'none' }}
+                        />
                       )}
                       {!showPlansPdf && (
                         <div className="absolute inset-0 flex items-end justify-center pb-2 bg-gradient-to-t from-black/20 to-transparent">
@@ -3137,6 +3208,29 @@ export function ContractorPortal() {
           </div>
         </div>
       )}
+
+      {/* The markup studio — a worker with the markUpPlans permission draws
+          on the plan and files a version exactly as the office does. */}
+      {markup && (() => {
+        const mApt = apartments.find(x => x.id === markup.aptId);
+        if (!mApt) return null;
+        return (
+          <Suspense fallback={null}>
+            <PlanAnnotator
+              key={`${markup.aptId}:${markup.fileId}`}
+              planFileId={markup.fileId}
+              planName={s.engineeringPlans}
+              apartmentId={mApt.id}
+              apartmentLabel={aptLabel(mApt)}
+              driveFolderUrl={mApt.driveLink}
+              plansFolderId={markup.plansFolderId}
+              authorName={contractor?.name ?? ''}
+              touchScale={1.3}
+              onClose={() => setMarkup(null)}
+            />
+          </Suspense>
+        );
+      })()}
 
       {/* Full-screen photo gallery lightbox */}
       {lightboxInfo && (

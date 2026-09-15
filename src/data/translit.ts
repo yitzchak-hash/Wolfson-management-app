@@ -16,53 +16,16 @@
  * examples rather than trusted.
  */
 
-/** Each Hebrew letter's primary Latin sound. Finals fold into their base. */
-const HEB: Record<string, string> = {
-  'א': 'a', 'ב': 'b', 'ג': 'g', 'ד': 'd', 'ה': 'h', 'ו': 'v', 'ז': 'z',
-  'ח': 'x', 'ט': 't', 'י': 'i', 'כ': 'k', 'ך': 'k', 'ל': 'l', 'מ': 'm',
-  'ם': 'm', 'נ': 'n', 'ן': 'n', 'ס': 's', 'ע': 'a', 'פ': 'p', 'ף': 'p',
-  'צ': 'ĉ', 'ץ': 'ĉ', 'ק': 'k', 'ר': 'r', 'ש': 'š', 'ת': 't',
-};
+import { soundKey } from './hebrewNormalize';
 
 /**
- * The canonical skeleton of any name, from either alphabet.
- *
- * Order matters and each rule exists for a worked pair:
- *  · digraphs first ("sh" must become š before "h" is read alone);
- *  · tz/ts → c so "Artzi" meets צ;
- *  · ch → x so "Chaim" meets ח;
- *  · b/v fold together (ב is both), p/f fold together (פ is both);
- *  · vowels drop entirely — Hebrew never wrote them;
- *  · doubles collapse so "Cohenn" still meets "כהן".
+ * The canonical skeleton of any name, from either alphabet — now the ONE
+ * rule in `hebrewNormalize.ts` (vav read both ways, h dropped, geresh
+ * digraphs), so the header search, the job list, the tile and the widgets
+ * can never again disagree about how a Hebrew name sounds.
  */
 export function skeleton(raw: string): string {
-  let s = raw.toLowerCase().trim();
-  // Hebrew letters to their sounds.
-  s = [...s].map(ch => HEB[ch] ?? ch).join('');
-  // Latin digraphs to the same single symbols the Hebrew side produced.
-  s = s
-    .replace(/sh/g, 'š')
-    .replace(/t[zs]/g, 'ĉ')
-    .replace(/ch|kh/g, 'x')
-    .replace(/ph/g, 'p')
-    .replace(/th/g, 't')
-    .replace(/q/g, 'k')
-    .replace(/w/g, 'v')
-    .replace(/j/g, 'g')
-    // English c on its own is a hard k more often than not (Cohen, Marcus);
-    // the soft-c names still land through the fuzzy skeleton match.
-    .replace(/c/g, 'k');
-  // Sounds Hebrew writes with one letter but English spells two ways.
-  s = s.replace(/f/g, 'p').replace(/b/g, 'v').replace(/y/g, 'i');
-  // Drop everything that is not a consonant sound. Vowels go; so do spaces
-  // and punctuation — "Ben-Gurion" and "בן גוריון" must not differ by a dash.
-  s = s.replace(/[aeiou]/g, '').replace(/[^a-zšĉx]/g, '');
-  // Fold digraphs AGAIN now the vowels are gone: "cohen" only becomes k-h
-  // adjacent after the o drops, while כהן arrived adjacent from the start.
-  s = s.replace(/kh/g, 'x').replace(/t[zs]/g, 'ĉ');
-  // Collapse doubles.
-  s = s.replace(/(.)\1+/g, '$1');
-  return s;
+  return soundKey(raw);
 }
 
 /**
