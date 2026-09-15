@@ -237,7 +237,7 @@ export function ContractorStatusPanel({ apartment, onClose }: {
                   {isPair && (
                     <div className={`flex items-baseline gap-2 mb-2 ${i > 0 ? 'mt-4 pt-3 border-t border-gray-200' : ''}`}>
                       <span className="text-[12px] font-bold text-[#1e3a5f]">
-                        {ui.aptPrefix} {u.apt.apartmentNumber || '—'}
+                        {ui.aptPrefix} {u.apt.apartmentNumber || u.apt.displayName || '—'}
                       </span>
                       {u.apt.displayName?.trim() && u.apt.displayName.trim() !== u.apt.apartmentNumber?.trim() && (
                         <span className="text-[10.5px] text-gray-400 truncate">{u.apt.displayName}</span>

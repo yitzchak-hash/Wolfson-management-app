@@ -58,6 +58,12 @@ function ProgressCell({ apt, fill, cell, label, projectId, onOpen }: {
    */
   const { w, h } = cell;
   const name = apt.displayName && apt.displayName !== apt.apartmentNumber ? apt.displayName : '';
+  // A unit may carry a NAME and no number ("Gym", "Lobby & entrance") — then
+  // the name IS the headline and nothing dangles where the number would be.
+  const head = apt.apartmentNumber || name || '—';
+  const sub = apt.apartmentNumber ? name : '';
+  // A merged unit spans the positions it covers, here as on the diagram.
+  const span = Math.max(1, Math.min(4, Math.floor(Number(apt.colSpan) || 1)));
   const usable = Math.max(4, w - 2);
 
   // The number: from the cell's smaller dimension, and a step smaller when a
@@ -85,7 +91,7 @@ function ProgressCell({ apt, fill, cell, label, projectId, onOpen }: {
   const addrPx = Math.max(4.5, Math.min(8, h * 0.16));
   const nameH = namePx * 1.12 * nameLines;
   const showNumber = w >= 14 && h >= 9;
-  const showName = !!name && w >= 22 && h >= numberPx * 1.1 + namePx * 1.12 + 2;
+  const showName = !!sub && w >= 22 && h >= numberPx * 1.1 + namePx * 1.12 + 2;
   if (showName && nameLines === 2 && h < numberPx * 1.1 + nameH + 2) nameLines = 1;
   // The address is the TALL-cell earn — his "if it becomes taller": a real
   // height floor plus slack, so a squeezed cell never stacks three lines.
@@ -98,7 +104,7 @@ function ProgressCell({ apt, fill, cell, label, projectId, onOpen }: {
       onClick={e => { e.stopPropagation(); onOpen(); }}
       className="rounded-[2px] overflow-hidden flex flex-col items-center justify-center leading-none
                  hover:ring-2 hover:ring-[#1e3a5f] transition-shadow px-[1px]"
-      style={{ backgroundColor: fill, color: readableOn(fill), ...planner.style }}
+      style={{ backgroundColor: fill, color: readableOn(fill), gridColumn: span > 1 ? `span ${span}` : undefined, ...planner.style }}
       title={planner.draggable ? `${label} · drag it onto a day` : label}
     >
       {showAddr && (
@@ -108,7 +114,7 @@ function ProgressCell({ apt, fill, cell, label, projectId, onOpen }: {
       )}
       {showNumber && (
         <span className="font-bold truncate max-w-full flex-shrink-0" style={{ fontSize: numberPx }}>
-          {apt.apartmentNumber || '—'}
+          {head}
         </span>
       )}
       {showName && (
@@ -121,7 +127,7 @@ function ProgressCell({ apt, fill, cell, label, projectId, onOpen }: {
             WebkitLineClamp: nameLines, overflow: 'hidden',
           }}
         >
-          {apt.displayName}
+          {sub}
         </span>
       )}
     </button>
@@ -192,6 +198,7 @@ export function ProjectMini({ projectId: chosen, buildingId, onOpen, onOpenUnit,
     }
     for (const list of m.values()) {
       list.sort((a, b) => (b.floor - a.floor)
+        || (Number(a.colPosition) || 0) - (Number(b.colPosition) || 0)
         || Number(a.apartmentNumber || 0) - Number(b.apartmentNumber || 0));
     }
     return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));

@@ -3,7 +3,7 @@ import { useStore, loadProjectSnapshot } from '../data/store';
 import {
   Plus, Trash2, Save, Palette, ChevronUp, ChevronDown, Shield, Sun, Moon,
   Copy, Check, Download, Upload, HardDrive, X, HardDriveDownload, ToggleLeft, ToggleRight,
-  Languages, Clock, RotateCcw, Wifi, WifiOff, Loader, Database, RefreshCw, CloudUpload, Search, BookOpen, ExternalLink, AlertTriangle, Tv,
+  Languages, Clock, RotateCcw, Wifi, WifiOff, Loader, Database, RefreshCw, CloudUpload, Search, BookOpen, ExternalLink, AlertTriangle, Tv, Building2,
 } from 'lucide-react';
 import { isFirebaseConfigured, db, fsSet, fsGetAll } from '../data/firebase';
 import { TvDashboard } from '../components/board/TvDashboard';
@@ -32,10 +32,9 @@ import { format } from 'date-fns';
 import { saveAs } from 'file-saver';
 import { extractFolderId, extractFileId, isUploadBackendConfigured, getFolderNameViaBackend, familyNameFromFolderName, shareFileToDrive } from '../data/driveApi';
 import { fetchContractorSheet } from '../data/sheetApi';
-import { ProjectBuilder } from '../components/settings/ProjectBuilder';
+import { LayoutStudio } from '../components/settings/LayoutStudio';
 import { ImportJobsCard } from '../components/settings/ImportJobsCard';
 import { AutoJobsCard } from '../components/settings/AutoJobsCard';
-import { ProjectLayout, layoutToApartments, newSlot, joinSlots, areNeighbours } from '../data/projectLayout';
 
 /** The shape the wall is set to, as a number. Defaults to 16:9. */
 function ratioOfShape(id?: string): number {
@@ -1465,87 +1464,18 @@ function TvPresentationSettings({ onToast }: { onToast: (msg: string, type?: 'su
   );
 }
 
-// ─── Buildings tab: the visual project builder ────────────────────────────────
+// ─── Buildings tab: the layout studio, full screen ────────────────────────────
+/**
+ * The Buildings card opens the layout studio as a full-screen surface
+ * (owner, 2026-09-15) — the card itself is only the door back in once the
+ * studio has been closed. The studio reads the LIVE apartments of the open
+ * workspace and writes through the store on Save; see LayoutStudio.tsx.
+ */
 function BuildingsBuilderTab({ onToast }: { onToast: (msg: string, type?: 'success' | 'error') => void }) {
-  const { apartments, buildings, currentProjectId, currentUser, bulkUpdateApartments, addApartment } = useStore();
-
-  /** Current apartment records -> an editable layout. */
-  const initial: ProjectLayout = useMemo(() => {
-    const byBuilding = new Map<string, Apartment[]>();
-    for (const a of apartments) {
-      if (a.buildingId === 'G') continue;
-      if (!byBuilding.has(a.buildingId)) byBuilding.set(a.buildingId, []);
-      byBuilding.get(a.buildingId)!.push(a);
-    }
-    return {
-      buildings: [...byBuilding.entries()].map(([id, apts], i) => {
-        const floors = [...new Set(apts.map(a => a.floor))].sort((x, y) => y - x);
-        return {
-          id,
-          name: buildings.find(b => b.id === id)?.name ?? id,
-          displayOrder: buildings.find(b => b.id === id)?.displayOrder ?? i + 1,
-          floors: floors.map(f => ({
-            label: f === 0 ? 'Ground' : String(f),
-            slots: apts
-              .filter(a => a.floor === f)
-              .sort((x, y) => (x.colPosition ?? 0) - (y.colPosition ?? 0))
-              .map(a => ({
-                ...newSlot('apartment'),
-                number: a.apartmentNumber || undefined,
-                pinned: !!a.apartmentNumber,
-                // Carried through so the joins can be rebuilt below, once every
-                // slot exists and positions are known.
-                srcId: a.id,
-                srcMergedWith: a.mergedWith,
-                srcDuplex: a.isDuplexApt,
-              })),
-          })),
-        };
-      }),
-    };
-  }, [apartments, buildings]);
-
-  /**
-   * Rebuilds joins from the records.
-   *
-   * `mergedWith` becomes a connected pair; `isDuplexApt` becomes a duplex with
-   * the slot above. Done after the whole layout exists, because a join needs
-   * both halves to be present before it can point at anything.
-   */
-  const initialJoined: ProjectLayout = useMemo(() => {
-    const l: ProjectLayout = structuredClone(initial);
-    for (const b of l.buildings) {
-      const posById = new Map<string, { f: number; s: number }>();
-      b.floors.forEach((fl, f) => fl.slots.forEach((sl, s) => {
-        const src = (sl as unknown as Record<string, unknown>).srcId;
-        if (typeof src === 'string') posById.set(src, { f, s });
-      }));
-      b.floors.forEach((fl, f) => fl.slots.forEach((sl, s) => {
-        const raw = sl as unknown as Record<string, unknown>;
-        if (sl.joinUid) return;
-        if (raw.srcDuplex && f > 0) {
-          const above = b.floors[f - 1]?.slots[s];
-          if (above && above.kind === 'apartment' && !above.joinUid) {
-            joinSlots(b, { f, s }, { f: f - 1, s }, 'duplex');
-            return;
-          }
-        }
-        const partnerId = raw.srcMergedWith;
-        if (typeof partnerId === 'string') {
-          const p = posById.get(partnerId);
-          if (p && !b.floors[p.f].slots[p.s].joinUid && areNeighbours({ f, s }, p)) {
-            joinSlots(b, { f, s }, p, 'connected');
-          }
-        }
-      }));
-      // The carrier fields have done their job.
-      b.floors.forEach(fl => fl.slots.forEach(sl => {
-        const raw = sl as unknown as Record<string, unknown>;
-        delete raw.srcId; delete raw.srcMergedWith; delete raw.srcDuplex;
-      }));
-    }
-    return l;
-  }, [initial]);
+  const { currentProjectId, mainUiStrings: s } = useStore();
+  const [open, setOpen] = useState(false);
+  // Opening the card opens the builder — the first paint of this tab.
+  useEffect(() => { if (currentProjectId !== 'general') setOpen(true); }, [currentProjectId]);
 
   if (currentProjectId === 'general') {
     return (
@@ -1557,30 +1487,18 @@ function BuildingsBuilderTab({ onToast }: { onToast: (msg: string, type?: 'succe
 
   return (
     <div className="space-y-3">
-      <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-        <strong>Nothing is destroyed by saving.</strong> Apartments are matched by building and number, so
-        stages, tasks, photos, notes and Drive links stay attached. Take a backup first if you are making
-        a large change.
+      <div className="bg-white border border-gray-200 rounded-xl p-5" data-buildings-card>
+        <div className="flex items-center gap-2 mb-2">
+          <Building2 size={18} className="text-[#1e3a5f]" />
+          <h2 className="font-semibold text-gray-800">{s.lbTitle}</h2>
+        </div>
+        <p className="text-sm text-gray-500 mb-3">{s.lbCardText}</p>
+        <button data-open-builder onClick={() => setOpen(true)}
+          className="px-4 py-2 rounded-lg bg-[#1e3a5f] text-white text-sm font-bold hover:bg-[#16304f]">
+          {s.lbOpenBuilder}
+        </button>
       </div>
-      <ProjectBuilder
-        initial={initialJoined}
-        onToast={onToast}
-        onSave={layout => {
-          if (!currentUser) return;
-          const next = layoutToApartments(layout, apartments);
-          const existingIds = new Set(apartments.map(a => a.id));
-          for (const a of next) {
-            if (existingIds.has(a.id)) {
-              bulkUpdateApartments([a.id], {
-                floor: a.floor, colPosition: a.colPosition,
-                apartmentNumber: a.apartmentNumber, isDuplexApt: a.isDuplexApt,
-              }, currentUser);
-            } else {
-              addApartment(a);
-            }
-          }
-        }}
-      />
+      {open && <LayoutStudio onClose={() => setOpen(false)} onToast={onToast} />}
     </div>
   );
 }
