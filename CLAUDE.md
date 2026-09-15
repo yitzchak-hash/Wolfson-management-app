@@ -4763,13 +4763,23 @@ verified identical with these changes stashed.
 
 # v2 — the markup round, first half (the tabs await approval)
 
-## The zoom-out floor is the fit
+## The zoom-out floor is HALF the fit (was: the fit — changed 2026-09-15)
 `fitScaleRef` in PlanAnnotator is written EVERY renderPage from the stage's
 real size (not only when a fit was asked for — the buttons and the pinch
 clamp against it and need it current after every resize, page turn and
 rotation). Every zoom-out path — wheel, pinch, all three button clusters —
-floors on it: once the whole sheet is visible with its margin, zooming out
-buys nothing but blank stage. Zoom-in caps are untouched.
+floors on `zoomFloor()` = `fitScaleRef × ZOOM_FLOOR_BELOW_FIT` (0.5). It USED
+to floor on the fit itself, and that made the first gesture a mouse makes on
+a freshly opened plan — the wheel DOWN, on a sheet that opens fitted — do
+nothing at all; on a PC it read as "scroll to zoom doesn't work" (the
+sketcher's Round 3, Q13 / pick 109, reproduced on the built bundle by the
+sketcher's `scratchpad/wheelprobe.mjs`). Half the fit is enough for the
+wheel to answer without the sheet shrinking to nothing; the fit button brings
+it straight back. Zoom-in caps are untouched. The stage scroller also wears
+`scrollbar-thin` (the thin grey bar `index.css` already defines) instead of
+the browser's own — the "old format" scrollbar in the same report. This
+change was made on the sketcher's branch `claude/plan-sketcher-extraction-9a81bz`
+and re-copied there; production carries it only when that branch is merged.
 
 ## Touch: unrounded pinch, gentler taps
 - The pinch sets the scale UNROUNDED while the fingers are down and snaps to

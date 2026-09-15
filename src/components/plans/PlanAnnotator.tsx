@@ -40,6 +40,8 @@ pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
  */
 const NAVY = '#1e3a5f';
 const NAVY_DEEP = '#152b47';
+/** How far below the fit the wheel and the pinch may zoom out: half the fit (see `zoomFloor`). */
+const ZOOM_FLOOR_BELOW_FIT = 0.5;
 /**
  * The coloured part of a slider's track, as a percentage.
  *
@@ -510,6 +512,15 @@ function PlanEditor({
    */
   const fitScaleRef = useRef(0.1);
   /**
+   * The zoom-out FLOOR sits a step below the fit, not on it. The plan opens
+   * fitted, and the first thing a hand with a mouse does is turn the wheel
+   * DOWN — with the floor on the fit that gesture moved nothing, and on a PC
+   * it read as "scroll to zoom doesn't work" (the sketcher's Round 3, Q13).
+   * Half the fit is enough room for the wheel to answer without the sheet
+   * shrinking away to nothing; the fit button brings it straight back.
+   */
+  const zoomFloor = () => fitScaleRef.current * ZOOM_FLOOR_BELOW_FIT;
+  /**
    * A touch screen zooms in gentler steps.
    *
    * A flat +0.2 per tap is a quarter of the sheet gone at 80% and barely a
@@ -524,7 +535,7 @@ function PlanEditor({
     setFitting(false);
     setScale(s => {
       const next = touchUIRef.current ? s * (dir > 0 ? 1.08 : 1 / 1.08) : s + dir * step;
-      return Math.min(cap, Math.max(fitScaleRef.current, Math.round(next * 100) / 100));
+      return Math.min(cap, Math.max(zoomFloor(), Math.round(next * 100) / 100));
     });
   }, []);
   /**
@@ -905,9 +916,9 @@ function PlanEditor({
   const zoomAt = useCallback((clientX: number, clientY: number, factor: number) => {
     anchorZoomAt(clientX, clientY);
     setFitting(false);
-    // The floor is the fit: once the whole sheet is on screen with its
+    // The floor is HALF the fit (zoomFloor): the whole sheet on screen with
     // margin, zooming out further only shrinks it into blank stage.
-    setScale(z => Math.min(6, Math.max(fitScaleRef.current, Math.round(z * factor * 100) / 100)));
+    setScale(z => Math.min(6, Math.max(zoomFloor(), Math.round(z * factor * 100) / 100)));
   }, [anchorZoomAt]);
 
   useEffect(() => {
@@ -1014,7 +1025,7 @@ function PlanEditor({
        */
       const d = gap(e.touches);
       const want = base.dist >= 8
-        ? Math.min(6, Math.max(fitScaleRef.current, base.scale * (d / base.dist)))
+        ? Math.min(6, Math.max(zoomFloor(), base.scale * (d / base.dist)))
         : scaleRef.current;
       // The post-render correction gets the SAME frozen fraction at the live
       // midpoint; the inline apply keeps the sheet on the fingers this frame
@@ -3201,7 +3212,7 @@ function PlanEditor({
               zoomed sheet unreachable. `m-auto` centres exactly the same while
               it fits and behaves like a normal scroll child once it does not.
             */
-            className={`flex-1 min-h-0 overflow-auto flex ${
+            className={`flex-1 min-h-0 overflow-auto scrollbar-thin flex ${
               compact ? 'p-1' : 'p-4'}`}
             style={{ touchAction: 'pan-x pan-y' }}>
             {loadErr ? (
