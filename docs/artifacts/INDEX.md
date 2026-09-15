@@ -24,6 +24,7 @@ the time and can be rebuilt from the template, or read at the link.
 | 2026-09-07 | Active Jobs, Rethought (approved "all yes") | https://claude.ai/code/artifact/9fe06ae9-36fd-4971-a871-360d11c4f3f0 | docs/artifacts/2026-09-07-active-jobs-rethought.html · docs/plans/active-jobs/DESIGN.md |
 | 2026-09-08 | Galaxy Tab S10 FE Gallery | https://claude.ai/code/artifact/0e4f5298-79c2-4f22-b438-a653b1e1ceb2 | docs/artifacts/2026-09-08-galaxy-tab-s10-fe-gallery.html · scratchpad/build-tabs10.mjs |
 | 2026-09-15 | Buildings, Plans and the Notebook Plus (awaiting the owner's stars) | https://claude.ai/artifact/Y8ujqL3CjhocFFGn5C5W9B | docs/artifacts/2026-09-15-buildings-plans-notebook-plus.html · scratchpad/settings-plans-notebook-plan.template.html |
+| 2026-09-15 | Buildings, Plans and the Notebook Plus — VERSION 2 (the owner's remarks drawn in; awaiting stars 7–10 + his screenshots) | https://claude.ai/artifact/Y8ujqL3CjhocFFGn5C5W9B | docs/artifacts/2026-09-15-buildings-plans-notebook-plus-v2.html · scratchpad/settings-plans-notebook-plan.template.html |
 
 Earlier plan pages from the same method (Arrange, Tasks That Take Days,
 Plan Tabs, Notebook Strips) have their templates in `scratchpad/*-plan.template.html`

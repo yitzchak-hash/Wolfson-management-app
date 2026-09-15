@@ -45,6 +45,36 @@ unasked.
 
 ## Where things stand (2026-09-08, seventh round of the day)
 Last commits, newest first (see `git log`):
+- **2026-09-15, second pass — VERSION 2 of the plan page, still nothing built.**
+  The owner approved version 1 ("everything looks good") and added remarks,
+  all drawn into the SAME artifact (version 2; dated copy
+  `docs/artifacts/2026-09-15-buildings-plans-notebook-plus-v2.html`). What
+  version 2 adds: a unit may have a name and NO number; the builder's
+  controls also in a right-click menu; a preview arrow on every plan tile
+  with "Back to <folder>" and "Make this the main plan"; the notebook plus
+  only on HOVER; the add-a-job dialog's general job = pick workspace THEN
+  building, who = a search, what = the MessageBox, days = the standard
+  TaskDaysPicker, stage = from → when-done; **Add task EVERYWHERE picks the
+  FROM stage (any stage, even unreached) and the TO stage**, and every task
+  row reads "Installation → Drywall" (new field `ContractorAssignment.fromStageId`
+  proposed); non-consecutive stretches get a "different stages" switch and an
+  "one task or two?" ask; **the notebook gets ONE kind of square — a bar
+  spanning its days (Google Calendar), drawn FROM THE TASK**, and the
+  notebook stores no per-day task cards any more (only free-words notes and
+  job-without-task placements; a one-time fold of existing cards into their
+  tasks); **the "already in the planner" ask fires ONLY on an overlap** (same
+  job, same day) and names who is there. The page explains, from the code,
+  the three things he hit: `addContractorAssignment` raises `plannerAsk`
+  whenever the job has ANY card on any rota (never checks the day);
+  `saveTaskEdit` in the drawer rewrites the task's days but never touches the
+  notebook's `cells`, so the four per-day cards stayed after he unchecked
+  non-consecutive; and the two square kinds are stored entries (one card per
+  day, `data-day-pill`) versus derived dashed `taskChips` (a dated task nobody
+  placed). **His screenshots did NOT arrive** (words only) — the page says so
+  and asks for them again. New stars 7–10 on the page: one source of truth
+  (rec. yes), overlap rule same-job-same-day (rec.), two tasks when stages
+  differ (rec.), FROM stage = any stage with a "not reached yet" hint (rec.).
+  Stars 1–6 taken as recommended by his "everything looks good".
 - **2026-09-15 — a plan page only, nothing built**: the owner asked for
   urgent changes in three places and for before/after previews in ONE
   artifact before anything is built. Published "Buildings, Plans and the
@@ -198,7 +228,17 @@ Last commits, newest first (see `git log`):
   `npx vite --port 5173` and `VITE_DRIVE_API_KEY=test npx vite --port 5174`.
 
 ## The last reply the owner saw (so the next one continues it)
-**Newest (2026-09-15)**: the reply gave him the link to "Buildings, Plans and
+**Newest (2026-09-15, second pass)**: the reply said version 2 is at the
+same link, that no screenshots arrived, listed what was added from his
+remarks, explained the three faults (the day-blind ask; the drawer's task
+edit not touching the notebook's stored cards; stored cards vs derived
+chips), proposed one source of truth + spanning bars + the overlap-only ask,
+and asked him to answer stars 7–10, resend the screenshots, and say "build
+it". The next assistant's job: read his answers and BUILD the whole page in
+one round (scenes 1–6), probes and all — the biggest piece is scene 6 (the
+notebook drawing tasks from tasks, with the one-time card fold).
+
+Earlier: **Newest (2026-09-15)**: the reply gave him the link to "Buildings, Plans and
 the Notebook Plus", said each scene is a before beside an after with numbered
 notes, listed the six starred questions (move-a-floor keeps its number?; a
 merged row is one unit?; a marked-up version can take the star?; keep the
