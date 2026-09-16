@@ -87,7 +87,7 @@ export function FolderTile({ id, name, onOpen }: { id: string; name: string; onO
  * it is displayed — the standing where-DISPLAYED rule for plans.
  */
 export function FileTile({
-  file, starred, current, sub, onOpen, onStar, onPreview, onOpenNewTab, rowHook,
+  file, starred, starAuto, current, sub, onOpen, onStar, onPreview, onOpenNewTab, rowHook,
 }: {
   file: TileFile;
   starred?: boolean;
@@ -98,6 +98,8 @@ export function FileTile({
   /** The tile's own press. */
   onOpen?: () => void;
   onStar?: () => void;
+  /** The star is the APP's guess (latest activity), not a person's choice — drawn red. */
+  starAuto?: boolean;
   onPreview?: () => void;
   onOpenNewTab?: () => void;
   /** Which data hook the tile wears — the picker keeps `data-plan-row` for its standing probes. */
@@ -149,11 +151,12 @@ export function FileTile({
           <button type="button"
             data-tile-star={file.id}
             data-starred={starred ? '1' : '0'}
+            data-star-auto={starred && starAuto ? '1' : undefined}
             onClick={e => { e.stopPropagation(); onStar(); }}
-            title={starred ? ui.planIsMain : ui.planMakeMain}
+            title={starred ? (starAuto ? ui.planAutoPicked : ui.planIsMain) : ui.planMakeMain}
             className={`absolute top-1 right-1 w-8 h-8 rounded-full flex items-center justify-center shadow-sm border ${
               starred
-                ? 'bg-amber-400 border-amber-500 text-white opacity-100'
+                ? (starAuto ? 'bg-red-600 border-red-700 text-white opacity-100' : 'bg-amber-400 border-amber-500 text-white opacity-100')
                 : 'bg-white/90 border-gray-200 text-slate-500 hover:text-amber-500 opacity-0 group-hover:opacity-100'}`}>
             <Star size={16} fill={starred ? 'currentColor' : 'none'} />
           </button>
@@ -234,7 +237,7 @@ export function TileGrid({ children }: { children: React.ReactNode }) {
  * component, so a crumb pressed twice costs one round trip.
  */
 export function PlanBrowser({
-  path, onPath, starredId, onStar, onPreview, onBack, onHide, currentId, hidden = false,
+  path, onPath, starredId, starAuto, onStar, onPreview, onBack, onHide, currentId, hidden = false,
 }: {
   /**
    * A preview is standing over the browser. It stays MOUNTED — same folder,
@@ -247,6 +250,8 @@ export function PlanBrowser({
   onPath: (next: Crumb[]) => void;
   /** The starred file — the apartment's plansPdfLink. */
   starredId: string | null;
+  /** `starredId` is the app's latest-activity guess, not a person's star. */
+  starAuto?: boolean;
   onStar: (file: TileFile) => void;
   /** Open this sheet in the pane, from THIS folder (named so Back can say where it goes). */
   onPreview: (file: TileFile, folderName: string) => void;
@@ -354,6 +359,7 @@ export function PlanBrowser({
                 key={f.id}
                 file={{ id: f.id, name: f.name, isImage: f.isImage, viewable: f.viewable, mimeType: f.mimeType }}
                 starred={starredId === f.id}
+                starAuto={starAuto}
                 current={currentId === f.id}
                 onOpen={f.viewable ? () => onPreview(f, folder.name) : undefined}
                 onStar={f.viewable ? () => onStar(f) : undefined}

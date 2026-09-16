@@ -18,7 +18,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, BellRing, X } from 'lucide-react';
 import { useStore, loadAllProjectsTaskData, loadProjectSnapshot } from '../../data/store';
-import { Contractor, ContractorAssignment, ContractorNote, PortalLang, aptLabel } from '../../types';
+import { Contractor, ContractorAssignment, ContractorNote, PortalLang, aptLabel, projectShortName } from '../../types';
 import { chime, enablePush, notifyHere, pushConfigured, pushPermission, pushRemembered, pushSupported } from '../../data/pushClient';
 
 const W = {
@@ -93,7 +93,7 @@ export function ArrivalWatcher({ contractor, lang, onOpen }: {
   /** Everything that can ring, keyed so a repeat is never announced twice. */
   const current = useMemo(() => {
     const out = new Map<string, Arrival>();
-    const wsName = (pid: string) => projects.find(p => p.id === pid)?.shortName ?? projects.find(p => p.id === pid)?.name ?? pid;
+    const wsName = (pid: string) => projectShortName(projects.find(p => p.id === pid), lang === 'he', pid);
     for (const p of loadAllProjectsTaskData()) {
       const live = p.projectId === currentProjectId;
       const tasks: ContractorAssignment[] = live ? liveTasks : p.assignments;
@@ -123,7 +123,7 @@ export function ArrivalWatcher({ contractor, lang, onOpen }: {
     }
     return out;
     // snapshotTick: a foreign workspace's live sync landing must recompute this.
-  }, [contractor.id, currentProjectId, liveTasks, liveNotes, liveApts, snapshotTick, projects, words]);
+  }, [contractor.id, currentProjectId, liveTasks, liveNotes, liveApts, snapshotTick, projects, words, lang]);
 
   const seenKey = `portal_seen_${contractor.id}`;
   const [toast, setToast] = useState<Arrival | null>(null);

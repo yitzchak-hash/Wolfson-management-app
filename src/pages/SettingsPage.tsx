@@ -850,7 +850,7 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
   const stages = useStore(st => st.stages);
   const currentProjectId = useStore(st => st.currentProjectId);
   /** Which worker's "maps" / "stages" panel is open — one at a time. */
-  const [reachOpen, setReachOpen] = useState<{ id: string; what: 'maps' | 'stages' } | null>(null);
+  const [reachOpen, setReachOpen] = useState<{ id: string; what: 'maps' | 'stages' | 'self' } | null>(null);
   const [openPerms, setOpenPerms] = useState<string | null>(null);
   /**
    * A new worker starts on a level, and WHICH level is remembered.
@@ -1050,6 +1050,15 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
                     const all = buildingProjects.every(p => next.includes(p.id));
                     updateContractor(c.id, { mapProjects: all ? undefined : next });
                   };
+                  // WHERE he may give himself a task (owner, 2026-09-16) — the
+                  // second half of the split permission. Absent = everywhere.
+                  const selfOn = c.selfAssignProjects ?? projects.map(p => p.id);
+                  const toggleSelf = (pid: string) => {
+                    const next = selfOn.includes(pid) ? selfOn.filter(x => x !== pid) : [...selfOn, pid];
+                    const all = projects.every(p => next.includes(p.id));
+                    updateContractor(c.id, { selfAssignProjects: all ? undefined : next });
+                  };
+                  const canSelf = permsOf(c, workerLevels).selfAssign;
                   const toggleStage = (sid: string) => {
                     const next = reportOn.includes(sid) ? reportOn.filter(x => x !== sid) : [...reportOn, sid];
                     const same = next.length === defaultReport.length && defaultReport.every(x => next.includes(x));
@@ -1067,6 +1076,16 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
                           maps: {c.mapProjects ? mapsOn.map(id => projects.find(p => p.id === id)?.name ?? id).join(', ') || 'none' : 'all'}
                         </button>
                       </Tooltip>
+                      {canSelf && (
+                        <Tooltip text="In which workspaces this worker may give HIMSELF a task">
+                          <button data-worker-selftask
+                            onClick={() => setReachOpen(open === 'self' ? null : { id: c.id, what: 'self' })}
+                            className={`text-[11px] font-semibold px-2 py-1 rounded-lg border ${
+                              c.selfAssignProjects ? 'border-sky-200 bg-sky-50 text-sky-700' : 'border-gray-200 text-gray-500'}`}>
+                            own tasks in: {c.selfAssignProjects ? selfOn.map(id => projects.find(p => p.id === id)?.shortName ?? id).join(', ') || 'nowhere' : 'all'}
+                          </button>
+                        </Tooltip>
+                      )}
                       <Tooltip text={`The stages he can answer "What did you do?" with, in ${wsName}`}>
                         <button data-worker-stages
                           onClick={() => setReachOpen(open === 'stages' ? null : { id: c.id, what: 'stages' })}
@@ -1078,9 +1097,18 @@ function ContractorsTab({ onToast }: { onToast: (msg: string, type?: 'success' |
                       {open && (
                         <div data-worker-reach className="absolute top-full mt-1 start-0 z-30 bg-white rounded-xl shadow-xl border border-gray-200 p-2 w-64">
                           <div className="text-[10px] font-bold text-gray-400 px-1.5 pb-1">
-                            {open === 'maps' ? 'Building maps he may open' : `Stages he can report · ${wsName}`}
+                            {open === 'maps' ? 'Building maps he may open'
+                              : open === 'self' ? 'Workspaces he may give himself a task in'
+                              : `Stages he can report · ${wsName}`}
                           </div>
-                          {open === 'maps'
+                          {open === 'self'
+                            ? projects.map(p => (
+                              <label key={p.id} className="flex items-center gap-2 px-1.5 py-1 text-xs text-gray-700">
+                                <input type="checkbox" checked={selfOn.includes(p.id)} onChange={() => toggleSelf(p.id)} className="accent-[#1e3a5f]" />
+                                {p.name}
+                              </label>
+                            ))
+                            : open === 'maps'
                             ? buildingProjects.map(p => (
                               <label key={p.id} className="flex items-center gap-2 px-1.5 py-1 text-xs text-gray-700">
                                 <input type="checkbox" checked={mapsOn.includes(p.id)} onChange={() => toggleMap(p.id)} className="accent-[#1e3a5f]" />

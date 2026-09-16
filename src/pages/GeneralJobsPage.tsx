@@ -6,7 +6,7 @@ import {
   Ghost, ThumbsUp, ThumbsDown, ClipboardPaste, LayoutGrid, Columns3, Archive, CheckCircle2, PlayCircle,
   Image as ImageIcon, ImageOff, History, MoveUpRight, Unlink, FileText, Search, FolderPlus, Printer,
   Settings2 as Settings, BringToFront, SendToBack, ChevronUp, ChevronDown, Eye,
-  Eraser, GripVertical, Lock, Unlock, Group, Ungroup, Info as InfoGlyph, CalendarDays, Crosshair,
+  Eraser, GripVertical, Lock, Unlock, Group, Ungroup, Info as InfoGlyph, CalendarDays, Crosshair, Maximize2,
 } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useStore, isTombstoned, loadProjectSnapshot } from '../data/store';
@@ -21,7 +21,7 @@ import { placeJobsOnPlanner, dropMessage } from '../data/plannerDrop';
 import { PlannerEntry, personOf, weekStartOf, iso as isoDay } from '../components/board/PlannerWidget';
 import { PlannerTaskDialog, PlannerRemoveDialog, QuickAssignDialog } from '../components/board/PlannerDialogs';
 import { ScheduleWindow } from '../components/board/ScheduleWindow';
-import { boardAccess } from '../types';
+import { boardAccess, projectShortName } from '../types';
 import { Apartment, CanvasElement, BinKind, BIN_KINDS, BIN_META, binKeyOf, binLabelOf, isBuiltInBin, getStageName, relativeTime, personColor, PLANNER_ARCHIVE_MAX, BOARD_MARGIN, BoardLayout } from '../types';
 import { presenceReady, startPresence, publishPresence } from '../data/presence';
 import { PresenceLayer } from '../components/board/PresenceLayer';
@@ -304,11 +304,26 @@ function Hint({ text }: { text: string }) {
 }
 
 /** The "N SELECTED" strip at the top of a multi-selection menu. */
-function SelCountHeader({ n }: { n: number }) {
+function SelCountHeader({ n, detail }: { n: number; detail?: string }) {
   return (
     <div className="px-4 py-1.5 text-[11px] font-bold text-gray-400 border-b border-gray-100 tracking-wide">
-      {n} SELECTED
+      <span data-sel-count className="block">{n} SELECTED</span>
+      {/* WHAT the number is made of — "27 selected" over four groups read
+          as a lie until it said the twenty-three jobs the lasso also caught. */}
+      {detail && <span data-sel-detail className="block text-[10px] font-semibold text-gray-400 normal-case tracking-normal">{detail}</span>}
     </div>
+  );
+}
+
+/** The Equal-size row beside Arrange. */
+function EqualSizeRow({ n, onClick }: { n: number; onClick: () => void }) {
+  return (
+    <button onClick={onClick} data-equal-row
+      className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5"
+      title="Every selected thing takes the size of the largest one">
+      <Maximize2 size={14} className="text-gray-400" />
+      {`Equal size (${n})`}
+    </button>
   );
 }
 
@@ -724,6 +739,7 @@ export function GeneralJobsPage() {
   const copyRef = useRef<() => void>(() => {});
   const pasteRef = useRef<(at?: { x: number; y: number }) => boolean>(() => false);
   const arrangeRef = useRef<() => void>(() => {});
+  const equalizeRef = useRef<() => void>(() => {});
   /** What Ctrl+C put down: whole node records, not text. */
   const boardClip = useRef<{ els: CanvasElement[]; jobs: string[]; mode: 'copy' | 'cut' }>(
     { els: [], jobs: [], mode: 'copy' });
@@ -1190,8 +1206,11 @@ export function GeneralJobsPage() {
    * clip art are left out — Arrange moves things, it never resizes them.
    */
   arrangeRef.current = () => {
+    // Groups (bins) ARE arranged — the owner selected all his groups and
+    // pressed Arrange and nothing moved, because the fixture rule left them
+    // out. A fixture that cannot be tidied is a fixture in the way.
     const els = canvasElements.filter(el => selectedElIds.has(el.id)
-      && el.type !== 'bin' && el.type !== 'arrow' && !el.locked && !el.attachedTo
+      && el.type !== 'arrow' && !el.locked && !el.attachedTo
       && (el.board ?? '') === activeBoardView);
     const jobSel = jobs.filter(j => selectedJobIds.has(j.id) && !j.boardLocked);
     const items = [
@@ -1237,6 +1256,41 @@ export function GeneralJobsPage() {
     // Selection is deliberately KEPT — the approved rule: one drag still
     // moves the whole block.
     setToast(`Arranged ${items.length} — still selected`);
+  };
+
+  /**
+   * EQUAL SIZE (owner, 2026-09-16): every selected node and tile takes the
+   * size of the LARGEST one, so nothing is cropped and the block reads as a
+   * set. Widgets, notes, boxes, groups and job tiles alike; arrows, locked
+   * things and attached clip art are left as they are. One arrange undo step.
+   */
+  equalizeRef.current = () => {
+    const els = canvasElements.filter(el => selectedElIds.has(el.id)
+      && el.type !== 'arrow' && !el.locked && !el.attachedTo
+      && (el.board ?? '') === activeBoardView);
+    const jobSel = jobs.filter(j => selectedJobIds.has(j.id) && !j.boardLocked);
+    const boxes = [
+      ...els.map(e => ({ w: e.w, h: e.h })),
+      ...jobSel.map(j => tileSize(j)),
+    ];
+    if (boxes.length < 2) return;
+    const big = boxes.reduce((a, b) => (b.w * b.h > a.w * a.h ? b : a));
+    const w = Math.round(big.w), h = Math.round(big.h);
+    track({ weight: 'arrange', label: `Made ${boxes.length} the same size` }, () => {
+      els.forEach(el => {
+        if (el.w === w && el.h === h) return;
+        const box = { x: el.x, y: el.y, w, h };
+        updateCanvasElement(el.id, isDrawingNode(el)
+          ? { w, h, points: relaidPoints(el, box) }
+          : { w, h });
+      });
+      if (currentUser) jobSel.forEach(j => {
+        const sz = tileSize(j);
+        if (sz.w === w && sz.h === h) return;
+        updateApartment(j.id, { tileW: w, tileH: h }, currentUser);
+      });
+    });
+    setToast(`${boxes.length} now the same size — ${w} × ${h}`);
   };
 
   pasteRef.current = (at?: { x: number; y: number }) => {
@@ -3005,9 +3059,32 @@ export function GeneralJobsPage() {
    * is the exception and stays silent, because its contents are ARCHIVED rather
    * than destroyed — putting a fresh one down brings the season's planning back.
    */
+  /** "4 groups · 20 jobs · 3 notes" — what a selection is made of. */
+  function selBreakdown(): string {
+    const counts = new Map<string, number>();
+    const bump = (k: string) => counts.set(k, (counts.get(k) ?? 0) + 1);
+    selectedJobIds.forEach(() => bump('job'));
+    selectedElIds.forEach(id => {
+      const el = canvasElements.find(e => e.id === id);
+      if (!el) return;
+      bump(el.type === 'bin' ? 'group' : el.type === 'widget' ? 'widget' : el.type === 'stroke' ? 'drawing' : el.type);
+    });
+    const word = (k: string, n: number) => `${n} ${k}${n === 1 ? '' : k === 'box' ? 'es' : 's'}`;
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => word(k, n)).join(' · ');
+  }
+
+/** A node that only POINTS at something else — deleting it loses nothing. */
+const POINTER_WIDGETS = new Set(['unit-card', 'project-mini', 'board-mini']);
+function isPointerNode(el: CanvasElement | undefined): boolean {
+  return !!el && el.type === 'widget' && POINTER_WIDGETS.has(el.widget ?? '');
+}
+
   function whatIsLost(el: CanvasElement | undefined): string {
     if (!el) return '';
     if (el.widget === 'rota' || el.widget === 'week-planner') return '';
+    // A unit card is a POINTER at a job in another workspace — removing it
+    // deletes nothing anywhere (owner: "they're like ghosts"). No ask.
+    if (el.widget === 'unit-card' || el.widget === 'project-mini' || el.widget === 'board-mini') return '';
     const d = (el.data ?? {}) as Record<string, unknown>;
     if (el.widget === 'sticky-pad') {
       const notes = (d.notes as StickyNoteRecord[] | undefined) ?? [];
@@ -3427,7 +3504,14 @@ export function GeneralJobsPage() {
       : lost.length
         ? `Remove ${removable.length} things? You will lose ${lost.join(', ')}, and it cannot be undone.`
         : `Remove ${removable.length} things?`;
-    if (!window.confirm(msg)) return;
+    /**
+     * A POINTER node — a unit card, a workspace or board miniature — holds
+     * no data of its own (owner, 2026-09-16: "they're a ghost… it should just
+     * delete"). A sweep made only of pointers asks nothing; anything else
+     * keeps the one question.
+     */
+    const allPointers = removable.every(id => isPointerNode(canvasElements.find(e => e.id === id)));
+    if (!allPointers && !window.confirm(msg)) return;
     removable.forEach(id => removeEl(id, false));
     setSelectedElIds(new Set());
     setCtxMenu(null);
@@ -4931,6 +5015,13 @@ export function GeneralJobsPage() {
      * opens at the press itself, the move closes it again.
      */
     if (e.button === 2 && (e.target as Element) === canvasRef.current) {
+      /**
+       * RIGHT-drag PANS (owner, 2026-09-16 — "if I right-click and while
+       * right-clicking I drag, I want it to drag and not select any
+       * widgets"). Supersedes the right-drag lasso; Ctrl+drag still lassoes.
+       * Nothing is decided at the press: a motionless right-click still
+       * opens the menu exactly as before.
+       */
       const w = toWorld(e.clientX, e.clientY);
       rightDrag.current = { px: e.clientX, py: e.clientY, wx: w.x, wy: w.y, lasso: false };
       canvasRef.current!.setPointerCapture(e.pointerId);
@@ -4971,9 +5062,12 @@ export function GeneralJobsPage() {
     const rd = rightDrag.current;
     if (rd && !rd.lasso && (e.buttons & 2) === 2
         && Math.hypot(e.clientX - rd.px, e.clientY - rd.py) > 6) {
-      rd.lasso = true;
+      rd.lasso = true; // "moved" — the release must not raise the menu
       setCtxMenu(null); // platforms that open the menu at the press
-      setLasso({ sx: rd.wx, sy: rd.wy, ex: rd.wx, ey: rd.wy });
+      // The press becomes a PAN from where the hand is now, not from where
+      // it pressed — six pixels of slop must not become a six-pixel jump.
+      panRef.current = { px: e.clientX, py: e.clientY, ox: pan.x, oy: pan.y };
+      setPanning(true);
     }
     if (zoomingWithButton.current) return;
     if (erasing.current) { eraseAt(e.clientX, e.clientY); return; }
@@ -7360,7 +7454,7 @@ export function GeneralJobsPage() {
               /* Right-click ANYWHERE with things selected — the approved
                  Magnific menu: the count, Copy, Cut, paste-here, Arrange. */
               <>
-                <SelCountHeader n={selectedJobIds.size + selectedElIds.size} />
+                <SelCountHeader n={selectedJobIds.size + selectedElIds.size} detail={selBreakdown()} />
                 <button onClick={() => { copyRef.current(); setCtxMenu(null); }}
                   className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
                   <Copy size={14} className="text-gray-400" />
@@ -7385,14 +7479,29 @@ export function GeneralJobsPage() {
                 )}
                 <ArrangeMenuRow n={selectedJobIds.size + selectedElIds.size}
                   onClick={() => { arrangeRef.current(); setCtxMenu(null); }} />
+                <EqualSizeRow n={selectedJobIds.size + selectedElIds.size}
+                  onClick={() => { equalizeRef.current(); setCtxMenu(null); }} />
               </>
             ) : ctxMenu.kind === 'job' ? (
               <>
-                {ctxMenu.ids.length > 1 && <SelCountHeader n={ctxMenu.ids.length} />}
+                {ctxMenu.ids.length > 1 && <SelCountHeader n={Math.max(ctxMenu.ids.length, selectedJobIds.size + selectedElIds.size)} detail={selBreakdown()} />}
                 {ctxMenu.ids.length > 1 && (
-                  <ArrangeMenuRow n={ctxMenu.ids.length}
-                    onClick={() => { arrangeRef.current(); setCtxMenu(null); }} />
+                  <>
+                    <ArrangeMenuRow n={ctxMenu.ids.length}
+                      onClick={() => { arrangeRef.current(); setCtxMenu(null); }} />
+                    <EqualSizeRow n={ctxMenu.ids.length}
+                      onClick={() => { equalizeRef.current(); setCtxMenu(null); }} />
+                  </>
                 )}
+                <button data-menu-focus onClick={() => {
+                    const j = apartments.find(a => a.id === ctxMenu.ids[0]);
+                    if (j) live.current.jobFocus(j);
+                    setCtxMenu(null);
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5"
+                  title="Glide the view so this sits in the middle of the screen">
+                  <Crosshair size={14} className="text-gray-400" /> Focus
+                </button>
                 <button onClick={() => handleDuplicateJobs(ctxMenu.ids)}
                   className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
                   <Copy size={14} className="text-gray-400" />
@@ -7628,11 +7737,26 @@ export function GeneralJobsPage() {
               </>
             ) : (
               <>
-                {ctxMenu.ids.length > 1 && <SelCountHeader n={ctxMenu.ids.length} />}
+                {ctxMenu.ids.length > 1 && <SelCountHeader n={Math.max(ctxMenu.ids.length, selectedJobIds.size + selectedElIds.size)} detail={selBreakdown()} />}
                 {ctxMenu.ids.length > 1 && (
-                  <ArrangeMenuRow n={ctxMenu.ids.length}
-                    onClick={() => { arrangeRef.current(); setCtxMenu(null); }} />
+                  <>
+                    <ArrangeMenuRow n={ctxMenu.ids.length}
+                      onClick={() => { arrangeRef.current(); setCtxMenu(null); }} />
+                    <EqualSizeRow n={ctxMenu.ids.length}
+                      onClick={() => { equalizeRef.current(); setCtxMenu(null); }} />
+                  </>
                 )}
+                {/* Focus — the crosshair on the node's strip, offered on the
+                    right-click too (owner, 2026-09-16). */}
+                <button data-menu-focus onClick={() => {
+                    const el = canvasElements.find(e => e.id === ctxMenu.ids[0]);
+                    if (el) live.current.elFocus(el);
+                    setCtxMenu(null);
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5"
+                  title="Glide the view so this sits in the middle of the screen">
+                  <Crosshair size={14} className="text-gray-400" /> Focus
+                </button>
                 {/* Ordering, the way Google Docs names it. Two overlapping notes
                     and no way to say which is on top was the gap. */}
                 <div className="px-4 pt-1.5 pb-1 text-[10px] font-extrabold tracking-wide text-gray-400">
@@ -8527,7 +8651,7 @@ export function GeneralJobsPage() {
               if (r.taskIds.length) {
                 const wsRec = plannerDrop.projectId
                   ? useStore.getState().projects.find(p => p.id === plannerDrop.projectId) : undefined;
-                const ws = wsRec?.shortName ?? wsRec?.name ?? '';
+                const ws = projectShortName(wsRec, !!useStore.getState().mainUiStrings.isRtl);
                 setToast((r.days.length > 1
                   ? `On the planner for ${r.days.length} days, and a task added`
                   : 'On the planner, and a task added') + (ws ? ` in ${ws}` : ''));

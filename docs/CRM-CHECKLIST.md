@@ -138,3 +138,10 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ Portal My tasks opens on ALL (2026-09-16)
 - ☑ Plan zoom: a zoom you chose survives the stage changing shape (scrollbar, pane narrowing, window nudge); only a fitted sheet re-fits; full screen in/out always fits; the fit is one number scrollbars or not (2026-09-16)
 - ☐ `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` (+ `VITE_VAPID_PUBLIC_KEY`) — *to be added in Vercel* to turn push on
+- ☑ The OFFICE rings: a worker's message or a closed job → chime + card + desktop notification (`OfficeAlerts` in AppLayout), pressing it opens the job on its Tasks tab with the task lit; the portal bell holds office messages too (2026-09-16)
+- ☑ "I'm going to work here" is its own permission (`workHere`), asks no stage at the start; the close asks which stages (several) + finished? yes/no → done / half done; an ordinary task never asks a stage at close (2026-09-16)
+- ☑ "A job for myself" limited per workspace (`Contractor.selfAssignProjects`, Settings → Workers); the form's WHERE is a search over every allowed job (2026-09-16)
+- ☑ Plans: nobody starred → newest-activity sheet shown with a RED star + red "!" bubble between Layers and Plans, never written; the portal shows the same guess (2026-09-16)
+- ☑ Board: right-drag PANS (Ctrl+drag lassoes); Arrange includes groups; Equal size row; the selection header says "N groups · N jobs · N notes"; Focus in every node menu; calendar widget month arrows; a unit card deletes without an ask (2026-09-16)
+- ☑ Hebrew workspace names (`Project.nameHe`/`shortNameHe`, `projectName()`/`projectShortName()`) in the header, the portal, the notebook dialogs, the TV bar, the calendars (2026-09-16)
+- ☑ Add-a-job dialog: the job's current stage named in colour above the labelled from → to pair (2026-09-16)

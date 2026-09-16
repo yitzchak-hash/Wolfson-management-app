@@ -42,10 +42,17 @@ await ctx.addInitScript(() => {
       classification: 'standard', generalNotes: '', address: '3 Wolfson St',
       currentStageId: 'S2', stageDates: {},
       createdAt: '2026-01-01', updatedAt: '2026-01-01', updatedBy: 'U', updatedByName: 'U',
+    }, {
+      id: 'A1-8', buildingId: 'A1', floor: 3, apartmentNumber: '8',
+      displayName: 'Baruch', isUnnamed: false, isDuplexApt: false,
+      classification: 'standard', generalNotes: '', address: '3 Wolfson St',
+      currentStageId: 'S1', stageDates: {},
+      createdAt: '2026-01-01', updatedAt: '2026-01-01', updatedBy: 'U', updatedByName: 'U',
     }],
   }));
 });
 const store = p => p.evaluate(() => JSON.parse(localStorage.getItem('wolfson_app_data')));
+const seedStageOf = id => ({ 'A1-7': 'S2', 'A1-8': 'S1' })[id];
 const marksOf = async p => (await store(p)).apartments.find(a => a.id === 'A1-7').stageMarks ?? {};
 
 // ── 1 · THE OFFICE: the stage picker's boxes ────────────────────────────────
@@ -117,35 +124,45 @@ check(await page.locator('[data-work-here]').count() === 1
   && /going to work here/i.test(await page.locator('[data-work-here]').innerText()),
   'with the big "I\'m going to work here" button');
 await page.locator('[data-work-here]').click();
-await page.waitForTimeout(400);
-check(await page.locator('[data-work-stages] button').count() === 4,
-  'What stage is it at? — every stage of the workspace, one per row');
-check(await page.locator('[data-work-stage="S2"][data-current]').count() === 1,
-  "the unit's own stage is marked as the one it is at now");
+await page.waitForTimeout(900);
+// OWNER (2026-09-16): NO "what stage is it at?" at the start — the unit's own
+// stage is the one he is working on. The press makes the task outright.
+check(await page.locator('[data-work-stages]').count() === 0 && await page.locator('[data-work-stage]').count() === 0,
+  'no stage question at the START');
 check(await page.locator('[data-finished-yes]').count() === 0 && await page.locator('[data-work-note]').count() === 0,
   'no "did you finish?" and no note at the START');
-await page.locator('[data-work-stage="S2"]').click();
-await page.waitForTimeout(900);
 let d = await store(page);
 const today = new Date(); today.setHours(0, 0, 0, 0);
 const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 const report = d.contractorAssignments.find(a => a.stageReport && a.stageId === 'S2');
 check(!!report && !report.completedAt && report.dueDate === todayIso && report.contractorId === 'C-jo',
-  'an OPEN stage-report task for TODAY was made on the unit', JSON.stringify({ due: report?.dueDate, done: report?.completedAt }));
+  "an OPEN stage-report task for TODAY was made on the unit, on the unit's OWN stage", JSON.stringify({ due: report?.dueDate, done: report?.completedAt, stage: report?.stageId }));
 check((d.apartments.find(a => a.id === 'A1-7').stageMarks ?? {}).S2 !== 'pending', 'nothing is marked half done by starting');
 check(await page.locator('[data-work-sheet]').count() === 0 && await page.locator('[data-close-job]').count() === 1,
   'and the task sheet opened on it, with Close job ready for the end of the day');
 
-// ── 4 · THE WORKER at the end of the day: close → "what stage is it at now?" → pictures → closed
+// ── 4 · THE WORKER at the end of the day: close → "what stages did you do?" (several) → "did you finish them?" → pictures → closed
 await page.locator('[data-close-job]').first().click();
 await page.waitForTimeout(500);
 check(await page.locator('[data-closing-panel]').count() === 1, 'Close job opens the standing closing screen');
 check(await page.locator('[data-close-stage]').count() === 1
   && await page.locator('[data-close-stage-pick="S2"][data-on]').count() === 1,
-  'it asks what stage the unit is at NOW, the task\'s own stage picked');
+  'it asks WHAT STAGES he did, the unit\'s own stage already ticked');
+check(await page.locator('[data-close-finished]').count() === 1
+  && await page.locator('[data-close-finished-pick="yes"][data-on]').count() === 1,
+  'and whether he finished — Yes by default');
 await page.locator('[data-close-stage-pick="S3"]').click();
 await page.waitForTimeout(200);
-check(await page.locator('[data-close-stage-pick="S3"][data-on]').count() === 1, 'picking Concealed units lights it');
+check(await page.locator('[data-close-stage-pick="S3"][data-on]').count() === 1
+  && await page.locator('[data-close-stage-pick="S2"][data-on]').count() === 1,
+  'a second stage ticks beside the first (several at once)');
+check(/all of them/i.test(await page.locator('[data-close-finished]').innerText()), 'the finish question now says "all of them"');
+// Half done first: "Not yet" → both stages wear the clock, the unit stays put.
+await page.locator('[data-close-finished-pick="no"]').click();
+await page.waitForTimeout(150);
+check(await page.locator('[data-close-finished-pick="no"][data-on]').count() === 1, '"Not yet — half done" lights');
+// …then he changes his mind: finished.
+await page.locator('[data-close-finished-pick="yes"]').click();
 await page.locator('input[type="file"][accept*="video"][accept*=".zip"]').setInputFiles(files(3));
 await page.waitForTimeout(2500);
 await page.locator('[data-close-now]').click();
@@ -153,10 +170,48 @@ await page.waitForTimeout(1500);
 d = await store(page);
 marks = d.apartments.find(a => a.id === 'A1-7').stageMarks ?? {};
 const doneReport = d.contractorAssignments.find(a => a.id === report.id);
-check(!!doneReport?.completedAt && doneReport.stageWhenDone === 'S3', 'the task closed carrying the stage he named as when-done',
-  JSON.stringify({ done: doneReport?.completedAt, to: doneReport?.stageWhenDone }));
-check(d.apartments.find(a => a.id === 'A1-7').currentStageId === 'S3', 'and the unit MOVED to Concealed units');
-check(marks.S2 === 'done', 'the stage he worked on is crossed off', JSON.stringify(marks));
+check(!!doneReport?.completedAt && JSON.stringify(doneReport.stagesWorked) === JSON.stringify(['S2', 'S3']) && doneReport.stagesFinished === true,
+  'the task closed carrying the stages he did and that he finished them',
+  JSON.stringify({ done: doneReport?.completedAt, worked: doneReport?.stagesWorked, fin: doneReport?.stagesFinished }));
+check(d.apartments.find(a => a.id === 'A1-7').currentStageId === 'S3', 'and the unit MOVED to the furthest stage he finished (Concealed units)');
+check(marks.S2 === 'done' && marks.S3 === 'done', 'both stages he did are crossed off', JSON.stringify(marks));
+
+// ── 4b · A SECOND unit, the "Not yet" answer: stages wear the clock, the unit stays ──
+await page.locator('[data-closing-panel]').count(); // (screen closed itself)
+await page.waitForTimeout(800);
+// Dismiss the completion celebration if it stands (z-220 swallows presses),
+// then the sheet by its backdrop — a press at the very top of the screen is
+// outside the bottom sheet.
+for (let i = 0; i < 3 && await page.locator('[data-close-job], [data-thread-closed]').count(); i++) {
+  await page.mouse.click(20, 20); await page.waitForTimeout(500);
+}
+await page.locator('button:has-text("Building Map")').first().click();
+await page.waitForTimeout(700);
+if (await page.locator('[data-map-square="wolfson"]').count()) { await page.locator('[data-map-square="wolfson"]').click(); await page.waitForTimeout(1200); }
+if (await page.locator('[data-apt-id="A1-8"]').count()) {
+  await page.locator('[data-apt-id="A1-8"]').first().click();
+  await page.waitForTimeout(700);
+  await page.locator('[data-work-here]').click();
+  await page.waitForTimeout(900);
+  d = await store(page);
+  const rep2 = d.contractorAssignments.find(a => a.stageReport && a.apartmentId === 'A1-8' && !a.completedAt);
+  check(!!rep2, 'a second unit starts its own open report');
+  await page.locator('[data-close-job]').first().click();
+  await page.waitForTimeout(500);
+  const preset = await page.locator('[data-close-stage-pick][data-on]').getAttribute('data-close-stage-pick');
+  await page.locator('[data-close-finished-pick="no"]').click();
+  await page.locator('input[type="file"][accept*="video"][accept*=".zip"]').setInputFiles(files(3));
+  await page.waitForTimeout(2500);
+  await page.locator('[data-close-now]').click();
+  await page.waitForTimeout(1500);
+  d = await store(page);
+  const apt8 = d.apartments.find(a => a.id === 'A1-8');
+  const before8 = seedStageOf('A1-8');
+  check((apt8.stageMarks ?? {})[preset] === 'pending', `"Not yet" marks the stage he worked (${preset}) HALF DONE`, JSON.stringify(apt8.stageMarks));
+  check(apt8.currentStageId === before8, 'and the unit did NOT move', `${apt8.currentStageId} vs ${before8}`);
+} else {
+  console.log('SKIP no A1-8 cell to test the Not-yet path');
+}
 await page.close();
 
 // ── 5 · THE OFFICE again: the pending it marked itself still stands; the worker made none ──

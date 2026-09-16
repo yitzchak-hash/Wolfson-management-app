@@ -25,7 +25,7 @@ type FolderRow = DriveFolder & { sub?: boolean };
  */
 export function PlanPicker({
   driveLink, plansFolderId, plansFolderName = 'Engineered Plans',
-  plans, current, onPick, onOpenNewTab, onClose, onStar, starredId, onPreview,
+  plans, current, onPick, onOpenNewTab, onClose, onStar, starredId, starAuto, onPreview,
 }: {
   driveLink?: string;
   plansFolderId?: string | null;
@@ -50,6 +50,8 @@ export function PlanPicker({
    */
   onStar?: (p: PlanEntry) => void;
   starredId?: string | null;
+  /** The star is the app's latest-activity guess, drawn red until a person stars one. */
+  starAuto?: boolean;
   /** The tile's expand arrow — open this sheet as a LOOK, never a choice. */
   onPreview?: (p: PlanEntry, folder: { id: string; name: string }) => void;
 }) {
@@ -257,6 +259,7 @@ export function PlanPicker({
       file={{ id: p.id, name: p.name, isImage: p.isImage, annotated: p.kind === 'annotated', viewable: true }}
       current={p.id === current}
       starred={!!starredId && starredId === p.id}
+      starAuto={starAuto}
       sub={sub}
       onOpen={onChoose}
       onStar={onStar ? () => onStar(p) : undefined}

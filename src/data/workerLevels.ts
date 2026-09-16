@@ -38,6 +38,8 @@ export const WORKER_PERMISSIONS: PermissionDef[] = [
     hint: 'How the office sees what was done.' },
   { key: 'addNotes', label: 'Write notes back', group: 'Work' ,
     hint: 'A line of text against the task, which the office reads.' },
+  { key: 'workHere', label: 'Start work from the building map', group: 'Work',
+    hint: 'The "I\'m going to work here" button on an apartment — one open task for today, closed with pictures.' },
   { key: 'selfAssign', label: 'Give themselves a task', group: 'Work',
     hint: 'For somebody who finds work on site and needs it recorded rather than remembered. '
       + 'It behaves like any other task — it takes photos and it shows in the office.' },
@@ -92,7 +94,7 @@ export const DEFAULT_WORKER_LEVELS: WorkerLevel[] = [
     // the diagrams and every unit on them, not only their own. Switch them off
     // per worker; the level ships with them on.
     description: 'Their own work, with the building diagrams. The planner never.',
-    perms: on('ownTasks', 'completeTasks', 'uploadPhotos', 'addNotes', 'seePlans', 'seeSnags',
+    perms: on('ownTasks', 'completeTasks', 'uploadPhotos', 'addNotes', 'workHere', 'seePlans', 'seeSnags',
       'seeDiagrams', 'seeAllApartments'),
   },
   {
@@ -101,7 +103,7 @@ export const DEFAULT_WORKER_LEVELS: WorkerLevel[] = [
     nameHe: 'טכנאי',
     builtIn: true,
     description: 'Everything, optionally. Their own assignments stay picked out from the rest.',
-    perms: on('ownTasks', 'completeTasks', 'uploadPhotos', 'addNotes', 'selfAssign',
+    perms: on('ownTasks', 'completeTasks', 'uploadPhotos', 'addNotes', 'selfAssign', 'workHere',
       'seeDiagrams', 'seeAllApartments', 'seePlans', 'seeSnags',
       'allTasks', 'seeSchedule', 'seeContacts'),
   },

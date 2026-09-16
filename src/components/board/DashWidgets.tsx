@@ -681,7 +681,10 @@ export function CalendarMini({ assignments, jobs }: {
 }) {
   const navigate = useNavigate();
   const now = new Date();
-  const year = now.getFullYear(), month = now.getMonth();
+  // ‹ › walk whole months (owner, 2026-09-16); the title snaps back to today.
+  const [shift, setShift] = useState(0);
+  const shown = new Date(now.getFullYear(), now.getMonth() + shift, 1);
+  const year = shown.getFullYear(), month = shown.getMonth();
   const first = new Date(year, month, 1);
   const days = new Date(year, month + 1, 0).getDate();
   const lead = first.getDay();
@@ -698,17 +701,26 @@ export function CalendarMini({ assignments, jobs }: {
   const total = [...counts.values()].reduce((a, b) => a + b, 0);
 
   return (
-    <button
-      data-no-drag data-el-action
-      onClick={() => navigate('/calendar')}
+    <div
       className="w-full h-full text-left flex flex-col px-2.5 py-2 overflow-hidden"
       title="Open the full calendar"
     >
-      <div className="flex items-baseline gap-1.5 mb-1 flex-shrink-0">
-        <span className="text-[9.5px] font-extrabold tracking-wide text-gray-500 truncate">
+      <div className="flex items-center gap-1 mb-1 flex-shrink-0">
+        <button data-no-drag data-el-action data-cal-prev
+          onClick={e => { e.stopPropagation(); setShift(v => v - 1); }}
+          className="w-5 h-5 rounded-md flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-700 flex-shrink-0"
+          title="Previous month">‹</button>
+        <button data-no-drag data-el-action data-cal-title
+          onClick={e => { e.stopPropagation(); if (shift) setShift(0); else navigate('/calendar'); }}
+          className="text-[9.5px] font-extrabold tracking-wide text-gray-500 truncate flex-1 text-left rtl:text-right hover:text-[#1e3a5f]"
+          title={shift ? 'Back to this month' : 'Open the full calendar'}>
           {first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }).toUpperCase()}
-        </span>
-        <span className="ml-auto text-[9px] text-gray-400 tabular-nums">{total} due</span>
+        </button>
+        <button data-no-drag data-el-action data-cal-next
+          onClick={e => { e.stopPropagation(); setShift(v => v + 1); }}
+          className="w-5 h-5 rounded-md flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-700 flex-shrink-0"
+          title="Next month">›</button>
+        <span className="text-[9px] text-gray-400 tabular-nums flex-shrink-0">{total} due</span>
       </div>
 
       <div className="grid grid-cols-7 gap-[2px] text-center flex-shrink-0 mb-0.5">
@@ -726,7 +738,9 @@ export function CalendarMini({ assignments, jobs }: {
           return (
             <span
               key={n}
-              className="rounded-[3px] flex items-center justify-center tabular-nums"
+              data-no-drag data-el-action
+              onClick={() => navigate('/calendar')}
+              className="rounded-[3px] flex items-center justify-center tabular-nums cursor-pointer"
               style={{
                 fontSize: 8,
                 aspectRatio: '1.1',
@@ -746,6 +760,6 @@ export function CalendarMini({ assignments, jobs }: {
       {jobs.length === 0 && (
         <span className="text-[8.5px] text-gray-300 mt-0.5 flex-shrink-0">No jobs yet</span>
       )}
-    </button>
+    </div>
   );
 }

@@ -30,6 +30,63 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-12-31',
+    title: 'The office rings, the worker starts the day in one press, and the plan picks itself',
+    items: [
+      {
+        title: 'The office hears the worker',
+        body: 'A message a worker sends from his phone, or a job he closes, rings on the office '
+          + 'computer: a chime, a card at the top-right, and a desktop notification when the tab '
+          + 'is in the background. Pressing the card walks to the job \u2014 switching workspace if '
+          + 'it lives elsewhere \u2014 and opens it on its Tasks tab with that task lit. The '
+          + 'worker\u2019s bell now holds the office\u2019s messages too, and each opens its task.',
+        demo: 'tap',
+      },
+      {
+        title: '\u201cI\u2019m going to work here\u201d asks nothing at the start',
+        body: 'The unit\u2019s own stage is the one he is working on. At the CLOSE he ticks the '
+          + 'stages he did (several at once) and says whether he finished them all: yes crosses '
+          + 'them off and moves the unit forward; not yet marks them half done with the orange '
+          + 'clock. An ordinary task asks no stage question at all \u2014 it moves the job to the '
+          + 'stage chosen when it was made. Starting work from the map is its own permission now, '
+          + 'apart from \u201ca job for myself\u201d, which can be limited to chosen workspaces.',
+        demo: 'tap',
+      },
+      {
+        title: 'A job for myself, anywhere',
+        body: 'The worker\u2019s own task form asks WHERE with a search over every job in the '
+          + 'workspaces he is allowed \u2014 a name, a number, an address \u2014 exactly like the '
+          + 'computer, and the task lands in that job\u2019s workspace.',
+        demo: 'tap',
+      },
+      {
+        title: 'The newest plan shows itself, with a red warning',
+        body: 'When nobody has starred a plan, the sheet with the latest activity in Engineered '
+          + 'Plans is shown and drawn with a RED star, and a red \u201c!\u201d bubble sits between '
+          + 'Layers and Plans saying it was picked automatically \u2014 so the office knows to star '
+          + 'the right one. Nothing is written until a person stars. The worker\u2019s phone shows the '
+          + 'same sheet with the same warning.',
+        demo: 'tap',
+      },
+      {
+        title: 'Board: right-drag pans, Equal size, honest counts, Focus everywhere',
+        body: 'Dragging with the right button moves the board (Ctrl+drag still lassoes). The '
+          + 'selection menu says what it holds (\u201c4 groups \u00b7 20 jobs \u00b7 3 notes\u201d), '
+          + 'Arrange now takes groups along, and Equal size gives every selected thing the size '
+          + 'of the largest. Focus sits in every right-click menu, the calendar widget has month '
+          + 'arrows, and deleting a unit card never asks \u2014 it is only a pointer.',
+        demo: 'drag',
+      },
+      {
+        title: 'Hebrew workspace names, and a clearer stage line',
+        body: 'In Hebrew the workspaces are named in Hebrew everywhere \u2014 the header, the '
+          + 'worker\u2019s phone, the notebook. The add-a-job dialog says the job\u2019s current '
+          + 'stage in its colour above \u201cStage it is at now \u2192 When done, move it to\u201d.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2026-12-30',
     title: 'A zoom you chose stays yours',
     items: [

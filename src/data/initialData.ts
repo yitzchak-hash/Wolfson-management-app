@@ -137,13 +137,13 @@ export function buildGroundFirstFloorSlots(bid: BuildingId): Apartment[] {
 }
 
 export const DEFAULT_PROJECTS: Project[] = [
-  { id: 'wolfson',  name: 'Wolfson Residence', shortName: 'Wolfson', logoPath: '/wolfson-building.png', color: '#b8860b' },
-  { id: 'netiv',    name: 'Netiv Neve Shamir', shortName: 'Netiv',   logoPath: '/netiv-logo.png', color: '#0d9488' },
+  { id: 'wolfson',  name: 'Wolfson Residence', shortName: 'Wolfson', nameHe: 'וולפסון', shortNameHe: 'וולפסון', logoPath: '/wolfson-building.png', color: '#b8860b' },
+  { id: 'netiv',    name: 'Netiv Neve Shamir', shortName: 'Netiv',   nameHe: 'נתיב נווה שמיר', shortNameHe: 'נתיב', logoPath: '/netiv-logo.png', color: '#0d9488' },
   // Orange, from the TzviAir mark — the previous violet read as generic app
   // chrome rather than as this company's board.
   // The Job Board is the company's own board, so it wears the company mark
   // rather than a generic briefcase.
-  { id: 'general',  name: 'Job Board',         shortName: 'Job Board', logoPath: '/tzviair-logo.png', type: 'general', color: '#ea6b13' },
+  { id: 'general',  name: 'Job Board',         shortName: 'Job Board', nameHe: 'לוח העבודות', shortNameHe: 'לוח העבודות', logoPath: '/tzviair-logo.png', type: 'general', color: '#ea6b13' },
 ];
 
 export const NETIV_BUILDINGS: Building[] = [

@@ -5,7 +5,7 @@ import { LogOut, User, Sun, Moon, AlertTriangle, Loader2, CheckCircle2, Search, 
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../data/store';
 import { usePhone } from '../../data/usePhone';
-import { Project, aptLabel, getStageName } from '../../types';
+import { Project, aptLabel, getStageName, projectName, projectShortName } from '../../types';
 import { pendingStages } from '../../data/stageMarks';
 import { isLiveProblem, problemStateOf, PROBLEM_FILL } from '../../data/problems';
 import { Tooltip } from '../ui/Tooltip';
@@ -393,7 +393,7 @@ function WorkspacePicker({ light }: { light: boolean }) {
           className="min-w-0 truncate text-[11.5px] md:text-[13px] font-bold"
           style={{ color: light ? '#1e3a5f' : '#ffffff' }}
         >
-          {active.shortName}
+          {projectShortName(active, !!s.isRtl)}
         </span>
         <ChevronDown
           size={14}
@@ -459,9 +459,9 @@ function WorkspacePicker({ light }: { light: boolean }) {
                   <WorkspaceLogo project={p} light={light} />
                   <span className="min-w-0 flex-1 self-center">
                     <span className="block text-[13px] font-bold truncate"
-                      style={{ color: light ? '#1e3a5f' : '#ffffff' }}>{p.shortName}</span>
+                      style={{ color: light ? '#1e3a5f' : '#ffffff' }}>{projectShortName(p, !!s.isRtl)}</span>
                     <span className="block text-[10.5px] truncate"
-                      style={{ color: light ? '#9ca3af' : '#8fa9c6' }}>{p.name}</span>
+                      style={{ color: light ? '#9ca3af' : '#8fa9c6' }}>{projectName(p, !!s.isRtl)}</span>
                   </span>
                   {on && <Check size={15} className="flex-shrink-0 self-center" style={{ color: p.color }} />}
                   {/* Drag to reorder is a mouse gesture — HTML5 drag never fires

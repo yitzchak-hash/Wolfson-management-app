@@ -792,7 +792,7 @@ function PlanEditor({
   touchScale = 1, chooseSaveFolder = false, sheetOverlay,
   tabStrip, initialWork, workRef, onOpenPlanNewTab, onUnsavedChange,
   onClose, onToast, onPickPlan, onStartMarkup, onSavedToDrive,
-  onPreviewPlan, onStarPlan, starredPlanId,
+  onPreviewPlan, onStarPlan, starredPlanId, starAuto, autoPlanNote,
 }: {
   planFileId: string;
   /**
@@ -903,6 +903,15 @@ function PlanEditor({
    */
   onStarPlan?: (p: PlanChoice) => void;
   starredPlanId?: string | null;
+  /** `starredPlanId` is the app's latest-activity guess — the picker draws it red. */
+  starAuto?: boolean;
+  /**
+   * The shown plan was picked by the APP (latest activity in the plans folder),
+   * not by a person (owner, 2026-09-16). Drawn as a red bubble between Plans
+   * and Layers so the office knows a plan still has to be starred before a
+   * worker is sent out on it. Absent = somebody chose.
+   */
+  autoPlanNote?: string;
   onClose: () => void;
   onToast?: (msg: string, kind?: 'success' | 'error') => void;
   onPickPlan?: (p: PlanChoice) => void;
@@ -4032,6 +4041,18 @@ function PlanEditor({
             <ChevronsUpDown size={13} /> Plans
           </button>
 
+          {/* The shown plan is the app's GUESS — say so, in red, where the
+              eye goes for Plans and Layers. */}
+          {autoPlanNote && (
+            <button data-plan-auto-warning onClick={() => setShowPlans(true)}
+              title={autoPlanNote}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11.5px] font-bold text-white max-w-[260px]"
+              style={{ backgroundColor: '#dc2626', boxShadow: '0 0 0 2px rgba(220,38,38,.25)' }}>
+              <span className="w-4 h-4 rounded-full bg-white text-red-600 flex items-center justify-center text-[11px] font-black flex-shrink-0">!</span>
+              <span className="truncate">{autoPlanNote}</span>
+            </button>
+          )}
+
           {/* The gap the owner drew: Plans belongs with the sheet you are
               choosing, the rest belongs at the far end. */}
           {twoRow && <div className="flex-1" />}
@@ -4926,6 +4947,7 @@ function PlanEditor({
           })}
           onStar={onStarPlan}
           starredId={starredPlanId}
+          starAuto={starAuto}
           onPreview={onPreviewPlan && (p => {
             onPreviewPlan(p);
             setShowPlans(false);
@@ -5643,6 +5665,7 @@ export function PlanAnnotator(props: PlanHostProps) {
         onPreview={p => plusPick(p)}
         onStar={props.onStarPlan}
         starredId={props.starredPlanId}
+        starAuto={props.starAuto}
         onClose={() => setPlusOpen(false)}
       />
     )}

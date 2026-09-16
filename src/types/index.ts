@@ -6,6 +6,9 @@ export interface Project {
   id: string;
   name: string;
   shortName: string;
+  /** Hebrew names — the portal and the office in Hebrew print these (owner, 2026-09-16). */
+  nameHe?: string;
+  shortNameHe?: string;
   logoPath: string;
   type?: 'building' | 'general';
   /** Workspace identity colour — the left rail, the header chip, sidebar accents. */
@@ -15,6 +18,16 @@ export interface Project {
 /** The colour for a project id, with a safe fallback. */
 export function projectColor(projects: Project[], id: string): string {
   return projects.find(p => p.id === id)?.color ?? '#1e3a5f';
+}
+
+/** A workspace's name in the reader's language — Hebrew when it has one and Hebrew is wanted. */
+export function projectName(p: Pick<Project, 'name' | 'nameHe'> | undefined, he: boolean, fallback = ''): string {
+  if (!p) return fallback;
+  return (he && p.nameHe) ? p.nameHe : p.name;
+}
+export function projectShortName(p: Pick<Project, 'shortName' | 'shortNameHe' | 'name' | 'nameHe'> | undefined, he: boolean, fallback = ''): string {
+  if (!p) return fallback;
+  return (he && (p.shortNameHe || p.nameHe)) ? (p.shortNameHe || p.nameHe!) : p.shortName;
 }
 
 /**
@@ -1074,6 +1087,7 @@ export type ContractorCategory = 'drywall' | 'ac' | 'general';
  */
 export type WorkerPermission =
   | 'ownTasks' | 'completeTasks' | 'uploadPhotos' | 'addNotes' | 'selfAssign'
+  | 'workHere'
   | 'assignOthers'
   | 'seeDiagrams' | 'seeAllApartments' | 'seePlans' | 'markUpPlans' | 'seeSnags'
   | 'allTasks' | 'seePlanner' | 'seeSchedule' | 'seeContacts' | 'switchProject';
@@ -1118,6 +1132,12 @@ export interface Contractor {
    * door; this says which rooms (owner, 2026-09-03).
    */
   mapProjects?: string[];
+  /**
+   * Where he may give HIMSELF a task (workspace ids) — the second half of the
+   * split permission (owner, 2026-09-16): `selfAssign` opens the door, this
+   * says in which workspaces. Absent = every workspace.
+   */
+  selfAssignProjects?: string[];
   /**
    * The stages he may answer "What did you do?" with, per workspace. Absent =
    * every active stage except the first and the last ("Ready to start" is a
@@ -1273,6 +1293,15 @@ export interface ContractorAssignment {
    * 'pending' stage — the note of what is left hangs under it.
    */
   stageReport?: boolean;
+  /**
+   * What the worker said at the CLOSE of a stage report (owner, 2026-09-16):
+   * the stages he worked on that day, and whether he finished all of them.
+   * Finished → each is marked 'done' on the apartment and the job moves to
+   * the furthest; not finished → each is marked 'pending' (half done).
+   * Applied by the store at the completion write, like stageWhenDone.
+   */
+  stagesWorked?: string[];
+  stagesFinished?: boolean;
   /**
    * A GENERAL JOB (owner, 2026-09-03): a task for a workspace — "Work at
    * Wolfson" — rather than for one apartment; which apartments the worker
@@ -1995,6 +2024,8 @@ export interface MainUiStrings {
   stageJobsStage: string;
   stageNotReached: string;
   stageLeaveAlone: string;
+  /** The red bubble on the plan bar when the shown plan was picked by the app, not a person. */
+  planAutoPicked: string;
   stageDifferentLabel: string;
   splitAskLabel: string;
   splitTwoLabel: string;
@@ -2527,6 +2558,11 @@ export interface MainUiStrings {
   dlPagesWord: string;
   printPlanLabel: string;
   unknownUser: string;
+  /** Office-side notifications when a worker writes or closes a job. */
+  officeNotifMessage: string;
+  officeNotifClosed: string;
+  officeNotifAllow: string;
+  officeNotifOpen: string;
   daysWord: string;
   settingsLabel: string;
   statusLabel: string;
@@ -2730,11 +2766,12 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   selectContractor: 'Select worker *',
   selectApartment: 'Select apartment *',
   stageOptional: 'Stage (optional)',
-  stageOnLabel: 'Stage',
-  stageToLabel: "When it's done, move to",
-  stageJobsStage: "The job's stage",
+  stageOnLabel: 'Stage it is at now',
+  stageToLabel: 'When done → move it to',
+  stageJobsStage: 'Current stage',
   stageNotReached: 'not reached yet',
   stageLeaveAlone: 'Leave the stage alone',
+  planAutoPicked: 'Latest-activity plan, auto-selected — star the right one',
   stageDifferentLabel: 'Different stages for this stretch',
   splitAskLabel: 'One task, or two?',
   splitTwoLabel: 'Two tasks — each stretch is its own',
@@ -3257,6 +3294,10 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   dlPagesWord: 'Pages',
   printPlanLabel: 'Print',
   unknownUser: 'Someone',
+  officeNotifMessage: 'Message from {who}',
+  officeNotifClosed: '{who} closed a job',
+  officeNotifAllow: 'Allow desktop alerts',
+  officeNotifOpen: 'Open',
   daysWord: 'days',
   settingsLabel: 'Settings',
   statusLabel: 'Status',
@@ -3458,11 +3499,12 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   selectContractor: 'בחר קבלן *',
   selectApartment: 'בחר דירה *',
   stageOptional: 'שלב (אופציונלי)',
-  stageOnLabel: 'שלב',
-  stageToLabel: 'כשמסיימים, לעבור ל',
-  stageJobsStage: 'השלב של הדירה',
+  stageOnLabel: 'השלב שבו זה נמצא עכשיו',
+  stageToLabel: 'כשמסיימים → לעבור ל',
+  stageJobsStage: 'השלב הנוכחי',
   stageNotReached: 'טרם הגיעו',
   stageLeaveAlone: 'להשאיר את השלב',
+  planAutoPicked: 'תוכנית עם הפעילות האחרונה נבחרה אוטומטית — סמנו בכוכב את הנכונה',
   stageDifferentLabel: 'שלבים אחרים למקטע הזה',
   splitAskLabel: 'משימה אחת או שתיים?',
   splitTwoLabel: 'שתי משימות — לכל מקטע משלו',
@@ -3985,6 +4027,10 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   dlPagesWord: 'עמודים',
   printPlanLabel: 'הדפסה',
   unknownUser: 'מישהו',
+  officeNotifMessage: 'הודעה מ{who}',
+  officeNotifClosed: '{who} סגר עבודה',
+  officeNotifAllow: 'לאפשר התראות במחשב',
+  officeNotifOpen: 'פתיחה',
   daysWord: 'ימים',
   settingsLabel: 'הגדרות',
   statusLabel: 'סטטוס',

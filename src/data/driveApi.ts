@@ -120,6 +120,22 @@ export interface DriveFile {
   id: string;
   name: string;
   mimeType: string;
+  /** Drive's own last-modified stamp — what "latest activity" is read from. */
+  modifiedTime?: string;
+}
+
+/**
+ * Newest activity first. The plan a job shows when NOBODY has starred one is
+ * the sheet with the latest activity in the plans folder (owner, 2026-09-16)
+ * — the architect's newest issue, not whichever file Drive happened to list
+ * first. Files without a stamp fall to the end, in their given order.
+ */
+export function newestFirst<T extends { modifiedTime?: string }>(files: T[]): T[] {
+  return [...files].sort((a, b) => {
+    const ta = a.modifiedTime ? Date.parse(a.modifiedTime) : -1;
+    const tb = b.modifiedTime ? Date.parse(b.modifiedTime) : -1;
+    return tb - ta;
+  });
 }
 
 export interface FolderHealth {
@@ -322,7 +338,7 @@ export async function findAllPlansPdfsViaBackend(driveLink: string): Promise<Dri
     // lying in the main folder, and never scan other subfolders.
     if (!plansFolder) return [];
     const planFiles = await listFolderViaBackend(plansFolder.id);
-    return planFiles.filter(f => f.mimeType === 'application/pdf');
+    return newestFirst(planFiles.filter(f => f.mimeType === 'application/pdf'));
   } catch {
     return [];
   }
@@ -939,7 +955,7 @@ export async function listPlansViaBackend(plansFolderId: string): Promise<{
     for (const f of top) {
       // Pictures as well as PDFs: a phone photo of a riser is a plan somebody
       // wants to draw on just as much as a drawing out of AutoCAD.
-      if (markable(f)) out.push({ id: f.id, name: f.name, kind: 'original', isImage: isImageFile(f) });
+      if (markable(f)) out.push({ id: f.id, name: f.name, kind: 'original', isImage: isImageFile(f), modifiedTime: f.modifiedTime });
     }
     const sub = top.find(f =>
       f.mimeType === 'application/vnd.google-apps.folder'
@@ -948,7 +964,7 @@ export async function listPlansViaBackend(plansFolderId: string): Promise<{
       annotatedFolderId = sub.id;
       const inner = await listFolderViaBackend(sub.id);
       for (const f of inner) {
-        if (markable(f)) out.push({ id: f.id, name: f.name, kind: 'annotated', isImage: isImageFile(f) });
+        if (markable(f)) out.push({ id: f.id, name: f.name, kind: 'annotated', isImage: isImageFile(f), modifiedTime: f.modifiedTime });
       }
     }
   } catch { /* the chips just stay as they were */ }

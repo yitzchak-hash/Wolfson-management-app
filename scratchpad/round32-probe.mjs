@@ -1,4 +1,4 @@
-// Probe for the controls round: right-drag lasso, right-click+scroll zoom,
+// Probe for the controls round: right-drag PAN (was lasso), right-click+scroll zoom,
 // the quick-assign drop box, the typed default zoom, and the tutorial.
 import { chromium } from 'playwright';
 
@@ -42,39 +42,81 @@ const page = await ctx.newPage();
 await page.goto('http://localhost:5173/jobs');
 await page.waitForTimeout(3000);
 
-// ── 1. Right-drag lasso ──
-// Find empty canvas near the two tiles (they sit at world 500/700,300; home view
-// is flush top-left, so screen ≈ world + header offset).
+// ── 1. Right-drag PANS (owner, 2026-09-16 — supersedes the right-drag lasso) ──
+// A right-button drag on empty board moves the BOARD: the world transform
+// changes, both tiles travel by the same screen delta, nothing is selected
+// and nothing is written. Drag UP-LEFT: the home view is pinned top-left, so
+// only that direction has room to move.
 const t1 = await page.locator('[data-node-id="G-r1"]').boundingBox();
 const t2 = await page.locator('[data-node-id="G-r2"]').boundingBox();
 check(!!t1 && !!t2, 'both tiles are on screen');
-const sx = t1.x - 40, sy = t1.y - 30;
-const ex = t2.x + t2.width + 30, ey = t2.y + t2.height + 30;
+const worldXf = () => page.evaluate(() => {
+  const w = document.querySelector('[data-board-world]');
+  return w ? getComputedStyle(w.parentElement).transform : '';
+});
+const xfBefore = await worldXf();
+const sx = t2.x + t2.width + 120, sy = t2.y + t2.height + 160;
 await page.mouse.move(sx, sy);
 await page.mouse.down({ button: 'right' });
 for (let i = 1; i <= 8; i++) {
-  await page.mouse.move(sx + ((ex - sx) * i) / 8, sy + ((ey - sy) * i) / 8);
+  await page.mouse.move(sx - (150 * i) / 8, sy - (100 * i) / 8);
   await page.waitForTimeout(16);
 }
 await page.mouse.up({ button: 'right' });
 await page.waitForTimeout(400);
-// No context menu after the lasso release…
-const menuAfterLasso = await page.evaluate(() =>
+const xfAfter = await worldXf();
+check(xfBefore !== xfAfter, 'right-drag moved the board (world transform changed)');
+const t1b = await page.locator('[data-node-id="G-r1"]').boundingBox();
+// The pan begins where the hand is once the 6px slop is crossed (the
+// first sampled move here is ~19px), so the travel is the drag less one step.
+check((t1.x - t1b.x) > 110 && (t1.x - t1b.x) <= 150 && (t1.y - t1b.y) > 70 && (t1.y - t1b.y) <= 100,
+  `the tile travelled with the board (dx ${(t1.x - t1b.x).toFixed(0)}, dy ${(t1.y - t1b.y).toFixed(0)})`);
+const storedPos = await page.evaluate(() => {
+  const d = JSON.parse(localStorage.getItem('general_app_data') || '{}');
+  const j = (d.apartments || []).find(a => a.id === 'G-r1');
+  return j ? [j.canvasX, j.canvasY] : null;
+});
+check(storedPos && storedPos[0] === 500 && storedPos[1] === 300, `the tile's stored position is untouched (${storedPos})`);
+const menuAfterPan = await page.evaluate(() =>
   [...document.querySelectorAll('button')].some(b => /SELECTED|Add job here|Paste/.test(b.textContent || '')
     && b.closest('[class*="fixed"]')));
-check(!menuAfterLasso, 'right-drag lasso raises no context menu');
-// …and a motionless right-click now speaks for the selection. The lasso can
-// legitimately also catch the seeded Goals widget fixture (it lands at the
-// view centre since the goals round), so the count is 2 OR 3 — what matters
-// is that BOTH tiles are in it.
-await page.mouse.click(t1.x - 60, t1.y - 60, { button: 'right' });
+check(!menuAfterPan, 'the right-drag release raises no context menu');
+// Nothing was selected by the drag: a right-click on empty board opens the
+// CANVAS menu, not a selection menu.
+await page.mouse.click(t1b.x - 60, t1b.y - 60, { button: 'right' });
+await page.waitForTimeout(300);
+const selAfterPan = await page.evaluate(() =>
+  [...document.querySelectorAll('div,span')].some(x => /^\d+ SELECTED$/i.test((x.textContent || '').trim()) && x.children.length === 0));
+check(!selAfterPan, 'a right-drag selects nothing');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(300);
+// Come home (100%) so the tiles sit clear of the floating chrome again.
+await page.evaluate(() => {
+  const b = [...document.querySelectorAll('button')].find(x => /^100%$/.test(x.textContent || ''));
+  b?.click();
+});
+await page.waitForTimeout(500);
+const t1c = await page.locator('[data-node-id="G-r1"]').boundingBox();
+const t2c = await page.locator('[data-node-id="G-r2"]').boundingBox();
+// Ctrl+drag still lassoes — the other controls are untouched.
+await page.keyboard.down('Control');
+await page.mouse.move(t1c.x - 40, t1c.y - 30);
+await page.mouse.down();
+for (let i = 1; i <= 8; i++) {
+  await page.mouse.move(t1c.x - 40 + ((t2c.x + t2c.width + 30 - (t1c.x - 40)) * i) / 8, t1c.y - 30 + ((t1c.height + 60) * i) / 8);
+  await page.waitForTimeout(16);
+}
+await page.mouse.up();
+await page.keyboard.up('Control');
+await page.waitForTimeout(300);
+await page.mouse.click(t1c.x - 60, t1c.y - 60, { button: 'right' });
 await page.waitForTimeout(300);
 const selHeader = await page.evaluate(() => {
   const el = [...document.querySelectorAll('div,span')].find(x =>
     /^[23] SELECTED$/i.test((x.textContent || '').trim()) && x.children.length === 0);
   return el ? el.textContent.trim() : null;
 });
-check(!!selHeader, `right-drag selected the tiles (menu says ${selHeader ?? 'nothing'})`);
+check(!!selHeader, `ctrl+drag still lassoes (menu says ${selHeader ?? 'nothing'})`);
 await page.keyboard.press('Escape');
 await page.waitForTimeout(300);
 

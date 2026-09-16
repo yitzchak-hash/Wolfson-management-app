@@ -8156,3 +8156,70 @@ that let a measurement throw away a chosen zoom was the fault.
   H.264; `pip install imageio-ffmpeg` brings a full static ffmpeg. Crop the
   readout region per frame and tile the crops into one sheet — a number per
   frame is worth more than any still.
+
+## The office rings, and the worker's day (2026-09-16, the second list)
+
+### `OfficeAlerts` (`src/components/layout/OfficeAlerts.tsx`, mounted in AppLayout)
+The mirror of the portal's `ArrivalWatcher`: watches every workspace (live +
+snapshots, `snapshotTick`) for a CONTRACTOR note or a `completedAt` landing,
+chimes, draws `[data-office-toast]` top-right, and `notifyHere` when the tab
+is hidden (a small "Allow desktop alerts" line asks for permission the first
+time). Pressing `[data-office-toast-open]` walks step by step: `rememberTaskFocus`
+→ `setCurrentProject` if foreign → `setPendingFocus({kind:'task'})` → navigate.
+Two rules paid for here: **an empty workspace never wrote its baseline**
+(`seen` stayed null, so the first-ever message was swallowed as "first
+visit") — settling now re-runs the effect through a `settledAt` STATE so an
+empty baseline is written; and the drawer's tab switch is the last step
+(`src/data/taskFocus.ts`): **peek in the effect, take in a deferred tick** —
+the drawer's own open effect resets the tab to Details in the same commit,
+and StrictMode's mount/cleanup/mount consumed the focus in a run whose
+timers were cleared. `[data-task-card=<id>][data-task-lit]` on the card.
+
+### The worker's day, per the owner
+- `workHere` is a permission of its own (Contractor and Technician ship with
+  it; `selfAssign` is separate and `Contractor.selfAssignProjects` limits it
+  per workspace — `[data-worker-selftask]` in Settings → Workers).
+- "I'm going to work here" makes the open report on the unit's CURRENT stage
+  with no question. The closing screen of a `stageReport` task asks
+  `[data-close-stage-pick]` (several) + `[data-close-finished-pick=yes|no]`;
+  the store's completion rule reads `stagesWorked`/`stagesFinished`:
+  finished → each 'done' and the unit moves to the furthest; not → each
+  'pending', the unit stays. An ORDINARY task's close asks nothing — it goes
+  to `stageWhenDone`. `stagereport.mjs` re-encoded (with the not-yet path).
+- The self-task form's WHERE is `searchJobs` over the allowed workspaces
+  (`[data-self-search]`/`[data-self-hit]`), the task written through
+  `addAssignmentToProject` when foreign.
+- The portal's Planner tab is gated by `seePlanner`, which only the Manager
+  level (or a personal override) grants — a worker who sees it is on that
+  level.
+
+### Plans pick themselves, in red
+`newestFirst()` in driveApi (Drive's `modifiedTime`); `findAllPlansPdfsViaBackend`
+returns newest first and the drawer NO LONGER WRITES `plansPdfLink` from
+`pdfs[0]` (two sites). `autoPlan` (read off the drawer's LOCAL link state,
+never the prop — the board hands a stale record) draws the red star
+(`[data-star-auto]`) and the red bubble `[data-plan-auto-warning]` before
+Layers; the portal's `autoPlanFor` shows the same guess. Only a person's
+star writes.
+
+### Board
+Right-drag PANS (`rightDrag` → `panRef`; Ctrl+drag lassoes) — `round32-probe`
+re-encoded. `equalizeRef` (largest w×h onto every selected node and tile),
+`selBreakdown()` under `[data-sel-count]` (the header's count is
+`max(menu ids, jobs + nodes)` — the menu's ids are one KIND), Arrange no
+longer excludes bins, `[data-menu-focus]` in both node menus, calendar-mini
+`[data-cal-prev]`/`[data-cal-next]`/`[data-cal-title]`, and `isPointerNode`
+(unit-card / project-mini / board-mini) deletes without the ask.
+
+### Hebrew names
+`Project.nameHe`/`shortNameHe` + `projectName()`/`projectShortName()` — every
+`p.shortName ?? p.name` read goes through them (header, portal, PlannerDialogs,
+PortalAlerts, GlobalCalendar, TV bar, the board's toast). The dialog names the
+job's current stage in colour (`[data-dialog-current-stage]`) above the
+labelled pair.
+
+Harness: `scratchpad/round43-probe.mjs` (six contexts, 41 checks). Traps:
+the plan cache PUMP fetches the other sheets after the first — assert the
+FIRST fetch, not the only one; the picker's tiles are `data-plan-row`, not
+`data-file-tile`; a probe's init script must set `active_project` only when
+absent or it yanks the app back after a workspace switch.

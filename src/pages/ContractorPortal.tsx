@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo, useEffect, lazy, Suspense } from 'react';
 import { useParams } from 'react-router-dom';
-import { useStore, loadAllProjectsTaskData, ensureProjectSnapshot, startForeignSync, stopForeignSync } from '../data/store';
-import { ContractorAssignment, ContractorPhoto, Contractor, Apartment, Project, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, RUSSIAN_CONTRACTOR_UI_STRINGS, PortalLang, getStageName, aptLabel, workAtLabel, projectColor } from '../types';
+import { useStore, loadAllProjectsTaskData, loadProjectSnapshot, ensureProjectSnapshot, startForeignSync, stopForeignSync } from '../data/store';
+import { ContractorAssignment, ContractorPhoto, Contractor, Apartment, Project, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, RUSSIAN_CONTRACTOR_UI_STRINGS, PortalLang, getStageName, aptLabel, workAtLabel, projectColor, projectName } from '../types';
 import { transcribeMemo } from '../data/transcribe';
 import { daysOf, futureDaysOf } from '../data/taskDays';
 import { PlanPinOverlay } from '../components/apartment/PlanPinOverlay';
@@ -36,7 +36,8 @@ import { saveBytes, safeFileName } from '../data/planExport';
 import { TaskThread } from '../components/tasks/TaskThread';
 import { Translated, TrText } from '../components/ui/Translated';
 import { installPortalManifest } from '../data/portalManifest';
-import { findPlanSetViaBackend } from '../data/driveApi';
+import { findPlanSetViaBackend, findAllPlansPdfsViaBackend } from '../data/driveApi';
+import { searchJobs } from '../data/searchIndex';
 // Lazy — the studio carries pdf.js, and a worker who never opens a plan should
 // not download it (the drawer's precedent).
 const PlanAnnotator = lazy(() =>
@@ -349,13 +350,15 @@ function MediaItem({ photo, onDelete, onOpen }: { photo: ContractorPhoto; onDele
 
 interface BellItem {
   id: string;
-  kind: 'problem' | 'overdue' | 'today' | 'tomorrow' | 'new';
+  kind: 'problem' | 'overdue' | 'today' | 'tomorrow' | 'new' | 'message';
   text: string;
   where: string;
   /** Named only when the task lives in ANOTHER workspace. */
   workspace?: string;
   projectId: string;
   taskId: string;
+  /** When it happened (messages), for the newest-first order. */
+  at?: number;
 }
 
 /**
@@ -397,7 +400,27 @@ function PortalBell({ contractor, s, lang, currentProjectId, allAssignments, all
       // The open workspace is LIVE; the snapshots stand in for the rest.
       const asg = p.projectId === currentProjectId ? allAssignments : p.assignments;
       const apts = p.projectId === currentProjectId ? allApartments : p.apartments;
-      const wsName = projects.find(x => x.id === p.projectId)?.name ?? p.projectId;
+      const wsName = projectName(projects.find(x => x.id === p.projectId), lang === 'he', p.projectId);
+      /**
+       * The office's MESSAGES on his open tasks, this week — every
+       * notification lands in the bell too (owner, 2026-09-16), not only
+       * the arrival toast that passes. Newest first, above the dates.
+       */
+      const notes = p.projectId === currentProjectId
+        ? useStore.getState().contractorNotes
+        : loadProjectSnapshot(p.projectId).contractorNotes;
+      const mineOpen = new Set(asg.filter(a => a.contractorId === contractor.id && !a.completedAt).map(a => a.id));
+      for (const n of notes) {
+        if (n.authorType !== 'office' || !mineOpen.has(n.assignmentId) || Date.parse(n.createdAt) < weekAgo) continue;
+        const t = asg.find(a => a.id === n.assignmentId);
+        const said = n.text?.trim()
+          || (n.attachmentMimeType?.startsWith('audio/') ? '🎤' : n.attachmentMimeType?.startsWith('image/') ? '📷' : '📎');
+        out.push({
+          id: `msg|${n.id}`, kind: 'message', text: `${n.authorName}: ${said}`,
+          where: t?.taskDescription ?? '', workspace: p.projectId === currentProjectId ? undefined : wsName,
+          projectId: p.projectId, taskId: n.assignmentId, at: Date.parse(n.createdAt),
+        });
+      }
       for (const a of asg) {
         if (a.contractorId !== contractor.id || a.completedAt) continue;
         const apt = apts.find(x => x.id === a.apartmentId);
@@ -415,8 +438,8 @@ function PortalBell({ contractor, s, lang, currentProjectId, allAssignments, all
         else if (scope === 'all' && a.createdAt && Date.parse(a.createdAt) > weekAgo) mk('new', `n|${a.id}`);
       }
     }
-    const order: Record<BellItem['kind'], number> = { problem: -1, overdue: 0, today: 1, tomorrow: 2, new: 3 };
-    return out.sort((a, b) => order[a.kind] - order[b.kind]).slice(0, 30);
+    const order: Record<BellItem['kind'], number> = { message: -2, problem: -1, overdue: 0, today: 1, tomorrow: 2, new: 3 };
+    return out.sort((a, b) => (order[a.kind] - order[b.kind]) || ((b.at ?? 0) - (a.at ?? 0))).slice(0, 40);
     // snapshotTick: a hydrated snapshot landing must recompute this.
   }, [contractor.id, scope, currentProjectId, allAssignments, allApartments, projects, snapshotTick, lang]);
 
@@ -434,6 +457,7 @@ function PortalBell({ contractor, s, lang, currentProjectId, allAssignments, all
     today: { word: s.filterToday, color: '#f97316' },
     tomorrow: { word: s.filterTomorrow, color: '#0ea5e9' },
     new: { word: s.notifNew || w('New job for you', 'עבודה חדשה בשבילך', 'Новая работа для вас'), color: '#16a34a' },
+    message: { word: w('Message from the office', 'הודעה מהמשרד', 'Сообщение из офиса'), color: '#1e3a5f' },
   };
 
   return (
@@ -638,6 +662,9 @@ export function ContractorPortal() {
   const [selfTask, setSelfTask] = useState(false);
   const [selfText, setSelfText] = useState('');
   const [selfApt, setSelfApt] = useState('');
+  /** The job he picked from the search — with the workspace it lives in. */
+  const [selfPick, setSelfPick] = useState<{ projectId: string; job: Apartment } | null>(null);
+  const [selfQ, setSelfQ] = useState('');
   /**
    * The rest of the office's task form, field for field. Adding work from the
    * site is the same act as adding it from the office, so it gets the same
@@ -698,12 +725,18 @@ export function ContractorPortal() {
    * it is at now. Nothing is decided about the finish at the start.
    */
   const [workHere, setWorkHere] = useState<null | {
-    aptId: string; step: 'view' | 'part' | 'stage'; stageId?: string;
+    aptId: string; step: 'view' | 'part'; stageId?: string;
     /** The general job this report is filed under, once he has said so. */
     partOf?: string | null;
   }>(null);
-  /** The closing screen's "what stage is it at now" — the task's when-done stage, chosen at the close. */
-  const [closeStage, setCloseStage] = useState<string | null>(null);
+  /**
+   * The closing screen's two questions for a stage report (owner, 2026-09-16):
+   * WHICH stages he worked on (several), and whether he FINISHED them all.
+   * An ordinary task is never asked a stage — it moves to the stage chosen
+   * when it was made (stageWhenDone), as before.
+   */
+  const [closeStages, setCloseStages] = useState<string[]>([]);
+  const [closeFinished, setCloseFinished] = useState<'yes' | 'no'>('yes');
   /** How many pictures a closing needs. photosOptional workers skip it. */
   const MIN_CLOSE_MEDIA = 3;
   /** Weekly is what a worker plans his van by; the month grid is one press away. */
@@ -736,7 +769,7 @@ export function ContractorPortal() {
     return loadAllProjectsTaskData()
       .map(p => ({
         id: p.projectId,
-        name: projects.find(x => x.id === p.projectId)?.name ?? p.projectId,
+        name: projectName(projects.find(x => x.id === p.projectId), readLang === 'he', p.projectId),
         open: p.assignments.filter(a => a.contractorId === contractor.id && !a.completedAt).length,
         total: p.assignments.filter(a => a.contractorId === contractor.id).length,
       }))
@@ -802,8 +835,37 @@ export function ContractorPortal() {
   /** Every apartment's live problem — the map paints them red whoever the problem is assigned to. */
   const problemMap = useMemo(() => problemStates(contractorAssignments), [contractorAssignments]);
   const catColor = CATEGORY_COLORS[contractor.category] ?? '#6b7280';
-  const wsNameOf = (pid: string) => projects.find(p => p.id === pid)?.name ?? pid;
+  const wsNameOf = (pid: string) => projectName(projects.find(p => p.id === pid), readLang === 'he', pid);
   const currentWsName = wsNameOf(currentProjectId);
+  /** A workspace's own active stages, sorted — the Job Board's are its own. */
+  const stagesOfWs = (pid: string) => stages
+    .filter(st => st.active && (pid === 'general' ? st.projectId === 'general' : !st.projectId))
+    .sort((a, b) => a.order - b.order);
+  /**
+   * The self-task search: every job in every workspace he may give himself a
+   * task in (`selfAssignProjects`, absent = all) — the open one live, the
+   * rest from their snapshots, which the foreign live sync keeps fresh.
+   */
+  const selfHits = useMemo(() => {
+    const query = selfQ.trim();
+    if (!query) return [] as { job: Apartment; projectId: string }[];
+    const allowed = contractor?.selfAssignProjects ?? projects.map(p => p.id);
+    const out: { job: Apartment; projectId: string }[] = [];
+    const take = (list: Apartment[], pid: string) => {
+      if (!allowed.includes(pid)) return;
+      const real = list.filter(a => !a.isUnnamed && a.boardBin !== 'trash');
+      for (const h of searchJobs(real, query, { stages: stagesOfWs(pid), projectId: pid, limit: 6 }).slice(0, 6)) {
+        out.push({ job: h.rec, projectId: pid });
+      }
+    };
+    take(apartments, currentProjectId);
+    for (const p of projects) {
+      if (p.id === currentProjectId) continue;
+      take(loadProjectSnapshot(p.id).apartments, p.id);
+    }
+    return out.slice(0, 12);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selfQ, apartments, projects, currentProjectId, contractor?.selfAssignProjects, snapshotTick]);
   /**
    * His tasks in the OTHER workspaces — read from each one's stored snapshot,
    * because only the open workspace is live (the workspace chip row is gone;
@@ -813,7 +875,7 @@ export function ContractorPortal() {
     const out: { a: ContractorAssignment; apt?: Apartment; projectId: string; projectName: string }[] = [];
     for (const p of loadAllProjectsTaskData()) {
       if (p.projectId === currentProjectId) continue;
-      const name = projects.find(x => x.id === p.projectId)?.name ?? p.projectId;
+      const name = projectName(projects.find(x => x.id === p.projectId), readLang === 'he', p.projectId);
       for (const a of p.assignments) {
         if (a.contractorId !== contractorId) continue;
         out.push({ a, apt: p.apartments.find(x => x.id === a.apartmentId), projectId: p.projectId, projectName: name });
@@ -875,10 +937,28 @@ export function ContractorPortal() {
    * outside the company account. Fired when the task sheet opens, so every
    * plan heals itself the first time it is actually needed on site.
    */
+  /**
+   * No starred plan on the unit → the plans folder's LATEST-ACTIVITY sheet
+   * stands in (owner, 2026-09-16), per unit, looked up once per visit and
+   * marked on the sheet as the app's guess. Never written to the unit.
+   */
+  const [autoPlanFor, setAutoPlanFor] = useState<Record<string, string | null>>({});
   useEffect(() => {
     if (!selectedAssignment) return;
     const apt = apartments.find(x => x.id === selectedAssignment.apartmentId);
-    const planId = apt?.plansPdfLink ? extractFileId(apt.plansPdfLink) : null;
+    if (!apt || apt.plansPdfLink || !apt.driveLink || !isUploadBackendConfigured()) return;
+    if (apt.id in autoPlanFor) return;
+    let dead = false;
+    findAllPlansPdfsViaBackend(apt.driveLink)
+      .then(pdfs => { if (!dead) setAutoPlanFor(m => ({ ...m, [apt.id]: pdfs[0]?.id ?? null })); })
+      .catch(() => { if (!dead) setAutoPlanFor(m => ({ ...m, [apt.id]: null })); });
+    return () => { dead = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAssignment?.apartmentId, apartments]);
+  useEffect(() => {
+    if (!selectedAssignment) return;
+    const apt = apartments.find(x => x.id === selectedAssignment.apartmentId);
+    const planId = (apt?.plansPdfLink ? extractFileId(apt.plansPdfLink) : null) ?? (apt ? autoPlanFor[apt.id] ?? null : null);
     ensureDriveShared(planId);
     if (apt && planId) {
       const latest = planAnnotations
@@ -886,7 +966,7 @@ export function ContractorPortal() {
         .sort((a, b) => b.version - a.version)[0];
       ensureDriveShared(latest?.driveFileId);
     }
-  }, [selectedAssignment, apartments, planAnnotations]);
+  }, [selectedAssignment, apartments, planAnnotations, autoPlanFor]);
 
   const assignedAptIds = new Set(assignments.map(a => a.apartmentId));
 
@@ -1214,7 +1294,9 @@ export function ContractorPortal() {
       setClosingComment('');
       setFinishAsk(null);
       const liveA = contractorAssignments.find(x => x.id === selectedAssignment.id) ?? selectedAssignment;
-      setCloseStage(liveA.stageWhenDone ?? liveA.stageId ?? getApt(liveA.apartmentId)?.currentStageId ?? null);
+      const seed = liveA.stageId ?? getApt(liveA.apartmentId)?.currentStageId ?? null;
+      setCloseStages(seed ? [seed] : []);
+      setCloseFinished('yes');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [closing]);
@@ -1223,12 +1305,12 @@ export function ContractorPortal() {
     if (!selectedAssignment) return;
     const apt = getApt(selectedAssignment.apartmentId);
     const completedAt = new Date().toISOString();
-    // The stage he says the unit is at NOW becomes the task's when-done
-    // stage, written BEFORE the close so the store's completion rule moves
-    // the unit there in the same motion.
+    // A stage report carries his answers — written BEFORE the close so the
+    // store's completion rule marks the stages (done or half done) and moves
+    // the unit in the same motion. An ordinary task goes to its stageWhenDone.
     const liveA = contractorAssignments.find(x => x.id === selectedAssignment.id) ?? selectedAssignment;
-    if (closeStage && closeStage !== (liveA.stageWhenDone ?? null) && !liveA.problem) {
-      updateContractorAssignment(selectedAssignment.id, { stageWhenDone: closeStage });
+    if (liveA.stageReport && !liveA.problem && closeStages.length) {
+      updateContractorAssignment(selectedAssignment.id, { stagesWorked: closeStages, stagesFinished: closeFinished === 'yes' });
     }
     updateContractorAssignment(selectedAssignment.id, { completedAt });
     addActivityLog({
@@ -1474,16 +1556,17 @@ export function ContractorPortal() {
               projects={projects}
               snapshotTick={snapshotTick}
               onPick={it => {
+                // A notification opens ITS item (owner, 2026-09-16): the task
+                // sheet, in whichever workspace holds it — switch, then open.
+                setActiveTab('tasks');
                 if (it.projectId !== currentProjectId) {
-                  // The task lives in another workspace — go where it is (the
-                  // auto-switch precedent); the list there shows it.
+                  pendingOpenTask.current = it.taskId;
                   setCurrentProject(it.projectId);
                   setMapBuilding('');
-                  setActiveTab('tasks');
                   return;
                 }
                 const a = contractorAssignments.find(x => x.id === it.taskId);
-                if (a) { setActiveTab('tasks'); setSelectedAssignment(a); setShowHistory(false); }
+                if (a) { setSelectedAssignment(a); setShowHistory(false); }
               }}
             />
           )}
@@ -1677,29 +1760,45 @@ export function ContractorPortal() {
                     </select>
                   )}
 
-                  <select
-                    value={selfApt}
-                    onChange={e => setSelfApt(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#4aa8d8]"
-                  >
-                    <option value="">{w('Where?', 'איפה?', 'Где?')}</option>
-                    {/* Their own units first — that is where the work almost
-                        always is — then everything else if they can see it.
-                        Somebody allowed to HAND OUT work gets the full list
-                        regardless: you cannot give a task without being able
-                        to say where it is. */}
-                    {[...apartments]
-                      .filter(a => !a.isUnnamed
-                        && (perms.seeAllApartments || perms.assignOthers || assignedAptIds.has(a.id)))
-                      .sort((a, b) => Number(assignedAptIds.has(b.id)) - Number(assignedAptIds.has(a.id)))
-                      .slice(0, 400)
-                      .map(a => (
-                        <option key={a.id} value={a.id}>
-                          {assignedAptIds.has(a.id) ? '★ ' : ''}{aptLabel(a)}
-                          {a.buildingId !== 'G' ? ` · ${a.buildingId}` : ''}
-                        </option>
-                      ))}
-                  </select>
+                  {/* WHERE — a search over every workspace he may give
+                      himself a task in (owner, 2026-09-16: "just like on the
+                      computer"), not a dropdown of this workspace's units. */}
+                  {selfPick ? (
+                    <div data-self-picked className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm">
+                      <span className="w-2 h-2 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: projectColor(projects, selfPick.projectId) }} />
+                      <span className="flex-1 truncate font-semibold text-gray-800">
+                        {aptLabel(selfPick.job) || selfPick.job.displayName || selfPick.job.address}
+                      </span>
+                      <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-full text-white"
+                        style={{ backgroundColor: projectColor(projects, selfPick.projectId) }}>{wsNameOf(selfPick.projectId)}</span>
+                      <button onClick={() => { setSelfPick(null); setSelfApt(''); }} className="text-gray-400 hover:text-red-500"><X size={14} /></button>
+                    </div>
+                  ) : (
+                    <div>
+                      <input data-self-search value={selfQ} onChange={e => setSelfQ(e.target.value)}
+                        placeholder={w('Where? Search a name, a number, an address', 'איפה? חפשו שם, מספר, כתובת', 'Где? Имя, номер, адрес')}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#4aa8d8]" />
+                      {selfQ.trim() && (
+                        <div className="mt-1 rounded-lg border border-gray-200 overflow-hidden max-h-56 overflow-y-auto">
+                          {selfHits.map(h => (
+                            <button key={`${h.projectId}:${h.job.id}`} data-self-hit={h.job.id}
+                              onClick={() => { setSelfPick(h); setSelfApt(h.job.id); setSelfQ(''); setSelfStage(''); }}
+                              className="w-full flex items-center gap-2 px-2.5 py-2 text-start text-[13px] border-b border-gray-100 last:border-b-0 hover:bg-slate-50">
+                              <span className="w-2 h-2 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: projectColor(projects, h.projectId) }} />
+                              <span className="truncate flex-1">{aptLabel(h.job) || h.job.displayName || h.job.address}</span>
+                              <span className="text-[9.5px] font-extrabold px-1.5 py-0.5 rounded-full text-white flex-shrink-0"
+                                style={{ backgroundColor: projectColor(projects, h.projectId) }}>{wsNameOf(h.projectId)}</span>
+                            </button>
+                          ))}
+                          {selfHits.length === 0 && (
+                            <p className="px-3 py-2 text-[12px] text-gray-400">{w('Nothing found', 'לא נמצא', 'Ничего не найдено')}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-2">
                     <label className="block">
@@ -1726,7 +1825,7 @@ export function ContractorPortal() {
                   <select value={selfStage} onChange={e => setSelfStage(e.target.value)}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#4aa8d8]">
                     <option value="">{w('Stage (optional)', 'שלב (לא חובה)', 'Этап (необязательно)')}</option>
-                    {stages.filter(st => st.active).sort((a, b) => a.order - b.order).map(st => (
+                    {stagesOfWs(selfPick?.projectId ?? currentProjectId).map(st => (
                       <option key={st.id} value={st.id}>{s.isRtl && st.nameHe ? st.nameHe : st.name}</option>
                     ))}
                   </select>
@@ -1763,11 +1862,11 @@ export function ContractorPortal() {
 
                   <div className="flex gap-2">
                     <button
-                      disabled={!selfText.trim() || !selfApt}
+                      disabled={!selfText.trim() || !selfPick}
                       onClick={() => {
-                        const apt = apartments.find(a => a.id === selfApt);
-                        if (!apt) return;
-                        addContractorAssignment({
+                        if (!selfPick) return;
+                        const apt = selfPick.job;
+                        const fields = {
                           contractorId: (perms.assignOthers && selfFor) ? selfFor : contractorId,
                           apartmentId: apt.id,
                           buildingId: apt.buildingId,
@@ -1784,8 +1883,13 @@ export function ContractorPortal() {
                           completedAt: null,
                           createdBy: contractorId,
                           createdByName: contractor!.name,
-                        } as never);
-                        setSelfText(''); setSelfApt(''); setSelfTask(false);
+                        };
+                        // The task is written where the JOB lives — the open
+                        // workspace through the ordinary action, another through
+                        // its own collections (the addAssignmentToProject idiom).
+                        if (selfPick.projectId === currentProjectId) addContractorAssignment(fields as never);
+                        else useStore.getState().addAssignmentToProject(selfPick.projectId, fields as never);
+                        setSelfText(''); setSelfApt(''); setSelfPick(null); setSelfTask(false);
                         setSelfFor(''); setSelfStage(''); setSelfPriority('normal'); setSelfFiles([]);
                         setSelfDue(new Date().toISOString().slice(0, 10));
                       }}
@@ -1793,7 +1897,7 @@ export function ContractorPortal() {
                       style={{ backgroundColor: '#1e3a5f' }}>
                       {w('Add it', 'הוספה', 'Добавить')}
                     </button>
-                    <button onClick={() => { setSelfTask(false); setSelfText(''); setSelfApt(''); setSelfFiles([]); }}
+                    <button onClick={() => { setSelfTask(false); setSelfText(''); setSelfApt(''); setSelfPick(null); setSelfQ(''); setSelfFiles([]); }}
                       className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-500 border border-gray-200">
                       {w('Cancel', 'ביטול', 'Отмена')}
                     </button>
@@ -2115,7 +2219,7 @@ export function ContractorPortal() {
         const visible = perms.seeAllApartments
           ? apartments
           : apartments.filter(a => assignedAptIds.has(a.id));
-        const projectName = projects.find(p => p.id === currentProjectId)?.name ?? currentProjectId;
+        const projectNameNow = projectName(projects.find(p => p.id === currentProjectId), readLang === 'he', currentProjectId);
         const wsColor = projectColor(projects, currentProjectId);
         const wsColorOf = (pid: string) => projectColor(projects, pid);
         const openHere = (pid: string) => (pid === currentProjectId ? assignments : otherTasks.filter(r => r.projectId === pid).map(r => r.a))
@@ -2152,7 +2256,7 @@ export function ContractorPortal() {
                         className="max-w-[78%] max-h-full object-contain"
                         style={{ height: 'min(150px, 100%)' }} />
                     </span>
-                    <span className="mt-2 text-center text-[17px] font-black text-[#1e3a5f] leading-tight w-full">{p.name}</span>
+                    <span className="mt-2 text-center text-[17px] font-black text-[#1e3a5f] leading-tight w-full">{projectName(p, readLang === 'he')}</span>
                   </button>
                 );
               })}
@@ -2175,7 +2279,7 @@ export function ContractorPortal() {
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-extrabold text-[13.5px] min-w-0 active:scale-[0.98]"
                 style={{ backgroundColor: '#eef4fa', color: '#1e3a5f' }}>
                 <span className="w-2 h-[18px] rounded-sm flex-shrink-0" style={{ backgroundColor: wsColor }} />
-                <span className="truncate">{projectName}</span>
+                <span className="truncate">{projectNameNow}</span>
                 <ChevronDown size={14} className="flex-shrink-0" />
               </button>
               <div className="ms-auto flex rounded-xl p-[3px] flex-shrink-0" style={{ backgroundColor: '#eef2f6' }} data-map-buildings>
@@ -2326,7 +2430,11 @@ export function ContractorPortal() {
         const stage = getStage(a.stageId);
         const isOverdue = a.dueDate && !a.completedAt && isPast(parseISO(a.dueDate));
         const dueBadge = getDueBadge(effectiveDue(a), dueWords);
-        const plansPdfFileId = apt?.plansPdfLink ? extractFileId(apt.plansPdfLink) : null;
+        // The starred plan — or, when nobody starred one, the app's guess:
+        // the plans folder's latest-activity sheet, marked in red as a guess.
+        const starredFileId = apt?.plansPdfLink ? extractFileId(apt.plansPdfLink) : null;
+        const plansPdfFileId = starredFileId ?? (apt ? autoPlanFor[apt.id] ?? null : null);
+        const planIsGuess = !starredFileId && !!plansPdfFileId;
         const composerNode = (
           <div data-composer-block>
 {noteAttachments.length > 0 && (
@@ -2545,6 +2653,15 @@ export function ContractorPortal() {
                 {/* Engineering Plans PDF */}
                 {plansPdfFileId && (
                   <div>
+                    {planIsGuess && (
+                      <div data-plan-auto-warning className="mb-2 flex items-center gap-2 px-3 py-2 rounded-xl text-[12.5px] font-bold text-white"
+                        style={{ backgroundColor: '#dc2626' }}>
+                        <span className="w-5 h-5 rounded-full bg-white text-red-600 flex items-center justify-center text-[12px] font-black flex-shrink-0">!</span>
+                        {w('Latest-activity plan, auto-selected — the office has not starred one yet',
+                          'תוכנית עם הפעילות האחרונה נבחרה אוטומטית — המשרד עוד לא סימן תוכנית בכוכב',
+                          'План с последней активностью выбран автоматически — офис ещё не отметил план')}
+                      </div>
+                    )}
                     <div className="flex items-center justify-between mb-2">
                       <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
                         <BookOpen size={12} /> {s.engineeringPlans}
@@ -2839,20 +2956,22 @@ export function ContractorPortal() {
                     </div>
                   ) : (
                     <div className="max-w-md mx-auto w-full space-y-6">
-                      {/* 0 · what stage is the unit at NOW — the task's when-done
-                          stage, chosen at the close (owner, 2026-09-15). The
-                          store moves the unit there when the task closes. */}
-                      {!selProblem && !a.general && wsStageList.length > 0 && (
+                      {/* 0 · A STAGE REPORT ("I'm going to work here") asks two
+                          things at the close (owner, 2026-09-16): which stages
+                          he did — several — and whether he finished them all.
+                          Yes → done; no → half done. An ordinary task is not
+                          asked: it moves to the stage chosen when it was made. */}
+                      {!selProblem && !a.general && a.stageReport && wsStageList.length > 0 && (
                         <div data-close-stage>
                           <p className="text-center font-extrabold text-gray-800 mb-2" style={{ fontSize: 16, lineHeight: 1.35 }}>
-                            {s.stageNowLabel || (w('What stage is it at now?', 'באיזה שלב זה עכשיו?', 'На каком этапе это теперь?'))}
+                            {w('What stages did you do?', 'על אילו שלבים עבדת?', 'Какие этапы вы делали?')}
                           </p>
                           <div className="flex flex-wrap justify-center gap-1.5">
                             {wsStageList.map(st => {
-                              const on = closeStage === st.id;
+                              const on = closeStages.includes(st.id);
                               return (
                                 <button key={st.id} data-close-stage-pick={st.id} data-on={on ? '1' : undefined}
-                                  onClick={() => setCloseStage(st.id)}
+                                  onClick={() => setCloseStages(prev => prev.includes(st.id) ? prev.filter(x => x !== st.id) : [...prev, st.id])}
                                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-bold border active:scale-[0.98]"
                                   style={on
                                     ? { backgroundColor: st.color, borderColor: st.color, color: '#fff' }
@@ -2863,6 +2982,33 @@ export function ContractorPortal() {
                               );
                             })}
                           </div>
+                          {closeStages.length > 0 && (
+                            <div data-close-finished className="mt-3">
+                              <p className="text-center font-extrabold text-gray-800 mb-2" style={{ fontSize: 15, lineHeight: 1.35 }}>
+                                {closeStages.length > 1
+                                  ? w('Did you finish all of them?', 'סיימת את כולם?', 'Вы закончили все?')
+                                  : w('Did you finish it?', 'סיימת אותו?', 'Вы закончили?')}
+                              </p>
+                              <div className="grid grid-cols-2 gap-2">
+                                <button data-close-finished-pick="yes" data-on={closeFinished === 'yes' ? '1' : undefined}
+                                  onClick={() => setCloseFinished('yes')}
+                                  className="py-2.5 rounded-xl text-sm font-bold border active:scale-[0.98]"
+                                  style={closeFinished === 'yes'
+                                    ? { backgroundColor: '#16a34a', borderColor: '#16a34a', color: '#fff' }
+                                    : { borderColor: '#e5e7eb', color: '#374151', backgroundColor: '#fff' }}>
+                                  {w('Yes — finished', 'כן — סיימתי', 'Да — закончил')}
+                                </button>
+                                <button data-close-finished-pick="no" data-on={closeFinished === 'no' ? '1' : undefined}
+                                  onClick={() => setCloseFinished('no')}
+                                  className="py-2.5 rounded-xl text-sm font-bold border active:scale-[0.98]"
+                                  style={closeFinished === 'no'
+                                    ? { backgroundColor: '#f97316', borderColor: '#f97316', color: '#fff' }
+                                    : { borderColor: '#e5e7eb', color: '#374151', backgroundColor: '#fff' }}>
+                                  {w('Not yet — half done', 'עוד לא — חצי גמור', 'Ещё нет — наполовину')}
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                       {/* 1 · the pictures — the rule names MIN_CLOSE_MEDIA, so
@@ -3018,8 +3164,8 @@ export function ContractorPortal() {
         /** His open general jobs here — the "is this part of…?" question. */
         const generalJobs = assignments.filter(x => x.general && !x.completedAt);
         /** File the visit under the general job he named. */
-        const recordVisit = (rid: string, st: typeof allWsStages[0]) => {
-          const gid = workHere.partOf;
+        const recordVisit = (rid: string, st: typeof allWsStages[0], partOf: string | null) => {
+          const gid = partOf;
           if (!gid) return;
           const g = useStore.getState().contractorAssignments.find(x => x.id === gid);
           if (!g) return;
@@ -3039,23 +3185,29 @@ export function ContractorPortal() {
          * finish is decided at the CLOSE (the closing screen asks what stage
          * it is at now), never here.
          */
-        const startWork = (st: typeof allWsStages[0]) => {
+        /**
+         * The stage is NOT asked at the start (owner, 2026-09-16): the unit
+         * is at the stage it is set at. The close asks what stages were done
+         * and whether they were finished.
+         */
+        const startWork = (partOf: string | null) => {
           const rid = mintId();
+          const st = curStage ?? null;
           addContractorAssignment({
             id: rid,
             contractorId,
             apartmentId: apt.id,
             buildingId: apt.buildingId,
-            taskDescription: `${getStageName(st, !!s.isRtl)} — ${w('working here today', 'עובד כאן היום', 'работаю здесь сегодня')}`,
+            taskDescription: `${st ? `${getStageName(st, !!s.isRtl)} — ` : ''}${w('working here today', 'עובד כאן היום', 'работаю здесь сегодня')}`,
             dueDate: todayIso,
-            stageId: st.id,
+            stageId: st?.id ?? null,
             priority: 'normal',
             completedAt: null,
             stageReport: true,
             createdBy: contractorId,
             createdByName: contractor?.name ?? '',
           } as never);
-          recordVisit(rid, st);
+          if (st) recordVisit(rid, st, partOf);
           const rec = useStore.getState().contractorAssignments.find(a => a.id === rid);
           closeSheet();
           if (rec) setSelectedAssignment(rec);
@@ -3113,13 +3265,15 @@ export function ContractorPortal() {
                         ))}
                       </div>
                     )}
+                    {perms.workHere && (
                     <button data-work-here
-                      onClick={() => setWorkHere({ ...workHere, step: generalJobs.length ? 'part' : 'stage' })}
+                      onClick={() => { if (generalJobs.length) setWorkHere({ ...workHere, step: 'part' }); else startWork(null); }}
                       className="w-full py-4 rounded-xl text-base font-bold text-white flex items-center justify-center gap-2 active:scale-[0.98]"
                       style={{ background: 'linear-gradient(135deg, #1e3a5f, #2c4f78)' }}>
                       <Hammer size={19} />
                       {s.goingToWorkBtn || (w("I'm going to work here", 'אני הולך לעבוד כאן', 'Я буду здесь работать'))}
                     </button>
+                    )}
                   </>
                 )}
                 {workHere.step === 'part' && (
@@ -3129,7 +3283,7 @@ export function ContractorPortal() {
                     </p>
                     {generalJobs.map((g, i) => (
                       <button key={g.id} data-work-part-yes={g.id}
-                        onClick={() => setWorkHere({ ...workHere, step: 'stage', partOf: g.id })}
+                        onClick={() => startWork(g.id)}
                         className="w-full text-left rtl:text-right rounded-xl px-3.5 py-3 border"
                         style={i === 0
                           ? { backgroundColor: '#fffdf5', borderColor: '#b8860b' }
@@ -3141,41 +3295,11 @@ export function ContractorPortal() {
                       </button>
                     ))}
                     <button data-work-part-no
-                      onClick={() => setWorkHere({ ...workHere, step: 'stage', partOf: null })}
+                      onClick={() => startWork(null)}
                       className="w-full py-3 rounded-xl font-bold text-sm text-gray-600 border border-gray-200">
                       {s.partNo || 'No, separate work'}
                     </button>
                   </div>
-                )}
-                {workHere.step === 'stage' && (
-                  <>
-                    <p className="text-center font-extrabold text-gray-800" style={{ fontSize: 17 }}>
-                      {s.whatStageNow || (w('What stage is it at?', 'באיזה שלב זה נמצא?', 'На каком этапе это сейчас?'))}
-                    </p>
-                    <div className="space-y-2" data-work-stages>
-                      {allWsStages.map(st => {
-                        const isCur = apt.currentStageId === st.id;
-                        return (
-                          <button key={st.id} data-work-stage={st.id} data-current={isCur ? '1' : undefined}
-                            onClick={() => startWork(st)}
-                            className="w-full flex items-center gap-2.5 rounded-xl px-3.5 py-3 text-left rtl:text-right active:scale-[0.99] border"
-                            style={isCur ? { borderColor: st.color, backgroundColor: `${st.color}14` } : { borderColor: '#e5e7eb' }}>
-                            <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: st.color }} />
-                            <span className="text-sm font-bold text-gray-800 flex-1">{getStageName(st, !!s.isRtl)}</span>
-                            {isCur && (
-                              <span className="text-[10px] font-extrabold uppercase tracking-wide" style={{ color: st.color }}>
-                                {w('now', 'עכשיו', 'сейчас')}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <button onClick={() => setWorkHere({ ...workHere, step: 'view' })}
-                      className="w-full text-center text-xs font-semibold text-gray-400">
-                      {w('Back', 'חזרה', 'Назад')}
-                    </button>
-                  </>
                 )}
               </div>
             </div>

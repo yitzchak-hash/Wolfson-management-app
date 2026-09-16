@@ -2301,7 +2301,7 @@ export const useStore = create<AppState>((set, get) => ({
      */
     if (before && updated && 'completedAt' in changes
         && !before.completedAt && updated.completedAt
-        && updated.stageReport && updated.stageId) {
+        && updated.stageReport && (updated.stageId || updated.stagesWorked?.length)) {
       const apt = get().apartments.find(ap => ap.id === updated.apartmentId);
       if (apt) {
         const who = get().currentUser
@@ -2311,9 +2311,23 @@ export const useStore = create<AppState>((set, get) => ({
             code: '', role: 'viewer', active: true, createdAt: updated.createdAt,
           } as User;
         const changesToApt: Partial<Apartment> = {};
-        if (apt.stageMarks?.[updated.stageId] !== 'done') {
-          changesToApt.stageMarks = { ...(apt.stageMarks ?? {}), [updated.stageId]: 'done' };
+        /**
+         * What he said at the close (owner, 2026-09-16): the stages he WORKED
+         * on, and whether he finished them all. Finished → each is 'done';
+         * not finished → each is 'pending' (half done) — the orange clock on
+         * the picker and the office's bell. With no answer recorded (older
+         * tasks) the report's own stage counts as finished, as before.
+         */
+        const worked = (updated.stagesWorked?.length ? updated.stagesWorked : [updated.stageId])
+          .filter((x): x is string => !!x);
+        const finished = updated.stagesFinished !== false;
+        const marks = { ...(apt.stageMarks ?? {}) };
+        let marksChanged = false;
+        for (const sid of worked) {
+          const want = finished ? 'done' : 'pending';
+          if (marks[sid] !== want) { marks[sid] = want; marksChanged = true; }
         }
+        if (marksChanged) changesToApt.stageMarks = marks;
         /**
          * The finished stage is where the apartment IS now (owner's rule,
          * 2026-09-03): a report on a stage ordered AFTER the current one moves
@@ -2323,7 +2337,12 @@ export const useStore = create<AppState>((set, get) => ({
          * it backwards.
          */
         const order = (id: string | null) => get().stages.find(st => st.id === id)?.order ?? -1;
-        if (order(updated.stageId) > order(apt.currentStageId)) changesToApt.currentStageId = updated.stageId;
+        // Only FINISHED work moves the apartment forward — to the furthest
+        // stage he finished. Half-done stays where it stood, wearing the clock.
+        if (finished) {
+          const furthest = worked.reduce<string | null>((best, sid) => (order(sid) > order(best) ? sid : best), null);
+          if (furthest && order(furthest) > order(apt.currentStageId)) changesToApt.currentStageId = furthest;
+        }
         if (Object.keys(changesToApt).length) get().updateApartment(updated.apartmentId, changesToApt, who);
       }
     }

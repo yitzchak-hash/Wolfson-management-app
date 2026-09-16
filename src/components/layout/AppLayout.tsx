@@ -8,6 +8,7 @@ import { driveActivityDue, refreshDriveActivity } from '../../data/driveActivity
 import { isFirebaseConfigured } from '../../data/firebase';
 import { PlannerAskModal } from '../board/PlannerAskModal';
 import { UndoLayer } from '../board/UndoLayer';
+import { OfficeAlerts } from './OfficeAlerts';
 
 export function AppLayout() {
   const { startFirebaseSync, firebaseListening, mainUiStrings } = useStore();
@@ -217,6 +218,8 @@ export function AppLayout() {
           office from any page; the worker portal never mounts this layout,
           so a worker is never asked about the office's planner. */}
       <PlannerAskModal />
+      {/* A worker's message or a closed job rings the office — every page. */}
+      <OfficeAlerts />
       {/* Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y, and the question that guards anything
           putting real content back. Here rather than on the board so the keys
           work on every page, and so a question raised on the board is still

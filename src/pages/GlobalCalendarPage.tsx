@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { CalendarDays } from 'lucide-react';
 import { useStore, loadAllProjectsTaskData } from '../data/store';
 import { TaskCalendar, CalendarEvent } from '../components/tasks/TaskCalendar';
-import { ContractorAssignment, Apartment, aptLabel } from '../types';
+import { ContractorAssignment, Apartment, aptLabel, projectShortName } from '../types';
 import { daysOf } from '../data/taskDays';
 import { fsListen, isFirebaseConfigured, projectCollection } from '../data/firebase';
 import { DEFAULT_PROJECTS } from '../data/initialData';
@@ -67,7 +67,7 @@ export function GlobalCalendarPage() {
     });
   }, [currentProjectId, contractorAssignments, apartments, bgAssignments, bgApartments]);
 
-  const projectName = (id: string) => projects.find(p => p.id === id)?.shortName ?? id;
+  const projectName = (id: string) => projectShortName(projects.find(p => p.id === id), !!s.isRtl, id);
 
   const events: CalendarEvent[] = useMemo(() => {
     const out: CalendarEvent[] = [];

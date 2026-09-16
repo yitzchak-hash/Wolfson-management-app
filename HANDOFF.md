@@ -15,7 +15,7 @@ exactly there.
 - App: the TzviAir job board / CRM — React 19 + TS + Vite, Zustand, Firestore,
   Vercel. Production branch `claude/blissful-cray-spTFY` deploys to
   wolfson-management-app.vercel.app. This session also pushes
-  `claude/handoff-documentation-aei1ev`; both must end each round at the
+  `claude/ui-widget-fixes-fosqdk`; both must end each round at the
   same commit.
 - Three workspaces: Wolfson (buildings), Netiv (buildings), the Job Board
   (`general`, free canvas, ~1,650 jobs after the CRM import and the Drive sweep).
@@ -27,7 +27,7 @@ exactly there.
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2026-12-30` — the next entry must be a later date (an older
+   newest is `2026-12-31` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`. 8. Rewrite THIS file.
@@ -43,8 +43,37 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-16 — the plan zoom, for real this time)
+## Where things stand (2026-09-16 — his second list: the office rings, the worker's day, plans in red)
 Last commits, newest first (see `git log`):
+- **2026-09-16, seventh pass — his ~15-item list, all built.** (1) `workHere`
+  is its own permission apart from `selfAssign`; `selfAssignProjects` limits
+  "a job for myself" per workspace (Settings → Workers chip). (2) "I'm going
+  to work here" asks NO stage at the start (the unit's own stage); the close
+  asks which stages he did (several) + finished? yes/no → done / half done
+  (`stagesWorked`/`stagesFinished` on the task, read by the store's
+  completion rule). (3) An ordinary task's close asks no stage — it goes to
+  `stageWhenDone`. (4) Plans: nobody starred → the newest-activity sheet is
+  shown with a RED star + a red "!" bubble between Layers and Plans, NEVER
+  written (the drawer's two `pdfs[0]` writes removed); the portal shows the
+  same guess. (5) The OFFICE rings: `OfficeAlerts` in AppLayout — chime,
+  card, desktop notification when hidden; pressing it switches workspace,
+  opens the job on its Tasks tab with the task lit (`taskFocus.ts`); the
+  portal bell holds office messages and opens the task. (6) Board: Equal
+  size row, selection header says "N groups · N jobs · N notes" (his "27
+  selected and arrange doesn't work" — Arrange now takes groups along too),
+  Focus in every node menu, calendar widget month arrows, right-drag PANS
+  (Ctrl+drag lassoes), a unit card deletes without the ask. (7) Hebrew
+  workspace names everywhere (`Project.nameHe`/`shortNameHe`). (8) The
+  add-a-job dialog names the job's current stage in colour above the
+  labelled from → to pair; stages are the picked job's workspace's; the
+  All-buildings pill was already there. (9) The self-task form's WHERE is a
+  search over every allowed job. NOT a bug: the Planner tab is gated by
+  `seePlanner`, which only the Manager level (or a personal override)
+  grants — his worker must be on that level. `round43-probe.mjs` (41 checks,
+  six contexts); re-encoded `round32-probe` (right-drag pan) and
+  `stagereport.mjs` (start-no-ask + close asks, incl. the not-yet path);
+  arrange, planbrowser, portalround, foreigndrop, multiday, round42,
+  notebookbars, touchpan, round20, gsearch, tsc, build, four audits green.
 - **2026-09-16, sixth pass — his video of the zoom still jumping.** The
   border-box observer fix did NOT hold on his Windows PC (production carried
   it — the deployed PlanAnnotator chunk is byte-identical to the local
@@ -336,6 +365,19 @@ Last commits, newest first (see `git log`):
   the one-file Hebrew-safe Windows helper.
 
 ## What the owner last asked (his exact wants)
+-1. **(2026-09-16, the second list — BUILT, see above)** separate permissions
+   for "add a job for myself" vs "I'm going to do work here"; no "what stage"
+   at the start, "what stages did you do" + "did you finish all of them?" at
+   the close, else half finished; an ordinary job's close must not ask the
+   stage; plans everywhere auto-pick the latest Drive activity with a red "!"
+   bubble; notifications both ways with the portal bell holding everything
+   and a click opening the item step by step; Equal size + "27 selected and
+   arrange doesn't work"; unit cards are ghosts (delete without the warning);
+   calendar widget month arrows; Focus on a widget's right-click; the
+   add-a-job dialog's stage pair clearer + per-workspace stages; general job
+   → all buildings (already there); right-drag = pan; self-task per project
+   with a search over all jobs like the PC; a Planner tab he never permitted
+   (answer: the Manager level grants it); Hebrew workspace names.
 0. **(2026-09-15, OPEN — awaiting his stars)** "There's a few fixes we need to
    do really urgently": in Wolfson project settings → Buildings he cannot see
    the actual apartments with their saved info ("at least I can see what I'm
@@ -370,6 +412,13 @@ Last commits, newest first (see `git log`):
    rebuild") is built and pushed.
 
 ## Open threads / things to verify on production
+- **Desktop alerts on the office PCs** (2026-09-16): the first worker message
+  after this deploy shows a card with "Allow desktop alerts" — press it once
+  per computer so a hidden tab can notify. Works without VAPID keys (it is
+  the in-app half); the phone-closed half still needs the keys below.
+- **Check the worker who sees the Planner tab**: Settings → Workers → his
+  level. Only Manager grants "See the planner"; move him to Technician or
+  Contractor (or switch the one permission off on him) and the tab is gone.
 - **The plan zoom on his Windows PC** (2026-09-16): reload the tab first.
   If it STILL snaps, the next step is a `?debugzoom=1`-style readout of what
   fires `setFitting(true)` — the trigger on Windows was never seen from here
@@ -406,6 +455,18 @@ Last commits, newest first (see `git log`):
   `npx vite --port 5173` and `VITE_DRIVE_API_KEY=test npx vite --port 5174`.
 
 ## The last reply the owner saw (so the next one continues it)
+**Newest (2026-09-16, seventh pass)**: the reply walked his list item by
+item — the split permissions and the per-workspace self-task; the start
+that asks nothing and the close that asks which stages + finished?; the
+ordinary task's close asking nothing; the newest plan shown in red with the
+"!" bubble and never written; the office ringing (card top-right, one-time
+"Allow desktop alerts" press, click opens the task lit) and the portal bell;
+Equal size, honest counts, Arrange with groups, Focus, calendar arrows,
+right-drag pan, unit-card delete; Hebrew names; the clearer dialog — and
+told him the Planner tab comes from the worker's Manager level, not a bug.
+Reminded him VAPID keys are still needed for phone-closed push. It ended
+with a Bottom line + bullets (KEEP THAT FORMAT on every reply).
+
 **Newest (2026-09-16, sixth pass)**: the reply said his video was read frame
 by frame, that the previous fix WAS on production but the sheet was still
 being re-fitted while he wheeled (two ladders, 124 and 122, a scrollbar's

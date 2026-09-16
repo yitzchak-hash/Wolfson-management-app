@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Paperclip, Loader2, AlertTriangle, Search, Plus, Building2 } from 'lucide-react';
 import {
-  Apartment, Contractor, Stage, TaskAttachment, TaskPriority, User, personColor, aptLabel, GeneralWhere, generalBuildingsText } from '../../types';
+  Apartment, Contractor, Stage, TaskAttachment, TaskPriority, User, personColor, aptLabel, GeneralWhere, generalBuildingsText, projectShortName, getStageName } from '../../types';
 import { useStore, loadProjectSnapshot } from '../../data/store';
 import { searchJobs } from '../../data/searchIndex';
 import { TaskDaysPicker, taskWrites, splitStringsOf, TaskSplit } from '../tasks/TaskDaysPicker';
@@ -116,7 +116,7 @@ export function PlannerTaskDialog({
     const query = q.trim();
     if (!query || picked || general) return [] as { job: Apartment; projectId: string; ws: string }[];
     const out: { job: Apartment; projectId: string; ws: string }[] = [];
-    const wsName = (pid: string) => projects.find(p => p.id === pid)?.shortName ?? projects.find(p => p.id === pid)?.name ?? pid;
+    const wsName = (pid: string) => projectShortName(projects.find(p => p.id === pid), isRtl, pid);
     const take = (list: Apartment[], pid: string) => {
       const real = list.filter(a => !a.isUnnamed && a.boardBin !== 'trash');
       for (const h of searchJobs(real, query, { stages: stagesFor(pid), projectId: pid, limit: 6 }).slice(0, 6)) {
@@ -248,7 +248,7 @@ export function PlannerTaskDialog({
 
   const box = 'w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12.5px] outline-none '
     + 'focus:ring-2 focus:ring-[#1e3a5f]/25 bg-white';
-  const wsName = (pid: string) => projects.find(p => p.id === pid)?.shortName ?? projects.find(p => p.id === pid)?.name ?? pid;
+  const wsName = (pid: string) => projectShortName(projects.find(p => p.id === pid), isRtl, pid);
   const wsColor = (pid: string) => projects.find(p => p.id === pid)?.color ?? '#64748b';
   const jobTitle = picked ? (aptLabel(picked.job) || picked.job.displayName || t('this job', 'העבודה'))
     : general ? `${wsName(general.projectId)}${generalBuildingsText(general) ? ` · ${generalBuildingsText(general)}` : ''}` : '';
@@ -289,7 +289,7 @@ export function PlannerTaskDialog({
                       else { setGeneral({ projectId: p.id }); setGenStep(null); }
                     }}
                     className="px-2.5 py-1 rounded-full text-[11.5px] font-bold text-white"
-                    style={{ backgroundColor: p.color ?? '#64748b' }}>{p.shortName ?? p.name}</button>
+                    style={{ backgroundColor: p.color ?? '#64748b' }}>{projectShortName(p, isRtl)}</button>
                 ))}
                 <button onClick={() => setGenStep(null)} className="text-[11px] text-gray-400 hover:text-gray-600">{t('back', 'חזרה')}</button>
               </div>
@@ -410,12 +410,27 @@ export function PlannerTaskDialog({
         )}
 
         {/* The stage the work is ON, and where the job goes when it is closed. */}
-        {!general && (
-          <Field label={`${s.stageOnLabel} · ${s.stageToLabel}`}>
-            <StagePairPicker stages={stageList} currentStageId={jobStage || null} value={pair} onChange={setPair}
-              strings={stagePairStrings(s)} isRtl={isRtl} box={box} labels={false} />
-          </Field>
-        )}
+        {!general && (() => {
+          const cur = stageList.find(st => st.id === jobStage);
+          return (
+            <div className="grid gap-1.5">
+              {/* The job's CURRENT stage, said once and in its colour, so the
+                  two selects below read as "it is here → when done, go there". */}
+              <div data-dialog-current-stage className="flex items-center gap-1.5 text-[11.5px] text-gray-600">
+                <span className="font-semibold">{s.stageJobsStage}:</span>
+                {cur ? (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md font-semibold"
+                    style={{ backgroundColor: cur.color + '20', color: cur.color }}>
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cur.color }} />
+                    {getStageName(cur, isRtl)}
+                  </span>
+                ) : <span className="text-gray-400">{t('Not started', 'לא התחיל')}</span>}
+              </div>
+              <StagePairPicker stages={stageList} currentStageId={jobStage || null} value={pair} onChange={setPair}
+                strings={stagePairStrings(s)} isRtl={isRtl} box={box} />
+            </div>
+          );
+        })()}
 
         {/* The days: start, how many, Friday, a second stretch (with its own
             stages, and the one-or-two ask when they differ). */}

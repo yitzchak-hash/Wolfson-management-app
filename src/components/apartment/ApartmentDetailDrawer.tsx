@@ -5,6 +5,7 @@ import { TaskThread } from '../tasks/TaskThread';
 import { Translated } from '../ui/Translated';
 import { Send } from 'lucide-react';
 import { useStore } from '../../data/store';
+import { peekTaskFocus, takeTaskFocus } from '../../data/taskFocus';
 import { TaskDaysPicker, daysFields } from '../tasks/TaskDaysPicker';
 import { StagePairPill } from '../tasks/StagePair';
 import { daysOf } from '../../data/taskDays';
@@ -275,6 +276,35 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    */
   const planWide = useMedia('(min-width: 800px)');
   const [activeTab, setActiveTab] = useState<'details' | 'tasks' | 'stages' | 'history' | 'photos' | 'plan'>('details');
+  /**
+   * A notification's last step: the task it rang for, lit on the Tasks tab
+   * (`data-task-lit`). Taken from `taskFocus` on open, when the remembered
+   * task belongs to THIS job; cleared after a few seconds.
+   */
+  const [litTaskId, setLitTaskId] = useState<string | null>(null);
+  const contractorAssignmentsForFocus = useStore(st => st.contractorAssignments);
+  useEffect(() => {
+    if (!apartment) return;
+    const mine = contractorAssignmentsForFocus.filter(a => a.apartmentId === apartment.id).map(a => a.id);
+    if (!peekTaskFocus(mine)) return;
+    // Deferred a tick: the open effect below resets the tab to Details in
+    // the same commit, and it is declared after this one, so it would win.
+    // Taken INSIDE the tick — StrictMode's mount/cleanup/mount would
+    // otherwise consume it in a run whose timers are cleared.
+    const open = setTimeout(() => {
+      const id = takeTaskFocus(mine);
+      if (!id) return;
+      setActiveTab('tasks'); setLitTaskId(id);
+    }, 0);
+    const t = setTimeout(() => setLitTaskId(null), 6000);
+    return () => { clearTimeout(open); clearTimeout(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apartment?.id, contractorAssignmentsForFocus.length]);
+  useEffect(() => {
+    if (!litTaskId || activeTab !== 'tasks') return;
+    const el = document.querySelector(`[data-task-card="${litTaskId}"]`);
+    el?.scrollIntoView({ block: 'center' });
+  }, [litTaskId, activeTab]);
   const [drivePhotos, setDrivePhotos] = useState<DrivePhotoItem[]>([]);
   const [loadingPhotos, setLoadingPhotos] = useState(false);
   const [photosLoaded, setPhotosLoaded] = useState(false);
@@ -618,14 +648,17 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
 
       if (!existingFileId && apartment.driveLink && backendConfigured) {
         setFetchingPdf(true);
+        /**
+         * The LATEST-ACTIVITY sheet is shown and drawn as starred — but it is
+         * the app's guess and is NEVER written to the job (owner, 2026-09-16).
+         * It used to write pdfs[0] into plansPdfLink silently, so nobody could
+         * tell a plan the office chose from one the app happened to list
+         * first, and a worker could be sent out on the wrong sheet. The red
+         * bubble on the plan bar says a person still has to star one.
+         */
         findAllPlansPdfsViaBackend(apartment.driveLink).then(pdfs => {
-          setAvailablePdfs(pdfs);
+          setAvailablePdfs(pdfs); // newest activity first
           setSelectedPdfIdx(0);
-          if (pdfs.length > 0 && currentUser) {
-            const link = `https://drive.google.com/file/d/${pdfs[0].id}/view`;
-            setPlansPdfLink(link);
-            updateApartment(apartment.id, { plansPdfLink: link }, currentUser);
-          }
         }).finally(() => setFetchingPdf(false));
       }
     }
@@ -674,6 +707,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const paneFileId = browsePreview?.file.id ?? (browsing ? null : (shownPlanId ?? detectedPdfId));
   const studioFileId = browsePreview?.file.id ?? shownPlanId ?? detectedPdfId;
   const starredPlanId = plansPdfLink ? extractFileId(plansPdfLink) : null;
+  /** The shown plan is the app's latest-activity GUESS — nobody starred one. */
+  // Read the LOCAL link state, not the prop: the board hands the drawer the
+  // record captured at open, so a star pressed a moment ago would not clear it.
+  const autoPlan = !plansPdfLink && !shownPlanId && !!detectedPdfId;
+  const shownStarId = starredPlanId ?? (autoPlan ? detectedPdfId : null);
   const rootCrumb: Crumb = { id: rootFolderId ?? '', name: driveFolderName || ui.driveFolder };
   // The root crumb takes the folder's title whenever it lands, even after a step in.
   const activePath: Crumb[] = (browsePath ?? [rootCrumb]).map((c, i) =>
@@ -1247,10 +1285,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         <>
           <div className="absolute inset-0 flex flex-col min-h-0">
             <PlanBrowser
+              starAuto={autoPlan && !starredPlanId}
               hidden={!!browsePreview}
               path={activePath}
               onPath={setBrowsePath}
-              starredId={starredPlanId}
+              starredId={shownStarId}
               onStar={starPlan}
               onPreview={(file, folderName) => setBrowsePreview({ file, folderName })}
               onBack={backTo}
@@ -1368,7 +1407,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               plansFolderId={planSet.plansFolderId ?? undefined}
               plans={planSet.plans}
               onStarPlan={starPlan}
-              starredPlanId={starredPlanId}
+              starredPlanId={shownStarId}
+              starAuto={autoPlan && !starredPlanId}
+              autoPlanNote={autoPlan ? ui.planAutoPicked : undefined}
               /*
                 Plans is the chooser now, so what it picks has to land back
                 here. The rule the chip row carried is kept exactly: only an
@@ -2179,16 +2220,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                       autoFillFamilyNameFromFolder(folderId);
                       findPlanSetViaBackend(next).then(setPlanSet).catch(() => {});
                       setFetchingPdf(true);
+                      // The guess is shown, never written — see the open effect.
                       findAllPlansPdfsViaBackend(next)
-                        .then(pdfs => {
-                          setAvailablePdfs(pdfs);
-                          setSelectedPdfIdx(0);
-                          if (pdfs.length > 0) {
-                            const link = `https://drive.google.com/file/d/${pdfs[0].id}/view`;
-                            setPlansPdfLink(link);
-                            updateApartment(apartment!.id, { plansPdfLink: link }, currentUser);
-                          }
-                        })
+                        .then(pdfs => { setAvailablePdfs(pdfs); setSelectedPdfIdx(0); })
                         .finally(() => setFetchingPdf(false));
                     }
                   }}
@@ -2358,7 +2392,8 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     const CAT_COLORS: Record<string, string> = { drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981' };
                     const isEditing = drawerEditingTaskId === a.id;
                     return (
-                      <div key={a.id} className={`rounded-xl border transition-all ${
+                      <div key={a.id} data-task-card={a.id} data-task-lit={litTaskId === a.id ? '1' : undefined}
+                        className={`rounded-xl border transition-all ${litTaskId === a.id ? 'ring-2 ring-[#4aa8d8] ring-offset-1 ' : ''}${
                         isEditing
                           ? 'border-[#1e3a5f]/40 bg-[#f0f4fa]'
                           : a.completedAt

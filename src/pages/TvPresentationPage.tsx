@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { problemStates } from '../data/problems';
 import { useSearchParams } from 'react-router-dom';
 import { useStore, loadAllProjectsTaskData, ensureProjectSnapshot, startForeignSync, stopForeignSync } from '../data/store';
-import { Apartment, CanvasElement, isCountableApartment, binKeyOf, binLabelOf, getStageName, TV_DASH_BOARD } from '../types';
+import { Apartment, CanvasElement, isCountableApartment, binKeyOf, binLabelOf, getStageName, TV_DASH_BOARD, projectShortName } from '../types';
 import { withAlpha, WidgetSurface } from '../components/board/BoardItems';
 import { tvScreenId, reportTvScreen } from '../data/tvScreens';
 import { tvViewbox } from '../data/tvRegion';
@@ -1041,7 +1041,7 @@ export function TvPresentationPage() {
           className={`${barBtn} px-3 py-1.5`}
           style={view === p.id ? on : off}>
           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />
-          {p.shortName}
+          {projectShortName(p, isRtl)}
         </button>
       ))}
       <button onClick={() => { pickView('dashboard'); setOpenJobId(null); }}
