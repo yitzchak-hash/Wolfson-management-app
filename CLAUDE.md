@@ -7980,3 +7980,20 @@ deploy, the CrashScreen's copied text is the next step. Probe:
 `scratchpad/homepage-probe.mjs` (9 — standing in Wolfson, cold browser
 through login, an unknown address). Harnesses that `goto('/')` only to import
 a module (`seed.mjs`, `gapsnap`, `pencil`) are unaffected.
+
+## A general job names its BUILDINGS — several, or all (owner, 2026-09-16)
+`GeneralWhere` in `types/index.ts`: `general.buildingIds?: string[]` is the
+picked SET; absent = every building ("All"); the legacy `buildingId` is
+still written when exactly one is picked, so older readers keep working.
+`generalBuildingsText(g)` is the ONE label rule ("A1, A2" / "" for all) —
+read by the dialog's picked-job line, the notebook bar and the Tasks page
+row. In `PlannerTaskDialog` the which-building step is an `All` pill
+(`[data-general-bld-pick="all"]`, writes the workspace alone and closes),
+toggling building pills (`[data-general-bld-pick=<id>][data-on]`) and
+`[data-general-bld-done]` (disabled until one is ticked, counts the picks).
+The Tasks page's own add form keeps its single dropdown ("Any building")
+for now. Also: a general job's bar no longer wears the purple workspace tag
+— its label already names the workspace, so it printed twice. Probe:
+`scratchpad/genbld-probe.mjs` (12). Standing pre-existing red:
+`round39-probe.mjs` still asserts the deleted "I did work here" stage
+filter (superseded 2026-09-15) — identical with this diff stashed.

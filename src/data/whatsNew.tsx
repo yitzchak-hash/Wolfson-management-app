@@ -30,6 +30,20 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-12-27',
+    title: 'A general job can cover several buildings, or all of them',
+    items: [
+      {
+        title: 'Which building? — All, or tick more than one',
+        body: 'When you add a general job from a notebook square and pick a workspace, '
+          + 'the buildings are tick-boxes now: press the ones the crew will work in and '
+          + 'Done, or press All for the whole site. The task and its bar say "A1, A2" — '
+          + 'and a job for the whole site names just the workspace.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2026-12-26',
     title: 'The front door is the Job Board',
     items: [

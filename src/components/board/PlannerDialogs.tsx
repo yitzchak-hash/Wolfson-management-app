@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Paperclip, Loader2, AlertTriangle, Search, Plus, Building2 } from 'lucide-react';
 import {
-  Apartment, Contractor, Stage, TaskAttachment, TaskPriority, User, personColor, aptLabel,
-} from '../../types';
+  Apartment, Contractor, Stage, TaskAttachment, TaskPriority, User, personColor, aptLabel, GeneralWhere, generalBuildingsText } from '../../types';
 import { useStore, loadProjectSnapshot } from '../../data/store';
 import { searchJobs } from '../../data/searchIndex';
 import { TaskDaysPicker, taskWrites, splitStringsOf, TaskSplit } from '../tasks/TaskDaysPicker';
@@ -45,7 +44,7 @@ export interface TaskDialogResult {
   /** Where the job lives when it is not this workspace's. */
   projectId?: string;
   /** A general job in a workspace (no unit): the workspace and building. */
-  general?: { projectId: string; buildingId?: string };
+  general?: GeneralWhere;
   parked?: boolean;
 }
 
@@ -87,7 +86,9 @@ export function PlannerTaskDialog({
   // ── Which job ──────────────────────────────────────────────────────────
   const [picked, setPicked] = useState<{ job: Apartment; projectId: string } | null>(
     job ? { job, projectId: currentProjectId } : null);
-  const [general, setGeneral] = useState<{ projectId: string; buildingId?: string } | null>(null);
+  const [general, setGeneral] = useState<GeneralWhere | null>(null);
+  // The buildings ticked so far on the which-building step (several at once).
+  const [genBlds, setGenBlds] = useState<string[]>([]);
   const [genStep, setGenStep] = useState<'ws' | 'bld' | null>(null);
   const [genWs, setGenWs] = useState('');
   const [q, setQ] = useState('');
@@ -238,7 +239,7 @@ export function PlannerTaskDialog({
   const wsName = (pid: string) => projects.find(p => p.id === pid)?.shortName ?? projects.find(p => p.id === pid)?.name ?? pid;
   const wsColor = (pid: string) => projects.find(p => p.id === pid)?.color ?? '#64748b';
   const jobTitle = picked ? (aptLabel(picked.job) || picked.job.displayName || t('this job', 'העבודה'))
-    : general ? `${wsName(general.projectId)}${general.buildingId ? ` · ${general.buildingId}` : ''}` : '';
+    : general ? `${wsName(general.projectId)}${generalBuildingsText(general) ? ` · ${generalBuildingsText(general)}` : ''}` : '';
   const dayWord = parseDay(dayIso).toLocaleDateString(isRtl ? 'he-IL' : 'en-US', { weekday: 'long', day: 'numeric', month: 'short' });
   const title = job
     ? `${t('Put', 'לשבץ את')} ${jobTitle} ${t('on', 'אצל')} ${person.name} · ${dayWord}`
@@ -272,7 +273,7 @@ export function PlannerTaskDialog({
                   <button key={p.id} data-general-ws-pick={p.id}
                     onClick={() => {
                       const blds = buildingsOf(p.id);
-                      if (blds.length) { setGenWs(p.id); setGenStep('bld'); }
+                      if (blds.length) { setGenWs(p.id); setGenBlds([]); setGenStep('bld'); }
                       else { setGeneral({ projectId: p.id }); setGenStep(null); }
                     }}
                     className="px-2.5 py-1 rounded-full text-[11.5px] font-bold text-white"
@@ -282,12 +283,32 @@ export function PlannerTaskDialog({
               </div>
             ) : genStep === 'bld' ? (
               <div data-general-bld className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[11px] text-gray-500">{wsName(genWs)} · {t('which building?', 'איזה בניין?')}</span>
-                {buildingsOf(genWs).map(b => (
-                  <button key={b.id} data-general-bld-pick={b.id}
-                    onClick={() => { setGeneral({ projectId: genWs, buildingId: b.id }); setGenStep(null); }}
-                    className="px-2.5 py-1 rounded-full text-[11.5px] font-bold border border-gray-200 text-gray-700 hover:bg-gray-50">{b.id}</button>
-                ))}
+                <span className="text-[11px] text-gray-500">{wsName(genWs)} · {t('which buildings?', 'איזה בניינים?')}</span>
+                {/* ALL (owner, 2026-09-16): the whole workspace, no building named — one press and done. */}
+                <button data-general-bld-pick="all"
+                  onClick={() => { setGeneral({ projectId: genWs }); setGenBlds([]); setGenStep(null); }}
+                  className="px-2.5 py-1 rounded-full text-[11.5px] font-bold text-white"
+                  style={{ backgroundColor: wsColor(genWs) }}>{t('All', 'כולם')}</button>
+                {/* Several at once: a pill toggles; Done writes the set. */}
+                {buildingsOf(genWs).map(b => {
+                  const on = genBlds.includes(b.id);
+                  return (
+                    <button key={b.id} data-general-bld-pick={b.id} {...(on ? { 'data-on': '1' } : {})}
+                      onClick={() => setGenBlds(cur => cur.includes(b.id) ? cur.filter(x => x !== b.id) : [...cur, b.id])}
+                      className={`px-2.5 py-1 rounded-full text-[11.5px] font-bold border ${on
+                        ? 'border-[#1e3a5f] bg-[#1e3a5f] text-white'
+                        : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>{b.id}</button>
+                  );
+                })}
+                <button data-general-bld-done disabled={genBlds.length === 0}
+                  onClick={() => {
+                    const ids = buildingsOf(genWs).map(b => b.id).filter(id => genBlds.includes(id));
+                    setGeneral({ projectId: genWs, buildingIds: ids, ...(ids.length === 1 ? { buildingId: ids[0] } : {}) });
+                    setGenStep(null);
+                  }}
+                  className="px-2.5 py-1 rounded-full text-[11.5px] font-bold text-white bg-emerald-600 disabled:opacity-40">
+                  {t('Done', 'סיום')}{genBlds.length ? ` · ${genBlds.length}` : ''}
+                </button>
                 <button onClick={() => setGenStep('ws')} className="text-[11px] text-gray-400 hover:text-gray-600">{t('back', 'חזרה')}</button>
               </div>
             ) : (

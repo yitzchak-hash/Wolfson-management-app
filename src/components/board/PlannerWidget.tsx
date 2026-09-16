@@ -4,8 +4,7 @@ import { PlannerDropDialog, PlannerTaskDialog, PlannerRemoveDialog, TaskDialogRe
 import { ChevronUp, ChevronDown, Plus, X, CalendarDays, Maximize2, Eye, EyeOff, ClipboardList } from 'lucide-react';
 import {
   Apartment, CanvasElement, Contractor, User, ContractorAssignment, Stage, personColor,
-  aptLabel, getStageName,
-} from '../../types';
+  aptLabel, getStageName, generalBuildingsText } from '../../types';
 import {
   registerRota, onRotaHover, rotaCellAt, setRotaHover, RotaHit,
   announceNotebookDrag, quickBoxHover, quickBoxTake,
@@ -888,7 +887,7 @@ export function PlannerWidget({
       const apt = apts.find(x => x.id === a.apartmentId);
       const generalName = a.general
         ? (projects.find(p => p.id === a.general!.projectId)?.name ?? a.general.projectId)
-          + (a.general.buildingId ? ` · ${a.general.buildingId}` : '')
+          + (generalBuildingsText(a.general) ? ` · ${generalBuildingsText(a.general)}` : '')
         : null;
       const label = generalName ?? (apt ? (aptLabel(apt) || apt.address?.trim() || 'Job') : 'Job');
       const stl = stagesFor(pid);
@@ -904,7 +903,9 @@ export function PlannerWidget({
           id: `${a.id}:${run.days[0]}`, taskId: a.id, task: a, pid: `c:${a.contractorId}`,
           weekKey: run.wk, startIdx: run.start, len: run.days.length, days: run.days,
           label, desc: (a.taskDescription ?? '').trim(), jobId: a.apartmentId,
-          projectId: pid === currentProjectId ? undefined : pid, workspace: ws,
+          // A general job's label already NAMES its workspace — the purple
+          // tag would print it twice ("Wolfson · Wolfson · A1, A2").
+          projectId: pid === currentProjectId ? undefined : pid, workspace: a.general ? undefined : ws,
           done: !!a.completedAt, stageFrom: from, stageTo: to,
           foreign: pid !== currentProjectId, lane: 0,
         });
@@ -1879,7 +1880,7 @@ function TaskBar({ bar, z, size, strip, readOnly, isRtl, onOpen, onDropTo, onDra
       data-no-drag data-el-action data-task-bar={bar.taskId} data-bar-days={bar.len}
       className="group/bar relative rounded-md min-w-0 flex-shrink-0"
       title={bar.done ? 'Done — crossed off, never removed'
-        : bar.foreign ? `${bar.workspace ?? 'Another workspace'} — click to open · drag to move · X takes it off`
+        : bar.foreign ? `${bar.workspace ?? bar.label} — click to open · drag to move · X takes it off`
         : 'Click to open · drag to move · pull the right edge for more days'}
       style={{
         position: 'relative', zIndex: 3,

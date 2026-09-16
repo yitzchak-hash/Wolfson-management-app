@@ -1221,6 +1221,21 @@ export interface TaskAttachment {
 
 export type TaskPriority = 'urgent' | 'normal' | 'low';
 
+/**
+ * Where a GENERAL JOB is. `buildingIds` (owner, 2026-09-16) is the picked
+ * SET — several buildings at once; absent means every building in the
+ * workspace ("All"). `buildingId` is the legacy single pick, still written
+ * when exactly one building is chosen so every older reader keeps working.
+ */
+export interface GeneralWhere { projectId: string; buildingId?: string; buildingIds?: string[] }
+
+/** The buildings part of a general job's label — "" for every building. */
+export function generalBuildingsText(g: { buildingId?: string; buildingIds?: string[] } | undefined | null): string {
+  if (!g) return '';
+  if (g.buildingIds && g.buildingIds.length) return g.buildingIds.join(', ');
+  return g.buildingId ?? '';
+}
+
 export interface ContractorAssignment {
   id: string;
   contractorId: string;
@@ -1265,7 +1280,7 @@ export interface ContractorAssignment {
    * this names where the work is. Rides inside `contractorAssignments`, so
    * persist / export / import / sync need no new key.
    */
-  general?: { projectId: string; buildingId?: string };
+  general?: GeneralWhere;
   /**
    * The apartments actually visited under a general job — filled by the
    * worker's "I did work here" when he says the report is part of this job.

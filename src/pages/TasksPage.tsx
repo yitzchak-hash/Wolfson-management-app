@@ -11,7 +11,7 @@ import { BulkAddTaskModal } from '../components/apartment/BulkAddTaskModal';
 import { TaskCalendar, CalendarEvent } from '../components/tasks/TaskCalendar';
 import { TaskDaysPicker, daysFields, taskWrites, splitStringsOf, TaskSplit } from '../components/tasks/TaskDaysPicker';
 import { StagePairPicker, StagePairPill, stagePairStrings } from '../components/tasks/StagePair';
-import { ContractorAssignment, ContractorCategory, TaskAttachment, TaskPriority, getStageName, aptLabel, isCountableApartment } from '../types';
+import { ContractorAssignment, ContractorCategory, TaskAttachment, TaskPriority, getStageName, aptLabel, isCountableApartment, generalBuildingsText } from '../types';
 import { Toast } from '../components/ui/Toast';
 import { printTable, printDot, printPill } from '../data/printing';
 import { Tooltip } from '../components/ui/Tooltip';
@@ -876,7 +876,7 @@ export function TasksPage() {
                             ? <span data-general-where className="inline-flex items-center gap-1">
                                 <Building2 size={13} className="text-[#b8860b]" />
                                 {projects.find(p => p.id === a.general!.projectId)?.name ?? a.general.projectId}
-                                {a.general.buildingId ? ` · ${a.general.buildingId}` : ''}
+                                {generalBuildingsText(a.general) ? ` · ${generalBuildingsText(a.general)}` : ''}
                                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">{s.generalJob}</span>
                               </span>
                             : <>{a.buildingId} · {s.aptPrefix} {aptLabel(apt)}</>}

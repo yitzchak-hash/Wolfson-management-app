@@ -118,6 +118,7 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ Search tile and header search take voice (browser speech recognition)
 
 ## Office side
+- ☑ Notebook add-a-job: a general job's which-building step offers All and ticks several buildings at once; the task carries the set and every label reads it (2026-09-16)
 - ☑ The bare domain is the Job Board: `/` switches to the board workspace before drawing; login from the bare address lands there; typed addresses still go where they say (2026-09-16)
 - ☑ Task thread is one drawing shared with the phone; office writes from the apartment window
 - ☑ Plan markup studio, versions, Drive filing, pins filed to Drive

@@ -27,7 +27,7 @@ exactly there.
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2026-12-26` — the next entry must be a later date (an older
+   newest is `2026-12-27` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`. 8. Rewrite THIS file.
@@ -43,8 +43,19 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-16 — the map chooser wears the logos; the bare domain is the Job Board)
+## Where things stand (2026-09-16 — logos, the home page, and buildings that multi-select)
 Last commits, newest first (see `git log`):
+- **2026-09-16, third pass — "Which building should have an all option +
+  multiple select"** (his screenshot of the notebook's add-a-job dialog on
+  the Wolfson which-building step). DONE: an All pill, tick-several building
+  pills and a Done button; `general.buildingIds` on the task with the legacy
+  single `buildingId` kept when one is ticked; one label helper for the
+  dialog, the bar and the Tasks row; the bar's doubled workspace name fixed.
+  `genbld-probe.mjs` (12) green; notebookbars, multiday, tsc, build, audits
+  green. Pre-existing red noted: `round39-probe.mjs` (stale "I did work
+  here" stage-filter assertion from before yesterday's flow change).
+  Not done (not asked): the Tasks page's own general-job form still has a
+  single "Any building" dropdown — offer it if he wants the same there.
 - **2026-09-16, first pass — the worker's map chooser wears the project
   LOGOS.** His ask, in order: (1) FIRST, then commit and push to main: the
   two big project buttons under Building Map should carry the projects'
