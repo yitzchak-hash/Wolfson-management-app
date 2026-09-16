@@ -7997,3 +7997,52 @@ for now. Also: a general job's bar no longer wears the purple workspace tag
 `scratchpad/genbld-probe.mjs` (12). Standing pre-existing red:
 `round39-probe.mjs` still asserts the deleted "I did work here" stage
 filter (superseded 2026-09-15) — identical with this diff stashed.
+
+## The other workspaces stay LIVE, and a foreign unit drops like a job (2026-09-16)
+
+### `startForeignSync(currentProjectId)` / `stopForeignSync()` (store.ts)
+Only the open workspace ever had listeners; everything cross-workspace read
+`loadProjectSnapshot`, a localStorage copy `ensureProjectSnapshot` fills ONCE
+when missing and `persist()` refreshes only while that workspace is open. So
+a task made in Wolfson on the secretary's machine showed on hers (standing in
+Wolfson) and on nobody else's until they opened Wolfson — "she sees it, I
+don't", and the worker's phone never saw a notebook drop "that same second".
+Now every OTHER workspace's `apartments` / `contractorAssignments` /
+`contractorNotes` carry real-time listeners writing into that workspace's
+snapshot key (Firebase wins wholesale — a foreign snapshot is a copy of the
+cloud, never a place the office writes; apartments scoped through
+`scopeApartmentsToProject`), debounced per workspace (120ms for the attach
+burst, 400ms after), then `snapshotTick` bumps so every consumer re-reads.
+Attached from AppLayout, ContractorPortal and TvPresentationPage in an effect
+keyed on the open workspace (re-pointed on switch, torn down on unmount).
+`ensureProjectSnapshot` still does the one-time pull of stages / canvas /
+plans — nothing cross-workspace needs those live. **Not probeable here** (no
+Firebase in the container) — verified by reading; watch production.
+
+### The dialog's stages are ALWAYS the job's own workspace's
+`PlannerTaskDialog` lost its `stages` prop: `stageList =
+stagesFor(picked?.projectId ?? general?.projectId ?? currentProjectId)`.
+The board's widget ctx handed the notebook EVERY workspace's stages and the
+notebook passed them straight through, which was "it shows me all the
+stages". `jobProjectId?` names a foreign job's workspace.
+
+### A foreign unit on a notebook square = a regular job's drop
+`registerRotaDropRule` / `askRotaDrop` in `rotaDrop.ts` (the registry idiom,
+fourth use): the page registers `dropOnRota` (ref re-assigned per render,
+registered once — the `boardDropRef` idiom) and `usePlannerDrag` asks it
+FIRST on a square drop, falling back to the parked-card write only when no
+page listens. `dropOnRota(cell, ids, projectId?)` is ONE door for tiles, list
+rows, Building Progress squares and unit cards: `askOnDrop` → the task
+dialog (a foreign job resolved from `loadProjectSnapshot`, its task made via
+`addAssignmentToProject` in ITS workspace, the notebook drawing the bar from
+the task — nothing written into `cells`); no ask → a parked card
+(`placeJobsOnPlanner` with the projectId for a foreign one). A dragged
+`unit-card` NODE released over a square goes through the same door in
+`onElPointerUp` and the card itself stays put. "Just put it on the planner"
+for a foreign job parks a pointer card, as before.
+
+Harness: `scratchpad/foreigndrop-probe.mjs` (20 checks). Its traps: a given
+job's name sits in the dialog's TITLE (`h3`), not `[data-job-picked]`; a
+square under the tool rail takes no hover (seed the notebook narrower); and
+the seeded Goals fixture lands at the view centre over the notebook unless
+the seed parks `CE-goals-board` elsewhere.

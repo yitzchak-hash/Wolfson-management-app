@@ -149,6 +149,34 @@ export function boardDropAt(clientX: number, clientY: number): BoardPlacer | nul
 /** True when a board is mounted and can take job drops. */
 export const anyBoardDrop = () => !!boardProbe;
 
+// ── The drop ASK: the page decides what a drop on a square means ────────────
+//
+// A tile dropped on a notebook square goes through the page's `dropOnRota`,
+// which honours the notebook's "ask when a job is dropped in" setting and
+// opens the task dialog. A list row, a Building Progress square or a unit
+// card went round it — `usePlannerDrag` wrote a parked card straight into the
+// square — so a foreign unit could never be planned "like a regular job"
+// (owner, 2026-09-16). The page registers its rule here; the hook asks it
+// first and only falls back to the plain write when no page is listening.
+
+/**
+ * Handle a job's drop on a square. Returns true when it took the drop (a
+ * dialog opened, or the page wrote the square itself).
+ */
+export type RotaDropRule = (cell: RotaHit, jobId: string, projectId?: string) => boolean;
+
+let dropRule: RotaDropRule | null = null;
+
+export function registerRotaDropRule(rule: RotaDropRule): () => void {
+  dropRule = rule;
+  return () => { if (dropRule === rule) dropRule = null; };
+}
+
+/** Offer a drop to the page's rule; false means "nobody took it, write it". */
+export function askRotaDrop(cell: RotaHit, jobId: string, projectId?: string): boolean {
+  return dropRule?.(cell, jobId, projectId) ?? false;
+}
+
 // ── Where the drag currently is, so the cell under it can light up ──────────
 //
 // A plain module-level value with subscribers, rather than Zustand state: this

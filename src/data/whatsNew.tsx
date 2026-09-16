@@ -30,6 +30,35 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-12-28',
+    title: 'Other workspaces stay live, and any unit drops into the notebook',
+    items: [
+      {
+        title: 'A task made in another workspace shows up in seconds',
+        body: 'The worker\u2019s phone, the notebook and Building Progress used to read the '
+          + 'other workspaces from a copy this device made the last time it visited them \u2014 '
+          + 'so a task the secretary made in Wolfson showed on her machine and on nobody '
+          + 'else\u2019s until they opened Wolfson themselves. Every workspace\u2019s tasks and '
+          + 'units are now followed live from every screen, whichever workspace is open.',
+        demo: 'tap',
+      },
+      {
+        title: 'Drop a Wolfson unit on the notebook like any job',
+        body: 'Drag a square out of Building Progress, a unit card, or a row from a list onto a '
+          + 'notebook day and the same task dialog opens \u2014 the task is made in that unit\u2019s '
+          + 'own workspace and the notebook draws it as a bar. No more pointer card with a '
+          + 'workspace label.',
+        demo: 'drag',
+      },
+      {
+        title: 'Each job\u2019s own stages, everywhere',
+        body: 'The stage lists in the notebook dialog show only the stages of the workspace the '
+          + 'job belongs to \u2014 Wolfson\u2019s for a Wolfson unit, the Job Board\u2019s for a board job.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2026-12-27',
     title: 'A general job can cover several buildings, or all of them',
     items: [

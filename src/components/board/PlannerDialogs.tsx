@@ -62,15 +62,21 @@ export interface TaskDialogResult {
  * (locked answer 7), so nothing here writes a square.
  */
 export function PlannerTaskDialog({
-  job, jobs, person, dayIso, stages, contractors, onCancel, onDone,
+  job, jobProjectId, jobs, person, dayIso, contractors, onCancel, onDone,
 }: {
   job?: Apartment;
+  /**
+   * The workspace `job` lives in — omit for the one you are standing in. A
+   * Building Progress square, a unit card or a search row dragged onto the
+   * notebook is a job from ANOTHER workspace, and its task must be made
+   * there, with that workspace's stages (owner, 2026-09-16).
+   */
+  jobProjectId?: string;
   /** This workspace's jobs, for the search. */
   jobs?: Apartment[];
   /** The row it was opened from — a contractor if that person is one. */
   person: { name: string; color: string; contractorId?: string };
   dayIso: string;
-  stages: Stage[];
   contractors: Contractor[];
   onCancel: () => void;
   onDone: (result: TaskDialogResult) => void;
@@ -85,7 +91,7 @@ export function PlannerTaskDialog({
 
   // ── Which job ──────────────────────────────────────────────────────────
   const [picked, setPicked] = useState<{ job: Apartment; projectId: string } | null>(
-    job ? { job, projectId: currentProjectId } : null);
+    job ? { job, projectId: jobProjectId ?? currentProjectId } : null);
   const [general, setGeneral] = useState<GeneralWhere | null>(null);
   // The buildings ticked so far on the which-building step (several at once).
   const [genBlds, setGenBlds] = useState<string[]>([]);
@@ -97,8 +103,14 @@ export function PlannerTaskDialog({
   const stagesFor = (pid: string) => allStages
     .filter(st => st.active && (pid === 'general' ? st.projectId === 'general' : !st.projectId))
     .sort((x, y) => x.order - y.order);
-  const stageList = picked ? (picked.projectId === currentProjectId ? stages : stagesFor(picked.projectId))
-    : general ? stagesFor(general.projectId) : stages;
+  /**
+   * ALWAYS the job's own workspace's stages — never a list handed in by the
+   * host. The board's widget context carried EVERY workspace's stages, and
+   * the notebook passed that straight through, so a Wolfson notebook drop
+   * offered the Job Board's stages beside Wolfson's own: the owner's "it
+   * shows me all the stages". Each workspace has its own, everywhere.
+   */
+  const stageList = stagesFor(picked?.projectId ?? general?.projectId ?? currentProjectId);
 
   const hits = useMemo(() => {
     const query = q.trim();

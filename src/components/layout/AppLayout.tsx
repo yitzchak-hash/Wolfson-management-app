@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Header } from './Header';
 import { Sidebar, MobileNav } from './Sidebar';
-import { useStore, ensureProjectSnapshot } from '../../data/store';
+import { useStore, ensureProjectSnapshot, startForeignSync, stopForeignSync } from '../../data/store';
 import { sweepDue, sweepAutoJobs } from '../../data/autoJobs';
 import { driveActivityDue, refreshDriveActivity } from '../../data/driveActivity';
 import { isFirebaseConfigured } from '../../data/firebase';
@@ -147,6 +147,17 @@ export function AppLayout() {
     projects.filter(p => p.id !== currentProjectId)
       .forEach(p => void ensureProjectSnapshot(p.id));
   }, []);
+
+  /**
+   * The OTHER workspaces stay live too (owner, 2026-09-16): a task made in
+   * Wolfson on the secretary's machine reaches this machine's notebook and
+   * Building Progress within seconds, not on the next visit to Wolfson.
+   * Re-pointed whenever the open workspace changes; torn down with the layout.
+   */
+  useEffect(() => {
+    startForeignSync(currentProjectId);
+    return () => stopForeignSync();
+  }, [currentProjectId]);
 
   /**
    * THE DRIVE SWEEP's clock (owner, 2026-09-07: "every two hours a little

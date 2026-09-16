@@ -27,7 +27,7 @@ exactly there.
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2026-12-27` — the next entry must be a later date (an older
+   newest is `2026-12-28` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`. 8. Rewrite THIS file.
@@ -43,8 +43,23 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-16 — logos, the home page, and buildings that multi-select)
+## Where things stand (2026-09-16 — foreign live sync, own stages, foreign units drop like jobs)
 Last commits, newest first (see `git log`):
+- **2026-09-16, fourth pass — his four-part report.** (a) "she sees the task,
+  I don't; the contractor doesn't see it that same second": the other
+  workspaces were a one-time localStorage copy — `startForeignSync` in the
+  store now keeps every other workspace's apartments / tasks / threads LIVE
+  from AppLayout, the portal and the TV (see the last CLAUDE.md section).
+  Cannot be probed here (no Firebase) — verified by reading; he must confirm
+  on production. (b) "it shows me all the stages": the notebook dialog now
+  lists ONLY the job's own workspace's stages (`stages` prop removed).
+  (c) "I can't drag [Building Progress apartments] into the notebook like a
+  regular job": a progress square, a unit card or a list row dropped on a
+  square opens the SAME task dialog, the task made in the unit's workspace,
+  drawn as a bar; no pointer card. (d) the portal's "React error" on
+  refresh: NOT identified — ask him for the crash screen's copied text.
+  `foreigndrop-probe.mjs` (20) green; notebookbars, genbld, round21,
+  portalswitch, multiday, tsc, build, four audits green.
 - **2026-09-16, third pass — "Which building should have an all option +
   multiple select"** (his screenshot of the notebook's add-a-job dialog on
   the Wolfson which-building step). DONE: an All pill, tick-several building
@@ -353,6 +368,15 @@ Last commits, newest first (see `git log`):
   `npx vite --port 5173` and `VITE_DRIVE_API_KEY=test npx vite --port 5174`.
 
 ## The last reply the owner saw (so the next one continues it)
+**Newest (2026-09-16, fourth pass)**: the reply explained the one cause
+behind "she sees it, I don't" (other workspaces were a copy made on the last
+visit, never refreshed), said they are followed live now from every screen,
+that the notebook dialog lists only the job's own stages, that a Building
+Progress square / unit card / list row now drops on the notebook exactly like
+a tile (dialog, task in its own workspace, bar), and asked him — for the
+portal's React error on refresh — to press "Copy the details" on the crash
+screen and paste the text, since that fault was not found from the code.
+
 **Newest (2026-09-15, fourth pass)**: the reply read his screenshot (two
 dashed chips from a task, one solid stored card, same job, same worker),
 folded it into scene 6, and said the only outstanding thing is "build it".

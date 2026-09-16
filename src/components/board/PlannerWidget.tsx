@@ -1711,7 +1711,6 @@ export function PlannerWidget({
             jobs={jobs}
             person={{ name: who.name, color: who.color, contractorId: rowContractorId(plusAsk.person) ?? undefined }}
             dayIso={plusAsk.day}
-            stages={stages}
             contractors={contractors}
             onCancel={() => setPlusAsk(null)}
             onDone={(r: TaskDialogResult) => {

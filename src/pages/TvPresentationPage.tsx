@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { problemStates } from '../data/problems';
 import { useSearchParams } from 'react-router-dom';
-import { useStore, loadAllProjectsTaskData, ensureProjectSnapshot } from '../data/store';
+import { useStore, loadAllProjectsTaskData, ensureProjectSnapshot, startForeignSync, stopForeignSync } from '../data/store';
 import { Apartment, CanvasElement, isCountableApartment, binKeyOf, binLabelOf, getStageName, TV_DASH_BOARD } from '../types';
 import { withAlpha, WidgetSurface } from '../components/board/BoardItems';
 import { tvScreenId, reportTvScreen } from '../data/tvScreens';
@@ -335,6 +335,13 @@ export function TvPresentationPage() {
     const { projects: ps, currentProjectId: cur } = useStore.getState();
     ps.filter(p => p.id !== cur).forEach(p => void ensureProjectSnapshot(p.id));
   }, []);
+
+  // …and kept live, so the wall's notebook and Building Progress follow the
+  // other workspaces' tasks as they are made (owner, 2026-09-16).
+  useEffect(() => {
+    startForeignSync(currentProjectId);
+    return () => stopForeignSync();
+  }, [currentProjectId]);
 
   const view = params.get('view') ?? currentProjectId;
   const setView = (v: string) => {

@@ -13,7 +13,7 @@
  */
 import React, { useRef, useState } from 'react';
 import { useStore } from './store';
-import { RotaHit, setRotaHover, rotaCellAt, anyRota, anyBoardDrop, boardDropAt } from './rotaDrop';
+import { RotaHit, setRotaHover, rotaCellAt, anyRota, anyBoardDrop, boardDropAt, askRotaDrop } from './rotaDrop';
 import type { PlannerEntry } from '../components/board/PlannerWidget';
 
 export interface DropResult {
@@ -199,6 +199,14 @@ export function usePlannerDrag(jobId: string, opts?: {
       const cell = rotaCellAt(e.clientX, e.clientY);
       setRotaHover(null);
       if (cell) {
+        /**
+         * The PAGE's rule first — the same door a board tile goes through, so
+         * a row, a progress square or a unit card dropped on a square is
+         * offered the task dialog exactly like a tile (and a foreign unit's
+         * task is made in ITS workspace). The plain parked-card write is only
+         * for a host with no page listening.
+         */
+        if (askRotaDrop(cell, jobId, opts?.projectId)) return;
         const msg = dropMessage(placeJobsOnPlanner(cell, [jobId], opts?.projectId));
         if (msg) opts?.onToast?.(msg);
         return;

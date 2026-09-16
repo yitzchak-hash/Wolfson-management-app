@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect, lazy, Suspense } from 'react';
 import { useParams } from 'react-router-dom';
-import { useStore, loadAllProjectsTaskData, ensureProjectSnapshot } from '../data/store';
+import { useStore, loadAllProjectsTaskData, ensureProjectSnapshot, startForeignSync, stopForeignSync } from '../data/store';
 import { ContractorAssignment, ContractorPhoto, Contractor, Apartment, Project, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, RUSSIAN_CONTRACTOR_UI_STRINGS, PortalLang, getStageName, aptLabel, workAtLabel, projectColor } from '../types';
 import { transcribeMemo } from '../data/transcribe';
 import { daysOf, futureDaysOf } from '../data/taskDays';
@@ -537,6 +537,19 @@ export function ContractorPortal() {
     const { projects: ps, currentProjectId: cur } = useStore.getState();
     ps.filter(p => p.id !== cur).forEach(p => void ensureProjectSnapshot(p.id));
   }, []);
+
+  /**
+   * And they stay LIVE (owner, 2026-09-16): a job dropped on the office's
+   * notebook is a task in ITS workspace, and the worker's list draws the other
+   * workspaces from this phone's snapshots — so without listeners on them the
+   * task showed up on the next visit to that workspace, if ever, and never
+   * "that same second". Re-pointed when the open workspace changes.
+   */
+  const portalPid = useStore(st => st.currentProjectId);
+  useEffect(() => {
+    startForeignSync(portalPid);
+    return () => stopForeignSync();
+  }, [portalPid]);
 
   const workerNow = contractors.find(c => c.token === token) ?? null;
 

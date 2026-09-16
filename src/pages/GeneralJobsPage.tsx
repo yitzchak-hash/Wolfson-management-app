@@ -9,14 +9,15 @@ import {
   Eraser, GripVertical, Lock, Unlock, Group, Ungroup, Info as InfoGlyph, CalendarDays, Crosshair,
 } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { useStore, isTombstoned } from '../data/store';
+import { useStore, isTombstoned, loadProjectSnapshot } from '../data/store';
 import { useBoardTrack } from '../data/useBoardUndo';
 import { UndoButtons } from '../components/board/UndoLayer';
 import { isPlannerElement, purgeJobsFromPlanner } from '../data/plannerPurge';
 import {
   rotaCellAt, setRotaHover, anyRota, RotaHit, registerBoardDrop, BoardPlacer,
-  registerQuickBox, watchNotebookDrag,
+  registerQuickBox, watchNotebookDrag, registerRotaDropRule, RotaDropRule,
 } from '../data/rotaDrop';
+import { placeJobsOnPlanner, dropMessage } from '../data/plannerDrop';
 import { PlannerEntry, personOf, weekStartOf, iso as isoDay } from '../components/board/PlannerWidget';
 import { PlannerTaskDialog, PlannerRemoveDialog, QuickAssignDialog } from '../components/board/PlannerDialogs';
 import { ScheduleWindow } from '../components/board/ScheduleWindow';
@@ -544,7 +545,12 @@ export function GeneralJobsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobDrive, showAddModal]);
   /** A drop waiting on the "make it a task?" answer. */
-  const [plannerDrop, setPlannerDrop] = useState<{ cell: RotaHit; job: Apartment } | null>(null);
+  /**
+   * The task dialog a notebook drop opens. `projectId` is set when the job
+   * belongs to ANOTHER workspace — a Building Progress square, a unit card or
+   * a search row dragged onto a square — so the task is made over there.
+   */
+  const [plannerDrop, setPlannerDrop] = useState<{ cell: RotaHit; job: Apartment; projectId?: string } | null>(null);
   /**
    * The QUICK-ASSIGN drop box (the owner's ask): while a job is being dragged
    * a target appears at the top-middle of the screen, over everything.
@@ -2758,13 +2764,42 @@ export function GeneralJobsPage() {
     return !!r && cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom;
   }
 
-  function dropOnRota(cell: RotaHit, ids: string[]) {
+  /**
+   * A job dropped on a notebook square — from a tile, a list row, a Building
+   * Progress square or a unit card, this workspace's or another's. ONE door,
+   * so every kind of thing that stands for a job gets the same answer: the
+   * notebook's "ask when a job is dropped in" opens the task dialog (a
+   * foreign job's task is made in ITS workspace, with its stages), otherwise
+   * the square takes a parked card. `projectId` names a foreign workspace.
+   */
+  function dropOnRota(cell: RotaHit, ids: string[], projectId?: string) {
     const el = canvasElements.find(c => c.id === cell.elId);
     const ask = !!(el?.data as Record<string, unknown> | undefined)?.askOnDrop;
-    const job = ids.length === 1 ? apartments.find(a => a.id === ids[0]) : undefined;
-    if (ask && job) { setRotaHover(null); setPlannerDrop({ cell, job }); return; }
+    const foreign = !!projectId && projectId !== currentProjectId;
+    const job = ids.length !== 1 ? undefined
+      : foreign ? loadProjectSnapshot(projectId!).apartments.find(a => a.id === ids[0])
+      : apartments.find(a => a.id === ids[0]);
+    if (ask && job) {
+      setRotaHover(null);
+      setPlannerDrop({ cell, job, ...(foreign ? { projectId } : {}) });
+      return;
+    }
+    if (foreign) {
+      const msg = dropMessage(placeJobsOnPlanner(cell, ids, projectId));
+      if (msg) setToast(msg);
+      return;
+    }
     placeOnPlanner(cell, ids);
   }
+  // The same door, offered to every list row / progress square / unit card
+  // drag through `usePlannerDrag` (rotaDrop's rule registry) — a ref
+  // re-assigned per render, registered once, the boardDropRef idiom.
+  const rotaRuleRef = useRef<RotaDropRule>(() => false);
+  rotaRuleRef.current = (cell, jobId, projectId) => {
+    dropOnRota(cell, [jobId], projectId && projectId !== currentProjectId ? projectId : undefined);
+    return true;
+  };
+  useEffect(() => registerRotaDropRule((cell, id, pid) => rotaRuleRef.current(cell, id, pid)), []);
 
   /** Files a job into a group, with the Done celebration when that is the one. */
   /**
@@ -4362,6 +4397,24 @@ export function GeneralJobsPage() {
         });
         setDrag(null); setHoverBin(null);
         setToast('Unstuck');
+        return;
+      }
+    }
+
+    /**
+     * A UNIT CARD released on a notebook square plans THAT UNIT — the card is
+     * a pointer at a job in another workspace, and the owner wants it to
+     * drop "like a regular job": the same task dialog, the task made in the
+     * unit's own workspace. The card itself stays where it was picked up.
+     */
+    if (drag.moved && e && el.type === 'widget' && el.widget === 'unit-card' && drag.ids.length === 1
+      && !drag.carryJobs?.size && anyRota()) {
+      const cell = rotaCellAt(e.clientX, e.clientY);
+      const d2 = (el.data ?? {}) as Record<string, unknown>;
+      const pid = String(d2.projectId ?? ''), aptId = String(d2.aptId ?? '');
+      if (cell && pid && aptId) {
+        dropOnRota(cell, [aptId], pid !== currentProjectId ? pid : undefined);
+        setDrag(null); setHoverBin(null); setAttachHint(null);
         return;
       }
     }
@@ -8455,19 +8508,29 @@ export function GeneralJobsPage() {
         return (
           <PlannerTaskDialog
             job={plannerDrop.job}
+            jobProjectId={plannerDrop.projectId}
             jobs={apartments}
             person={who}
             dayIso={plannerDrop.cell.day}
-            stages={allStages.filter(st => st.projectId === 'general')}
             contractors={contractors}
             onCancel={() => setPlannerDrop(null)}
             onDone={r => {
-              placeOnPlanner(plannerDrop.cell, [plannerDrop.job.id], r.taskIds.length > 0);
+              if (plannerDrop.projectId) {
+                // A FOREIGN unit: its task lives in its own workspace and the
+                // notebook draws it from there. Only "just put it on the
+                // planner" writes anything here — a pointer card.
+                if (!r.taskIds.length) placeJobsOnPlanner(plannerDrop.cell, [plannerDrop.job.id], plannerDrop.projectId);
+              } else {
+                placeOnPlanner(plannerDrop.cell, [plannerDrop.job.id], r.taskIds.length > 0);
+              }
               setPlannerDrop(null);
               if (r.taskIds.length) {
-                setToast(r.days.length > 1
+                const wsRec = plannerDrop.projectId
+                  ? useStore.getState().projects.find(p => p.id === plannerDrop.projectId) : undefined;
+                const ws = wsRec?.shortName ?? wsRec?.name ?? '';
+                setToast((r.days.length > 1
                   ? `On the planner for ${r.days.length} days, and a task added`
-                  : 'On the planner, and a task added');
+                  : 'On the planner, and a task added') + (ws ? ` in ${ws}` : ''));
               }
             }}
           />

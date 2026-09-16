@@ -152,6 +152,88 @@ export async function ensureProjectSnapshot(projectId: string): Promise<void> {
   }
 }
 
+/**
+ * LIVE SYNC OF THE OTHER WORKSPACES' WORK (owner, 2026-09-16).
+ *
+ * Only the open workspace ever had listeners. Everything cross-workspace —
+ * the worker's portal listing his tasks in every workspace, the notebook's
+ * bars for a Wolfson task planned from the Job Board, Building Progress —
+ * reads `loadProjectSnapshot`, a localStorage copy that `ensureProjectSnapshot`
+ * fills ONCE when it is missing and `persist()` refreshes only while that
+ * workspace is the open one. So a task the secretary made in Wolfson showed
+ * on her machine (she was standing in Wolfson) and on nobody else's until
+ * they opened Wolfson themselves: the owner's "she sees it, I don't" and
+ * "the contractor doesn't see it that same second".
+ *
+ * This attaches real-time listeners to every OTHER workspace's task-bearing
+ * collections — apartments (the units the tasks hang off), assignments and
+ * the task threads — and writes each change into that workspace's snapshot
+ * key, the same key `persist()` and `ensureProjectSnapshot` write, then bumps
+ * `snapshotTick` so every consumer re-reads. Firebase wins wholesale for a
+ * snapshot (a foreign snapshot is a copy of the cloud, never a place the
+ * office writes), so there is no local-keeps rule and no tombstone walk.
+ * Writes are debounced per workspace: three listeners answer at once on
+ * attach, and one JSON.stringify of a thousand-job board per answer is one
+ * too many.
+ *
+ * Keyed on the OPEN workspace: switching re-attaches so the newly-open one
+ * drops out (its own sync takes over) and the one just left joins. A
+ * snapshot's stages/canvas/plans still come from `ensureProjectSnapshot`'s
+ * one-time pull — nothing cross-workspace needs those live.
+ */
+let _foreignUnsubs: Array<() => void> = [];
+let _foreignFor: string | null = null;
+export function stopForeignSync(): void {
+  _foreignUnsubs.forEach(u => { try { u(); } catch { /* already gone */ } });
+  _foreignUnsubs = [];
+  _foreignFor = null;
+}
+export function startForeignSync(currentProjectId: string): void {
+  if (!isFirebaseConfigured || !db || !currentProjectId) return;
+  if (_foreignFor === currentProjectId) return;
+  stopForeignSync();
+  _foreignFor = currentProjectId;
+  const { projects } = useStore.getState();
+  for (const p of projects) {
+    if (p.id === currentProjectId) continue;
+    const pid = p.id;
+    const key = getProjectStorageKey(pid);
+    let pending: Record<string, unknown> = {};
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let first = true;
+    const flush = () => {
+      timer = null;
+      const patch = pending; pending = {};
+      // A guard against a listener answering after the sync was re-pointed.
+      if (_foreignFor !== currentProjectId) return;
+      const existing = (loadFromStorage(key, null) as Record<string, unknown> | null) ?? {};
+      if (!Array.isArray(existing.buildings) || !(existing.buildings as unknown[]).length) {
+        existing.buildings = getDefaultBuildings(pid);
+      }
+      if (patch.apartments) {
+        patch.apartments = scopeApartmentsToProject(
+          pid, patch.apartments as Apartment[], existing.buildings as Building[]);
+      }
+      saveToStorage(key, { ...existing, ...patch });
+      useStore.setState(st => ({ snapshotTick: st.snapshotTick + 1 }));
+    };
+    const queue = (k: string, v: unknown) => {
+      pending[k] = v;
+      if (timer) clearTimeout(timer);
+      // The attach answer comes fast and whole; a later change is one record.
+      timer = setTimeout(flush, first ? 120 : 400);
+      first = false;
+    };
+    const col = (base: string) => projectCollection(pid, base);
+    _foreignUnsubs.push(
+      fsListen(col('apartments'), docs => queue('apartments', docs)),
+      fsListen(col('contractorAssignments'), docs => queue('contractorAssignments', docs)),
+      fsListen(col('contractorNotes'), docs => queue('contractorNotes', docs)),
+      () => { if (timer) clearTimeout(timer); timer = null; },
+    );
+  }
+}
+
 // Holds unsubscribe functions for all active Firestore real-time listeners.
 // Stored outside the Zustand state (not serializable) so they survive re-renders.
 let _firebaseUnsubscribers: Array<() => void> = [];

@@ -131,3 +131,4 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ `ANTHROPIC_API_KEY` — optional; when present it does the translating instead (2026-09-06)
 - ☑ Firebase Firestore + Storage; optional Realtime Database URL for presence
 - Reminder: at most 12 files under `/api` (Vercel Hobby) — a new route folds into an existing file
+- ☑ Other workspaces' tasks, units and threads followed LIVE from every screen (portal, board, TV); a foreign unit dropped on the notebook opens the task dialog with its own workspace's stages (2026-09-16)
