@@ -94,10 +94,13 @@ export function LoginPage() {
        * to match — a URL is a destination, not a suggestion.
        */
       const from = (location.state as { from?: string } | null)?.from;
-      if (from === '/jobs' || from === '/list') {
+      if (from === '/jobs' || from === '/list' || !from || from === '/') {
+        // The bare domain and the board's own addresses land on the Job
+        // Board (the owner's home page, 2026-09-16) whatever this machine
+        // last held.
         if (currentProjectId !== 'general') setCurrentProject('general');
-        navigate(from);
-      } else if (from && from !== '/' && from !== '/project') {
+        navigate(from === '/list' ? from : '/jobs');
+      } else if (from !== '/project') {
         navigate(from);
       } else {
         navigate(currentProjectId === 'general' ? '/jobs' : '/project');

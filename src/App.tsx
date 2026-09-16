@@ -23,6 +23,27 @@ import { armWorkspaceHistoryRestore } from './data/workspaceHistory';
 // Before the router can subscribe to popstate — see workspaceHistory.ts.
 armWorkspaceHistoryRestore();
 
+/**
+ * The front door (owner, 2026-09-16): the bare domain IS the Job Board.
+ *
+ * The index route used to say `Navigate to="/jobs"`, and the board's own
+ * guard then sent anyone whose browser last held Wolfson or Netiv on to
+ * `/project` — so the domain by itself opened whatever workspace the machine
+ * happened to remember, and on a machine remembering a workspace with
+ * nothing to show, nothing. A URL is a destination: "/" means the board, so
+ * the workspace is switched to `general` BEFORE the board route renders, or
+ * its guard would bounce the arrival straight back out.
+ */
+function Home() {
+  const currentProjectId = useStore(st => st.currentProjectId);
+  const setCurrentProject = useStore(st => st.setCurrentProject);
+  React.useLayoutEffect(() => {
+    if (currentProjectId !== 'general') setCurrentProject('general');
+  }, [currentProjectId, setCurrentProject]);
+  if (currentProjectId !== 'general') return null;
+  return <Navigate to="/jobs" replace />;
+}
+
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { currentUser } = useStore();
   const location = useLocation();
@@ -87,7 +108,7 @@ export default function App() {
           }
         >
           {/* Home is the Job Board — the app's front door, not a project tile */}
-          <Route index element={<Navigate to="/jobs" replace />} />
+          <Route index element={<Home />} />
           <Route path="project" element={<ProjectDiagramPage />} />
           <Route path="dashboard" element={<DashboardPage />} />
           {/* The whole goals website, as a tab — computer only, never the TV */}

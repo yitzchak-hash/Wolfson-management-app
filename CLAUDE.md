@@ -7963,3 +7963,20 @@ white-backed PNG and a shadow draws a box around it. Probe:
 `scratchpad/maplogos-probe.mjs` (15 checks — the header's own file, loaded,
 big, centred, name below, both squares on one phone screen, the press still
 opens the map).
+
+## The bare domain IS the Job Board (owner, 2026-09-16)
+`Home` in `App.tsx` is the index route: it switches the workspace to
+`general` in a layout effect and only THEN renders `Navigate to="/jobs"` —
+the board's own guard (`currentProjectId !== 'general'` → `/project`) would
+otherwise bounce the arrival to whatever workspace the machine last held,
+which is exactly what the old bare `Navigate` did: "/" opened Wolfson on a
+Wolfson machine and, the owner reports, nothing at all on some. The `*`
+catch-all goes through `/` and so lands on the board too. `LoginPage` agrees:
+a bounce from `/`, no `from`, `/jobs` or `/list` switches to `general` and
+lands on the board; any other typed address (`/project` included) still goes
+where it says. His "blank page" could not be reproduced here (the root drew
+the Wolfson diagram, never blank) — if a blank still shows after this
+deploy, the CrashScreen's copied text is the next step. Probe:
+`scratchpad/homepage-probe.mjs` (9 — standing in Wolfson, cold browser
+through login, an unknown address). Harnesses that `goto('/')` only to import
+a module (`seed.mjs`, `gapsnap`, `pencil`) are unaffected.

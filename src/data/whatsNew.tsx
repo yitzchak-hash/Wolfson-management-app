@@ -30,6 +30,21 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-12-26',
+    title: 'The front door is the Job Board',
+    items: [
+      {
+        title: 'Open the site by its address alone and you are on the board',
+        body: 'The bare domain — no /jobs, no workspace in the address — used to open '
+          + 'whatever workspace this computer last held, and on some machines nothing at '
+          + 'all. It is the Job Board now, every time, on every computer: the site switches '
+          + 'to the board before it draws. Logging in from the bare address lands there too; '
+          + 'an address you typed on purpose, like /project, still goes where it says.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2026-12-25',
     title: 'The worker picks a building by its picture',
     items: [
