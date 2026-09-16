@@ -50,6 +50,7 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ The layout studio shows all buildings side by side; empty squares are selectable and merge by becoming a blank record (2026-09-15)
 - ☑ A notebook bar for a task in another workspace can be dragged, resized and taken off (cross-workspace task writes); a bar never covers the next square's card (2026-09-15)
 - ☑ Worker's map: "I'm going to work here" → the stage it is at → an OPEN task for today; the CLOSE asks "what stage is it at now?" and moves the unit there (2026-09-15; replaces "I did work here" with its finished / not-yet steps)
+- ☑ Worker's map chooser: each project button is the project's LOGO, big and centred, the name small underneath (2026-09-16)
 - ☑ General jobs — a task for a workspace, not an apartment: "General job" checkbox + workspace select on the Tasks page; notebook card reads "Wolfson"; phone card reads "Work at Wolfson" / עבודה בבניינים של וולפסון / Работа в Wolfson; "Is this part of…?" on a stage report (Yes preselected); visits list on the task (2026-09-03)
 - ☑ General job closes like any task, with or without visits (starred answer taken, 2026-09-03)
 - ☑ "Is this part of…?" asks every time a general job is running, Yes first (starred answer taken, 2026-09-03)

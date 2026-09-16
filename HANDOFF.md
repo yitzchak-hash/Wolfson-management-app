@@ -27,7 +27,7 @@ exactly there.
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2026-12-24` — the next entry must be a later date (an older
+   newest is `2026-12-25` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`. 8. Rewrite THIS file.
@@ -43,8 +43,23 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-15 — the six scenes built, then his first look)
+## Where things stand (2026-09-16 — the map chooser wears the logos; the blank home page is NEXT)
 Last commits, newest first (see `git log`):
+- **2026-09-16, first pass — the worker's map chooser wears the project
+  LOGOS.** His ask, in order: (1) FIRST, then commit and push to main: the
+  two big project buttons under Building Map should carry the projects'
+  logos, big, in the middle — "some of them don't read the little name in
+  English"; the logos are the header's own `logoPath` pictures. DONE: each
+  button is the logo centred (≤78% wide, ≤150px tall) with the name at 17px
+  underneath; `scratchpad/maplogos-probe.mjs` (15) green; tsc, build, four
+  audits green. (2) THEN — **PENDING, not started**: the bare domain (no
+  `/jobs`, no workspace path) "is blank… there's no home page"; the home
+  page should be the Job Board. CLAUDE.md says `/` already redirects to
+  `/jobs` — investigate WHY the root renders blank on his machine (login
+  redirect? the `/jobs` ↔ `/project` guards? a workspace that is not
+  `general` so `/jobs` bounces to `/project` and back? the router-urgent
+  shim?), reproduce with a probe at `/` from a cold browser AND a browser
+  standing in Wolfson, fix, then the ritual. Reply plainly.
 - **2026-09-15, sixth pass — the owner's first look at the build, four
   reports, all fixed** (the last CLAUDE.md section is the record).
   (1) "My job on -0.5 vanished / A2 and A3 show no basement": the row model

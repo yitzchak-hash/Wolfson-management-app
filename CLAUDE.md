@@ -7951,3 +7951,15 @@ worked stage off. Hidden for problems and general jobs. Three new optional
 ContractorUiStrings (three presets, fallback rule). `stagereport.mjs`
 re-encoded: the start makes an open task and marks nothing; the close asks,
 moves the unit, crosses the stage off; the office's own pending survives.
+
+## The worker picks a building by its LOGO (owner, 2026-09-16)
+The portal's map chooser (`[data-map-square=<pid>]`) draws each project's
+`logoPath` — the SAME picture the header's `WorkspaceLogo` draws — big and
+centred in the button (`[data-map-square-logo]`, `object-contain`, ≤78% of
+the width, up to 150px tall), with the name underneath at 17px. Some workers
+cannot read the small English project name; the picture is what they know
+from the office's screens. No drop-shadow on the image: Netiv's logo is a
+white-backed PNG and a shadow draws a box around it. Probe:
+`scratchpad/maplogos-probe.mjs` (15 checks — the header's own file, loaded,
+big, centred, name below, both squares on one phone screen, the press still
+opens the map).

@@ -2081,19 +2081,24 @@ export function ContractorPortal() {
                 return (
                   <button key={p.id} data-map-square={p.id}
                     onClick={() => pick(p.id)}
-                    className="relative flex-1 min-h-[150px] rounded-3xl bg-white border text-left rtl:text-right p-5 flex flex-col justify-end overflow-hidden active:scale-[0.99] transition-transform"
+                    className="relative flex-1 min-h-[210px] rounded-3xl bg-white border p-5 flex flex-col items-center justify-end overflow-hidden active:scale-[0.99] transition-transform"
                     style={{ borderColor: '#e2e8f0', boxShadow: '0 8px 24px -16px rgba(15,23,42,.35)' }}>
                     <span className="absolute inset-y-0 start-0 w-2" style={{ backgroundColor: wsColorOf(p.id) }} />
-                    <svg className="absolute end-4 bottom-14 opacity-[.08]" width="120" height="150" viewBox="0 0 120 150" fill="#1e3a5f" aria-hidden="true">
-                      <rect x="10" y="30" width="100" height="120" /><rect x="40" y="10" width="40" height="20" />
-                    </svg>
                     {n > 0 && (
                       <span className="absolute top-4 end-4 text-[12px] font-extrabold px-2.5 py-1 rounded-full"
                         style={{ backgroundColor: '#fde68a', color: '#92400e' }}>
                         {n} {n !== 1 ? s.taskPlural : s.taskSingular}
                       </span>
                     )}
-                    <span className="text-[22px] font-black text-[#1e3a5f] leading-tight">{p.name}</span>
+                    {/* The LOGO is the button (owner, 2026-09-16): big and centred, because a
+                        worker who cannot read the small English name knows the picture from
+                        the office's own screens. The name stays underneath, smaller. */}
+                    <span className="flex-1 min-h-0 w-full flex items-center justify-center px-6 pt-2" data-map-square-logo>
+                      <img src={p.logoPath} alt="" draggable={false}
+                        className="max-w-[78%] max-h-full object-contain"
+                        style={{ height: 'min(150px, 100%)' }} />
+                    </span>
+                    <span className="mt-2 text-center text-[17px] font-black text-[#1e3a5f] leading-tight w-full">{p.name}</span>
                   </button>
                 );
               })}

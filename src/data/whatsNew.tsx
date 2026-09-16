@@ -30,6 +30,20 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-12-25',
+    title: 'The worker picks a building by its picture',
+    items: [
+      {
+        title: 'The map chooser wears the project logos',
+        body: 'On the worker\'s phone, Building Map asks which project — and each button '
+          + 'is now the project\'s own logo, big and in the middle, the same picture the '
+          + 'office sees in the top bar. The name is still written underneath, smaller, so a '
+          + 'worker who does not read the English name presses the picture he knows.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2026-12-24',
     title: 'The basements are back, all three buildings at once, and the worker starts his day',
     items: [
