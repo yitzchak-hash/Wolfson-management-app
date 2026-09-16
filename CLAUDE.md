@@ -8122,3 +8122,37 @@ Harness: `scratchpad/round42-probe.mjs` (32 checks; a third dev server on
 5175 carries `VITE_VAPID_PUBLIC_KEY` for the banner section) ·
 `scratchpad/push-test.mjs` (offline, 5). Green: portalround, portalswitch,
 planviewer, planzoom, drawerround, foreigndrop-probe, the four audits.
+
+## The plan zoom, third time: a chosen zoom is never thrown away (2026-09-16)
+The owner's video (read frame by frame — the zoom readout cropped from every
+frame) showed TWO zoom ladders interleaved in full screen: 124 → 139 → 156 →
+175 (×1.12 from a fit of 1.24) and 137 → 153 (×1.12 from a fit of 1.22), the
+sheet snapping between them every half second with the mouse still. 1.22 is
+1.24 with 17px less height: the fit measured with and without a Windows
+scrollbar. So the stage was being RE-FITTED mid-zoom on his machine even after
+the border-box observer shipped — and whatever moves the stage's box there
+(not reproducible in Chromium/Linux, where the border box holds), the rule
+that let a measurement throw away a chosen zoom was the fault.
+- **`atFitRef`** in PlanAnnotator: is the sheet standing at the fit? Set in
+  renderPage's fit branch; cleared by `leaveFit()` (zoomAt, zoomStep, the
+  pinch). **The stage ResizeObserver re-fits ONLY when `atFitRef` is true.**
+  A fitted sheet still follows its stage (the pane narrowing when the ratio
+  lands, a Fold turning); a zoomed one keeps its zoom until Fit is pressed.
+- **Full screen coming or going re-fits explicitly** (`fullscreenchange` →
+  `setFitting(true)`), zoomed or not — the observer no longer does it for a
+  zoomed sheet, and the whole point of the button is the sheet on the whole
+  screen.
+- **The fit is computed from the BORDER box** (`offsetWidth/Height − pad`),
+  never the client box, so a scrollbar can never make two "fits" for one
+  stage (the video's second half: 78% then 80% on leaving full screen).
+- Harness: `scratchpad/planjump-probe.mjs` — launched with
+  `ignoreDefaultArgs: ['--hide-scrollbars']` so Chromium draws CLASSIC 15px
+  scrollbars (headless hides them, which is why no plan harness ever saw the
+  Windows condition). Proven non-vacuous: the previous code snaps a 156% zoom
+  to the 30% fit two frames after the pane narrows; this code holds 156%.
+  Leave full screen through the BUTTON — a synthetic Escape reaches the page
+  and closes the drawer instead of leaving full screen.
+- Reading a screen recording here: the bundled Playwright ffmpeg cannot open
+  H.264; `pip install imageio-ffmpeg` brings a full static ffmpeg. Crop the
+  readout region per frame and tile the crops into one sheet — a number per
+  frame is worth more than any still.

@@ -30,6 +30,21 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-12-30',
+    title: 'A zoom you chose stays yours',
+    items: [
+      {
+        title: 'The plan no longer snaps back to the fit while you zoom',
+        body: 'Zooming a plan with the wheel jumped in and out on Windows, in the job window and in '
+          + 'full screen, because the viewer re-fitted the sheet every time its frame moved by a '
+          + 'scrollbar\u2019s width. A zoom you chose now survives the frame changing shape; only a sheet '
+          + 'sitting at the fit follows its frame, and full screen coming or going still fits. '
+          + 'The fit is one number too, scrollbars or not.',
+        demo: 'zoom',
+      },
+    ],
+  },
+  {
     date: '2026-12-29',
     title: 'Your phone rings, messages can be taken back, and the plan zoom holds',
     items: [

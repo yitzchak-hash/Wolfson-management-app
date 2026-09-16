@@ -980,6 +980,19 @@ function PlanEditor({
   // A tab coming back remembers its zoom; only a fresh one fits on open.
   const [fitting, setFitting] = useState(initialWork?.scale == null);
   /**
+   * Is the sheet standing at the FIT right now — as opposed to a zoom
+   * somebody chose? The stage's resize observer re-fits only in the first
+   * case. It used to re-fit on ANY change of the stage's box, and on the
+   * owner's Windows machine the box moved while he wheeled (the owner's
+   * video: 124 → 139 → 156 → back to 124, every half second, in full
+   * screen) — whatever moves it there, a zoom that was chosen must never be
+   * thrown away by a measurement. A fitted sheet still follows its stage
+   * (the pane narrowing when the ratio lands, a Fold turning, full screen
+   * coming and going); a zoomed one keeps its zoom until Fit is pressed.
+   */
+  const atFitRef = useRef(initialWork?.scale == null);
+  const leaveFit = useCallback(() => { atFitRef.current = false; setFitting(false); }, []);
+  /**
    * Zooming does NOT redraw the sheet. Not straight away.
    *
    * Every zoom step used to resize all three canvases — which clears them — and
@@ -1166,12 +1179,12 @@ function PlanEditor({
   const touchUIRef = useRef(touchUI);
   touchUIRef.current = touchUI;
   const zoomStep = useCallback((dir: 1 | -1, step: number, cap: number) => {
-    setFitting(false);
+    leaveFit();
     setScale(s => {
       const next = touchUIRef.current ? s * (dir > 0 ? 1.25 : 1 / 1.25) : s + dir * step;
       return Math.min(cap, Math.max(zoomFloor(), Math.round(next * 100) / 100));
     });
-  }, [zoomFloor]);
+  }, [zoomFloor, leaveFit]);
   /** Standing on the (new, far lower) floor — minus greys out only there. */
   const atZoomFloor = scale <= zoomFloor() + 0.005;
   /**
@@ -1182,7 +1195,11 @@ function PlanEditor({
    */
   const [isFull, setIsFull] = useState(false);
   useEffect(() => {
-    const on = () => setIsFull(!!document.fullscreenElement);
+    // Full screen coming or going is the one stage reshape that ALWAYS
+    // re-fits, zoomed or not — the whole point of the button is to see the
+    // sheet on the whole screen. The resize observer no longer does it for
+    // a zoomed sheet, so it is asked for here, explicitly.
+    const on = () => { setIsFull(!!document.fullscreenElement); setFitting(true); };
     document.addEventListener('fullscreenchange', on);
     return () => document.removeEventListener('fullscreenchange', on);
   }, []);
@@ -1466,8 +1483,16 @@ function PlanEditor({
       // 4px on a phone, where sixteen of them is four per cent of the screen
       // spent on nothing.
       const pad = compact ? 8 : 32;
-      const availW = stageRef.current.clientWidth - pad;
-      const availH = stageRef.current.clientHeight - pad;
+      /**
+       * The BORDER box (offsetWidth/Height), not the client box. The client
+       * box loses 17px the moment a classic scrollbar appears, so the fit
+       * came out 1.24 with no scrollbar and 1.22 with one — two different
+       * "fits" for one stage, and the sheet see-sawed between them (the
+       * two ladders in the owner's video). At the fit nothing overflows, so
+       * the border box less the padding IS the room the sheet gets.
+       */
+      const availW = stageRef.current.offsetWidth - pad;
+      const availH = stageRef.current.offsetHeight - pad;
       // The zoom-out floor is measured HERE, whether or not a fit was asked
       // for — the buttons and the pinch clamp against it and they need it
       // current after every resize, page turn and rotation.
@@ -1475,6 +1500,7 @@ function PlanEditor({
         Math.min(availW / natVp.width, availH / natVp.height)));
       if (fitting) {
         s = Math.max(0.1, fitScaleRef.current);
+        atFitRef.current = true;
         setScale(s); setRaster(s); setFitting(false);
       }
     }
@@ -1655,6 +1681,9 @@ function PlanEditor({
        * changes the WIDTH, and that is the one that genuinely needs a new fit.
        */
       if (compactRef.current && !turned) return;
+      // A zoom somebody CHOSE survives the stage changing shape. Only a
+      // sheet standing at the fit follows the stage to its new fit.
+      if (!atFitRef.current) return;
       setFitting(true);
     });
     ro.observe(el);
@@ -1697,9 +1726,9 @@ function PlanEditor({
 
   const zoomAt = useCallback((clientX: number, clientY: number, factor: number) => {
     anchorZoomAt(clientX, clientY);
-    setFitting(false);
+    leaveFit();
     setScale(z => Math.min(6, Math.max(zoomFloor(), Math.round(z * factor * 100) / 100)));
-  }, [anchorZoomAt, zoomFloor]);
+  }, [anchorZoomAt, zoomFloor, leaveFit]);
 
   useEffect(() => {
     const el = stageRef.current;
@@ -1790,6 +1819,7 @@ function PlanEditor({
       } : null;
       lastMid = m;
       lastWant = scaleRef.current;
+      atFitRef.current = false;
       setFitting(false);
     }
     function move(e: TouchEvent) {

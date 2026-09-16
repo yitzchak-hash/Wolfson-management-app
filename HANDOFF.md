@@ -27,7 +27,7 @@ exactly there.
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2026-12-29` — the next entry must be a later date (an older
+   newest is `2026-12-30` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`. 8. Rewrite THIS file.
@@ -43,8 +43,22 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-16 — the phone rings, messages come back, plan zoom holds)
+## Where things stand (2026-09-16 — the plan zoom, for real this time)
 Last commits, newest first (see `git log`):
+- **2026-09-16, sixth pass — his video of the zoom still jumping.** The
+  border-box observer fix did NOT hold on his Windows PC (production carried
+  it — the deployed PlanAnnotator chunk is byte-identical to the local
+  build). Reading the video frame by frame showed two zoom ladders (fit 1.24
+  vs fit 1.22 = the same stage minus a 17px scrollbar), i.e. the stage was
+  still being re-fitted mid-wheel. The rule itself was wrong: a measurement
+  must never throw away a zoom somebody chose. Now `atFitRef` gates the
+  stage observer (re-fit only a sheet standing at the fit), full screen
+  in/out re-fits explicitly, and the fit reads the border box so scrollbars
+  cannot make two fits. `planjump-probe.mjs` (10 checks, classic scrollbars
+  on) — non-vacuous: old code snaps 156% → 30% on a pane reshape. planviewer,
+  planzoom, planpinch, planphone, markupfixes, tvzoom, tsc, build, four
+  audits green. He must RELOAD the tab (an open tab keeps the old chunk)
+  and try the wheel again in the job window and in full screen.
 - **2026-09-16, fifth pass — his five issues.** (1) plan wheel zoom "jumps
   in and out very fast": the stage's ResizeObserver read the client box and
   a Windows scrollbar appearing re-fitted the sheet — border box now; not
@@ -356,6 +370,13 @@ Last commits, newest first (see `git log`):
    rebuild") is built and pushed.
 
 ## Open threads / things to verify on production
+- **The plan zoom on his Windows PC** (2026-09-16): reload the tab first.
+  If it STILL snaps, the next step is a `?debugzoom=1`-style readout of what
+  fires `setFitting(true)` — the trigger on Windows was never seen from here
+  (Chromium/Linux holds the border box); the fix removes the consequence,
+  not the (unknown) trigger.
+- The portal's React error on refresh: still waiting for the crash screen's
+  "Copy the details" text.
 - **Try the new search on the real board**: type a first name that only
   lives in a folder title, a phone number without dashes, a Hebrew spelling
   of an English family, `group:done <name>`, `is:problem`. The row should say
@@ -385,6 +406,16 @@ Last commits, newest first (see `git log`):
   `npx vite --port 5173` and `VITE_DRIVE_API_KEY=test npx vite --port 5174`.
 
 ## The last reply the owner saw (so the next one continues it)
+**Newest (2026-09-16, sixth pass)**: the reply said his video was read frame
+by frame, that the previous fix WAS on production but the sheet was still
+being re-fitted while he wheeled (two ladders, 124 and 122, a scrollbar's
+width apart), that the viewer now never throws away a zoom he chose (only a
+fitted sheet follows its frame; full screen still fits), and asked him to
+reload the tab and try the wheel again in the job window and in full screen.
+It ended with a Bottom line + bullets, the format he asked for on 2026-09-16
+("maybe at the end of each prompt, give me like the bottom line and like
+bullet points") — KEEP THAT FORMAT on every reply.
+
 **Newest (2026-09-16, fifth pass)**: the reply walked his five issues — the
 scrollbar cause of the jumping zoom; the "press Send" line; the ringing
 (in-app now, phone-closed once he adds the VAPID keys in Vercel, with the

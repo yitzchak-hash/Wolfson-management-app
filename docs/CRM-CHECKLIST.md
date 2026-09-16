@@ -136,4 +136,5 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ Delete a message you sent in a task's conversation (office its own, worker his own) (2026-09-16)
 - ☑ Message box says "Not sent yet — press Send" while a recording/file waits (2026-09-16)
 - ☑ Portal My tasks opens on ALL (2026-09-16)
+- ☑ Plan zoom: a zoom you chose survives the stage changing shape (scrollbar, pane narrowing, window nudge); only a fitted sheet re-fits; full screen in/out always fits; the fit is one number scrollbars or not (2026-09-16)
 - ☐ `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` (+ `VITE_VAPID_PUBLIC_KEY`) — *to be added in Vercel* to turn push on
