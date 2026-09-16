@@ -821,3 +821,9 @@ main > * { min-width: 0; }
   to   { clip-path: inset(0 0 0 0); }
 }
 @media (prefers-reduced-motion: reduce) { .tray-reveal { animation: none; } }
+
+/* The Send arrow with a recording or a file waiting behind it: a soft ring
+   pulse until pressed. Reduced motion keeps the amber and drops the pulse. */
+@keyframes send-nudge { 0%,100% { box-shadow: 0 0 0 0 rgba(245,158,11,.55); } 50% { box-shadow: 0 0 0 9px rgba(245,158,11,0); } }
+.send-nudge { animation: send-nudge 1.4s ease-out infinite; }
+@media (prefers-reduced-motion: reduce) { .send-nudge { animation: none; } }

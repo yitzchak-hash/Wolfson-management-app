@@ -22,6 +22,7 @@ import { PlannerWidget } from '../components/board/PlannerWidget';
 import { TaskCalendar, CalendarEvent } from '../components/tasks/TaskCalendar';
 import { VoiceRecorderButton, VoiceMemoPlayer } from '../components/ui/VoiceMemo';
 import { MessageBox } from '../components/ui/MessageBox';
+import { PushBanner, ArrivalWatcher } from '../components/portal/PortalAlerts';
 import { problemStates, isLiveProblem, problemDaysLate, problemStateOf } from '../data/problems';
 import { WazeIcon, wazeUrl } from '../components/ui/BrandIcons';
 import { RecordedMemo } from '../data/voiceMemo';
@@ -660,7 +661,9 @@ export function ContractorPortal() {
   const [celebrateCopied, setCelebrateCopied] = useState(false);
   const [lightboxInfo, setLightboxInfo] = useState<{ photos: ContractorPhoto[]; index: number } | null>(null);
   const [uploadError, setUploadError] = useState('');
-  const [mapFilter, setMapFilter] = useState<'yesterday' | 'today' | 'tomorrow' | 'week' | 'all'>('today');
+  // ALL is the opening pill (owner, 2026-09-16) — Today hid tomorrow's work
+  // behind an empty list on every open.
+  const [mapFilter, setMapFilter] = useState<'yesterday' | 'today' | 'tomorrow' | 'week' | 'all'>('all');
   /**
    * Today is the opening filter and stays it (owner, 2026-09-03 — the
    * once-per-visit widening to All is gone). An empty Today says so in words
@@ -839,6 +842,28 @@ export function ContractorPortal() {
     const a = contractorAssignments.find(x => x.id === id);
     if (a) { pendingOpenTask.current = null; setSelectedAssignment(a); }
   }, [contractorAssignments]);
+  /**
+   * A tapped notification arrives as `?task=<id>` — open that task, in
+   * whichever workspace holds it, and take the id off the address so a
+   * refresh does not reopen it.
+   */
+  const deepLinked = useRef(false);
+  useEffect(() => {
+    if (deepLinked.current) return;
+    const id = new URLSearchParams(window.location.search).get('task');
+    if (!id) { deepLinked.current = true; return; }
+    const here = contractorAssignments.find(x => x.id === id);
+    const elsewhere = here ? null : loadAllProjectsTaskData().find(p => p.assignments.some(x => x.id === id));
+    if (!here && !elsewhere) return;           // not landed yet — try again on the next sync
+    deepLinked.current = true;
+    const url = new URL(window.location.href); url.searchParams.delete('task');
+    window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+    if (here) { setActiveTab('tasks'); setSelectedAssignment(here); return; }
+    const a = elsewhere!.assignments.find(x => x.id === id)!;
+    setActiveTab('tasks');
+    openTask(elsewhere!.projectId, a);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contractorAssignments, snapshotTick]);
   const getMedia = (assignmentId: string) => contractorPhotos.filter(p => p.assignmentId === assignmentId);
   const getNotes = (assignmentId: string) => contractorNotes.filter(n => n.assignmentId === assignmentId);
 
@@ -1518,6 +1543,22 @@ export function ContractorPortal() {
           </div>
         </div>
       </header>
+      {workerNow && (
+        <>
+          <PushBanner contractor={workerNow} lang={readLang} />
+          <ArrivalWatcher
+            contractor={workerNow}
+            lang={readLang}
+            onOpen={(pid, taskId) => {
+              const list = pid === currentProjectId ? contractorAssignments
+                : (loadAllProjectsTaskData().find(p => p.projectId === pid)?.assignments ?? []);
+              const a = list.find(x => x.id === taskId);
+              setActiveTab('tasks');
+              if (a) openTask(pid, a);
+            }}
+          />
+        </>
+      )}
 
       {/* Tab bar. A tab this worker's level does not allow is not drawn — a
           greyed-out tab is an invitation to ask why. */}
@@ -2664,12 +2705,15 @@ export function ContractorPortal() {
                     photos={selMedia}
                     viewer="contractor"
                     translateTo={readLang}
+                    canDelete={n => n.authorType === 'contractor'}
                     words={{
                       rtl: !!s.isRtl,
                       tapToOpen: s.tapToOpenLabel || (w('tap to open', 'הקישו לפתיחה', 'нажмите, чтобы открыть')),
                       jobClosed: s.jobClosedLabel || (w('Job closed', 'העבודה נסגרה', 'Работа закрыта')),
                       download: s.download,
                       said: s.saidLabel || 'Said',
+                      remove: w('Delete', 'מחיקה', 'Удалить'),
+                      removeSure: w('Delete this message?', 'למחוק את ההודעה?', 'Удалить это сообщение?'),
                     }}
                     footer={composerNode}
                   />

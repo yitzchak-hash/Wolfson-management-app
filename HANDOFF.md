@@ -27,7 +27,7 @@ exactly there.
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2026-12-28` — the next entry must be a later date (an older
+   newest is `2026-12-29` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`. 8. Rewrite THIS file.
@@ -43,8 +43,25 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-16 — foreign live sync, own stages, foreign units drop like jobs)
+## Where things stand (2026-09-16 — the phone rings, messages come back, plan zoom holds)
 Last commits, newest first (see `git log`):
+- **2026-09-16, fifth pass — his five issues.** (1) plan wheel zoom "jumps
+  in and out very fast": the stage's ResizeObserver read the client box and
+  a Windows scrollbar appearing re-fitted the sheet — border box now; not
+  reproducible headless (scrollbars hidden), fix by construction. (2) a
+  recording in a task did not look unsent: "Not sent yet — press Send" line
+  + amber pulsing arrow. (3) WORKER NOTIFICATIONS: in-app chime + banner +
+  tap-to-open for a new task / office message (live), and WEB PUSH when the
+  app is closed — `public/sw.js`, `pushClient.ts`, `pushNotify.ts`, the
+  `push` branch in api/geocode.js (web-push dependency added), `pushSubs`
+  collection. **He must add VAPID keys in Vercel** (`npx web-push
+  generate-vapid-keys` → `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`,
+  `VITE_VAPID_PUBLIC_KEY`, optional `VAPID_SUBJECT`) and redeploy; until then
+  only the in-app half works and no banner is drawn. iPhone: install to Home
+  Screen first. (4) delete a message you sent: trash on own bubbles, inline
+  confirm, both hosts. (5) portal My tasks opens on ALL. Probes:
+  `round42-probe.mjs` (32, needs a 5175 server with VITE_VAPID_PUBLIC_KEY),
+  `push-test.mjs` (5, offline). Regressions + audits green.
 - **2026-09-16, fourth pass — his four-part report.** (a) "she sees the task,
   I don't; the contractor doesn't see it that same second": the other
   workspaces were a one-time localStorage copy — `startForeignSync` in the
@@ -368,6 +385,13 @@ Last commits, newest first (see `git log`):
   `npx vite --port 5173` and `VITE_DRIVE_API_KEY=test npx vite --port 5174`.
 
 ## The last reply the owner saw (so the next one continues it)
+**Newest (2026-09-16, fifth pass)**: the reply walked his five issues — the
+scrollbar cause of the jumping zoom; the "press Send" line; the ringing
+(in-app now, phone-closed once he adds the VAPID keys in Vercel, with the
+exact three variable names and the iPhone Home-Screen rule); delete on own
+messages; All as the default — and asked him to add the keys and try a
+task on a worker's phone.
+
 **Newest (2026-09-16, fourth pass)**: the reply explained the one cause
 behind "she sees it, I don't" (other workspaces were a copy made on the last
 visit, never refreshed), said they are followed live now from every screen,

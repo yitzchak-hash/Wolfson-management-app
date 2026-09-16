@@ -8046,3 +8046,79 @@ job's name sits in the dialog's TITLE (`h3`), not `[data-job-picked]`; a
 square under the tool rail takes no hover (seed the notebook narrower); and
 the seeded Goals fixture lands at the view centre over the notebook unless
 the seed parks `CE-goals-board` elsewhere.
+
+## The worker's phone rings, messages come back, the plan zoom holds (2026-09-16)
+
+### Web push (`public/sw.js` · `src/data/pushClient.ts` · `src/data/pushNotify.ts` · the `push` branch of `api/geocode.js`)
+Owner: "the worker should get a notification in the app and in his phone
+with a noise as well just like a WhatsApp message". Two halves:
+- **In the app** — `ArrivalWatcher` (`src/components/portal/PortalAlerts.tsx`)
+  watches his open tasks and the office's messages on them across every
+  workspace (live + snapshots, which the foreign live sync keeps fresh).
+  Anything not in `portal_seen_<worker>` (per phone) rings `chime()` (a
+  two-note WebAudio chime — no third party's sound), drops a tappable
+  `[data-arrival-toast]` at the top, and with the tab hidden a real
+  notification through the service worker. The first 2.5s after arriving
+  are a BASELINE, never an alarm; the seen set is written only once settled,
+  or the baseline swallows what lands a moment later. Tapping travels to the
+  task's workspace and opens it (`openTask`). A notification's `?task=<id>`
+  deep link does the same on arrival and is taken off the address.
+- **When the app is closed** — the browser's push channel. `enablePush()`
+  registers `/sw.js`, asks permission (the `[data-push-banner]` under the
+  header asks once; "not now" is remembered per phone; an already-granted
+  phone subscribes silently on every open so a rotated subscription is
+  replaced), subscribes with `VITE_VAPID_PUBLIC_KEY`, and files the
+  subscription in the global bare collection **`pushSubs`** (one doc per
+  phone, `<contractorId>__<endpointHash>`). The OFFICE rings: `notifyWorker`
+  is called by `addContractorAssignment`, `addAssignmentToProject` and
+  `addContractorNote` (office notes) — it reads the worker's docs, POSTs
+  `{push: {subs, title, body, url, tag}}` to `/api/geocode` (key-guarded;
+  the server holds `VAPID_PRIVATE_KEY` and signs with `web-push`), and
+  forgets endpoints answered 404/410 (`gone`). Words in the WORKER's
+  language. **It stands down on the portal path** — a task the worker starts
+  for himself never rings him. `pushSubs` is a mechanism, not app data: out
+  of persist / export / import. Keys: `VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY`
+  (+ optional `VAPID_SUBJECT`) in Vercel, the public one also as
+  `VITE_VAPID_PUBLIC_KEY`; `npx web-push generate-vapid-keys` makes them;
+  health reports `hasPushKeys`. Without them the banner is never drawn and
+  the branch answers 501. **iPhone delivers web push only to a Home-Screen
+  installed site** — the portal's own manifest is that installation.
+  `web-push` refuses a plain-http endpoint, so `scratchpad/push-test.mjs`
+  runs a self-signed HTTPS "push service" (201 for one phone, 410 for
+  another) and proves `sent` and `gone` through the real handler.
+- Dev harness door: `window.__store` (DEV builds only) — the arrival probe
+  writes a task into another workspace's snapshot through
+  `addAssignmentToProject` with no Firestore to carry it.
+
+### Messages can be taken back
+`deleteContractorNote(id)` (store: filter + fsDelete; the notes listener
+replaces the list wholesale, so no tombstone). `TaskThread.canDelete(note)`
+decides per bubble — the drawer passes `authorType === 'office'`, the portal
+`authorType === 'contractor'`; a message the other side wrote is never
+offered. `[data-note-delete]` (hover-revealed; always visible under
+`any-hover: none`) → an INLINE two-step `[data-note-delete-ask]` /
+`[data-note-delete-yes]`, never a native confirm. Photos are not deletable
+from the thread.
+
+### "Not sent yet — press Send"
+`MessageBox` with `hasPending` in SEND mode draws `[data-pending-hint]`
+above the row and the arrow turns amber with `.send-nudge` (a ring pulse,
+reduced-motion safe). A recording that landed as a pending attachment used
+to read as sent.
+
+### The plan pane's wheel zoom snapped back on Windows
+`PlanAnnotator`'s stage ResizeObserver measured `clientWidth/clientHeight`:
+a classic 17px scrollbar appearing when the zoomed sheet overflowed changed
+them past the 3px damping → re-fit → sheet shrank → scrollbar gone → the
+owner's "jumps in and out very fast". It measures the BORDER box
+(`offsetWidth/offsetHeight`) now, which a scrollbar never moves. Headless
+Chromium hides scrollbars, so the probe cannot reproduce the fault — the
+fix is by construction; watch a Windows machine.
+
+### The portal opens on ALL
+`mapFilter` starts `'all'` (owner, superseding the 2026-09-03 Today default).
+
+Harness: `scratchpad/round42-probe.mjs` (32 checks; a third dev server on
+5175 carries `VITE_VAPID_PUBLIC_KEY` for the banner section) ·
+`scratchpad/push-test.mjs` (offline, 5). Green: portalround, portalswitch,
+planviewer, planzoom, drawerround, foreigndrop-probe, the four audits.

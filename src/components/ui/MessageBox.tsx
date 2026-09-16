@@ -36,10 +36,10 @@ import type { RecordedMemo } from '../../data/voiceMemo';
  */
 export type MessageLang = 'en' | 'he' | 'ru';
 
-const WORDS: Record<MessageLang, { placeholder: string; dictate: string; attach: string; record: string; send: string; sending: string }> = {
-  en: { placeholder: 'Your message', dictate: 'Dictate', attach: 'Attach a file', record: 'Record a voice memo', send: 'Send', sending: 'Sending the recording…' },
-  he: { placeholder: 'ההודעה שלך', dictate: 'הקלדה קולית', attach: 'צירוף קובץ', record: 'הקלטת הודעה קולית', send: 'שליחה', sending: 'שולח את ההקלטה…' },
-  ru: { placeholder: 'Ваше сообщение', dictate: 'Голосовой ввод', attach: 'Прикрепить файл', record: 'Записать голосовое', send: 'Отправить', sending: 'Отправляю запись…' },
+const WORDS: Record<MessageLang, { placeholder: string; dictate: string; attach: string; record: string; send: string; sending: string; pending: string }> = {
+  en: { placeholder: 'Your message', dictate: 'Dictate', attach: 'Attach a file', record: 'Record a voice memo', send: 'Send', sending: 'Sending the recording…', pending: 'Not sent yet — press Send' },
+  he: { placeholder: 'ההודעה שלך', dictate: 'הקלדה קולית', attach: 'צירוף קובץ', record: 'הקלטת הודעה קולית', send: 'שליחה', sending: 'שולח את ההקלטה…', pending: 'עוד לא נשלח — לחצו על שליחה' },
+  ru: { placeholder: 'Ваше сообщение', dictate: 'Голосовой ввод', attach: 'Прикрепить файл', record: 'Записать голосовое', send: 'Отправить', sending: 'Отправляю запись…', pending: 'Ещё не отправлено — нажмите Отправить' },
 };
 
 export const dictationLocale = (lang: MessageLang | null | undefined) =>
@@ -135,6 +135,17 @@ export function MessageBox({
           {L.sending}
         </div>
       )}
+      {/* A recording or a file waiting in the box is NOT sent yet — and a
+          player sitting there read as "done" (the owner's report: after
+          recording into a task nobody could tell they still had to send).
+          One plain line, and the arrow beside it pulses until it is pressed. */}
+      {sendMode && hasPending && !sending && (
+        <div data-pending-hint className="mb-1.5 flex items-center gap-1.5 text-[12px] font-bold" style={{ color: '#b45309' }}>
+          <span className="inline-block w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: '#f59e0b' }} />
+          {L.pending}
+          <Send size={12} style={{ transform: L === WORDS.he ? 'scaleX(-1)' : undefined }} />
+        </div>
+      )}
       <div className="flex gap-2 items-end" data-composer>
         {onAttach && (
           <>
@@ -204,8 +215,9 @@ export function MessageBox({
             onClick={onSend}
             disabled={disabled || busy}
             title={L.send}
-            className="w-11 h-11 flex items-center justify-center rounded-full text-white transition-all active:scale-95 flex-shrink-0 disabled:opacity-40"
-            style={{ backgroundColor: '#4aa8d8', boxShadow: '0 6px 14px -6px rgba(74,168,216,.7)' }}
+            className={`w-11 h-11 flex items-center justify-center rounded-full text-white transition-all active:scale-95 flex-shrink-0 disabled:opacity-40 ${
+              hasPending ? 'send-nudge' : ''}`}
+            style={{ backgroundColor: hasPending ? '#f59e0b' : '#4aa8d8', boxShadow: hasPending ? '0 6px 16px -6px rgba(245,158,11,.8)' : '0 6px 14px -6px rgba(74,168,216,.7)' }}
           >
             <Send size={18} />
           </button>

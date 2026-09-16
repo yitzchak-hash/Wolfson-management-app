@@ -2622,12 +2622,15 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                               viewer="office"
                               maxBubble={640}
                               translateTo={ui.isRtl ? 'he' : 'en'}
+                              canDelete={n => n.authorType === 'office'}
                               words={{
                                 rtl: !!ui.isRtl,
                                 tapToOpen: ui.threadTapToOpen,
                                 jobClosed: ui.threadJobClosed,
                                 download: ui.downloadLabel,
                                 said: ui.isRtl ? 'נאמר' : 'Said',
+                                remove: ui.isRtl ? 'מחיקה' : 'Delete',
+                                removeSure: ui.isRtl ? 'למחוק את ההודעה?' : 'Delete this message?',
                               }}
                               footer={
                             <MessageBox

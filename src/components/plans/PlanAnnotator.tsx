@@ -1628,11 +1628,21 @@ function PlanEditor({
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return;
-    let last = { w: el.clientWidth, h: el.clientHeight };
+    /**
+     * The BORDER box (offsetWidth/Height), never the client box. A classic
+     * scrollbar — Windows, 17px — appears the moment a zoomed sheet
+     * overflows and takes that much off clientWidth/clientHeight: the
+     * observer read it as the stage changing shape, re-fitted, the sheet
+     * shrank back, the scrollbar left, and every wheel notch zoomed in and
+     * straight back out (the owner's "jumps in and out very fast"). The
+     * border box does not move when a scrollbar comes or goes, and on Mac's
+     * overlay scrollbars — where this never showed — nothing changes at all.
+     */
+    let last = { w: el.offsetWidth, h: el.offsetHeight };
     const ro = new ResizeObserver(() => {
-      const w = el.clientWidth, h = el.clientHeight;
-      // Damped: sub-3px wobble (scrollbars, the width transition settling)
-      // must not throw away a zoom somebody chose.
+      const w = el.offsetWidth, h = el.offsetHeight;
+      // Damped: sub-3px wobble (the width transition settling) must not
+      // throw away a zoom somebody chose.
       const turned = Math.abs(w - last.w) > 3;
       const grew = Math.abs(h - last.h) > 3;
       if (!turned && !grew) return;

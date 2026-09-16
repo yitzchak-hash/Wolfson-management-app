@@ -24,6 +24,8 @@ import { DEFAULT_TIME_CLOCK, resolvePunch } from './timeClock';
 import { purgeJobsFromPlanner, isPlannerElement } from './plannerPurge';
 import { DEFAULT_WORKER_LEVELS } from './workerLevels';
 import { daysOf } from './taskDays';
+import { notifyWorker } from './pushNotify';
+import { aptLabel } from '../types';
 
 /** How many AUTOMATIC layout snapshots rotate, separate from the 10 manual. */
 const LAYOUTS_AUTO_MAX = 8;
@@ -659,6 +661,14 @@ interface AppState {
   addContractorNote: (n: Omit<ContractorNote, 'id' | 'createdAt'>) => void;
   /** A field or two onto a note — the memo's transcript, once it is known. */
   updateContractorNote: (id: string, changes: Partial<ContractorNote>) => void;
+  /**
+   * Take a message OUT of a task's conversation (owner, 2026-09-16: "we need
+   * a way for people to delete messages that we sent"). Each side deletes
+   * only its own — the hosts decide that; the store just removes the record.
+   * The notes listener replaces the list wholesale, so the deletion reaches
+   * every device without a tombstone.
+   */
+  deleteContractorNote: (id: string) => void;
   /**
    * A task written into ANOTHER workspace's collection — a general job for
    * Wolfson created while standing on the Job Board. The open workspace goes
@@ -2205,6 +2215,15 @@ export const useStore = create<AppState>((set, get) => ({
     // Strip attachment dataUrls before Firestore (keep metadata only)
     const aForFs = { ...a, attachments: a.attachments?.map(att => ({ ...att, dataUrl: '' })) };
     fsSet(projectCollection(get().currentProjectId, 'contractorAssignments'), a.id, aForFs);
+    // Ring the worker's phone (pushNotify stands down on the portal itself,
+    // so a task the worker starts for himself never rings him).
+    if (a.contractorId && !a.completedAt) {
+      const aptFor = get().apartments.find(ap => ap.id === a.apartmentId);
+      notifyWorker(get().contractors.find(c => c.id === a.contractorId), get().boardSettings.__tv?.portalDomain, {
+        kind: 'task', body: a.taskDescription, taskId: a.id,
+        where: aptFor ? (aptLabel(aptFor) || aptFor.displayName || '') : '',
+      });
+    }
     // Activity log
     const apt = get().apartments.find(ap => ap.id === a.apartmentId);
     if (apt) {
@@ -2387,6 +2406,12 @@ export const useStore = create<AppState>((set, get) => ({
     set(state => ({ contractorNotes: [...state.contractorNotes, n] }));
     persist(get);
     fsSet(projectCollection(get().currentProjectId, 'contractorNotes'), n.id, { ...n, attachmentDataUrl: undefined });
+    if (n.authorType === 'office' && n.contractorId) {
+      notifyWorker(get().contractors.find(c => c.id === n.contractorId), get().boardSettings.__tv?.portalDomain, {
+        kind: 'message', from: n.authorName, taskId: n.assignmentId,
+        body: n.text?.trim() || '', attachment: n.attachmentMimeType,
+      });
+    }
   },
 
   updateContractorNote: (id, changes) => {
@@ -2396,6 +2421,12 @@ export const useStore = create<AppState>((set, get) => ({
     persist(get);
     const updated = get().contractorNotes.find(n => n.id === id);
     if (updated) fsSet(projectCollection(get().currentProjectId, 'contractorNotes'), id, { ...updated, attachmentDataUrl: undefined });
+  },
+
+  deleteContractorNote: (id) => {
+    set(state => ({ contractorNotes: state.contractorNotes.filter(n => n.id !== id) }));
+    persist(get);
+    fsDelete(projectCollection(get().currentProjectId, 'contractorNotes'), id);
   },
 
   addAssignmentToProject: (projectId, fields) => {
@@ -2411,6 +2442,14 @@ export const useStore = create<AppState>((set, get) => ({
     saveToStorage(key, { ...snap, contractorAssignments: [...list, a] });
     fsSet(projectCollection(projectId, 'contractorAssignments'), a.id, a);
     set(st => ({ snapshotTick: st.snapshotTick + 1 }));
+    if (a.contractorId && !a.completedAt) {
+      const apts = Array.isArray(snap.apartments) ? snap.apartments as Apartment[] : [];
+      const aptFor = apts.find(ap => ap.id === a.apartmentId);
+      notifyWorker(get().contractors.find(c => c.id === a.contractorId), get().boardSettings.__tv?.portalDomain, {
+        kind: 'task', body: a.taskDescription, taskId: a.id,
+        where: aptFor ? (aptLabel(aptFor) || aptFor.displayName || '') : '',
+      });
+    }
     return a.id;
   },
 
@@ -3378,4 +3417,13 @@ function persistNow(get: () => AppState) {
       activityLogs: state.activityLogs.slice(0, 50),
     });
   }
+}
+
+/**
+ * A harness door, DEV builds only: the probes reach the store to inject an
+ * arrival (a task written into another workspace's snapshot) without a
+ * Firestore to carry it — the presence layer's `__injectPresence` idiom.
+ */
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  (window as unknown as { __store?: typeof useStore }).__store = useStore;
 }

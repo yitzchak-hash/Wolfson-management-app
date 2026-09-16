@@ -132,3 +132,8 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ Firebase Firestore + Storage; optional Realtime Database URL for presence
 - Reminder: at most 12 files under `/api` (Vercel Hobby) — a new route folds into an existing file
 - ☑ Other workspaces' tasks, units and threads followed LIVE from every screen (portal, board, TV); a foreign unit dropped on the notebook opens the task dialog with its own workspace's stages (2026-09-16)
+- ☑ The worker's phone rings: in-app chime + banner on a new task / office message (live), web push through `/sw.js` + `pushSubs` + the `push` branch of /api/geocode when VAPID keys are set (2026-09-16)
+- ☑ Delete a message you sent in a task's conversation (office its own, worker his own) (2026-09-16)
+- ☑ Message box says "Not sent yet — press Send" while a recording/file waits (2026-09-16)
+- ☑ Portal My tasks opens on ALL (2026-09-16)
+- ☐ `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` (+ `VITE_VAPID_PUBLIC_KEY`) — *to be added in Vercel* to turn push on

@@ -30,6 +30,46 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2026-12-29',
+    title: 'Your phone rings, messages can be taken back, and the plan zoom holds',
+    items: [
+      {
+        title: 'A new task or message rings the worker\u2019s phone',
+        body: 'While his portal is open, a task made for him anywhere \u2014 the drawer, the '
+          + 'notebook, the Tasks page \u2014 or a message from the office rings a chime and '
+          + 'drops a banner at the top; tapping it opens the task. Turn on notifications on the '
+          + 'phone (one line under the header asks) and it rings when the app is closed too, '
+          + 'like a WhatsApp message. Needs the push keys set on the server.',
+        demo: 'tap',
+      },
+      {
+        title: 'Not sent yet \u2014 press Send',
+        body: 'A recording or a file sitting in the message box is not sent until the arrow is '
+          + 'pressed. The box says so now, and the arrow turns amber and pulses until you do.',
+        demo: 'tap',
+      },
+      {
+        title: 'Delete a message you sent',
+        body: 'Hover a message of your own in a task\u2019s conversation and a small trash appears; '
+          + 'press it, confirm, and it is gone on every screen. The office deletes the office\u2019s, '
+          + 'the worker his own.',
+        demo: 'tap',
+      },
+      {
+        title: 'Zooming the plan with the wheel holds',
+        body: 'On Windows the scrollbar appearing made the sheet snap back to the fit on every '
+          + 'notch, so the zoom jumped in and out. It zooms and stays now, in the job window and '
+          + 'in full screen.',
+        demo: 'zoom',
+      },
+      {
+        title: 'My tasks opens on All',
+        body: 'The worker\u2019s list opens on every day\u2019s work, not only today\u2019s.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2026-12-28',
     title: 'Other workspaces stay live, and any unit drops into the notebook',
     items: [

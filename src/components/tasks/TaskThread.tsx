@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { format, isToday, parseISO } from 'date-fns';
-import { Download, X } from 'lucide-react';
+import { Download, X, Trash2 } from 'lucide-react';
 import { ContractorAssignment, ContractorNote, ContractorPhoto } from '../../types';
 import { VoiceMemoPlayer } from '../ui/VoiceMemo';
 import { VideoTile } from '../ui/VideoTile';
@@ -41,6 +41,9 @@ export interface ThreadWords {
   download: string;
   /** "Said" — over a memo's transcription. */
   said?: string;
+  /** The trash on a message of your own; fallbacks are English. */
+  remove?: string;
+  removeSure?: string;
 }
 
 const ACCENT = '#4aa8d8';
@@ -116,8 +119,14 @@ function photoSrc(p: ContractorPhoto, px = 400): string | null {
   return p.storageUrl || (p.driveFileId ? driveThumbUrl(p.driveFileId, px) : null) || (p.dataUrl || null);
 }
 
-export function TaskThread({ assignment, notes, photos, viewer, readOnly = false, words, maxBubble, translateTo, footer }: {
+export function TaskThread({ assignment, notes, photos, viewer, readOnly = false, words, maxBubble, translateTo, footer, canDelete }: {
   assignment: ContractorAssignment;
+  /**
+   * Which messages THIS reader may take back (owner, 2026-09-16). The office
+   * deletes the office's, the worker his own — each host says which; a
+   * message the other side wrote is never offered. Absent = nothing deletes.
+   */
+  canDelete?: (note: ContractorNote) => boolean;
   /**
    * The READER's language — every message written in another one is shown
    * translated, with its original one press away. Absent = nothing is
@@ -142,8 +151,13 @@ export function TaskThread({ assignment, notes, photos, viewer, readOnly = false
 }) {
   const [lightbox, setLightbox] = useState<ContractorPhoto | null>(null);
   const updateContractorNote = useStore(st => st.updateContractorNote);
-  void viewer; void readOnly; // the thread is the same drawing for everyone,
-  // and nothing in it can be edited or deleted from either side.
+  const deleteContractorNote = useStore(st => st.deleteContractorNote);
+  // The message whose trash was pressed — a second press on the same bubble
+  // confirms (an inline two-step, never a native confirm), anything else
+  // stands it down.
+  const [askDelete, setAskDelete] = useState<string | null>(null);
+  void viewer; void readOnly; // the thread is the same drawing for everyone;
+  // nothing in it is edited, and only a message of your OWN can be deleted.
 
   // A photo the closing comment claimed rides inside that message; the rest
   // stand as messages of their own.
@@ -281,10 +295,13 @@ export function TaskThread({ assignment, notes, photos, viewer, readOnly = false
       );
     }
     const key = item.kind === 'photo' ? `ph-${item.photo.id}` : `nt-${item.note.id}`;
+    const deletable = item.kind === 'note' && !readOnly && !!canDelete?.(item.note);
+    const asking = deletable && askDelete === item.note.id;
     return (
       <div key={key} className={`flex ${worker ? 'justify-end' : 'justify-start'}`}>
         <div
-          className={`rounded-[14px] shadow-sm ${worker ? 'rounded-se-[5px]' : 'rounded-ss-[5px]'}`}
+          data-thread-bubble={item.kind === 'note' ? item.note.id : undefined}
+          className={`relative group/bubble rounded-[14px] shadow-sm ${worker ? 'rounded-se-[5px]' : 'rounded-ss-[5px]'}`}
           style={{
             maxWidth: maxBubble ? Math.min(maxBubble, 640) : '82%',
             width: maxBubble ? undefined : undefined,
@@ -296,7 +313,33 @@ export function TaskThread({ assignment, notes, photos, viewer, readOnly = false
           }}
         >
           {body}
-          <div className="text-end mt-0.5" style={{ fontSize: 11, color: '#93a2b1' }}>{stamp(when)}</div>
+          <div className="flex items-center justify-end gap-2 mt-0.5" style={{ fontSize: 11, color: '#93a2b1' }}>
+            {deletable && !asking && (
+              <button
+                type="button"
+                data-note-delete
+                onClick={() => setAskDelete(item.note.id)}
+                title={words.remove ?? 'Delete this message'}
+                className="w-6 h-6 -my-1 flex items-center justify-center rounded-full text-gray-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover/bubble:opacity-100 focus:opacity-100 transition-opacity"
+              >
+                <Trash2 size={12} />
+              </button>
+            )}
+            <span>{stamp(when)}</span>
+          </div>
+          {asking && (
+            <div data-note-delete-ask className="mt-1.5 flex items-center gap-2 rounded-lg px-2 py-1.5"
+              style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca', fontSize: 12 }}>
+              <span className="font-semibold" style={{ color: '#991b1b' }}>{words.removeSure ?? 'Delete this message?'}</span>
+              <button type="button" data-note-delete-yes
+                onClick={() => { deleteContractorNote(item.note.id); setAskDelete(null); }}
+                className="ms-auto px-2.5 py-1 rounded-md text-white font-bold" style={{ backgroundColor: '#dc2626' }}>
+                {words.remove ?? 'Delete'}
+              </button>
+              <button type="button" onClick={() => setAskDelete(null)}
+                className="w-6 h-6 flex items-center justify-center rounded-full text-gray-500 hover:bg-white"><X size={12} /></button>
+            </div>
+          )}
         </div>
       </div>
     );
