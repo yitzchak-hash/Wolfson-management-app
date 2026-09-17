@@ -27,12 +27,12 @@ exactly there.
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2027-01-03` — the next entry must be a later date (an older
+   newest is `2027-01-04` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`. 8. Rewrite THIS file.
-9. Commit (footer: `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`
-   + `Claude-Session: <session url>`), push the working branch, then
+9. Commit (footer: the `Co-Authored-By:` + `Claude-Session:` lines given in
+   the session's own attribution reminder), push the working branch, then
    `git merge-base --is-ancestor origin/claude/blissful-cray-spTFY HEAD` and
    push production. Never force-push. Never commit real office data (the CRM
    export, fetched Firestore records) — they live in /tmp.
@@ -43,8 +43,34 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-17 — files open properly; the gallery is on request only)
+## Where things stand (2026-09-17 — the buildings layout, and notes that reach the site)
 Last commits, newest first (see `git log`):
+- **2026-09-17, fourth pass — his six asks about the buildings layout, plus
+  the notes.** (1) A FLOOR can be renamed from its right-click menu, and the
+  four POSITIONS across a building can be named — both show on the buildings
+  page (`BoardSetting.buildingLayout`, riding boardSettings, no new state
+  key). (2) His "it's not letting me merge": a floor with one apartment and
+  three empty squares needed every square picked first — **Merge the whole
+  row into one** is now one press in the cell, empty and floor menus. And the
+  merge that silently cleared the other apartments' numbers and names now
+  ASKS, naming each. (3) A square can carry a NAME and no number (the pool,
+  the gym on minus one to minus four): "Name this square…" on an empty
+  position. (4) Save leads with a BEFORE and AFTER picture — every building
+  drawn twice, new / changed / gone squares ringed; the written list folds
+  behind its own button. (5) Floors can be ADDED above or below any row and
+  REMOVED when empty (never one that still holds an apartment; a floor added
+  between two others is the half step and wears the name you give it).
+  (6) NOTES stopped duplicating the task messages: a stage note is what the
+  WORKER reads on site — it shows in his own language on the task sheet and
+  on the map's work sheet before "I'm going to work here", and each line says
+  "the worker sees this" with one press to keep it in the office
+  (`StageNoteEntry.officeOnly`). `layoutround-probe.mjs` (33 checks, three
+  contexts); re-encoded `builder2-probe` (the merge asks now; the change list
+  is folded); portalround, stagereport, round40, tsc, build and the four
+  audits green.
+  **NEXT: the owner asked for a planning session about the STAGES** — "now,
+  finish this and we have a planning session to do regarding the stages".
+  That is the next thing to open with.
 - **2026-09-17, third pass — six asks off two screenshots.** (0) **STOP
   refreshing the Device Gallery** — "I keep updating the device gallery,
   wasting my credits". The skill now runs ON REQUEST ONLY; its description was
@@ -416,6 +442,21 @@ Last commits, newest first (see `git log`):
   the one-file Hebrew-safe Windows helper.
 
 ## What the owner last asked (his exact wants)
+-3. **(2026-09-17, the buildings list — ALL BUILT, see above)** "In the
+   building layout editor I need to be able to rename a floor upon
+   right-clicking… where is the names of the four squares as well." "If I
+   already have an apartment on minus 2 and now I want to merge that for the
+   whole row — it's not letting me merge, and even if it does let me merge, it
+   just…" "Not all positions have necessarily numbers. In minus 1, 2, 3 and 4
+   there's a pool, a gym, there's no numbers there." "When I click save and I
+   see these changes will be written, I wanted a total before and after —
+   three buildings on one side, three on the other, and I see highlights of
+   what changed." "I need an ability to add and remove floors." "Right now the
+   notes and tasks are kind of redundant. The task messages are the notes. So
+   the notes should have a different function: I put notes there, then when we
+   get to that stage or task, the contractor will see it on the site."
+   **AND THE OPEN ONE:** "Now, finish this and we have a planning session to
+   do regarding the stages." — the stages planning session is the next thing.
 -2. **(2026-09-17)** "why don't I see the permissions asked on my computer
    from Google Chrome to allow notifications" — DONE (header pill). "When a
    worker assigns a job for himself, it asks him what stage is it on. I want

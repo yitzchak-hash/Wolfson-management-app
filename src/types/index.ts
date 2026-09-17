@@ -164,6 +164,19 @@ export interface BoardSetting {
    */
   floorHeights?: Record<string, Record<string, 'tall' | 'short'>>;
   /**
+   * What the office has SAID about each building's shape beyond the records:
+   * the name it gave a floor, the names of the four positions across a row,
+   * and the floors it added or took out. buildingId → BuildingLayout
+   * (`src/data/floorRows.ts`). Rides in `boardSettings` like `floorHeights`,
+   * so persist / sync / export / import need no new key.
+   */
+  buildingLayout?: Record<string, {
+    floorNames?: Record<string, string>;
+    colNames?: string[];
+    addFloors?: number[];
+    hideFloors?: number[];
+  }>;
+  /**
    * Margin, in board units, kept clear on all four sides — like the margins
    * on a page. Nothing is dropped inside it, so the work never sits flush
    * against the chrome. Absent means the default (BOARD_MARGIN).
@@ -595,6 +608,14 @@ export interface StageNoteEntry {
   by: string;
   byName: string;
   attachments?: StageNoteAttachment[];
+  /**
+   * OWNER RULING (2026-09-17): a stage note is what the WORKER must know on
+   * site when that stage comes up — the task's own messages are the
+   * conversation, so the notes stopped being a second copy of it. Every
+   * bullet therefore reaches the worker's task sheet by default; this flag is
+   * the office keeping one to itself. Absent means the worker sees it.
+   */
+  officeOnly?: boolean;
 }
 
 export interface StageNote {
@@ -1576,6 +1597,13 @@ export interface ContractorUiStrings {
   pinAddBtn?: string;
   /** The portal's Mark-up button, shown only to a worker whose level allows it. */
   markUpBtn?: string;
+  /**
+   * The heading over what the OFFICE wrote about this stage, shown on site
+   * (owner, 2026-09-17). Optional with a fallback, like every string added to
+   * this interface — these objects are stored and user-edited, and there is no
+   * mergeFresh for them.
+   */
+  siteNotesTitle?: string;
   pinClickPlan?: string;
   pinNotePlaceholder?: string;
   /** The portal's notification bell — optional, same rule. */
@@ -1691,6 +1719,7 @@ export const DEFAULT_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   monthlyLabel: 'Monthly',
   pinAddBtn: 'Pin',
   markUpBtn: 'Mark up',
+  siteNotesTitle: 'From the office',
   pinClickPlan: 'Tap the plan',
   pinNotePlaceholder: 'What needs doing here?',
   notifTitle: 'Updates',
@@ -1800,6 +1829,7 @@ export const HEBREW_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   monthlyLabel: 'חודשי',
   pinAddBtn: 'נעץ',
   markUpBtn: 'סימון על התוכנית',
+  siteNotesTitle: 'מהמשרד',
   pinClickPlan: 'געו בתוכנית',
   pinNotePlaceholder: 'מה צריך לעשות כאן?',
   notifTitle: 'עדכונים',
@@ -1914,6 +1944,7 @@ export const RUSSIAN_CONTRACTOR_UI_STRINGS: ContractorUiStrings = {
   monthlyLabel: 'Месяц',
   pinAddBtn: 'Метка',
   markUpBtn: 'Разметка',
+  siteNotesTitle: 'Из офиса',
   pinClickPlan: 'Нажмите на план',
   pinNotePlaceholder: 'Что здесь нужно сделать?',
   notifTitle: 'Обновления',
@@ -2190,6 +2221,35 @@ export interface MainUiStrings {
   lbOpenBuilder: string;
   lbCardText: string;
   lbFloorLabelTip: string;
+  lbRenameFloor: string;
+  lbFloorNameField: string;
+  lbFloorNamePlaceholder: string;
+  lbFloorNameHint: string;
+  lbPositionNames: string;
+  lbPositionNamesHint: string;
+  lbPositionN: string;
+  lbAddFloorAbove: string;
+  lbAddFloorBelow: string;
+  lbRemoveFloor: string;
+  lbRemoveFloorRefused: string;
+  lbFloorAdded: string;
+  lbFloorRemoved: string;
+  lbFloorExists: string;
+  lbMergeRow: string;
+  lbMergeWarnTitle: string;
+  lbMergeWarnHint: string;
+  lbMergeGo: string;
+  lbNameSquare: string;
+  lbBefore: string;
+  lbAfter: string;
+  lbLegendNew: string;
+  lbLegendChanged: string;
+  lbLegendGone: string;
+  lbChangeListLabel: string;
+  lbChangeLayout: string;
+  noteWorkerSees: string;
+  noteOfficeOnly: string;
+  noteSiteHint: string;
   // Header
   syncSaving: string;
   syncSaved: string;
@@ -2931,7 +2991,36 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   lbMoved: 'Moved to floor {f}',
   lbOpenBuilder: 'Open the layout builder',
   lbCardText: 'Move units between floors, merge positions into one unit, rename, renumber and set row heights — full screen, with a list of every change before it is written.',
-  lbFloorLabelTip: 'Right-click for row height and renumbering',
+  lbFloorLabelTip: 'Right-click to rename the floor, add or remove floors, name the positions',
+  lbRenameFloor: 'Rename this floor…',
+  lbFloorNameField: 'What this floor is called',
+  lbFloorNamePlaceholder: 'e.g. -2 · Pool level',
+  lbFloorNameHint: 'This replaces the label on the left of the row, here and on the buildings page. Leave it empty to go back to the number.',
+  lbPositionNames: 'Name the positions…',
+  lbPositionNamesHint: 'the squares across every floor of this building',
+  lbPositionN: 'Position {n}',
+  lbAddFloorAbove: 'Add a floor above this one',
+  lbAddFloorBelow: 'Add a floor below this one',
+  lbRemoveFloor: 'Remove this floor',
+  lbRemoveFloorRefused: 'That floor still has an apartment on it — move it first',
+  lbFloorAdded: 'Floor added',
+  lbFloorRemoved: 'Floor removed',
+  lbFloorExists: 'There is already a floor there',
+  lbMergeRow: 'Merge the whole row into one',
+  lbMergeWarnTitle: 'These squares lose their number and name',
+  lbMergeWarnHint: 'Merging keeps the FIRST square and turns the rest into blank places under it. Unmerge puts the places back, but not what was written on them.',
+  lbMergeGo: 'Merge them',
+  lbNameSquare: 'Name this square…',
+  lbBefore: 'Now',
+  lbAfter: 'After saving',
+  lbLegendNew: 'new',
+  lbLegendChanged: 'changed',
+  lbLegendGone: 'gone',
+  lbChangeListLabel: 'Every change in words ({n})',
+  lbChangeLayout: 'Floor and position names',
+  noteWorkerSees: 'the worker sees this',
+  noteOfficeOnly: 'office only',
+  noteSiteHint: 'the worker will see this on site',
   // Header
   syncSaving: 'Saving…',
   syncSaved: 'Saved ✓',
@@ -3668,7 +3757,36 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   lbMoved: 'הועבר לקומה {f}',
   lbOpenBuilder: 'פתח את בונה הפריסה',
   lbCardText: 'הזזת יחידות בין קומות, מיזוג מקומות ליחידה אחת, שינוי שם, מספור וגובה שורות — במסך מלא, עם רשימת כל השינויים לפני הכתיבה.',
-  lbFloorLabelTip: 'קליק ימני לגובה שורה ומספור מחדש',
+  lbFloorLabelTip: 'לחיצה ימנית לשינוי שם הקומה, הוספה או הסרה של קומות, ושמות המקומות',
+  lbRenameFloor: 'שנה שם לקומה…',
+  lbFloorNameField: 'איך קוראים לקומה הזאת',
+  lbFloorNamePlaceholder: 'למשל -2 · קומת הבריכה',
+  lbFloorNameHint: 'זה מחליף את התווית בצד השורה, כאן ובעמוד הבניינים. השאר ריק כדי לחזור למספר.',
+  lbPositionNames: 'שמות המקומות…',
+  lbPositionNamesHint: 'הריבועים לרוחב כל קומה בבניין הזה',
+  lbPositionN: 'מקום {n}',
+  lbAddFloorAbove: 'הוסף קומה מעל',
+  lbAddFloorBelow: 'הוסף קומה מתחת',
+  lbRemoveFloor: 'הסר את הקומה הזאת',
+  lbRemoveFloorRefused: 'יש עדיין דירה בקומה הזאת — העבר אותה קודם',
+  lbFloorAdded: 'קומה נוספה',
+  lbFloorRemoved: 'קומה הוסרה',
+  lbFloorExists: 'כבר יש שם קומה',
+  lbMergeRow: 'מזג את כל השורה לאחת',
+  lbMergeWarnTitle: 'הריבועים האלה יאבדו מספר ושם',
+  lbMergeWarnHint: 'מיזוג שומר את הריבוע הראשון והופך את השאר למקומות ריקים מתחתיו. ביטול מיזוג מחזיר את המקומות, אבל לא את מה שהיה כתוב בהם.',
+  lbMergeGo: 'מזג אותם',
+  lbNameSquare: 'תן שם לריבוע הזה…',
+  lbBefore: 'עכשיו',
+  lbAfter: 'אחרי השמירה',
+  lbLegendNew: 'חדש',
+  lbLegendChanged: 'השתנה',
+  lbLegendGone: 'הוסר',
+  lbChangeListLabel: 'כל השינויים במילים ({n})',
+  lbChangeLayout: 'שמות קומות ומקומות',
+  noteWorkerSees: 'העובד רואה את זה',
+  noteOfficeOnly: 'למשרד בלבד',
+  noteSiteHint: 'העובד יראה את זה בשטח',
   // Header
   syncSaving: 'שומר...',
   syncSaved: 'נשמר ✓',

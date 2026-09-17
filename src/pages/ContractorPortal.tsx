@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo, useEffect, lazy, Suspense } from 'rea
 import { useParams } from 'react-router-dom';
 import { useThreadFold } from '../data/threadFold';
 import { useStore, loadAllProjectsTaskData, loadProjectSnapshot, ensureProjectSnapshot, startForeignSync, stopForeignSync } from '../data/store';
-import { ContractorAssignment, ContractorPhoto, Contractor, Apartment, Project, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, RUSSIAN_CONTRACTOR_UI_STRINGS, PortalLang, stageNameIn, aptLabel, workAtLabel, projectColor, projectName } from '../types';
+import { ContractorAssignment, ContractorPhoto, Contractor, Apartment, Project, StageNote, StageNoteEntry, Stage, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, RUSSIAN_CONTRACTOR_UI_STRINGS, PortalLang, stageNameIn, aptLabel, workAtLabel, projectColor, projectName } from '../types';
 import { transcribeMemo } from '../data/transcribe';
 import { daysOf, futureDaysOf } from '../data/taskDays';
 import { PlanPinOverlay } from '../components/apartment/PlanPinOverlay';
@@ -15,7 +15,7 @@ import {
   Plus, Send, AlertCircle, X, Play, File as FileIcon, MapPin,
   BookOpen, Download, Paperclip, MessageSquare, CloudUpload,
   ChevronLeft, ChevronRight, ChevronDown, History, PenLine, Mic,
-  Settings as SettingsIcon, Bell,
+  Settings as SettingsIcon, Bell, Info,
 } from 'lucide-react';
 import { BuildingDiagram } from '../components/diagram/BuildingDiagram';
 import { permsOf } from '../data/workerLevels';
@@ -523,6 +523,74 @@ function PortalBell({ contractor, s, lang, currentProjectId, allAssignments, all
         </>
       )}
     </>
+  );
+}
+
+/**
+ * WHAT THE OFFICE SAID ABOUT THIS STAGE — the note left in the apartment's
+ * notes tab, read here on site (owner's ruling, 2026-09-17: "the task messages
+ * ARE the notes… the notes should have a different function. I should be able
+ * to put notes there, then when we get to that stage or task, the contractor
+ * will see it on the site").
+ *
+ * Every bullet reaches the worker unless the office kept it back
+ * (`officeOnly`), and it is drawn in HIS language through `Translated` — the
+ * record stays in the words the office typed.
+ */
+function SiteNotes({ note, stage, lang, title }: {
+  note: StageNote | undefined;
+  stage: Stage | undefined;
+  lang: PortalLang;
+  title: string;
+}) {
+  const entries: StageNoteEntry[] = note?.entries
+    ?? (note && note.noteText.trim()
+      ? [{ id: `${note.id}-0`, text: note.noteText, at: note.updatedAt, by: note.updatedBy, byName: note.updatedByName, attachments: note.attachments }]
+      : []);
+  const mine = entries.filter(e => !e.officeOnly && (e.text.trim() || e.attachments?.length));
+  if (!mine.length) return null;
+  return (
+    <div data-site-notes={stage?.id ?? ''} className="rounded-2xl border overflow-hidden"
+      style={{ borderColor: '#fde68a', backgroundColor: '#fffbeb' }}>
+      <div className="px-4 py-2 flex items-center gap-2 border-b" style={{ borderColor: '#fde68a' }}>
+        <Info size={13} style={{ color: '#b45309' }} />
+        <span className="text-xs font-bold" style={{ color: '#92400e' }}>{title}</span>
+        {stage && (
+          <span className="ms-auto text-[10px] px-2 py-0.5 rounded-full font-semibold"
+            style={{ backgroundColor: stage.color + '22', color: stage.color }}>{stageNameIn(stage, lang)}</span>
+        )}
+      </div>
+      <ul className="px-4 py-3 space-y-2">
+        {mine.map(e => (
+          <li key={e.id} data-site-note className="flex items-start gap-2 text-[13px] leading-snug text-gray-800">
+            <span className="w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0" style={{ backgroundColor: '#f59e0b' }} />
+            <div className="min-w-0 flex-1">
+              {e.text.trim() && <Translated text={e.text} to={lang} />}
+              {e.attachments?.length ? (
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {e.attachments.map(att => att.mimeType?.startsWith('audio/') ? (
+                    <VoiceMemoPlayer key={att.id} src={att.driveUrl || att.dataUrl || ''} className="w-full max-w-[300px]"
+                      transcript={att.transcript} lang={lang}
+                      saidLabel={lang === 'he' ? 'נאמר' : lang === 'ru' ? 'Сказано' : 'Said'} />
+                  ) : att.mimeType?.startsWith('image/') ? (
+                    <a key={att.id} href={att.driveUrl ?? att.dataUrl ?? '#'} target="_blank" rel="noopener noreferrer">
+                      <img src={att.driveFileId ? driveThumbUrl(att.driveFileId, 300) : att.dataUrl}
+                        alt={att.filename} className="h-16 w-16 rounded-lg object-cover border border-amber-200" />
+                    </a>
+                  ) : (
+                    <a key={att.id} href={att.driveUrl ?? att.dataUrl ?? '#'} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-2 py-1 bg-white rounded-lg border border-amber-200 text-xs text-amber-800">
+                      <Paperclip size={10} /><span className="truncate max-w-[170px]">{att.filename}</span>
+                    </a>
+                  ))}
+                </div>
+              ) : null}
+              <div className="text-[10px] text-amber-700/70 mt-0.5">{e.byName}</div>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -2667,6 +2735,19 @@ export function ContractorPortal() {
                   )}
                 </div>
 
+                {/* What the office wrote about this stage — read on site. */}
+                {apt && (() => {
+                  const stId = a.stageId || apt.currentStageId;
+                  if (!stId) return null;
+                  return (
+                    <SiteNotes
+                      note={stageNotes.find(n => n.apartmentId === a.apartmentId && n.stageId === stId)}
+                      stage={stages.find(st => st.id === stId)}
+                      lang={readLang}
+                      title={s.siteNotesTitle || w('From the office', 'מהמשרד', 'Из офиса')} />
+                  );
+                })()}
+
                 {/* Stage history panel */}
                 {showHistory && apt && (() => {
                   const stageDates = apt.stageDates ?? {};
@@ -3353,6 +3434,15 @@ export function ContractorPortal() {
               <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
                 {workHere.step === 'view' && (
                   <>
+                    {/* What the office wrote about the stage this unit is on —
+                        read BEFORE the work starts, which is the whole point. */}
+                    {apt.currentStageId && (
+                      <SiteNotes
+                        note={stageNotes.find(n => n.apartmentId === apt.id && n.stageId === apt.currentStageId)}
+                        stage={curStage ?? undefined}
+                        lang={readLang}
+                        title={s.siteNotesTitle || w('From the office', 'מהמשרד', 'Из офиса')} />
+                    )}
                     {aptTasks.filter(t => t.contractorId === contractorId && isLiveProblem(t) && t.problem!.status !== 'waiting').map(t => (
                       <button key={`fix|${t.id}`} data-fix-for={t.id}
                         onClick={() => { closeSheet(); arriveClosingRef.current = true; setSelectedAssignment(t); }}

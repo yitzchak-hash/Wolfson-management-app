@@ -4,7 +4,7 @@ import { Apartment, BuildingId, Stage } from '../../types';
 import { useStore } from '../../data/store';
 import { PROBLEM_FILL } from '../../data/problems';
 import {
-  FloorRow, RowMode, aptCol, aptSpan, buildFloorRows, positionMap, roofHeightPx, rowCells,
+  FloorRow, RowMode, aptCol, aptSpan, buildFloorRows, colNameOf, positionMap, roofHeightPx, rowCells,
   rowHeightPx, rowLabelText, rowPillLabel,
 } from '../../data/floorRows';
 
@@ -667,11 +667,12 @@ function BuildingColumn({
 }: ColumnProps) {
   const ui = useStore(state => state.mainUiStrings);
   const heights = useStore(state => state.boardSettings[state.currentProjectId]?.floorHeights?.[buildingId]);
+  const layout = useStore(state => state.boardSettings[state.currentProjectId]?.buildingLayout?.[buildingId]);
   const stageMap = useMemo(() => new Map(stages.map(s => [s.id, s])), [stages]);
   const pos = useMemo(() => positionMap(buildingId, apartments), [buildingId, apartments]);
   const rows: FloorRow[] = useMemo(
-    () => buildFloorRows(buildingId, apartments, heights),
-    [buildingId, apartments, heights]);
+    () => buildFloorRows(buildingId, apartments, heights, layout),
+    [buildingId, apartments, heights, layout]);
   const mode: RowMode = compact ? 'compact' : phone ? 'phone' : 'desktop';
   const rowPx = useMemo(() => rows.map(r => rowHeightPx(r, buildingId, mode)), [rows, buildingId, mode]);
   const roofH = roofHeightPx(mode);
@@ -745,6 +746,37 @@ function BuildingColumn({
             <div className="flex-1 rounded-md" style={{ backgroundColor: '#bfdbfe' }} />
           </div>
         </div>
+
+        {/* What the four squares across a row are CALLED, when the office
+            named them in the layout studio. Drawn once under the roof — a
+            heading for the columns, never repeated per floor. */}
+        {(() => {
+          if (compact) return null;
+          const wide = Math.max(4, ...rows.map(r => r.cols));
+          const names = Array.from({ length: wide }, (_, i) => colNameOf(layout, i + 1));
+          if (!names.some(Boolean)) return null;
+          const leftN = Math.ceil(wide / 2);
+          const cellOf = (i: number) => (
+            <div key={i} data-position-name={i + 1}
+              className="min-w-0 text-center text-gray-500 font-semibold truncate"
+              style={{ flex: '1 1 0%', fontSize: phone ? '7.5px' : '8.5px' }}>{names[i]}</div>
+          );
+          return (
+            <div className="flex items-stretch" data-position-names
+              style={{ borderBottom: '1px solid #e9edf2', backgroundColor: '#f8fafc' }}>
+              {!phone && <div className="flex-shrink-0" style={{ width: `${LABEL_W}px`, borderRight: '1px solid #e2e8f0' }} />}
+              <div className={`flex flex-1 items-center ${padClass} min-w-0`}>
+                <div className={`flex ${gapCls} min-w-0`} style={{ flex: `${leftN} 1 0%` }}>
+                  {names.slice(0, leftN).map((_, i) => cellOf(i))}
+                </div>
+                <div className="flex-shrink-0" style={{ width: compact || phone ? 10 : 14 }} />
+                <div className={`flex ${gapCls} min-w-0`} style={{ flex: `${wide - leftN} 1 0%` }}>
+                  {names.slice(leftN).map((_, i) => cellOf(i + leftN))}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {rows.map((row, ri) => {
           const h = rowPx[ri];

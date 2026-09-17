@@ -34,6 +34,8 @@ export interface FloorRow {
   key: string;
   /** The number printed on the row's label, '' when the row has no number. */
   num: string;
+  /** The name the office typed for this floor, when it typed one. */
+  name?: string;
   kind: RowKind;
   /** Positions across this row — at least 4, more when a unit was placed further out. */
   cols: number;
@@ -42,6 +44,34 @@ export interface FloorRow {
 
 /** buildingId → floor key → row height. Absent means normal. */
 export type FloorHeights = Record<string, Record<string, RowHeight>>;
+
+/**
+ * What the office has SAID about a building's shape, beyond the records
+ * themselves — the names it gave the floors and the four positions, and the
+ * floors it added or took out (owner, 2026-09-17). It rides in
+ * `BoardSetting.buildingLayout`, so persist / sync / export / import need no
+ * new key, exactly like `floorHeights`.
+ *
+ * A floor is never hidden while a record still sits on it: taking a floor out
+ * is a decision about an EMPTY row, and a row holding somebody's job is not
+ * the studio's to remove.
+ */
+export interface BuildingLayout {
+  /** floor key (`String(floor)`) → the name on that row's label. */
+  floorNames?: Record<string, string>;
+  /** Position 1..n → what that square across the row is called. */
+  colNames?: string[];
+  /** Floors added by hand, beyond the canonical / record-derived ones. */
+  addFloors?: number[];
+  /** Floors the office took out. Honoured only while the floor is empty. */
+  hideFloors?: number[];
+}
+export type BuildingLayouts = Record<string, BuildingLayout>;
+
+/** What position `col` is called, or '' — 1-based, as the rows count. */
+export function colNameOf(layout: BuildingLayout | null | undefined, col: number): string {
+  return (layout?.colNames?.[col - 1] ?? '').trim();
+}
 
 export function isWolfsonBuilding(buildingId: string): boolean {
   return /^A\d/.test(buildingId);
@@ -91,6 +121,9 @@ export function rowKindOf(buildingId: string, floor: number): RowKind {
 
 /** The number on the row label — Wolfson's towers print one lower than the record floor. */
 export function rowNumOf(buildingId: string, floor: number): string {
+  // A floor added between two others is a half step (3.5). There is no tidy
+  // number for it — it carries the name the office gives it instead.
+  if (!Number.isInteger(floor) && floor !== -0.5) return '';
   if (isWolfsonBuilding(buildingId)) {
     if (floor >= 2) return String(floor - 1);
     if (floor === 1) return '1';
@@ -118,21 +151,26 @@ function wolfsonCanonicalFloors(buildingId: string): number[] {
 }
 
 /** The floors a building draws, top first. */
-export function floorsOf(buildingId: string, apartments: Apartment[]): number[] {
+export function floorsOf(buildingId: string, apartments: Apartment[], layout?: BuildingLayout | null): number[] {
   const set = new Set<number>();
   if (isWolfsonBuilding(buildingId)) wolfsonCanonicalFloors(buildingId).forEach(f => set.add(f));
+  layout?.addFloors?.forEach(f => { if (Number.isFinite(f)) set.add(f); });
+  const holds = new Set<number>();
   let groundHasUnit = false;
   for (const a of apartments) {
     if (a.buildingId !== buildingId) continue;
     if (!Number.isFinite(a.floor)) continue;
     set.add(a.floor);
-    if (a.isDuplexApt) set.add(a.floor + 1);
+    holds.add(a.floor);
+    if (a.isDuplexApt) { set.add(a.floor + 1); holds.add(a.floor + 1); }
     if (a.floor === 0 && isCountableApartment(a)) groundHasUnit = true;
   }
   // The empty Ground / Commercial row is gone from the Wolfson model — but a
   // REAL unit somebody named there is never hidden: the row comes back for
   // as long as it holds one.
   if (isWolfsonBuilding(buildingId) && !groundHasUnit) set.delete(0);
+  // A floor the office took out — but never one that still holds a record.
+  layout?.hideFloors?.forEach(f => { if (!holds.has(f)) set.delete(f); });
   return [...set].sort((a, b) => b - a);
 }
 
@@ -140,16 +178,19 @@ export function buildFloorRows(
   buildingId: string,
   apartments: Apartment[],
   heights?: Record<string, RowHeight> | null,
+  layout?: BuildingLayout | null,
 ): FloorRow[] {
-  const floors = floorsOf(buildingId, apartments);
+  const floors = floorsOf(buildingId, apartments, layout);
   const { colsByFloor } = placeUnits(buildingId, apartments);
   return floors.map(floor => {
     const cols = Math.max(4, colsByFloor.get(floor) ?? 0);
     const key = floorKey(floor);
     const h = heights?.[key];
+    const name = (layout?.floorNames?.[key] ?? '').trim();
     return {
       floor, key,
       num: rowNumOf(buildingId, floor),
+      name: name || undefined,
       kind: rowKindOf(buildingId, floor),
       cols,
       height: h === 'tall' || h === 'short' ? h : 'normal',
@@ -255,11 +296,15 @@ export function rowCells(row: FloorRow, pos: Map<string, Apartment>): RowCell[] 
 /** The phone pill over the stairwell: the row's number, or one letter for a named row. */
 export function rowPillLabel(row: FloorRow): string {
   if (row.num) return row.num;
+  if (row.name) return row.name.trim().charAt(0).toUpperCase();
   return row.kind === 'lobby' ? 'L' : row.kind === 'ground' ? 'G' : '';
 }
 
-/** The row's printed label — "15", "1 · Lobby", "Ground / Commercial", "-2" — given the two translated words. */
-export function rowLabelText(row: Pick<FloorRow, 'num' | 'kind'>, lobbyWord: string, groundWord: string): string {
+/** The row's printed label — the office's own name, else "15", "1 · Lobby", "Ground / Commercial", "-2". */
+export function rowLabelText(row: Pick<FloorRow, 'num' | 'kind' | 'name'>, lobbyWord: string, groundWord: string): string {
+  // A name the office typed IS the label — it can say "-2 · Pool" itself if
+  // it wants the number kept.
+  if (row.name?.trim()) return row.name.trim();
   if (row.kind === 'lobby') return row.num ? `${row.num} · ${lobbyWord}` : lobbyWord;
   if (row.kind === 'ground') return groundWord;
   return row.num;

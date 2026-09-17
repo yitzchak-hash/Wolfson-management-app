@@ -8408,3 +8408,82 @@ the viewer's full-screen / info / Drive / download / arrows, Escape leaving
 the drawer open, a `.dwg` opening as a file card rather than a broken picture,
 the stage advancing on a cross-off, and the worker's task stored with no
 Cyrillic in it).
+
+---
+
+# v2 — the buildings round: floors with names, a row that merges, notes that reach the site
+
+## `BoardSetting.buildingLayout` — what the office SAID about a building
+`BuildingLayout` in `floorRows.ts` (`floorNames` · `colNames` · `addFloors` ·
+`hideFloors`), keyed by building, riding `boardSettings` exactly like
+`floorHeights` — no new state key, nothing for the backup audit. `floorsOf`
+and `buildFloorRows` take it; `FloorRow.name` carries the office's own label
+and `rowLabelText` prefers it (so "-2 · Pool level" replaces "-2", and the
+office can keep the number by typing it). The diagram draws the position
+names ONCE under the roof (`data-position-names`) — a heading for the
+columns, never repeated per floor.
+
+**A floor is never hidden while a record sits on it.** `hideFloors` is
+honoured only for an empty row, and `removeFloor` refuses out loud when a
+countable unit is there; the blank placeholders on an empty floor go with it.
+**A floor added between two others is the HALF STEP** (3.5) and `rowNumOf`
+returns '' for a non-integer floor — there is no tidy number for it, so it
+wears the name the office gives it. Past the top or the bottom it is the next
+whole one.
+
+## Merging: one press for the row, and a warning before anything is blanked
+The owner's "it's not letting me merge" was a floor holding ONE apartment and
+three empty squares: the merge button needs two selected things, so a row like
+that could only be merged by hunting every empty square first.
+**`Merge the whole row into one`** is a row in the cell, empty and floor
+menus — real units first so the kept one is a real unit.
+
+And `doMerge(ids, confirmed)` now raises `mergeWarn` when the merge would
+clear a second REAL apartment's number and name, naming each one. That
+destruction was always there (unmerge restores the positions, never what was
+written on them); it was just silent. **A merge of empty squares still asks
+nothing.**
+
+## A square with a name and no number
+The pool, the gym, the machine room on minus one to minus four. `Name this
+square…` on an empty position mints the blank record and opens the rename box
+in one gesture, and the bottom bar's Rename takes a single selected empty the
+same way. `isCountableApartment` already counted a named, numberless unit —
+what was missing was a way to make one.
+
+## Save is a BEFORE and AFTER picture
+`MiniBuilding` (module level) draws a building at glance size from the SAME row
+model, so the two panels cannot drift from the studio. The save screen shows
+every building twice — `data-save-side="before"` from the live records,
+`"after"` from the draft — with each square ringed green (new), amber
+(changed) or red struck (gone); `changedIds`/`newIds`/`goneIds` are derived
+from the change list itself. The written list is still there, folded behind
+`data-save-list-toggle`. The modal is 980 wide for it.
+
+## Notes are the instructions; the messages are the conversation
+OWNER RULING (2026-09-17): "the task messages ARE the notes… the notes should
+have a different function. I should be able to put notes there, then when we
+get to that stage or task, the contractor will see it on the site."
+
+- `StageNoteEntry.officeOnly?: boolean` — **absent means the worker sees it.**
+  `appendStageNoteEntry` takes it; `setStageNoteEntryVisibility(noteId,
+  entryId, officeOnly)` flips one bullet (store action, persist + fsSet).
+- The notes tab draws the audience ON the line (`data-note-audience`, "the
+  worker sees this" / "office only") and the composer carries the same switch
+  (`data-note-keep-in`) — off by default.
+- The portal's `SiteNotes` block (module level, `data-site-notes`) renders the
+  apartment's notes for the task's stage, translated into the worker's own
+  language through `Translated`, with memos as players and pictures as
+  thumbs. It is drawn in TWO places: the task sheet (under the description)
+  and the map's work sheet, before "I'm going to work here" — reading it
+  before the work starts is the whole point.
+- `ContractorUiStrings.siteNotesTitle` is optional with a fallback, the
+  standing rule for that interface.
+
+Harness: `scratchpad/layoutround-probe.mjs` (33 checks, three contexts).
+Its own trap, paid for: **a row's LABEL is not its record floor** — Wolfson's
+towers print one lower, so a probe that opens the menu on "13" is editing
+floor 14, and a refusal that never came reads as the product's fault. And
+`persist()` is debounced 250ms — read localStorage after a wait, never in the
+same tick as the write.
+Re-encoded: `builder2-probe` (the merge now asks; the change list is folded).

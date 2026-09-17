@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, Check, Clock, User, Paperclip, ExternalLink, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Check, Clock, User, Paperclip, ExternalLink, X, Eye, EyeOff, HardHat } from 'lucide-react';
 import { Stage, User as UserType, StageNoteAttachment, StageNoteEntry, getStageName } from '../../types';
 import { useStore } from '../../data/store';
 import { VoiceMemoPlayer } from '../ui/VoiceMemo';
@@ -49,11 +49,14 @@ type Bullet = {
   attachments?: StageNoteAttachment[];
   transcriptFor?: (attId: string) => string | undefined;
   onTranscript?: (attId: string, text: string) => void;
+  /** An office bullet — the only kind whose audience the office decides. */
+  noteId?: string;
+  officeOnly?: boolean;
 };
 
 export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }: StageNotesSectionProps) {
   const {
-    getStageNote, appendStageNoteEntry,
+    getStageNote, appendStageNoteEntry, setStageNoteEntryVisibility,
     apartments, contractors, contractorAssignments, contractorNotes, contractorPhotos,
     addContractorAssignment, updateContractorAssignment, deleteContractorAssignment, updateContractorNote,
   } = useStore();
@@ -69,6 +72,9 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [pending, setPending] = useState<Record<string, PendingAttachment[]>>({});
   const [uploading, setUploading] = useState<Record<string, number>>({});
+  /** Per stage: is the note being written for the office alone? Off by default
+   *  — a stage note is for the site now (owner, 2026-09-17). */
+  const [keepIn, setKeepIn] = useState<Record<string, boolean>>({});
 
   const isCurrent = (stageId: string) => apt?.currentStageId === stageId;
   const defaultOpen = (stageId: string) => {
@@ -151,6 +157,7 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
     if (!text && atts.length === 0) return;
     appendStageNoteEntry(apartmentId, stageId, {
       text,
+      officeOnly: !!keepIn[stageId],
       attachments: atts.map(({ id, filename, mimeType, dataUrl, driveFileId, driveUrl, transcript }) =>
         ({ id, filename, mimeType, dataUrl, driveFileId, driveUrl, transcript })),
     }, currentUser);
@@ -194,7 +201,10 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
               : undefined),
           }]
         : []);
-    const office: Bullet[] = entries.map(e => ({ id: e.id, at: e.at, byName: e.byName, text: e.text, attachments: e.attachments }));
+    const office: Bullet[] = entries.map(e => ({
+      id: e.id, at: e.at, byName: e.byName, text: e.text, attachments: e.attachments,
+      noteId: note?.id, officeOnly: e.officeOnly,
+    }));
     const stageTaskIds = new Set(contractorAssignments
       .filter(a => a.apartmentId === apartmentId && (a.stageId === stageId || (!a.stageId && stageId === sortedStages[0]?.id)))
       .map(a => a.id));
@@ -331,11 +341,25 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
                               ))}
                             </div>
                           ) : null}
-                          {!b.attachments?.some(a => a.mimeType?.startsWith('audio/')) && (
-                            <span data-notes-signoff className="text-[10px] text-gray-400 whitespace-nowrap">
-                              {b.byName} · {format(new Date(b.at), 'd MMM')}
-                            </span>
-                          )}
+                          <span className="inline-flex items-center gap-1.5">
+                            {!b.attachments?.some(a => a.mimeType?.startsWith('audio/')) && (
+                              <span data-notes-signoff className="text-[10px] text-gray-400 whitespace-nowrap">
+                                {b.byName} · {format(new Date(b.at), 'd MMM')}
+                              </span>
+                            )}
+                            {/* Who reads this line. A note is FOR THE SITE by
+                                default; the eye is the office keeping one back. */}
+                            {b.noteId && (
+                              <button data-note-audience={b.id} data-office-only={b.officeOnly ? '1' : undefined}
+                                onClick={() => setStageNoteEntryVisibility(b.noteId!, b.id, !b.officeOnly)}
+                                title={b.officeOnly ? s.noteOfficeOnly : s.noteWorkerSees}
+                                className={`inline-flex items-center gap-1 text-[9.5px] font-semibold rounded-full px-1.5 py-0.5 border ${
+                                  b.officeOnly ? 'text-gray-400 border-gray-200' : 'text-emerald-700 border-emerald-200 bg-emerald-50'}`}>
+                                {b.officeOnly ? <EyeOff size={9} /> : <Eye size={9} />}
+                                {b.officeOnly ? s.noteOfficeOnly : s.noteWorkerSees}
+                              </button>
+                            )}
+                          </span>
                         </div>
                       </li>
                     ))}
@@ -373,6 +397,13 @@ export function StageNotesSection({ apartmentId, stages, currentUser, onSaved }:
 
                 {/* THE BOX at the bottom: "Add notes for <Stage>" — Send puts the note above. */}
                 <div>
+                  <button data-note-keep-in={stage.id} data-on={keepIn[stage.id] ? '1' : undefined}
+                    onClick={() => setKeepIn(k => ({ ...k, [stage.id]: !k[stage.id] }))}
+                    className={`mb-1.5 inline-flex items-center gap-1.5 text-[10.5px] font-semibold rounded-full px-2 py-0.5 border ${
+                      keepIn[stage.id] ? 'text-gray-500 border-gray-200 bg-gray-50' : 'text-emerald-700 border-emerald-200 bg-emerald-50'}`}>
+                    {keepIn[stage.id] ? <EyeOff size={10} /> : <HardHat size={10} />}
+                    {keepIn[stage.id] ? s.noteOfficeOnly : s.noteSiteHint}
+                  </button>
                   <MessageBox
                     hook="stage-note-box"
                     value={drafts[stage.id] ?? ''}

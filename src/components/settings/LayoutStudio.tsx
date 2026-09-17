@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Undo2, Save, ArrowUp, ArrowDown, Merge, Split, Pencil, Hash, Rows3, Plus, Minus } from 'lucide-react';
+import { X, Undo2, Save, ArrowUp, ArrowDown, Merge, Split, Pencil, Hash, Rows3, Plus, Minus, Type, Columns3, Trash2, PanelTop, PanelBottom } from 'lucide-react';
 import { Apartment, MainUiStrings, aptLabel, isCountableApartment, projectColor } from '../../types';
 import { useStore } from '../../data/store';
 import {
-  FloorRow, RowHeight, aptCol, aptSpan, buildFloorRows, floorKey, placedColumns, positionMap, rowCells, rowLabelText,
+  BuildingLayout, BuildingLayouts, FloorRow, RowHeight, aptCol, aptSpan, buildFloorRows, colNameOf, floorKey,
+  placedColumns, positionMap, rowCells, rowLabelText,
 } from '../../data/floorRows';
 
 /**
@@ -38,12 +39,30 @@ const LABEL_W = 64;
 const LONG_PRESS_MS = 500;
 
 type Heights = Record<string, Record<string, 'tall' | 'short'>>;
-interface Draft { apts: Apartment[]; heights: Heights }
+interface Draft { apts: Apartment[]; heights: Heights; layouts: BuildingLayouts }
 
 const fmt = (t: string, v: Record<string, string | number>) =>
   t.replace(/\{(\w+)\}/g, (_, k: string) => String(v[k] ?? ''));
 
-const cloneDraft = (d: Draft): Draft => ({ apts: d.apts.map(a => ({ ...a })), heights: structuredClone(d.heights) });
+const cloneDraft = (d: Draft): Draft => ({
+  apts: d.apts.map(a => ({ ...a })),
+  heights: structuredClone(d.heights),
+  layouts: structuredClone(d.layouts),
+});
+
+/** One building's layout bag, written back with the empty fields dropped. */
+function withLayout(d: Draft, bid: string, fn: (cur: BuildingLayout) => BuildingLayout): Draft {
+  const cur: BuildingLayout = d.layouts[bid] ?? {};
+  const next = fn({ ...cur });
+  const clean: BuildingLayout = {};
+  if (next.floorNames && Object.keys(next.floorNames).length) clean.floorNames = next.floorNames;
+  if (next.colNames && next.colNames.some(n => n.trim())) clean.colNames = next.colNames;
+  if (next.addFloors?.length) clean.addFloors = next.addFloors;
+  if (next.hideFloors?.length) clean.hideFloors = next.hideFloors;
+  const layouts = { ...d.layouts };
+  if (Object.keys(clean).length) layouts[bid] = clean; else delete layouts[bid];
+  return { ...d, layouts };
+}
 
 /**
  * An EMPTY position is selectable too — it has no record, so its selection id
@@ -130,7 +149,7 @@ const inSequence = (row: FloorRow) => row.kind === 'normal' || row.kind === 'wid
  * HAVE a number. A unit whose number was left blank stays blank.
  */
 function resequenceTower(d: Draft, bid: string): Draft {
-  const rows = buildFloorRows(bid, d.apts).filter(inSequence).sort((a, b) => a.floor - b.floor);
+  const rows = buildFloorRows(bid, d.apts, d.heights[bid], d.layouts[bid]).filter(inSequence).sort((a, b) => a.floor - b.floor);
   const ordered: Apartment[] = [];
   for (const row of rows) ordered.push(...unitsOn(d.apts, bid, row.floor).filter(a => a.apartmentNumber.trim() !== ''));
   if (!ordered.length) return d;
@@ -313,6 +332,67 @@ function Btn({ children, onClick, primary, hook, disabled, tone }: {
   );
 }
 
+/**
+ * THE BEFORE / AFTER PICTURE (owner, 2026-09-17: "I wanted to go to a total
+ * before and after… and I see like highlights of what changed").
+ *
+ * The same buildings drawn twice at a glance-size, from the SAME row model as
+ * the studio itself — the left panel from the records as they stand, the
+ * right from the draft — with every square that is new, gone or different
+ * ringed. A list of sentences says what changed; a picture says WHERE.
+ */
+const MINI_W = 21;
+const MINI_H = 15;
+
+function MiniBuilding({ bid, apts, heights, layout, mark, lobbyWord, groundWord }: {
+  bid: string;
+  apts: Apartment[];
+  heights?: Record<string, RowHeight> | null;
+  layout?: BuildingLayout | null;
+  mark: (id: string) => 'new' | 'gone' | 'changed' | null;
+  lobbyWord: string;
+  groundWord: string;
+}) {
+  const rows = buildFloorRows(bid, apts, heights, layout);
+  const pos = positionMap(bid, apts);
+  const RING: Record<string, string> = { new: '#16a34a', gone: '#dc2626', changed: '#d97706' };
+  return (
+    <div data-mini-building={bid} className="inline-flex flex-col rounded-lg border border-gray-200 overflow-hidden bg-white">
+      <div className="text-center text-[9px] font-bold text-white tracking-widest py-0.5" style={{ backgroundColor: '#1e3a5f' }}>{bid}</div>
+      {rows.map(row => (
+        <div key={row.key} className="flex items-center" style={{ height: MINI_H + 3, borderBottom: '1px solid #f1f5f9' }}>
+          <div className="flex-shrink-0 text-center text-[7px] font-bold text-gray-400 truncate"
+            style={{ width: 30, padding: '0 2px' }} title={rowLabelText(row, lobbyWord, groundWord)}>
+            {rowLabelText(row, lobbyWord, groundWord)}
+          </div>
+          <div className="flex items-center" style={{ gap: 2, paddingInline: 2 }}>
+            {rowCells(row, pos).map(cell => {
+              const a = cell.apt;
+              const w = MINI_W * cell.span + 2 * (cell.span - 1);
+              const m = a ? mark(a.id) : null;
+              const real = a && isCountableApartment(a);
+              return (
+                <div key={cell.col} data-mini-cell={a?.id ?? `${row.floor}-${cell.col}`} data-mini-mark={m ?? undefined}
+                  className="flex items-center justify-center overflow-hidden"
+                  style={{
+                    width: w, height: MINI_H, borderRadius: 3, fontSize: 7.5, fontWeight: 700, lineHeight: 1,
+                    color: m ? RING[m] : '#64748b',
+                    backgroundColor: real ? '#fff' : '#f8fafc',
+                    border: `${m ? 1.6 : 1}px ${real ? 'solid' : 'dashed'} ${m ? RING[m] : '#e2e8f0'}`,
+                    boxShadow: m ? `0 0 0 1.5px ${RING[m]}33` : undefined,
+                    textDecoration: m === 'gone' ? 'line-through' : undefined,
+                  }}>
+                  {a ? (a.apartmentNumber?.trim() || (a.displayName?.trim() ? a.displayName.trim().slice(0, 3) : '')) : ''}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 type Menu =
@@ -325,6 +405,9 @@ type Modal =
   | { kind: 'number'; id: string }
   | { kind: 'move'; ids: string[]; toFloor: number; toCol?: number }
   | { kind: 'renumber'; bid: string; floor: number }
+  | { kind: 'floorName'; bid: string; floor: number }
+  | { kind: 'posNames'; bid: string }
+  | { kind: 'mergeWarn'; ids: string[]; lose: string[] }
   | { kind: 'save' }
   | { kind: 'discard' };
 
@@ -339,6 +422,7 @@ export function LayoutStudio({ onClose, onToast }: {
   const stages = useStore(st => st.stages);
   const liveApartments = useStore(st => st.apartments);
   const liveHeights = useStore(st => st.boardSettings[st.currentProjectId]?.floorHeights);
+  const liveLayouts = useStore(st => st.boardSettings[st.currentProjectId]?.buildingLayout);
   const currentUser = useStore(st => st.currentUser);
   const updateApartment = useStore(st => st.updateApartment);
   const addApartment = useStore(st => st.addApartment);
@@ -361,8 +445,9 @@ export function LayoutStudio({ onClose, onToast }: {
     return {
       apts: liveApartments.filter(a => a.buildingId !== 'G').map(a => ({ ...a, colPosition: placed.get(a.id) ?? a.colPosition })),
       heights: structuredClone(liveHeights ?? {}),
+      layouts: structuredClone(liveLayouts ?? {}),
     };
-  }, [liveApartments, liveHeights, buildings]);
+  }, [liveApartments, liveHeights, liveLayouts, buildings]);
 
   const [draft, setDraft] = useState<Draft>(fresh);
   const [history, setHistory] = useState<Draft[]>([]);
@@ -375,6 +460,8 @@ export function LayoutStudio({ onClose, onToast }: {
   const [field, setField] = useState('');
   const [moveChoice, setMoveChoice] = useState<'keep' | 'renumber'>('keep');
   const [renum, setRenum] = useState<{ start: string; dir: 'ltr' | 'rtl' }>({ start: '1', dir: 'ltr' });
+  const [posFields, setPosFields] = useState<string[]>([]);
+  const [showList, setShowList] = useState(false);
 
   const gridRef = useRef<HTMLDivElement>(null);
   const lassoRef = useRef<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
@@ -403,7 +490,7 @@ export function LayoutStudio({ onClose, onToast }: {
   // ── Every building, side by side (owner, 2026-09-15: all three at once) ──
   const perB = useMemo(() => buildings.map(b => ({
     id: b.id,
-    rows: buildFloorRows(b.id, draft.apts, draft.heights[b.id]),
+    rows: buildFloorRows(b.id, draft.apts, draft.heights[b.id], draft.layouts[b.id]),
     pos: positionMap(b.id, draft.apts),
   })), [buildings, draft]);
   const rowsOf = (bid: string) => perB.find(x => x.id === bid)?.rows ?? [];
@@ -520,7 +607,86 @@ export function LayoutStudio({ onClose, onToast }: {
     setModal(null);
     onToast(fmt(s.lbMoved, { f: labelOfFloor(bid, toFloor) }));
   }
-  function doMerge(ids: string[]) {
+  // ── Floors: name, add, remove ────────────────────────────────────────────
+  function applyFloorName() {
+    if (modal?.kind !== 'floorName') return;
+    const name = field.trim();
+    const key = floorKey(modal.floor);
+    edit(d => withLayout(d, modal.bid, cur => {
+      const names = { ...(cur.floorNames ?? {}) };
+      if (name) names[key] = name; else delete names[key];
+      return { ...cur, floorNames: names };
+    }));
+    setModal(null);
+  }
+  function applyPosNames() {
+    if (modal?.kind !== 'posNames') return;
+    const names = posFields.map(n => n.trim());
+    edit(d => withLayout(d, modal.bid, cur => ({ ...cur, colNames: names })));
+    setModal(null);
+  }
+  /**
+   * A floor between two others is the HALF STEP between them; past the top or
+   * the bottom it is the next whole one. Nothing is renumbered — a new floor
+   * is an empty row waiting to be named and filled.
+   */
+  function addFloor(bid: string, at: number, dir: 'above' | 'below') {
+    const floors = rowsOf(bid).map(r => r.floor);
+    const neighbour = dir === 'above'
+      ? Math.min(...floors.filter(f => f > at), Infinity)
+      : Math.max(...floors.filter(f => f < at), -Infinity);
+    const next = Number.isFinite(neighbour) ? (at + neighbour) / 2 : at + (dir === 'above' ? 1 : -1);
+    if (floors.includes(next)) { onToast(s.lbFloorExists, 'error'); return; }
+    edit(d => withLayout(d, bid, cur => ({ ...cur, addFloors: [...(cur.addFloors ?? []), next] })));
+    onToast(s.lbFloorAdded);
+  }
+  function removeFloor(bid: string, floor: number) {
+    const here = draft.apts.filter(a => a.buildingId === bid && a.floor === floor);
+    if (here.some(a => isCountableApartment(a))) { onToast(s.lbRemoveFloorRefused, 'error'); return; }
+    edit(d => {
+      // The blank placeholders on an empty floor go with it; nothing named is
+      // ever touched (the check above is what guarantees that).
+      const apts = d.apts.filter(a => !(a.buildingId === bid && a.floor === floor));
+      const next = withLayout({ ...d, apts }, bid, cur => ({
+        ...cur,
+        addFloors: (cur.addFloors ?? []).filter(f => f !== floor),
+        hideFloors: (cur.addFloors ?? []).includes(floor) ? cur.hideFloors : [...(cur.hideFloors ?? []), floor],
+        floorNames: (() => { const n = { ...(cur.floorNames ?? {}) }; delete n[floorKey(floor)]; return n; })(),
+      }));
+      return next;
+    });
+    onToast(s.lbFloorRemoved);
+  }
+
+  /** Every position of one row, real units first so the merge keeps a real one. */
+  function rowMergeIds(bid: string, floor: number): string[] {
+    const row = rowOfFloor(bid, floor);
+    if (!row) return [];
+    const cells = rowCells(row, posOf(bid));
+    const real = cells.filter(c => c.apt).map(c => c.apt!.id);
+    const empties = cells.filter(c => !c.apt).map(c => emptyId(bid, floor, c.col));
+    return [...real, ...empties];
+  }
+  /** Merging the WHOLE row — the one press the owner asked for. */
+  function doMergeRow(bid: string, floor: number) {
+    const ids = rowMergeIds(bid, floor);
+    if (ids.length < 2) { onToast(s.lbMergeNeedsRow, 'error'); return; }
+    doMerge(ids);
+  }
+  /** The units a merge would blank — their number and name are cleared. */
+  function mergeLosers(ids: string[]): string[] {
+    const units = ids.map(id => byId.get(id)).filter((a): a is Apartment => !!a && !a.coveredBy);
+    return units.slice(1).filter(u => isCountableApartment(u)).map(u => unitLabel(u));
+  }
+
+  function doMerge(ids: string[], confirmed = false) {
+    // Merging keeps the FIRST unit and blanks the rest — their number and
+    // name go. That is fine for a row of empty squares and is destruction on
+    // a row of real apartments, so the second real one asks first.
+    if (!confirmed) {
+      const lose = mergeLosers(ids);
+      if (lose.length) { setModal({ kind: 'mergeWarn', ids, lose }); return; }
+    }
     // An empty position in the selection becomes a blank record first — the
     // spot is then a real square the merge can span.
     const cur = cloneDraft(draftRef.current);
@@ -538,6 +704,19 @@ export function LayoutStudio({ onClose, onToast }: {
     setSel([realIds[0]]);
     onToast(s.lbMerged);
   }
+  /**
+   * A square with a NAME and no number — the pool, the gym (owner,
+   * 2026-09-17). The record is minted on the spot and the rename box opens
+   * over it, so naming an empty square is one gesture.
+   */
+  function nameEmpty(bid: string, floor: number, col: number) {
+    const rec = blankRecord(bid, floor, col);
+    edit(d => ({ ...d, apts: [...d.apts, rec] }));
+    setSel([rec.id]);
+    setField('');
+    setModal({ kind: 'rename', id: rec.id });
+  }
+
   function doUnmerge(id: string) {
     edit(d => unmergeUnit(d, id));
     onToast(s.lbUnmerged);
@@ -614,9 +793,26 @@ export function LayoutStudio({ onClose, onToast }: {
     if (JSON.stringify(liveHeights ?? {}) !== JSON.stringify(draft.heights)) {
       out.push({ key: '__heights', title: s.lbChangeHeights, lines: [], write: () => setBoardSetting('floorHeights', draft.heights) });
     }
+    if (JSON.stringify(liveLayouts ?? {}) !== JSON.stringify(draft.layouts)) {
+      out.push({ key: '__layout', title: s.lbChangeLayout, lines: [], write: () => setBoardSetting('buildingLayout', draft.layouts) });
+    }
     return out;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modal, draft, liveApartments, liveHeights, currentUser]);
+  }, [modal, draft, liveApartments, liveHeights, liveLayouts, currentUser]);
+
+  /** Which squares the picture rings — worked out from the change list itself. */
+  const { changedIds, newIds, goneIds } = useMemo(() => {
+    const live = new Set(liveApartments.map(a => a.id));
+    const inDraft = new Set(draft.apts.map(a => a.id));
+    const changed = new Set<string>(), fresh = new Set<string>(), gone = new Set<string>();
+    for (const c of changes) {
+      if (c.key.startsWith('__')) continue;
+      if (!live.has(c.key)) fresh.add(c.key);
+      else if (!inDraft.has(c.key)) gone.add(c.key);
+      else changed.add(c.key);
+    }
+    return { changedIds: changed, newIds: fresh, goneIds: gone };
+  }, [changes, liveApartments, draft]);
 
   function writeAll() {
     changes.forEach(c => c.write());
@@ -660,6 +856,29 @@ export function LayoutStudio({ onClose, onToast }: {
   const menuIds = menu?.kind === 'cell' ? (sel.includes(menu.id) && selUnits.length > 1 ? selUnits.map(u => u.id) : [menu.id]) : [];
   const canUnmerge = !!menuUnit && (aptSpan(menuUnit) > 1 || draft.apts.some(a => a.coveredBy === menuUnit.id));
   const menuRow = menu ? rowOfFloor(menu.bid, menu.floor) : undefined;
+  /** Opens the floor-name box seeded with what the row says now. */
+  const openFloorName = (bid: string, floor: number) => {
+    const r = rowOfFloor(bid, floor);
+    setField(r?.name ?? (r ? rowLabel(r) : ''));
+    setModal({ kind: 'floorName', bid, floor });
+  };
+  const openPosNames = (bid: string) => {
+    const wide = Math.max(4, ...rowsOf(bid).map(r => r.cols));
+    setPosFields(Array.from({ length: wide }, (_, i) => colNameOf(draft.layouts[bid], i + 1)));
+    setModal({ kind: 'posNames', bid });
+  };
+  /** The rows shared by the cell, empty and floor menus — everything about the FLOOR. */
+  const floorMenuRows = (bid: string, floor: number) => (
+    <>
+      <Item close={() => setMenu(null)} id="merge-row" icon={Merge} label={s.lbMergeRow} onClick={() => doMergeRow(bid, floor)} />
+      <Sep />
+      <Item close={() => setMenu(null)} id="floor-name" icon={Type} label={s.lbRenameFloor} onClick={() => openFloorName(bid, floor)} />
+      <Item close={() => setMenu(null)} id="pos-names" icon={Columns3} label={s.lbPositionNames} onClick={() => openPosNames(bid)} />
+      <Item close={() => setMenu(null)} id="floor-above" icon={PanelTop} label={s.lbAddFloorAbove} onClick={() => addFloor(bid, floor, 'above')} />
+      <Item close={() => setMenu(null)} id="floor-below" icon={PanelBottom} label={s.lbAddFloorBelow} onClick={() => addFloor(bid, floor, 'below')} />
+      <Item close={() => setMenu(null)} id="floor-remove" icon={Trash2} label={s.lbRemoveFloor} onClick={() => removeFloor(bid, floor)} />
+    </>
+  );
 
   const moveInfo = modal?.kind === 'move' ? (() => {
     const first = byId.get(modal.ids[0]);
@@ -875,8 +1094,13 @@ export function LayoutStudio({ onClose, onToast }: {
           <Split size={12} /> {s.lbUnmerge}
         </button>
         <span className="w-px h-5 bg-gray-200 mx-0.5" />
-        <button data-rename-btn disabled={selUnits.length !== 1}
-          onClick={() => { setField(selUnits[0].displayName ?? ''); setModal({ kind: 'rename', id: selUnits[0].id }); }}
+        <button data-rename-btn disabled={selCount !== 1}
+          onClick={() => {
+            // One empty square: mint the record and name it — that is how a
+            // pool or a gym gets onto a basement floor.
+            if (!selUnits.length && selEmpties.length === 1) { const e = selEmpties[0]; nameEmpty(e.bid, e.floor, e.col); return; }
+            setField(selUnits[0].displayName ?? ''); setModal({ kind: 'rename', id: selUnits[0].id });
+          }}
           className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11.5px] font-bold border border-gray-200 text-gray-700 disabled:opacity-40">
           <Pencil size={12} /> {s.lbRename}
         </button>
@@ -917,6 +1141,8 @@ export function LayoutStudio({ onClose, onToast }: {
                 }} />
                 <HeightRow cur={rowOfFloor(menuUnit.buildingId, menuUnit.floor)?.height ?? 'normal'} s={s} onPick={h => { setRowHeight(menuUnit.buildingId, menuUnit.floor, h); setMenu(null); }} />
                 <Sep />
+                {floorMenuRows(menuUnit.buildingId, menuUnit.floor)}
+                <Sep />
                 <Item close={() => setMenu(null)} id="add-position" icon={Plus} label={s.lbAddPosition} onClick={() => edit(d => addPosition(d, menuUnit.buildingId, menuUnit.floor, aptCol(menuUnit) + aptSpan(menuUnit) - 1))} />
                 <Item close={() => setMenu(null)} id="remove-position" icon={Minus} label={s.lbRemovePosition} onClick={() => {
                   const next = removePosition(cloneDraft(draft), menuUnit.buildingId, menuUnit.floor, aptCol(menuUnit));
@@ -928,7 +1154,11 @@ export function LayoutStudio({ onClose, onToast }: {
             {menu.kind === 'empty' && (
               <>
                 <div className="px-3 pt-1 pb-1 text-[9.5px] font-extrabold text-gray-400 tracking-wider">{s.lbBlankSlot.toUpperCase()}</div>
+                <Item close={() => setMenu(null)} id="name-square" icon={Pencil} label={s.lbNameSquare} onClick={() => nameEmpty(menu.bid, menu.floor, menu.col)} />
                 <Item close={() => setMenu(null)} id="merge" icon={Merge} label={`${s.lbMergeSelected} (${selCount})`} disabled={selCount < 2} onClick={() => doMerge(selForMerge())} />
+                <Sep />
+                {floorMenuRows(menu.bid, menu.floor)}
+                <Sep />
                 <Item close={() => setMenu(null)} id="add-position" icon={Plus} label={s.lbAddPosition} onClick={() => edit(d => addPosition(d, menu.bid, menu.floor, menu.col))} />
                 <Item close={() => setMenu(null)} id="remove-position" icon={Minus} label={s.lbRemovePosition} onClick={() => {
                   const next = removePosition(cloneDraft(draft), menu.bid, menu.floor, menu.col);
@@ -948,6 +1178,8 @@ export function LayoutStudio({ onClose, onToast }: {
                   setModal({ kind: 'renumber', bid: menu.bid, floor: menu.floor });
                 }} />
                 <Item close={() => setMenu(null)} id="add-position" icon={Plus} label={s.lbAddPosition} onClick={() => edit(d => addPosition(d, menu.bid, menu.floor, menuRow.cols))} />
+                <Sep />
+                {floorMenuRows(menu.bid, menu.floor)}
               </>
             )}
           </div>
@@ -1024,10 +1256,97 @@ export function LayoutStudio({ onClose, onToast }: {
           </div>
         </Shell>
       )}
+      {modal?.kind === 'floorName' && (
+        <Shell onClose={() => setModal(null)} hook="data-floorname-modal" width={380}>
+          <h3 className="font-bold text-gray-900 mb-1">{s.lbRenameFloor.replace(/…$/, '')}</h3>
+          <div className="text-[11px] text-gray-500 mb-2">{modal.bid} · {labelOfFloor(modal.bid, modal.floor)}</div>
+          <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">{s.lbFloorNameField}</label>
+          <input autoFocus data-enter-own data-floorname-input value={field} onChange={e => setField(e.target.value)}
+            placeholder={s.lbFloorNamePlaceholder}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); applyFloorName(); } }}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-2" />
+          <p className="text-[11px] text-gray-500 mb-4">{s.lbFloorNameHint}</p>
+          <div className="flex gap-2 justify-end">
+            <Btn tone={tone} onClick={() => setModal(null)}>{s.cancel}</Btn>
+            <Btn tone={tone} primary hook="data-modal-apply" onClick={applyFloorName}>{s.lbApply}</Btn>
+          </div>
+        </Shell>
+      )}
+      {modal?.kind === 'posNames' && (
+        <Shell onClose={() => setModal(null)} hook="data-posnames-modal" width={400}>
+          <h3 className="font-bold text-gray-900 mb-1">{s.lbPositionNames.replace(/…$/, '')}</h3>
+          <div className="text-[11px] text-gray-500 mb-3">{modal.bid} — {s.lbPositionNamesHint}</div>
+          <div className="space-y-2 mb-4">
+            {posFields.map((v, i) => (
+              <label key={i} className="flex items-center gap-2">
+                <span className="text-[11px] font-bold text-gray-400 w-20 flex-shrink-0">{fmt(s.lbPositionN, { n: i + 1 })}</span>
+                <input data-enter-own {...{ [`data-pos-name-${i + 1}`]: '' }} value={v}
+                  onChange={e => setPosFields(f => f.map((x, j) => j === i ? e.target.value : x))}
+                  className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm" />
+              </label>
+            ))}
+          </div>
+          <div className="flex gap-2 justify-end">
+            <Btn tone={tone} onClick={() => setModal(null)}>{s.cancel}</Btn>
+            <Btn tone={tone} primary hook="data-modal-apply" onClick={applyPosNames}>{s.lbApply}</Btn>
+          </div>
+        </Shell>
+      )}
+      {modal?.kind === 'mergeWarn' && (
+        <Shell onClose={() => setModal(null)} hook="data-mergewarn-modal" width={420}>
+          <h3 className="font-bold text-gray-900 mb-1">{s.lbMergeWarnTitle}</h3>
+          <p className="text-[11.5px] text-gray-500 mb-3">{s.lbMergeWarnHint}</p>
+          <div className="flex flex-wrap gap-1.5 mb-4">
+            {modal.lose.map(l => (
+              <span key={l} data-merge-lose className="text-[11.5px] px-2 py-0.5 rounded border border-amber-300 bg-amber-50 text-amber-800 font-bold">{l}</span>
+            ))}
+          </div>
+          <div className="flex gap-2 justify-end">
+            <Btn tone={tone} onClick={() => setModal(null)}>{s.cancel}</Btn>
+            <Btn tone={tone} primary hook="data-merge-go" onClick={() => { const ids = modal.ids; setModal(null); doMerge(ids, true); }}>{s.lbMergeGo}</Btn>
+          </div>
+        </Shell>
+      )}
       {modal?.kind === 'save' && (
-        <Shell onClose={() => setModal(null)} hook="data-save-modal" width={520}>
+        <Shell onClose={() => setModal(null)} hook="data-save-modal" width={980}>
           <h3 className="font-bold text-gray-900 mb-3">{changes.length ? s.lbSavePreview : s.lbNoChanges}</h3>
-          <div className="max-h-[52vh] overflow-y-auto mb-4 space-y-1.5">
+          {changes.length > 0 && (
+            <>
+              <div className="flex items-center gap-3 mb-2 text-[10.5px] font-semibold flex-wrap">
+                {([['new', '#16a34a', s.lbLegendNew], ['changed', '#d97706', s.lbLegendChanged], ['gone', '#dc2626', s.lbLegendGone]] as const).map(([k, c, label]) => (
+                  <span key={k} className="flex items-center gap-1 text-gray-500">
+                    <span style={{ width: 11, height: 9, borderRadius: 2, border: `1.6px solid ${c}`, display: 'inline-block' }} />{label}
+                  </span>
+                ))}
+              </div>
+              <div className="grid gap-3 mb-4" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                {([['before', liveApartments, liveHeights, liveLayouts] , ['after', draft.apts, draft.heights, draft.layouts]] as const).map(([side, apts, hh, ll]) => (
+                  <div key={side} data-save-side={side} className="rounded-xl border border-gray-200 bg-slate-50 p-2 overflow-x-auto">
+                    <div className="text-[10px] font-extrabold tracking-widest text-gray-400 mb-1.5 uppercase">
+                      {side === 'before' ? s.lbBefore : s.lbAfter}
+                    </div>
+                    <div className="flex items-start gap-2" style={{ minWidth: 'fit-content' }}>
+                      {buildings.map(b => (
+                        <MiniBuilding key={b.id} bid={b.id}
+                          apts={(apts as Apartment[]).filter(a => a.buildingId !== 'G')}
+                          heights={(hh as Heights | undefined)?.[b.id]}
+                          layout={(ll as BuildingLayouts | undefined)?.[b.id]}
+                          mark={id => side === 'before'
+                            ? (goneIds.has(id) ? 'gone' : changedIds.has(id) ? 'changed' : null)
+                            : (newIds.has(id) ? 'new' : changedIds.has(id) ? 'changed' : null)}
+                          lobbyWord={s.lobby} groundWord={s.groundCommercial} />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          <button data-save-list-toggle onClick={() => setShowList(v => !v)}
+            className="text-[11.5px] font-bold text-gray-500 hover:text-gray-800 mb-2">
+            {showList ? '▾ ' : '▸ '}{fmt(s.lbChangeListLabel, { n: changes.length })}
+          </button>
+          <div className={`${showList ? 'max-h-[34vh] overflow-y-auto' : 'hidden'} mb-4 space-y-1.5`}>
             {changes.map(c => (
               <div key={c.key} data-save-change className="rounded-lg border border-gray-200 px-3 py-2">
                 <div className="text-[12px] font-bold text-gray-800">{c.title}</div>

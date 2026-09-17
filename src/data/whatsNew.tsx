@@ -30,6 +30,52 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-01-04',
+    title: 'Floors get names, a whole row merges in one press, and a note reaches the worker on site',
+    items: [
+      {
+        title: 'Name a floor, and name the four squares',
+        body: 'Right-click a floor\u2019s label in the buildings layout and you can rename it \u2014 '
+          + '\u201c-2 \u00b7 Pool level\u201d instead of \u201c-2\u201d. The same menu names the four '
+          + 'positions across the building (Front left, Front right\u2026), and both show on the '
+          + 'buildings page for everyone.',
+        demo: 'tap',
+      },
+      {
+        title: 'Merge the whole row in one press',
+        body: 'A floor with one apartment on it and three empty squares could only be merged by '
+          + 'picking every square first. \u201cMerge the whole row into one\u201d is now one row in '
+          + 'the right-click menu. And a merge that would clear another apartment\u2019s number and '
+          + 'name asks first, naming exactly which ones.',
+      },
+      {
+        title: 'Add and remove floors',
+        body: 'The same menu adds a floor above or below any row, and removes an empty one. A floor '
+          + 'that still has an apartment on it is never removed \u2014 move the apartment first.',
+      },
+      {
+        title: 'A square can have a name and no number',
+        body: 'The pool, the gym, the machine room. Right-click an empty square and press \u201cName '
+          + 'this square\u201d \u2014 it becomes a real place on the floor with a name and no number.',
+      },
+      {
+        title: 'Save shows a before and after picture',
+        body: 'Pressing Save draws all your buildings twice \u2014 as they are now and as they will be '
+          + '\u2014 with every square that is new, changed or gone ringed in colour. The written list '
+          + 'of changes is still there, behind its own button.',
+        demo: 'list',
+      },
+      {
+        title: 'Notes are what the worker reads on site',
+        body: 'A task\u2019s messages are the conversation; the notes are now the instructions. Write a '
+          + 'note on a stage in the apartment window, and the worker sees it in his own language when '
+          + 'that stage comes up \u2014 on the task, and the moment he taps that apartment on the map. '
+          + 'Each line says \u201cthe worker sees this\u201d; press it to keep that one in the office.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-01-03',
     title: 'Every file opens properly, task messages fold away, and a crossed-off stage moves the job on',
     items: [

@@ -628,7 +628,12 @@ interface AppState {
    * old is lost or migrated. `noteText` is kept as the flat join, so search
    * and reports read every bullet as they always read the note.
    */
-  appendStageNoteEntry: (apartmentId: string, stageId: string, entry: { text: string; attachments?: StageNoteAttachment[] }, user: User) => void;
+  appendStageNoteEntry: (apartmentId: string, stageId: string, entry: { text: string; attachments?: StageNoteAttachment[]; officeOnly?: boolean }, user: User) => void;
+  /**
+   * Who sees one bullet: absent/false = the worker reads it on site when this
+   * stage comes up, true = the office keeps it to itself (owner, 2026-09-17).
+   */
+  setStageNoteEntryVisibility: (noteId: string, entryId: string, officeOnly: boolean) => void;
   getStageNoteVersions: (noteId: string) => StageNoteVersion[];
   getGeneralNoteVersions: (aptId: string) => GeneralNoteVersion[];
 
@@ -1771,7 +1776,7 @@ export const useStore = create<AppState>((set, get) => ({
     const legacy: StageNoteEntry[] = existing && !existing.entries && (existing.noteText.trim() || existing.attachments?.length)
       ? [{ id: `${existing.id}-0`, text: existing.noteText, at: existing.updatedAt, by: existing.updatedBy, byName: existing.updatedByName, attachments: existing.attachments }]
       : [];
-    const next: StageNoteEntry = { id: generateId(), text: entry.text, at: now, by: user.id, byName: user.name, attachments: entry.attachments?.length ? entry.attachments : undefined };
+    const next: StageNoteEntry = { id: generateId(), text: entry.text, at: now, by: user.id, byName: user.name, attachments: entry.attachments?.length ? entry.attachments : undefined, officeOnly: entry.officeOnly || undefined };
     const entries = [...(existing?.entries ?? legacy), next];
     const noteText = entries.map(e => e.text).filter(Boolean).join('\n');
     const note: StageNote = existing
@@ -1877,6 +1882,21 @@ export const useStore = create<AppState>((set, get) => ({
 
   getStageNote: (apartmentId, stageId) => {
     return get().stageNotes.find(n => n.apartmentId === apartmentId && n.stageId === stageId);
+  },
+
+  setStageNoteEntryVisibility: (noteId, entryId, officeOnly) => {
+    const note = get().stageNotes.find(n => n.id === noteId);
+    if (!note?.entries) return;
+    const entries = note.entries.map(e => e.id === entryId ? { ...e, officeOnly: officeOnly || undefined } : e);
+    const updated: StageNote = { ...note, entries };
+    set(state => ({ stageNotes: state.stageNotes.map(n => (n.id === noteId ? updated : n)) }));
+    persist(get);
+    fsSet(projectCollection(get().currentProjectId, 'stageNotes'), note.id, {
+      ...updated,
+      attachmentDataUrl: undefined,
+      attachments: updated.attachments?.map(a => ({ ...a, dataUrl: undefined })),
+      entries: entries.map(e => ({ ...e, attachments: e.attachments?.map(a => ({ ...a, dataUrl: undefined })) })),
+    });
   },
 
   getStageNoteVersions: (noteId) => {

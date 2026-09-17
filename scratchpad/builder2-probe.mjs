@@ -125,6 +125,13 @@ await page.locator('[data-builder-cell="A1-45"]').click();
 await page.locator('[data-builder-cell="A1-47"]').click({ modifiers: ['Shift'] });
 check(/3 selected/.test(await page.locator('[data-layout-studio]').innerText()), '6 shift+click selects the run 45..47');
 await page.locator('[data-merge-btn]').click();
+// Merging real apartments ASKS first now (owner, 2026-09-17) — the second and
+// third lose their number and name, and the warning names them.
+const warn1 = page.locator('[data-mergewarn-modal]');
+await warn1.waitFor({ state: 'visible' });
+check((await page.locator('[data-merge-lose]').allInnerTexts()).length === 2, '6a1 the merge warns about the two units it would blank');
+await page.locator('[data-merge-go]').click();
+await warn1.waitFor({ state: 'hidden' });
 check(await c45.getAttribute('data-builder-span') === '3', '6b 45 spans three positions');
 check(await page.locator('[data-builder-cell="A1-46"]').count() === 0 && await page.locator('[data-builder-cell="A1-47"]').count() === 0, '6c the covered positions are gone from the row');
 const wide = await c45.boundingBox();
@@ -140,6 +147,8 @@ check(await page.locator('[data-builder-cell="A1-46"]').getAttribute('data-build
 await c45.click();
 await page.locator('[data-builder-cell="A1-47"]').click({ modifiers: ['Shift'] });
 await page.locator('[data-merge-btn]').click();
+const warn2 = page.locator('[data-mergewarn-modal]');
+if (await warn2.count()) { await warn2.waitFor({ state: 'visible' }); await page.locator('[data-merge-go]').click(); await warn2.waitFor({ state: 'hidden' }); }
 check(await c45.getAttribute('data-builder-span') === '3', '7c merged again for the save');
 
 // ── 8. The right-click menu ──
@@ -169,6 +178,9 @@ const sv = page.locator('[data-save-modal]');
 await sv.waitFor({ state: 'visible' });
 const nChanges = await sv.locator('[data-save-change]').count();
 check(nChanges >= 5, '10 the save previews the list of changes first', String(nChanges));
+// The save screen leads with the BEFORE/AFTER picture now; the written list
+// sits behind its own button (owner, 2026-09-17).
+await page.locator('[data-save-list-toggle]').click();
 const svText = await sv.innerText();
 check(/floor 13 → 12/.test(svText) && /now one unit over 3 positions/.test(svText) && /row heights/i.test(svText), '10b the list names the move, the merge and the heights');
 await page.locator('[data-save-write]').click();

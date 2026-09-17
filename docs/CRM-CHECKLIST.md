@@ -158,3 +158,11 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ A task the worker starts is stored in English; the worker still reads it in his own language (2026-09-17)
 - ☑ The drawer's chip says "Contractor status" (2026-09-17)
 - ☒ The Device Gallery is refreshed ON REQUEST ONLY — owner's ruling 2026-09-17, it costs him credits; a UI change no longer triggers a capture run
+- ☑ A floor can be RENAMED from the layout studio's right-click menu, and the name shows on the buildings page (`BoardSetting.buildingLayout.floorNames`) (2026-09-17)
+- ☑ The four POSITIONS across a building can be named, drawn once as a heading under the roof (2026-09-17)
+- ☑ Floors can be ADDED above or below any row and REMOVED when empty; a floor holding an apartment is never removed (2026-09-17)
+- ☑ "Merge the whole row into one" is one press — his minus-two case, one apartment and three empty squares (2026-09-17)
+- ☑ A merge that would clear another apartment's number and name ASKS first, naming each one (2026-09-17)
+- ☑ A square can carry a NAME and no number (the pool, the gym): "Name this square…" on an empty position (2026-09-17)
+- ☑ Save shows a BEFORE and AFTER picture of every building with new / changed / gone squares ringed; the written list folds behind its own button (2026-09-17)
+- ☑ Notes stopped duplicating the task messages: a stage note is what the WORKER reads on site when that stage comes up, in his own language, on the task sheet and on the map's work sheet; each line says who sees it and can be kept in the office (`StageNoteEntry.officeOnly`) (2026-09-17)
