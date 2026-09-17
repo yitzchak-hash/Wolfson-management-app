@@ -145,3 +145,7 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ Board: right-drag PANS (Ctrl+drag lassoes); Arrange includes groups; Equal size row; the selection header says "N groups · N jobs · N notes"; Focus in every node menu; calendar widget month arrows; a unit card deletes without an ask (2026-09-16)
 - ☑ Hebrew workspace names (`Project.nameHe`/`shortNameHe`, `projectName()`/`projectShortName()`) in the header, the portal, the notebook dialogs, the TV bar, the calendars (2026-09-16)
 - ☑ Add-a-job dialog: the job's current stage named in colour above the labelled from → to pair (2026-09-16)
+- ☑ Office desktop-alert permission asked UP FRONT by a header pill (`OfficeAlertsAsk`, once per machine) (2026-09-17)
+- ☑ Worker's self-task form: "Now: <stage>" read-only + "What will you be doing here?" stage pills; no stage dropdown (2026-09-17)
+- ☑ A general job's task sheet has no Close job: "Choose the apartment you are working in" → that project's building(s) + a hunt banner → "I'm going to work here" files the visit under the general job; no-permission pop-up (2026-09-17)
+- ✎ The markup studio on the tablet — plan page "The Studio on the Tablet" published with eight starred questions; build once he answers (2026-09-17)

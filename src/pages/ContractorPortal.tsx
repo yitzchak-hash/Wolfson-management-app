@@ -743,6 +743,28 @@ export function ContractorPortal() {
   const [calMode, setCalMode] = useState<'week' | 'month'>('month');
   const [calWeekOff, setCalWeekOff] = useState(0);
   const phonePortal = usePhone();
+  /**
+   * The general job he is choosing apartments FOR (owner, 2026-09-17): its
+   * button on the task sheet takes him to that project's buildings with a
+   * banner asking which apartment; "I'm going to work here" on an apartment
+   * then files the visit under this job without the is-this-part-of ask.
+   */
+  const [generalHunt, setGeneralHunt] = useState<string | null>(null);
+  const [noPermPopup, setNoPermPopup] = useState(false);
+  const goToGeneral = (a: ContractorAssignment) => {
+    if (!a.general) return;
+    if (!permsOf(workerNow, workerLevels).workHere) { setNoPermPopup(true); return; }
+    const pid = a.general.projectId;
+    const blds = a.general.buildingIds?.length ? a.general.buildingIds : (a.general.buildingId ? [a.general.buildingId] : []);
+    setMapChosen(pid);
+    try { localStorage.setItem(`portal_map_${token ?? ''}`, pid); } catch { /* private mode */ }
+    if (pid !== currentProjectId) setCurrentProject(pid);
+    setMapBuilding(blds.length === 1 ? blds[0] : 'all');
+    setGeneralHunt(a.id);
+    setSelectedAssignment(null);
+    setClosing(false);
+    setActiveTab('map');
+  };
   const [showHistory, setShowHistory] = useState(false);
   /**
    * The markup studio, for a worker whose level allows it (`markUpPlans`).
@@ -1822,13 +1844,47 @@ export function ContractorPortal() {
                     </label>
                   </div>
 
-                  <select value={selfStage} onChange={e => setSelfStage(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#4aa8d8]">
-                    <option value="">{w('Stage (optional)', 'שלב (לא חובה)', 'Этап (необязательно)')}</option>
-                    {stagesOfWs(selfPick?.projectId ?? currentProjectId).map(st => (
-                      <option key={st.id} value={st.id}>{s.isRtl && st.nameHe ? st.nameHe : st.name}</option>
-                    ))}
-                  </select>
+                  {/* No "what stage is it on?" (owner, 2026-09-17): the job IS at the
+                      stage it is set at — said once, read-only — and the question is
+                      WHAT HE WILL BE DOING there, answered by tapping a stage. Nothing
+                      picked = the job's own stage. */}
+                  {selfPick && (() => {
+                    const wsSt = stagesOfWs(selfPick.projectId);
+                    const cur = wsSt.find(st => st.id === selfPick.job.currentStageId);
+                    return (
+                      <div data-self-stage-block className="rounded-lg border border-gray-200 px-3 py-2 space-y-2">
+                        <div data-self-stage-now className="flex items-center gap-1.5 text-[12px] text-gray-500">
+                          <span className="font-semibold">{w('Now', 'עכשיו', 'Сейчас')}:</span>
+                          {cur ? (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md font-bold"
+                              style={{ backgroundColor: cur.color + '20', color: cur.color }}>
+                              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cur.color }} />
+                              {getStageName(cur, readLang === 'he')}
+                            </span>
+                          ) : <span>{w('Not started', 'לא התחיל', 'Не начато')}</span>}
+                        </div>
+                        <p className="text-[13px] font-extrabold text-gray-800">
+                          {w('What will you be doing here?', 'מה תעשה כאן?', 'Что вы будете здесь делать?')}
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {wsSt.map(st => {
+                            const on = selfStage === st.id;
+                            return (
+                              <button key={st.id} type="button" data-self-stage-pick={st.id} data-on={on ? '1' : undefined}
+                                onClick={() => setSelfStage(on ? '' : st.id)}
+                                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[12.5px] font-bold border active:scale-[0.98]"
+                                style={on
+                                  ? { backgroundColor: st.color, borderColor: st.color, color: '#fff' }
+                                  : { borderColor: '#e5e7eb', color: '#374151', backgroundColor: '#fff' }}>
+                                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: on ? '#fff' : st.color }} />
+                                {getStageName(st, readLang === 'he')}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   <div className="flex items-center gap-2 flex-wrap">
                     <button type="button" onClick={() => selfFileRef.current?.click()}
@@ -2272,6 +2328,25 @@ export function ContractorPortal() {
 
         return (
           <div className="flex-1 min-h-0 flex flex-col bg-gray-100" data-portal-map>
+            {generalHunt && (() => {
+              const g = assignments.find(x => x.id === generalHunt) ?? otherTasks.find(r => r.a.id === generalHunt)?.a;
+              return (
+                <div data-general-hunt className="flex items-center gap-2.5 px-3 py-2.5 flex-shrink-0 text-white"
+                  style={{ background: 'linear-gradient(135deg, #b8860b, #8a6508)' }}>
+                  <Hammer size={18} className="flex-shrink-0" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[13.5px] font-extrabold leading-tight">
+                      {w('Which apartment are you working in? Tap it.', 'באיזו דירה אתה עובד? הקש עליה.', 'В какой квартире вы работаете? Нажмите на неё.')}
+                    </span>
+                    {g && <span className="block text-[11.5px] opacity-90 truncate">{g.taskDescription}</span>}
+                  </span>
+                  <button data-general-hunt-cancel onClick={() => setGeneralHunt(null)}
+                    className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/15 flex-shrink-0">
+                    <X size={15} />
+                  </button>
+                </div>
+              );
+            })()}
             {/* ONE bar: the project's name (press for the sheet) and the buildings. */}
             <div className="flex items-center gap-2.5 px-3 py-2.5 bg-white border-b border-gray-200 flex-shrink-0" data-map-bar>
               <button data-map-project-btn
@@ -2869,6 +2944,20 @@ export function ContractorPortal() {
                     <Clock size={18} />
                     {s.problemWaitingLabel || 'Waiting for approval'} · {s.problemWaitingHint || 'the office is checking'}
                   </div>
+                  ) : a.general ? (
+                  /* A GENERAL job is not closed by the worker (owner, 2026-09-17):
+                     it is "go to that project and pick the apartments you work
+                     in". The button leads to the buildings; each apartment he
+                     starts there files a visit under this job. */
+                  <button
+                    data-general-go
+                    onClick={() => goToGeneral(a)}
+                    className="w-full py-3.5 rounded-xl text-base font-bold tracking-wide transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-white"
+                    style={{ background: 'linear-gradient(135deg, #1e3a5f, #2c4f78)' }}
+                  >
+                    <Building2 size={18} />
+                    {w('Choose the apartment you are working in', 'בחר את הדירה שבה אתה עובד', 'Выберите квартиру, где вы работаете')}
+                  </button>
                   ) : (
                   /* One button. Pressing it opens the closing screen —
                      it never sits greyed-out wondering why. */
@@ -3267,7 +3356,7 @@ export function ContractorPortal() {
                     )}
                     {perms.workHere && (
                     <button data-work-here
-                      onClick={() => { if (generalJobs.length) setWorkHere({ ...workHere, step: 'part' }); else startWork(null); }}
+                      onClick={() => { if (generalHunt) { const gid = generalHunt; setGeneralHunt(null); startWork(gid); } else if (generalJobs.length) setWorkHere({ ...workHere, step: 'part' }); else startWork(null); }}
                       className="w-full py-4 rounded-xl text-base font-bold text-white flex items-center justify-center gap-2 active:scale-[0.98]"
                       style={{ background: 'linear-gradient(135deg, #1e3a5f, #2c4f78)' }}>
                       <Hammer size={19} />
@@ -3306,6 +3395,33 @@ export function ContractorPortal() {
           </>
         );
       })()}
+
+      {/* No permission to pick apartments (owner, 2026-09-17): a plain pop-up,
+          never a dead button. The office turns "Start work from the building
+          map" on for him in Settings → Workers. */}
+      {noPermPopup && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-[230]" onClick={() => setNoPermPopup(false)} />
+          <div data-no-perm-popup role="dialog"
+            className="fixed z-[231] left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(92vw,380px)] rounded-2xl bg-white shadow-2xl p-5 text-center">
+            <div className="mx-auto w-12 h-12 rounded-full flex items-center justify-center mb-3" style={{ backgroundColor: '#fee2e2', color: '#b91c1c' }}>
+              <Building2 size={22} />
+            </div>
+            <p className="text-[16px] font-extrabold text-gray-900 leading-snug">
+              {w('You cannot pick apartments yet', 'אין לך עדיין הרשאה לבחור דירות', 'Вы пока не можете выбирать квартиры')}
+            </p>
+            <p className="text-[13px] text-gray-500 mt-1.5 leading-snug">
+              {w('Ask the office to turn on “Start work from the building map” for you.',
+                 'בקש מהמשרד להפעיל לך את “התחלת עבודה ממפת הבניין”.',
+                 'Попросите офис включить вам «Начать работу с карты здания».')}
+            </p>
+            <button onClick={() => setNoPermPopup(false)}
+              className="mt-4 w-full py-2.5 rounded-xl text-sm font-bold text-white" style={{ backgroundColor: '#1e3a5f' }}>
+              {w('OK', 'הבנתי', 'Понятно')}
+            </button>
+          </div>
+        </>
+      )}
 
       {/*
         The moment of finishing.

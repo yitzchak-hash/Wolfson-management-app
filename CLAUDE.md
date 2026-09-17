@@ -8223,3 +8223,41 @@ the plan cache PUMP fetches the other sheets after the first — assert the
 FIRST fetch, not the only one; the picker's tiles are `data-plan-row`, not
 `data-file-tile`; a probe's init script must set `active_project` only when
 absent or it yanks the app back after a workspace switch.
+
+## The general job leads to the buildings, and the office is asked up front (2026-09-17)
+
+- **`OfficeAlertsAsk`** (exported from OfficeAlerts.tsx, rendered in the
+  Header beside the pending bell): Chrome asks for notification permission
+  only from a press, and the ask lived on the first worker-message card —
+  a PC that had never received one never saw it. A header PILL asks once per
+  machine (`office_notif_asked`). **A floating card was tried first and sat
+  over the drawer's plan bar on a tablet** (the studio capture hit it) —
+  chrome that floats over other chrome is the standing disease; a pill in
+  the header overlaps nothing.
+- **The self-task form asks "What will you be doing here?"**: no stage
+  dropdown; `[data-self-stage-now]` says the picked job's current stage,
+  `[data-self-stage-pick=<id>]` pills pick the work stage (none = the job's
+  own). Rendered only once a job is picked.
+- **A GENERAL job is never closed by the worker.** Its sheet's footer shows
+  `[data-general-go]` instead of Close job: `goToGeneral(a)` → the
+  `workHere` permission (else `[data-no-perm-popup]`) → `mapChosen` = the
+  job's workspace, `mapBuilding` = its one building or `'all'`,
+  `generalHunt` = the task id, the map tab. The map wears
+  `[data-general-hunt]` (which apartment? · the job's words · an X);
+  "I'm going to work here" with a hunt live calls `startWork(hunt)` straight
+  — no is-this-part-of ask — filing the visit under the general job and
+  opening the report task, whose close takes the pictures. The general job
+  stays open for the office.
+- **The tablet studio is a PLAN, not a build** ("The Studio on the Tablet",
+  `docs/artifacts/2026-09-17-the-studio-on-the-tablet.html`, captures by
+  `scratchpad/tabstudio-cap.mjs`): measured on the Tab S10 FE — landscape
+  gets the PC layout (34 of 35 buttons under 40px, 17px colour dots, two
+  chrome rows + a rail), portrait gets the phone layout (the sheet is 44% of
+  the height, 36% empty navy, "turn the phone"). Proposed: a third layout
+  keyed on `any-hover: none` + shorter side ≥ 600 — one bar, a 56px-tile
+  rail on the drawing-hand side, the ink row folded into a corner pill, a
+  DOCKED tray under the sheet in portrait, pen-only ink once an S Pen is
+  seen, 48px targets, ⋯ for the once-a-session things. Eight starred
+  questions; build only on his numbers.
+
+Harness: `scratchpad/round44-probe.mjs` (four contexts, 21 checks).

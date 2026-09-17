@@ -30,6 +30,36 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-01-01',
+    title: 'A general job leads to the buildings, the office is asked to turn alerts on, and the worker says what he will do',
+    items: [
+      {
+        title: 'Turn on desktop alerts \u2014 a pill in the header',
+        body: 'Chrome only asks for notification permission from a press, and the ask used to sit on '
+          + 'the first worker message \u2014 so a computer that had none never saw it. A small bell '
+          + 'pill in the header now asks up front, once per computer. Press it, allow, and a hidden '
+          + 'tab rings when a worker writes.',
+        demo: 'tap',
+      },
+      {
+        title: 'A job for myself: \u201cNow: Piping \u2014 what will you be doing here?\u201d',
+        body: 'The worker\u2019s own task form no longer asks what stage the unit is on. It says the '
+          + 'stage it is at, then asks what he will be doing there with the stages as pills. Nothing '
+          + 'tapped means the unit\u2019s own stage.',
+        demo: 'tap',
+      },
+      {
+        title: 'A general job is not closed \u2014 it leads to the apartments',
+        body: 'A task like \u201cinstall the risers in A2\u201d has no Close job button any more. Its '
+          + 'button takes the worker to that project\u2019s building (or all of them) with a banner '
+          + 'asking which apartment he is working in; tapping one and pressing \u201cI\u2019m going '
+          + 'to work here\u201d files that visit under the general job and opens the real task, '
+          + 'pictures and all. Without the building-map permission a pop-up says so.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2026-12-31',
     title: 'The office rings, the worker starts the day in one press, and the plan picks itself',
     items: [

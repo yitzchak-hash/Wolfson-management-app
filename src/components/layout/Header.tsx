@@ -15,6 +15,7 @@ import { TutorialButton } from '../ui/Tutorial';
 import { GlobalSearch } from '../ui/GlobalSearch';
 import { subscribeCloudSync, isFirebaseConfigured, SyncStatus } from '../../data/firebase';
 import { clearReturnTicket } from '../../data/unitTravel';
+import { OfficeAlertsAsk } from './OfficeAlerts';
 
 function CloudSyncBadge({ light }: { light: boolean }) {
   const [status, setStatus] = useState<SyncStatus>('idle');
@@ -541,6 +542,7 @@ export function Header() {
         {/* What just changed, and who did it — see ActivityTicker. */}
         {currentUser && <ActivityTicker light={lightTheme} />}
         {/* Half-done stages — pending shows on BOTH the apartment and here. */}
+        {currentUser && <OfficeAlertsAsk light={lightTheme} />}
         {currentUser && <PendingStagesBell light={lightTheme} />}
         <CloudSyncBadge light={lightTheme} />
 

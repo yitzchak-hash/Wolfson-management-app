@@ -180,3 +180,44 @@ export function OfficeAlerts() {
     </div>
   );
 }
+
+/**
+ * The upfront ask, as a HEADER pill — not a floating card. Chrome only asks
+ * for notification permission from a click, and the ask used to live on
+ * the first worker-message card, so a computer that had not yet received a
+ * message never saw it ("why don't I see the permission asked on my
+ * computer"). A floating card was tried first and sat over the job window's
+ * plan bar on a tablet; a pill in the header overlaps nothing. Shown while
+ * the permission is still undecided and not dismissed on this machine
+ * (`office_notif_asked`); Turn on runs the browser's own prompt.
+ */
+export function OfficeAlertsAsk({ light }: { light: boolean }) {
+  const s = useStore(st => st.mainUiStrings);
+  const [show, setShow] = useState<boolean>(() => {
+    try {
+      if (!('Notification' in window) || Notification.permission !== 'default') return false;
+      return localStorage.getItem('office_notif_asked') !== '1';
+    } catch { return false; }
+  });
+  if (!show) return null;
+  const dismiss = () => { setShow(false); try { localStorage.setItem('office_notif_asked', '1'); } catch { /* private mode */ } };
+  return (
+    <span data-office-notif-ask className="flex items-center gap-1 rounded-full pe-1"
+      style={{ backgroundColor: light ? '#fff7ed' : 'rgba(251,191,36,.14)', border: `1px solid ${light ? '#fdba74' : 'rgba(251,191,36,.45)'}` }}>
+      <button data-office-notif-on type="button"
+        onClick={() => { void Notification.requestPermission().finally(dismiss); }}
+        title={s.officeNotifAskBody}
+        className="flex items-center gap-1.5 ps-2.5 pe-1.5 py-1 rounded-full text-[11.5px] font-bold"
+        style={{ color: light ? '#9a3412' : '#fcd34d' }}>
+        <span aria-hidden>🔔</span>
+        <span className="hidden md:inline">{s.officeNotifAskTitle}</span>
+        <span className="md:hidden">{s.officeNotifAllow}</span>
+      </button>
+      <button data-office-notif-later type="button" onClick={dismiss} title={s.officeNotifLater}
+        className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] opacity-70 hover:opacity-100"
+        style={{ color: light ? '#9a3412' : '#fcd34d' }}>
+        <X size={11} />
+      </button>
+    </span>
+  );
+}

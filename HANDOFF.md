@@ -27,7 +27,7 @@ exactly there.
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2026-12-31` — the next entry must be a later date (an older
+   newest is `2027-01-01` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`. 8. Rewrite THIS file.
@@ -43,8 +43,23 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-16 — his second list: the office rings, the worker's day, plans in red)
+## Where things stand (2026-09-17 — four asks: the Chrome ask, the self-task stage, the tablet studio, the general job)
 Last commits, newest first (see `git log`):
+- **2026-09-17 — his four asks.** (1) "Why don't I see the permission asked
+  on my computer": the ask only appeared on the first worker-message card;
+  now a bell PILL in the header asks up front, once per machine (a floating
+  card was tried and covered the drawer's plan bar on the tablet). (2) The
+  self-task form: no "what stage is it on" — it says "Now: <stage>" and asks
+  "What will you be doing here?" with stage pills. (3) The markup studio on
+  the Galaxy Tab S10 FE: NOT built — measured and drawn as the plan page
+  "The Studio on the Tablet" (https://claude.ai/artifact/RTFMFTjLBj2d7Esu9dKLaP)
+  with eight starred questions; waiting for his numbers, then a day of
+  building. (4) A general job: no Close job on its sheet; "Choose the
+  apartment you are working in" leads to that project's building(s) with a
+  hunt banner, "I'm going to work here" files the visit under the general
+  job and opens the real task (pictures on close go there); without the
+  workHere permission a pop-up says so. `round44-probe.mjs` (21 checks);
+  round43, stagereport, portalround, tsc, build, four audits green.
 - **2026-09-16, seventh pass — his ~15-item list, all built.** (1) `workHere`
   is its own permission apart from `selfAssign`; `selfAssignProjects` limits
   "a job for myself" per workspace (Settings → Workers chip). (2) "I'm going
@@ -365,6 +380,16 @@ Last commits, newest first (see `git log`):
   the one-file Hebrew-safe Windows helper.
 
 ## What the owner last asked (his exact wants)
+-2. **(2026-09-17)** "why don't I see the permissions asked on my computer
+   from Google Chrome to allow notifications" — DONE (header pill). "When a
+   worker assigns a job for himself, it asks him what stage is it on. I want
+   to skip that… it should ask him What will you be doing here? and then
+   show the stages" — DONE. "On a Galaxy S10 tablet the markup studio looks
+   really bad… rethink the whole UX UI flow for the tablet" — PLAN PAGE
+   published, awaiting his answers 1–8. "When we assign a general job… he
+   shouldn't be able to close the job… it should take him to all the
+   buildings or the specific building… ask which apartment… if he doesn't
+   have the permission a pop-up should say that" — DONE.
 -1. **(2026-09-16, the second list — BUILT, see above)** separate permissions
    for "add a job for myself" vs "I'm going to do work here"; no "what stage"
    at the start, "what stages did you do" + "did you finish all of them?" at
@@ -412,6 +437,10 @@ Last commits, newest first (see `git log`):
    rebuild") is built and pushed.
 
 ## Open threads / things to verify on production
+- **The Studio on the Tablet**: waiting for his numbers on the eight
+  questions (page link above). Build to them exactly; the captures come
+  from `scratchpad/tabstudio-cap.mjs`, the pen probe from `tabs10-pen.mjs`.
+- **The header bell pill**: on each office PC press it once and Allow.
 - **Desktop alerts on the office PCs** (2026-09-16): the first worker message
   after this deploy shows a card with "Allow desktop alerts" — press it once
   per computer so a hidden tab can notify. Works without VAPID keys (it is
@@ -455,6 +484,15 @@ Last commits, newest first (see `git log`):
   `npx vite --port 5173` and `VITE_DRIVE_API_KEY=test npx vite --port 5174`.
 
 ## The last reply the owner saw (so the next one continues it)
+**Newest (2026-09-17)**: the reply explained why the Chrome ask never
+showed (it rode the first worker message) and that a bell pill in the
+header now asks; that the self-task form says the current stage and asks
+what he will be doing; that a general job's sheet leads to the building(s)
+with a banner and files each "I'm going to work here" as a visit under it,
+with a pop-up when the permission is off; and that the tablet studio was
+measured and drawn as a plan page with eight starred questions rather than
+built — asking for his numbers. Bottom line + bullets (KEEP THAT FORMAT).
+
 **Newest (2026-09-16, seventh pass)**: the reply walked his list item by
 item — the split permissions and the per-workspace self-task; the start
 that asks nothing and the close that asks which stages + finished?; the

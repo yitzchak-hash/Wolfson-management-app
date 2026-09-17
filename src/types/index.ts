@@ -2563,6 +2563,9 @@ export interface MainUiStrings {
   officeNotifClosed: string;
   officeNotifAllow: string;
   officeNotifOpen: string;
+  officeNotifAskTitle: string;
+  officeNotifAskBody: string;
+  officeNotifLater: string;
   daysWord: string;
   settingsLabel: string;
   statusLabel: string;
@@ -3298,6 +3301,9 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   officeNotifClosed: '{who} closed a job',
   officeNotifAllow: 'Allow desktop alerts',
   officeNotifOpen: 'Open',
+  officeNotifAskTitle: 'Hear it when a worker writes',
+  officeNotifAskBody: 'A sound and a desktop alert on this computer when a worker sends a message or closes a job — even with the tab in the background.',
+  officeNotifLater: 'Not now',
   daysWord: 'days',
   settingsLabel: 'Settings',
   statusLabel: 'Status',
@@ -4031,6 +4037,9 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   officeNotifClosed: '{who} סגר עבודה',
   officeNotifAllow: 'לאפשר התראות במחשב',
   officeNotifOpen: 'פתיחה',
+  officeNotifAskTitle: 'לשמוע כשעובד כותב',
+  officeNotifAskBody: 'צליל והתראה במחשב הזה כשעובד שולח הודעה או סוגר עבודה — גם כשהלשונית ברקע.',
+  officeNotifLater: 'לא עכשיו',
   daysWord: 'ימים',
   settingsLabel: 'הגדרות',
   statusLabel: 'סטטוס',
