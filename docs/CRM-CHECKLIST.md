@@ -148,4 +148,6 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ Office desktop-alert permission asked UP FRONT by a header pill (`OfficeAlertsAsk`, once per machine) (2026-09-17)
 - ☑ Worker's self-task form: "Now: <stage>" read-only + "What will you be doing here?" stage pills; no stage dropdown (2026-09-17)
 - ☑ A general job's task sheet has no Close job: "Choose the apartment you are working in" → that project's building(s) + a hunt banner → "I'm going to work here" files the visit under the general job; no-permission pop-up (2026-09-17)
-- ✎ The markup studio on the tablet — plan page "The Studio on the Tablet" published with eight starred questions; build once he answers (2026-09-17)
+- ☑ The plan opens BIG on a tablet: an upright sheet on a sideways screen no longer fits to the height — it opens as big as it can while keeping 60% of the page on screen (420 → 700px on the Tab S10 FE); the Fit control still shows the whole page; the phone untouched (2026-09-17)
+- ☑ Stage names in Russian (`Stage.nameRu`, `stageNameIn`), typed in project settings; the worker's portal names every stage in his own language (2026-09-17)
+- ☒ The markup studio tablet REDESIGN — owner's ruling 2026-09-17: the design and layout are approved as they are; only the scaling was wrong, and that is fixed. The eight starred questions on "The Studio on the Tablet" are not to be built.

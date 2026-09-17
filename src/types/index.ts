@@ -459,6 +459,7 @@ export interface Stage {
   id: string;
   name: string;
   nameHe?: string;  // Hebrew name for bilingual support
+  nameRu?: string;  // Russian name — the worker's portal reads his own language
   color: string;
   order: number;
   active: boolean;
@@ -470,6 +471,19 @@ export interface Stage {
 
 export function getStageName(stage: Stage, isRtl: boolean): string {
   return (isRtl && stage.nameHe) ? stage.nameHe : stage.name;
+}
+
+/**
+ * The stage's name in a named language — what the WORKER'S portal must use.
+ * A stage is a word the office chose; a worker reading Russian was still
+ * shown the English one on every screen that names a stage, which is the
+ * one word on that screen he has to understand (owner, 2026-09-17).
+ * Falls back to the English name, which is what the office typed.
+ */
+export function stageNameIn(stage: Stage, lang: 'en' | 'he' | 'ru'): string {
+  if (lang === 'he') return stage.nameHe || stage.name;
+  if (lang === 'ru') return stage.nameRu || stage.name;
+  return stage.name;
 }
 
 /**

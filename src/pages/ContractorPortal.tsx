@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo, useEffect, lazy, Suspense } from 'react';
 import { useParams } from 'react-router-dom';
 import { useStore, loadAllProjectsTaskData, loadProjectSnapshot, ensureProjectSnapshot, startForeignSync, stopForeignSync } from '../data/store';
-import { ContractorAssignment, ContractorPhoto, Contractor, Apartment, Project, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, RUSSIAN_CONTRACTOR_UI_STRINGS, PortalLang, getStageName, aptLabel, workAtLabel, projectColor, projectName } from '../types';
+import { ContractorAssignment, ContractorPhoto, Contractor, Apartment, Project, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, RUSSIAN_CONTRACTOR_UI_STRINGS, PortalLang, stageNameIn, aptLabel, workAtLabel, projectColor, projectName } from '../types';
 import { transcribeMemo } from '../data/transcribe';
 import { daysOf, futureDaysOf } from '../data/taskDays';
 import { PlanPinOverlay } from '../components/apartment/PlanPinOverlay';
@@ -1859,7 +1859,7 @@ export function ContractorPortal() {
                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md font-bold"
                               style={{ backgroundColor: cur.color + '20', color: cur.color }}>
                               <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cur.color }} />
-                              {getStageName(cur, readLang === 'he')}
+                              {stageNameIn(cur, readLang)}
                             </span>
                           ) : <span>{w('Not started', 'לא התחיל', 'Не начато')}</span>}
                         </div>
@@ -1877,7 +1877,7 @@ export function ContractorPortal() {
                                   ? { backgroundColor: st.color, borderColor: st.color, color: '#fff' }
                                   : { borderColor: '#e5e7eb', color: '#374151', backgroundColor: '#fff' }}>
                                 <span className="w-2 h-2 rounded-full" style={{ backgroundColor: on ? '#fff' : st.color }} />
-                                {getStageName(st, readLang === 'he')}
+                                {stageNameIn(st, readLang)}
                               </button>
                             );
                           })}
@@ -2030,7 +2030,7 @@ export function ContractorPortal() {
                           {stage && (
                             <span className="text-xs px-2 py-0.5 rounded-full font-medium"
                               style={{ backgroundColor: stage.color + '22', color: stage.color }}>
-                              {getStageName(stage, s.isRtl)}
+                              {stageNameIn(stage, readLang)}
                             </span>
                           )}
                         </div>
@@ -2592,7 +2592,7 @@ export function ContractorPortal() {
                       <div className="flex items-center gap-2">
                         <span className="text-xs px-2.5 py-1 rounded-full font-medium"
                           style={{ backgroundColor: stage.color + '22', color: stage.color, border: `1px solid ${stage.color}33` }}>
-                          {getStageName(stage, s.isRtl)}
+                          {stageNameIn(stage, readLang)}
                         </span>
                         {apt?.stageDates && Object.keys(apt.stageDates).length > 0 && (
                           <button
@@ -2692,7 +2692,7 @@ export function ContractorPortal() {
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-xs px-2 py-0.5 rounded-full font-medium"
                                   style={{ backgroundColor: st.color + '22', color: st.color, border: `1px solid ${st.color}33` }}>
-                                  {getStageName(st, s.isRtl)}
+                                  {stageNameIn(st, readLang)}
                                 </span>
                                 {isCurrent && (
                                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#1e3a5f]/10 text-[#1e3a5f] font-semibold">Current</span>
@@ -3066,7 +3066,7 @@ export function ContractorPortal() {
                                     ? { backgroundColor: st.color, borderColor: st.color, color: '#fff' }
                                     : { borderColor: '#e5e7eb', color: '#374151', backgroundColor: '#fff' }}>
                                   <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: on ? '#fff' : st.color }} />
-                                  {getStageName(st, !!s.isRtl)}
+                                  {stageNameIn(st, readLang)}
                                 </button>
                               );
                             })}
@@ -3287,7 +3287,7 @@ export function ContractorPortal() {
             contractorId,
             apartmentId: apt.id,
             buildingId: apt.buildingId,
-            taskDescription: `${st ? `${getStageName(st, !!s.isRtl)} — ` : ''}${w('working here today', 'עובד כאן היום', 'работаю здесь сегодня')}`,
+            taskDescription: `${st ? `${stageNameIn(st, readLang)} — ` : ''}${w('working here today', 'עובד כאן היום', 'работаю здесь сегодня')}`,
             dueDate: todayIso,
             stageId: st?.id ?? null,
             priority: 'normal',
@@ -3321,7 +3321,7 @@ export function ContractorPortal() {
                   {curStage && (
                     <p className="text-xs mt-0.5 flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full" style={{ backgroundColor: curStage.color }} />
-                      <span className="text-gray-600">{getStageName(curStage, !!s.isRtl)}</span>
+                      <span className="text-gray-600">{stageNameIn(curStage, readLang)}</span>
                     </p>
                   )}
                 </div>

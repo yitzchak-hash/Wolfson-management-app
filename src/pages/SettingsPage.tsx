@@ -537,6 +537,7 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
   const [edits, setEdits] = useState<Record<string, Partial<Stage>>>({});
   const [newStageName, setNewStageName] = useState('');
   const [newStageNameHe, setNewStageNameHe] = useState('');
+  const [newStageNameRu, setNewStageNameRu] = useState('');
   const [newStageColor, setNewStageColor] = useState('#6366f1');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   /** Deleting or hiding a stage that still holds jobs opens this first. */
@@ -598,6 +599,7 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
       id: 's' + Math.random().toString(36).substr(2, 6),
       name: newStageName.trim(),
       nameHe: newStageNameHe.trim() || undefined,
+      nameRu: newStageNameRu.trim() || undefined,
       color: newStageColor,
       order: maxOrder + 1, active: true,
       projectId: isGeneral ? 'general' : undefined,
@@ -605,6 +607,7 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
     });
     setNewStageName('');
     setNewStageNameHe('');
+    setNewStageNameRu('');
     onToast(s.stageNameAdded);
   }
 
@@ -642,11 +645,21 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
                     className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                   />
                   <input
+                    data-stage-he
                     value={(edit.nameHe ?? stage.nameHe) ?? ''}
                     onChange={e => setEdit(stage.id, { nameHe: e.target.value })}
                     placeholder="שם בעברית"
                     dir="rtl"
                     className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 text-right"
+                  />
+                  {/* A worker reading Russian sees the stage's name on every
+                      screen the portal draws; without this he sees English. */}
+                  <input
+                    data-stage-ru
+                    value={(edit.nameRu ?? stage.nameRu) ?? ''}
+                    onChange={e => setEdit(stage.id, { nameRu: e.target.value })}
+                    placeholder="Название по-русски"
+                    className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
                   />
                 </div>
                 <Tooltip text={active ? s.hideStage : s.activateStage}>
@@ -661,7 +674,7 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
                   </button>
                 </Tooltip>
                 <Tooltip text={s.saveChanges}>
-                  <button onClick={() => saveStage(stage)} className="p-2 text-[#1e3a5f] hover:bg-[#1e3a5f]/5 rounded-lg"><Save size={16} /></button>
+                  <button data-stage-save onClick={() => saveStage(stage)} className="p-2 text-[#1e3a5f] hover:bg-[#1e3a5f]/5 rounded-lg"><Save size={16} /></button>
                 </Tooltip>
                 <Tooltip text={s.deleteStageTooltip}>
                   <button onClick={() => setStageAction({ stage, mode: 'delete' })}
@@ -756,6 +769,11 @@ function StageSettings({ stages, updateStage, addStage, deleteStage, onToast, cu
               placeholder="שם בעברית (אופציונלי)"
               dir="rtl"
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 text-right" />
+            <input value={newStageNameRu} onChange={e => setNewStageNameRu(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleAddStage()}
+              data-enter-own
+              placeholder="Название по-русски (необязательно)"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30" />
             <button onClick={handleAddStage}
               className="flex items-center gap-1.5 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#162d4a] transition-colors">
               <Plus size={16} /> {s.addNewStage}

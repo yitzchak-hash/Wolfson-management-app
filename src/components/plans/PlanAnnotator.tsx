@@ -85,6 +85,14 @@ const INK_TOOLS = new Set(['pen', 'pencil', 'marker', 'fountain', 'calligraphy',
 /** What the fat end of the Samsung pen draws with. */
 const FAT_NIB_TOOL = 'highlighter';
 
+/**
+ * How much of the stage the whole page must use before the opening fit is
+ * left alone, and how much of the sheet must stay on screen when it is not.
+ * See the fit in renderPage.
+ */
+const FIT_USE = 0.6;
+const FIT_KEEP = 0.6;
+
 const ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
   pen: Pen, pencil: Pencil, marker: Highlighter, highlighter: Highlighter,
   fountain: PenTool, calligraphy: PenTool, crayon: Pencil, brush: Brush,
@@ -1178,6 +1186,14 @@ function PlanEditor({
   const zoomFloor = useCallback(() =>
     Math.max(0.02, fitScaleRef.current * 0.25), []);
   /**
+   * An automatic fit (opening, turning the tablet, full screen) opens the
+   * sheet as big as it can while still showing most of it; the fit CONTROL
+   * shows the whole page. Raised just before setFitting(true) and consumed
+   * by the fit itself, so a later automatic fit cannot inherit it.
+   */
+  const fitWholeRef = useRef(false);
+  const askWholeFit = useCallback(() => { fitWholeRef.current = true; setFitting(true); }, []);
+  /**
    * A touch tap moves a real step. The old ×1.08 "gentle" tap was the owner's
    * "the plus zoom thing we need to fix" — at the fit, eight taps bought one
    * wheel notch and the button read as broken. ×1.25 per tap is the pace the
@@ -1505,10 +1521,40 @@ function PlanEditor({
       // The zoom-out floor is measured HERE, whether or not a fit was asked
       // for — the buttons and the pinch clamp against it and they need it
       // current after every resize, page turn and rotation.
-      fitScaleRef.current = Math.max(0.05, Math.min(4,
+      const whole = Math.max(0.05, Math.min(4,
         Math.min(availW / natVp.width, availH / natVp.height)));
+      fitScaleRef.current = whole;
+      /**
+       * A PORTRAIT sheet on a LANDSCAPE screen — the office's tablet, and any
+       * wide monitor — fits to the height and comes out a narrow strip in the
+       * middle of a wide blue stage: an A1 portrait plan opened 420px wide in
+       * a 1090px stage, which the owner rightly called tiny (2026-09-17).
+       * Showing the whole page is the right instinct and the wrong result
+       * when the sheet's shape and the stage's badly disagree.
+       *
+       * So: when the whole page uses less than FIT_USE of the stage across
+       * its slack axis, the sheet opens bigger — up to covering the stage,
+       * and never so big that less than FIT_KEEP of it is on screen. You get
+       * a sheet you can actually draw on and still see most of at a glance;
+       * the fit CONTROL still shows every last millimetre.
+       *
+       * The phone is deliberately left alone: there a landscape sheet already
+       * fits to the width, the empty space says "turn the phone", and making
+       * the sheet overflow sideways would undo that.
+       */
+      let open = whole;
+      if (!compact) {
+        const used = Math.min(natVp.width * whole / availW, natVp.height * whole / availH);
+        if (used < FIT_USE) {
+          const cover = Math.max(availW / natVp.width, availH / natVp.height);
+          const keep = Math.min(availW / (natVp.width * FIT_KEEP),
+            availH / (natVp.height * FIT_KEEP));
+          open = Math.max(whole, Math.min(4, cover, keep));
+        }
+      }
       if (fitting) {
-        s = Math.max(0.1, fitScaleRef.current);
+        s = Math.max(0.1, fitWholeRef.current ? whole : open);
+        fitWholeRef.current = false;
         atFitRef.current = true;
         setScale(s); setRaster(s); setFitting(false);
       }
@@ -3201,7 +3247,7 @@ function PlanEditor({
         if (embedded && document.querySelector('[data-plan-surface="studio"]')) return;
         e.preventDefault();
         e.stopPropagation();
-        if (e.key === '0') setFitting(true);
+        if (e.key === '0') askWholeFit();
         else zoomStep(e.key === '-' || e.key === '_' ? -1 : 1, 0.2, 6);
         return;
       }
@@ -4027,7 +4073,7 @@ function PlanEditor({
                 className="p-1.5 rounded-lg hover:bg-white/10">
                 {isFull ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
               </button>
-              <button data-plan-fit onClick={() => setFitting(true)} title="Fit the page"
+              <button data-plan-fit onClick={askWholeFit} title="Fit the page"
                 className="p-1.5 rounded-lg hover:bg-white/10"><Square size={12} /></button>
             </div>
           )}
@@ -4434,7 +4480,7 @@ function PlanEditor({
                 className="px-2.5 py-1 rounded-full hover:bg-white/10 disabled:opacity-30">
                 <Minus size={14} />
               </button>
-              <button onClick={() => setFitting(true)} title="Fit the sheet to the window"
+              <button onClick={askWholeFit} title="Fit the sheet to the window"
                 className="px-2 py-1 rounded-full text-[12px] font-semibold tabular-nums hover:bg-white/10">
                 {Math.round(scale * 100)}%
               </button>
@@ -4447,7 +4493,7 @@ function PlanEditor({
                 className="px-2.5 py-1 rounded-full hover:bg-white/10">
                 {isFull ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
               </button>
-              <button data-plan-fit onClick={() => setFitting(true)} title="Fit to page"
+              <button data-plan-fit onClick={askWholeFit} title="Fit to page"
                 className="px-2.5 py-1 rounded-full hover:bg-white/10">
                 <Square size={12} />
               </button>
@@ -4807,7 +4853,7 @@ function PlanEditor({
                 style={{ backgroundColor: '#f1f5f9', color: '#334155' }}>
                 {isFull ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
               </button>
-              <button onClick={() => { setFitting(true); setShowMore(false); }} title="Fit the page"
+              <button onClick={() => { askWholeFit(); setShowMore(false); }} title="Fit the page"
                 className="rounded-lg flex items-center justify-center min-w-[42px] min-h-[42px]"
                 style={{ backgroundColor: '#f1f5f9', color: '#334155' }}><Square size={14} /></button>
             </div>

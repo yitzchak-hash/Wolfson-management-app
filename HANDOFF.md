@@ -27,7 +27,7 @@ exactly there.
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2027-01-01` — the next entry must be a later date (an older
+   newest is `2027-01-02` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`. 8. Rewrite THIS file.
@@ -43,8 +43,29 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-17 — four asks: the Chrome ask, the self-task stage, the tablet studio, the general job)
+## Where things stand (2026-09-17 — the tablet's plan opens big; stages speak Russian)
 Last commits, newest first (see `git log`):
+- **2026-09-17, second pass — his photo of the tablet in the studio.** His
+  words: "I like the design and layout. I just think the scaling is really
+  off. The plan is tiny and it needs to be bigger." **So the tablet-studio
+  REDESIGN is off** — the eight starred questions on "The Studio on the
+  Tablet" are not to be built; only the scaling was wrong. Reproduced by
+  giving the harness a PORTRAIT A1 sheet (my earlier captures used a
+  landscape one, which filled the stage and misrepresented the real thing):
+  420px of sheet in a 1090px stage, blue either side, 37% — his photo
+  exactly. The fit was fitting the whole page to the HEIGHT. Now, on a desk
+  or tablet only, a sheet whose shape badly disagrees with the screen's
+  opens as big as it can while keeping 60% of the page on screen — 420 →
+  700px, top-aligned; the Fit control still shows every millimetre; a
+  landscape sheet and the phone are untouched. Also his second ask: stage
+  names in Russian (`Stage.nameRu` + `stageNameIn`), a Russian box under the
+  Hebrew one in project settings, and the portal names every stage in the
+  worker's own language (nine sites that all read the OFFICE's RTL flag
+  before, so a Russian worker saw English). `round45-probe.mjs` (12 checks);
+  planviewer, planzoom, planjump, tvzoom, markup2, planphone, round44,
+  portalround, round38, round43, tsc, build, four audits green.
+  **He should check on the tablet**: open an upright plan in the studio and
+  see it fill the width; press the square Fit button to see the whole sheet.
 - **2026-09-17 — his four asks.** (1) "Why don't I see the permission asked
   on my computer": the ask only appeared on the first worker-message card;
   now a bell PILL in the header asks up front, once per machine (a floating

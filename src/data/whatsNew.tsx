@@ -30,6 +30,28 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-01-02',
+    title: 'The plan opens big on the tablet, and every stage speaks the worker\u2019s language',
+    items: [
+      {
+        title: 'An upright plan is no longer a strip in the middle of the screen',
+        body: 'On the tablet held sideways, a portrait plan used to be fitted to the height and came '
+          + 'out a narrow sheet with blue either side of it \u2014 too small to draw on. It now opens '
+          + 'as big as it can while still showing at least 60% of the page, which on the office\u2019s '
+          + 'tablet is two thirds wider than before. Scroll down for the rest, or press the Fit '
+          + 'button to see every millimetre at once.',
+        demo: 'tap',
+      },
+      {
+        title: 'Stage names in Russian',
+        body: 'Every stage now takes a Russian name beside its English and Hebrew ones, in project '
+          + 'settings. A worker whose portal is set to Russian reads the stage in Russian everywhere '
+          + '\u2014 his task, the closing screen, \u201cI\u2019m going to work here\u201d and his own '
+          + 'task form. A stage with no Russian name typed shows the English one.',
+      },
+    ],
+  },
+  {
     date: '2027-01-01',
     title: 'A general job leads to the buildings, the office is asked to turn alerts on, and the worker says what he will do',
     items: [

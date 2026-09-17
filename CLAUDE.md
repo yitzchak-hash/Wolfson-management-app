@@ -8261,3 +8261,64 @@ absent or it yanks the app back after a workspace switch.
   questions; build only on his numbers.
 
 Harness: `scratchpad/round44-probe.mjs` (four contexts, 21 checks).
+
+---
+
+# v2 — the tablet's plan opens big, and the stage speaks Russian
+
+## A PORTRAIT sheet on a LANDSCAPE screen was fitted to the height
+The owner's photo of the Tab S10 FE: a real A1 plan at 37%, a narrow sheet
+with blue either side, "the plan is tiny and it needs to be bigger". The
+layout he approved; the SCALING was the fault. Reproduced exactly
+(`scratchpad/tabfit-probe.mjs` with `PW=1684 PH=2384`): 420px of sheet in a
+1090px stage. My earlier tablet captures used a LANDSCAPE test sheet, which
+filled the stage and misrepresented the real thing — **a plan harness must
+use the sheet SHAPE the office actually has.**
+
+The fit itself was right; showing the whole page is simply the wrong result
+when the sheet's shape and the stage's badly disagree. In `renderPage`:
+
+- `FIT_USE` (0.6) — when the whole page uses less than this much of the
+  stage across its slack axis, the sheet opens BIGGER.
+- `FIT_KEEP` (0.6) — and never so big that less than this much of the sheet
+  is on screen. Capped by `cover` (the scale that fills the stage), floored
+  by the whole-page fit.
+- **The phone (`compact`) is deliberately untouched** — there a landscape
+  sheet already fits to the width and the empty space says "turn the phone";
+  making it overflow sideways would undo that.
+- `fitScaleRef` stays the WHOLE-page number, so the zoom-out floor (a
+  quarter of it) and the greyed-out minus still mean what they meant.
+- **An automatic fit (open, turning the tablet, full screen) opens big; the
+  fit CONTROL shows the whole page.** `fitWholeRef` + `askWholeFit()` —
+  raised just before `setFitting(true)` and consumed by the fit, so a later
+  automatic fit cannot inherit it. All five fit controls (both toolbars, the
+  phone ⋯ sheet, the viewer pill, the `0` key) call `askWholeFit`.
+
+Measured on the tablet in landscape with an A1 upright sheet: 420 → 700px
+wide, 60% of the sheet on screen, top-aligned. A landscape sheet and the
+phone are unchanged, byte for byte.
+
+## `stageNameIn(stage, lang)` — the worker reads the stage in HIS language
+`Stage.nameRu` beside `nameHe` (rides `stages`, a bare global collection —
+no new store key, nothing for the backup audit). `getStageName(stage,
+isRtl)` stays for the office; `stageNameIn(stage, 'en'|'he'|'ru')` is what
+the PORTAL uses, at all nine sites that name a stage — the task sheet, the
+closing screen's pills, "I'm going to work here", his own task form, the
+current-stage lines and the task description it writes.
+
+The portal's `s.isRtl` is the office's own flag and is FALSE for a Russian
+worker, so every one of those sites drew English: the one word on the screen
+he has to understand. `readLang` (`Contractor.lang`) is the answer
+everywhere in that file.
+
+Settings → Stages has a Russian box under the Hebrew one, on each row
+(`data-stage-ru`, `data-stage-save`) and on the add-a-stage row. An empty
+Russian name falls back to the English one the office typed — deliberately
+NOT machine-translated: a stage name is a term of art ("Geves"), and a
+guessed translation on the one word that must be right is worse than the
+original.
+
+Harness: `scratchpad/round45-probe.mjs` (12 checks — the portrait sheet past
+the whole-page fit, 60% still visible, the fit control showing the whole
+page, a landscape sheet and the phone unchanged, the Russian task sheet with
+no English stage left in it, and the settings box storing `nameRu`).
