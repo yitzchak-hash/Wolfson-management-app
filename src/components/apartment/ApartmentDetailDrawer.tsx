@@ -16,6 +16,10 @@ import { transcribeMemo } from '../../data/transcribe';
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns';
 import { StageNotesSection } from './StageNotesSection';
 import { ActivitySection } from './ActivitySection';
+import { MediaViewer } from '../ui/MediaViewer';
+import { useThreadFold } from '../../data/threadFold';
+import { advanceOnDone } from '../../data/stageMarks';
+import { mediaKindOf, isMediaFile } from '../../data/mediaKind';
 import { extractFileId, drivePreviewUrl, driveDownloadUrl, findPlansPdfViaBackend, findAllPlansPdfsViaBackend, findPlanSetViaBackend, PlanEntry, isUploadBackendConfigured, findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, ensureDriveShared, extractFolderId, driveThumbUrl, listAllPhotosViaBackend, getFolderNameViaBackend, familyNameFromFolderName, DrivePhotoItem, DriveFile, FolderHealth, checkFolderHealthViaBackend } from '../../data/driveApi';
 import { Tooltip } from '../ui/Tooltip';
 import { DriveStatus, driveStateOf } from '../ui/DriveStatus';
@@ -53,108 +57,6 @@ interface LightboxItem {
   thumbSrc: string;
   downloadHref: string;
   transcript?: string;
-}
-
-function LightboxOverlay({ items, initialIndex, onClose, imageUnavailable, openDownload, downloadLabel, lang = 'en' }: { items: LightboxItem[]; initialIndex: number; onClose: () => void; imageUnavailable: string; openDownload: string; downloadLabel: string; lang?: 'en' | 'he' }) {
-  const [idx, setIdx] = React.useState(initialIndex);
-  const [touchStart, setTouchStart] = React.useState<number | null>(null);
-  const item = items[idx];
-  const prev = () => setIdx(i => Math.max(0, i - 1));
-  const next = () => setIdx(i => Math.min(items.length - 1, i + 1));
-  const isImg = item.mimeType.startsWith('image/');
-  const isVid = item.mimeType.startsWith('video/');
-  const isAudio = item.mimeType.startsWith('audio/');
-
-  React.useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') prev();
-      else if (e.key === 'ArrowRight') next();
-      else if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
-  return (
-    <div
-      className="fixed inset-0 z-[300] bg-black flex flex-col select-none"
-      onTouchStart={e => setTouchStart(e.touches[0].clientX)}
-      onTouchEnd={e => {
-        if (touchStart === null) return;
-        const d = touchStart - e.changedTouches[0].clientX;
-        if (d > 60) next(); else if (d < -60) prev();
-        setTouchStart(null);
-      }}
-    >
-      {/* Top bar */}
-      <div className="flex items-center justify-between px-4 py-3 bg-black/80 flex-shrink-0">
-        <span className="text-white text-sm font-medium truncate max-w-[60%]">{item.filename}</span>
-        <div className="flex items-center gap-3">
-          <span className="text-gray-400 text-xs">{idx + 1} / {items.length}</span>
-          {item.downloadHref && (
-            <a href={item.downloadHref} target="_blank" rel="noopener noreferrer" download={!item.fileId ? item.filename : undefined}
-              className="p-1.5 text-gray-300 hover:text-white" title={downloadLabel}>
-              <Download size={18} />
-            </a>
-          )}
-          <button onClick={onClose} className="p-1.5 text-gray-300 hover:text-white"><X size={20} /></button>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 flex items-center justify-center relative overflow-hidden px-12">
-        {isAudio ? (
-          // A memo has nothing to show, so the viewer gives it the transport
-          // rather than a black frame with a filename under it.
-          <div className="flex items-center justify-center w-full h-full p-6">
-            <VoiceMemoPlayer src={item.downloadHref || item.thumbSrc || ''} className="max-w-[420px] w-full"
-              transcript={item.transcript} lang={lang} saidLabel={lang === 'he' ? 'נאמר' : 'Said'} />
-          </div>
-        ) : isImg ? (
-          item.thumbSrc
-            ? <img src={item.thumbSrc} alt={item.filename} className="max-w-full max-h-full object-contain" draggable={false} />
-            : <div className="text-gray-500 text-sm">{imageUnavailable}</div>
-        ) : isVid ? (
-          <video src={item.thumbSrc} controls className="max-w-full max-h-full" />
-        ) : (
-          <div className="flex flex-col items-center gap-4">
-            <FileText size={56} className="text-blue-400" />
-            <span className="text-white text-sm">{item.filename}</span>
-            {item.downloadHref && (
-              <a href={item.downloadHref} target="_blank" rel="noopener noreferrer"
-                className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-medium">
-                {openDownload}
-              </a>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Prev / Next */}
-      {idx > 0 && (
-        <button onClick={prev}
-          className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center text-white z-10">
-          <ChevronLeft size={22} />
-        </button>
-      )}
-      {idx < items.length - 1 && (
-        <button onClick={next}
-          className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center text-white z-10">
-          <ChevronRight size={22} />
-        </button>
-      )}
-
-      {/* Dot indicators */}
-      {items.length > 1 && (
-        <div className="flex justify-center gap-1.5 pb-4 pt-2 flex-shrink-0">
-          {items.map((_, i) => (
-            <button key={i} onClick={() => setIdx(i)}
-              className={`rounded-full transition-all ${i === idx ? 'w-4 h-2 bg-white' : 'w-2 h-2 bg-gray-600 hover:bg-gray-400'}`} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
 }
 
 function DriveImg({ src, alt, className }: { src: string; alt: string; className?: string }) {
@@ -309,6 +211,11 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
   const [loadingPhotos, setLoadingPhotos] = useState(false);
   const [photosLoaded, setPhotosLoaded] = useState(false);
   const [lightbox, setLightbox] = useState<{ items: LightboxItem[]; index: number } | null>(null);
+  const thread = useThreadFold();
+  /** How many messages and pictures a task's thread holds — shown on the fold. */
+  const threadCount = (taskId: string) =>
+    contractorNotes.filter(n => n.assignmentId === taskId).length
+    + contractorPhotos.filter(p => p.assignmentId === taskId).length;
   const [officeUploadPct, setOfficeUploadPct] = useState<number | null>(null);
   const [showUnmergeModal, setShowUnmergeModal] = useState(false);
   /** Drive folder health, checked once when the Photos tab is opened. */
@@ -1292,6 +1199,19 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
               starredId={shownStarId}
               onStar={starPlan}
               onPreview={(file, folderName) => setBrowsePreview({ file, folderName })}
+              onOpenMedia={(file, all) => {
+                // Every openable file in the folder rides along, so the
+                // arrows walk the site's pictures and films in order.
+                const list = all.filter(x => !x.viewable && isMediaFile(x.name, x.mimeType));
+                const items = (list.length ? list : [file]).map(x => ({
+                  fileId: x.id, filename: x.name, mimeType: x.mimeType ?? '',
+                  thumbSrc: mediaKindOf(x.name, x.mimeType) === 'image' ? driveThumbUrl(x.id, 1600) : '',
+                  downloadHref: driveDownloadUrl(x.id),
+                }));
+                const at = Math.max(0, items.findIndex(x => x.fileId === file.id));
+                if (!items.length) return;
+                setLightbox({ items, index: at });
+              }}
               onBack={backTo}
               onHide={planSideOn ? () => setPlanPaneOn(false) : undefined}
               currentId={shownPlanId ?? detectedPdfId}
@@ -1900,7 +1820,17 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                     currentStageId={currentStageId}
                     stageMarks={(apartments.find(a => a.id === apartment.id) ?? apartment).stageMarks}
                     onPickStage={handleStageChange}
-                    onMarks={next => updateApartment(apartment.id, { stageMarks: next }, currentUser)}
+                    onMarks={next => {
+                      // Crossing the CURRENT stage off moves the job on.
+                      const moveTo = advanceOnDone(apartment.currentStageId, apartment.stageMarks, next, sortedStages);
+                      updateApartment(apartment.id,
+                        moveTo ? { stageMarks: next, currentStageId: moveTo } : { stageMarks: next },
+                        currentUser);
+                      if (moveTo) {
+                        setCurrentStageId(moveTo);
+                        onToast(`${ui.stageMovedOn} ${getStageName(sortedStages.find(x => x.id === moveTo)!, !!ui.isRtl)}`);
+                      }
+                    }}
                     ui={ui}
                                       onReportProblem={isGeneralProject ? undefined : () => setProblemFormOpen(true)}
                     problem={problemState(apartment.id, contractorAssignments)}
@@ -2647,9 +2577,20 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                             {/* "Task messages" — named, per the owner; the
                                 composer sits INSIDE the grey panel with the
                                 messages (the worker's phone draws the same). */}
-                            <div className="flex items-center gap-1.5 text-[10.5px] font-extrabold tracking-wider text-gray-500 uppercase mt-1.5 mb-1.5">
+                            <button type="button" data-thread-toggle={a.id}
+                              aria-expanded={thread.isOpen(a.id)}
+                              onClick={() => thread.toggle(a.id)}
+                              className="w-full flex items-center gap-1.5 text-[10.5px] font-extrabold tracking-wider text-gray-500 uppercase mt-1.5 mb-1.5 hover:text-gray-700">
                               <MessageSquare size={11} /> {ui.threadTitle}
-                            </div>
+                              {threadCount(a.id) > 0 && (
+                                <span data-thread-count className="px-1.5 rounded-full bg-gray-200 text-gray-600 text-[10px] tabular-nums normal-case tracking-normal">
+                                  {threadCount(a.id)}
+                                </span>
+                              )}
+                              <span className="flex-1" />
+                              <ChevronDown size={13} className={thread.isOpen(a.id) ? '' : '-rotate-90'} />
+                            </button>
+                            {thread.isOpen(a.id) && (
                             <TaskThread
                               assignment={a}
                               notes={contractorNotes.filter(n => n.assignmentId === a.id)}
@@ -2698,6 +2639,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                             </MessageBox>
                               }
                             />
+                            )}
                           </div>
                         )}
                       </div>
@@ -2987,8 +2929,15 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
         />
       )}
       {lightbox && (
-        <LightboxOverlay
-          items={lightbox.items}
+        <MediaViewer
+          items={lightbox.items.map(it => ({
+            fileId: it.fileId || undefined,
+            filename: it.filename,
+            mimeType: it.mimeType,
+            src: it.thumbSrc || undefined,
+            downloadHref: it.downloadHref || undefined,
+            transcript: it.transcript,
+          }))}
           initialIndex={lightbox.index}
           onClose={() => setLightbox(null)}
           imageUnavailable={ui.imageUnavailable}

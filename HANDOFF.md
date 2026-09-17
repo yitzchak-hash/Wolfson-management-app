@@ -27,7 +27,7 @@ exactly there.
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2027-01-02` — the next entry must be a later date (an older
+   newest is `2027-01-03` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`. 8. Rewrite THIS file.
@@ -43,8 +43,23 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-17 — the tablet's plan opens big; stages speak Russian)
+## Where things stand (2026-09-17 — files open properly; the gallery is on request only)
 Last commits, newest first (see `git log`):
+- **2026-09-17, third pass — six asks off two screenshots.** (0) **STOP
+  refreshing the Device Gallery** — "I keep updating the device gallery,
+  wasting my credits". The skill now runs ON REQUEST ONLY; its description was
+  narrowed so a UI change does not trigger it. (1) A film, a picture or a file
+  now OPENS: one `MediaViewer` with full screen, an info panel, Download and
+  Open in Drive, wired into the thread's bubbles, the drawer and the Drive
+  browser (whose videos were dead grey badges). A `.dwg` that Drive calls
+  `image/vnd.dwg` drew as a broken picture — `mediaKindOf` decides by the NAME
+  now. (2) Task messages fold away with a count, remembered per machine.
+  (3) Crossing the CURRENT stage off moves the job to the next stage by itself.
+  (4) The Russian he saw on his PC: "I'm going to work here" stored its task
+  description in the worker's language — it is English now, and the worker
+  still reads it translated. (5) The drawer's chip says Contractor status.
+  `round46-probe.mjs` (21 checks); drawerround, stagereport, portalround,
+  round40, tsc, build and the four audits green.
 - **2026-09-17, second pass — his photo of the tablet in the studio.** His
   words: "I like the design and layout. I just think the scaling is really
   off. The plan is tiny and it needs to be bigger." **So the tablet-studio

@@ -151,3 +151,10 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ The plan opens BIG on a tablet: an upright sheet on a sideways screen no longer fits to the height — it opens as big as it can while keeping 60% of the page on screen (420 → 700px on the Tab S10 FE); the Fit control still shows the whole page; the phone untouched (2026-09-17)
 - ☑ Stage names in Russian (`Stage.nameRu`, `stageNameIn`), typed in project settings; the worker's portal names every stage in his own language (2026-09-17)
 - ☒ The markup studio tablet REDESIGN — owner's ruling 2026-09-17: the design and layout are approved as they are; only the scaling was wrong, and that is fixed. The eight starred questions on "The Studio on the Tablet" are not to be built.
+- ☑ One media viewer for every file — pictures, films, memos, documents — with full screen, an info panel, Download and Open in Drive; the Drive browser's videos and files are no longer dead tiles (2026-09-17)
+- ☑ A file's kind is decided by its NAME (`mediaKindOf`): a `.dwg` that Drive calls `image/vnd.dwg` no longer draws as a broken picture (2026-09-17)
+- ☑ Task messages fold away, with a count, remembered per machine (2026-09-17)
+- ☑ Crossing the CURRENT stage off moves the job to the next stage automatically (`advanceOnDone`) (2026-09-17)
+- ☑ A task the worker starts is stored in English; the worker still reads it in his own language (2026-09-17)
+- ☑ The drawer's chip says "Contractor status" (2026-09-17)
+- ☒ The Device Gallery is refreshed ON REQUEST ONLY — owner's ruling 2026-09-17, it costs him credits; a UI change no longer triggers a capture run

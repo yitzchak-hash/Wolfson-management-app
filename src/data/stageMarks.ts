@@ -81,3 +81,28 @@ export function cycleMark(
   }
   return Object.keys(next).length ? next : undefined;
 }
+
+/**
+ * Crossing the CURRENT stage off moves the job on (owner, 2026-09-17: "if a
+ * stage is crossed off, it can move to the next stage automatically").
+ *
+ * Only that one case: marking a stage the job has already passed is a
+ * record, and marking one AHEAD is somebody saying it was done out of order
+ * — neither is the job moving. The answer is the next ACTIVE stage after the
+ * current one, or null when there is nothing to move to (the last stage, no
+ * current stage, or the mark is not a fresh 'done' on it).
+ */
+export function advanceOnDone(
+  currentStageId: string | null | undefined,
+  before: Record<string, 'done' | 'pending'> | undefined,
+  after: Record<string, 'done' | 'pending'> | undefined,
+  sortedStages: Stage[],
+): string | null {
+  if (!currentStageId) return null;
+  if (before?.[currentStageId] === 'done') return null;      // already crossed off
+  if (after?.[currentStageId] !== 'done') return null;       // not what just happened
+  const live = sortedStages.filter(s => s.active);
+  const at = live.findIndex(s => s.id === currentStageId);
+  if (at < 0 || at === live.length - 1) return null;
+  return live[at + 1].id;
+}

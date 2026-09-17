@@ -5,6 +5,8 @@ import { Download, X, Trash2 } from 'lucide-react';
 import { ContractorAssignment, ContractorNote, ContractorPhoto } from '../../types';
 import { VoiceMemoPlayer } from '../ui/VoiceMemo';
 import { VideoTile } from '../ui/VideoTile';
+import { MediaViewer, ViewerItem } from '../ui/MediaViewer';
+import { mediaKindOf } from '../../data/mediaKind';
 import { fetchPlanBytes, driveThumbUrl } from '../../data/driveApi';
 import { saveBytes } from '../../data/planExport';
 import { Translated } from '../ui/Translated';
@@ -119,6 +121,20 @@ function photoSrc(p: ContractorPhoto, px = 400): string | null {
   return p.storageUrl || (p.driveFileId ? driveThumbUrl(p.driveFileId, px) : null) || (p.dataUrl || null);
 }
 
+/** A picture, film or file from site, as the viewer wants it. */
+function photoViewerItem(p: ContractorPhoto): ViewerItem {
+  return {
+    fileId: p.driveFileId,
+    filename: p.filename,
+    mimeType: p.mimeType,
+    // A Drive thumbnail is fine for a picture and never for a film — the
+    // viewer knows that rule and fetches the bytes instead.
+    src: p.storageUrl || p.dataUrl || (p.driveFileId ? driveThumbUrl(p.driveFileId, 1600) : undefined),
+    sizeBytes: p.fileSizeBytes,
+    when: p.uploadedAt,
+  };
+}
+
 export function TaskThread({ assignment, notes, photos, viewer, readOnly = false, words, maxBubble, translateTo, footer, canDelete }: {
   assignment: ContractorAssignment;
   /**
@@ -149,7 +165,7 @@ export function TaskThread({ assignment, notes, photos, viewer, readOnly = false
   /** Cap the bubbles on a monitor so they do not run the whole window. */
   maxBubble?: number;
 }) {
-  const [lightbox, setLightbox] = useState<ContractorPhoto | null>(null);
+  const [viewAt, setViewAt] = useState<string | null>(null);
   const updateContractorNote = useStore(st => st.updateContractorNote);
   const deleteContractorNote = useStore(st => st.deleteContractorNote);
   // The message whose trash was pressed — a second press on the same bubble
@@ -170,13 +186,50 @@ export function TaskThread({ assignment, notes, photos, viewer, readOnly = false
     ...photos.filter(p => !claimed.has(p.id)).map<Item>(p => ({ t: p.uploadedAt, kind: 'photo', photo: p })),
   ].sort((a, b) => a.t.localeCompare(b.t));
 
+  /**
+   * Everything in this thread that can be OPENED — pictures, films, memos,
+   * documents — in the order the thread draws them, so the viewer's arrows
+   * walk the conversation. One key per row (`data-media-key`) is what a
+   * press hands back.
+   */
+  const media: { key: string; item: ViewerItem }[] = [];
+  for (const it of items) {
+    if (it.kind === 'photo') {
+      media.push({ key: `p:${it.photo.id}`, item: photoViewerItem(it.photo) });
+    } else {
+      for (const ph of it.photos) media.push({ key: `p:${ph.id}`, item: photoViewerItem(ph) });
+      const n = it.note;
+      if (n.attachmentFilename || n.attachmentDriveFileId || n.attachmentDataUrl) {
+        media.push({
+          key: `n:${n.id}`,
+          item: {
+            fileId: n.attachmentDriveFileId,
+            filename: n.attachmentFilename || 'file',
+            mimeType: n.attachmentMimeType,
+            src: n.attachmentDataUrl || undefined,
+            transcript: n.transcript,
+            who: n.authorName,
+            when: n.createdAt,
+          },
+        });
+      }
+    }
+  }
+  const openMedia = (key: string) => setViewAt(key);
+
   const closedAt = assignment.completedAt ?? null;
   const before = closedAt ? items.filter(i => i.t <= closedAt) : items;
   const after = closedAt ? items.filter(i => i.t > closedAt) : [];
 
   function photoBlock(p: ContractorPhoto, inBubble: boolean) {
     const src = photoSrc(p);
-    const isImage = (p.fileType ?? 'image') === 'image';
+    /**
+     * The FILE decides, not the record's label and not Drive's mime: a
+     * `.dwg` arrives as `image/vnd.dwg` and drew as a broken picture, and a
+     * film uploaded before `fileType` existed defaults to 'image'.
+     */
+    const kind = mediaKindOf(p.filename, p.mimeType);
+    const isImage = kind === 'image' || (kind === 'file' && (p.fileType ?? 'image') === 'image' && !p.filename);
     if (isImage && src) {
       return (
         <div key={p.id} className={inBubble ? 'mb-1.5' : undefined}>
@@ -185,33 +238,36 @@ export function TaskThread({ assignment, notes, photos, viewer, readOnly = false
             alt={p.filename}
             className="block w-full rounded-[9px] cursor-pointer"
             style={{ maxWidth: 230 }}
-            onClick={() => setLightbox(p)}
+            onClick={() => openMedia(`p:${p.id}`)}
           />
           <div className="text-[11px] mt-0.5" style={{ color: '#8a99a8' }}>{words.tapToOpen}</div>
         </div>
       );
     }
     // A video is a still with a play button and a full-screen corner.
-    if ((p.fileType === 'video' || p.mimeType?.startsWith('video/')) && (p.storageUrl || p.dataUrl || p.driveFileId)) {
+    if ((kind === 'video' || p.fileType === 'video') && (p.storageUrl || p.dataUrl || p.driveFileId)) {
       return (
         <div key={p.id} className={inBubble ? 'mb-1.5' : undefined}>
-          <VideoTile src={p.storageUrl || p.dataUrl || null} driveFileId={p.driveFileId} filename={p.filename} mimeType={p.mimeType} />
+          <VideoTile src={p.storageUrl || p.dataUrl || null} driveFileId={p.driveFileId} filename={p.filename} mimeType={p.mimeType}
+            onOpen={() => openMedia(`p:${p.id}`)} />
         </div>
       );
     }
     // Any other file is a card you press to open and download.
     return <div key={p.id} className={inBubble ? 'mb-1.5' : undefined}>{fileCard({
       filename: p.filename, mime: p.mimeType, size: p.fileSizeBytes,
-      driveFileId: p.driveFileId, url: p.storageUrl, dataUrl: p.dataUrl,
+      driveFileId: p.driveFileId, url: p.storageUrl, dataUrl: p.dataUrl, open: `p:${p.id}`,
     })}</div>;
   }
 
-  function fileCard(f: { filename: string; mime?: string; size?: number; driveFileId?: string; url?: string; dataUrl?: string }) {
+  function fileCard(f: { filename: string; mime?: string; size?: number; driveFileId?: string; url?: string; dataUrl?: string; open?: string }) {
     const size = sizeLabel(f.size);
     return (
       <button
         type="button"
-        onClick={() => void handOver({ driveFileId: f.driveFileId, url: f.url, dataUrl: f.dataUrl, filename: f.filename, mime: f.mime })}
+        onClick={() => (f.open
+          ? openMedia(f.open)
+          : void handOver({ driveFileId: f.driveFileId, url: f.url, dataUrl: f.dataUrl, filename: f.filename, mime: f.mime }))}
         className="w-full flex items-center gap-2 rounded-[10px] px-2.5 py-2 text-start cursor-pointer"
         style={{ backgroundColor: '#f4f7fa', border: '1px solid #e2e9f1' }}
       >
@@ -247,7 +303,8 @@ export function TaskThread({ assignment, notes, photos, viewer, readOnly = false
       }
       for (const p of item.photos) body.push(<React.Fragment key={p.id}>{photoBlock(p, true)}</React.Fragment>);
       if (n.attachmentDataUrl || n.attachmentDriveFileId || n.attachmentDriveUrl) {
-        if (n.attachmentMimeType?.startsWith('audio/')) {
+        const attKind = mediaKindOf(n.attachmentFilename, n.attachmentMimeType);
+        if (attKind === 'audio') {
           body.push(
             <div key="att" className="mb-1.5">
               {/* A memo comes with its words — transcribed once, kept on the
@@ -262,18 +319,19 @@ export function TaskThread({ assignment, notes, photos, viewer, readOnly = false
               />
             </div>,
           );
-        } else if (n.attachmentMimeType?.startsWith('video/') && (n.attachmentDriveFileId || n.attachmentDataUrl)) {
+        } else if (attKind === 'video' && (n.attachmentDriveFileId || n.attachmentDataUrl)) {
           body.push(
             <div key="att" className="mb-1.5">
-              <VideoTile src={n.attachmentDataUrl || null} driveFileId={n.attachmentDriveFileId} filename={n.attachmentFilename} mimeType={n.attachmentMimeType} />
+              <VideoTile src={n.attachmentDataUrl || null} driveFileId={n.attachmentDriveFileId} filename={n.attachmentFilename} mimeType={n.attachmentMimeType}
+                onOpen={() => openMedia(`n:${n.id}`)} />
             </div>,
           );
-        } else if (n.attachmentMimeType?.startsWith('image/') && (n.attachmentDriveFileId || n.attachmentDataUrl)) {
+        } else if (attKind === 'image' && (n.attachmentDriveFileId || n.attachmentDataUrl)) {
           const src = n.attachmentDriveFileId ? driveThumbUrl(n.attachmentDriveFileId, 400) : n.attachmentDataUrl!;
           body.push(
             <div key="att" className="mb-1.5">
               <img src={src} alt={n.attachmentFilename} className="block w-full rounded-[9px] cursor-pointer" style={{ maxWidth: 230 }}
-                onClick={() => void handOver({ driveFileId: n.attachmentDriveFileId, dataUrl: n.attachmentDataUrl, filename: n.attachmentFilename || 'photo.jpg', mime: n.attachmentMimeType })} />
+                onClick={() => openMedia(`n:${n.id}`)} />
               <div className="text-[11px] mt-0.5" style={{ color: '#8a99a8' }}>{words.tapToOpen}</div>
             </div>,
           );
@@ -282,7 +340,7 @@ export function TaskThread({ assignment, notes, photos, viewer, readOnly = false
             <div key="att" className="mb-1.5">
               {fileCard({
                 filename: n.attachmentFilename || 'file', mime: n.attachmentMimeType,
-                driveFileId: n.attachmentDriveFileId, dataUrl: n.attachmentDataUrl,
+                driveFileId: n.attachmentDriveFileId, dataUrl: n.attachmentDataUrl, open: `n:${n.id}`,
               })}
             </div>,
           );
@@ -368,36 +426,14 @@ export function TaskThread({ assignment, notes, photos, viewer, readOnly = false
       )}
       {footer && <div data-thread-composer className="pt-1">{footer}</div>}
 
-      {/* The lightbox — portalled to the body: the drawer's panel carries a
-          transform, and a fixed child inside a transformed ancestor is
-          positioned against IT, not the screen. */}
-      {lightbox && createPortal(
-        <div className="fixed inset-0 z-[210] flex flex-col items-center justify-center"
-          style={{ backgroundColor: 'rgba(6,10,16,.88)' }}
-          onClick={() => setLightbox(null)}>
-          <img
-            src={photoSrc(lightbox, 1600) ?? undefined}
-            alt={lightbox.filename}
-            className="max-w-[94vw] max-h-[82vh] rounded-lg object-contain"
-            onClick={e => e.stopPropagation()}
-          />
-          <div className="flex items-center gap-2 mt-4" onClick={e => e.stopPropagation()}>
-            <button
-              onClick={() => void handOver({
-                driveFileId: lightbox.driveFileId, url: lightbox.storageUrl,
-                dataUrl: lightbox.dataUrl, filename: lightbox.filename, mime: lightbox.mimeType,
-              })}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-sm font-semibold"
-              style={{ backgroundColor: '#1e3a5f' }}>
-              <Download size={15} /> {words.download}
-            </button>
-            <button onClick={() => setLightbox(null)}
-              className="p-2 rounded-xl text-white/80 hover:text-white" style={{ backgroundColor: 'rgba(255,255,255,.12)' }}>
-              <X size={17} />
-            </button>
-          </div>
-        </div>,
-        document.body,
+      {viewAt && media.some(m => m.key === viewAt) && (
+        <MediaViewer
+          items={media.map(m => m.item)}
+          initialIndex={Math.max(0, media.findIndex(m => m.key === viewAt))}
+          onClose={() => setViewAt(null)}
+          lang={translateTo ?? 'en'}
+          downloadLabel={words.download}
+        />
       )}
     </div>
   );

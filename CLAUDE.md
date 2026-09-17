@@ -8322,3 +8322,89 @@ Harness: `scratchpad/round45-probe.mjs` (12 checks — the portrait sheet past
 the whole-page fit, 60% still visible, the fit control showing the whole
 page, a landscape sheet and the phone unchanged, the Russian task sheet with
 no English stage left in it, and the settings box storing `nameRu`).
+
+---
+
+# v2 — one viewer for every file, a thread that folds, a stage that moves on
+
+## THE GALLERY IS ON REQUEST ONLY (owner, 2026-09-17)
+"I keep updating the device gallery, wasting my credits." The device-gallery
+skill's standing "refresh after every UI change" rule is REVERSED: capture and
+republish only when he asks — for the gallery, for a device preview, or for
+his pins. A UI change does not entitle a capture run. Its `description` was
+narrowed to match, so it no longer triggers on "the UI changed". Say in the
+reply which screens a change touched and let him call for a refresh.
+
+## `mediaKindOf(name, mime)` — the file's kind, decided by its NAME
+`src/data/mediaKind.ts`. The extension answers whenever there is one and only
+an extension-less file falls back to the mime, because **Drive's mime lies**:
+a `.dwg` arrives as `image/vnd.dwg`, which is how a CAD file came to be drawn
+as a broken picture in a task's messages. The image list is what a BROWSER can
+draw (no HEIC, no TIFF). `isMediaFile` and `typeBadgeOf` ride with it; the plan
+browser's own `typeBadge` now delegates.
+
+Every place that draws a stored file branches on this, never on the raw mime
+and never on a record's own label (`ContractorPhoto.fileType` defaults to
+'image', so a film uploaded before that field existed drew as a picture).
+
+## `MediaViewer` — the one thing that opens a file
+`src/components/ui/MediaViewer.tsx`, portalled to the body (every host — the
+drawer, a thread bubble, the Drive browser — sits inside a transformed or
+clipped subtree). It replaces the drawer's `LightboxOverlay` and the thread's
+own photo-only lightbox; both are deleted.
+
+- Bar: the name · a count when several · **info** (`data-viewer-info`, a panel
+  of name / type / size / who / when) · **full screen**
+  (`data-viewer-full`, `requestFullscreen` on its own root) · **open in
+  Drive** · **download** · close. Arrows and a dot row walk the set; a swipe
+  does the same on a phone.
+- **A Drive THUMBNAIL is never a video source** — it is a picture of the first
+  frame. Hosts hand one `src` to every kind, so the rule lives in the viewer
+  once: a thumbnail address is refused for a film and the bytes come down
+  through `/api/drive-fetch` on OPEN — never on mount of a tile, which would
+  fetch every film in a folder.
+- Escape is handled in the CAPTURE phase and stopped, so closing the viewer
+  cannot close the job window behind it.
+
+Wired at: the drawer's photos and office files (as before), **the Drive
+browser** (`PlanBrowser.onOpenMedia` — a film, a picture, a memo or a
+spreadsheet is no longer a dead grey badge; a video tile wears Drive's
+thumbnail with a play mark), and **every bubble in a task's thread** (a
+picture, a film's corner button, a file card). `VideoTile.onOpen` makes its
+corner open the viewer instead of throwing the bare `<video>` full screen;
+the centre play still plays it in place.
+
+## The thread folds (`src/data/threadFold.ts`)
+The "Task messages" heading is a button in BOTH hosts (`data-thread-toggle`,
+`data-thread-count`) — the office's drawer and the worker's phone read ONE
+hook, so they cannot drift. Open until somebody folds one away, and the last
+choice becomes the default for every other task on that machine
+(`thread_open_default`, localStorage — how much of a conversation you want on
+screen is about the screen you are at, so it stays out of the store, the
+export and Firestore, and out of the backup audit). The toggle works out the
+next value through refs before writing: neither setState updater does anything
+but return a value.
+
+## Crossing the CURRENT stage off moves the job on
+`advanceOnDone(currentStageId, before, after, sortedStages)` in
+`stageMarks.ts` — pure. Only the fresh `'done'` on the stage the job is ON
+advances it, to the next ACTIVE stage; a mark on a passed stage is a record
+and a mark on one ahead is somebody saying it was done out of order. The
+drawer writes `stageMarks` and `currentStageId` in ONE `updateApartment` and
+toasts where it went (`stageMovedOn`, both presets).
+
+## A record is written in ENGLISH, whoever wrote it
+"I'm going to work here" stored its task description in the WORKER's language
+(`работаю здесь сегодня`), so the office read Russian on an English PC. The
+description is plain English now; the worker still reads it in his own
+language because every screen draws a task description through `Translated`.
+**Write a record in the writer's language and it is wrong for everybody else,
+for ever** — the reader's language is a rendering decision, never a stored one.
+
+The drawer's chip is **Contractor status** (the Hebrew already said קבלן).
+
+Harness: `scratchpad/round46-probe.mjs` (21 checks — the fold and its count,
+the viewer's full-screen / info / Drive / download / arrows, Escape leaving
+the drawer open, a `.dwg` opening as a file card rather than a broken picture,
+the stage advancing on a cross-off, and the worker's task stored with no
+Cyrillic in it).

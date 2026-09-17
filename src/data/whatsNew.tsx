@@ -30,6 +30,38 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-01-03',
+    title: 'Every file opens properly, task messages fold away, and a crossed-off stage moves the job on',
+    items: [
+      {
+        title: 'One viewer for pictures, films and files',
+        body: 'A video or a file in a job\u2019s Drive folder used to be a dead grey tile, and a film '
+          + 'in a task\u2019s messages was just a filename. Press any of them now and it opens full '
+          + 'size with the name, a full-screen button, an info button that says what the file is, '
+          + 'Download, Open in Drive, and arrows to walk the rest of the job\u2019s pictures.',
+        demo: 'tap',
+      },
+      {
+        title: 'Task messages fold away',
+        body: 'The Task messages heading is a button. Press it and the whole conversation folds up '
+          + 'with a count of what is in it; press it again to open it. The app remembers how you '
+          + 'left it, on this computer.',
+      },
+      {
+        title: 'Crossing a stage off moves the job to the next one',
+        body: 'Tick the box beside the stage the job is ON and it is crossed off AND the job moves '
+          + 'to the next stage by itself, with a line saying where it went. Ticking a stage the job '
+          + 'has already passed, or one further ahead, is still only a record.',
+      },
+      {
+        title: 'A task the worker starts reads in your language',
+        body: 'A task a Russian-speaking worker started on site was stored in Russian, so the office '
+          + 'saw Russian on an English screen. It is written in plain English now, and the worker '
+          + 'still reads it in his own language.',
+      },
+    ],
+  },
+  {
     date: '2027-01-02',
     title: 'The plan opens big on the tablet, and every stage speaks the worker\u2019s language',
     items: [

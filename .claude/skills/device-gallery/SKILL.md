@@ -4,11 +4,12 @@ description: >-
   Maintain the owner's Device Gallery — one artifact page of real screenshots
   of the running app on every device (newest iPhone, newest Galaxy, Z Flip,
   Z Fold's three screens, all the iPads, the office PC) — and work its
-  pin-notes feedback loop. Use whenever UI is being changed or discussed
-  (views, screens, layout, sizes, colors, "how does it look", "show me"),
-  whenever the owner asks for the gallery or a device preview, and whenever
-  he says to check his gallery notes / pins — the notes live INSIDE the
-  artifact and must be read from it.
+  pin-notes feedback loop. Use ONLY when the owner asks for it — the gallery,
+  a device preview, "show me how it looks on my phone", or "check my gallery
+  notes / pins" (the notes live INSIDE the artifact and must be read from
+  it). Do NOT run it as a routine step after a UI change: capturing and
+  republishing costs the owner real money and he asked for it on request
+  only (2026-09-17).
 ---
 
 # The Device Gallery
@@ -26,8 +27,12 @@ method; this skill is how it runs in THIS repo.
   favicon 🖼️). Never mint a second gallery.
 - **Real screenshots only** — captured from the app served by the dev
   server, on the current branch, with realistic seeded data. Never mockups.
-- **Refresh after every UI change**, before reporting it done. The page
-  must never be older than the code being discussed.
+- **Refresh ONLY when the owner asks** (owner's ruling, 2026-09-17: "I keep
+  updating the device gallery, wasting my credits"). A UI change does NOT
+  entitle this skill to a capture run. Capture and republish when he asks
+  for the gallery, for a device preview, or for his pins to be worked —
+  never as a routine step of a round. Say in the reply which screens the
+  change touched, so he can call for a refresh if he wants one.
 - **Screenshots show; the audit proves.** Run `scratchpad/shots.mjs` at any
   size a change could affect (`W`/`H`/`VIEW=landscape` env vars) — overflow
   and clipped counts must be 0.

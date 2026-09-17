@@ -1,5 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect, lazy, Suspense } from 'react';
 import { useParams } from 'react-router-dom';
+import { useThreadFold } from '../data/threadFold';
 import { useStore, loadAllProjectsTaskData, loadProjectSnapshot, ensureProjectSnapshot, startForeignSync, stopForeignSync } from '../data/store';
 import { ContractorAssignment, ContractorPhoto, Contractor, Apartment, Project, DEFAULT_CONTRACTOR_UI_STRINGS, HEBREW_CONTRACTOR_UI_STRINGS, RUSSIAN_CONTRACTOR_UI_STRINGS, PortalLang, stageNameIn, aptLabel, workAtLabel, projectColor, projectName } from '../types';
 import { transcribeMemo } from '../data/transcribe';
@@ -614,6 +615,7 @@ export function ContractorPortal() {
    * office's Hebrew in Russian; the office reads his Russian in its own.
    */
   const readLang: PortalLang = lang ?? (contractorUiStrings.isRtl ? 'he' : 'en');
+  const thread = useThreadFold();
   const w = wordsOf(readLang);
   const format = dateFmt(readLang);
   const calLocale = localeOf(readLang);
@@ -2888,9 +2890,20 @@ export function ContractorPortal() {
                     decision — the worker's paperclip lives in the composer
                     and on the closing screen). */}
                 <div>
-                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                  <button type="button" data-thread-toggle={a.id}
+                    aria-expanded={thread.isOpen(a.id)}
+                    onClick={() => thread.toggle(a.id)}
+                    className="w-full text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
                     <MessageSquare size={12} /> {s.taskMessagesLabel || (w('Task messages', 'הודעות המשימה', 'Сообщения по задаче'))}
-                  </h3>
+                    {selNotes.length + selMedia.length > 0 && (
+                      <span data-thread-count className="px-1.5 rounded-full bg-gray-200 text-gray-600 text-[11px] tabular-nums normal-case tracking-normal">
+                        {selNotes.length + selMedia.length}
+                      </span>
+                    )}
+                    <span className="flex-1" />
+                    <ChevronDown size={14} className={thread.isOpen(a.id) ? '' : '-rotate-90'} />
+                  </button>
+                  {thread.isOpen(a.id) && (
                   <TaskThread
                     assignment={a}
                     notes={selNotes}
@@ -2909,6 +2922,7 @@ export function ContractorPortal() {
                     }}
                     footer={composerNode}
                   />
+                  )}
 
                   {/* The hidden pickers stay mounted at sheet level — the
                       closing screen's add button and the composer's paperclip
@@ -3287,7 +3301,16 @@ export function ContractorPortal() {
             contractorId,
             apartmentId: apt.id,
             buildingId: apt.buildingId,
-            taskDescription: `${st ? `${stageNameIn(st, readLang)} — ` : ''}${w('working here today', 'עובד כאן היום', 'работаю здесь сегодня')}`,
+            /**
+             * STORED IN ENGLISH, always — a record's own words are data, and
+             * the office reading a Russian worker's task saw Russian on a
+             * PC set to English (owner, 2026-09-17). The worker still reads
+             * it in his language: every screen draws a task description
+             * through `Translated`, which turns it into the READER's
+             * language. Write a record in the writer's language and it is
+             * wrong for everybody else, for ever.
+             */
+            taskDescription: `${st ? `${st.name} — ` : ''}working here today`,
             dueDate: todayIso,
             stageId: st?.id ?? null,
             priority: 'normal',

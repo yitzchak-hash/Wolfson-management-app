@@ -18,7 +18,7 @@ import { driveThumbUrl, fetchPlanBytes } from '../../data/driveApi';
  * /api/drive-fetch on the FIRST press — never before, or opening a thread
  * with six videos in it would download six videos.
  */
-export function VideoTile({ src, driveFileId, filename, mimeType, className = '', maxWidth = 230, onError }: {
+export function VideoTile({ src, driveFileId, filename, mimeType, className = '', maxWidth = 230, onError, onOpen }: {
   /** A playable address — storageUrl, a data URL, a blob URL. */
   src?: string | null;
   driveFileId?: string;
@@ -27,6 +27,13 @@ export function VideoTile({ src, driveFileId, filename, mimeType, className = ''
   className?: string;
   maxWidth?: number;
   onError?: () => void;
+  /**
+   * Given, the corner button opens the host's full VIEWER — the film with a
+   * name, an info panel, Download and real full screen — instead of throwing
+   * the bare <video> element full screen. The centre play still plays it
+   * right here for a quick look.
+   */
+  onOpen?: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
@@ -65,6 +72,7 @@ export function VideoTile({ src, driveFileId, filename, mimeType, className = ''
 
   async function fullScreen(e: React.MouseEvent) {
     e.stopPropagation();
+    if (onOpen) { onOpen(); return; }
     const url = await ensureBytes();
     if (!url) return;
     setPlaying(true);
@@ -124,7 +132,7 @@ export function VideoTile({ src, driveFileId, filename, mimeType, className = ''
         onClick={fullScreen}
         className="absolute top-1.5 end-1.5 w-7 h-7 rounded-full flex items-center justify-center text-white"
         style={{ backgroundColor: 'rgba(0,0,0,.55)' }}
-        title="Full screen"
+        title={onOpen ? 'Open' : 'Full screen'}
       >
         <Maximize2 size={13} />
       </button>

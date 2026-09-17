@@ -2119,6 +2119,8 @@ export interface MainUiStrings {
   tipusimHint: string;
   tipusNone: string;
   // Stage marks (done / pending bookkeeping in the stage picker)
+  /** The toast when crossing a stage off moves the job to the next one. */
+  stageMovedOn: string;
   stagePendingLabel: string;
   stageMarkHint: string;
   stagePendingListTitle: string;
@@ -2860,6 +2862,7 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   tipusimTitle: 'Tipusim — apartment types',
   tipusimHint: 'The list the Tipus dropdown offers in every apartment window here (A1, A2, B1…). A workspace keeps its own list.',
   tipusNone: '— none —',
+  stageMovedOn: 'Moved on to',
   stagePendingLabel: 'half done',
   stageMarkHint: 'Tap a box to cross a stage off · right-click marks it half done',
   stagePendingListTitle: 'Half-done stages',
@@ -3416,7 +3419,7 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   markProgress: 'In progress',
   markIssue: 'Issue',
   markNone: 'Not started',
-  contractorStatusTitle: 'Worker status',
+  contractorStatusTitle: 'Contractor status',
   liveLabel: 'LIVE',
   loadingLabel: 'Loading…',
   sheetUnavailable: 'Sheet unavailable',
@@ -3596,6 +3599,7 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   tipusimTitle: 'טיפוסים — סוגי דירות',
   tipusimHint: 'הרשימה שהתפריט "טיפוס" מציע בכל חלון דירה כאן (A1, A2, B1…). לכל סביבת עבודה רשימה משלה.',
   tipusNone: '— ללא —',
+  stageMovedOn: 'עבר לשלב',
   stagePendingLabel: 'חצי גמור',
   stageMarkHint: 'לחיצה על התיבה מסמנת שלב כגמור · קליק ימני מסמן חצי גמור',
   stagePendingListTitle: 'שלבים חצי גמורים',

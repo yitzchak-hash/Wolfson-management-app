@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronRight, Folder, FileText, Image as ImageIcon, Star, Maximize2, ExternalLink, Loader2, ChevronLeft, X } from 'lucide-react';
+import { ChevronRight, Folder, FileText, Image as ImageIcon, Star, Maximize2, ExternalLink, Loader2, ChevronLeft, X, Play, Music } from 'lucide-react';
 import { DriveChild, driveThumbUrl, ensureDriveShared, listFolderChildrenViaBackend } from '../../data/driveApi';
 import { useStore } from '../../data/store';
+import { mediaKindOf, typeBadgeOf } from '../../data/mediaKind';
 import { usePlanDownload } from '../../data/planCache';
 
 /** One step of the breadcrumb: the job folder first, then each folder stepped into. */
@@ -35,13 +36,8 @@ function useInView<T extends HTMLElement>(ref: React.RefObject<T | null>): boole
   return seen;
 }
 
-/** The file's type, as a short badge — "DWG", "XLSX" — for a file that cannot open here. */
-function typeBadge(name: string, mime?: string): string {
-  const m = /\.([A-Za-z0-9]{1,5})\s*$/.exec(name.trim());
-  if (m) return m[1].toUpperCase();
-  const t = String(mime ?? '').split('/').pop() ?? '';
-  return (t.replace(/^vnd\.google-apps\./, '').slice(0, 5) || 'FILE').toUpperCase();
-}
+/** The file's type, as a short badge — "DWG", "XLSX" — for a file nothing can draw. */
+const typeBadge = typeBadgeOf;
 
 /** How far a plan's background download has got — the picker's quiet note, kept on the tile. */
 function DownloadNote({ fileId }: { fileId: string }) {
@@ -109,8 +105,16 @@ export function FileTile({
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref);
   const [thumbFailed, setThumbFailed] = useState(false);
-  const showThumb = file.viewable && inView && !thumbFailed;
-  useEffect(() => { if (file.viewable && inView) ensureDriveShared(file.id); }, [file.viewable, inView, file.id]);
+  /**
+   * A film, a memo or a picture is not a PLAN — `viewable` is about what can
+   * be marked up — but it is very much something to open. Drive makes a
+   * thumbnail for a video too, so the tile shows the first frame with a play
+   * mark rather than a dead grey badge (the owner's MP4, 2026-09-17).
+   */
+  const kind = mediaKindOf(file.name, file.mimeType);
+  const canThumb = file.viewable || kind === 'image' || kind === 'video';
+  const showThumb = canThumb && inView && !thumbFailed;
+  useEffect(() => { if (canThumb && inView) ensureDriveShared(file.id); }, [canThumb, inView, file.id]);
   const hookAttrs = rowHook === 'plan-row' ? { 'data-plan-row': file.id } : { 'data-file-tile': file.id };
   const glyph = file.isImage
     ? <ImageIcon size={30} className="text-emerald-600" />
@@ -138,10 +142,20 @@ export function FileTile({
             onError={() => setThumbFailed(true)}
             className="absolute inset-0 w-full h-full object-cover object-top"
           />
-        ) : file.viewable ? glyph : (
+        ) : kind === 'video' ? <Play size={28} className="text-slate-500" />
+          : kind === 'audio' ? <Music size={28} className="text-violet-500" />
+          : file.viewable ? glyph : (
           <span data-tile-badge className="px-2 py-1 rounded-md text-[11px] font-extrabold tracking-wide text-slate-500 bg-white border border-gray-200"
             title={ui.planNotViewable}>
             {typeBadge(file.name, file.mimeType)}
+          </span>
+        )}
+
+        {kind === 'video' && showThumb && (
+          <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <span className="w-9 h-9 rounded-full bg-black/55 flex items-center justify-center">
+              <Play size={16} className="text-white ms-0.5" fill="currentColor" />
+            </span>
           </span>
         )}
 
@@ -162,7 +176,7 @@ export function FileTile({
           </button>
         )}
         {/* The expand arrow — top-left. A look at the sheet, never a choice. */}
-        {file.viewable && onPreview && (
+        {onPreview && (
           <button type="button"
             data-tile-preview={file.id}
             onClick={e => { e.stopPropagation(); onPreview(); }}
@@ -237,7 +251,7 @@ export function TileGrid({ children }: { children: React.ReactNode }) {
  * component, so a crumb pressed twice costs one round trip.
  */
 export function PlanBrowser({
-  path, onPath, starredId, starAuto, onStar, onPreview, onBack, onHide, currentId, hidden = false,
+  path, onPath, starredId, starAuto, onStar, onPreview, onOpenMedia, onBack, onHide, currentId, hidden = false,
 }: {
   /**
    * A preview is standing over the browser. It stays MOUNTED — same folder,
@@ -255,6 +269,12 @@ export function PlanBrowser({
   onStar: (file: TileFile) => void;
   /** Open this sheet in the pane, from THIS folder (named so Back can say where it goes). */
   onPreview: (file: TileFile, folderName: string) => void;
+  /**
+   * Anything that is NOT a markable plan — a film, a picture, a memo, a
+   * spreadsheet — opens in the host's full media viewer instead. Without
+   * this a folder of site videos was a wall of dead grey badges.
+   */
+  onOpenMedia?: (file: TileFile, all: TileFile[]) => void;
   /** Offered when the pane has a sheet to go back to. */
   onBack?: () => void;
   /** The side pane's own "hide the plan" chevron. */
@@ -354,18 +374,29 @@ export function PlanBrowser({
             {listing.folders.map(f => (
               <FolderTile key={f.id} id={f.id} name={f.name} onOpen={() => onPath([...path, { id: f.id, name: f.name }])} />
             ))}
-            {listing.files.map(f => (
-              <FileTile
-                key={f.id}
-                file={{ id: f.id, name: f.name, isImage: f.isImage, viewable: f.viewable, mimeType: f.mimeType }}
-                starred={starredId === f.id}
-                starAuto={starAuto}
-                current={currentId === f.id}
-                onOpen={f.viewable ? () => onPreview(f, folder.name) : undefined}
-                onStar={f.viewable ? () => onStar(f) : undefined}
-                onPreview={f.viewable ? () => onPreview(f, folder.name) : undefined}
-              />
-            ))}
+            {listing.files.map(f => {
+              const tile: TileFile = { id: f.id, name: f.name, isImage: f.isImage, viewable: f.viewable, mimeType: f.mimeType };
+              const all: TileFile[] = listing.files.map(x => ({
+                id: x.id, name: x.name, isImage: x.isImage, viewable: x.viewable, mimeType: x.mimeType,
+              }));
+              // A markable sheet goes to the pane; everything else opens in
+              // the viewer, so no file in a Drive folder is a dead tile.
+              const open = f.viewable
+                ? () => onPreview(f, folder.name)
+                : onOpenMedia ? () => onOpenMedia(tile, all) : undefined;
+              return (
+                <FileTile
+                  key={f.id}
+                  file={tile}
+                  starred={starredId === f.id}
+                  starAuto={starAuto}
+                  current={currentId === f.id}
+                  onOpen={open}
+                  onStar={f.viewable ? () => onStar(f) : undefined}
+                  onPreview={open}
+                />
+              );
+            })}
           </TileGrid>
         )}
       </div>
