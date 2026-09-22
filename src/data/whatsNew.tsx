@@ -30,6 +30,32 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-01-14',
+    title: 'A task’s name opens its apartment, and a late close lands on the day it happened',
+    items: [
+      {
+        title: 'On the Tasks page, press the name',
+        body: 'The apartment name on a task row (and the task’s words) now open the apartment window '
+          + 'straight on that task, on the Tasks tab, lit so you see which one.',
+        demo: 'tap',
+      },
+      {
+        title: 'Closed late? It moves to the day it was closed',
+        body: 'A task that was overdue and gets closed today gains today as one of its days, so the '
+          + 'notebook, the calendars and the worker’s schedule show it crossed off on the day the work '
+          + 'really happened — not sitting red on last week.',
+        demo: 'tap',
+      },
+      {
+        title: 'The cloud says when it is not answering',
+        body: 'If the cloud refuses to send updates (out of quota, or no connection) the header shows a red '
+          + '“Cloud not answering” instead of quietly showing yesterday’s data. The app also reads far less '
+          + 'history from the cloud on every load, which is what used the quota up.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-01-13',
     title: 'A history line with no name no longer crashes the page',
     items: [

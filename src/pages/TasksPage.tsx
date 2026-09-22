@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useStore } from '../data/store';
+import { useNavigate } from 'react-router-dom';
+import { rememberTaskFocus } from '../data/taskFocus';
 import { VoiceMemoPlayer } from '../components/ui/VoiceMemo';
 import { MessageBox, memoFile } from '../components/ui/MessageBox';
 import { contractorLoad } from '../data/contractorLoad';
@@ -37,6 +39,19 @@ export function TasksPage() {
     pendingFocus, setPendingFocus,
   } = useStore();
   const projectName = projects.find(p => p.id === currentProjectId)?.name ?? 'Workspace';
+  const navigate = useNavigate();
+  /**
+   * The task's NAME opens the apartment window ON that task (owner,
+   * 2026-09-22) — the same hand-over a notification uses: remember the task,
+   * set the intent, and let the page that can show the unit open the drawer
+   * on its Tasks tab with the card lit. A general job has no unit to open.
+   */
+  const openInWindow = (a: ContractorAssignment) => {
+    if (!a.apartmentId) return;
+    rememberTaskFocus(a.id);
+    setPendingFocus({ kind: 'task', id: a.id, apartmentId: a.apartmentId });
+    navigate(currentProjectId === 'general' ? '/jobs' : '/project');
+  };
 
   const PRIORITY_CONFIG: Record<TaskPriority, { label: string; cls: string; dot: string }> = {
     urgent: { label: s.urgentPriority, cls: 'text-red-600 bg-red-50 border-red-200', dot: 'bg-red-500' },
@@ -887,7 +902,11 @@ export function TasksPage() {
                                 {generalBuildingsText(a.general) ? ` · ${generalBuildingsText(a.general)}` : ''}
                                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">{s.generalJob}</span>
                               </span>
-                            : <>{a.buildingId} · {s.aptPrefix} {aptLabel(apt)}</>}
+                            : <button type="button" data-open-task={a.id} onClick={() => openInWindow(a)}
+                                title={s.openInWindow}
+                                className="inline-flex items-center gap-1 text-[#1e3a5f] hover:underline underline-offset-2 text-left rtl:text-right">
+                                {a.buildingId} · {s.aptPrefix} {aptLabel(apt)}
+                              </button>}
                         </span>
                         {(stage || a.stageWhenDone) && (
                           <StagePairPill task={a} stages={stages} isRtl={s.isRtl} />
@@ -899,7 +918,8 @@ export function TasksPage() {
                           </span>
                         )}
                       </div>
-                      <p className={`text-sm ${a.completedAt ? 'line-through text-gray-400' : 'text-gray-600'}`} data-task-text>
+                      <p className={`text-sm ${a.completedAt ? 'line-through text-gray-400' : 'text-gray-600'} ${a.apartmentId ? 'cursor-pointer hover:text-[#1e3a5f]' : ''}`}
+                        data-task-text onClick={() => openInWindow(a)} title={a.apartmentId ? s.openInWindow : undefined}>
                         <Translated text={a.taskDescription} to={s.isRtl ? 'he' : 'en'} />
                       </p>
                       {/* A general job collects the apartments actually visited

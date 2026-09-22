@@ -16,14 +16,14 @@ import {
   buildDefaultApartments, buildNetivApartments, buildGroundFirstFloorSlots, migrateNetivApartments, DATA_VERSION,
 } from './initialData';
 import {
-  fsSet, fsDelete, fsBatchSet, fsGetAll, fsListen, isFirebaseConfigured, db, projectCollection,
+  fsSet, fsDelete, fsBatchSet, fsGetAll, fsListen, fsGetAllRecent, fsListenRecent, isFirebaseConfigured, db, projectCollection,
   fsTombstone,
   fsUntombstone, fsGetTombstones, fsListenTombstones,
 } from './firebase';
 import { DEFAULT_TIME_CLOCK, resolvePunch } from './timeClock';
 import { purgeJobsFromPlanner, isPlannerElement } from './plannerPurge';
 import { DEFAULT_WORKER_LEVELS } from './workerLevels';
-import { daysOf } from './taskDays';
+import { daysOf, closeDayFields } from './taskDays';
 import { applyMarks, marksForCurrent, migrateToBubbles, seedStageKinds, taskStageIds, isWorkStage } from './stageMarks';
 import type { SetContext } from './stageMarks';
 import { notifyWorker } from './pushNotify';
@@ -2363,6 +2363,11 @@ export const useStore = create<AppState>((set, get) => ({
         && before?.days?.length && changes.dueDate && !before.days.includes(changes.dueDate)) {
       changes = { ...changes, days: undefined };
     }
+    // Closed late → the closing day joins the task's days (closeDayFields).
+    if (before && !before.completedAt && changes.completedAt && !('days' in changes)) {
+      const late = closeDayFields(before, changes.completedAt);
+      if (late) changes = { ...changes, ...late };
+    }
     set(state => ({
       contractorAssignments: state.contractorAssignments.map(a => a.id === id ? { ...a, ...changes } : a),
     }));
@@ -2547,6 +2552,10 @@ export const useStore = create<AppState>((set, get) => ({
     const list = Array.isArray(snap.contractorAssignments) ? snap.contractorAssignments as ContractorAssignment[] : [];
     const cur = list.find(a => a.id === id);
     if (!cur) return;
+    if (!cur.completedAt && patch.completedAt && !('days' in patch)) {
+      const late = closeDayFields(cur, patch.completedAt);
+      if (late) patch = { ...patch, ...late };
+    }
     const next = { ...cur, ...patch, updatedAt: new Date().toISOString() } as ContractorAssignment;
     saveToStorage(key, { ...snap, contractorAssignments: list.map(a => (a.id === id ? next : a)) });
     fsSet(projectCollection(projectId, 'contractorAssignments'), id, next);
@@ -3029,15 +3038,15 @@ export const useStore = create<AppState>((set, get) => ({
       fsGetAll(col('stageNotes')),
       fsGetAll('stages'),
       fsGetAll('users'),
-      fsGetAll(col('activityLogs')),
+      fsGetAllRecent(col('activityLogs'), 'createdAt', 500),
       fsGetAll('contractors'),
       fsGetAll(col('contractorAssignments')),
       fsGetAll(col('contractorNotes')),
       fsGetAll(col('contractorPhotos')),
       fsGetAll(col('officeNoteFiles')),
       fsGetAll('settings'),
-      fsGetAll(col('stageNoteVersions')),
-      fsGetAll(col('generalNoteVersions')),
+      fsGetAllRecent(col('stageNoteVersions'), 'savedAt', 500),
+      fsGetAllRecent(col('generalNoteVersions'), 'savedAt', 500),
       fsGetAll(col('canvasElements')),
       fsGetAll(col('planPins')),
       fsGetAll(col('planAnnotations')),
@@ -3251,13 +3260,13 @@ export const useStore = create<AppState>((set, get) => ({
       fsListen(col('stageNotes'), (docs) => {
         if (docs.length > 0) { set({ stageNotes: docs as unknown as StageNote[] }); persist(get); }
       }),
-      fsListen(col('stageNoteVersions'), (docs) => {
+      fsListenRecent(col('stageNoteVersions'), 'savedAt', 500, (docs) => {
         if (docs.length > 0) { set({ stageNoteVersions: docs as unknown as StageNoteVersion[] }); persist(get); }
       }),
-      fsListen(col('generalNoteVersions'), (docs) => {
+      fsListenRecent(col('generalNoteVersions'), 'savedAt', 500, (docs) => {
         if (docs.length > 0) { set({ generalNoteVersions: docs as unknown as GeneralNoteVersion[] }); persist(get); }
       }),
-      fsListen(col('activityLogs'), (docs) => {
+      fsListenRecent(col('activityLogs'), 'createdAt', 500, (docs) => {
         if (docs.length > 0) {
           const sorted = (docs as unknown as ActivityLog[])
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 500);

@@ -27,7 +27,7 @@ exactly there.
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2027-01-13` — the next entry must be a later date (an older
+   newest is `2027-01-14` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`. 8. Rewrite THIS file.
@@ -43,8 +43,29 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-22 — THE SET MODEL is built; the crash he saw is fixed)
+## Where things stand (2026-09-22, evening — three asks built, the cloud quota found, the stage split AWAITING HIS GO)
 Last commits, newest first (see `git log`):
+- **2026-09-22, evening — his four asks.** (1) BUILT: on the Tasks page the
+  apartment name / the task's words open the apartment window on that task
+  (`openInWindow`, the taskFocus hand-over). (2) His "the worker's own tasks
+  should pop up on the notebook with the apartment's name": the code already
+  does it (probed: a Wolfson stage-report task by the worker draws as its own
+  bar "1 — Artzi" beside the "Wolfson Residence" general bar, from the
+  snapshot the foreign live sync feeds) — what he is seeing is the CLOUD
+  REFUSING READS: production Firestore answered HTTP 429 "Quota exceeded" to
+  every read today. Shipped: activity log + note versions read only the
+  newest 500 (`fsGetAllRecent`/`fsListenRecent`), and a refused listener
+  shows red "Cloud not answering" in the header. HIS DECISION PENDING: move
+  the Firebase project to the Blaze plan (same free allowance, cents past
+  it) — told in the reply. (3) BUILT: a task closed after its last day gains
+  the closing day (`closeDayFields`). (4) PREVIEW ONLY, NOT BUILT: the
+  Wolfson stage split into separate bubbles on a grey→yellow→orange→green
+  ramp — drawn inline in the reply from HIS words (the live four names
+  could not be read, 429); build = a one-time migration that splits each
+  combined stage into its children and COPIES the parent's mark onto them,
+  once he says go and confirms the names. `round47-probe.mjs` (14),
+  taskdays (+6), multiday, notebookbars, drawerround, tsc, build, four
+  audits green.
 - **2026-09-22, later — his production crash.** He pasted the CrashScreen
   text: `Cannot read properties of undefined (reading 'charAt')` in a page's
   `.map`. Cause: an activity-log entry stored without a `userName` (fsSet

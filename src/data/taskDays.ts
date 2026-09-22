@@ -183,3 +183,29 @@ export function stretchesFromDays(days: string[]): {
     exact: first.used + secondRun.used === sorted.length,
   };
 }
+
+/**
+ * A task closed AFTER its last day gets the closing day added (owner,
+ * 2026-09-22): "if a job is overdue and he closes it on Sunday, add it to
+ * the day it was closed and mark it off as closed". The notebook, the
+ * calendars and the worker's schedule then show the work on the day it
+ * really happened, struck through as done, instead of a red bar sitting on
+ * a day nobody was there. `dueDate` follows to the new last day (the
+ * standing invariant), so "late" stops the moment it closes. A task closed
+ * on time or early is untouched; a problem's close is a "waiting for
+ * approval", not a day of work, and a dateless task has nothing to be late
+ * against. Returns the fields to write, or null when nothing changes.
+ */
+export function closeDayFields(
+  task: { days?: string[]; dueDate: string | null; problem?: unknown },
+  completedAtIso: string,
+): { days: string[]; dueDate: string } | null {
+  if (task.problem) return null;
+  const ds = daysOf(task);
+  if (!ds.length) return null;
+  const closeDay = dayIso(new Date(completedAtIso));
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(closeDay) || closeDay <= ds[ds.length - 1]) return null;
+  const next = [...new Set([...ds, closeDay])].sort();
+  return { days: next, dueDate: closeDay };
+}
+

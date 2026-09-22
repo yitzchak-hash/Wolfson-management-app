@@ -8628,3 +8628,53 @@ When a crash screen names `charAt`, `toLowerCase`, `slice` or `trim` on a
 stored field, grep every `.charAt(`-style call on that field across `src`,
 not only the one in the stack.
 
+---
+
+# v2 — the task's name is a door, a late close lands where it happened, and the cloud that ran dry (2026-09-22)
+
+## The Tasks page opens the apartment window ON the task
+`openInWindow(a)` in TasksPage: the apartment name (`[data-open-task=<id>]`)
+and the task's words are presses that do the notification's hand-over —
+`rememberTaskFocus(id)` → `setPendingFocus({kind:'task'})` → navigate to
+`/project` or `/jobs` — and the page that can show the unit opens the drawer
+on its Tasks tab with the card lit (`data-task-lit`). A general job has no
+unit and stays plain text. String `openInWindow` in both presets.
+
+## Closed late → the closing day joins the task (`closeDayFields`, taskDays.ts)
+Owner: "if a job is overdue and he closes it on Sunday, add it to the day it
+was closed and mark it off as closed". Pure: when the close date is after
+the task's LAST day, the day is appended and `dueDate` follows (the standing
+invariant) — so every calendar and the notebook draw the bar crossed off on
+the day the work happened, and "late" stops the moment it closes. On time or
+early: nothing changes (the finish-early rule stands). A problem's close is
+never a day of work; a dateless task has nothing to be late against. Applied
+in `updateContractorAssignment` AND `updateAssignmentInProject`, only on the
+open → closed transition and only when the caller sent no `days` of its own.
+`scratchpad/taskdays.mjs` grew six hand-worked cases.
+
+## THE CLOUD RAN DRY — production Firestore answered "Quota exceeded" to every read
+Probing the live stage list by REST (the tvhis idiom) got HTTP 429
+`RESOURCE_EXHAUSTED` all day. On the free plan that is the daily read quota
+gone, and the app's own listeners are refused the same way — silently: the
+office then reads yesterday's snapshot and reports the feature as broken
+("the worker's tasks don't show on the notebook"; the code path is fine —
+`round47-probe` draws the worker's own report task from the Wolfson
+snapshot by the apartment's name beside the general bar). Two things shipped:
+- **Reads capped where the collection only grows**: `fsGetAllRecent` /
+  `fsListenRecent` (a single-field `orderBy` + `limit`, no index needed) load
+  the newest 500 of `activityLogs` (by `createdAt`) and of the two
+  note-version collections (by `savedAt`). The app KEPT 500 and threw the
+  rest away after reading every one, on every load, on every machine.
+- **A refused listener is visible**: `onSnapshot`'s error callback →
+  `_notifyReadError` → the header's `CloudSyncBadge` shows a red **"Cloud not
+  answering"** (`data-cloud-unreachable`, status `unreachable`) for 30s past
+  the last refusal.
+What remains is the owner's decision: the Blaze (pay-as-you-go) plan keeps
+the same free daily allowance and bills fractions of a cent past it — the
+alternative is a sync that dies every busy afternoon. The biggest remaining
+read source is the attach of every listener on every load with Firestore's
+own cache OFF (a deliberate rule — see "No custom Firestore cache"); the
+Job Board's ~1,650 jobs are re-read by every device on every reload.
+
+Harness: `scratchpad/round47-probe.mjs` (14 checks, two contexts).
+

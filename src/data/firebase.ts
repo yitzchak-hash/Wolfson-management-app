@@ -22,6 +22,9 @@ import {
   getDoc,
   deleteDoc,
   onSnapshot,
+  query,
+  orderBy,
+  limit,
   writeBatch,
   serverTimestamp,
   deleteField,
@@ -84,7 +87,7 @@ export { db };
 
 // ── Cloud-sync status tracker ─────────────────────────────────────────────
 // Lets the UI show "Saving…" / "Saved ✓" without threading state through the store.
-export type SyncStatus = 'idle' | 'saving' | 'saved' | 'error';
+export type SyncStatus = 'idle' | 'saving' | 'saved' | 'error' | 'unreachable';
 type SyncListener = (s: SyncStatus) => void;
 const _syncListeners: SyncListener[] = [];
 let _pendingWrites = 0;
@@ -105,6 +108,21 @@ function _notifySyncListeners(s: SyncStatus) { _syncListeners.forEach(fn => fn(s
  * settled, and only the DevTools console knew the truth. The badge now shows
  * a red "not saved" for a while instead of "Saved ✓".
  */
+/**
+ * A cloud READ failed — a listener was refused (2026-09-22: production
+ * answered "Quota exceeded" to every read for a day, and the only witness
+ * was the DevTools console: the office saw yesterday's notebook and called
+ * the app broken). The badge says the cloud is not answering, for half a
+ * minute past the last refusal, so a stale screen is a known stale screen.
+ */
+let _unreachableTimer: ReturnType<typeof setTimeout> | null = null;
+function _notifyReadError(collectionName: string, e: unknown) {
+  console.warn(`Firestore listener refused for ${collectionName}:`, e);
+  if (_unreachableTimer) clearTimeout(_unreachableTimer);
+  _notifySyncListeners('unreachable');
+  _unreachableTimer = setTimeout(() => { _unreachableTimer = null; _notifySyncListeners('idle'); }, 30_000);
+}
+
 function _notifySyncError() {
   _writeFailed = true;
   if (_savedTimer) { clearTimeout(_savedTimer); _savedTimer = null; }
@@ -183,6 +201,42 @@ export async function fsGetAll(collectionName: string): Promise<Record<string, u
   }
 }
 
+/**
+ * The NEWEST `n` docs of a collection, by `field` descending — for a
+ * collection that only ever grows (the activity log: one doc per change,
+ * one per hourly "opened", for ever). The app keeps 500 of them and threw
+ * the rest away AFTER reading every one, on every load, on every machine —
+ * tens of thousands of billed reads a day for nothing, which is how the
+ * free tier's daily read quota ran out (2026-09-22: production answered
+ * "Quota exceeded" to reads). A single-field orderBy needs no index.
+ */
+export async function fsGetAllRecent(collectionName: string, field: string, n: number): Promise<Record<string, unknown>[]> {
+  if (!db) return [];
+  try {
+    const snap = await getDocs(query(collection(db, collectionName), orderBy(field, 'desc'), limit(n)));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (e) {
+    console.warn(`Firestore read failed for ${collectionName}:`, e);
+    return [];
+  }
+}
+
+/** Live twin of fsGetAllRecent — the listener only ever holds the newest `n`. */
+export function fsListenRecent(
+  collectionName: string, field: string, n: number,
+  callback: (items: Record<string, unknown>[]) => void
+): Unsubscribe {
+  if (!db) return () => {};
+  try {
+    return onSnapshot(query(collection(db, collectionName), orderBy(field, 'desc'), limit(n)), snap => {
+      callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, e => _notifyReadError(collectionName, e));
+  } catch (e) {
+    console.warn(`Firestore listener failed for ${collectionName}:`, e);
+    return () => {};
+  }
+}
+
 // Real-time listener for a collection
 export function fsListen(
   collectionName: string,
@@ -192,7 +246,7 @@ export function fsListen(
   try {
     return onSnapshot(collection(db, collectionName), snap => {
       callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+    }, e => _notifyReadError(collectionName, e));
   } catch (e) {
     console.warn(`Firestore listener failed for ${collectionName}:`, e);
     return () => {};

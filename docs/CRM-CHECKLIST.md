@@ -177,3 +177,7 @@ Legend: ☑ shipped · ☐ decided, not built · ◐ built in part · ✎ needs 
 - ☑ Reports: Stages done of / Done stages / Stages still to do; Analytics: work finished per stage; search: needs: doing: done:; the printed job sheet's tick list (2026-09-22)
 - ☑ One-time migration (`migrateStageSets`, settle-first from AppLayout): passed → done, the current stage → to do, `bubbles: true`; idempotent (2026-09-22)
 - ☑ A history entry with no name never crashes a page: every reader of `ActivityLog.userName` falls back to “Someone”, and `addActivityLog` always writes a name (2026-09-22)
+- ☑ Tasks page: the apartment name and the words on a task row open the apartment window on that task (`data-open-task`, the taskFocus hand-over) (2026-09-22)
+- ☑ A task closed AFTER its last day gains the closing day (`closeDayFields` in taskDays.ts, on both close paths) — drawn crossed off on the day it happened (2026-09-22)
+- ☑ Cloud reads are capped: activity log and note versions load the newest 500 (`fsGetAllRecent`/`fsListenRecent`); a refused listener shows "Cloud not answering" in the header (2026-09-22)
+- ✎ Wolfson stages split into separate bubbles on a grey→yellow→orange→green ramp — previewed inline, awaiting the owner's go and the four live names (2026-09-22)

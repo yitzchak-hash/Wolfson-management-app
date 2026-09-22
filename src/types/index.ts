@@ -2743,6 +2743,7 @@ export interface MainUiStrings {
   dlPagesWord: string;
   printPlanLabel: string;
   unknownUser: string;
+  openInWindow: string;
   /** Office-side notifications when a worker writes or closes a job. */
   officeNotifMessage: string;
   officeNotifClosed: string;
@@ -3545,6 +3546,7 @@ export const DEFAULT_MAIN_UI_STRINGS: MainUiStrings = {
   dlPagesWord: 'Pages',
   printPlanLabel: 'Print',
   unknownUser: 'Someone',
+  openInWindow: 'Open in the apartment window',
   officeNotifMessage: 'Message from {who}',
   officeNotifClosed: '{who} closed a job',
   officeNotifAllow: 'Allow desktop alerts',
@@ -4344,6 +4346,7 @@ export const HEBREW_MAIN_UI_STRINGS: MainUiStrings = {
   dlPagesWord: 'עמודים',
   printPlanLabel: 'הדפסה',
   unknownUser: 'מישהו',
+  openInWindow: 'פתיחה בחלון הדירה',
   officeNotifMessage: 'הודעה מ{who}',
   officeNotifClosed: '{who} סגר עבודה',
   officeNotifAllow: 'לאפשר התראות במחשב',

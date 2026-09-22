@@ -29,6 +29,14 @@ function CloudSyncBadge({ light }: { light: boolean }) {
    * is how a notebook that could not save read as everyone else's fault for
    * weeks. Red here means: what you just did is on THIS machine only.
    */
+  if (status === 'unreachable') {
+    return (
+      <div data-cloud-unreachable className="flex items-center gap-1.5 text-xs font-bold text-red-500"
+        title="The cloud refused to send updates (out of quota, or no connection) — what you see may be out of date, and changes made elsewhere are not arriving. Check the Firebase usage page.">
+        <AlertTriangle size={13} /> {s.isRtl ? 'הענן לא עונה' : 'Cloud not answering'}
+      </div>
+    );
+  }
   if (status === 'error') {
     return (
       <div className="flex items-center gap-1.5 text-xs font-bold text-red-500"

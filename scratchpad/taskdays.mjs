@@ -10,7 +10,7 @@ const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const server = await createServer({ server: { middlewareMode: true }, logLevel: 'silent' });
 const {
   workingRun, stretchDays, nextWorkingDay, dayNumberOf, futureDaysOf, daysOf,
-  moveTaskDay, removeTaskDay, addTaskDay,
+  moveTaskDay, removeTaskDay, addTaskDay, closeDayFields,
 } = await server.ssrLoadModule('/src/data/taskDays.ts');
 
 // ── workingRun: Saturday never, Friday by the checkbox ──────────────────────
@@ -69,6 +69,23 @@ check(removeTaskDay(['2026-08-26'], '2026-08-26') === null,
 check(eq(addTaskDay(['2026-08-26', '2026-08-27'], '2026-08-30'),
   { days: ['2026-08-26', '2026-08-27', '2026-08-30'], dueDate: '2026-08-30' }),
   'a copied card adds its landing day');
+
+// ── closeDayFields: closed late → the closing day joins the task (2026-09-22) ─
+// Local midday stamps, so the day is the same in any zone this runs in.
+check(eq(closeDayFields({ days: ['2026-08-26', '2026-08-27'], dueDate: '2026-08-27' }, '2026-08-30T12:00:00'),
+  { days: ['2026-08-26', '2026-08-27', '2026-08-30'], dueDate: '2026-08-30' }),
+  'a Wed–Thu task closed on Sunday gains Sunday and its due date follows');
+check(eq(closeDayFields({ dueDate: '2026-08-27' }, '2026-08-31T12:00:00'),
+  { days: ['2026-08-27', '2026-08-31'], dueDate: '2026-08-31' }),
+  'a one-day task closed four days late becomes a two-day task');
+check(closeDayFields({ days: ['2026-08-26', '2026-08-27'], dueDate: '2026-08-27' }, '2026-08-27T12:00:00') === null,
+  'closed on its last day — nothing changes');
+check(closeDayFields({ days: ['2026-08-26', '2026-08-27'], dueDate: '2026-08-27' }, '2026-08-26T12:00:00') === null,
+  'closed early — nothing changes (the finish-early rule stands)');
+check(closeDayFields({ dueDate: null }, '2026-08-30T12:00:00') === null,
+  'a dateless task has nothing to be late against');
+check(closeDayFields({ dueDate: '2026-08-27', problem: { status: 'open' } }, '2026-08-30T12:00:00') === null,
+  "a problem's close is never a day of work");
 
 await server.close();
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASS');
