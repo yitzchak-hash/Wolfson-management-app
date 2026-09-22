@@ -68,9 +68,28 @@ Last commits, newest first (see `git log`):
   contexts); re-encoded `builder2-probe` (the merge asks now; the change list
   is folded); portalround, stagereport, round40, tsc, build and the four
   audits green.
-  **NEXT: the owner asked for a planning session about the STAGES** — "now,
-  finish this and we have a planning session to do regarding the stages".
-  That is the next thing to open with.
+  **THEN the STAGES planning session (2026-09-17, three versions of one
+  page, NOTHING BUILT)**: the "Bubbles, Not Stages" artifact
+  (https://claude.ai/artifact/Ba8sosR7hLfmHFm51KaTqd, source
+  `scratchpad/bubbles.html` in the session scratchpad; dated copies v2 and
+  v3 in `docs/artifacts/`). The idea: each apartment carries its own SET of
+  stages with a state each (to do · booked · doing · problem · done · not
+  needed) instead of standing at one point on a line; on screen the word
+  stays "stages". LOCKED by his two rounds of answers (1–14): keep the word
+  stages; segmented strip + one headline word (now, else next in order);
+  the tipus is the starting set; suggested order never enforced; a stage can
+  be switched off and stops counting — OFFICE ONLY; a task gets ONE picker
+  in the settings order, may cover several stages, closing ticks them all
+  off and the headline auto-advances (the from→to pair goes); six states;
+  Job Board too; everything at once; THREE PICTURES PER FINISHED STAGE,
+  separately (his ruling against my star); work/marker switch per line;
+  unfinished stages become half done and only the office clears them; the
+  phone says "select one or multiple", the "Something else" button is gone.
+  STILL OPEN: 15 (which doors add a stage — tipus · apartment window · bulk
+  bar · a line's on-every-apartment switch) and 16 (where a quick custom
+  stage lives — my star: in the workspace list flagged custom · used on N,
+  hidden elsewhere until widened). **NEXT: his answers to 15 and 16, then
+  "build it" → the five-round build order at the bottom of the page.**
 - **2026-09-17, third pass — six asks off two screenshots.** (0) **STOP
   refreshing the Device Gallery** — "I keep updating the device gallery,
   wasting my credits". The skill now runs ON REQUEST ONLY; its description was
@@ -442,6 +461,22 @@ Last commits, newest first (see `git log`):
   the one-file Hebrew-safe Windows helper.
 
 ## What the owner last asked (his exact wants)
+0. **(2026-09-17, the stages session — PAGE ONLY, awaiting 15/16 + "build
+   it")** "under what are you doing here, I want to write select one or
+   multiple. You don't need the only three… What does something else do?
+   Closing the job my way I kind of like. I like that they have to take
+   pictures for each stage. I just want to know the scope of adding a
+   feature where we can add a custom bubble really quick… for that specific
+   apartment… Regarding question three, you're starting; question four,
+   either the start or the workspace, we should be able to add by multiple
+   things. We have to see how that would work. Question seven: we don't
+   need this job stage now and after anymore. We need one which is just the
+   bubbles and we should still keep an order… it will just move to the next
+   one on the order automatically. And a task can cover several stages at
+   once. Question 11: I want three pictures for each stage you finish,
+   separately. Starting with 12. Only the office can switch off a stage for
+   an apartment. And whatever he says he didn't finish is half done. The
+   only unlock is the office as well." — ALL folded into Version 3.
 -3. **(2026-09-17, the buildings list — ALL BUILT, see above)** "In the
    building layout editor I need to be able to rename a floor upon
    right-clicking… where is the names of the four squares as well." "If I
@@ -561,6 +596,19 @@ Last commits, newest first (see `git log`):
   `npx vite --port 5173` and `VITE_DRIVE_API_KEY=test npx vite --port 5174`.
 
 ## The last reply the owner saw (so the next one continues it)
+**Newest (2026-09-17, the stages session, Version 3)**: the reply said the
+page was updated with every one of his second-round answers — the phone
+says "select one or multiple" and "Something else" is gone (it meant work
+not on the apartment's list; with office-only adding it has no place on the
+phone), the close now takes three pictures per finished stage on separate
+named screens and never for one he didn't finish, one task picker in order
+with several stages and an auto-advancing headline, office-only off-switch,
+half-done cleared by the office only — and answered the custom-stage scope
+(a three-field "+ add a stage" in the apartment window; underneath it lives
+in the workspace list flagged custom · used on 1, hidden elsewhere until
+widened; under half a round, rides round 2). Two questions left: 15 (the
+doors) and 16 (where a custom stage lives). Bottom line + bullets.
+
 **Newest (2026-09-17)**: the reply explained why the Chrome ask never
 showed (it rode the first worker message) and that a bell pill in the
 header now asks; that the self-task form says the current stage and asks
