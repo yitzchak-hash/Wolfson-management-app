@@ -30,6 +30,26 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-01-16',
+    title: 'The Wolfson stages are split into their own steps',
+    items: [
+      {
+        title: 'Eight stages where there were three',
+        body: 'Piping, Concealed Units and Fans are three stages now; Wall Units and Outdoor Units two; '
+          + 'Registers, Access Panels and Thermostats three — each its own bubble on the apartment, on a '
+          + 'grey → yellow → orange → green ramp. Netiv shares the same list.',
+        demo: 'tap',
+      },
+      {
+        title: 'Nothing already ticked comes undone',
+        body: 'Whatever an apartment had on a combined stage — done, half done, happening now — is on '
+          + 'every one of its new steps. Tasks and notes that named the old stage now name the new ones. '
+          + 'The old combined stages are kept, retired, so history still reads.',
+        demo: 'sparkle',
+      },
+    ],
+  },
+  {
     date: '2027-01-15',
     title: 'The app reads the cloud once, and a workspace keeps only its own records',
     items: [

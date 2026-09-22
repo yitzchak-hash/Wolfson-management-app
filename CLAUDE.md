@@ -8780,3 +8780,34 @@ Units & Fans (#f0cf6a) · `s4` Wall Units & Outdoor Units (#f59e0b) · `s7`
 Registers,Access Panels & Thermostats (#84cc16); the Job Board has its own
 six. `notebookbars-probe.mjs` had rotted on the removed stage `<select>`
 (`from.selectOption`) — repaired to the bubble picker.
+
+## The Wolfson stage split, BUILT (owner, 2026-09-22: "remove them and go on the split")
+`src/data/stageSplit.ts` (pure) — `STAGE_SPLITS`: `s1` Piping, Concealed
+Units & Fans → `s1-piping` · `s1-concealed` · `s1-fans`; `s4` Wall Units &
+Outdoor Units → `s4-wall` · `s4-outdoor`; `s7` Registers, Access Panels &
+Thermostats → `s7-registers` · `s7-panels` · `s7-thermostats`, orders 2..9
+behind Sold/Start, colours the approved ramp (#9ca3af → #65a30d). **Fixed
+ids**, so two machines running it write the same documents (the seeded-bins
+idiom). `planStageSplit` (children to add, parents to RETIRE — `active:
+false`, never deleted: history, notes and tasks still name them),
+`splitApartment` (the parent's mark copied onto every child that has none,
+the parent's mark gone; a record that STOOD on a parent by hand lands on the
+first child), `splitTask` (`stageId`/`stageWhenDone` → the first child,
+`stageIds`/`stagesWorked`/`stagesUnfinished` expanded), `splitStageNote`,
+`splitStageIdList` (tipus sets). Every helper answers null when nothing
+named a parent — that is the idempotency.
+
+`splitCombinedStages` (store) runs at the top of `migrateStageSets`, i.e.
+1.6s after any building workspace lands, on every office machine: the list
+part once (global stages — Wolfson and Netiv SHARE it, so Netiv's units are
+split when Netiv is next opened), the records part per open workspace, one
+chunked batch each for apartments / tasks / notes. The Job Board has its own
+list and is untouched. Harness: `scratchpad/stagesplit-probe.mjs` (15
+checks, seeded with the live list's exact shape; idempotent on reload).
+
+## The cleanup ran (2026-09-22, "remove them")
+`cloudclean.mjs --delete`: 4,095 misplaced records removed, one (A1-66)
+copied home first, all backed up in the session scratchpad. Wolfson 259 ·
+Job Board 3,520 · Netiv 90. **`documents:commit` names a document by its
+RESOURCE path** (`projects/…/documents/apartments/X`), never the full
+address — the first run failed on that before touching anything.

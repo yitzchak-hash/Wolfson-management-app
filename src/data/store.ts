@@ -27,6 +27,7 @@ import { DEFAULT_WORKER_LEVELS } from './workerLevels';
 import { daysOf, closeDayFields } from './taskDays';
 import { applyMarks, marksForCurrent, migrateToBubbles, seedStageKinds, taskStageIds, isWorkStage } from './stageMarks';
 import type { SetContext } from './stageMarks';
+import { planStageSplit, splitApartment, splitTask, splitStageNote, splitStageIdList, isSplitParent, firstChildOf } from './stageSplit';
 import { notifyWorker } from './pushNotify';
 import { aptLabel } from '../types';
 
@@ -641,6 +642,8 @@ interface AppState {
    * were written. Run by AppLayout once the workspace has landed.
    */
   migrateStageSets: () => number;
+  /** The Wolfson stage split (2026-09-22): three combined global stages → eight; marks copied onto the children. Idempotent. */
+  splitCombinedStages: () => number;
   addApartment: (apt: Apartment) => void;
   /** Bulk add — one state set, one persist, one (chunked) Firestore batch. */
   importJobs: (jobs: Apartment[]) => void;
@@ -1499,6 +1502,7 @@ export const useStore = create<AppState>((set, get) => ({
     const sorted = stagesOfProject(pid, get().stages);
     // Kinds first: the seed is by name, once, and only while no line has one.
     for (const k of seedStageKinds(sorted)) get().updateStage(k.id, { kind: k.kind });
+    get().splitCombinedStages();
     const sortedNow = stagesOfProject(pid, get().stages);
     const now = new Date().toISOString();
     const changed: Apartment[] = [];
@@ -1514,6 +1518,71 @@ export const useStore = create<AppState>((set, get) => ({
     persist(get);
     fsBatchSet(projectCollection(pid, 'apartments'), changed.map(a => ({ id: a.id, data: { stageMarks: a.stageMarks, bubbles: true, updatedAt: now } })));
     return changed.length;
+  },
+
+  splitCombinedStages: () => {
+    const pid = get().currentProjectId;
+    const now = new Date().toISOString();
+    const { add, retire } = planStageSplit(get().stages, now);
+    for (const st of add) get().addStage(st);
+    for (const id of retire) get().updateStage(id, { active: false });
+    // Only a workspace on the GLOBAL list holds records that name these
+    // stages; the Job Board's own list never did.
+    if (pid === 'general') return add.length + retire.length;
+    const sorted = stagesOfProject(pid, get().stages);
+    const ctx = setContextOf(pid, get().boardSettings);
+    let n = add.length + retire.length;
+    // Apartments: each parent's mark copied onto its children, the headline re-derived
+    // (a record that STOOD on a parent with nothing marked moves to the first child).
+    const changedApts: Apartment[] = [];
+    const apartments = get().apartments.map(a => {
+      const sm = splitApartment(a);
+      if (!sm) return a;
+      const applied = applyMarks(a, sm.marks, sorted, ctx);
+      // A record that STOOD on a parent by hand (no marks at all) moves to its first
+      // child; one with marks takes the derived headline unless that is a parent.
+      const currentStageId = isSplitParent(applied.currentStageId) ? (sm.headline ?? firstChildOf(applied.currentStageId!))
+        : (!sm.marks && sm.headline) ? sm.headline : applied.currentStageId;
+      const next = { ...a, ...applied, currentStageId, updatedAt: now };
+      changedApts.push(next);
+      return next;
+    });
+    // Tasks: the stage lists expanded, the single stages re-pointed at the first child.
+    const taskPatches: Array<{ id: string; data: Partial<ContractorAssignment> }> = [];
+    const contractorAssignments = get().contractorAssignments.map(t => {
+      const patch = splitTask(t);
+      if (!patch) return t;
+      taskPatches.push({ id: t.id, data: patch });
+      return { ...t, ...patch };
+    });
+    // Stage notes filed on a parent move to its first child.
+    const notePatches: Array<{ id: string; data: Partial<StageNote> }> = [];
+    const stageNotes = get().stageNotes.map(nt => {
+      const patch = splitStageNote(nt);
+      if (!patch) return nt;
+      notePatches.push({ id: nt.id, data: patch });
+      return { ...nt, ...patch };
+    });
+    if (!changedApts.length && !taskPatches.length && !notePatches.length) return n;
+    n += changedApts.length + taskPatches.length + notePatches.length;
+    set({ apartments, contractorAssignments, stageNotes });
+    persist(get);
+    if (changedApts.length) fsBatchSet(projectCollection(pid, 'apartments'), changedApts.map(a => ({ id: a.id, data: { stageMarks: a.stageMarks, currentStageId: a.currentStageId, bubbles: true, updatedAt: now } })));
+    if (taskPatches.length) fsBatchSet(projectCollection(pid, 'contractorAssignments'), taskPatches);
+    if (notePatches.length) fsBatchSet(projectCollection(pid, 'stageNotes'), notePatches);
+    // A tipus set naming a parent names its children now.
+    const bs = get().boardSettings[pid];
+    if (bs?.tipusStages) {
+      let touched = false;
+      const tipusStages: Record<string, string[]> = {};
+      for (const [t, ids] of Object.entries(bs.tipusStages)) {
+        const v = splitStageIdList(ids);
+        if (v) touched = true;
+        tipusStages[t] = v ?? ids;
+      }
+      if (touched) get().setBoardSetting('tipusStages', tipusStages);
+    }
+    return n;
   },
 
   addApartment: (apt) => {

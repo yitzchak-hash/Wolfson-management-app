@@ -19,7 +19,8 @@
 // rules answer the REST API directly; no key, no SDK.
 import fs from 'node:fs';
 const PROJECT = process.env.FS_PROJECT || 'wolfson-54874';
-const BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
+const DOCS = `projects/${PROJECT}/databases/(default)/documents`;   // a write names a document by this RESOURCE path
+const BASE = `https://firestore.googleapis.com/v1/${DOCS}`;
 const DEL = process.argv.includes('--delete');
 const OUT = process.env.OUT || '/tmp/claude-0/-home-user-Wolfson-management-app/b8d14d64-4aa3-5544-895c-576d1b3eced3/scratchpad';
 const HOME = { apartments: ['A1', 'A2', 'A3'], general_apartments: ['G'], netiv_apartments: ['B1', 'B2'] };
@@ -73,11 +74,11 @@ async function commit(writes) {
 }
 // 1 · copies home (whole documents, fields as they are)
 const copies = plan.filter(p => p.copyHome).map(p => ({
-  update: { name: `${BASE}/${p.home}/${p.id}`, fields: p.copyHome.fields },
+  update: { name: `${DOCS}/${p.home}/${p.id}`, fields: p.copyHome.fields },
 }));
 if (copies.length) { console.log(`copying ${copies.length} home…`); await commit(copies); }
 // 2 · the deletes
-const dels = plan.map(p => ({ delete: `${BASE}/${p.coll}/${p.id}` }));
+const dels = plan.map(p => ({ delete: `${DOCS}/${p.coll}/${p.id}` }));
 console.log(`deleting ${dels.length}…`); await commit(dels);
 // 3 · the count after
 for (const c of Object.keys(HOME)) { const m = await listAll(c); console.log(`${c}: ${m.size} docs now`); }

@@ -27,7 +27,7 @@ exactly there.
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2027-01-15` — the next entry must be a later date (an older
+   newest is `2027-01-16` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`. 8. Rewrite THIS file.
@@ -43,8 +43,21 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-22, night — Blaze on, the read diet built, TWO DECISIONS AWAITING HIS WORD)
+## Where things stand (2026-09-22, late — the copies removed, the Wolfson stages split, NOTHING PENDING HIS WORD)
 Last commits, newest first (see `git log`):
+- **2026-09-22, late — "remove them and go on the split".** DONE both.
+  `cloudclean.mjs --delete` removed the 4,095 misplaced records from the
+  wrong workspace collections (A1-66 copied home first; backup in the session
+  scratchpad): Wolfson 259 · Job Board 3,520 · Netiv 90 remain. THE SPLIT:
+  `src/data/stageSplit.ts` + `splitCombinedStages` (run by `migrateStageSets`
+  on every workspace land): s1/s4/s7 retired (kept, inactive), eight children
+  under fixed ids on the approved ramp, marks copied onto the children, tasks
+  / notes / tipus sets re-pointed. It runs on the office's machines the moment
+  they load the new build and open Wolfson (Netiv's units when Netiv is
+  opened — same global list). `stagesplit-probe.mjs` (15) green; bubbles-probe,
+  tsc, build, four audits green. NEXT: he opens Wolfson on the deployed
+  build and looks at an apartment's stage board — eight bubbles, the old
+  ticks in place.
 - **2026-09-22, night — the read diet + the cross-workspace copies.** He
   linked the Firebase project to billing (Blaze; the first try had failed —
   the Cloud console's "Change billing" on the wolfson row did it) and reads
