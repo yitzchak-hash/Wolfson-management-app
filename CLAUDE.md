@@ -8830,3 +8830,27 @@ job's OWN workspace's list (`stagesFor(pid)`, sorted) and tipus sets
 own). `barHeight` reserves the band in tile mode. Harness:
 `scratchpad/notebooklabel-probe.mjs` (15 checks).
 
+## The plan pane drags with the mouse (2026-09-22)
+The owner: wheel and zoom in the drawer's plan pane were fine, "but holding
+the left button on the mouse and dragging, that doesn't work". The pane's
+`touch-action: pan-x pan-y` lets a finger scroll the sheet natively — a
+MOUSE never drag-scrolls anything by itself, and the locked pane's press
+was only ever a click-to-full-screen (`paneTap`, now gone). `mousePan` in
+PlanAnnotator: the STAGE (`[data-plan-stage]`, the scroller) takes a mouse
+press whenever the canvas stands aside (`locked || tool === 'pan'` — the
+drawer's pane, its full screen, the wallboard's viewer and the studio's Pan
+tool alike), captures the pointer, and writes `scrollLeft/Top` from the
+hand's travel (4px slop; `buttons === 0` on a move ends a lost gesture); a
+motionless lift ON THE SHEET is the pane's click-to-full-screen. Rules paid
+for: only a press on the plan's canvases, the sheet wrapper or the bare
+stage starts a pan — a pin, the placing overlay, the floating pill keep
+their own press, because capturing it on the stage retargets their CLICK
+onto the stage and the control goes dead; and the cursor is written back to
+`grab` on the lift, never `''` — the style prop is not re-applied until the
+next render. The live canvas is `pointer-events: none` whenever locked now
+(the embedded exception existed only for paneTap). Harness:
+`scratchpad/panepan-probe.mjs` (14 checks — exact travel, no full screen on
+a drag, the click still opens it, the same drag in full screen, a pin still
+places, the studio's Pan tool). Standing pre-existing red: `planphone.mjs`
+(a stale cell locator; identical with the diff stashed).
+

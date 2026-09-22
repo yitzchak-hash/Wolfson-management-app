@@ -43,8 +43,15 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-22, latest — the notebook names the unit and wears the strip; NOTHING PENDING HIS WORD)
+## Where things stand (2026-09-22, latest — the plan pane drags with the mouse; NOTHING PENDING HIS WORD)
 Last commits, newest first (see `git log`):
+- **2026-09-22, latest — "holding the left button and dragging doesn't
+  work".** `mousePan` on the plan STAGE in PlanAnnotator: a mouse drag pans
+  the drawer's pane, its full screen and the studio's Pan tool; a motionless
+  click on the sheet still opens full screen; a pin/overlay press is never
+  captured. `panepan-probe.mjs` (14) green; planzoom, planviewer, planjump,
+  videoplan, pinvoice, round41, markup2 green; tsc, build, four audits
+  green. planphone's red is pre-existing (stale locator).
 - **2026-09-22, latest — the notebook screenshot.** Two Wolfson bars on one
   day read "Wolfson …" twice with the number cut off: the workspace tag was
   printed IN FRONT of the unit. `TaskBar` now leads with `aptLabel`, the
@@ -696,6 +703,12 @@ Last commits, newest first (see `git log`):
   `npx vite --port 5173` and `VITE_DRIVE_API_KEY=test npx vite --port 5174`.
 
 ## The last reply the owner saw (so the next one continues it)
+**Newest (2026-09-22, the pane drag)**: the reply said why a mouse drag did
+nothing (the pane only knew a finger's native scroll and a click), that the
+sheet now follows a held left button exactly, in the pane, in full screen
+and with the studio's Pan tool, that a plain click still opens full screen
+and pins still place. Bottom line + bullets (KEEP THAT FORMAT).
+
 **Newest (2026-09-22, the notebook)**: the reply explained why both bars
 read "Wolfson …" (the workspace tag stood in front of the unit and the
 truncation ate the number), that the bar now leads with "9 — Aharonov" with

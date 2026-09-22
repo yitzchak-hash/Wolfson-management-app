@@ -30,6 +30,25 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-01-18',
+    title: 'Drag the plan around with the mouse',
+    items: [
+      {
+        title: 'Hold the left button and pull',
+        body: 'In the apartment window’s plan pane, and in its full screen, holding the left mouse '
+          + 'button and dragging now moves the sheet — the way you would expect after zooming in. '
+          + 'A plain click still opens the plan full screen; the wheel still zooms to the pointer.',
+        demo: 'drag',
+      },
+      {
+        title: 'The studio’s Pan tool too',
+        body: 'The markup studio’s Pan tool drags the sheet with the mouse the same way. A finger and '
+          + 'the S Pen keep scrolling the sheet as they did.',
+        demo: 'tap',
+      },
+    ],
+  },
+  {
     date: '2027-01-17',
     title: 'The notebook names the apartment, and wears the stage lines',
     items: [

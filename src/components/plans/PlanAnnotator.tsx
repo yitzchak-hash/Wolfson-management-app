@@ -1134,8 +1134,20 @@ function PlanEditor({
    * scrolls it. A click that never travels still just clears the pick.
    */
   const stagePan = useRef<{ x: number; y: number; sl: number; st: number } | null>(null);
-  /** A press on the locked, embedded pane — a motionless lift opens full screen. */
-  const paneTap = useRef<{ x: number; y: number } | null>(null);
+  /**
+   * A MOUSE drag on the stage pans the sheet — the drawer's pane, its full
+   * screen, and the studio's Pan tool alike.
+   *
+   * The pane's touch-action lets a finger scroll the sheet natively, but a
+   * mouse never drag-scrolls anything by itself, so on a PC the pane could be
+   * wheeled and zoomed and not pulled about (the owner's "holding the left
+   * button and dragging doesn't work"). The press is taken on the STAGE, not
+   * the canvas, so it works wherever the canvas stands aside (pointer-events
+   * none while locked or panning). `onSheet` remembers whether the press
+   * landed on the plan itself: a motionless lift there is the pane's
+   * click-to-full-screen, a lift on the margin is nothing.
+   */
+  const mousePan = useRef<{ x: number; y: number; sl: number; st: number; moved: boolean; onSheet: boolean } | null>(null);
   const erased = useRef<Set<string>>(new Set());
   /**
    * The pen's side button is the eraser — held while touching, the stroke
@@ -2458,13 +2470,7 @@ function PlanEditor({
   }
 
   function onDown(e: React.PointerEvent<HTMLCanvasElement>) {
-    // The drawer's pane (owner, 2026-09-06): a plain click anywhere on the
-    // sheet opens the same full screen the corner button does. Recorded here,
-    // judged on the lift — a drag that scrolled the sheet is not a click.
-    if (locked && embedded && !isFull) {
-      paneTap.current = { x: e.clientX, y: e.clientY };
-      return;
-    }
+    // A locked pane and the Pan tool answer on the STAGE — see mousePan.
     if (locked || tool === 'pan') return;
 
     /**
@@ -2783,7 +2789,6 @@ function PlanEditor({
    */
   function onCancelDraw(e: React.PointerEvent<HTMLCanvasElement>) {
     stagePan.current = null;
-    paneTap.current = null;
     try { (e.target as HTMLCanvasElement).releasePointerCapture(e.pointerId); } catch { /* gone */ }
     // What had already landed in the marks stays — a cancel abandons the
     // stroke in the air, it is not an undo — so a drag or a rub that was
@@ -2795,13 +2800,55 @@ function PlanEditor({
     setNibAt(null);
   }
 
-  function onUp(e: React.PointerEvent<HTMLCanvasElement>) {
-    const tap = paneTap.current;
-    if (tap) {
-      paneTap.current = null;
-      if (Math.hypot(e.clientX - tap.x, e.clientY - tap.y) < 8) toggleFull();
-      return;
+  /** The stage's own mouse handlers — see mousePan. */
+  function onStageDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.pointerType !== 'mouse') return;               // a finger/pen scrolls natively
+    if (!(locked || tool === 'pan')) return;             // the canvas owns the press
+    if (e.button !== 0 && e.button !== 1) return;
+    const t = e.target as HTMLElement;
+    const stage = stageRef.current;
+    if (!stage) return;
+    // Only the plan itself, its wrapper or the bare stage starts a pan. A pin,
+    // the pin overlay while placing, the floating pill — anything else drawn
+    // over the sheet — keeps its own press: capturing it here would retarget
+    // its click onto the stage and the control would go dead.
+    if (!(t === stage || t === sheetWrapRef.current || t.tagName === 'CANVAS')) return;
+    mousePan.current = {
+      x: e.clientX, y: e.clientY, sl: stage.scrollLeft, st: stage.scrollTop,
+      moved: false, onSheet: !!t.closest('canvas'),
+    };
+    try { stage.setPointerCapture(e.pointerId); } catch { /* fine */ }
+    e.preventDefault();
+  }
+  function onStageMove(e: React.PointerEvent<HTMLDivElement>) {
+    const mp = mousePan.current;
+    const stage = stageRef.current;
+    if (!mp || !stage) return;
+    if (e.buttons === 0) { onStageUp(e); return; }       // the lift was missed
+    const dx = e.clientX - mp.x, dy = e.clientY - mp.y;
+    if (!mp.moved && Math.hypot(dx, dy) < 4) return;
+    if (!mp.moved) { mp.moved = true; stage.style.cursor = 'grabbing'; }
+    e.preventDefault();
+    stage.scrollLeft = mp.sl - dx;
+    stage.scrollTop = mp.st - dy;
+  }
+  function onStageUp(e: React.PointerEvent<HTMLDivElement>) {
+    const mp = mousePan.current;
+    if (!mp) return;
+    mousePan.current = null;
+    const stage = stageRef.current;
+    if (stage) {
+      // Back to the open hand — the style prop is not re-applied until the
+      // next render, so an empty string would leave the pointer plain.
+      stage.style.cursor = 'grab';
+      try { stage.releasePointerCapture(e.pointerId); } catch { /* gone */ }
     }
+    // The drawer's pane (owner, 2026-09-06): a plain click on the sheet opens
+    // the same full screen the corner button does. A drag is not a click.
+    if (!mp.moved && mp.onSheet && locked && embedded && !isFull) toggleFull();
+  }
+
+  function onUp(e: React.PointerEvent<HTMLCanvasElement>) {
     if (stagePan.current) {
       stagePan.current = null;
       try { (e.target as HTMLCanvasElement).releasePointerCapture(e.pointerId); } catch { /* gone */ }
@@ -4518,7 +4565,12 @@ function PlanEditor({
             */
             className={`flex-1 min-h-0 overflow-auto flex ${
               compact ? 'p-1' : 'p-4'}`}
-            style={{ touchAction: 'pan-x pan-y' }}>
+            data-plan-stage
+            onPointerDown={onStageDown}
+            onPointerMove={onStageMove}
+            onPointerUp={onStageUp}
+            onPointerCancel={onStageUp}
+            style={{ touchAction: 'pan-x pan-y', cursor: locked || tool === 'pan' ? 'grab' : undefined }}>
             {loadErr ? (
               <div className="m-auto text-center text-gray-300 text-[13px] max-w-md">
                 <p className="font-semibold mb-1">This plan would not open.</p>
@@ -4614,11 +4666,11 @@ function PlanEditor({
                       : tool === 'text' ? 'text'
                       : tool === 'move' ? (picked ? 'move' : 'grab')
                       : showNib ? 'none' : 'crosshair',
-                    // A locked pane lets the pointer through to the sheet —
-                    // EXCEPT the drawer's embedded pane, which takes a plain
-                    // click as "open full screen" (touch-action keeps a finger
-                    // drag scrolling the sheet natively).
-                    pointerEvents: (locked && !(embedded && !isFull)) || tool === 'pan' ? 'none' : 'auto',
+                    // A locked pane lets the pointer through to the STAGE,
+                    // which pans a mouse drag and reads a motionless click on
+                    // the sheet as "open full screen" (mousePan); touch-action
+                    // keeps a finger drag scrolling the sheet natively.
+                    pointerEvents: locked || tool === 'pan' ? 'none' : 'auto',
                   }}
                 />
                 {sheetOverlay && (
