@@ -12,6 +12,7 @@ import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns
 import { findOrCreateFolderViaBackend, uploadFileViaResumableSession, shareFileToDrive, isUploadBackendConfigured, extractFolderId } from '../../data/driveApi';
 import { TaskDaysPicker, daysFields, taskWrites, splitStringsOf, TaskSplit } from '../tasks/TaskDaysPicker';
 import { StagePairPicker, StagePairPill, stagePairStrings, StagePairValue } from '../tasks/StagePair';
+import { taskStageIds } from '../../data/stageMarks';
 
 const CAT_COLORS: Record<ContractorCategory, string> = {
   drywall: '#f59e0b', ac: '#3b82f6', general: '#10b981',
@@ -88,7 +89,8 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
   const [editContractorId, setEditContractorId] = useState('');
   const [editTask, setEditTask] = useState('');
   const [editDueDate, setEditDueDate] = useState('');
-  const [editStageId, setEditStageId] = useState('');
+  // The set model on the edit form: every picked stage (the first is stageId).
+  const [editIds, setEditIds] = useState<string[]>([]);
   const attachRef = useRef<HTMLInputElement>(null);
 
   function startEdit(a: typeof aptTasks[0]) {
@@ -96,7 +98,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
     setEditContractorId(a.contractorId);
     setEditTask(a.taskDescription);
     setEditDueDate(a.dueDate ?? '');
-    setEditStageId(a.stageId ?? '');
+    setEditIds(taskStageIds(a));
   }
 
   function saveEdit(id: string) {
@@ -105,7 +107,8 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
       contractorId: editContractorId,
       taskDescription: editTask.trim(),
       dueDate: editDueDate || null,
-      stageId: editStageId || null,
+      stageId: editIds[0] || null,
+      stageIds: editIds.length ? editIds : undefined,
     });
     setEditingTaskId(null);
   }
@@ -328,14 +331,13 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                           className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 resize-none"
                         />
                         <div className="grid grid-cols-2 gap-2">
-                          <select
-                            value={editStageId}
-                            onChange={e => setEditStageId(e.target.value)}
-                            className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30"
-                          >
-                            <option value="">{s.stageLabel}</option>
-                            {sortedStages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                          </select>
+                          <div className="col-span-2" data-task-edit-stages>
+                            <StagePairPicker stages={sortedStages} currentStageId={apartment.currentStageId}
+                              value={{ from: editIds[0] ?? '', to: '', ids: editIds }}
+                              apartment={apartment} ctx={{ tipusStages: tipusStagesQA }}
+                              onChange={v => setEditIds(v.ids ?? [])}
+                              strings={stagePairStrings(s)} isRtl={s.isRtl} />
+                          </div>
                           <input
                             type="date"
                             value={editDueDate}
@@ -351,6 +353,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                             {s.cancel}
                           </button>
                           <button
+                            data-task-edit-save
                             onClick={() => saveEdit(a.id)}
                             disabled={!editTask.trim() || !editContractorId}
                             className="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-medium bg-[#1e3a5f] text-white rounded-lg hover:bg-[#162d4a] disabled:opacity-40 transition-colors"
@@ -414,6 +417,7 @@ export function QuickAddTaskPanel({ apartment, onClose, currentUser, onToast }: 
                         </div>
                       </div>
                       <button
+                        data-edit-task={a.id}
                         onClick={() => startEdit(a)}
                         className="flex-shrink-0 mt-0.5 p-1 rounded-lg text-gray-300 hover:text-[#1e3a5f] hover:bg-gray-100 transition-colors"
                         title="Edit task"

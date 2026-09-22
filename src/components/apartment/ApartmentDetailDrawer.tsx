@@ -7,7 +7,7 @@ import { Send } from 'lucide-react';
 import { useStore } from '../../data/store';
 import { peekTaskFocus, takeTaskFocus } from '../../data/taskFocus';
 import { TaskDaysPicker, daysFields } from '../tasks/TaskDaysPicker';
-import { StagePairPill } from '../tasks/StagePair';
+import { StagePairPill, StagePairPicker, stagePairStrings } from '../tasks/StagePair';
 import { daysOf } from '../../data/taskDays';
 import { usePhone, useMedia } from '../../data/usePhone';
 import { VoiceRecorderButton, VoiceMemoPlayer } from '../ui/VoiceMemo';
@@ -29,7 +29,7 @@ import { LinkField } from '../ui/LinkField';
 import { printSheet, printEsc } from '../../data/printing';
 import { PlanAddressSuggest } from './PlanAddressSuggest';
 import { StagePicker } from './StagePicker';
-import { isWorkStage, progressOf } from '../../data/stageMarks';
+import { isWorkStage, progressOf, taskStageIds } from '../../data/stageMarks';
 import { ProblemForm } from './ProblemForm';
 import { ProblemBand } from './ProblemBand';
 import { problemState } from '../../data/problems';
@@ -370,6 +370,13 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
    * last one's days in the box.
    */
   const [drawerEditDays, setDrawerEditDays] = useState<string[]>([]);
+  /**
+   * The set model on the EDIT form (owner, 2026-09-22 — his screenshot of a
+   * plain stage dropdown on Igor's task): every task editor draws the
+   * apartment's own stages as bubbles, one or several, exactly as the add
+   * forms do. `stageId` stays the FIRST pick for every one-stage reader.
+   */
+  const [drawerEditIds, setDrawerEditIds] = useState<string[]>([]);
   const [drawerDaysEpoch, setDrawerDaysEpoch] = useState(0);
   const [drawerEditAttachments, setDrawerEditAttachments] = useState<TaskAttachment[]>([]);
   /**
@@ -821,6 +828,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       priority: task.priority ?? '',
     });
     setDrawerEditAttachments(task.attachments ?? []);
+    setDrawerEditIds(taskStageIds(task));
     setDrawerEditDays(daysOf(task));
     setDrawerDaysEpoch(e => e + 1);
   }
@@ -831,9 +839,9 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
       taskDescription: drawerEditFields.taskDescription,
       // The whole run, not just the last day — the model's standing rule.
       ...daysFields(drawerEditFields.dueDate, drawerEditDays),
-      stageId: drawerEditFields.stageId || null,
-      ...(drawerEditFields.stageId !== (aptTasks.find(t => t.id === drawerEditingTaskId)?.stageId ?? '')
-        ? { stageIds: drawerEditFields.stageId ? [drawerEditFields.stageId] : undefined } : {}),
+      // Every picked stage; the first is the one-stage readers' answer.
+      stageId: drawerEditIds[0] || null,
+      stageIds: drawerEditIds.length ? drawerEditIds : undefined,
       priority: (drawerEditFields.priority as TaskPriority) || undefined,
       attachments: drawerEditAttachments.length > 0 ? drawerEditAttachments : undefined,
     });
@@ -2427,14 +2435,13 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 resize-none"
                             />
                             <div className="grid grid-cols-2 gap-2">
-                              <select
-                                value={drawerEditFields.stageId}
-                                onChange={e => setDrawerEditFields(f => ({ ...f, stageId: e.target.value }))}
-                                className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white"
-                              >
-                                <option value="">{ui.noneOption}</option>
-                                {sortedStages.map(st => <option key={st.id} value={st.id}>{getStageName(st, ui.isRtl)}</option>)}
-                              </select>
+                              <div className="col-span-2" data-task-edit-stages>
+                                <StagePairPicker stages={sortedStages} currentStageId={apartment.currentStageId}
+                                  value={{ from: drawerEditIds[0] ?? '', to: '', ids: drawerEditIds }}
+                                  apartment={apartment} ctx={setCtx}
+                                  onChange={v => { setDrawerEditIds(v.ids ?? []); setDrawerEditFields(f => ({ ...f, stageId: v.from })); }}
+                                  strings={stagePairStrings(ui)} isRtl={ui.isRtl} />
+                              </div>
                               <input
                                 type="date"
                                 value={drawerEditFields.dueDate}
@@ -2503,6 +2510,7 @@ export function ApartmentDetailDrawer({ apartment, onClose, currentUser, onToast
                                 {ui.cancel}
                               </button>
                               <button
+                                data-task-edit-save
                                 onClick={saveTaskEdit}
                                 disabled={!drawerEditFields.taskDescription.trim()}
                                 className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-xs font-semibold hover:bg-[#162d4a] disabled:opacity-40 transition-colors"

@@ -8863,3 +8863,24 @@ a diagonal finger stroke reports dy 0 — that is the browser, not the pane;
 drive each axis on its own. Standing pre-existing red: `planphone.mjs`
 (a stale cell locator; identical with the diff stashed).
 
+## Every task EDITOR wears the bubbles (2026-09-22)
+The set model reached every ADD form in the build round and stopped there:
+the drawer's Tasks-tab inline editor, the Tasks page's edit form and the
+quick-add panel's own edit mode still drew a plain stage `<select>` — the
+owner's screenshot of Igor's task with "None / Sold/Start / Piping / …" in a
+dropdown, "look how bad it is". All three now render `StagePairPicker` with
+the task's OWN apartment (`apartment` + `ctx` — a general job on the Tasks
+page has none, so every work stage is offered), seeded from `taskStageIds(task)`
+(`drawerEditIds` / `editIds`), and save `stageId: ids[0] || null` +
+`stageIds: ids.length ? ids : undefined` — the same write the add forms make.
+Hooks: `[data-task-edit-stages]` around the bubbles, `[data-task-edit-save]`
+on the three Save buttons, `[data-edit-task=<id>]` on the Tasks page's and the
+quick-add panel's pencils (the drawer's pencil keeps `title="Edit task"`).
+The stage `<select>`s that REMAIN are filters (the Tasks page's stage filter)
+and non-stage pickers (worker, priority, tipus, workspace) — a filter lists
+stages to narrow by and is not an editor. Harness:
+`scratchpad/taskbubbles-probe.mjs` (16 checks, all three editors, a pick and
+an unpick saved to localStorage). Its trap: the seed stores NO stage list
+(the app fills its defaults on load) and the Wolfson split retires s1/s4/s7
+on arrival — seed a task on `s2`, a default stage that stays as it is.
+

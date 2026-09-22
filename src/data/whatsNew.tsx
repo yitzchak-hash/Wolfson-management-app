@@ -30,6 +30,25 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    date: '2027-01-19',
+    title: 'Editing a task shows the stage bubbles',
+    items: [
+      {
+        title: 'The same stage picker everywhere',
+        body: 'Editing a task — in the apartment window’s Tasks tab, on the Tasks page, or in the '
+          + 'quick-add panel — now shows the apartment’s own stages as bubbles, one or several, '
+          + 'exactly as adding a task does. The plain stage dropdown is gone from every editor.',
+        demo: 'tap',
+      },
+      {
+        title: 'What the task already had is picked',
+        body: 'Open a task to edit it and its stages are already lit; tap another to add it, tap a '
+          + 'lit one to take it off, and Save keeps them in the settings order.',
+        demo: 'list',
+      },
+    ],
+  },
+  {
     date: '2027-01-18',
     title: 'Drag the plan around with the mouse',
     items: [

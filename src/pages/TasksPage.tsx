@@ -13,6 +13,7 @@ import { BulkAddTaskModal } from '../components/apartment/BulkAddTaskModal';
 import { TaskCalendar, CalendarEvent } from '../components/tasks/TaskCalendar';
 import { TaskDaysPicker, daysFields, taskWrites, splitStringsOf, TaskSplit } from '../components/tasks/TaskDaysPicker';
 import { StagePairPicker, StagePairPill, stagePairStrings } from '../components/tasks/StagePair';
+import { taskStageIds } from '../data/stageMarks';
 import { ContractorAssignment, ContractorCategory, TaskAttachment, TaskPriority, getStageName, aptLabel, isCountableApartment, generalBuildingsText } from '../types';
 import { Toast } from '../components/ui/Toast';
 import { printTable, printDot, printPill } from '../data/printing';
@@ -87,6 +88,8 @@ export function TasksPage() {
     taskDescription: string; dueDate: string; stageId: string; completedAt: string | null; priority: string;
   }>({ taskDescription: '', dueDate: '', stageId: '', completedAt: null, priority: '' });
   const [editAttachments, setEditAttachments] = useState<TaskAttachment[]>([]);
+  // The set model on the edit form: every picked stage (stageId = the first).
+  const [editIds, setEditIds] = useState<string[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [showBulkAdd, setShowBulkAdd] = useState(false);
   const [addForm, setAddForm] = useState({ contractorId: '', aptId: '', task: '', dueDate: '', stageId: '', priority: '' });
@@ -292,6 +295,7 @@ export function TasksPage() {
       completedAt: a.completedAt,
       priority: a.priority ?? 'normal',
     });
+    setEditIds(taskStageIds(a));
     setEditAttachments(a.attachments ?? []);
   }
 
@@ -299,8 +303,8 @@ export function TasksPage() {
     updateContractorAssignment(id, {
       taskDescription: editFields.taskDescription,
       dueDate: editFields.dueDate || null,
-      stageId: editFields.stageId || null,
-      stageIds: editFields.stageId ? [editFields.stageId] : undefined,
+      stageId: editIds[0] || null,
+      stageIds: editIds.length ? editIds : undefined,
       completedAt: editFields.completedAt,
       priority: (editFields.priority as TaskPriority) || undefined,
       attachments: editAttachments.length > 0 ? editAttachments : undefined,
@@ -993,6 +997,7 @@ export function TasksPage() {
                     <div className="flex items-center gap-1 flex-shrink-0">
                       <Tooltip text={isEditing ? s.cancel : s.editTask}>
                         <button
+                          data-edit-task={a.id}
                           onClick={() => isEditing ? setEditingId(null) : startEdit(a)}
                           className={`p-2.5 sm:p-1.5 rounded-lg transition-colors ${isEditing ? 'bg-[#1e3a5f]/10 text-[#1e3a5f]' : 'text-gray-400 hover:bg-gray-100'}`}
                         >
@@ -1032,14 +1037,16 @@ export function TasksPage() {
                         }}
                       />
                       <div className="grid grid-cols-2 gap-3">
-                        <select
-                          value={editFields.stageId}
-                          onChange={e => setEditFields(f => ({ ...f, stageId: e.target.value }))}
-                          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/30 bg-white"
-                        >
-                          <option value="">{s.notStartedOption}</option>
-                          {sortedStages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                        </select>
+                        {/* The bubbles of the task's OWN apartment — a general
+                            job has none, so every work stage is offered. */}
+                        <div className="col-span-2" data-task-edit-stages>
+                          <StagePairPicker stages={sortedStages}
+                            currentStageId={apartments.find(ap => ap.id === a.apartmentId)?.currentStageId}
+                            value={{ from: editIds[0] ?? '', to: '', ids: editIds }}
+                            apartment={apartments.find(ap => ap.id === a.apartmentId) ?? null} ctx={{ tipusStages: tipusStagesTP }}
+                            onChange={v => { setEditIds(v.ids ?? []); setEditFields(f => ({ ...f, stageId: v.from })); }}
+                            strings={stagePairStrings(s)} isRtl={s.isRtl} />
+                        </div>
                         <input
                           type="date"
                           value={editFields.dueDate}
@@ -1101,6 +1108,7 @@ export function TasksPage() {
                       )}
                       <div className="flex items-center gap-3">
                         <button
+                          data-task-edit-save
                           onClick={() => saveEdit(a.id)}
                           className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-xs font-medium hover:bg-[#162d4a]"
                         >

@@ -27,7 +27,7 @@ exactly there.
 3. `npx tsc --noEmit -p .` and `npx vite build`. 4. The audits:
    `node scratchpad/loopaudit.mjs`, `backupaudit.mjs`, `navaudit.mjs`, `apilimit.mjs`.
 5. A What's New entry (`src/data/whatsNew.tsx`, dates run AHEAD of the clock;
-   newest is `2027-01-16` — the next entry must be a later date (an older
+   newest is `2027-01-19` — the next entry must be a later date (an older
    entry lower down also wears `2026-12-20`; the marker compares only the TOP
    entry's date, so never reuse a date that appears anywhere in the file)). 6. A CLAUDE.md
    round record. 7. A line in `docs/CRM-CHECKLIST.md`. 8. Rewrite THIS file.
@@ -43,8 +43,17 @@ with starred recommendations is published first; the owner says "approved" /
 "all yes" / answers by number; then it is built. Never build a redesign
 unasked.
 
-## Where things stand (2026-09-22, latest — the plan pane drags with the mouse; NOTHING PENDING HIS WORD)
+## Where things stand (2026-09-22, latest — every task editor wears the bubbles; NOTHING PENDING HIS WORD)
 Last commits, newest first (see `git log`):
+- **2026-09-22, latest — his screenshot of a plain stage dropdown on Igor's
+  task ("we didn't do the stage fix with the bubbles… across the whole
+  app").** The set model had reached every ADD form and stopped there.
+  The drawer's Tasks-tab editor, the Tasks page's edit form and the
+  quick-add panel's edit mode now draw `StagePairPicker` with the task's own
+  apartment, open with the task's stages picked, and save `stageId` +
+  `stageIds`. No plain stage `<select>` remains in any editor (the Tasks
+  page's stage FILTER is a filter, not an editor). `taskbubbles-probe.mjs`
+  (16) green; drawerround, taskdaysforms, tsc, build, four audits green.
 - **2026-09-22, latest — "holding the left button and dragging doesn't
   work".** `mousePan` on the plan STAGE in PlanAnnotator: a mouse drag pans
   the drawer's pane, its full screen and the studio's Pan tool; a motionless
@@ -705,6 +714,13 @@ Last commits, newest first (see `git log`):
   `npx vite --port 5173` and `VITE_DRIVE_API_KEY=test npx vite --port 5174`.
 
 ## The last reply the owner saw (so the next one continues it)
+**Newest (2026-09-22, the stage dropdown screenshot)**: the reply said the
+bubble picker had only been wired into the ADD forms and the three EDIT
+forms were missed, that all three now show the apartment's stages as
+bubbles with the task's own stages already lit, that picking and unpicking
+saves the way adding does, and that the one stage dropdown left on the
+Tasks page is its filter. Bottom line + bullets (KEEP THAT FORMAT).
+
 **Newest (2026-09-22, the pane drag, then "what about on a touch screen?")**:
 the reply said why a mouse drag did nothing, that the sheet now follows a
 held left button exactly (pane, full screen, studio Pan tool); then that a
